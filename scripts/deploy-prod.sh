@@ -342,24 +342,48 @@ API_DIGEST=$(resolve_image_digest "${API_IMAGE}")
 API_IMMUTABLE_IMAGE="${REGISTRY}/caseops-api@${API_DIGEST}"
 echo "  immutable api image=${API_IMMUTABLE_IMAGE}"
 
-# Step 2 — refresh and execute the migrate-job. Idempotent when alembic
-# is already at head; mandatory when there's a pending migration.
+# Step 2 — converge, read back and execute the migrate-job. Idempotent when
+# alembic is already at head; mandatory when there's a pending migration.
+# This block is the job's only checked-in definition: it sets every field and
+# the readback compares every field before alembic runs. The retired
+# infra/cloudrun/migrate-job.yaml was never applied, and its environment
+# (no CASEOPS_AUTO_MIGRATE=false) fails the cloud settings validator.
 echo "--- 2/6 migrate-job (alembic upgrade head) ---"
-gcloud run jobs update caseops-migrate-job \
+MIGRATION_JOB=caseops-migrate-job
+MIGRATION_JOB_ACTION=update
+if ! gcloud run jobs describe "${MIGRATION_JOB}" \
+  --region "${REGION}" --project "${PROJECT}" >/dev/null 2>&1; then
+  MIGRATION_JOB_ACTION=create
+fi
+gcloud run jobs "${MIGRATION_JOB_ACTION}" "${MIGRATION_JOB}" \
   --image "${API_IMMUTABLE_IMAGE}" \
+  --command python \
+  --args "^|^-m|alembic|upgrade|head" \
+  --service-account "caseops-runtime@${PROJECT}.iam.gserviceaccount.com" \
+  --set-env-vars "CASEOPS_ENV=cloud,CASEOPS_AUTO_MIGRATE=false,CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS=${MIGRATION_DB_CONNECT_TIMEOUT_SECONDS},CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS=${MIGRATION_DB_STATEMENT_TIMEOUT_MS},CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS=${MIGRATION_DB_LOCK_TIMEOUT_MS},CASEOPS_MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS=${MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS}" \
+  --set-secrets "CASEOPS_DATABASE_URL=caseops-database-url:latest,CASEOPS_AUTH_SECRET=caseops-auth-secret:latest" \
+  --set-cloudsql-instances "${PROJECT}:${REGION}:caseops-db" \
+  --cpu 1 \
+  --memory 512Mi \
   --task-timeout "${MIGRATION_TASK_TIMEOUT}" \
-  --update-env-vars "CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS=${MIGRATION_DB_CONNECT_TIMEOUT_SECONDS},CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS=${MIGRATION_DB_STATEMENT_TIMEOUT_MS},CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS=${MIGRATION_DB_LOCK_TIMEOUT_MS},CASEOPS_MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS=${MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS}" \
+  --tasks 1 \
+  --parallelism 1 \
+  --max-retries 1 \
   --region "${REGION}" --project "${PROJECT}" --quiet
-MIGRATION_JOB_JSON=$(gcloud run jobs describe caseops-migrate-job \
+MIGRATION_JOB_JSON=$(gcloud run jobs describe "${MIGRATION_JOB}" \
   --region "${REGION}" --project "${PROJECT}" --format=json)
-export MIGRATION_JOB_JSON
+export MIGRATION_JOB_JSON API_IMMUTABLE_IMAGE PROJECT REGION MIGRATION_TASK_TIMEOUT
 export MIGRATION_DB_CONNECT_TIMEOUT_SECONDS MIGRATION_DB_STATEMENT_TIMEOUT_MS
 export MIGRATION_DB_LOCK_TIMEOUT_MS MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS
 python - <<'PY'
 import json
 import os
 
-expected = {
+project = os.environ["PROJECT"]
+region = os.environ["REGION"]
+expected_environment = {
+    "CASEOPS_ENV": "cloud",
+    "CASEOPS_AUTO_MIGRATE": "false",
     "CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS": os.environ[
         "MIGRATION_DB_CONNECT_TIMEOUT_SECONDS"
     ],
@@ -373,38 +397,81 @@ expected = {
         "MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS"
     ],
 }
+expected_secrets = {
+    "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+    "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest",
+}
+task_timeout = os.environ["MIGRATION_TASK_TIMEOUT"]
+expected_timeout = int(task_timeout[:-1]) * {"s": 1, "m": 60, "h": 3600}[task_timeout[-1]]
 
 
-def container_envs(node):
-    if isinstance(node, dict):
-        containers = node.get("containers")
-        if isinstance(containers, list):
-            for container in containers:
-                if isinstance(container, dict):
-                    yield container.get("env", [])
-        for value in node.values():
-            yield from container_envs(value)
-    elif isinstance(node, list):
-        for value in node:
-            yield from container_envs(value)
+def seconds(value):
+    text = str(value if value is not None else "").strip().removesuffix("s")
+    return int(text) if text.isdigit() else None
+
+
+def cpu_millicores(value):
+    text = str(value if value is not None else "").strip()
+    if text.endswith("m") and text[:-1].isdigit():
+        return int(text[:-1])
+    try:
+        return round(float(text) * 1000)
+    except ValueError:
+        return None
 
 
 payload = json.loads(os.environ["MIGRATION_JOB_JSON"])
-actual = {}
-for entries in container_envs(payload):
-    for entry in entries:
-        if isinstance(entry, dict) and entry.get("name") in expected:
-            actual[entry["name"]] = str(entry.get("value", ""))
-
-if actual != expected:
-    raise SystemExit(
-        "caseops-migrate-job database timeout drift: "
-        f"expected={expected!r} actual={actual!r}"
+template = payload.get("spec", {}).get("template", {})
+execution = template.get("spec", {})
+task = execution.get("template", {}).get("spec", {})
+containers = task.get("containers") or []
+container = containers[0] if len(containers) == 1 else {}
+environment = {}
+secrets = {}
+for entry in container.get("env") or []:
+    name = str(entry.get("name", ""))
+    reference = (entry.get("valueFrom") or {}).get("secretKeyRef")
+    if isinstance(reference, dict):
+        secrets[name] = f"{reference.get('name', '')}:{reference.get('key', '')}"
+    else:
+        environment[name] = str(entry.get("value", ""))
+limits = (container.get("resources") or {}).get("limits") or {}
+annotations = (template.get("metadata") or {}).get("annotations") or {}
+checks = {
+    "task_count": execution.get("taskCount") == 1,
+    "parallelism": execution.get("parallelism") == 1,
+    "single_container": len(containers) == 1,
+    "image": container.get("image") == os.environ["API_IMMUTABLE_IMAGE"],
+    "command": container.get("command") == ["python"],
+    "args": container.get("args") == ["-m", "alembic", "upgrade", "head"],
+    "environment": environment == expected_environment,
+    "secrets": secrets == expected_secrets,
+    "service_account": task.get("serviceAccountName")
+    == f"caseops-runtime@{project}.iam.gserviceaccount.com",
+    "cloud_sql": annotations.get("run.googleapis.com/cloudsql-instances")
+    == f"{project}:{region}:caseops-db",
+    "cpu": cpu_millicores(limits.get("cpu")) == 1000,
+    "memory": str(limits.get("memory", "")) == "512Mi",
+    "max_retries": task.get("maxRetries") == 1,
+    "task_timeout": seconds(task.get("timeoutSeconds")) == expected_timeout,
+}
+drift = sorted(field for field, passed in checks.items() if not passed)
+if drift:
+    # Name the drifted fields and variables, never their values.
+    names = sorted(
+        {**environment, **secrets}.keys() ^ {**expected_environment, **expected_secrets}.keys()
+        | {name for name, value in expected_environment.items() if environment.get(name) != value}
+        | {name for name, value in expected_secrets.items() if secrets.get(name) != value}
     )
-print("  migrate-job database timeout contract verified.")
+    raise SystemExit(
+        "caseops-migrate-job contract drift: "
+        + ", ".join(drift)
+        + (f" (variables: {', '.join(names)})" if names else "")
+    )
+print("  migrate-job contract verified.")
 PY
 unset MIGRATION_JOB_JSON
-gcloud run jobs execute caseops-migrate-job \
+gcloud run jobs execute "${MIGRATION_JOB}" \
   --region "${REGION}" --project "${PROJECT}" --wait --quiet
 echo "  migrate-job completed."
 

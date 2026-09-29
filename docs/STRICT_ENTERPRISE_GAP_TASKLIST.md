@@ -2207,9 +2207,94 @@ job or scheduler was changed.
   Give the live-only environment a checked-in owner, or record why it has none.
   The data-governance change gate never watched the release script's
   environment declarations; it watched the unapplied manifest instead.
-- **Stale references:** no tool applies
-  `infra/cloudrun/activity-report-job.yaml`, `case-tracking-poll-job.yaml`,
-  `ip-journal-watch-job.yaml`, `legal-update-sync-job.yaml` or
-  `migrate-job.yaml`. The first four still use `uv run` commands that differ
-  from the verified inventory contracts. Retire or regenerate them together
-  with their data-governance and program-manifest references.
+- **Stale references:** see EH-DEPLOY-04; the five unapplied job manifests and
+  `document-worker-job.yaml` were retired on 2026-09-27.
+
+### EH-DEPLOY-04 - Six unapplied job manifests disagreed with the jobs they described
+
+- **Status:** Partially implemented. The control is written and falsified on
+  `fix/cloudrun-job-manifests-20260927`, stacked on EH-DEPLOY-02, and is
+  **not yet merged**. It becomes `Implemented` once it is on `main` with CI
+  green; the migration-job contract first executes in the next release.
+- **Gap found:** no tool applied `infra/cloudrun/activity-report-job.yaml`,
+  `case-tracking-poll-job.yaml`, `ip-journal-watch-job.yaml`,
+  `legal-update-sync-job.yaml`, `migrate-job.yaml` or
+  `document-worker-job.yaml`, and each disagreed with production.
+  - The four recurring-job files ran `uv run <entrypoint>`, which
+    `scheduler_inventory.py validate` forbids, and pinned the auth secret to
+    the unrendered `__AUTH_SECRET_VERSION__`. The live jobs equal their
+    inventory `bootstrap` contracts on command, arguments, environment,
+    secrets, identity, Cloud SQL, CPU, memory, retries and task timeout (read
+    back on 2026-09-27).
+  - `migrate-job.yaml` put the command and its arguments in one list, set a
+    `workingDir`, put the Cloud SQL annotation on the job instead of its
+    execution template and omitted `CASEOPS_AUTO_MIGRATE=false`. With
+    `CASEOPS_ENV=cloud` the settings validator rejects the default
+    `auto_migrate=true`, so alembic could not have started; the live job's
+    environment passes the same validator. `deploy-prod.sh` updated only the
+    image, the task timeout and four database timeouts, so the job's command,
+    identity, secrets and database binding had no checked-in owner.
+  - `document-worker-job.yaml` described a job that was never provisioned. It
+    set no `CASEOPS_AUTH_SECRET`, which the validator requires in cloud, put
+    the database URL in a plain environment placeholder and used `uv run`.
+  - The QG-OPS-006 secret gate scanned only these YAML files. It never read
+    the applied definitions: the inventory's bootstrap environment, which
+    `scheduler_inventory.py` passes to `--set-env-vars` verbatim.
+- **Evidence that none was a live path:** 400 days of admin audit logs hold 70
+  Cloud Run job create, replace, deploy and delete events other than
+  `gcloud run jobs update`; the oldest is the 2026-04-22 creation of the first
+  job, `caseops-reminders-job`. `caseops-migrate-job` was created with
+  `gcloud run jobs create` on 2026-04-23, `caseops-activity-report` with
+  `gcloud run jobs deploy` on 2026-07-10 and `caseops-ip-journal-watch` with
+  `gcloud run jobs create` on 2026-08-24. Only `caseops-legal-update-sync` and
+  `caseops-case-tracking-poll` were created from these files, by the manual
+  `gcloud run jobs replace` on 2026-05-31 recorded under EH-DEPLOY-02, and
+  neither has been replaced since. No `caseops-document-worker` event exists.
+- **Decision:** retire all six rather than regenerate them. The inventory is
+  already each recurring job's declarative contract, applied and verified on
+  every release. A generated YAML would be a second copy with no consumer, and
+  its only use, a manual `jobs replace`, is forbidden because it bypasses the
+  reconciler's invoker-before-trigger ordering. The migration job is not
+  recurring and has no inventory contract to regenerate from.
+- **Control:**
+  - `scripts/deploy-prod.sh` step 2 declares the migration job's complete
+    contract (created when missing, otherwise updated, with command,
+    arguments, environment, secrets, identity, Cloud SQL, CPU, memory, retries
+    and task timeout) and reads every field back before alembic runs. The
+    readback names drifted fields and variables but never prints their
+    values. The declared contract equals the live job read on 2026-09-27.
+  - `apps/api/tests/test_deploy_prod_hardening.py` executes that readback
+    against the live-shaped job, the whole-number CPU form and twelve drifts,
+    including the retired manifest's command and its missing
+    `CASEOPS_AUTO_MIGRATE`. Fake-`gcloud` releases prove the full converge
+    command, the create path, and that drift stops the release before
+    `jobs execute`.
+  - `apps/api/tests/test_cloudrun_service_ownership.py` fails on any
+    checked-in Cloud Run `Job` manifest.
+  - `scripts/check_cloudrun_manifest_secrets.py` (QG-OPS-006) checks every
+    inventory bootstrap contract. A secret-like name in `environment`, a name
+    in both maps or a `secrets` value other than `<secret>:<version>` fails
+    without echoing the value, and a target with no definitions still fails
+    closed.
+  - The data-governance map, its rendered view, the compiled projection, the
+    program manifest, the settings error text, `docs/architecture.md` and
+    `infra/cloudrun/README.md` cite the real owners. Each new test failed
+    against a deliberately broken source before it was accepted.
+- **2026-09-29 migration execution-bound correction:** the original readback
+  accepted an execution template with `taskCount=8` and `parallelism=8`.
+  Step 2 now declares `--tasks 1 --parallelism 1` on both create and update
+  and checks both execution-template fields before `jobs execute`. Missing
+  fields, changed task count, unset parallelism and concurrent migration tasks
+  fail closed. The live-shaped fake includes these fields at the execution
+  level, separately from the nested task specification; direct readback and
+  fake-release tests cover each drift and both create/update rejection paths.
+  Production verification remains pending; this correction changes no cloud
+  resources and does not close the other EH-DEPLOY-04 items.
+- **Open, not decided here:** production has never run the document worker,
+  so its queue drains have no production consumer: stale document-job
+  recovery, scheduled reprocessing, queued inbound-email attachments, stale
+  court-sync recovery and tracked-case update summaries. Whether production
+  needs a scheduled worker is a product decision that needs the production
+  job and outbox backlog; a worker would be a `scheduler-inventory.json` entry.
+- **Severity:** control gap, not stop-ship. Nothing applied the files; the
+  release-owned migration job gains a checked-in, verified contract.
