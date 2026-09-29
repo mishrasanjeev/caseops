@@ -410,10 +410,11 @@ requirements when using the fallback.
   never satisfy acceptance only with a synthetic local statute row.
 - A private-output manifest must distinguish a relevant source/access change
   from a benign shadow-generation rebuild. Reauthorize an unchanged saved
-  source only when the retired projection is not tombstoned and the active
-  generation has the exact same complete source/type/id/version/hash multiset
-  under the current ACL; relevant source, access, or tombstone events remain
-  fail-closed.
+  source only when the retired projection is not tombstoned, no later event in
+  the projection event ledger reaches it, and the active generation has the
+  exact same complete source/type/id/version/hash multiset under the current
+  ACL; relevant source, access, or tombstone events remain fail-closed in
+  every generation.
 - A synchronous interactive AI call in an async route must run off the event
   loop, and its total provider budget must fit inside the platform deadline.
   SDK retries must not multiply a per-attempt timeout past Cloud Run's limit;
@@ -1269,6 +1270,15 @@ requirements when using the fallback.
   its own (a merged manifest spans generations and repeats projections), and
   prove list, read and HTTP agreement for malformed shapes beside the statement
   bound, as `test_20260927_draft_lists_bounded.py` does.
+- A projection event tombstones rows only in the generation active when it
+  applies, so a retired generation's untombstoned row does not prove that no
+  event followed. Reauthorize a saved private source only when the event
+  ledger holds no event after the saved row was built for the tenant, the
+  source or a saved parent scope. Checking the tombstone alone let a document
+  proof saved one generation before a Matter grant, or before a dispose and
+  reopen, return at the next rebuild, while the same proof saved one
+  generation later stayed locked. Regress both saved generations with bare
+  and real events, before and after a later rebuild.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing
