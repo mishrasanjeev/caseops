@@ -119,8 +119,10 @@ def test_saved_manifest_survives_only_an_equivalent_unrelated_rebuild(
     Production rebuilds the tenant shadow after new Matters are created. The
     old implementation compared generation IDs and made every saved Draft
     unreadable even when its exact source/version/hash and ACL were unchanged.
-    A later event on the saved Matter must still tombstone the retired proof
-    and fail closed.
+    A later event on the saved Matter must still fail closed. It tombstones
+    only the active generation, so the event ledger holds the retired proof;
+    ``test_20260927_saved_manifest_later_events.py`` covers events that leave
+    the source unchanged, before and after a later rebuild.
     """
 
     bootstrap = bootstrap_company(client)
