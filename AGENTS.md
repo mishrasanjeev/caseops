@@ -1311,6 +1311,14 @@ requirements when using the fallback.
   image SHA or resolve the candidate checkout, reject malformed identity rather
   than substituting one, and prove the normal suite discovers and runs the
   journey. Preserve a failed harness baseline separately from acceptance.
+- A stronger security rejection can legitimately precede an older stale-target
+  error. Audit dated browser expectations after changing that ordering; assert
+  the exact typed response and user-visible copy plus unchanged persisted
+  fields and child identities, never accept several errors or weaken the fence.
+- A multi-record browser journey must establish its visible list/detail context
+  on every iteration. Preserve failed partially edited fixtures, prove the
+  replacement journey on a fresh fixture and rerun its retained terminal state;
+  resetting saved evidence is not idempotence or revocation proof.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing
