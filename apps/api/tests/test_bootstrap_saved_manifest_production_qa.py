@@ -243,6 +243,42 @@ def test_document_sister_draft_stays_revoked_after_restore_rebuild_and_fixture_r
         assert "Private source access or generation changed" in rejected.text
 
 
+def test_saved_manifest_fixture_replay_preserves_interrupted_manual_edit(client):
+    qa, fixture, _, member = _fixture(client)
+    root = f"/api/matters/{fixture['anchor_id']}/drafts"
+    access = fixture["cases"]["access"]
+    edited = client.patch(
+        f"{root}/{access['draft_id']}",
+        headers=auth_headers(member),
+        json={"body": "Synthetic interrupted manual QA edit. Not a legal opinion."},
+    )
+    assert edited.status_code == 200, edited.text
+    before = client.get(f"{root}/{access['draft_id']}", headers=auth_headers(member))
+    assert before.status_code == 200, before.text
+    retained_versions = before.json()["versions"]
+    assert len(retained_versions) == 2
+    assert retained_versions[1]["source_manifest"] == retained_versions[0]["source_manifest"]
+    with get_session_factory()() as session:
+        generations = list(session.scalars(select(PrivateIndexGeneration.id)))
+        repeated = ensure_ip_production_qa_saved_manifest_fixture(
+            session,
+            company_id=qa.company_id,
+            membership_id=qa.membership_id,
+            release_sha=SHA,
+            member_password=PASSWORD,
+        )
+        assert repeated == {**fixture, "created_fixture": False}
+        assert list(session.scalars(select(PrivateIndexGeneration.id))) == generations
+    after = client.get(f"{root}/{access['draft_id']}", headers=auth_headers(member))
+    assert after.status_code == 200, after.text
+    assert after.json()["versions"] == retained_versions
+    tombstone = client.get(
+        f"{root}/{fixture['cases']['tombstone']['draft_id']}", headers=auth_headers(member)
+    )
+    assert tombstone.status_code == 200, tombstone.text
+    assert len(tombstone.json()["versions"]) == 1
+
+
 @pytest.mark.parametrize("drift", ["manifest", "body", "document", "credential"])
 def test_saved_manifest_fixture_rejects_retained_drift_without_rewriting(client, drift):
     qa, fixture, _, _ = _fixture(client)

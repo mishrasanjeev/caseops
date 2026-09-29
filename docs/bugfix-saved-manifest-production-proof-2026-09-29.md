@@ -104,6 +104,52 @@ test. Serialize the release seed with other QA-tenant mutations.
 
 Local retained evidence directory:
 `C:\Users\mishr\.codex\release-evidence\saved-manifest-proof-20260929`.
-No Docker browser run, deployed browser run, cloud write, merge, or push was
-performed by this worker. Original Review and positive rendered-export proof
-remain explicitly outside the verified claim.
+At the original fixture checkpoint, no Docker browser run, deployed browser
+run, cloud write, merge, or push had been performed by this worker. Original
+Review and positive rendered-export proof remain outside the verified claim.
+
+## Docker Navigation Correction
+
+The parent candidate `32cea75b3200beacd8d58ba066be7f97c0afce78` failed at the
+second positive list-row assertion, not at a source fence. Its trace shows the
+access detail/manual edit completed, then the tombstone list row was asserted
+without returning from access detail to the list. Both initial detail responses
+were 200; access DOCX/PDF were the legitimate citation 422; the access edit was
+200 with two versions, equal inherited source manifests and no model run.
+
+The journey now returns to the list and reloads for each positive case, asserts
+the exact list/detail URLs and checks the detail response status explicitly.
+All source/body/export/manual-edit/frozen-manifest and responsive retained-read
+assertions remain. The final read loops already navigate per case; the adjacent
+Drafting journey and 066B retained-answer loops have no analogous list/detail
+context reuse.
+
+Before any new manual edit, both local positive Drafts must have exactly one
+frozen version. An interrupted two-version access Draft is preserved and
+rejected, never reset or extended into a false fresh proof. The new backend
+regression compares complete persisted version DTOs before/after seed replay,
+keeps both access versions and the one tombstone version, and proves no new
+generation or source recapture. Its first run exposed SQLite's PATCH-versus-GET
+timestamp serialization difference (21 passed, 1 failed); those artifacts remain.
+The final canonical run uses persisted reads on both sides: 22 collected tests,
+22 passed and 66 successful setup/call/teardown reports, completion exit 0.
+The existing nine exact-runtime contracts and browser typecheck also pass.
+
+The original failed error context, screenshot, video and trace are retained in
+`docker32-actual-failure` under the evidence directory above. The trace SHA-256
+is `02c098a4a1ee4870e5860f6c636ec6d938036e6e9dfb4f313f8d45043d4143fb`.
+The parent fixture, including access Revision 2, is untouched.
+
+Focused browser replay uses an independent migrated Docker/PostgreSQL project
+`caseops-066c-navigation-20260929`, ports 55600-55604, a newly built web image
+with its own loopback API URL, and the unchanged exact API/web identity
+`32cea75b3200beacd8d58ba066be7f97c0afce78`. The fresh QA tenant is
+`caseops-ip-qa-066c-navigation-fresh`, with a unique synthetic owner email.
+`navigation-browser-fresh.xml` and its retained trace record the complete
+`IPLF-UJ-66C` positive/event/rebuild/1280px/360px journey passing (43.5 seconds).
+The same completed fixture's retained rerun also passes (29.6 seconds), recorded
+in `navigation-browser-retained.xml` and its separate trace; it does not repeat
+manual edits or source events. This is narrow
+Docker proof of the corrected browser source, not combined-candidate or
+deployed-production certification. Parent owns those gates and no runtime
+security predicate, citation gate, source contract or production data changes.

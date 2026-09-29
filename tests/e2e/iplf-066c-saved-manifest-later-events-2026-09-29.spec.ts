@@ -92,6 +92,7 @@ test("IPLF-UJ-66C Draft/document sister: benignly retired outputs stay revoked a
     const visibleControl = async () => {
       await page.goto(draftsUrl);
       await page.reload();
+      await expect(page).toHaveURL(draftsUrl);
       await expect(page.getByTestId(`draft-row-${fixture.cases.control.draft_id}`)).toBeVisible();
     };
     const blocked = async (name: "access" | "tombstone") => {
@@ -124,16 +125,22 @@ test("IPLF-UJ-66C Draft/document sister: benignly retired outputs stay revoked a
     const baseline = await Promise.all((["access", "tombstone"] as const).map(async (name) => {
       const response = await page.request.get(`${root}/${fixture.cases[name].draft_id}`, { headers });
       expect([200, 409]).toContain(response.status());
+      if (local && response.status() === 200) {
+        expect((await response.json()).versions,
+          "Fresh positive proof requires one frozen version; preserve an interrupted manual edit and use an isolated fixture.")
+          .toHaveLength(1);
+      }
       return response.status();
     }));
     expect(baseline.every((status) => status === baseline[0]), "partial/interrupted evidence cannot certify a fresh or retained run").toBe(true);
     if (!local) expect(baseline).toEqual([409, 409]);
     if (local && baseline[0] === 200) {
-      await visibleControl();
       for (const name of ["access", "tombstone"] as const) {
         const target = fixture.cases[name];
+        await visibleControl();
         await expect(page.getByTestId(`draft-row-${target.draft_id}`)).toBeVisible();
         const detail = await page.request.get(`${root}/${target.draft_id}`, { headers });
+        await expectStatus(detail, 200, "unchanged frozen draft remains authorized after list reload");
         const draft = await detail.json();
         const version = draft.versions[0];
         expect(version.id).toBe(target.version_id);
@@ -146,6 +153,7 @@ test("IPLF-UJ-66C Draft/document sister: benignly retired outputs stay revoked a
         });
         await page.goto(`${draftsUrl}/${target.draft_id}`);
         await page.reload();
+        await expect(page).toHaveURL(`${draftsUrl}/${target.draft_id}`);
         await expect(page.getByTestId("draft-body-readonly")).toHaveText(frozenQaBody(fixture, name));
         // No invented authority/approval may turn this citation-free fixture
         // into an exportable legal draft. Later rejection must precede this gate.
@@ -164,6 +172,7 @@ test("IPLF-UJ-66C Draft/document sister: benignly retired outputs stay revoked a
         expect(editedDraft.versions[1].source_manifest).toEqual(version.source_manifest);
         expect(editedDraft.versions[1].model_run_id).toBeNull();
         await page.reload();
+        await expect(page).toHaveURL(`${draftsUrl}/${target.draft_id}`);
         await expect(page.getByTestId("draft-body-readonly")).toHaveText(editedBody);
       }
       const access = fixture.cases.access;
