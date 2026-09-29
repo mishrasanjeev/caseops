@@ -837,6 +837,7 @@ def _skeleton() -> dict[str, Any]:
         "table_policy_profile_overrides": {},
         "table_disposition_handler_overrides": {},
         "column_category_overrides": {},
+        "table_purpose_overrides": {},
         "change_controls": {
             "migration_marker": MIGRATION_MARKER,
             "ci_validate_command": (
@@ -861,12 +862,20 @@ def _skeleton() -> dict[str, Any]:
     }
 
 
+def _generic_purpose(table_name: str) -> str:
+    return (
+        f"Repository SQL persistence class `{table_name}`; its exact column "
+        "inventory is intentionally versioned below."
+    )
+
+
 def _table_rows(
     schema: Mapping[str, Mapping[str, Mapping[str, object]]],
     *,
     table_overrides: Mapping[str, object],
     disposition_overrides: Mapping[str, object],
     column_overrides: Mapping[str, object],
+    purpose_overrides: Mapping[str, object],
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for table_name, columns in sorted(schema.items()):
@@ -889,9 +898,8 @@ def _table_rows(
             {
                 "id": table_name,
                 "table_name": table_name,
-                "purpose": (
-                    f"Repository SQL persistence class `{table_name}`; its exact column "
-                    "inventory is intentionally versioned below."
+                "purpose": str(
+                    purpose_overrides.get(table_name) or _generic_purpose(table_name)
                 ),
                 "policy_profile_id": profile,
                 "disposition_handler_id": str(
@@ -916,7 +924,11 @@ def _schema_fingerprint_payload(
 
 
 def generate() -> dict[str, Any]:
-    """Refresh only generated SQL inventory while preserving policy decisions."""
+    """Refresh only generated SQL inventory while preserving policy decisions.
+
+    Reviewed table purposes are decisions too: they live in
+    ``table_purpose_overrides`` and every other row gets the generated text.
+    """
 
     data = copy.deepcopy(_load(MAP_PATH) if MAP_PATH.exists() else _skeleton())
     schema = current_sql_schema()
@@ -925,18 +937,37 @@ def generate() -> dict[str, Any]:
     table_overrides = data.get("table_policy_profile_overrides", {})
     disposition_overrides = data.get("table_disposition_handler_overrides", {})
     column_overrides = data.get("column_category_overrides", {})
+    purpose_overrides = data.get("table_purpose_overrides", {})
     if not isinstance(table_overrides, Mapping):
         raise ValueError("table_policy_profile_overrides must be an object")
     if not isinstance(column_overrides, Mapping):
         raise ValueError("column_category_overrides must be an object")
     if not isinstance(disposition_overrides, Mapping):
         raise ValueError("table_disposition_handler_overrides must be an object")
+    if not isinstance(purpose_overrides, Mapping):
+        raise ValueError("table_purpose_overrides must be an object")
+    # Rows are generated output. A reviewed purpose written only into a row
+    # would be replaced below, so refuse before rewriting anything.
+    unrecorded = sorted(
+        str(row.get("table_name"))
+        for row in data.get("sql_tables", [])
+        if isinstance(row, Mapping)
+        and row.get("table_name") in schema
+        and row.get("table_name") not in purpose_overrides
+        and row.get("purpose") != _generic_purpose(str(row.get("table_name")))
+    )
+    if unrecorded:
+        raise ValueError(
+            "record reviewed table purposes in table_purpose_overrides before "
+            f"regenerating sql_tables: {unrecorded}"
+        )
 
     data["sql_tables"] = _table_rows(
         schema,
         table_overrides=table_overrides,
         disposition_overrides=disposition_overrides,
         column_overrides=column_overrides,
+        purpose_overrides=purpose_overrides,
     )
     data["schema_fingerprint"] = _fingerprint(
         _schema_fingerprint_payload(schema, orm_indexes, migration_indexes)
@@ -1097,6 +1128,10 @@ def validate(
         if table_name in row_by_name:
             errors.append(f"duplicate sql-table entry: {table_name}")
         row_by_name[table_name] = row
+    purpose_overrides = data.get("table_purpose_overrides", {})
+    if not isinstance(purpose_overrides, Mapping):
+        errors.append("table_purpose_overrides must be an object")
+        purpose_overrides = {}
     actual_table_names = set(actual_schema)
     registered_table_names = set(row_by_name)
     if registered_table_names != actual_table_names:
@@ -1114,6 +1149,13 @@ def validate(
             errors.append(f"sql-table/{table_name}: id must equal table_name")
         if not _required_string(row.get("purpose")):
             errors.append(f"sql-table/{table_name}: purpose must be explicit")
+        elif row.get("purpose") != (
+            purpose_overrides.get(table_name) or _generic_purpose(table_name)
+        ):
+            errors.append(
+                f"sql-table/{table_name}: purpose must equal its table_purpose_overrides "
+                "entry or the generated text; record a reviewed purpose as an override"
+            )
         profile_id = str(row.get("policy_profile_id", ""))
         if profile_id not in profiles:
             errors.append(
@@ -1181,6 +1223,15 @@ def validate(
                 errors.append(
                     f"table disposition override uses unknown handler {handler_id!r}"
                 )
+    for table_name, purpose in purpose_overrides.items():
+        if table_name not in actual_schema:
+            errors.append(f"table purpose override references unknown table {table_name}")
+        if not _required_string(purpose):
+            errors.append(f"table purpose override for {table_name} must be explicit")
+        elif purpose == _generic_purpose(str(table_name)):
+            errors.append(
+                f"table purpose override for {table_name} repeats the generated text"
+            )
     column_overrides = data.get("column_category_overrides", {})
     if not isinstance(column_overrides, Mapping):
         errors.append("column_category_overrides must be an object")

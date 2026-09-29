@@ -309,6 +309,9 @@
       "target_reference_hash": "lifecycle_or_audit_evidence"
     }
   },
+  "table_purpose_overrides": {
+    "matter_bulk_update_operations": "Tenant-scoped bulk-update operation history. Forward revision 20260925_0001 adds row_results_json to databases that applied 20260924_0001 before that column was introduced; historical rows receive an empty result list rather than invented row evidence."
+  },
   "change_controls": {
     "migration_marker": "DATA-GOVERNANCE-MAP: updated",
     "ci_validate_command": "uv --directory apps/api run python ../../scripts/ip_data_governance_map.py validate",
