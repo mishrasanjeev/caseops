@@ -1262,6 +1262,13 @@ requirements when using the fallback.
   transaction, so a later `DROP INDEX` waits on the test itself, and its
   cleanup is rolled back on close. Re-enable AUTOCOMMIT after the block, bound
   lock waits, and commit the cleanup.
+- Migration-job safety includes execution topology. Declare and verify one
+  task and parallelism one before Alembic execution; inherited job defaults or
+  a correct image, command and environment cannot certify serial migration.
+- GitHub auto-merge is not a CI gate when the branch has no required checks.
+  Inspect the exact-head check rollup and repository enforcement before using
+  it, keep pending rewritten-head evidence pending, and require completed CI
+  on the combined current main before any production deployment.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing

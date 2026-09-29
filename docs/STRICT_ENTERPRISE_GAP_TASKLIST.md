@@ -2150,7 +2150,12 @@ job or scheduler was changed.
 
 ### EH-DEPLOY-03 - The canonical API deploy inherits billing, CPU boost and most environment
 
-- **Status:** Partially implemented.
+- **Status:** Partially implemented. Declared billing and CPU boost, with the
+  runtime readback below, are written and falsified on
+  `fix/cloudrun-api-billing-boost-20260927` and are **not yet merged**. That
+  part becomes `Implemented` once it is on `main` with CI green and a
+  production release has passed the new readback. The live-only environment
+  and the ClamAV image and resources are still inherited from the service.
 - **Gap:** `scripts/deploy-prod.sh` sets the containers, probes, capacity and
   the environment and secrets it owns, but carries forward request-based
   billing, startup CPU boost, the ClamAV resources and every other environment
@@ -2159,8 +2164,46 @@ job or scheduler was changed.
   independence and the service minimum. It does not check billing mode, CPU
   boost, concurrency, timeout or maximum instances, so drift made outside a
   release would persist unnoticed.
+- **Control (billing, CPU boost and runtime readback):** the `caseops-api`
+  deploy in `scripts/deploy-prod.sh` passes `--cpu-throttling` (request-based
+  billing) and `--cpu-boost` with the other service-level flags, before the
+  first `--container`. After routing, and before the QA bootstrap or
+  prod-verify dispatch, the readback also fails closed on instance-based
+  billing (a `cpu-throttling` annotation other than true), a startup CPU boost
+  that is not true, concurrency other than 1, a timeout other than 120 s, a
+  service or revision maximum other than 20, an API `command` or `args`
+  override, and a ClamAV probe timeout or failure threshold other than 1 s and
+  120. A missing `cpu-throttling` annotation passes, because request-based
+  billing is Cloud Run's default and was the live state before the release
+  declared it; gcloud's `True` and the service's `true` both pass.
+- **Evidence (offline; no production API was called):** the installed gcloud
+  568.0.0, the client version recorded on the live service, lists
+  `--[no-]cpu-throttling` and `--[no-]cpu-boost` among the flags that must
+  precede `--container`, and its GA parser hands every later argument to a
+  container-only parser. With an empty gcloud configuration, a fake project
+  and a dead loopback proxy, the script's exact 44-argument command passed
+  parsing and container validation and stopped only at the missing
+  credential; the same flags after `--container clamav`, or a misspelled
+  `--cpu-bost`, were rejected as unrecognized arguments. Against a loopback
+  fake of the Run API seeded from the read-only 2026-09-27 export, gcloud sent
+  one `PUT` that differs from the current command's request only in
+  `cpu-throttling` (absent to `True`), `startup-cpu-boost` (`true` to `True`)
+  and the per-deploy nonce. The unchanged readback accepted that request, its
+  lower-case and annotation-dropped forms and the live export itself. All 472
+  retained revisions carry `startup-cpu-boost: 'true'` and none carries
+  `cpu-throttling`.
+- **Tests:** `test_deploy_prod_hardening.py` pins both flags in the service
+  section of the executed command and adds one drift mode per new check. Each
+  fails with exactly its own readback error and withholds the QA bootstrap and
+  prod-verify; the live, gcloud and service spellings pass. All 16 source
+  mutations were caught by an assertion in the test that claims them: either
+  flag removed, the billing flag negated, both flags moved after
+  `--container`, each readback check disabled, the billing check made
+  presence-only, the boost comparison made case-sensitive and the override
+  check narrowed to `command`.
 - **Missing layer:** declare startup CPU boost and request-based billing in the
-  release and read them back with concurrency, timeout and maximum instances.
+  release and read them back with concurrency, timeout and maximum instances
+  (the control above, not yet merged; the revision minimum is still unread).
   Give the live-only environment a checked-in owner, or record why it has none.
   The data-governance change gate never watched the release script's
   environment declarations; it watched the unapplied manifest instead.

@@ -39,26 +39,32 @@ every value the release does not set. Every release sets this contract, and
 - Concurrency 1, a 120-second request timeout, a service-level minimum of 4
   and maximum of 20 instances, a revision maximum of 20 and no revision-level
   minimum.
+- Request-based billing (`--cpu-throttling`: CPU only while a request is in
+  flight) and startup CPU boost (`--cpu-boost`). Both apply to the revision
+  template, so they precede the first `--container`; gcloud parses every
+  later argument as a per-container flag and rejects them there.
 
-A new project gets the same contract from section 6 of `docs/GCP_DEPLOY.md`,
-which also declares request-based billing (`--cpu-throttling`) and startup CPU
-boost (`--cpu-boost`); `apps/api/tests/test_cloudrun_service_ownership.py`
-compares that command with the release and loads its environment through the
-production settings validators.
+A new project gets the same contract from section 6 of `docs/GCP_DEPLOY.md`;
+`apps/api/tests/test_cloudrun_service_ownership.py` compares that command with
+the release and loads its environment through the production settings
+validators.
 
 After routing, the release reads back the sidecar, the API startup probe, the
-ClamAV probe delay and period, the scanner requirement, startup independence
-and the service minimum, and withholds certification on any drift. It refuses
-to deploy at all when the live service has no ClamAV container to carry
-forward. `scripts/eg003-apply-clamav.sh` is the repair path: it re-adds the
+ClamAV probe delay, period, timeout and failure threshold, the scanner
+requirement, startup independence, request-based billing, startup CPU boost,
+concurrency, the request timeout, the service minimum and maximum, the
+revision maximum and the absence of an API command or argument override, and
+withholds certification on any drift. A missing `cpu-throttling` annotation
+counts as request-based billing, which is Cloud Run's default. The release
+refuses to deploy at all when the live service has no ClamAV container to
+carry forward. `scripts/eg003-apply-clamav.sh` is the repair path: it re-adds the
 sidecar to an export of the live service, and the next release converges the
 probes and startup order.
 
-Request-based billing, startup CPU boost, the ClamAV resources (1 CPU,
-1500 MiB) and every environment value outside the release's
-`--update-env-vars` and `--update-secrets` (for example `CASEOPS_ENV=production`,
-CORS, the document bucket, the embedding provider, SendGrid and eCourts
-bindings) are live service state. They were set outside the release script, at
+The ClamAV image and resources (1 CPU, 1500 MiB) and every environment value
+outside the release's `--update-env-vars` and `--update-secrets` (for example
+`CASEOPS_ENV=production`, CORS, the document bucket, the embedding provider,
+SendGrid and eCourts bindings) are live service state. They were set outside the release script, at
 bootstrap, by the EG-003 repair or by earlier service updates, and each
 release carries them forward unchanged. Every sensitive value is a Secret
 Manager reference (verified on 2026-09-27).

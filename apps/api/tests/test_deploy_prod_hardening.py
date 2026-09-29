@@ -596,10 +596,22 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "$ActualNodeVersion -ne $PinnedNodeVersion" in docker_script
     assert "Activate the pinned runtime before retrying" in docker_script
     assert "& $NpmPath ci --no-audit --no-fund" in docker_script
-    assert docker_script.count("& $NpxPath playwright test") == 4
-    assert "--project=app-chromium --shard=1/2" in docker_script
-    assert "--project=app-chromium --shard=2/2" in docker_script
-    assert "--project=app-mobile" in docker_script
+    # Browser acceptance runs the candidate's own Playwright with an absolute
+    # config (the listing preflight and the launcher), never a CWD lookup.
+    assert docker_script.count("& $NodePath $PlaywrightCli test --config $PlaywrightConfig") == 2
+    assert "--config playwright.docker.config.ts" not in docker_script
+    assert docker_script.count("Invoke-CandidatePlaywright -Arguments") == 4
+    assert (
+        'Invoke-CandidatePlaywright -Arguments @("--project=app-chromium", "--shard=1/2")'
+        in docker_script
+    )
+    assert (
+        'Invoke-CandidatePlaywright -Arguments @("--project=app-chromium", "--shard=2/2")'
+        in docker_script
+    )
+    assert 'Invoke-CandidatePlaywright -Arguments @("--project=app-mobile")' in docker_script
+    assert "Invoke-CandidatePlaywright -Arguments $PlaywrightArgs" in docker_script
+    assert "Assert-CandidatePlaywrightSuite -Arguments $PlaywrightArgs" in docker_script
     assert "Docker Playwright focused acceptance failed" in docker_script
     assert "--retries" not in docker_script
     assert "git -C $RepoRoot status" in docker_script
@@ -1647,6 +1659,15 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_LLM_PROVIDER='openai'
   FAKE_LLM_SECRET='caseops-openai-api-key'
   FAKE_SERVICE_MIN='4'
+  FAKE_SERVICE_MAX='20'
+  FAKE_REVISION_MAX='20'
+  FAKE_CONCURRENCY='1'
+  FAKE_TIMEOUT='120'
+  # The live service on 2026-09-27: no cpu-throttling annotation (request-based
+  # billing is the default) and startup-cpu-boost "true".
+  FAKE_BILLING_ANNOTATION=''
+  FAKE_CPU_BOOST_ANNOTATION='"run.googleapis.com/startup-cpu-boost":"true",'
+  FAKE_API_OVERRIDE=''
   FAKE_SCANNER_REQUIRED='true'
   FAKE_API_PROBE_PERIOD='2'
   FAKE_STARTUP_DEPENDENCIES='{}'
@@ -1673,14 +1694,43 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     FAKE_STARTUP_DEPENDENCIES='{\\"api\\":[\\"clamav\\"]}'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "startup-malformed" ]]; then
     FAKE_STARTUP_DEPENDENCIES='[]'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "gcloud-declared" ]]; then
+    # gcloud writes --cpu-throttling and --cpu-boost as str(True).
+    FAKE_BILLING_ANNOTATION='"run.googleapis.com/cpu-throttling":"True",'
+    FAKE_CPU_BOOST_ANNOTATION='"run.googleapis.com/startup-cpu-boost":"True",'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "billing-declared" ]]; then
+    FAKE_BILLING_ANNOTATION='"run.googleapis.com/cpu-throttling":"true",'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "billing-drift" ]]; then
+    FAKE_BILLING_ANNOTATION='"run.googleapis.com/cpu-throttling":"false",'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "cpu-boost-drift" ]]; then
+    FAKE_CPU_BOOST_ANNOTATION='"run.googleapis.com/startup-cpu-boost":"false",'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "cpu-boost-missing" ]]; then
+    FAKE_CPU_BOOST_ANNOTATION=''
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "concurrency-drift" ]]; then
+    FAKE_CONCURRENCY='80'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "timeout-drift" ]]; then
+    FAKE_TIMEOUT='300'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "service-max-drift" ]]; then
+    FAKE_SERVICE_MAX='10'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "revision-max-drift" ]]; then
+    FAKE_REVISION_MAX='10'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "api-command-override" ]]; then
+    FAKE_API_OVERRIDE='"command":["uv","run","uvicorn"],'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "api-args-override" ]]; then
+    FAKE_API_OVERRIDE='"args":["--workers","4"],'
   fi
   printf '%s' \
     '{"metadata":{"generation":2,"annotations":{' \
-    '"run.googleapis.com/minScale":"' "${FAKE_SERVICE_MIN}" '"}},' \
+    '"run.googleapis.com/minScale":"' "${FAKE_SERVICE_MIN}" '",' \
+    '"run.googleapis.com/maxScale":"' "${FAKE_SERVICE_MAX}" '"}},' \
     '"spec":{"traffic":[{"latestRevision":true,"percent":100}],' \
     '"template":{"metadata":{"annotations":{' \
+    '"autoscaling.knative.dev/maxScale":"' "${FAKE_REVISION_MAX}" '",' \
+    "${FAKE_BILLING_ANNOTATION}" "${FAKE_CPU_BOOST_ANNOTATION}" \
     '"run.googleapis.com/container-dependencies":"' "${FAKE_STARTUP_DEPENDENCIES}" \
-    '"}},"spec":{"containers":[{"name":"api",' \
+    '"}},"spec":{"containerConcurrency":' "${FAKE_CONCURRENCY}" ',' \
+    '"timeoutSeconds":' "${FAKE_TIMEOUT}" ',' \
+    '"containers":[{"name":"api",' "${FAKE_API_OVERRIDE}" \
     '"startupProbe":{"tcpSocket":{"port":8080},"periodSeconds":' \
     "${FAKE_API_PROBE_PERIOD}" ',"timeoutSeconds":1,"failureThreshold":120},"env":[' \
     '{"name":"CASEOPS_CLAMAV_REQUIRED","value":"' "${FAKE_SCANNER_REQUIRED}" '"},' \
@@ -1759,6 +1809,20 @@ elif [[ "$*" == *"services describe caseops-api"* && \
 elif [[ "$*" == *"services describe caseops-api"* && \
   "$*" == *"startupProbe.periodSeconds"* ]]; then
   printf '2\n'
+elif [[ "$*" == *"services describe caseops-api"* && \
+  "$*" == *"startupProbe.timeoutSeconds"* ]]; then
+  if [[ "${FAKE_TRAFFIC_MODE}" == "clamav-probe-timeout-drift" ]]; then
+    printf '5\n'
+  else
+    printf '1\n'
+  fi
+elif [[ "$*" == *"services describe caseops-api"* && \
+  "$*" == *"startupProbe.failureThreshold"* ]]; then
+  if [[ "${FAKE_TRAFFIC_MODE}" == "clamav-probe-threshold-drift" ]]; then
+    printf '3\n'
+  else
+    printf '120\n'
+  fi
 fi
 """,
     )
@@ -2154,9 +2218,10 @@ def test_deploy_prod_executes_the_complete_two_container_api_contract(tmp_path: 
 
     The retired infra/cloudrun/api-service.yaml disagreed with production on
     command, billing mode, sidecar, probes and CPU boost. Every release must
-    redeploy both containers with their probes and capacity, and must leave
-    the image command, request-based billing, startup CPU boost and every
-    environment value it does not own exactly as the live service has them.
+    redeploy both containers with their probes and capacity, declare
+    request-based billing and startup CPU boost, and leave the image command
+    and every environment value it does not own exactly as the live service
+    has them.
     """
     result = _run_deploy_with_fakes(tmp_path, "abcdef1")
 
@@ -2173,6 +2238,11 @@ def test_deploy_prod_executes_the_complete_two_container_api_contract(tmp_path: 
         "--min-instances default",
         "--timeout 120s",
     } <= {" ".join(pair) for pair in pairwise(service.split())}
+    # Revision-template flags: gcloud parses every argument after the first
+    # --container as a per-container flag and rejects these there.
+    declared = {"--cpu-throttling", "--cpu-boost"}
+    assert declared <= set(service.split())
+    assert not declared & set(api.split() + clamav.split())
     assert api.startswith(
         "api --port 8080 --image "
         "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api:abcdef1 "
@@ -2228,6 +2298,80 @@ def test_deploy_prod_withholds_certification_when_the_sidecar_disappears(
     assert "EG-003 REGRESSION: clamav sidecar missing from caseops-api" in result.stdout
     calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
     assert any(call.startswith("run deploy caseops-api ") for call in calls)
+    assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
+    assert not any("gh workflow run prod-verify.yml" in call for call in calls)
+
+
+_API_RUNTIME_CONTRACT_ERRORS = {
+    "billing-drift": "request-based billing is not in effect (cpu-throttling is not true)",
+    "cpu-boost-drift": "startup CPU boost is not enabled",
+    "cpu-boost-missing": "startup CPU boost is not enabled",
+    "concurrency-drift": "containerConcurrency does not match API_CONCURRENCY",
+    "timeout-drift": "request timeout does not match API_TIMEOUT_SECONDS",
+    "service-max-drift": "service-level maximum capacity does not match API_MAX_INSTANCES",
+    "revision-max-drift": "revision-level maximum capacity does not match API_MAX_INSTANCES",
+    "api-command-override": "API container overrides the image command or arguments",
+    "api-args-override": "API container overrides the image command or arguments",
+}
+
+
+@pytest.mark.parametrize(
+    ("traffic_mode", "expected_error"),
+    sorted(_API_RUNTIME_CONTRACT_ERRORS.items()),
+    ids=sorted(_API_RUNTIME_CONTRACT_ERRORS),
+)
+def test_deploy_prod_readback_fails_closed_on_api_runtime_contract_drift(
+    tmp_path: Path,
+    traffic_mode: str,
+    expected_error: str,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", traffic_mode=traffic_mode)
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "TRAFFIC/REVISION DRIFT" in result.stdout
+    # Each mode drifts one field; the readback must report exactly that field.
+    assert result.stderr.strip() == expected_error
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert any(call.startswith("run deploy caseops-api ") for call in calls)
+    assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
+    assert not any("gh workflow run prod-verify.yml" in call for call in calls)
+    assert "DONE abcdef1" not in result.stdout
+
+
+@pytest.mark.parametrize("traffic_mode", ["ok", "gcloud-declared", "billing-declared"])
+def test_deploy_prod_readback_accepts_each_declared_billing_and_boost_spelling(
+    tmp_path: Path,
+    traffic_mode: str,
+) -> None:
+    # "ok" is the live service before the release declared billing: no
+    # cpu-throttling annotation, which is Cloud Run's request-based default.
+    # gcloud writes the declared flags as "True"; the service reports "true".
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", traffic_mode=traffic_mode)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "DONE abcdef1" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("traffic_mode", "reported_probe"),
+    [
+        ("clamav-probe-timeout-drift", "delay=0 period=2 timeout=5 failureThreshold=120"),
+        ("clamav-probe-threshold-drift", "delay=0 period=2 timeout=1 failureThreshold=3"),
+    ],
+    ids=["clamav-probe-timeout-drift", "clamav-probe-threshold-drift"],
+)
+def test_deploy_prod_withholds_certification_on_clamav_probe_drift(
+    tmp_path: Path,
+    traffic_mode: str,
+    reported_probe: str,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", traffic_mode=traffic_mode)
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert (
+        f"EG-003 REGRESSION: clamav startup probe {reported_probe}; expected 0/2/1/120."
+    ) in result.stdout
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
     assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
     assert not any("gh workflow run prod-verify.yml" in call for call in calls)
 

@@ -20,6 +20,11 @@ $ComposeFile = Join-Path $RepoRoot "docker-compose.yml"
 $ApiDir = Join-Path $RepoRoot "apps\api"
 $ApiPython = Join-Path $ApiDir ".venv\Scripts\python.exe"
 $TestApiProxyScript = Join-Path $RepoRoot "scripts\docker-acceptance-api-proxy.mjs"
+# Browser acceptance must use the candidate's own config, specs and installed
+# Playwright. A relative --config or npx lookup follows the caller's working
+# directory, which on 2026-09-28 silently ran another checkout's browser suite.
+$PlaywrightConfig = Join-Path $RepoRoot "playwright.docker.config.ts"
+$PlaywrightCli = Join-Path $RepoRoot "node_modules\@playwright\test\cli.js"
 $TestApiProxyProcess = $null
 $TestApiProxyStdout = $null
 $TestApiProxyStderr = $null
@@ -159,6 +164,106 @@ function Assert-CandidateSourceUnchanged {
     }
 }
 
+function Test-PathWithinRoot {
+    param(
+        [Parameter(Mandatory=$true)][AllowEmptyString()][string]$Path,
+        [Parameter(Mandatory=$true)][string]$Root
+    )
+
+    if (-not $Path -or -not [IO.Path]::IsPathRooted($Path)) { return $false }
+    $Separators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $FullRoot = [IO.Path]::GetFullPath($Root).TrimEnd($Separators) + [IO.Path]::DirectorySeparatorChar
+    $FullPath = [IO.Path]::GetFullPath($Path)
+    $Comparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    return $FullPath.StartsWith($FullRoot, $Comparison)
+}
+
+function Assert-CandidatePlaywrightSuite {
+    param([string[]]$Arguments = @())
+
+    if (-not (Test-Path -LiteralPath $PlaywrightConfig -PathType Leaf)) {
+        throw "Candidate Playwright config is missing: $PlaywrightConfig"
+    }
+    if (-not (Test-Path -LiteralPath $PlaywrightCli -PathType Leaf)) {
+        throw "Candidate Playwright is not installed at $PlaywrightCli; refusing to resolve it elsewhere."
+    }
+    $HelperPython = [Environment]::GetEnvironmentVariable("CASEOPS_E2E_PYTHON", "Process")
+    if (
+        -not (Test-PathWithinRoot -Path $HelperPython -Root $RepoRoot) -or
+        -not (Test-Path -LiteralPath $HelperPython -PathType Leaf)
+    ) {
+        throw "Browser support helpers would run Python outside the candidate: '$HelperPython'."
+    }
+
+    Push-Location -LiteralPath $RepoRoot
+    try {
+        $Listing = @(& $NodePath $PlaywrightCli test --config $PlaywrightConfig --list --reporter=json @Arguments)
+        $ListExitCode = $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
+    $ListingText = $Listing -join "`n"
+    $InventoryPath = Join-Path $ResultsDirectory "playwright-inventory.json"
+    [IO.File]::WriteAllText($InventoryPath, $ListingText)
+    $JsonStart = $ListingText.IndexOf("{")
+    if ($ListExitCode -ne 0 -or $JsonStart -lt 0) {
+        throw "Could not list the candidate Playwright suite (exit $ListExitCode); see $InventoryPath."
+    }
+    $Report = $ListingText.Substring($JsonStart) | ConvertFrom-Json
+    if (@($Report.errors).Count -gt 0) {
+        throw "The candidate Playwright suite has load errors; see $InventoryPath."
+    }
+    $ConfigFile = [string]$Report.config.configFile
+    if (
+        -not (Test-PathWithinRoot -Path $ConfigFile -Root $RepoRoot) -or
+        [IO.Path]::GetFullPath($ConfigFile) -ne [IO.Path]::GetFullPath($PlaywrightConfig)
+    ) {
+        throw "Playwright resolved config '$ConfigFile' instead of $PlaywrightConfig."
+    }
+    $RootDir = [string]$Report.config.rootDir
+    $TestDirs = @($RootDir) + @($Report.config.projects | ForEach-Object { [string]$_.testDir })
+    foreach ($TestDir in $TestDirs) {
+        if (-not (Test-PathWithinRoot -Path $TestDir -Root $RepoRoot)) {
+            throw "Playwright resolved test directory '$TestDir' outside the candidate $RepoRoot."
+        }
+    }
+    $Pending = New-Object 'System.Collections.Generic.Queue[object]'
+    foreach ($Suite in @($Report.suites)) { if ($null -ne $Suite) { $Pending.Enqueue($Suite) } }
+    $SpecCount = 0
+    while ($Pending.Count -gt 0) {
+        $Suite = $Pending.Dequeue()
+        if ($Suite.file) {
+            $SpecFile = [IO.Path]::Combine($RootDir, [string]$Suite.file)
+            if (-not (Test-PathWithinRoot -Path $SpecFile -Root $RepoRoot)) {
+                throw "Playwright listed spec '$SpecFile' outside the candidate $RepoRoot."
+            }
+        }
+        $SpecCount += @($Suite.specs | Where-Object { $null -ne $_ }).Count
+        foreach ($Child in @($Suite.suites)) { if ($null -ne $Child) { $Pending.Enqueue($Child) } }
+    }
+    if ($SpecCount -eq 0) {
+        throw "The candidate Playwright selection is empty; an empty browser run cannot certify."
+    }
+    Write-Host "[docker-acceptance] candidate Playwright inventory: $SpecCount specs from $RootDir"
+}
+
+function Invoke-CandidatePlaywright {
+    param([string[]]$Arguments = @())
+
+    Push-Location -LiteralPath $RepoRoot
+    try {
+        & $NodePath $PlaywrightCli test --config $PlaywrightConfig --reporter=list @Arguments
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 function Get-ComposeServiceState {
     param(
         [Parameter(Mandatory=$true)]
@@ -189,6 +294,7 @@ function Get-ComposeServiceState {
 
 $PinnedNodeVersion = ((Get-Content -LiteralPath (Join-Path $RepoRoot ".nvmrc") -Raw).Trim() -replace "^v", "")
 & (Join-Path $RepoRoot "tests\docker-candidate-source-guard.ps1")
+& (Join-Path $RepoRoot "tests\docker-acceptance-repo-root-guard.ps1")
 $NodePath = (Get-Command node -ErrorAction Stop).Source
 Write-Host "[docker-acceptance] validating local proxy cancellation and transport semantics"
 & $NodePath --test (Join-Path $RepoRoot "scripts\docker-acceptance-api-proxy.test.mjs")
@@ -201,7 +307,6 @@ if ($ActualNodeVersion -ne $PinnedNodeVersion) {
     )
 }
 $NpmPath = (Get-Command npm -ErrorAction Stop).Source
-$NpxPath = (Get-Command npx -ErrorAction Stop).Source
 
 $PreviousEnvironment = @{}
 $AcceptanceEnvironment = @{
@@ -240,6 +345,8 @@ $AcceptanceEnvironment = @{
     CASEOPS_ENV = "ci"
     CASEOPS_AUTH_SECRET = "docker-postgres-validation-secret-at-least-32-bytes"
     CASEOPS_WEB_BASE_URL = "http://127.0.0.1:$WebPort"
+    # Browser support helpers honour this before any path of their own.
+    CASEOPS_E2E_PYTHON = $ApiPython
     # Worktrees under OneDrive cannot always accept uv cache hardlinks on Windows.
     UV_LINK_MODE = "copy"
 }
@@ -250,6 +357,8 @@ foreach ($Name in $AcceptanceEnvironment.Keys) {
 }
 
 $Succeeded = $false
+# npm, npx, uv, Python and Compose resolve inputs from the working directory.
+Push-Location -LiteralPath $RepoRoot
 try {
     $IdentityKind = if ($PreCommit) { "pre-commit source fingerprint" } else { "commit" }
     $CandidateIdentity = if ($PreCommit) { $SourceFingerprint } else { $ReleaseSha }
@@ -271,8 +380,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Browser test or configuration typecheck failed." }
     & uv sync --project $ApiDir --frozen
     if ($LASTEXITCODE -ne 0) { throw "Host API dependency sync failed." }
-    & $ApiPython -c "import caseops_api, psycopg, sqlalchemy"
+    $ApiPackage = ((& $ApiPython -c "import caseops_api, psycopg, sqlalchemy; print(caseops_api.__file__)" | Out-String).Trim())
     if ($LASTEXITCODE -ne 0) { throw "Host API fixture dependencies or project package are unavailable." }
+    if (-not (Test-PathWithinRoot -Path $ApiPackage -Root $ApiDir)) {
+        throw "Host API fixtures import caseops_api from '$ApiPackage', outside the candidate $ApiDir."
+    }
+    Assert-CandidatePlaywrightSuite -Arguments $PlaywrightArgs
 
     Write-Host "[docker-acceptance] resetting isolated project $ComposeProject"
     & docker compose --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
@@ -411,6 +524,7 @@ try {
     $TestApiProxyProcess = Start-Process `
         -FilePath $NodePath `
         -ArgumentList @("`"$TestApiProxyScript`"", $TestApiPort, $ApiPort) `
+        -WorkingDirectory $RepoRoot `
         -PassThru `
         -WindowStyle Hidden `
         -RedirectStandardOutput $TestApiProxyStdout `
@@ -438,18 +552,15 @@ try {
     if ($PlaywrightArgs.Count -eq 0) {
         # Bound each Windows worker's lifetime without retries: every desktop
         # test still runs exactly once, and the mobile project remains whole.
-        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list `
-            --project=app-chromium --shard=1/2
+        Invoke-CandidatePlaywright -Arguments @("--project=app-chromium", "--shard=1/2")
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright desktop shard 1/2 failed." }
-        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list `
-            --project=app-chromium --shard=2/2
+        Invoke-CandidatePlaywright -Arguments @("--project=app-chromium", "--shard=2/2")
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright desktop shard 2/2 failed." }
-        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list `
-            --project=app-mobile
+        Invoke-CandidatePlaywright -Arguments @("--project=app-mobile")
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright mobile project failed." }
     }
     else {
-        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list @PlaywrightArgs
+        Invoke-CandidatePlaywright -Arguments $PlaywrightArgs
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright focused acceptance failed." }
     }
 
@@ -489,6 +600,7 @@ finally {
         $TestApiProxyProcess.WaitForExit()
         $TestApiProxyProcess.Dispose()
     }
+    Pop-Location
 }
 
 if (-not $Succeeded) { exit 1 }
