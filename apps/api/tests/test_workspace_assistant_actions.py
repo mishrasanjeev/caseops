@@ -246,7 +246,16 @@ def test_preview_supersession_expiry_policy_and_target_changes_fail_closed(
         preview=stale_target_preview,
     )
     assert rejected_target.status_code == 409
-    assert rejected_target.json()["type"] == "assistant_action_target_changed"
+    # The changed source now hides the answer before the target-only guard.
+    assert rejected_target.json()["type"] == "assistant_action_answer_hidden"
+    turns = client.get(
+        f"/api/workspace-assistant/sessions/{assistant_session['id']}/turns",
+        headers=auth_headers(token),
+    )
+    assert turns.status_code == 200, turns.text
+    hidden = next(turn for turn in turns.json()["items"] if turn["id"] == kwargs["turn_id"])
+    assert hidden["render_status"] == "permission_changed"
+    assert hidden["proposed_actions"] == []
     with get_session_factory()() as session:
         assert session.scalar(select(func.count(MatterTask.id))) == 0
 

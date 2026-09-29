@@ -132,3 +132,86 @@ The owner decided on 2026-09-28:
   rebuild-race tests, all 29 pass.
 - All CI governance validators, including both `check-change` gates, and
   `ruff check src tests` pass.
+
+## Scoped hidden-controls follow-up, 2026-09-29
+
+This follow-up maps to M6, UJ-23/UJ-66 and IPLF-062/IPLF-066. It starts on
+`5556e6295bac21b2cd6a19bc5ef26f14357035d4`, directly after the separate
+#500 production-proof patch. No private-retrieval/drafting implementation,
+shared governance files, cloud resources or remote branches were changed.
+
+The saved-answer decision hid content and citations but still returned the
+manifest's `suggested_searches` and `proposed_actions`. Those can contain
+private filenames, target labels, URLs and write instructions. Action preview
+and confirmation read that manifest directly, and confirmed replay returned
+the stored preview without checking the answer. An unchanged writable target
+therefore did not prevent a write based on a permanently locked answer.
+
+- `_serialize_turns` now returns both control arrays empty for every hidden
+  answer, including legacy reauthorization-required and redacted rows and a
+  citation-version mismatch. Visible controls and model metadata are unchanged.
+- Proposal lookup uses that same serializer decision. Preview checks both
+  before and after the existing tenant/actor locks; confirmation checks after
+  those locks and before the confirmed-replay return as well as execution.
+  Rejection is a generic 409 `assistant_action_answer_hidden`, without private
+  labels or links. No new lock or persisted visibility decision is introduced.
+- Turn-list, ask response, export and citation-open all use the shared
+  serializer. Citation-open still rejects hidden citations with 409. Source
+  manifests, content/hash, citations, saved-access rows and model audit fields
+  remain stored unchanged; rejected actions do not change previews or tasks.
+- The older changed-target action assertion now expects the earlier hidden
+  answer rejection and positively checks its hidden turn and empty proposals.
+  Current visible write/confirmation/idempotent-replay behavior stays covered.
+
+Focused regression inventory:
+
+- `test_20260929_assistant_hidden_controls.py`: four hidden-control states,
+  with real document navigation plus a retained private-label suggestion,
+  visible controls before the change, repeated list/export reads, citation
+  rejection and identical retained row fields after reads.
+- Its two action cases cache a real task preview, lock only the saved document
+  through the real projection-event service while leaving the target unchanged,
+  and reject pending execution, a new preview and already-confirmed replay.
+  Preview/task/audit state is unchanged after rejection. Visible confirmation
+  and replay first succeed in the confirmed case.
+- `test_20260929_assistant_hidden_controls_postgres.py` discovers the same six
+  cases with the independently isolated PostgreSQL fixture. Execution belongs
+  to the parent's combined gate, not this local proof.
+
+Evidence is retained outside the checkout in
+`C:/Users/mishr/.codex/worktrees/assistant-access-prod-proof/access-proof-evidence/`:
+
+- `hidden-controls-baseline-20260929.jsonl` and `.xml`: first attempt, six
+  fixture assertion failures because the extractive Matter-scoped answer cited
+  the Matter rather than the document. This is incomplete reproduction, not
+  product evidence; it is preserved, not overwritten.
+- `hidden-controls-baseline2-20260929.jsonl` and `.xml`: corrected fixtures,
+  six product failures on unchanged `5556e629` code. Hidden filename
+  suggestions remained, pending confirmation returned 200 and created a task,
+  and confirmed replay returned 200 with private labels and a result link.
+- `hidden-controls-baseline-imports-20260929.json` records both imported
+  service paths in this checkout before the fix, not the parent's dirty tree.
+- `hidden-controls-fixed-20260929.jsonl` and `.xml`: first candidate run,
+  20 passed and one old exact-error assertion failed. The full failure was
+  inspected and the stricter assertion updated; this is not a green gate.
+- `hidden-controls-fixed2-20260929.jsonl` and `.xml`: complete replacement
+  selection, 21 passed, zero failed/skipped, in 109.39 seconds. All 63
+  setup/call/teardown reports passed and agree one-to-one with the canonical
+  collection and JUnit. `hidden-controls-reconciliation-20260929.json` retains
+  that comparison and the corrected baseline's six failures. Only existing
+  Starlette/httpx and SQLite datetime deprecation warnings were emitted.
+- `hidden-controls-fixed-imports-20260929.json` records the candidate's
+  service import paths in this same isolated checkout.
+- `hidden-controls-collection-20260929.jsonl`: canonical 21-test selection
+  across the six new cases, all six existing action cases, seven saved-answer
+  contract cases and two original QA/export/permission cases.
+- `hidden-controls-postgres-collection-20260929.jsonl`: all six new PostgreSQL
+  identities collected, not executed and not certified as passed.
+
+The production follow-up above is historical: `5556e629` already extends the
+existing release-owned production journey before disposal, using its seeded
+fixture and extractive no-model path. It checks hidden controls after access
+change/restore, reload and mobile while retaining terminal reruns. It needs no
+new release seed or production company bootstrap. Neither that journey nor
+the combined Docker/PostgreSQL gate has been executed by this follow-up.
+Deployed verification remains **Inconclusive**, not a deployed-fix claim.

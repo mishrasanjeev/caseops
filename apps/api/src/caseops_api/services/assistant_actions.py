@@ -52,6 +52,7 @@ from caseops_api.services.shared_work import create_ip_shared_task
 from caseops_api.services.workspace_assistant import (
     _locked_assistant_policy,
     _resolve_scope_versions,
+    _serialize_turns,
     _session_or_404,
 )
 
@@ -136,12 +137,13 @@ def _proposal_or_404(
             detail="The assistant proposal is no longer available.",
             status_code=404,
         )
-    raw_actions = (turn.retrieval_manifest_json or {}).get("proposed_actions", [])
-    for raw in raw_actions if isinstance(raw_actions, list) else []:
-        try:
-            proposal = AssistantProposedAction.model_validate(raw)
-        except (TypeError, ValueError):
-            continue
+    visible = _serialize_turns(session, context=context, turns=[turn])[0]
+    if visible.render_status != "visible":
+        raise _problem(
+            code="assistant_action_answer_hidden",
+            detail="This answer is hidden. Ask again before reviewing or confirming an action.",
+        )
+    for proposal in visible.proposed_actions:
         if proposal.proposal_id == proposal_id:
             if proposal.action_type not in {"draft", "task", "field_update"}:
                 raise _problem(
@@ -706,6 +708,15 @@ def confirm_assistant_action(
             code="assistant_action_preview_invalid",
             detail="The confirmation token does not match this preview.",
         )
+    # Even an idempotent replay must not return a hidden answer's saved labels
+    # or result links. The tenant lock already fences concurrent source events.
+    proposal = _proposal_or_404(
+        session,
+        context=context,
+        session_id=session_id,
+        turn_id=row.turn_id,
+        proposal_id=row.proposal_id,
+    )
     if row.status == AssistantActionStatus.CONFIRMED:
         response = _response(row)
         session.rollback()
@@ -737,13 +748,6 @@ def confirm_assistant_action(
             code="assistant_action_policy_changed",
             detail="Workspace AI policy changed. Create a new preview before confirming.",
         )
-    proposal = _proposal_or_404(
-        session,
-        context=context,
-        session_id=session_id,
-        turn_id=row.turn_id,
-        proposal_id=row.proposal_id,
-    )
     target = _resolve_target(session, context=context, proposal=proposal)
     if target.target_type != row.target_type or target.target_id != row.target_id:
         raise _problem(

@@ -1755,8 +1755,8 @@ def _serialize_turns(
                     for citation in visible_citations
                 ],
                 model=_model_metadata(models_by_id.get(turn.model_run_id)),
-                suggested_searches=_manifest_suggestions(manifest),
-                proposed_actions=_manifest_actions(manifest),
+                suggested_searches=[] if changed else _manifest_suggestions(manifest),
+                proposed_actions=[] if changed else _manifest_actions(manifest),
                 created_at=turn.created_at,
             )
         )
