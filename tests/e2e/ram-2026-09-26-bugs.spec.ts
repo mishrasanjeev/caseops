@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-import { expectPaidProviderBlocked, noPaidProviderHeaders } from "./support/cost-controls";
+import {
+  expectVerifiedFreshReplay,
+  noPaidProviderHeaders,
+  verifiedFreshReplayHeaders,
+} from "./support/cost-controls";
 import { apiBaseUrl, webBaseUrl } from "./support/env";
 import { collectFormLayoutOffenders } from "./support/form-layout";
 import { plusDays } from "./support/helpers";
@@ -47,6 +51,19 @@ const CAUSE_LIST_COLUMNS = ["Sr", "Date", "File", "Court", "Case No", "Title", "
 const CAUSE_LIST_WEIGHTS = [7, 18, 24, 36, 30, 58, 32, 20, 40];
 
 type Credentials = { slug: string; email: string; password: string; headers: Record<string, string> };
+type ExistingMatter = { matter_id: string; matter_code: string | null; title: string; status: string };
+type SearchResult = {
+  cnr_number: string | null;
+  case_title: string;
+  link_token?: string | null;
+  linked_to_matter?: boolean;
+  existing_matters?: ExistingMatter[];
+};
+type SearchBody = { results: SearchResult[] };
+
+// The reported Matter's case. It is the production verification fixture
+// `ram-20260926-bug-032` in the QA workspace (case_tracking_verification.py).
+const BUG_032_CNR = "DLHC010317282019";
 
 async function authenticate(request: APIRequestContext): Promise<Credentials> {
   const suffix = randomUUID().slice(0, 8);
@@ -236,13 +253,64 @@ test.describe("Ram 2026-09-26 workbook (IV)", () => {
     const auth = await authenticate(request);
     const cnr = "DLHC010091232026";
     if (isProduction) {
-      // Provider search is credit-bearing. Automated production runs must prove
-      // the no-paid rejection without spending; the live search is human use.
-      const blocked = await request.post(`${api}/api/case-tracking/search`, {
-        headers: auth.headers,
-        data: { cnr_number: cnr },
-      });
-      await expectPaidProviderBlocked(blocked, "BUG-032 production search");
+      // Provider search is credit-bearing, so this run replays the verification
+      // fixture's stored lookup of the reported case. The 18:00 IST scheduled job
+      // refreshes it at most once a day; missing, stale (older than 24 hours),
+      // superseded or tampered evidence is refused and fails this journey.
+      const replayHeaders = { ...auth.headers, ...verifiedFreshReplayHeaders };
+      const outside = await expectVerifiedFreshReplay<SearchBody>(
+        await request.post(`${api}/api/case-tracking/search`, {
+          headers: replayHeaders,
+          data: { cnr_number: BUG_032_CNR },
+        }),
+        "BUG-032 production replay outside a Matter",
+      );
+      expect(outside.results).toHaveLength(1);
+      expect(outside.results[0].cnr_number).toBe(BUG_032_CNR);
+      // Reuse the retained QA Matter that records the reported case; otherwise
+      // record it the way the report did, with the Matter's own wording.
+      const retained = (outside.results[0].existing_matters ?? []).find((item) =>
+        ["active", "intake"].includes(item.status),
+      );
+      const matterId = retained
+        ? retained.matter_id
+        : (
+            await createMatter(request, auth.headers, {
+              title: "SATISH KUMAR MEHANI VS PUNJAB NATIONAL BANK",
+              court_name: "Delhi High Court",
+              client_name: "Satish Kumar Mehani",
+              opposing_party: "Punjab National Bank",
+              cnr_number: BUG_032_CNR,
+            })
+          ).id;
+      const scoped = await expectVerifiedFreshReplay<SearchBody>(
+        await request.post(`${api}/api/case-tracking/search`, {
+          headers: replayHeaders,
+          data: { matter_id: matterId, cnr_number: BUG_032_CNR },
+        }),
+        "BUG-032 production replay inside the Matter",
+      );
+      const [ownCase] = scoped.results;
+      // The matcher decision the report was about: the Matter's own case is
+      // linkable (or already linked), never "Does not match this Matter".
+      expect(Boolean(ownCase.link_token) || ownCase.linked_to_matter === true).toBe(true);
+
+      // The same decision on the page, answered from the same fresh evidence.
+      await page.setExtraHTTPHeaders(verifiedFreshReplayHeaders);
+      await signIn(page, auth);
+      await page.goto(`${web}/app/case-tracking?matterId=${matterId}&cnr=${BUG_032_CNR}`);
+      await page.getByTestId("case-tracking-query").fill(BUG_032_CNR);
+      await page.getByTestId("case-tracking-search-submit").click();
+      const ownCaseAction = page.getByTestId("matter-search-linked").or(page.getByTestId("matter-search-link-submit"));
+      await expect(ownCaseAction.first()).toBeVisible();
+      await expect(page.getByTestId("matter-search-unmatched")).toHaveCount(0);
+      await page.goto(`${web}/app/case-tracking`);
+      await page.getByTestId("case-tracking-cnr").fill(BUG_032_CNR);
+      await page.getByTestId("case-tracking-search-submit").click();
+      const open = page.getByTestId(`existing-matter-open-${matterId}`);
+      await expect(open).toBeVisible();
+      await open.click();
+      await expect(page).toHaveURL(new RegExp(`/app/matters/${matterId}$`));
       return;
     }
     // The provider emulator exists only in the Docker acceptance stack; the host

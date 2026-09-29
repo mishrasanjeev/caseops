@@ -906,25 +906,20 @@ Quality tiers (what's real, what's honest):
 
 ## Deployment
 
-Cloud Run assets live in [`infra/cloudrun/`](./infra/cloudrun/). The helper script is
-idempotent and deploys API + worker job:
+Production releases run [`scripts/deploy-prod.sh`](./scripts/deploy-prod.sh) with the
+full `main` commit SHA from a clean checkout of that commit. The script builds the API and
+web images, runs migrations and release seeds, converges the recurring jobs from
+[`infra/cloudrun/scheduler-inventory.json`](./infra/cloudrun/scheduler-inventory.json),
+deploys both services and verifies exact release identity:
 
-```powershell
-.\infra\cloudrun\deploy.ps1 `
-  -ProjectId "<gcp-project-id>" `
-  -ProjectNumber "<gcp-project-number>" `
-  -Region "asia-south1" `
-  -CloudSqlInstance "<cloud-sql-instance-name>" `
-  -ServiceAccount "<runtime-service-account-email>" `
-  -SchedulerServiceAccount "<scheduler-service-account-email>" `
-  -ApiImage "<artifact-registry-image-ref>" `
-  -DatabaseUrl "<cloud-sql-psycopg-url>" `
-  -GcsBucket "<document-bucket-name>" `
-  -PublicAppUrl "https://app.caseops.ai"
+```bash
+scripts/deploy-prod.sh <full-main-sha>
 ```
 
-See [`infra/cloudrun/README.md`](./infra/cloudrun/README.md) for the full variable list and
-required IAM.
+[`docs/GCP_DEPLOY.md`](./docs/GCP_DEPLOY.md) bootstraps a new project, including the
+two-container API service (API plus ClamAV sidecar) that every release carries forward, and
+[`infra/cloudrun/README.md`](./infra/cloudrun/README.md) records which Cloud Run asset owns
+what. Never replace a Cloud Run service from a checked-in manifest.
 
 ---
 

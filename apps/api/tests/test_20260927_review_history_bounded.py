@@ -13,6 +13,10 @@ manifest the production capture path writes, saved in both the active and a
 retired generation, beside rows whose private source was revoked or whose
 manifest no longer matches. Those rows must stay hidden, and each batched
 decision must equal the decision for that manifest alone.
+
+The revocation tombstones only the generation active when it applies. Its
+proofs must stay hidden after a later rebuild too: the second test repeats the
+history once every manifest's generation has been retired.
 """
 
 from __future__ import annotations
@@ -46,9 +50,10 @@ from tests.test_workspace_assistant_qa import _matter
 
 # Statements for one page, independent of its size, for a non-owner member:
 # team-scoping flag and the ACL-filtered page; the active generation, saved
-# projections, saved generations, active rows for retired manifests, the
-# team-scoping flag and ACL-authorized projection IDs, the team-scoping flag
-# plus current Matter versions, current IP docket versions; published Drafts.
+# projections with their later-event ledger check, saved generations, active
+# rows for retired manifests, the team-scoping flag and ACL-authorized
+# projection IDs, the team-scoping flag plus current Matter versions, current
+# IP docket versions; published Drafts.
 REVIEW_HISTORY_STATEMENT_BOUND = 12
 
 
@@ -62,11 +67,13 @@ def build_review_history(
     retired_reviews: int,
     current_reviews: int,
     after_rebuild: Callable[[Session, str], None] | None = None,
+    later_rebuild: bool = False,
 ) -> dict:
     """Seed reviews exactly as the private capture path freezes them.
 
     Returns the tenant identities and, newest first, each review with whether
-    the history must show it.
+    the history must show it. ``later_rebuild`` retires every generation a
+    manifest was saved in before the reviews are listed.
     """
 
     bootstrap, first_matter, docket, _proceeding = opposition_fixture(client)
@@ -163,6 +170,15 @@ def build_review_history(
                     "visible": True,
                 }
             )
+    if later_rebuild:
+        # The revocation above never reached the first generation's rows, and
+        # this rebuild recreates the revoked Matter unchanged. The first
+        # generation's proof of it must still stay hidden.
+        _matter(client, owner_token, "RVW-HIST-LATER")
+        with factory() as session:
+            rebuild_private_index(session, company_id=company_id, activate=True)
+            if after_rebuild is not None:
+                after_rebuild(session, company_id)
     valid = current[0]["manifest"]
     negatives.extend(
         [
@@ -312,4 +328,16 @@ def test_review_history_reauthorizes_every_private_manifest_in_one_bounded_query
     client: TestClient,
 ) -> None:
     history = build_review_history(client, retired_reviews=12, current_reviews=24)
+    assert_bounded_history(client, history)
+
+
+def test_review_history_keeps_revoked_sources_hidden_after_a_later_rebuild(
+    client: TestClient,
+) -> None:
+    history = build_review_history(
+        client,
+        retired_reviews=12,
+        current_reviews=24,
+        later_rebuild=True,
+    )
     assert_bounded_history(client, history)

@@ -1925,3 +1925,83 @@ Verdicts:
   acceptance.
 - Not claimed: the Intelligent Review cold-start latency recorded under
   production run 2 is a separate capacity defect with its own task.
+
+## 2026-09-28 — Docker acceptance ran another checkout's browser suite
+
+Docker acceptance for PR #501 was started as
+`powershell.exe -File C:\Users\mishr\caseops-acceptance\docker-c4eec853\scripts\verify-docker.ps1`
+from a different, older CaseOps checkout
+(`C:\Projects\CaseOps\caseops\.claude\worktrees\trusting-clarke-7b3987`, `328761c5`).
+The images, the stack and the complete PostgreSQL + pgvector suite came from
+`c4eec853`. Every later step that resolved paths from the working directory
+used the older checkout instead:
+
+- `npm ci` reinstalled that checkout's `node_modules`, and `npm run typecheck:e2e`
+  type-checked its specs.
+- `npx playwright test --config playwright.docker.config.ts` loaded its config,
+  specs and support helpers.
+- Its helpers imported that checkout's unsynced venv
+  (`ModuleNotFoundError: No module named 'sqlalchemy'`): 63 failed and 145 passed.
+- `test-results` was written into that checkout.
+
+The run failed, so nothing was certified. Had the older specs passed, the
+harness would have printed `[docker-acceptance] PASS c4eec853...` for browser
+evidence from another source: the candidate-source guard fingerprints only
+`$RepoRoot`. The failed log and its `test-results` are retained with the run's
+evidence. #501 was re-certified from inside its own acceptance worktree.
+
+Fix (`scripts/verify-docker.ps1`):
+
+- **Working directory:** the harness enters `$RepoRoot` before its first native
+  step and leaves it in the final `finally`. That covers npm, uv, Python and
+  Compose. The API proxy also starts with `-WorkingDirectory $RepoRoot`.
+- **Playwright entry point:** Playwright runs only through
+  `Invoke-CandidatePlaywright`, which uses the candidate's installed CLI
+  (`node_modules/@playwright/test/cli.js`) with an absolute `--config`, from
+  `$RepoRoot`. It never resolves through `npx`, which follows the working
+  directory and can fetch an unpinned copy.
+- **Suite preflight:** before the Docker stack is built,
+  `Assert-CandidatePlaywrightSuite` lists the selected suite and retains the
+  listing as `playwright-inventory.json`. It fails closed when:
+  - the resolved config is not the candidate's;
+  - the root or any project test directory lies outside `$RepoRoot`;
+  - a listed spec lies outside `$RepoRoot`;
+  - the listing has load errors or no specs;
+  - the helpers' `CASEOPS_E2E_PYTHON` (now pinned by the harness to the
+    candidate venv) lies outside `$RepoRoot`;
+  - the candidate's own Playwright is missing.
+- **Import check:** the host import check now requires `caseops_api` to load
+  from the candidate's `apps/api`.
+
+Verification:
+
+- `tests/docker-acceptance-repo-root-guard.ps1` runs at the start of every
+  acceptance run. It executes the harness's own launcher and preflight,
+  extracted from its syntax tree, from a foreign directory holding a decoy
+  `playwright.docker.config.ts` and a decoy Playwright CLI. It covers 14 cases:
+  - the candidate CLI runs from `$RepoRoot` with the absolute config, and the
+    caller's location is restored;
+  - six listing failures are refused;
+  - foreign and missing helper Python are refused;
+  - a missing candidate CLI is refused without falling back to the decoy;
+  - four path-containment traps are rejected.
+- Mutation checks: with the launcher reverted to a relative config and no
+  location change, the guard fails with "Playwright ran in ...\foreign". Without
+  the resolved-config check, it fails because a foreign config is accepted.
+- `apps/api/tests/test_20260928_docker_acceptance_guards.py` executes both
+  guards in pytest, so CI runs them too. It fails rather than skips under `CI`
+  when PowerShell or Node is missing. Both guards now take their default script
+  path in the body: under `-File`, Windows PowerShell leaves `$PSScriptRoot`
+  empty while evaluating parameter defaults.
+- The existing candidate-source guard still passes its 4 cases.
+  `test_deploy_prod_hardening.py` now pins the new launcher structure
+  (103 passed, 1 pre-existing POSIX-only skip).
+
+The complete harness at `f0ecd4b9`, which includes main `c6def4b4`, was
+deliberately launched from the older checkout (`328761c5`, which holds its own
+`playwright.docker.config.ts`). The preflight reported 418 specs from the
+candidate's `tests/e2e`, and the run printed
+`[docker-acceptance] PASS f0ecd4b9ab3aa8c52ab3f8f6707ae67e9d7cf5e6`:
+PostgreSQL 440 passed; browser 208 + 198 + 4 passed, with the 8 by-design
+production-only or provider-gated skips. The foreign checkout stayed clean,
+with no `test-results` and an unchanged `node_modules`.
