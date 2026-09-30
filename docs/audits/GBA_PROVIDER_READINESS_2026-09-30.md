@@ -143,6 +143,16 @@ court code; only 46 have ever succeeded or have a hearing. Missing official
 identities and vendor authorization remain external blockers. This release
 does not make GBA all-provider-ready.
 
+PR #507's first CI run failed one workflow inventory assertion because the
+new read-only shard was not added to that test's expected matrix. The next
+candidate `33b76f8b` corrected the inventory and passed focused API tests,
+but CI identified an unupdated data-governance map after comparison with
+current `origin/main`. Its Docker gate was interrupted after build and index
+health, before PostgreSQL and Playwright; the partial report is retained at
+`.tmp/docker-acceptance/936f912bd2d24dcf8884c7f307014866/` and is not
+acceptance evidence. The governance note and generated view are updated in
+the next candidate. Full CI, Docker and production verification remain open.
+
 ## Closure gates
 
 1. Obtain the GBA court/identifier inventory from an authorized owner. Review

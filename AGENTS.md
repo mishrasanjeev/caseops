@@ -1361,3 +1361,7 @@ requirements when using the fallback.
   together across Matter resolution, manual search and refresh. Regress the
   exact dated production Playwright assertions, zero transport and zero spend;
   local API safety alone cannot certify the user-visible production copy.
+- A production-verification matrix addition must update the workflow inventory
+  test and its secret/project assertions in the same change. Refresh
+  `origin/main` before governance change-gate checks; that gate compares
+  committed branch history, so uncommitted map edits cannot satisfy it.
