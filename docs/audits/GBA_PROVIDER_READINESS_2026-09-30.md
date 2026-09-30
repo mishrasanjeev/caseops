@@ -117,6 +117,32 @@ FT-078..088. BUG-012 and BUG-014 remain open until the full browser journeys
 and exact-production release proof pass. A no-charge rejection alone does not
 meet the next-hearing requirement.
 
+## Release and production verification update (2026-09-30)
+
+PR #506 was accepted on Docker at `bec958ba` (462/462 PostgreSQL tests,
+four locally applicable dated Playwright journeys passing, two production-only
+skips), merged to main at `ba6468f1`, and deployed. The accepted and merged
+trees were identical. Production API revision `caseops-api-00477-pwk` and web
+revision `caseops-web-00454-w62` both serve that release with 100% traffic.
+Migration, statute seed, hearing backfill, index health, QA bootstrap and
+health/ClamAV gates passed. The 18:00-20:00 IST case-tracking scheduler resumed.
+
+Exact-release production verification [run 36683747177](https://github.com/mishrasanjeev/caseops/actions/runs/36683747177)
+found two tester-journey failures: the new pre-spend court-code rejection was
+safe but omitted the established `No external request was made.` user-visible
+assurance. These failures are not waived. A follow-up regression now checks
+that exact response, zero provider transport and zero spend reservation, as
+well as the tracked-case refresh path. The replacement release is pending full
+Docker and CI acceptance, merge, deploy and production replay. The
+private-projection maintenance scheduler remains intentionally paused until
+successful exact-release verification and two clean serial maintenance runs.
+
+GBA was audited with a read-only Cloud SQL transaction after deployment: 586
+tracked eCourts cases, 583 eligible, 538 due, 534 without CNR and 535 without
+court code; only 46 have ever succeeded or have a hearing. Missing official
+identities and vendor authorization remain external blockers. This release
+does not make GBA all-provider-ready.
+
 ## Closure gates
 
 1. Obtain the GBA court/identifier inventory from an authorized owner. Review

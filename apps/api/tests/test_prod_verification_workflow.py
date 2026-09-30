@@ -230,6 +230,7 @@ def test_exact_release_verification_is_serialized_into_bounded_jobs() -> None:
     assert shard_job["strategy"]["max-parallel"] == 1
     assert shard_job["strategy"]["matrix"]["suite"] == [
         "tester",
+        "test-legal-readonly",
         "legacy",
         "supporting",
         "patent-statute",
@@ -240,9 +241,16 @@ def test_exact_release_verification_is_serialized_into_bounded_jobs() -> None:
     assert "--expected-sha" in boundary["run"]
     assert "needs.resolve-release.outputs.release_sha" in boundary["run"]
     tester = by_name["Run canonical tester production regressions"]["run"]
+    test_legal = by_name["Run test-legal read-only hearing acceptance"]
     legacy = by_name["Run legacy QA production regressions"]["run"]
     assert "--project=tester-prod-chromium" in tester
     assert "--project=prod-chromium" not in tester
+    assert "matrix.suite == 'test-legal-readonly'" in test_legal["if"]
+    assert "--project=test-legal-readonly-prod-chromium" in test_legal["run"]
+    assert (
+        "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD"
+        in test_legal["env"]["CASEOPS_RAM_PROD_PASSWORD"]
+    )
     assert "--project=prod-chromium" in legacy
     assert "--project=tester-prod-chromium" not in legacy
 

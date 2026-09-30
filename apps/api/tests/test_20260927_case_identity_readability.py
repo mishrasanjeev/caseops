@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -34,10 +35,14 @@ from caseops_api.core.automated_test_context import (
     NO_PAID_PROVIDERS_VALUE,
 )
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import AuditEvent, Matter, TrackedCaseBookmark
+from caseops_api.db.models import AuditEvent, Matter, ProviderSpendReservation, TrackedCaseBookmark
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.case_tracking import poll_tracked_cases
-from caseops_api.services.case_tracking_providers import CaseSearchQuery, ProviderCaseSnapshot
+from caseops_api.services.case_tracking_providers import (
+    CaseSearchQuery,
+    EcourtsIndiaApiProvider,
+    ProviderCaseSnapshot,
+)
 from caseops_api.services.hearing_matching import (
     CASE_NUMBER_UNREADABLE,
     CASE_TYPE_REQUIRED,
@@ -224,6 +229,41 @@ def test_a_readable_typed_case_number_reaches_the_paid_provider_gate(
     body = resolved.json()
     assert body["code"] == "paid_provider_blocked_for_test"
     assert "no external request was made" in body["detail"]
+
+
+def test_exact_matter_lookup_without_search_ready_code_explains_no_provider_request(
+    client: TestClient, monkeypatch
+) -> None:
+    _enable_case_tracking(monkeypatch)
+    token = _bootstrap(client)
+    matter_id = _create_matter(
+        client, token, "GAP-NO-COURT-CODE", case_number="W.P.(C) No. 654321 of 2026"
+    )
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        raise AssertionError("An unsearchable Matter must not reach the paid provider")
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://provider.invalid",
+        token="fixture",
+        transport=httpx.MockTransport(handler),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider", lambda: provider
+    )
+    response = client.post(
+        f"/api/case-tracking/matters/{matter_id}/resolve",
+        headers={**auth_headers(token), NO_PAID_PROVIDERS_HEADER: NO_PAID_PROVIDERS_VALUE},
+    )
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert "search-ready court code or CNR" in detail
+    assert "No external request was made." in detail
+    assert calls == []
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count(ProviderSpendReservation.id))) == 0
 
 
 def test_blocked_search_body_carries_its_code_at_the_top_level(
