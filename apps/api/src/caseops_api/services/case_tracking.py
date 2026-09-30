@@ -5140,7 +5140,8 @@ def _require_search_ready_court_code(
     ):
         raise HTTPException(
             409,
-            "A search-ready court code or CNR is required before an exact eCourts case lookup.",
+            "A search-ready court code or CNR is required before an exact eCourts case lookup. "
+            "No external request was made.",
         )
 
 

@@ -99,6 +99,7 @@ jobs:
       matrix:
         suite:
           - tester
+          - test-legal-readonly
           - legacy
           - supporting
           - patent-statute
@@ -213,6 +214,22 @@ jobs:
           CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
           CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
         run: npx playwright test --config=playwright.prod-ram.config.ts --project=prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/legacy
+
+      - name: Run test-legal read-only hearing acceptance
+        if: matrix.suite == 'test-legal-readonly'
+        env:
+          CASEOPS_RAM_PROD_SLUG: test-legal
+          CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
+          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: |
+          if [ -z "$CASEOPS_RAM_PROD_PASSWORD" ]; then
+            echo "::error::CASEOPS_TEST_LEGAL_PROD_PASSWORD secret is not configured."
+            exit 1
+          fi
+          npx playwright test --config=playwright.prod-ram.config.ts --project=test-legal-readonly-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-readonly
 
       - name: Run IPLF-027B A0 quiescence acceptance
         # This is immutable historical rollout evidence tied to one exact

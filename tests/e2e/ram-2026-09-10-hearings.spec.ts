@@ -46,7 +46,9 @@ async function visibleMatter(page: Page, code: string, expectedDate: string | nu
       }
       await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
     }
-    await page.screenshot({ path: test.info().outputPath(`hearing-${code}-${width}.png`), fullPage: true });
+    if (local) {
+      await page.screenshot({ path: test.info().outputPath(`hearing-${code}-${width}.png`), fullPage: true });
+    }
   }
 }
 

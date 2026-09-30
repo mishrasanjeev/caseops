@@ -1356,3 +1356,14 @@ requirements when using the fallback.
   provider-published court code (the older base fixture and a newer hearing
   fixture may differ), keep CNR-only and no-code/no-transport negatives, and
   prove the code-backed positive still yields the expected persisted hearing.
+- A pre-spend rejection also owns the existing no-charge user contract. Keep
+  actionable identity guidance and the explicit no-external-request assurance
+  together across Matter resolution, manual search and refresh. Regress the
+  exact dated production Playwright assertions, zero transport and zero spend;
+  local API safety alone cannot certify the user-visible production copy.
+- A production-verification matrix addition must update the workflow inventory
+  test and its secret/project assertions in the same change. Refresh
+  `origin/main` before governance change-gate checks; that gate compares
+  committed branch history, so uncommitted map edits cannot satisfy it. A
+  governance-note edit must render and validate both the Markdown map and
+  generated data-class projection before freezing a Docker candidate.

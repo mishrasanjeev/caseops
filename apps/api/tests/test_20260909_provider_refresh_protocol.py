@@ -68,6 +68,7 @@ def test_unsearchable_exact_case_is_blocked_before_spend_and_does_not_starve_pol
         )
         assert response.status_code == 409, response.text
         assert "court code or CNR" in response.text
+        assert "No external request was made." in response.text
         with get_session_factory()() as session:
             run = case_tracking.poll_tracked_cases(session, provider=provider)[0]
             assert run.status == "partial"
