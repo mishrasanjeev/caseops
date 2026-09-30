@@ -80,8 +80,17 @@ that a reviewed provider link left a legacy code-less auto-link active beside
 the verified bookmark on the same Matter. The two failures have separate
 retained `test-results/` contexts; the full gate is retained at
 `.tmp/docker-acceptance/9eabd7dd79b843999471ddc2e759f3df/`. The
-reconciliation fix and its SQLite/PostgreSQL regressions are local changes,
-not yet an accepted or deployed release.
+reconciliation fix and its SQLite/PostgreSQL regressions were local changes,
+not an accepted or deployed release.
+
+The fifth committed candidate `798d0fe20984f591c7b55da2718c5942c24d7274`
+passed all **462/462** selected PostgreSQL tests, post-rehearsal index health,
+and all four locally applicable dated Playwright journeys. The two
+production-only journeys were explicitly skipped locally; neither is a
+production acceptance claim. Retained gate:
+`.tmp/docker-acceptance/ae57dc9dab754cddb6917777831feed9/`.
+PR #506 still has security/dependency and data-governance CI failures, so
+this candidate is not releasable or deployed.
 
 PRD scope: journeys J03/J05/J08, modules M02/M04/M08, US-057..059 and
 FT-078..088. BUG-012 and BUG-014 remain open until the full browser journeys
