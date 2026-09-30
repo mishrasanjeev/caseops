@@ -100,6 +100,18 @@ the generated data-class projection stale; no completed PostgreSQL or browser
 result is claimed for that run. Its partial journal remains at
 `.tmp/docker-acceptance/5bcc2b7f2fb4417993a179cf8fe2ef1a/`.
 
+The seventh candidate `1e9b3bd36c9a90ac0309e6bbe8c43af9ff50d2c1`
+cleared security/governance checks but failed CI API coverage shard 5: four
+dated combined-hearing emulator cases still searched by case number without
+a provider court code. Its Docker run was interrupted after the first part of
+the PostgreSQL matrix because this CI failure made the candidate
+non-releasable; the partial journal is retained at
+`.tmp/docker-acceptance/ab92d580504946cea89af26401e0bdc6/`.
+The revised dated fixtures now use their own published codes (`DLHC01` for
+the September 10 hearing fixture, `DLHC` for the older base fixture). The
+54-test local emulator/matching matrix passes, including the no-code
+pre-transport rejection. This does not replace full CI or Docker acceptance.
+
 PRD scope: journeys J03/J05/J08, modules M02/M04/M08, US-057..059 and
 FT-078..088. BUG-012 and BUG-014 remain open until the full browser journeys
 and exact-production release proof pass. A no-charge rejection alone does not

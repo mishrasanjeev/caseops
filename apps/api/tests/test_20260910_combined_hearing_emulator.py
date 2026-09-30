@@ -41,7 +41,13 @@ def provider():
 def test_combined_service_preserves_september10_nearest_seven_day_fixture(mode):
     cnr = "DLHC010081232026" if mode == "cnr" else None
     number = "421/2026" if mode == "filing" else "WP(C) 8123/2026"
-    case = TrackedCase(cnr_number=cnr, case_number=number, court_name="Delhi High Court")
+    court_code = None if mode == "cnr" else "DLHC01"
+    case = TrackedCase(
+        cnr_number=cnr,
+        case_number=number,
+        court_code=court_code,
+        court_name="Delhi High Court",
+    )
     expected = HearingIdentity(
         cnr=cnr,
         filing_number=number if mode == "filing" else None,
@@ -52,6 +58,7 @@ def test_combined_service_preserves_september10_nearest_seven_day_fixture(mode):
         query=CaseSearchQuery(
             cnr_number=cnr,
             case_number=number,
+            court_code=court_code,
             court_name=case.court_name,
             require_complete_results=True,
         )
@@ -66,12 +73,14 @@ def test_combined_service_preserves_older_twenty_one_day_fixture(mode):
     case = TrackedCase(
         cnr_number="DLHC010091232026" if mode == "cnr" else None,
         case_number="WP(C) 9123/2026",
+        court_code=None if mode == "cnr" else "DLHC",
         court_name="Delhi High Court",
     )
     snapshots = provider().search_cases(
         query=CaseSearchQuery(
             cnr_number=case.cnr_number,
             case_number=case.case_number,
+            court_code=case.court_code,
             court_name=case.court_name,
             require_complete_results=True,
         )
@@ -82,10 +91,15 @@ def test_combined_service_preserves_older_twenty_one_day_fixture(mode):
 
 
 def test_combined_service_keeps_ambiguous_september10_results_unselected():
-    case = TrackedCase(case_number="WP(C) 889/2026", court_name="Delhi High Court")
+    case = TrackedCase(
+        case_number="WP(C) 889/2026",
+        court_code="DLHC01",
+        court_name="Delhi High Court",
+    )
     snapshots = provider().search_cases(
         query=CaseSearchQuery(
             case_number=case.case_number,
+            court_code=case.court_code,
             court_name=case.court_name,
             require_complete_results=True,
         )

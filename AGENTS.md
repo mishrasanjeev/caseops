@@ -1351,3 +1351,8 @@ requirements when using the fallback.
   audit the change. Replayed selections must be idempotent. PostgreSQL tests
   must identify the intended actor explicitly; an invite helper can leave a
   shared TestClient logged in as the invited user despite later bearer headers.
+- A new provider pre-spend identity fence must be replayed against every dated
+  emulator journey, not only the newest fixture. Use each emulator's actual
+  provider-published court code (the older base fixture and a newer hearing
+  fixture may differ), keep CNR-only and no-code/no-transport negatives, and
+  prove the code-backed positive still yields the expected persisted hearing.
