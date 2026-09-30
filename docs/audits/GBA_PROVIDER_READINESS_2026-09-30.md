@@ -151,7 +151,12 @@ current `origin/main`. Its Docker gate was interrupted after build and index
 health, before PostgreSQL and Playwright; the partial report is retained at
 `.tmp/docker-acceptance/936f912bd2d24dcf8884c7f307014866/` and is not
 acceptance evidence. The governance note and generated view are updated in
-the next candidate. Full CI, Docker and production verification remain open.
+the next candidate. That candidate `b5cab1be` passed the map gate but failed
+CI's generated data-class projection check; its Docker gate was interrupted
+before PostgreSQL completion and Playwright, with partial report
+`.tmp/docker-acceptance/e9b97cfdb6c543d1b03745702dc1d0eb/`. Both
+governance views are now rendered and locally validated. Full CI, Docker and
+production verification remain open.
 
 ## Closure gates
 

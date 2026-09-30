@@ -1364,4 +1364,6 @@ requirements when using the fallback.
 - A production-verification matrix addition must update the workflow inventory
   test and its secret/project assertions in the same change. Refresh
   `origin/main` before governance change-gate checks; that gate compares
-  committed branch history, so uncommitted map edits cannot satisfy it.
+  committed branch history, so uncommitted map edits cannot satisfy it. A
+  governance-note edit must render and validate both the Markdown map and
+  generated data-class projection before freezing a Docker candidate.
