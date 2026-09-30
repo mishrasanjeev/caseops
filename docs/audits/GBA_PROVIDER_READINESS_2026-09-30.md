@@ -54,6 +54,16 @@ correction must prove both visible no-code blocking and a successful
 provider-code-backed Matter link on a new committed image; it has not yet
 replaced that failure.
 
+The second committed candidate `9369d6ae449adf3a6ce602d2cab485999447aeea`
+completed the same 461-identity PostgreSQL collection with 458 call passes,
+three call failures, and 461 passing setups/teardowns. Its Playwright phase
+was correctly withheld. The three failures independently showed that the new
+court-code hint masked the pre-existing missing-court and missing-case-type
+messages. The corrected priority and current-Matter-CNR read check passed
+all five exact PostgreSQL repros and a 136-test local hearing/provider matrix;
+the latter is not a replacement Docker release verdict. The second run is
+retained at `.tmp/docker-acceptance/58e620899c764440a37ab558846b8f00/`.
+
 PRD scope: journeys J03/J05/J08, modules M02/M04/M08, US-057..059 and
 FT-078..088. BUG-012 and BUG-014 remain open until the full browser journeys
 and exact-production release proof pass. A no-charge rejection alone does not

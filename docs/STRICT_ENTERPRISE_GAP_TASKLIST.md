@@ -2326,3 +2326,8 @@ job or scheduler was changed.
   but failed two of six selected Docker Playwright hearing tests (one passed,
   three local-inapplicable skips). BUG-012/014 remain open. The corrected
   browser journey is pending a fresh exact-image Docker run.
+- **Second failed gate:** candidate `9369d6ae` completed all 461 PostgreSQL
+  identities with 458 call passes and three specific-message failures; the
+  harness withheld Playwright. The corrected code now passes those five
+  selected PostgreSQL cases and 136 local hearing/provider tests. A full
+  replacement Docker inventory and production proof are still pending.

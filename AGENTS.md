@@ -1333,3 +1333,13 @@ requirements when using the fallback.
   and no provider call. Never widen the registry, relax the 24-hour bound, fall
   back to older evidence, or add a deploy-time paid warm-up to make a replayed
   check pass.
+- An eCourts exact case-number search is not safe with only a human court
+  name. Require a provider-published court code or current Matter CNR before
+  reserving spend or dispatching transport; exclude unsearchable scheduled
+  rows from the bounded batch while counting them as blocked/backlogged.
+  Readiness for automatic links must use the current Matter identity, not a
+  stale learned CNR, and must disable Refresh with actionable copy. Preserve
+  the more specific missing-court, malformed-CNR and case-type errors ahead
+  of the court-code hint. Regress both the no-charge blocked path and a
+  reviewed-code search/link/hearing reload in Playwright; a no-charge 409
+  alone does not satisfy next-hearing acceptance.

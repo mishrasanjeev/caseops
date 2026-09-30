@@ -2024,3 +2024,9 @@ with no `test-results` and an unchanged `node_modules`.
 - **Evidence:** `docs/audits/GBA_PROVIDER_READINESS_2026-09-30.md` and the
   retained Docker acceptance under
   `.tmp/docker-acceptance/b50b6f3fe8344d9393b8456061d079cb/`.
+- **Second failed candidate:** `9369d6ae` ran all 461 PostgreSQL identities:
+  458 calls passed and three failed because the new code hint obscured the
+  existing missing-court/case-type guidance. Browser execution was withheld.
+  The corrected precedence and current-Matter-CNR read check passed five
+  exact PostgreSQL repros and 136 local adjacent tests; this is not closure.
+  Retained run: `.tmp/docker-acceptance/58e620899c764440a37ab558846b8f00/`.
