@@ -92,6 +92,14 @@ production acceptance claim. Retained gate:
 PR #506 still has security/dependency and data-governance CI failures, so
 this candidate is not releasable or deployed.
 
+The sixth candidate `2305ff6d521f277f4b8a409833ffc7c642accba3`
+cleared the local dependency audit, 1,108 web tests, web build/typecheck,
+53 focused authentication tests and both governance-map checks. Its Docker
+run was deliberately interrupted after image/index checks because CI found
+the generated data-class projection stale; no completed PostgreSQL or browser
+result is claimed for that run. Its partial journal remains at
+`.tmp/docker-acceptance/5bcc2b7f2fb4417993a179cf8fe2ef1a/`.
+
 PRD scope: journeys J03/J05/J08, modules M02/M04/M08, US-057..059 and
 FT-078..088. BUG-012 and BUG-014 remain open until the full browser journeys
 and exact-production release proof pass. A no-charge rejection alone does not
