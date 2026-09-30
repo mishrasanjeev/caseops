@@ -64,6 +64,14 @@ all five exact PostgreSQL repros and a 136-test local hearing/provider matrix;
 the latter is not a replacement Docker release verdict. The second run is
 retained at `.tmp/docker-acceptance/58e620899c764440a37ab558846b8f00/`.
 
+The third committed candidate `403dbaa237e66bda1c8ad736be086be65d1e61e9`
+completed the same 461-identity PostgreSQL collection with 460 call passes,
+one call failure, and all 461 setups/teardowns passing. The provider-wait
+concurrency test did not enter its mocked transport within five seconds during
+the full run. It passed alone against fresh PostgreSQL, which does not erase
+the full-suite failure or establish its cause. Playwright was withheld.
+Retained report: `.tmp/docker-acceptance/00f33705bf084b1e8eb003e736177776/`.
+
 PRD scope: journeys J03/J05/J08, modules M02/M04/M08, US-057..059 and
 FT-078..088. BUG-012 and BUG-014 remain open until the full browser journeys
 and exact-production release proof pass. A no-charge rejection alone does not
