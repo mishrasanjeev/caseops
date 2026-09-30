@@ -72,6 +72,17 @@ the full run. It passed alone against fresh PostgreSQL, which does not erase
 the full-suite failure or establish its cause. Playwright was withheld.
 Retained report: `.tmp/docker-acceptance/00f33705bf084b1e8eb003e736177776/`.
 
+The fourth committed candidate `2783c4130fa74eddd3be4118048987669907b3d7`
+passed all **461/461** PostgreSQL tests and the complete post-rehearsal index
+health check. Its six-test dated Playwright inventory had one pass, two
+failures and three expected local-inapplicable skips. Both failures showed
+that a reviewed provider link left a legacy code-less auto-link active beside
+the verified bookmark on the same Matter. The two failures have separate
+retained `test-results/` contexts; the full gate is retained at
+`.tmp/docker-acceptance/9eabd7dd79b843999471ddc2e759f3df/`. The
+reconciliation fix and its SQLite/PostgreSQL regressions are local changes,
+not yet an accepted or deployed release.
+
 PRD scope: journeys J03/J05/J08, modules M02/M04/M08, US-057..059 and
 FT-078..088. BUG-012 and BUG-014 remain open until the full browser journeys
 and exact-production release proof pass. A no-charge rejection alone does not

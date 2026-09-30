@@ -2454,6 +2454,13 @@ def link_matter_case(
     mutation = _create_or_get_bookmark(
         session, context=context, payload=bookmark_payload, matter=matter
     )
+    reconciled = _reconcile_legacy_matter_links(
+        session,
+        context=context,
+        matter=matter,
+        selected=mutation.bookmark,
+        selected_case=mutation.tracked_case,
+    )
     if mutation.created:
         record_from_context(
             session,
@@ -2467,9 +2474,90 @@ def link_matter_case(
                 "tracked_case_id_sha256": _hash_value(mutation.tracked_case.id),
             },
         )
+    if mutation.created or reconciled:
         session.commit()
         session.refresh(mutation.bookmark)
     return _bookmark_record(session, mutation.bookmark)
+
+
+def _reconcile_legacy_matter_links(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    selected: TrackedCaseBookmark,
+    selected_case: TrackedCase,
+) -> bool:
+    case_number = normalize_case_number(matter.case_number)
+    if not case_number:
+        return False
+    max_links = 500
+    legacy = list(
+        session.scalars(
+            select(TrackedCaseBookmark)
+            .join(TrackedCase, TrackedCaseBookmark.tracked_case_id == TrackedCase.id)
+            .options(selectinload(TrackedCaseBookmark.tracked_case))
+            .where(
+                TrackedCaseBookmark.company_id == context.company.id,
+                TrackedCaseBookmark.matter_id == matter.id,
+                TrackedCaseBookmark.is_archived.is_(False),
+                TrackedCaseBookmark.id != selected.id,
+                TrackedCase.provider == selected_case.provider,
+                TrackedCase.cnr_number.is_(None),
+                TrackedCase.court_code.is_(None),
+                TrackedCase.normalized_case_number == case_number,
+                TrackedCase.metadata_json["source"].as_string().in_(
+                    ("matter_create_auto_link", "scheduled_existing_matter_backfill")
+                ),
+            )
+            .order_by(TrackedCaseBookmark.id)
+            .limit(max_links + 1)
+            .with_for_update(of=TrackedCaseBookmark)
+        )
+    )
+    if len(legacy) > max_links:
+        raise HTTPException(409, "Too many existing case links to reconcile safely.")
+    if not legacy:
+        return False
+    canonical_member_rows = list(
+        session.scalars(
+            select(TrackedCaseBookmark.created_by_membership_id)
+            .where(
+                TrackedCaseBookmark.company_id == context.company.id,
+                TrackedCaseBookmark.matter_id == matter.id,
+                TrackedCaseBookmark.tracked_case_id == selected_case.id,
+                TrackedCaseBookmark.is_archived.is_(False),
+            )
+            .limit(max_links + 1)
+        )
+    )
+    if len(canonical_member_rows) > max_links:
+        raise HTTPException(409, "Too many existing case links to reconcile safely.")
+    canonical_members = set(canonical_member_rows)
+    now = _now()
+    moved = archived = 0
+    for bookmark in legacy:
+        if bookmark.created_by_membership_id in canonical_members:
+            bookmark.is_archived = True
+            bookmark.active_scope_key = None
+            bookmark.archived_at = now
+            archived += 1
+        else:
+            bookmark.tracked_case = selected_case
+            bookmark.tracked_case_id = selected_case.id
+            canonical_members.add(bookmark.created_by_membership_id)
+            moved += 1
+        session.add(bookmark)
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.legacy_matter_link_reconciled",
+        target_type="tracked_case_bookmark",
+        target_id=selected.id,
+        matter_id=matter.id,
+        metadata={"moved_bookmark_count": moved, "archived_duplicate_count": archived},
+    )
+    return True
 
 
 def _matter_or_none(

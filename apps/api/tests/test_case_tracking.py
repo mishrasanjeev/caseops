@@ -703,6 +703,91 @@ def test_matter_case_selection_links_exact_provider_evidence_once_without_transp
         ) == 1
 
 
+def test_reviewed_matter_link_reconciles_legacy_auto_links_without_losing_other_members(
+    client: TestClient, monkeypatch
+) -> None:
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_BASE_URL", "https://provider.example")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "test-only-token")
+    get_settings.cache_clear()
+    token = _bootstrap(client)
+    matter_id = _create_resolution_matter(client, token, cnr=None)
+    owner_bookmarks = client.get("/api/case-tracking/bookmarks", headers=auth_headers(token))
+    assert owner_bookmarks.status_code == 200, owner_bookmarks.text
+    owner_rows = [
+        row for row in owner_bookmarks.json()["bookmarks"] if row["matter_id"] == matter_id
+    ]
+    assert len(owner_rows) == 1
+    original_id = owner_rows[0]["id"]
+    member_id, _ = _invite_member(client, token, "legacy-case-colleague@example.com")
+    client.cookies.clear()
+    with get_session_factory()() as session:
+        original = session.get(TrackedCaseBookmark, original_id)
+        assert original is not None
+        assert original.tracked_case.cnr_number is None
+        assert original.tracked_case.court_code is None
+        assert original.tracked_case.metadata_json.get("source") == "matter_create_auto_link"
+        colleague = TrackedCaseBookmark(
+            company_id=original.company_id,
+            tracked_case_id=original.tracked_case_id,
+            created_by_membership_id=member_id,
+            matter_id=matter_id,
+            scope_key=matter_id,
+            active_scope_key=matter_id,
+            name="Colleague tracking",
+            notification_enabled=False,
+        )
+        session.add(colleague)
+        session.commit()
+        colleague_id = colleague.id
+
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider", lambda: provider
+    )
+    search = client.post(
+        "/api/case-tracking/search",
+        headers=auth_headers(token),
+        json={"matter_id": matter_id, "case_number": "WP(C) 1/2026", "court_code": "DLHC"},
+    )
+    assert search.status_code == 200, search.text
+    selection = search.json()["results"][0]["link_token"]
+    link_url = f"/api/case-tracking/matters/{matter_id}/link"
+    linked = client.post(link_url, headers=auth_headers(token), json={"link_token": selection})
+    assert linked.status_code == 200, linked.text
+    replay = client.post(link_url, headers=auth_headers(token), json={"link_token": selection})
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["id"] == linked.json()["id"]
+    visible = client.get("/api/case-tracking/bookmarks", headers=auth_headers(token))
+    assert visible.status_code == 200, visible.text
+    assert [row["id"] for row in visible.json()["bookmarks"]] == [linked.json()["id"]]
+
+    with get_session_factory()() as session:
+        old = session.get(TrackedCaseBookmark, original_id)
+        colleague = session.get(TrackedCaseBookmark, colleague_id)
+        assert old is not None
+        assert old.created_by_membership_id == linked.json()["created_by_membership_id"], (
+            old.created_by_membership_id,
+            linked.json()["created_by_membership_id"],
+        )
+        assert old.is_archived and old.active_scope_key is None, (
+            old.tracked_case.normalized_case_number,
+            old.tracked_case.metadata_json,
+            old.id,
+            linked.json()["id"],
+        )
+        assert colleague is not None and not colleague.is_archived
+        assert colleague.tracked_case_id == linked.json()["tracked_case_id"]
+        assert colleague.name == "Colleague tracking" and not colleague.notification_enabled
+        assert session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action == "case_tracking.legacy_matter_link_reconciled",
+                AuditEvent.matter_id == matter_id,
+            )
+        ) == 1
+
+
 def test_public_bookmark_route_preserves_company_scope_but_rejects_matter_claims(
     client: TestClient, monkeypatch
 ) -> None:

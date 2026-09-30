@@ -1343,3 +1343,11 @@ requirements when using the fallback.
   of the court-code hint. Regress both the no-charge blocked path and a
   reviewed-code search/link/hearing reload in Playwright; a no-charge 409
   alone does not satisfy next-hearing acceptance.
+- A signed provider result can create a second active Matter bookmark when a
+  code-less auto-link already exists under another tracked identity. Reconcile
+  only matching system-created placeholders inside the locked Matter-link
+  transaction: archive same-member duplicates, move other members without
+  losing bookmark IDs or notification settings, retain old tracked rows and
+  audit the change. Replayed selections must be idempotent. PostgreSQL tests
+  must identify the intended actor explicitly; an invite helper can leave a
+  shared TestClient logged in as the invited user despite later bearer headers.

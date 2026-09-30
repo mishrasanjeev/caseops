@@ -12,9 +12,18 @@ from sqlalchemy.exc import IntegrityError
 
 from tests import test_20260909_provider_recovery as journeys
 from tests import test_20260909_provider_refresh_protocol as protocol
+from tests import test_case_tracking as case_tracking_journeys
 from tests.test_postgres_validation import _ensure_migrations  # noqa: F401
 
 pytestmark = pytest.mark.postgres
+
+
+def test_reviewed_matter_link_reconciles_legacy_bookmarks_on_postgres(
+    isolated_postgres_client, monkeypatch
+):
+    case_tracking_journeys.test_reviewed_matter_link_reconciles_legacy_auto_links_without_losing_other_members(
+        isolated_postgres_client, monkeypatch
+    )
 
 
 def test_overlapping_provider_attempt_is_durably_fenced(isolated_postgres_client):
