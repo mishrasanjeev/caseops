@@ -2005,3 +2005,28 @@ candidate's `tests/e2e`, and the run printed
 PostgreSQL 440 passed; browser 208 + 198 + 4 passed, with the 8 by-design
 production-only or provider-gated skips. The foreign checkout stayed clean,
 with no `test-results` and an unchanged `node_modules`.
+# 2026-09-30 BUG-012/014 GBA provider identity checkpoint
+
+- **Verdict:** Not fixed end to end. Production still serves `37d54ec9`;
+  the local prevention candidate is not merged or deployed.
+- **Reproduction:** candidate `92eb79bf` passed 461 PostgreSQL/pgvector tests
+  but its Docker Playwright selection failed the dated case-number and
+  combined registration/filing hearing journeys. Only the CNR journey passed;
+  three selected tests were locally inapplicable. The source requires a
+  provider court code or CNR for safe exact search, while legacy Matters carry
+  a human court name but no provider code.
+- **Correction under test:** reject the unsafe paid search before transport and
+  spend reservation, keep missing-code cases visibly blocked/backlogged, and
+  disable their Refresh control. The revised browser journeys must prove the
+  visible blocked state and a provider-code-backed search/link/date after
+  reload. Do not call this properly fixed until fresh Docker and exact-release
+  production Playwright pass.
+- **Evidence:** `docs/audits/GBA_PROVIDER_READINESS_2026-09-30.md` and the
+  retained Docker acceptance under
+  `.tmp/docker-acceptance/b50b6f3fe8344d9393b8456061d079cb/`.
+- **Second failed candidate:** `9369d6ae` ran all 461 PostgreSQL identities:
+  458 calls passed and three failed because the new code hint obscured the
+  existing missing-court/case-type guidance. Browser execution was withheld.
+  The corrected precedence and current-Matter-CNR read check passed five
+  exact PostgreSQL repros and 136 local adjacent tests; this is not closure.
+  Retained run: `.tmp/docker-acceptance/58e620899c764440a37ab558846b8f00/`.

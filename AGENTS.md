@@ -1333,3 +1333,26 @@ requirements when using the fallback.
   and no provider call. Never widen the registry, relax the 24-hour bound, fall
   back to older evidence, or add a deploy-time paid warm-up to make a replayed
   check pass.
+- An eCourts exact case-number search is not safe with only a human court
+  name. Require a provider-published court code or current Matter CNR before
+  reserving spend or dispatching transport; exclude unsearchable scheduled
+  rows from the bounded batch while counting them as blocked/backlogged.
+  Readiness for automatic links must use the current Matter identity, not a
+  stale learned CNR, and must disable Refresh with actionable copy. Preserve
+  the more specific missing-court, malformed-CNR and case-type errors ahead
+  of the court-code hint. Regress both the no-charge blocked path and a
+  reviewed-code search/link/hearing reload in Playwright; a no-charge 409
+  alone does not satisfy next-hearing acceptance.
+- A signed provider result can create a second active Matter bookmark when a
+  code-less auto-link already exists under another tracked identity. Reconcile
+  only matching system-created placeholders inside the locked Matter-link
+  transaction: archive same-member duplicates, move other members without
+  losing bookmark IDs or notification settings, retain old tracked rows and
+  audit the change. Replayed selections must be idempotent. PostgreSQL tests
+  must identify the intended actor explicitly; an invite helper can leave a
+  shared TestClient logged in as the invited user despite later bearer headers.
+- A new provider pre-spend identity fence must be replayed against every dated
+  emulator journey, not only the newest fixture. Use each emulator's actual
+  provider-published court code (the older base fixture and a newer hearing
+  fixture may differ), keep CNR-only and no-code/no-transport negatives, and
+  prove the code-backed positive still yields the expected persisted hearing.

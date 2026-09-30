@@ -8,7 +8,12 @@ import pytest
 from sqlalchemy import func, select
 
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import BillingUsageEvent, ProviderSpendReservation, TrackedCase
+from caseops_api.db.models import (
+    BillingUsageEvent,
+    ProviderSpendReservation,
+    TrackedCase,
+    TrackedCaseProviderOperation,
+)
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import case_tracking
 from caseops_api.services.case_tracking_providers import EcourtsIndiaApiProvider
@@ -17,6 +22,97 @@ from tests.test_auth_company import auth_headers
 from tests.test_case_tracking import FakeCaseTrackingProvider
 
 CNR = "DLHC010012342026"
+
+
+def test_unsearchable_exact_case_is_blocked_before_spend_and_does_not_starve_poll(
+    client, monkeypatch
+):
+    boot, bookmark, _context = _setup_tracking_case(client)
+    with get_session_factory()() as session:
+        tracked = session.get(TrackedCase, bookmark["tracked_case"]["id"])
+        assert tracked is not None
+        tracked.cnr_number = None
+        tracked.normalized_cnr_number = None
+        tracked.case_number = "WP(C) 9123/2026"
+        tracked.court_code = None
+        tracked.identity_key = "case:WP(C) 9123/2026|court:Delhi High Court"
+        session.commit()
+
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        raise AssertionError("An unsearchable case must not reach the paid provider")
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://provider.invalid", token="fixture", transport=httpx.MockTransport(handler)
+    )
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    get_settings.cache_clear()
+    monkeypatch.setattr(case_tracking, "get_case_tracking_provider", lambda: provider)
+    monkeypatch.setattr(
+        case_tracking, "provider_status", lambda: (True, "ecourtsindia", True, None)
+    )
+    try:
+        listed = client.get(
+            "/api/case-tracking/bookmarks",
+            headers=auth_headers(str(boot["access_token"])),
+        )
+        assert listed.status_code == 200, listed.text
+        tracked_record = listed.json()["bookmarks"][0]["tracked_case"]
+        assert tracked_record["manual_refresh_allowed"] is False
+        assert "court code or CNR" in tracked_record["manual_refresh_disabled_reason"]
+        response = client.post(
+            f"/api/case-tracking/bookmarks/{bookmark['id']}/refresh",
+            headers=auth_headers(str(boot["access_token"])),
+        )
+        assert response.status_code == 409, response.text
+        assert "court code or CNR" in response.text
+        with get_session_factory()() as session:
+            run = case_tracking.poll_tracked_cases(session, provider=provider)[0]
+            assert run.status == "partial"
+            assert run.checked_count == run.provider_call_count == run.error_count == 0
+            assert run.blocked_count == run.backlog_remaining_count == 1
+            assert run.metadata["identity_blocked_count"] == 1
+            assert session.scalar(select(func.count(ProviderSpendReservation.id))) == 0
+            assert session.scalar(select(func.count(TrackedCaseProviderOperation.id))) == 0
+        assert calls == []
+    finally:
+        get_settings.cache_clear()
+
+
+def test_identity_recheck_blocks_a_cnr_lost_after_batch_selection(client, monkeypatch):
+    _boot, bookmark, _context = _setup_tracking_case(client)
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        raise AssertionError("A stale CNR must not reach the provider")
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://provider.invalid", token="fixture", transport=httpx.MockTransport(handler)
+    )
+
+    def invalidate_learned_cnr(_session, *, context, tracked_case):
+        tracked_case.cnr_number = None
+        tracked_case.case_number = "WP(C) 9123/2026"
+        tracked_case.court_code = None
+
+    monkeypatch.setattr(case_tracking, "_refresh_automatic_source_identity", invalidate_learned_cnr)
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        with get_session_factory()() as session:
+            run = case_tracking.poll_tracked_cases(session, provider=provider)[0]
+            assert run.status == "partial"
+            assert run.blocked_count == 1
+            assert run.provider_call_count == 0
+            assert session.scalar(select(func.count(ProviderSpendReservation.id))) == 0
+            assert session.scalar(select(func.count(TrackedCaseProviderOperation.id))) == 0
+            assert session.get(TrackedCase, bookmark["tracked_case"]["id"]) is not None
+        assert calls == []
+    finally:
+        get_settings.cache_clear()
 
 
 def test_queued_refresh_recovers_without_repurchase_or_stale_hearing(client, monkeypatch):

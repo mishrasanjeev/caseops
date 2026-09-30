@@ -741,6 +741,11 @@ class EcourtsIndiaApiProvider:
                 "A public case or filing number with year is required for automatic matching.",
                 response_class="match_validation_failed",
             )
+        if query.require_complete_results and not (query.court_code or "").strip():
+            raise CaseTrackingProviderError(
+                "Record the provider court code or the case CNR before automatic matching.",
+                response_class="match_validation_failed",
+            )
         search_params = {
             key: value
             for key, value in {

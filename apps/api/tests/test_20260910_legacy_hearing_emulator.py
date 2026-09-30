@@ -106,10 +106,12 @@ def test_prior_dated_journey_matches_official_envelope_without_changing_21_day_r
         case_number="WP(C) 9123/2026",
         court_name="Delhi High Court",
         cnr_number="DLHC010091232026" if mode == "cnr" else None,
+        court_code=None if mode == "cnr" else "DLHC",
     )
     query = CaseSearchQuery(
         cnr_number=tracked.cnr_number,
         case_number=tracked.case_number,
+        court_code=tracked.court_code,
         court_name=tracked.court_name,
         require_complete_results=True,
     )

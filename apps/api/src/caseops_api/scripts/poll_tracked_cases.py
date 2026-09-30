@@ -53,13 +53,14 @@ def main(argv: list[str] | None = None) -> int:
         for run in runs:
             logger.info(
                 "case tracking poll company=%s status=%s checked=%s updates=%s "
-                "skipped=%s blocked=%s provider_calls=%s backlog=%s errors=%s",
+                "skipped=%s blocked=%s identity_blocked=%s provider_calls=%s backlog=%s errors=%s",
                 run.company_id,
                 run.status,
                 run.checked_count,
                 run.update_count,
                 run.skipped_count,
                 run.blocked_count,
+                run.metadata.get("identity_blocked_count", 0),
                 run.provider_call_count,
                 run.backlog_remaining_count,
                 run.error_count,

@@ -487,6 +487,7 @@ def _case_tracking_poll_record(row: TrackedCasePollRun) -> ProviderOperationReco
         f"changed={row.update_count}",
         f"skipped={row.skipped_count}",
         f"blocked={row.blocked_count}",
+        f"identity_blocked={metadata.get('identity_blocked_count', 0)}",
         f"provider_calls={row.provider_call_count}",
         f"backlog={row.backlog_remaining_count}",
         "Only explicitly tracked/bookmarked cases are eligible for scheduled refresh.",

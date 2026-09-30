@@ -213,7 +213,9 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
         headers: headers(),
         data: {
           case_number: "WP(C) 9123/2026",
-          ...(identityMode === "cnr" ? { cnr_number: "DLHC010091232026" } : {}),
+          ...(identityMode === "cnr" || identityMode === "backfill-bound"
+            ? { cnr_number: "DLHC010091232026" }
+            : {}),
           expected_updated_at: original.updated_at,
         },
       },
@@ -230,6 +232,35 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
       (row: { matter_id: string }) => row.matter_id === original.id,
     )).toHaveLength(0);
 
+    if (identityMode === "case-number") {
+      runDockerPoll();
+      const blockedMatter = await api.get(`${API_BASE_URL}/api/matters/${original.id}`, {
+        headers: headers(),
+      });
+      await expectStatus(blockedMatter, 200, "unsearchable Matter after poll");
+      expect((await blockedMatter.json()).next_hearing_on).toBe(before.next_hearing_on);
+      const blockedBookmarks = await api.get(`${API_BASE_URL}/api/case-tracking/bookmarks`, {
+        headers: headers(),
+      });
+      await expectStatus(blockedBookmarks, 200, "code-less bookmark after backfill");
+      const blockedRows = (await blockedBookmarks.json()).bookmarks.filter(
+        (row: { matter_id: string }) => row.matter_id === original.id,
+      );
+      expect(blockedRows).toHaveLength(1);
+      expect(blockedRows[0].tracked_case.manual_refresh_allowed).toBe(false);
+      expect(blockedRows[0].tracked_case.manual_refresh_disabled_reason).toContain("court code or CNR");
+
+      await signIn(page);
+      await page.goto(`${BASE_URL}/app/case-tracking`);
+      const blockedBookmark = page.getByTestId(`case-tracking-bookmark-${blockedRows[0].id}`);
+      await expect(blockedBookmark.getByRole("button", { name: /^Refresh$/ })).toBeDisabled();
+      await expect(blockedBookmark.getByRole("status")).toContainText("court code or CNR");
+      await page.goto(`${BASE_URL}/app/case-tracking?matterId=${encodeURIComponent(original.id)}&caseNumber=${encodeURIComponent("WP(C) 9123/2026")}&courtCode=DLHC`);
+      await page.getByTestId("case-tracking-search-submit").click();
+      await expect(page.getByTestId("matter-search-link-submit")).toBeVisible();
+      await page.getByTestId("matter-search-link-submit").click();
+      await expect(page.getByTestId("matter-search-linked")).toBeVisible();
+    }
     runDockerPoll();
     if (identityMode === "backfill-bound") {
       const firstRead = await api.get(`${API_BASE_URL}/api/matters/${original.id}`, {

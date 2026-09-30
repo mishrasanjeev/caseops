@@ -69,6 +69,7 @@ from caseops_api.services.case_tracking_providers import (
     CaseTrackingProvider,
     CaseTrackingProviderError,
     CaseTrackingProviderUnavailable,
+    EcourtsIndiaApiProvider,
     ProviderCaseEvent,
     ProviderCaseSnapshot,
     case_tracking_transport_budget,
@@ -1727,6 +1728,12 @@ def search_cases(
     )
     try:
         active_provider = provider or get_case_tracking_provider()
+        _require_search_ready_court_code(
+            provider=active_provider,
+            cnr_number=query.cnr_number,
+            court_code=query.court_code,
+            exact_case_search=query.require_complete_results,
+        )
         from caseops_api.services.production_safety import assert_case_tracking_supported
 
         assert_case_tracking_supported(
@@ -2447,6 +2454,13 @@ def link_matter_case(
     mutation = _create_or_get_bookmark(
         session, context=context, payload=bookmark_payload, matter=matter
     )
+    reconciled = _reconcile_legacy_matter_links(
+        session,
+        context=context,
+        matter=matter,
+        selected=mutation.bookmark,
+        selected_case=mutation.tracked_case,
+    )
     if mutation.created:
         record_from_context(
             session,
@@ -2460,9 +2474,90 @@ def link_matter_case(
                 "tracked_case_id_sha256": _hash_value(mutation.tracked_case.id),
             },
         )
+    if mutation.created or reconciled:
         session.commit()
         session.refresh(mutation.bookmark)
     return _bookmark_record(session, mutation.bookmark)
+
+
+def _reconcile_legacy_matter_links(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    selected: TrackedCaseBookmark,
+    selected_case: TrackedCase,
+) -> bool:
+    case_number = normalize_case_number(matter.case_number)
+    if not case_number:
+        return False
+    max_links = 500
+    legacy = list(
+        session.scalars(
+            select(TrackedCaseBookmark)
+            .join(TrackedCase, TrackedCaseBookmark.tracked_case_id == TrackedCase.id)
+            .options(selectinload(TrackedCaseBookmark.tracked_case))
+            .where(
+                TrackedCaseBookmark.company_id == context.company.id,
+                TrackedCaseBookmark.matter_id == matter.id,
+                TrackedCaseBookmark.is_archived.is_(False),
+                TrackedCaseBookmark.id != selected.id,
+                TrackedCase.provider == selected_case.provider,
+                TrackedCase.cnr_number.is_(None),
+                TrackedCase.court_code.is_(None),
+                TrackedCase.normalized_case_number == case_number,
+                TrackedCase.metadata_json["source"].as_string().in_(
+                    ("matter_create_auto_link", "scheduled_existing_matter_backfill")
+                ),
+            )
+            .order_by(TrackedCaseBookmark.id)
+            .limit(max_links + 1)
+            .with_for_update(of=TrackedCaseBookmark)
+        )
+    )
+    if len(legacy) > max_links:
+        raise HTTPException(409, "Too many existing case links to reconcile safely.")
+    if not legacy:
+        return False
+    canonical_member_rows = list(
+        session.scalars(
+            select(TrackedCaseBookmark.created_by_membership_id)
+            .where(
+                TrackedCaseBookmark.company_id == context.company.id,
+                TrackedCaseBookmark.matter_id == matter.id,
+                TrackedCaseBookmark.tracked_case_id == selected_case.id,
+                TrackedCaseBookmark.is_archived.is_(False),
+            )
+            .limit(max_links + 1)
+        )
+    )
+    if len(canonical_member_rows) > max_links:
+        raise HTTPException(409, "Too many existing case links to reconcile safely.")
+    canonical_members = set(canonical_member_rows)
+    now = _now()
+    moved = archived = 0
+    for bookmark in legacy:
+        if bookmark.created_by_membership_id in canonical_members:
+            bookmark.is_archived = True
+            bookmark.active_scope_key = None
+            bookmark.archived_at = now
+            archived += 1
+        else:
+            bookmark.tracked_case = selected_case
+            bookmark.tracked_case_id = selected_case.id
+            canonical_members.add(bookmark.created_by_membership_id)
+            moved += 1
+        session.add(bookmark)
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.legacy_matter_link_reconciled",
+        target_type="tracked_case_bookmark",
+        target_id=selected.id,
+        matter_id=matter.id,
+        metadata={"moved_bookmark_count": moved, "archived_duplicate_count": archived},
+    )
+    return True
 
 
 def _matter_or_none(
@@ -2524,7 +2619,17 @@ def _tracked_case_record(
             )
             else "missing_identifiers"
         )
-    identity_ready = identity_problem is None
+    current_cnr = (
+        matching_matter.cnr_number
+        if matching_matter is not None and automatic_matter_link(case)
+        else case.cnr_number
+    )
+    provider_court_code_missing = (
+        case.provider == "ecourtsindia"
+        and not current_cnr
+        and not (case.court_code or "").strip()
+    )
+    identity_ready = identity_problem is None and not provider_court_code_missing
     manual_allowed = bool(
         enabled
         and identity_ready
@@ -2553,6 +2658,8 @@ def _tracked_case_record(
         disabled_reason = provider_reason or "Case tracking provider health is red."
     elif identity_problem is not None:
         disabled_reason = IDENTITY_GAP_MESSAGES[identity_problem]
+    elif provider_court_code_missing:
+        disabled_reason = "Add the provider court code or CNR before refreshing this case."
     return TrackedCaseRecord(
         id=case.id,
         provider=case.provider,
@@ -3572,6 +3679,12 @@ def refresh_bookmark(
     reservation_id: str | None = None
     try:
         active_provider = provider or get_case_tracking_provider()
+        _require_search_ready_court_code(
+            provider=active_provider,
+            cnr_number=tracked_case.cnr_number,
+            court_code=tracked_case.court_code,
+            exact_case_search=True,
+        )
         from caseops_api.services.production_safety import assert_case_tracking_supported
 
         assert_case_tracking_supported(
@@ -5012,6 +5125,25 @@ def _eligible_tracked_case_predicate(*, company_id: str):
     )
 
 
+def _require_search_ready_court_code(
+    *,
+    provider: CaseTrackingProvider,
+    cnr_number: str | None,
+    court_code: str | None,
+    exact_case_search: bool,
+) -> None:
+    if (
+        isinstance(provider, EcourtsIndiaApiProvider)
+        and exact_case_search
+        and not cnr_number
+        and not (court_code or "").strip()
+    ):
+        raise HTTPException(
+            409,
+            "A search-ready court code or CNR is required before an exact eCourts case lookup.",
+        )
+
+
 def _eligible_tracked_case_count(session: Session, *, company_id: str) -> int:
     return int(
         session.scalar(
@@ -5563,6 +5695,29 @@ def poll_tracked_cases(
             )
             continue
         total_eligible = _eligible_tracked_case_count(session, company_id=context.company.id)
+        exact_search_requires_code = isinstance(active_provider, EcourtsIndiaApiProvider)
+        missing_search_code = and_(
+            TrackedCase.cnr_number.is_(None),
+            or_(
+                TrackedCase.court_code.is_(None),
+                func.length(func.trim(TrackedCase.court_code)) == 0,
+            ),
+        )
+        identity_blocked_count = (
+            int(
+                session.scalar(
+                    select(func.count(TrackedCase.id)).where(
+                        TrackedCase.company_id == context.company.id,
+                        TrackedCase.provider == active_provider.provider_key,
+                        _eligible_tracked_case_predicate(company_id=context.company.id),
+                        missing_search_code,
+                    )
+                )
+                or 0
+            )
+            if exact_search_requires_code
+            else 0
+        )
         cases = list(
             session.scalars(
                 select(TrackedCase)
@@ -5571,6 +5726,7 @@ def poll_tracked_cases(
                     TrackedCase.company_id == context.company.id,
                     TrackedCase.provider == active_provider.provider_key,
                     _eligible_tracked_case_predicate(company_id=context.company.id),
+                    ~missing_search_code if exact_search_requires_code else True,
                     or_(
                         TrackedCase.quarantined_at.is_(None),
                         TrackedCase.last_response_class.in_(
@@ -5623,6 +5779,12 @@ def poll_tracked_cases(
                 with session.begin_nested():
                     _refresh_automatic_source_identity(
                         session, context=context, tracked_case=tracked_case
+                    )
+                    _require_search_ready_court_code(
+                        provider=active_provider,
+                        cnr_number=tracked_case.cnr_number,
+                        court_code=tracked_case.court_code,
+                        exact_case_search=True,
                     )
                     assert_case_tracking_supported(
                         session,
@@ -5828,7 +5990,7 @@ def poll_tracked_cases(
         run.checked_count = checked_count
         run.update_count = update_count
         run.error_count = error_count
-        run.blocked_count = blocked_count
+        run.blocked_count = blocked_count + identity_blocked_count
         run.provider_call_count = provider_call_count
         run.backlog_remaining_count = int(
             session.scalar(
@@ -5848,7 +6010,11 @@ def poll_tracked_cases(
         )
         run.skipped_count = max(0, total_eligible - len(attempts))
         run.completed_at = _now()
-        run.status = "partial" if error_count or run.backlog_remaining_count else "completed"
+        run.status = (
+            "partial"
+            if error_count or run.blocked_count or run.backlog_remaining_count
+            else "completed"
+        )
         run.metadata_json = {
             **dict(run.metadata_json or {}),
             "checked_count": run.checked_count,
@@ -5856,6 +6022,7 @@ def poll_tracked_cases(
             "error_count": run.error_count,
             "skipped_count": run.skipped_count,
             "blocked_count": run.blocked_count,
+            "identity_blocked_count": identity_blocked_count,
             "provider_call_count": run.provider_call_count,
             "backlog_remaining_count": run.backlog_remaining_count,
             "bulk_cnr_count": len(cnrs),

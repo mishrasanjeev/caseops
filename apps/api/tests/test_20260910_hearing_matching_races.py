@@ -353,6 +353,16 @@ def test_legacy_bookmark_requires_court_and_recovers_from_current_matter(
         },
     )
     assert corrected.status_code == 200, corrected.text
+    blocked = client.get("/api/case-tracking/bookmarks", headers=headers).json()["bookmarks"][0]
+    assert blocked["id"] == bookmark["id"]
+    assert blocked["tracked_case"]["manual_refresh_allowed"] is False
+    assert "court code or CNR" in blocked["tracked_case"]["manual_refresh_disabled_reason"]
+    assert provider.search_calls == [] and provider.bulk_calls == []
+    with get_session_factory()() as session:
+        tracking = session.get(TrackedCase, bookmark["tracked_case_id"])
+        assert tracking is not None
+        tracking.court_code = "DLHC01"
+        session.commit()
     ready = client.get("/api/case-tracking/bookmarks", headers=headers).json()["bookmarks"][0]
     assert ready["id"] == bookmark["id"] and ready["tracked_case"]["manual_refresh_allowed"] is True
     if boundary == "manual":
