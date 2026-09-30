@@ -2531,7 +2531,12 @@ def _tracked_case_record(
             )
             else "missing_identifiers"
         )
-    identity_ready = identity_problem is None
+    provider_court_code_missing = (
+        case.provider == "ecourtsindia"
+        and not case.cnr_number
+        and not (case.court_code or "").strip()
+    )
+    identity_ready = identity_problem is None and not provider_court_code_missing
     manual_allowed = bool(
         enabled
         and identity_ready
@@ -2558,6 +2563,8 @@ def _tracked_case_record(
         )
     elif not enabled or not configured:
         disabled_reason = provider_reason or "Case tracking provider health is red."
+    elif provider_court_code_missing:
+        disabled_reason = "Add the provider court code or CNR before refreshing this case."
     elif identity_problem is not None:
         disabled_reason = IDENTITY_GAP_MESSAGES[identity_problem]
     return TrackedCaseRecord(

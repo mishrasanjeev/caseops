@@ -155,14 +155,23 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
   expect(beforeRows[0].matter_id).toBe(legacyMatter.id);
   expect(beforeRows[0].id).toBe(legacyBookmarkId);
   expect(beforeRows[0].tracked_case.manual_refresh_allowed).toBe(false);
-  poll();
-  await page.setExtraHTTPHeaders(noPaidProviderHeaders);
   await page.goto(`${web}/sign-in`);
   await page.locator("#company-slug").fill(slug);
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(password);
   await page.locator('button[type="submit"]').click();
   await page.waitForURL(/\/app(?:[/?]|$)/);
+  for (const mode of ["case", "filing"]) {
+    const fixture = fixtures.find(row => row.mode === mode)!;
+    const number = mode === "case" ? "WP(C) 8123/2026" : "421/2026";
+    await page.goto(`${web}/app/case-tracking?matterId=${encodeURIComponent(fixture.id)}&caseNumber=${encodeURIComponent(number)}&courtCode=DLHC01`);
+    await page.getByTestId("case-tracking-search-submit").click();
+    await expect(page.getByTestId("matter-search-link-submit")).toBeVisible();
+    await page.getByTestId("matter-search-link-submit").click();
+    await expect(page.getByTestId("matter-search-linked")).toBeVisible();
+  }
+  poll();
+  await page.setExtraHTTPHeaders(noPaidProviderHeaders);
   for (const fixture of fixtures) {
     const response = await request.get(`${api}/api/matters/${fixture.id}`, { headers });
     expect(response.status()).toBe(200);
@@ -186,7 +195,24 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
   const recoveredRows = (await recovered.json()).bookmarks.filter((row: { matter_id: string }) => row.matter_id === legacyMatter.id);
   expect(recoveredRows).toHaveLength(1);
   expect(recoveredRows[0].id).toBe(legacyBookmarkId);
-  expect(recoveredRows[0].tracked_case.next_hearing_on).toBe(plusDays(7));
+  expect(recoveredRows[0].tracked_case.next_hearing_on).toBeNull();
+  expect(recoveredRows[0].tracked_case.manual_refresh_allowed).toBe(false);
+  expect(recoveredRows[0].tracked_case.manual_refresh_disabled_reason).toContain("court code or CNR");
+  await visibleMatter(page, legacyMatter.code, null, false);
+
+  await page.setExtraHTTPHeaders({});
+  await page.goto(`${web}/app/case-tracking?matterId=${encodeURIComponent(legacyMatter.id)}&caseNumber=${encodeURIComponent("WP(C) 8124/2026")}&courtCode=DLHC01`);
+  await page.getByTestId("case-tracking-search-submit").click();
+  await expect(page.getByTestId("matter-search-link-submit")).toBeVisible();
+  await page.getByTestId("matter-search-link-submit").click();
+  await expect(page.getByTestId("matter-search-linked")).toBeVisible();
+  poll();
+  await page.setExtraHTTPHeaders(noPaidProviderHeaders);
+  const restored = await request.get(`${api}/api/case-tracking/bookmarks`, { headers });
+  expect(restored.status()).toBe(200);
+  const restoredRows = (await restored.json()).bookmarks.filter((row: { matter_id: string }) => row.matter_id === legacyMatter.id);
+  expect(restoredRows).toHaveLength(1);
+  expect(restoredRows[0].tracked_case.next_hearing_on).toBe(plusDays(7));
   await visibleMatter(page, legacyMatter.code, plusDays(7), false);
 });
 

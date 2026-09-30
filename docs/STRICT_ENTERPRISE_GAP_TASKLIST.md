@@ -2322,3 +2322,7 @@ job or scheduler was changed.
   superseding the original GBA 16:00-18:00 requirement. No automated paid
   calls; GBA audit was enforced read-only. Full evidence and closure gates:
   `docs/audits/GBA_PROVIDER_READINESS_2026-09-30.md`.
+- **Retained failed gate:** candidate `92eb79bf` passed 461 PostgreSQL tests
+  but failed two of six selected Docker Playwright hearing tests (one passed,
+  three local-inapplicable skips). BUG-012/014 remain open. The corrected
+  browser journey is pending a fresh exact-image Docker run.

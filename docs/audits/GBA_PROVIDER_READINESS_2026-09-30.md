@@ -39,6 +39,26 @@ This supersedes the source GBA document's 16:00-18:00 request. Scheduled
 provider eligibility is separate from configured credentials, completed job
 exit code, and current browser policy. No paid automated acceptance is allowed.
 
+## Retained release-gate failure
+
+The committed first candidate `92eb79bf9aea1adbe4ae59257836d3d41d5a88ba`
+passed all **461/461** PostgreSQL/pgvector tests and index-health checks in
+fresh Docker on 2026-09-30. Its selected Playwright inventory was six tests in
+the two requested dated hearing files. The CNR journey passed; the older
+case-number and combined registration/filing journeys failed because their
+no-code Matters did not gain the expected hearing date. Three local-inapplicable
+tests were skipped. This is a **failed** acceptance, not a release certificate.
+Retained files: `.tmp/docker-acceptance/b50b6f3fe8344d9393b8456061d079cb/`
+and the two dated `test-results/` error contexts. The subsequent browser
+correction must prove both visible no-code blocking and a successful
+provider-code-backed Matter link on a new committed image; it has not yet
+replaced that failure.
+
+PRD scope: journeys J03/J05/J08, modules M02/M04/M08, US-057..059 and
+FT-078..088. BUG-012 and BUG-014 remain open until the full browser journeys
+and exact-production release proof pass. A no-charge rejection alone does not
+meet the next-hearing requirement.
+
 ## Closure gates
 
 1. Obtain the GBA court/identifier inventory from an authorized owner. Review

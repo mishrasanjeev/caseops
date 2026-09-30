@@ -50,7 +50,18 @@ def test_unsearchable_exact_case_is_blocked_before_spend_and_does_not_starve_pol
     monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
     get_settings.cache_clear()
     monkeypatch.setattr(case_tracking, "get_case_tracking_provider", lambda: provider)
+    monkeypatch.setattr(
+        case_tracking, "provider_status", lambda: (True, "ecourtsindia", True, None)
+    )
     try:
+        listed = client.get(
+            "/api/case-tracking/bookmarks",
+            headers=auth_headers(str(boot["access_token"])),
+        )
+        assert listed.status_code == 200, listed.text
+        tracked_record = listed.json()["bookmarks"][0]["tracked_case"]
+        assert tracked_record["manual_refresh_allowed"] is False
+        assert "court code or CNR" in tracked_record["manual_refresh_disabled_reason"]
         response = client.post(
             f"/api/case-tracking/bookmarks/{bookmark['id']}/refresh",
             headers=auth_headers(str(boot["access_token"])),
