@@ -7,6 +7,15 @@ Source filename note: the original Word filename uses a special dash after
 Prepared: 2026-06-06  
 Audience: Codex CLI implementation agent, product reviewer, engineering reviewer
 
+## 2026-09-30 scheduling decision
+
+The source document's 4:00-6:00 PM request remains recorded below for provenance.
+The user subsequently approved **6:00-8:00 PM Asia/Kolkata for all tenants**.
+That later decision supersedes the original window for implementation and
+acceptance. The production scheduler starts every five minutes from 18:00
+through 19:55 IST, with the application refusing new scheduled provider calls
+outside the 18:00-20:00 window.
+
 ## 1. Purpose
 
 This PRD converts the GBA Law Office requirement analysis document into a complete
@@ -110,8 +119,8 @@ Current behavior:
 
 Gap:
 
-- The GBA requirement specifically requires an automatic daily refresh window
-  between 4:00 PM and 6:00 PM.
+- The current approved daily refresh window is 6:00 PM to 8:00 PM for all
+  tenants; the original GBA document requested 4:00 PM to 6:00 PM.
 - The deployment/scheduler configuration must prove this window, not merely that
   a script exists.
 
@@ -250,7 +259,7 @@ Gap:
 - Matter status UI no longer displays "Close" or "Closed" for matter lifecycle
   completion.
 - Existing `closed` matters are migrated or compatibly displayed as `Dispose`.
-- Daily case-tracking refresh runs within the 4:00 PM to 6:00 PM Asia/Kolkata
+- Daily case-tracking refresh runs within the 6:00 PM to 8:00 PM Asia/Kolkata
   window.
 - At least 95 percent of successful auto-fetched order imports enqueue or run
   compliance extraction.
@@ -345,7 +354,7 @@ Update:
 ### B1. User Story
 
 As a GBA user, I want tracked cases refreshed automatically every day between
-4:00 PM and 6:00 PM, so latest court updates are available without manual
+6:00 PM and 8:00 PM, so latest court updates are available without manual
 refresh.
 
 ### B2. Scheduling Requirements
@@ -356,16 +365,16 @@ Time zone:
 
 Refresh window:
 
-- Start no earlier than 4:00 PM.
-- End no later than 6:00 PM for scheduled job start/active polling window.
+- Start no earlier than 6:00 PM.
+- End no later than 8:00 PM for scheduled job start/active polling window.
 
 Recommended implementation:
 
-- Configure Cloud Scheduler to invoke the case-tracking poll job at 6:00 PM
-  Asia/Kolkata daily.
+- Configure Cloud Scheduler to invoke the case-tracking poll job every five
+  minutes from 6:00 PM through 7:55 PM Asia/Kolkata.
 - Add settings to make the window explicit:
-  - `CASEOPS_CASE_TRACKING_DAILY_WINDOW_START=16:00`
-  - `CASEOPS_CASE_TRACKING_DAILY_WINDOW_END=18:00`
+  - `CASEOPS_CASE_TRACKING_DAILY_WINDOW_START=18:00`
+  - `CASEOPS_CASE_TRACKING_DAILY_WINDOW_END=20:00`
   - `CASEOPS_CASE_TRACKING_DAILY_TIMEZONE=Asia/Kolkata`
 - The script should log the configured window and current local time.
 - If run outside the window by scheduler/manual mistake, behavior should be
@@ -375,10 +384,10 @@ Recommended implementation:
 
 Runtime rules:
 
-- Cloud Scheduler/Cloud Run should start the job inside the configured window,
-  at 6:00 PM Asia/Kolkata.
+- Cloud Scheduler/Cloud Run should start jobs inside the configured 6:00-8:00 PM
+  Asia/Kolkata window.
 - Scheduled production runs must not start any new provider call after
-  6:00 PM Asia/Kolkata unless `--force` or an explicit local/test override is
+  8:00 PM Asia/Kolkata unless `--force` or an explicit local/test override is
   supplied.
 - Unfinished work must remain durable and resume on the next run; the job must
   record whether backlog remains.
@@ -389,7 +398,7 @@ Runtime rules:
 
 ### B3. Functional Flow
 
-1. Cloud Scheduler triggers the Cloud Run job between 4:00 PM and 6:00 PM.
+1. Cloud Scheduler triggers the Cloud Run job between 6:00 PM and 8:00 PM.
 2. `caseops-poll-tracked-cases` loads eligible tracked/bookmarked cases.
    Safest default: only explicitly tracked/bookmarked cases refresh
    automatically. Tenant-admin auto-enrollment of eligible matters can be added
@@ -438,7 +447,7 @@ Expose in admin/provider operations or a case tracking operations view:
 
 ### B6. Acceptance Criteria
 
-- Scheduler manifest reflects a 4:00 PM to 6:00 PM IST run window.
+- Scheduler manifest reflects a 6:00 PM to 8:00 PM IST run window.
 - Manual script output reports whether the run is inside the configured window.
 - Provider-disabled run does not call provider and records safe blocked/skipped
   status.
@@ -1443,7 +1452,7 @@ To exactly match GBA expectations, collect:
 7. Whether compliance extraction should auto-create tasks immediately or create
    review-only draft items first.
 8. Whether automatic next-hearing updates should ever overwrite manual dates.
-9. Which courts/providers GBA expects for the 4:00 PM to 6:00 PM daily refresh.
+9. Which courts/providers GBA expects for the 6:00 PM to 8:00 PM daily refresh.
 10. Whether cause-list PDFs should include disposed matters when they still have
     a future date by mistake.
 

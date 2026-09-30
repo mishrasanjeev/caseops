@@ -2298,3 +2298,27 @@ job or scheduler was changed.
   job and outbox backlog; a worker would be a `scheduler-inventory.json` entry.
 - **Severity:** control gap, not stop-ship. Nothing applied the files; the
   release-owned migration job gains a checked-in, verified contract.
+# EH-GBA-PROVIDERS-2026-09-30 - GBA provider end-to-end readiness
+
+- **Status:** Partially implemented. Prevention code for unsafe eCourts exact
+  search is locally tested but not merged/deployed; GBA data and provider-side
+  evidence are still missing. Overall all-provider verdict: **NO-GO**.
+- **Stop-ship for the requested claim:** GBA connector health reports case
+  tracking degraded/failed. The latest five poll runs are partial; 535 eligible
+  rows lack court code, and the latest run left 538 backlogged. The job exiting
+  zero is not proof of a successful tenant refresh. External email remains
+  disabled with four GBA intents blocked and no delivered evidence.
+- **Control in progress:** Exact automatic eCourts case-number search rejects
+  a missing code before adapter transport; service preflight avoids spend
+  reservation, and scheduled selection leaves those rows visible as identity
+  blocked/backlogged. Local regression inventory: provider refresh protocol,
+  hearing matching, auto next-hearing sync and GBA PRD (63 passed on 2026-09-30).
+- **Missing providers:** GBA Google and Microsoft user connections, SMS,
+  WhatsApp, Pine Labs merchant activation and lawful IP-registry access are
+  absent. Indian Kanoon, OpenAI and Voyage have configuration but no complete
+  GBA outcome proof. API enablement, secrets, unlimited spend policy and an
+  HTTP 200 are not meaningful-result evidence.
+- **Decision:** User confirmed 18:00-20:00 Asia/Kolkata for all tenants,
+  superseding the original GBA 16:00-18:00 requirement. No automated paid
+  calls; GBA audit was enforced read-only. Full evidence and closure gates:
+  `docs/audits/GBA_PROVIDER_READINESS_2026-09-30.md`.

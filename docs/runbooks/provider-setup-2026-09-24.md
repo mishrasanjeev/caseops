@@ -1,5 +1,13 @@
 # CaseOps provider setup and verified state (24 September 2026)
 
+**2026-09-30 update:** The GBA read-only audit in
+[`../audits/GBA_PROVIDER_READINESS_2026-09-30.md`](../audits/GBA_PROVIDER_READINESS_2026-09-30.md)
+supersedes any impression that configured secrets make providers operational.
+GBA eCourts polling is partial with 538 due cases and 535 eligible rows lacking
+a provider court code; SendGrid has zero observed GBA deliveries and external
+delivery remains disabled. The approved tracking window is 18:00-20:00 IST for
+all tenants. This is **NO-GO** for all-provider end-to-end certification.
+
 This is an operator checklist, not a claim that a configured credential has
 completed a live transaction. Production project: `perfect-period-305406`,
 region: `asia-south1`, API service: `caseops-api`. Keep credentials in Google

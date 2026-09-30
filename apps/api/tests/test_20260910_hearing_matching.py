@@ -151,6 +151,94 @@ def test_automatic_search_rejects_missing_public_number_before_transport():
         )
 
 
+@pytest.mark.parametrize("court_code", [None, "", " \t "])
+def test_automatic_case_number_search_requires_court_code_before_transport(court_code):
+    def unexpected_transport(request):
+        pytest.fail("A broad automatic case-number search must not spend provider credit")
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://provider.test/api/partner",
+        token="unused-fixture",
+        transport=httpx.MockTransport(unexpected_transport),
+    )
+    with pytest.raises(CaseTrackingProviderError) as failure:
+        provider.search_cases(
+            query=CaseSearchQuery(
+                case_number="WP(C) 9123/2026",
+                court_code=court_code,
+                require_complete_results=True,
+            )
+        )
+    assert failure.value.response_class == "match_validation_failed"
+    assert "court code" in str(failure.value).lower()
+    assert "CNR" in str(failure.value)
+
+
+def test_automatic_case_number_search_accepts_short_provider_court_code():
+    requests = []
+
+    def transport(request):
+        requests.append(request)
+        assert request.url.params["caseNumbers"] == "24807/2016"
+        assert request.url.params["courtCodes"] == "2"
+        assert "query" not in request.url.params
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "results": [
+                        {
+                            "cnr": "DLND020047882015",
+                            "registrationNumber": "24807/2016",
+                            "caseType": "WP_C",
+                            "courtCode": "2",
+                        }
+                    ],
+                    "totalHits": 1,
+                    "hasNextPage": False,
+                }
+            },
+        )
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://provider.test/api/partner",
+        token="unused-fixture",
+        transport=httpx.MockTransport(transport),
+    )
+    results = provider.search_cases(
+        query=CaseSearchQuery(
+            case_number="WP(C) 24807/2016", court_code="2", require_complete_results=True
+        )
+    )
+    assert len(requests) == 1
+    assert len(results) == 1
+    assert results[0].cnr_number == "DLND020047882015"
+
+
+def test_complete_cnr_search_does_not_require_court_code():
+    requests = []
+
+    def transport(request):
+        requests.append(request)
+        assert request.url.path.endswith("/case/DLHC010091232026")
+        return httpx.Response(
+            200,
+            json={"cnr": "DLHC010091232026", "registrationNumber": "9123/2026"},
+        )
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://provider.test/api/partner",
+        token="unused-fixture",
+        transport=httpx.MockTransport(transport),
+    )
+    results = provider.search_cases(
+        query=CaseSearchQuery(cnr_number="DLHC010091232026", require_complete_results=True)
+    )
+    assert len(requests) == 1
+    assert len(results) == 1
+    assert results[0].cnr_number == "DLHC010091232026"
+
+
 def test_ambiguous_candidates_are_never_selected():
     with pytest.raises(CaseTrackingProviderError) as failure:
         _verified_sync_snapshot_identity(tracked(), [snapshot(), snapshot(cnr="DLHC010091242026")])

@@ -69,6 +69,7 @@ from caseops_api.services.case_tracking_providers import (
     CaseTrackingProvider,
     CaseTrackingProviderError,
     CaseTrackingProviderUnavailable,
+    EcourtsIndiaApiProvider,
     ProviderCaseEvent,
     ProviderCaseSnapshot,
     case_tracking_transport_budget,
@@ -1727,6 +1728,12 @@ def search_cases(
     )
     try:
         active_provider = provider or get_case_tracking_provider()
+        _require_search_ready_court_code(
+            provider=active_provider,
+            cnr_number=query.cnr_number,
+            court_code=query.court_code,
+            exact_case_search=query.require_complete_results,
+        )
         from caseops_api.services.production_safety import assert_case_tracking_supported
 
         assert_case_tracking_supported(
@@ -3572,6 +3579,12 @@ def refresh_bookmark(
     reservation_id: str | None = None
     try:
         active_provider = provider or get_case_tracking_provider()
+        _require_search_ready_court_code(
+            provider=active_provider,
+            cnr_number=tracked_case.cnr_number,
+            court_code=tracked_case.court_code,
+            exact_case_search=True,
+        )
         from caseops_api.services.production_safety import assert_case_tracking_supported
 
         assert_case_tracking_supported(
@@ -5012,6 +5025,25 @@ def _eligible_tracked_case_predicate(*, company_id: str):
     )
 
 
+def _require_search_ready_court_code(
+    *,
+    provider: CaseTrackingProvider,
+    cnr_number: str | None,
+    court_code: str | None,
+    exact_case_search: bool,
+) -> None:
+    if (
+        isinstance(provider, EcourtsIndiaApiProvider)
+        and exact_case_search
+        and not cnr_number
+        and not (court_code or "").strip()
+    ):
+        raise HTTPException(
+            409,
+            "A search-ready court code or CNR is required before an exact eCourts case lookup.",
+        )
+
+
 def _eligible_tracked_case_count(session: Session, *, company_id: str) -> int:
     return int(
         session.scalar(
@@ -5563,6 +5595,29 @@ def poll_tracked_cases(
             )
             continue
         total_eligible = _eligible_tracked_case_count(session, company_id=context.company.id)
+        exact_search_requires_code = isinstance(active_provider, EcourtsIndiaApiProvider)
+        missing_search_code = and_(
+            TrackedCase.cnr_number.is_(None),
+            or_(
+                TrackedCase.court_code.is_(None),
+                func.length(func.trim(TrackedCase.court_code)) == 0,
+            ),
+        )
+        identity_blocked_count = (
+            int(
+                session.scalar(
+                    select(func.count(TrackedCase.id)).where(
+                        TrackedCase.company_id == context.company.id,
+                        TrackedCase.provider == active_provider.provider_key,
+                        _eligible_tracked_case_predicate(company_id=context.company.id),
+                        missing_search_code,
+                    )
+                )
+                or 0
+            )
+            if exact_search_requires_code
+            else 0
+        )
         cases = list(
             session.scalars(
                 select(TrackedCase)
@@ -5571,6 +5626,7 @@ def poll_tracked_cases(
                     TrackedCase.company_id == context.company.id,
                     TrackedCase.provider == active_provider.provider_key,
                     _eligible_tracked_case_predicate(company_id=context.company.id),
+                    ~missing_search_code if exact_search_requires_code else True,
                     or_(
                         TrackedCase.quarantined_at.is_(None),
                         TrackedCase.last_response_class.in_(
@@ -5623,6 +5679,12 @@ def poll_tracked_cases(
                 with session.begin_nested():
                     _refresh_automatic_source_identity(
                         session, context=context, tracked_case=tracked_case
+                    )
+                    _require_search_ready_court_code(
+                        provider=active_provider,
+                        cnr_number=tracked_case.cnr_number,
+                        court_code=tracked_case.court_code,
+                        exact_case_search=True,
                     )
                     assert_case_tracking_supported(
                         session,
@@ -5828,7 +5890,7 @@ def poll_tracked_cases(
         run.checked_count = checked_count
         run.update_count = update_count
         run.error_count = error_count
-        run.blocked_count = blocked_count
+        run.blocked_count = blocked_count + identity_blocked_count
         run.provider_call_count = provider_call_count
         run.backlog_remaining_count = int(
             session.scalar(
@@ -5848,7 +5910,11 @@ def poll_tracked_cases(
         )
         run.skipped_count = max(0, total_eligible - len(attempts))
         run.completed_at = _now()
-        run.status = "partial" if error_count or run.backlog_remaining_count else "completed"
+        run.status = (
+            "partial"
+            if error_count or run.blocked_count or run.backlog_remaining_count
+            else "completed"
+        )
         run.metadata_json = {
             **dict(run.metadata_json or {}),
             "checked_count": run.checked_count,
@@ -5856,6 +5922,7 @@ def poll_tracked_cases(
             "error_count": run.error_count,
             "skipped_count": run.skipped_count,
             "blocked_count": run.blocked_count,
+            "identity_blocked_count": identity_blocked_count,
             "provider_call_count": run.provider_call_count,
             "backlog_remaining_count": run.backlog_remaining_count,
             "bulk_cnr_count": len(cnrs),
