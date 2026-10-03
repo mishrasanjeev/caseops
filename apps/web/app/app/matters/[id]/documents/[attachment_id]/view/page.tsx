@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { PDFAnnotation } from "@/components/document/PDFViewer";
 import { Button } from "@/components/ui/Button";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import {
   type MatterAttachmentAnnotationRecord,
   fetchMatterAttachmentBlob,
@@ -142,7 +143,21 @@ export default function AttachmentViewerPage(): React.JSX.Element {
           ← Back to documents
         </Button>
       </div>
-      {url && isPdf ? (
+      {workspaceQuery.isPending ? (
+        <div className="flex flex-1 items-center justify-center" role="status">
+          Loading document…
+        </div>
+      ) : workspaceQuery.isError ? (
+        <QueryErrorState
+          title="Could not load document"
+          error={workspaceQuery.error}
+          onRetry={workspaceQuery.refetch}
+        />
+      ) : !attachment ? (
+        <div className="flex flex-1 items-center justify-center text-sm text-[var(--color-ink-2)]" role="alert">
+          This document is unavailable.
+        </div>
+      ) : url && isPdf ? (
         <PDFViewer
           url={inlineUrl}
           filename={filename}

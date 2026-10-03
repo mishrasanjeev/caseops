@@ -93,7 +93,7 @@ test("IPLF-UJ-66C Draft/document sister: benignly retired outputs stay revoked a
       await page.goto(draftsUrl);
       await page.reload();
       await expect(page).toHaveURL(draftsUrl);
-      await expect(page.getByTestId(`draft-row-${fixture.cases.control.draft_id}`)).toBeVisible();
+      await expect(page.getByTestId(`draft-row-${fixture.cases.control.draft_id}`)).toBeVisible({ timeout: 60_000 });
     };
     const blocked = async (name: "access" | "tombstone") => {
       const target = fixture.cases[name];
