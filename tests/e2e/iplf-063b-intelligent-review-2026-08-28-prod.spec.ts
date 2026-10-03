@@ -499,8 +499,7 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({
     await expect(staleDetail.getByText(/^abstained$/i)).toBeVisible();
     await expect(staleDetail.getByText(abstained.abstention_reason!)).toBeVisible();
     await expect(staleDetail.getByText(/Verifying frozen sources/)).toHaveCount(0);
-    await page.unroute(listRoute);
-    await page.unroute(detailRoute);
+    await page.unrouteAll({ behavior: "wait" });
   });
 
   await page.setViewportSize({ width: 360, height: 800 });

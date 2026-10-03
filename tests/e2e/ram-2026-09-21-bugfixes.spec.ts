@@ -171,7 +171,7 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   const imageAttachment = (await imageUpload.json()) as { id: string };
   await page.goto(`${web}/app/matters/${matter.id}/documents/${imageAttachment.id}/view`);
   const image = page.getByRole("img", { name: "matter-inline-view.png" });
-  await expect(image).toBeVisible();
+  await expect(image).toBeVisible({ timeout: 60_000 });
   await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(1);
 
   await page.setViewportSize({ width: 390, height: 844 });

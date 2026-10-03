@@ -41,7 +41,6 @@ const ALLOWED_UNTESTED = new Set<string>([
   // (drafting / hearings / recommendations entries dropped 2026-04-25
   // by AQ-003 batch-1.)
   "app/admin/email-templates/page.tsx",
-  "app/matters/[id]/documents/[attachment_id]/view/page.tsx",
   "app/matters/[id]/drafts/new/page.tsx",
   "app/outside-counsel/page.tsx",
   // Phase C-2 (2026-04-24): the matter detail page lives at

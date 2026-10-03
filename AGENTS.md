@@ -1367,3 +1367,10 @@ requirements when using the fallback.
   committed branch history, so uncommitted map edits cannot satisfy it. A
   governance-note edit must render and validate both the Markdown map and
   generated data-class projection before freezing a Docker candidate.
+- A Cloud Run request timestamp plus its latency can identify a request that
+  waited for a new scanner-gated API instance. Correlate the instance startup
+  logs before calling a missing browser row a data or permission defect. Keep
+  loading, failed metadata, absent attachment and unsupported format as
+  distinct viewer states. Give non-performance browser assertions a bounded
+  cold-start allowance, while retaining separate warm-path latency gates;
+  never hide a slow mutation with an automatic retry.
