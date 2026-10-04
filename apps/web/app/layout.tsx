@@ -118,6 +118,9 @@ export const metadata: Metadata = {
   ],
   creator: siteConfig.author,
   publisher: siteConfig.publisher,
+  verification: {
+    google: "PMGfTyh9A92sieEPcMzxE1pEAjez7zyvTiP1UorJ9T8",
+  },
   other: {
     "product-owner": siteConfig.ownership.legalOwner,
     "inventor-owner": siteConfig.ownership.inventorOwner,

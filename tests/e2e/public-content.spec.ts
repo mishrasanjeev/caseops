@@ -292,6 +292,15 @@ test.describe("Public landing page and user guide", () => {
     );
   });
 
+  test("home retains the Google Search Console ownership tag", async ({ page }) => {
+    const response = await page.goto("/");
+    expect(response?.status()).toBe(200);
+    await expect(page.locator('meta[name="google-site-verification"]')).toHaveAttribute(
+      "content",
+      "PMGfTyh9A92sieEPcMzxE1pEAjez7zyvTiP1UorJ9T8",
+    );
+  });
+
   test("matter-management resource answers the query and qualifies provider limits", async ({ page }) => {
     const response = await page.goto("/resources/legal-matter-management-india");
     expect(response?.status()).toBe(200);
