@@ -28,14 +28,14 @@ import { SkipLink } from "@/components/ui/SkipLink";
 import { siteConfig } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "CaseOps for general counsels",
+  title: "Legal operations software for Indian in-house teams",
   description:
-    "An operating layer for in-house legal teams. Portfolio visibility, outside counsel spend, contractual obligations and compliance posture on one matter graph.",
+    "CaseOps connects matters, contracts, outside counsel, spend, and review evidence for Indian in-house legal teams.",
   alternates: { canonical: "/general-counsels" },
   openGraph: {
     type: "article",
     url: `${siteConfig.url}/general-counsels`,
-    title: `For general counsels — ${siteConfig.name}`,
+    title: `Legal operations software for Indian in-house teams - ${siteConfig.name}`,
     description:
       "Stop stitching together matter trackers, contract repos, spend spreadsheets and compliance calendars. One matter graph for in-house legal.",
   },

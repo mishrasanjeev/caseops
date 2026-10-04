@@ -12,6 +12,7 @@ const body = `# CaseOps - Indian legal operating system
 
 - Home: ${siteConfig.url}
 - User guide: ${siteConfig.url}/guide
+- Legal matter management checklist: ${siteConfig.url}/resources/legal-matter-management-india
 - Tagline: ${siteConfig.tagline}
 - Product owner: ${siteConfig.ownership.legalOwner}
 - Inventor/Owner: ${siteConfig.ownership.inventorOwner}

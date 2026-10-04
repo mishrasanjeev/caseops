@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import { PricingPageClient } from "./PricingPageClient";
 
 export const metadata: Metadata = {
-  title: "Pricing - CaseOps",
+  title: "Pricing for Indian legal teams",
   description:
-    "CaseOps pricing for solo lawyers, law firms, and corporate legal teams.",
+    "Explore CaseOps plans for solo advocates, law firms, and in-house legal teams in India. Compare current plan limits and request assisted activation.",
   alternates: { canonical: "/pricing" },
 };
 

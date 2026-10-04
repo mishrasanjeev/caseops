@@ -2,6 +2,8 @@
 
 **The matter-native legal operating system for Indian law firms and corporate legal teams.**
 
+Public site and product guide: [caseops.ai](https://caseops.ai/).
+
 CaseOps is owned by **Orchestrum Technologies LLP**. **Sanjeev Kumar** is the
 Inventor/Owner. Owner contact: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)
 and [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com).
@@ -14,10 +16,10 @@ citation-grounded workspace - with tenant isolation, review-first AI assistance,
 production gates, and audit by default. Autonomous scoped-agent execution is readiness-only
 until the agent trust plane is activated.
 
-> Founder-stage monorepo. **Pre-alpha.** The backend foundation (matters, documents,
-> contracts, billing, authority ingestion) is working and hardened; the AI core is actively
-> landing. See [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) for current status and
-> priority.
+> **Early access.** Some legal-source coverage and external providers remain gated or
+> incomplete. See the public [user guide](https://caseops.ai/guide) for current
+> workflows and [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) for
+> engineering gaps and priorities.
 
 ---
 

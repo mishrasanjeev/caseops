@@ -6,13 +6,16 @@ const PUBLIC_SITEMAP_PATHS = [
   "/general-counsels",
   "/guide",
   "/law-firms",
-  "/llms-full.txt",
-  "/llms.txt",
   "/pricing",
+  "/resources/legal-matter-management-india",
   "/solo-lawyers",
 ] as const;
 
-const PUBLIC_CONTENT_PAGES = ["/", "/guide"] as const;
+const PUBLIC_CONTENT_PAGES = [
+  "/",
+  "/guide",
+  "/resources/legal-matter-management-india",
+] as const;
 
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
@@ -212,8 +215,8 @@ test.describe("Public landing page and user guide", () => {
     ).toBeVisible();
 
     await page.goto("/guide");
-    await expect(page.getByText("User guide · v4 · 2026", { exact: true })).toBeVisible();
-    await expect(page.locator("main > header")).toContainText(/Updated\s+27 August 2026/);
+    await expect(page.getByText("User guide · v5 · 2026", { exact: true })).toBeVisible();
+    await expect(page.locator("main > header")).toContainText(/Updated\s+7 September 2026/);
   });
 
   for (const pathname of PUBLIC_CONTENT_PAGES) {
@@ -283,9 +286,29 @@ test.describe("Public landing page and user guide", () => {
     }).sort();
 
     expect(paths).toEqual([...PUBLIC_SITEMAP_PATHS].sort());
+    expect(xml).not.toContain("<lastmod>");
     expect(paths.some((path) => /^\/(?:app|account|portal|sign-in)(?:\/|$)/.test(path))).toBe(
       false,
     );
+  });
+
+  test("matter-management resource answers the query and qualifies provider limits", async ({ page }) => {
+    const response = await page.goto("/resources/legal-matter-management-india");
+    expect(response?.status()).toBe(200);
+    const nonce = response?.headers()["content-security-policy"]?.match(/script-src[^;]*'nonce-([^']+)'/)?.[1];
+    expect(nonce, "resource JSON-LD must use the request's CSP nonce").toBeTruthy();
+    await expect(page.getByRole("heading", { level: 1, name: "Legal matter management in India" })).toBeVisible();
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+      "href",
+      "https://caseops.ai/resources/legal-matter-management-india",
+    );
+    await expect(page.locator("#checklist li")).toHaveCount(7);
+    await expect(page.locator("#court-data")).toContainText("does not guarantee");
+    const article = await page.locator('script[type="application/ld+json"]').allTextContents();
+    expect(article.map((value) => JSON.parse(value) as { "@type"?: string }).some((value) => value["@type"] === "Article")).toBe(true);
+    const articleNonce = await page.locator("#matter-management-article-jsonld")
+      .evaluate((element) => (element as HTMLScriptElement).nonce);
+    expect(articleNonce).toBe(nonce);
   });
 
   for (const viewport of VIEWPORTS) {
