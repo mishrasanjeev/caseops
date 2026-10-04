@@ -10,6 +10,8 @@ const body = `# CaseOps - Indian Legal Operating System
 
 ${siteConfig.description}
 
+Practical public evaluation checklist: ${siteConfig.url}/resources/legal-matter-management-india
+
 ## Ownership
 
 - Product owner: ${siteConfig.ownership.legalOwner}

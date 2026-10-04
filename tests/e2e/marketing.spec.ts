@@ -53,11 +53,13 @@ test.describe("Marketing site", () => {
       "content",
       "summary_large_image",
     );
+    await expect(page.locator('meta[name="keywords"]')).toHaveCount(0);
+    await expect(page.locator('meta[name="twitter:creator"]')).toHaveCount(0);
 
-    const jsonLdCount = await page
-      .locator('script[type="application/ld+json"]')
-      .count();
-    expect(jsonLdCount).toBeGreaterThanOrEqual(3);
+    const jsonLd = (await page.locator('script[type="application/ld+json"]').allTextContents())
+      .map((value) => JSON.parse(value) as { "@type"?: string; offers?: unknown });
+    expect(jsonLd.length).toBeGreaterThanOrEqual(3);
+    expect(jsonLd.find((value) => value["@type"] === "SoftwareApplication")?.offers).toBeUndefined();
 
     await expect(
       page.getByRole("heading", { level: 1, name: /operating system for/i }),

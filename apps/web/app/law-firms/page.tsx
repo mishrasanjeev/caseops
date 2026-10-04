@@ -36,14 +36,14 @@ import { cn } from "@/lib/cn";
 import { siteConfig } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Law Firms",
+  title: "Matter management software for Indian law firms",
   description:
-    "A 10-part sales pitch for litigation-heavy law firms evaluating CaseOps as their matter-native legal operating system.",
+    "See how Indian law firms can connect matters, hearings, source-backed drafting, team review, and billing in one CaseOps workspace.",
   alternates: { canonical: "/law-firms" },
   openGraph: {
     type: "website",
     url: `${siteConfig.url}/law-firms`,
-    title: `For law firms - ${siteConfig.name}`,
+    title: `Matter management software for Indian law firms - ${siteConfig.name}`,
     description:
       "See how CaseOps connects matter management, drafting, hearing prep, billing and control into one operating system for law firms.",
   },

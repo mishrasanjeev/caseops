@@ -28,14 +28,14 @@ import { SkipLink } from "@/components/ui/SkipLink";
 import { siteConfig } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "CaseOps for solo lawyers",
+  title: "Practice management software for solo lawyers in India",
   description:
-    "Operate like a 20-lawyer practice without hiring one. Case diary, drafting with citations, research, matter billing, and provider-gated payment readiness in one workspace for solo advocates.",
+    "Manage matters, hearing dates, source-backed drafts, research, and billing in one CaseOps workspace for solo advocates in India.",
   alternates: { canonical: "/solo-lawyers" },
   openGraph: {
     type: "article",
     url: `${siteConfig.url}/solo-lawyers`,
-    title: `For solo lawyers — ${siteConfig.name}`,
+    title: `Practice management software for solo lawyers in India - ${siteConfig.name}`,
     description:
       "Replace five subscriptions and a paper diary with one workspace built for the solo advocate on laptop, iPad and court mornings.",
   },

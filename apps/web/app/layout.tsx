@@ -74,14 +74,6 @@ const softwareJsonLd = {
     "@type": "Organization",
     name: siteConfig.ownership.legalOwner,
   },
-  offers: {
-    "@type": "AggregateOffer",
-    priceCurrency: "INR",
-    offerCount: 3,
-    url: `${siteConfig.url}/pricing`,
-    availability: "https://schema.org/LimitedAvailability",
-    description: "Versioned plan catalog; assisted activation while production payments remain UAT-gated.",
-  },
   featureList: [
     "Matter management",
     "Pre-engagement conflict checks",
@@ -119,7 +111,6 @@ export const metadata: Metadata = {
     template: `%s — ${siteConfig.name}`,
   },
   description: siteConfig.description,
-  keywords: [...siteConfig.keywords],
   applicationName: siteConfig.name,
   authors: [
     { name: siteConfig.ownership.inventorOwner },
@@ -127,6 +118,9 @@ export const metadata: Metadata = {
   ],
   creator: siteConfig.author,
   publisher: siteConfig.publisher,
+  verification: {
+    google: "PMGfTyh9A92sieEPcMzxE1pEAjez7zyvTiP1UorJ9T8",
+  },
   other: {
     "product-owner": siteConfig.ownership.legalOwner,
     "inventor-owner": siteConfig.ownership.inventorOwner,
@@ -159,7 +153,6 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: `${siteConfig.name} — ${siteConfig.tagline}`,
     description: siteConfig.description,
-    creator: siteConfig.twitter,
   },
   // icons removed — app/icon.tsx is a Next file-based icon convention and
   // is auto-served at /icon (PNG). Declaring it here as /icon.png creates
