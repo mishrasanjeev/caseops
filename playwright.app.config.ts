@@ -24,6 +24,7 @@ export default defineConfig({
   testIgnore: /iplf-027b-a0-quiescence-2026-08-14-prod\.spec\.ts$/,
   testMatch: [
     /marketing\.spec\.ts/,
+    /public-content\.spec\.ts/,
     /app-spine\.spec\.ts/,
     /functional-qa-regression\.spec\.ts/,
     /a11y\.spec\.ts/,
