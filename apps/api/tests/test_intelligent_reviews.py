@@ -33,6 +33,7 @@ from caseops_api.services.private_retrieval import (
     PrivateProjectionInput,
     ProjectionScopeInput,
     ensure_active_private_generation,
+    private_source_projection_text,
     private_source_version,
     propagate_private_projection_change,
     upsert_private_projection,
@@ -330,7 +331,7 @@ def _index_review_target(
                 source_version=private_source_version(matter),
                 chunk_ordinal=0,
                 label=matter.title,
-                content=f"{matter.title}. {matter.description or ''}",
+                content=private_source_projection_text(matter),
                 scopes=(
                     ProjectionScopeInput(
                         scope_type="matter",
