@@ -20,6 +20,7 @@ from caseops_api.db.models import (
     CompanyMembership,
     DataRetentionPolicy,
     DataRetentionPolicyVersion,
+    IpDocketRecord,
     Matter,
     MatterAttachment,
     MatterAttachmentChunk,
@@ -445,6 +446,78 @@ def test_new_matter_and_docket_invalidate_an_existing_private_generation(
         )
     assert ("matter", matter["id"]) in projected
     assert ("ip_docket", docket_id) in projected
+
+
+def test_rebuild_does_not_reuse_legacy_timestamp_source_versions(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    matter = _matter(client, token, "PRIVATE-LEGACY-SOURCE-VERSION")
+    with get_session_factory()() as session:
+        docket = create_ip_docket(
+            session,
+            context=_context(company_id, membership_id),
+            payload=IpDocketCreateRequest(
+                title="Private legacy source version docket",
+                restricted=False,
+                particulars={
+                    "form_key": "TM-A",
+                    "form_version": "2026.1",
+                    "mark_kind": "word",
+                    "representation": {"text": "PRIVATE LEGACY SOURCE VERSION"},
+                    "classes": [{"class_number": 45, "specification": "Legal services"}],
+                    "parties": [{"role": "applicant", "name": "CaseOps QA"}],
+                    "filing_manifest": [],
+                },
+            ),
+        )
+        docket_id = docket.id
+
+    with get_session_factory()() as session:
+        initial = rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+        matter_row = session.get(Matter, matter["id"])
+        docket_row = session.get(IpDocketRecord, docket_id)
+        assert matter_row is not None and docket_row is not None
+        expected_versions = {
+            ("matter", matter_row.id): private_retrieval.private_source_version(matter_row),
+            ("ip_docket", docket_row.id): private_retrieval.private_source_version(docket_row),
+        }
+        for (source_type, source_id), expected_version in expected_versions.items():
+            projection = session.scalar(
+                select(PrivateIndexProjection).where(
+                    PrivateIndexProjection.company_id == company_id,
+                    PrivateIndexProjection.generation_id == initial.generation_id,
+                    PrivateIndexProjection.source_type == source_type,
+                    PrivateIndexProjection.source_id == source_id,
+                    PrivateIndexProjection.is_tombstoned.is_(False),
+                )
+            )
+            assert projection is not None
+            projection.source_version = (
+                f"{expected_version.partition(':')[0]}:2026-08-31T19:12:11.136017+00:00"
+            )
+        session.commit()
+
+    with get_session_factory()() as session:
+        rebuilt = rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+        actual_versions = {
+            (row.source_type, row.source_id): row.source_version
+            for row in session.scalars(
+                select(PrivateIndexProjection).where(
+                    PrivateIndexProjection.company_id == company_id,
+                    PrivateIndexProjection.generation_id == rebuilt.generation_id,
+                    PrivateIndexProjection.source_id.in_((matter["id"], docket_id)),
+                    PrivateIndexProjection.is_tombstoned.is_(False),
+                )
+            )
+        }
+
+    assert actual_versions == expected_versions
 
 
 def test_rebuild_batches_only_one_tenant_and_search_reauthorizes_current_source(

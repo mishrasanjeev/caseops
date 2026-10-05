@@ -592,18 +592,6 @@ def _reuse_current_embeddings(
         if row is None:
             reused.append(payload)
             continue
-        can_preserve_source_version = payload.source_type in {
-            "client",
-            "matter",
-            "ip_docket",
-        }
-        if payload.source_type in {"matter", "ip_docket"}:
-            can_preserve_source_version = (
-                row.source_version.partition(":")[0]
-                == payload.source_version.partition(":")[0]
-            )
-        if can_preserve_source_version:
-            payload = replace(payload, source_version=row.source_version)
         if row.embedding_json is None:
             reused.append(payload)
             continue
