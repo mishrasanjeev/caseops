@@ -292,6 +292,21 @@ def promote_intake_request(
     )
     session.add(matter)
     session.flush()
+    from caseops_api.services.private_retrieval import (
+        private_source_version,
+        propagate_private_source_creation,
+    )
+
+    propagate_private_source_creation(
+        session,
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        idempotency_key=f"matter-created-from-intake:{matter.id}",
+        target_type="matter",
+        target_id=matter.id,
+        target_version=private_source_version(matter),
+        reason_code="matter_created_from_intake",
+    )
 
     row.linked_matter_id = matter.id
     row.status = MatterIntakeStatus.IN_PROGRESS

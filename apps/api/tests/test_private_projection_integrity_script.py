@@ -397,7 +397,7 @@ def test_maintenance_retries_one_database_lock_conflict_and_converges(monkeypatc
         pending_event_count=0,
         failed_event_count=0,
     )
-    reports = iter((repairable, repairable, repairable, ready))
+    reports = iter((repairable, repairable, repairable, ready, ready))
     rebuild_calls = 0
 
     monkeypatch.setattr(
@@ -550,7 +550,7 @@ def test_maintenance_retries_one_stale_rebuild_and_converges(monkeypatch) -> Non
         pending_event_count=0,
         failed_event_count=0,
     )
-    reports = iter((repairable, repairable, repairable, ready))
+    reports = iter((repairable, repairable, repairable, ready, ready))
     rebuild_calls = 0
     process_calls = 0
 
@@ -603,6 +603,80 @@ def test_maintenance_retries_one_stale_rebuild_and_converges(monkeypatch) -> Non
     assert result["rebuild_count"] == 1
     assert result["companies"][0]["applied_event_count"] == 2
     assert result["companies"][0]["rebuilt"] is True
+    assert rebuild_calls == 2
+    assert process_calls == 2
+
+
+def test_maintenance_replans_once_when_successful_rebuild_remains_stale(monkeypatch) -> None:
+    repairable = SimpleNamespace(
+        active_generation_id="generation-1",
+        oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=0,
+        blockers=("stale_or_ineligible_sources",),
+        release_blocked=True,
+        pending_event_count=0,
+        failed_event_count=0,
+    )
+    ready = SimpleNamespace(
+        active_generation_id="generation-3",
+        oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=None,
+        blockers=(),
+        release_blocked=False,
+        pending_event_count=0,
+        failed_event_count=0,
+    )
+    reports = iter((repairable, repairable, repairable, repairable, ready, ready))
+    rebuild_calls = 0
+    process_calls = 0
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "get_session_factory",
+        lambda: _WorkerSession,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: SimpleNamespace(
+            company_ids=("company-1",),
+            truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "inspect_private_index_integrity",
+        lambda _session, **_kwargs: next(reports),
+    )
+
+    def process(_session, **_kwargs):
+        nonlocal process_calls
+        process_calls += 1
+        return ()
+
+    def rebuild(_session, **_kwargs):
+        nonlocal rebuild_calls
+        rebuild_calls += 1
+        return SimpleNamespace(recovered_stale_shadow_count=0)
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "process_pending_private_projection_events",
+        process,
+    )
+    monkeypatch.setattr(private_projection_integrity, "rebuild_private_index", rebuild)
+
+    result = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=2,
+        event_lag_slo_seconds=300,
+    )
+
+    assert result["status"] == "ok"
+    assert result["release_blocked"] is False
+    assert result["rebuild_count"] == 2
+    assert result["companies"][0]["rebuilt"] is True
+    assert result["companies"][0]["blockers_after"] == []
     assert rebuild_calls == 2
     assert process_calls == 2
 

@@ -15,6 +15,7 @@ from caseops_api.db.models import (
     DocumentProcessingJobStatus,
     DocumentProcessingStatus,
     DocumentProcessingTargetType,
+    IpDocument,
     IpDocumentVersion,
     MatterActivity,
     MatterAttachment,
@@ -541,6 +542,28 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
             ),
         )
     )
+    event_actor_membership_id = (
+        job.requested_by_membership_id
+        or attachment.uploaded_by_membership_id
+        or attachment.matter.created_by_membership_id
+    )
+    if event_actor_membership_id is not None:
+        from caseops_api.services.private_retrieval import (
+            propagate_private_source_change_if_indexed,
+        )
+
+        session.flush()
+        propagate_private_source_change_if_indexed(
+            session,
+            company_id=job.company_id,
+            actor_membership_id=event_actor_membership_id,
+            idempotency_key=f"matter-document-indexed:{job.id}",
+            event_type="source_changed",
+            target_type="matter_document",
+            target_id=attachment.id,
+            target_version=attachment.sha256_hex,
+            reason_code="matter_attachment_processing_completed",
+        )
 
     # Persist indexing atomically under the parent lifecycle lock, then release
     # that lock before downstream compliance work. Compliance may involve many
@@ -650,4 +673,27 @@ def _process_ip_document_version_job(session: Session, job: DocumentProcessingJo
     )
     session.add(version)
     session.add(job)
+    document = session.scalar(
+        select(IpDocument).where(
+            IpDocument.id == version.document_id,
+            IpDocument.company_id == job.company_id,
+        )
+    )
+    if document is not None and document.current_version == version.version:
+        from caseops_api.services.private_retrieval import (
+            propagate_private_source_change_if_indexed,
+        )
+
+        session.flush()
+        propagate_private_source_change_if_indexed(
+            session,
+            company_id=job.company_id,
+            actor_membership_id=version.uploaded_by_membership_id,
+            idempotency_key=f"ip-document-indexed:{job.id}",
+            event_type="source_changed",
+            target_type="ip_document",
+            target_id=document.id,
+            target_version=str(document.current_version),
+            reason_code="ip_document_processing_completed",
+        )
     session.commit()

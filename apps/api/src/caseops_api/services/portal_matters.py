@@ -406,6 +406,31 @@ def submit_matter_kyc(
     target.kyc_submitted_at = now
     target.kyc_documents_json = safe_documents
     session.flush()
+    from caseops_api.services.private_retrieval import (
+        private_source_version,
+        propagate_private_source_change_if_indexed,
+    )
+
+    event_actor_membership_id = (
+        portal_user.invited_by_membership_id
+        or target.created_by_membership_id
+        or matter.created_by_membership_id
+    )
+    if event_actor_membership_id is not None:
+        source_version = private_source_version(target)
+        propagate_private_source_change_if_indexed(
+            session,
+            company_id=portal_user.company_id,
+            actor_membership_id=event_actor_membership_id,
+            idempotency_key=(
+                f"portal-client-kyc:{target.id}:{source_version}"
+            ),
+            event_type="source_changed",
+            target_type="client",
+            target_id=target.id,
+            target_version=source_version,
+            reason_code="portal_client_kyc_submitted",
+        )
     record_audit(
         session,
         company_id=portal_user.company_id,

@@ -169,6 +169,70 @@ def _context(company_id: str, membership_id: str) -> SessionContext:
         return SessionContext(company=company, membership=membership, user=user)
 
 
+def test_client_projection_tracks_only_indexed_fields_and_fences_real_changes(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    response = client.post(
+        "/api/clients/",
+        headers=auth_headers(token),
+        json={"name": "Projection Source Client", "client_type": "corporate"},
+    )
+    assert response.status_code == 200, response.text
+    client_id = str(response.json()["id"])
+
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+
+    metadata_update = client.patch(
+        f"/api/clients/{client_id}",
+        headers=auth_headers(token),
+        json={"city": "Delhi"},
+    )
+    assert metadata_update.status_code == 200, metadata_update.text
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(func.count(PrivateProjectionEvent.id)).where(
+                PrivateProjectionEvent.company_id == company_id,
+                PrivateProjectionEvent.target_type == "client",
+                PrivateProjectionEvent.target_id == client_id,
+            )
+        ) == 0
+        assert not inspect_private_index_integrity(
+            session,
+            company_id=company_id,
+        ).blockers
+
+    source_update = client.patch(
+        f"/api/clients/{client_id}",
+        headers=auth_headers(token),
+        json={"name": "Updated Projection Source Client"},
+    )
+    assert source_update.status_code == 200, source_update.text
+    with get_session_factory()() as session:
+        event = session.scalar(
+            select(PrivateProjectionEvent).where(
+                PrivateProjectionEvent.company_id == company_id,
+                PrivateProjectionEvent.target_type == "client",
+                PrivateProjectionEvent.target_id == client_id,
+            )
+        )
+        assert event is not None
+        assert event.status == "applied"
+        assert "active_generation_manifest_mismatch" in (
+            inspect_private_index_integrity(session, company_id=company_id).blockers
+        )
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+        assert not inspect_private_index_integrity(
+            session,
+            company_id=company_id,
+        ).blockers
+
+
 def _set_ip_workspace_entitlement(company_id: str, *, enabled: bool = True) -> None:
     with get_session_factory()() as session:
         subscription = session.scalar(
@@ -545,6 +609,19 @@ def test_stream_autocomplete_and_count_fail_closed_on_acl_epoch_change(
     with get_session_factory()() as session:
         rebuild_private_index(session, company_id=company_id, activate=True)
         session.commit()
+
+    with get_session_factory()() as session:
+        matter_row = session.get(Matter, str(matter["id"]))
+        assert matter_row is not None
+        indexed_version = private_retrieval.private_source_version(matter_row)
+        matter_row.next_hearing_on = datetime.now(UTC).date() + timedelta(days=14)
+        session.commit()
+        session.refresh(matter_row)
+        assert private_retrieval.private_source_version(matter_row) == indexed_version
+        assert not inspect_private_index_integrity(
+            session,
+            company_id=company_id,
+        ).blockers
 
     query = "StreamFenceUnique"
     request = {
@@ -1315,19 +1392,15 @@ def test_maintenance_retries_one_stale_shadow_and_activates_cleanly(
         nonlocal raced
         if not raced:
             raced = True
-            with get_session_factory()() as concurrent:
-                propagate_private_projection_change(
-                    concurrent,
-                    company_id=company_id,
-                    actor_membership_id=membership_id,
-                    idempotency_key="iplf-066b-maintenance-retry-race",
-                    event_type="access_changed",
-                    target_type="matter",
-                    target_id=str(matter["id"]),
-                    target_version=None,
-                    reason_code="access_changed_during_maintenance",
-                )
-                concurrent.commit()
+            response = client.patch(
+                f"/api/matters/{matter['id']}",
+                headers=auth_headers(token),
+                json={
+                    "title": "Race changed the indexed matter title",
+                    "expected_updated_at": matter["updated_at"],
+                },
+            )
+            assert response.status_code == 200, response.text
         return real_inputs(session, **kwargs)
 
     monkeypatch.setattr(

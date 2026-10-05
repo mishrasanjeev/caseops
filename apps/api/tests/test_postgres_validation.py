@@ -10184,6 +10184,8 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
 ) -> None:
     """IPLF-066B keeps production-scale candidate work tenant-bounded."""
 
+    import hashlib
+
     from sqlalchemy import event
 
     from caseops_api.db.models import (
@@ -10201,6 +10203,7 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
         ensure_active_private_generation,
         hydrate_private_projection_results,
         prefilter_private_projection_ids,
+        private_source_projection_text,
         private_source_version,
     )
     from caseops_api.services.private_retrieval_jobs import (
@@ -10252,7 +10255,7 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
         matter = Matter(
             id=matter_id,
             company_id=company_id,
-            title="Bounded private retrieval",
+            title="Bounded needle private retrieval",
             matter_code=f"PRIVATE-{matter_id[:8]}",
             status="active",
             practice_area="Intellectual Property",
@@ -10262,6 +10265,8 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
         )
         session.add_all([membership, matter])
         session.commit()
+        projection_text = private_source_projection_text(matter)
+        projection_hash = hashlib.sha256(projection_text.encode("utf-8")).hexdigest()
         generation = ensure_active_private_generation(session, company_id=company_id)
         other_generation = ensure_active_private_generation(
             session,
@@ -10278,8 +10283,8 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
                 source_version=version,
                 chunk_ordinal=ordinal,
                 label="Authorized private result",
-                content_text=f"bounded needle authorized private chunk {ordinal}",
-                content_sha256=(f"{ordinal:064x}"[-64:]),
+                content_text=projection_text,
+                content_sha256=projection_hash,
                 confidentiality="internal",
                 is_privileged=False,
                 source_state="active",

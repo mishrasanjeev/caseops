@@ -236,6 +236,21 @@ def create_international_record(
             context=context,
             docket=docket,
         )
+        from caseops_api.services.private_retrieval import (
+            private_source_version,
+            propagate_private_source_creation,
+        )
+
+        propagate_private_source_creation(
+            session,
+            company_id=context.company.id,
+            actor_membership_id=context.membership.id,
+            idempotency_key=f"ip-docket-created-international:{docket.id}",
+            target_type="ip_docket",
+            target_id=docket.id,
+            target_version=private_source_version(docket),
+            reason_code="ip_docket_created_international",
+        )
         record_from_context(
             session,
             context,
