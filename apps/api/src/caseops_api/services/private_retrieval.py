@@ -247,24 +247,39 @@ def private_retrieval_activation(
 
 
 def private_source_version(row: Client | Matter | IpDocketRecord) -> str:
-    """Return a version that changes for source edits and ACL changes."""
+    """Version only the source content and access state copied into retrieval."""
 
-    updated_at = row.updated_at
-    if updated_at is None:
-        updated = "missing"
-    else:
-        # SQLite drops timezone metadata while PostgreSQL returns an aware UTC
-        # value. Treat a naïve persisted timestamp as UTC so the same source
-        # does not look stale merely because the ORM refreshed it.
-        normalized = (
-            updated_at.replace(tzinfo=UTC)
-            if updated_at.tzinfo is None
-            else updated_at.astimezone(UTC)
-        )
-        updated = normalized.isoformat()
+    content_hash = hashlib.sha256(
+        private_source_projection_text(row).encode("utf-8")
+    ).hexdigest()
+    is_active = int(bool(row.is_active))
     if isinstance(row, (Matter, IpDocketRecord)):
-        return f"{row.access_policy_version}:{updated}"
-    return updated
+        return f"{int(row.access_policy_version or 0)}:{is_active}:{content_hash}"
+    return f"{is_active}:{content_hash}"
+
+
+def private_source_projection_text(row: Client | Matter | IpDocketRecord) -> str:
+    """Canonical text used by both indexing and source-currentness checks."""
+
+    if isinstance(row, Client):
+        return f"Client {row.name}. Type {row.client_type}. KYC {row.kyc_status}."
+    if isinstance(row, Matter):
+        return " ".join(
+            value
+            for value in (
+                f"Matter {row.matter_code}: {row.title}.",
+                f"Status {row.status}.",
+                f"Practice area {row.practice_area}.",
+                f"Forum {row.court_name or row.forum_level}.",
+                f"Client {row.client_name}." if row.client_name else "",
+                row.description or "",
+            )
+            if value
+        )
+    return (
+        f"IP docket {row.title}. Type {row.record_type}. Status {row.status}. "
+        f"Primary identifier {row.primary_identifier or 'not allocated'}."
+    )
 
 
 def _active_generation_statement(company_id: str):
@@ -1203,13 +1218,15 @@ def _source_versions_still_current(
                 Client.is_active.is_(True),
             )
         ).all():
-            expected = private_source_version(row)
+            expected_content_hash = hashlib.sha256(
+                private_source_projection_text(row).encode("utf-8")
+            ).hexdigest()
             allowed.update(
                 item.id
                 for item in projections
                 if item.source_type == "client"
                 and item.source_id == row.id
-                and item.source_version == expected
+                and item.content_sha256 == expected_content_hash
             )
 
     matter_ids = grouped.get("matter", set())
@@ -1222,12 +1239,15 @@ def _source_versions_still_current(
                 visible_matters_filter(session, context=context),
             )
         ).all():
+            expected_content_hash = hashlib.sha256(
+                private_source_projection_text(row).encode("utf-8")
+            ).hexdigest()
             allowed.update(
                 item.id
                 for item in projections
                 if item.source_type == "matter"
                 and item.source_id == row.id
-                and item.source_version == private_source_version(row)
+                and item.content_sha256 == expected_content_hash
             )
 
     attachment_ids = grouped.get("matter_document", set())
@@ -1262,12 +1282,15 @@ def _source_versions_still_current(
                 visible_ip_dockets_filter(session, context=context),
             )
         ).all():
+            expected_content_hash = hashlib.sha256(
+                private_source_projection_text(row).encode("utf-8")
+            ).hexdigest()
             allowed.update(
                 item.id
                 for item in projections
                 if item.source_type == "ip_docket"
                 and item.source_id == row.id
-                and item.source_version == private_source_version(row)
+                and item.content_sha256 == expected_content_hash
             )
 
     document_ids = grouped.get("ip_document", set())
@@ -2399,23 +2422,25 @@ def propagate_private_projection_change(
     return apply_private_projection_event(session, event_id=event.id)
 
 
-def propagate_private_source_creation(
+def propagate_private_source_change_if_indexed(
     session: Session,
     *,
     company_id: str,
     actor_membership_id: str,
     idempotency_key: str,
-    target_type: Literal["matter", "ip_docket"],
+    event_type: PrivateEventType,
+    target_type: PrivateSourceType,
     target_id: str,
-    target_version: str,
+    target_version: str | None,
     reason_code: str,
 ) -> PrivateProjectionEvent | None:
-    """Schedule a rebuild when a tenant already has a private index.
+    """Fence a source change when a tenant already has a private index.
 
     A tenant that has never activated private retrieval retains the existing
     default-off path. Once an active generation exists, a newly created source
     must not remain invisible forever merely because there was no prior
-    projection for the event consumer to tombstone.
+    projection for the event consumer to tombstone. The same guard prevents
+    ordinary writes from creating an otherwise-unused active generation.
     """
 
     generation_id = session.scalar(
@@ -2427,6 +2452,32 @@ def propagate_private_source_creation(
     if generation_id is None:
         return None
     return propagate_private_projection_change(
+        session,
+        company_id=company_id,
+        actor_membership_id=actor_membership_id,
+        idempotency_key=idempotency_key,
+        event_type=event_type,
+        target_type=target_type,
+        target_id=target_id,
+        target_version=target_version,
+        reason_code=reason_code,
+    )
+
+
+def propagate_private_source_creation(
+    session: Session,
+    *,
+    company_id: str,
+    actor_membership_id: str,
+    idempotency_key: str,
+    target_type: Literal["client", "matter", "matter_document", "ip_docket", "ip_document"],
+    target_id: str,
+    target_version: str,
+    reason_code: str,
+) -> PrivateProjectionEvent | None:
+    """Schedule a rebuild when a newly created source has no old projection."""
+
+    return propagate_private_source_change_if_indexed(
         session,
         company_id=company_id,
         actor_membership_id=actor_membership_id,
@@ -2548,6 +2599,7 @@ __all__ = [
     "private_saved_source_manifest_is_current",
     "private_saved_source_manifests_are_current",
     "private_source_version",
+    "propagate_private_source_change_if_indexed",
     "propagate_private_source_creation",
     "propagate_private_projection_change",
     "register_private_saved_output",

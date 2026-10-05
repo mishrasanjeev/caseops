@@ -45,6 +45,26 @@ bounded maintenance run must observe `active_generation_manifest_mismatch`,
 rebuild, and project the new source. Do not clear the blocker or weaken saved
 source checks merely to make the new record immediately reviewable.
 
+Core-source freshness is based on the exact canonical text copied into the
+projection, not the row's generic `updated_at`. Matter, Client, and IP docket
+metadata can change without changing retrieval content; treating every such
+write as a source revision caused avoidable stale-source blockers. Conversely,
+every write that changes projected text or eligibility must emit its source
+event in the same transaction. This includes normal and intake Matter creation,
+Matter edits, Client/KYC changes, IP docket creation and version changes, portal
+KYC updates, and completion of current document indexing. Rebuild integrity,
+saved-source validation, and projection generation all use the same canonical
+text function. An identical-content rebuild may preserve the existing source
+version and embedding; it must not preserve them across an access-policy change.
+
+After a successful shadow activation, maintenance immediately inspects the new
+active generation. If only repairable integrity blockers remain, it drains newly
+pending events and performs one additional bounded replan in the same run. A
+second unresolved result, any unsafe blocker, and a persisted repair-age SLO
+breach remain release-blocking. This bounded replan is recovery from a real
+concurrent change, not permission to suppress `stale_or_ineligible_sources` or
+to clear a failed/blocked incident record.
+
 The scheduler inventory is authoritative. Reconcile or inspect it with the exact
 immutable API image digest; do not deploy or verify a mutable tag.
 
@@ -165,6 +185,16 @@ an explicit operator-credential CloudScheduler.ResumeJob occurred at
 03:39:53/54 UTC. Maintenance deferred at 04:31, breached at 04:36 (369 seconds)
 and 04:41 (701 seconds), then rebuilt at 04:46. The 701-second breach remains
 incident evidence even after later clean cadences.
+
+On 2026-10-05, execution `caseops-private-projection-maintenance-tptsx`
+reported `stale_or_ineligible_sources` for one tenant after a bounded rebuild.
+The subsequent 12:21 UTC execution rebuilt that tenant and completed cleanly;
+12:26 UTC was also clean with no rebuild. Those later runs show convergence,
+not proof that the underlying defect was fixed. The source audit found generic
+`updated_at` freshness checks, incomplete source-change events, and no immediate
+post-activation integrity replan. Keep the original blocked execution as
+incident evidence and require the candidate's PostgreSQL and Playwright
+acceptance plus two consecutive clean production cadences before closure.
 
 The release drain permits up to five minutes for each named scheduler and caps
 individual `gcloud` control-plane calls at 90 seconds within that deadline.

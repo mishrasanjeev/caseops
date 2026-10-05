@@ -53,6 +53,7 @@ from caseops_api.services.private_retrieval import (
     ensure_active_private_generation,
     insert_private_projection_batch,
     mark_private_generation_ready,
+    private_source_projection_text,
     private_source_version,
 )
 
@@ -291,7 +292,7 @@ def _private_projection_inputs(
                 source_version=private_source_version(row),
                 chunk_ordinal=0,
                 label=row.name,
-                content=f"Client {row.name}. Type {row.client_type}. KYC {row.kyc_status}.",
+                content=private_source_projection_text(row),
                 scopes=(
                     ProjectionScopeInput(
                         scope_type="client",
@@ -311,18 +312,6 @@ def _private_projection_inputs(
         .limit(remaining + 1)
     ).all()
     for row in matters:
-        text = " ".join(
-            value
-            for value in (
-                f"Matter {row.matter_code}: {row.title}.",
-                f"Status {row.status}.",
-                f"Practice area {row.practice_area}.",
-                f"Forum {row.court_name or row.forum_level}.",
-                f"Client {row.client_name}." if row.client_name else "",
-                row.description or "",
-            )
-            if value
-        )
         _bounded_append(
             payloads,
             PrivateProjectionInput(
@@ -331,7 +320,7 @@ def _private_projection_inputs(
                 source_version=private_source_version(row),
                 chunk_ordinal=0,
                 label=f"{row.matter_code} · {row.title}",
-                content=text,
+                content=private_source_projection_text(row),
                 scopes=(
                     ProjectionScopeInput(
                         scope_type="matter",
@@ -398,10 +387,7 @@ def _private_projection_inputs(
                 source_version=private_source_version(row),
                 chunk_ordinal=0,
                 label=row.title,
-                content=(
-                    f"IP docket {row.title}. Type {row.record_type}. Status {row.status}. "
-                    f"Primary identifier {row.primary_identifier or 'not allocated'}."
-                ),
+                content=private_source_projection_text(row),
                 scopes=(
                     ProjectionScopeInput(
                         scope_type="ip_docket",
@@ -575,7 +561,6 @@ def _reuse_current_embeddings(
             PrivateIndexProjection.company_id == company_id,
             PrivateIndexProjection.generation_id == generation_id,
             PrivateIndexProjection.is_tombstoned.is_(False),
-            PrivateIndexProjection.embedding_json.is_not(None),
         )
         .order_by(PrivateIndexProjection.id)
         .limit(limit + 1)
@@ -588,7 +573,6 @@ def _reuse_current_embeddings(
         (
             row.source_type,
             row.source_id,
-            row.source_version,
             row.chunk_ordinal,
             row.content_sha256,
         ): row
@@ -601,12 +585,26 @@ def _reuse_current_embeddings(
             (
                 payload.source_type,
                 payload.source_id,
-                payload.source_version,
                 payload.chunk_ordinal,
                 content_hash,
             )
         )
-        if row is None or row.embedding_json is None:
+        if row is None:
+            reused.append(payload)
+            continue
+        can_preserve_source_version = payload.source_type in {
+            "client",
+            "matter",
+            "ip_docket",
+        }
+        if payload.source_type in {"matter", "ip_docket"}:
+            can_preserve_source_version = (
+                row.source_version.partition(":")[0]
+                == payload.source_version.partition(":")[0]
+            )
+        if can_preserve_source_version:
+            payload = replace(payload, source_version=row.source_version)
+        if row.embedding_json is None:
             reused.append(payload)
             continue
         try:
@@ -1118,6 +1116,7 @@ def inspect_private_index_integrity(
     source_scan_truncated = len(live_sources) > MAX_PRIVATE_REBUILD_PROJECTIONS
     live_sources = live_sources[:MAX_PRIVATE_REBUILD_PROJECTIONS]
     current_versions: dict[tuple[str, str], str] = {}
+    current_content_hashes: dict[tuple[str, str], str] = {}
     grouped_sources: dict[str, set[str]] = defaultdict(set)
     for row in live_sources:
         grouped_sources[row.source_type].add(row.source_id)
@@ -1128,7 +1127,9 @@ def inspect_private_index_integrity(
             Client.is_active.is_(True),
         )
     ).all():
-        current_versions[("client", row.id)] = private_source_version(row)
+        current_content_hashes[("client", row.id)] = hashlib.sha256(
+            private_source_projection_text(row).encode("utf-8")
+        ).hexdigest()
     for row in session.scalars(
         select(Matter).where(
             Matter.company_id == company_id,
@@ -1136,7 +1137,9 @@ def inspect_private_index_integrity(
             Matter.is_active.is_(True),
         )
     ).all():
-        current_versions[("matter", row.id)] = private_source_version(row)
+        current_content_hashes[("matter", row.id)] = hashlib.sha256(
+            private_source_projection_text(row).encode("utf-8")
+        ).hexdigest()
     for row in session.scalars(
         select(MatterAttachment)
         .join(Matter, Matter.id == MatterAttachment.matter_id)
@@ -1154,7 +1157,9 @@ def inspect_private_index_integrity(
             IpDocketRecord.is_active.is_(True),
         )
     ).all():
-        current_versions[("ip_docket", row.id)] = private_source_version(row)
+        current_content_hashes[("ip_docket", row.id)] = hashlib.sha256(
+            private_source_projection_text(row).encode("utf-8")
+        ).hexdigest()
     for document, _version in session.execute(
         select(IpDocument, IpDocumentVersion)
         .join(
@@ -1178,7 +1183,13 @@ def inspect_private_index_integrity(
     ).all():
         current_versions[("ip_document", document.id)] = str(document.current_version)
     stale_source_count = sum(
-        current_versions.get((row.source_type, row.source_id)) != row.source_version
+        (
+            current_content_hashes.get((row.source_type, row.source_id))
+            != row.content_sha256
+            if row.source_type in {"client", "matter", "ip_docket"}
+            else current_versions.get((row.source_type, row.source_id))
+            != row.source_version
+        )
         for row in live_sources
     )
     unsafe_tombstones = int(

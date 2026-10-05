@@ -139,6 +139,8 @@ def _maintain(
                     and rebuild_count < max_rebuilds
                 ):
                     for rebuild_attempt in range(2):
+                        if rebuild_count >= max_rebuilds:
+                            break
                         try:
                             rebuild_summary = rebuild_private_index(
                                 session,
@@ -190,7 +192,38 @@ def _maintain(
                         session.commit()
                         rebuild_count += 1
                         rebuilt = True
-                        break
+                        after = inspect_private_index_integrity(
+                            session,
+                            company_id=company_id,
+                            event_lag_slo_seconds=event_lag_slo_seconds,
+                        )
+                        if not after.blockers:
+                            break
+                        if not set(after.blockers) <= repairable_blockers:
+                            break
+                        if rebuild_attempt:
+                            break
+                        # A successful activation can still race a source writer
+                        # that did not publish a projection event. Replan once
+                        # from canonical state; a second unresolved result stays
+                        # visible to the release gate.
+                        retry_applied = process_pending_private_projection_events(
+                            session,
+                            company_id=company_id,
+                            commit_after_each_event=True,
+                        )
+                        applied = tuple(dict.fromkeys((*applied, *retry_applied)))
+                        session.commit()
+                        after = inspect_private_index_integrity(
+                            session,
+                            company_id=company_id,
+                            event_lag_slo_seconds=event_lag_slo_seconds,
+                        )
+                        if not after.blockers:
+                            break
+                        if not set(after.blockers) <= repairable_blockers:
+                            break
+                        continue
                     after = inspect_private_index_integrity(
                         session,
                         company_id=company_id,

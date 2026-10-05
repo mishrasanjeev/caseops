@@ -2699,6 +2699,9 @@ def update_matter(
     provided_update_fields = set(updates)
     expected_updated_at = updates.pop("expected_updated_at", None)
     _assert_expected_updated_at(matter, expected_updated_at=expected_updated_at)
+    from caseops_api.services.private_retrieval import private_source_version
+
+    previous_private_source_version = private_source_version(matter)
     if updates.get("status") is None:
         updates.pop("status", None)
     status_before = _status_value(matter.status)
@@ -3005,6 +3008,24 @@ def update_matter(
     # reactivate a legacy disposed row, and non-terminal states remain active.
     matter.is_active = _status_value(matter.status) != MatterStatus.DISPOSED.value
     session.add(matter)
+    session.flush()
+    source_version = private_source_version(matter)
+    if source_version != previous_private_source_version:
+        from caseops_api.services.private_retrieval import (
+            propagate_private_source_change_if_indexed,
+        )
+
+        propagate_private_source_change_if_indexed(
+            session,
+            company_id=context.company.id,
+            actor_membership_id=context.membership.id,
+            idempotency_key=f"matter-updated:{matter.id}:{source_version}",
+            event_type="source_changed",
+            target_type="matter",
+            target_id=matter.id,
+            target_version=source_version,
+            reason_code="matter_updated",
+        )
     _append_activity(
         session,
         matter_id=matter.id,

@@ -1042,6 +1042,9 @@ def append_ip_docket_version(
         required_capability="ip:write",
     )
     assert_trademark_docket(docket)
+    from caseops_api.services.private_retrieval import private_source_version
+
+    previous_source_version = private_source_version(docket)
     if docket.current_version != payload.expected_current_version:
         raise HTTPException(
             status_code=409,
@@ -1074,6 +1077,24 @@ def append_ip_docket_version(
         ip_docket_id=docket.id,
         metadata={"version": next_version, "status": docket.status},
     )
+    session.flush()
+    source_version = private_source_version(docket)
+    if source_version != previous_source_version:
+        from caseops_api.services.private_retrieval import (
+            propagate_private_source_change_if_indexed,
+        )
+
+        propagate_private_source_change_if_indexed(
+            session,
+            company_id=context.company.id,
+            actor_membership_id=context.membership.id,
+            idempotency_key=f"ip-docket-version:{docket.id}:{source_version}",
+            event_type="source_changed",
+            target_type="ip_docket",
+            target_id=docket.id,
+            target_version=source_version,
+            reason_code="ip_docket_version_created",
+        )
     session.commit()
     session.refresh(docket)
     return _serialize_docket(session, docket, context=context)

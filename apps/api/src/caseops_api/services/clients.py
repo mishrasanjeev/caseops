@@ -6,6 +6,8 @@ pattern used across ``matters`` / ``contracts`` / ``outside_counsel``.
 """
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -103,6 +105,41 @@ _ALLOWED_VERIFICATION_TRANSITIONS = {
         ClientKycStatus.EXPIRED.value,
     },
 }
+
+
+def _propagate_private_client_change(
+    session: Session,
+    *,
+    context: SessionContext,
+    client: Client,
+    reason_code: str,
+    event_type: Literal["source_changed", "revoked", "tombstoned", "reindex"] = (
+        "source_changed"
+    ),
+    previous_source_version: str | None = None,
+) -> None:
+    session.flush()
+    from caseops_api.services.private_retrieval import (
+        private_source_version,
+        propagate_private_source_change_if_indexed,
+    )
+
+    source_version = private_source_version(client)
+    if previous_source_version is not None and previous_source_version == source_version:
+        return
+    propagate_private_source_change_if_indexed(
+        session,
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        idempotency_key=(
+            f"client:{client.id}:{reason_code}:{source_version}"
+        ),
+        event_type=event_type,
+        target_type="client",
+        target_id=client.id,
+        target_version=source_version,
+        reason_code=reason_code,
+    )
 
 
 def _normalize_kyc_status(value: str | ClientKycStatus | None) -> str:
@@ -248,6 +285,12 @@ def create_client(
                 f"{payload.client_type!r}. Pick a different name or type."
             ),
         ) from exc
+    _propagate_private_client_change(
+        session,
+        context=context,
+        client=client,
+        reason_code="client_created",
+    )
     record_from_context(
         session,
         context,
@@ -313,6 +356,9 @@ def update_client(
     payload: ClientUpdateRequest,
 ) -> ClientRecord:
     client = _get_client_model(session, context=context, client_id=client_id)
+    from caseops_api.services.private_retrieval import private_source_version
+
+    previous_source_version = private_source_version(client)
     update_data = payload.model_dump(exclude_unset=True)
     if "client_type" in update_data and update_data["client_type"] not in _ALLOWED_TYPES:
         raise HTTPException(
@@ -364,6 +410,13 @@ def update_client(
                 "client in this workspace."
             ),
         ) from exc
+    _propagate_private_client_change(
+        session,
+        context=context,
+        client=client,
+        reason_code="client_updated",
+        previous_source_version=previous_source_version,
+    )
     record_from_context(
         session,
         context,
@@ -385,7 +438,18 @@ def archive_client(
     """Soft-delete — flip ``is_active`` to false. Keeps the rows
     linked to historical matters for audit continuity."""
     client = _get_client_model(session, context=context, client_id=client_id)
+    from caseops_api.services.private_retrieval import private_source_version
+
+    previous_source_version = private_source_version(client)
     client.is_active = False
+    _propagate_private_client_change(
+        session,
+        context=context,
+        client=client,
+        reason_code="client_archived",
+        event_type="tombstoned",
+        previous_source_version=previous_source_version,
+    )
     record_from_context(
         session,
         context,
@@ -412,7 +476,18 @@ def unarchive_client(
     """
     client = _get_client_model(session, context=context, client_id=client_id)
     if not client.is_active:
+        from caseops_api.services.private_retrieval import private_source_version
+
+        previous_source_version = private_source_version(client)
         client.is_active = True
+        _propagate_private_client_change(
+            session,
+            context=context,
+            client=client,
+            reason_code="client_unarchived",
+            event_type="reindex",
+            previous_source_version=previous_source_version,
+        )
         record_from_context(
             session,
             context,
@@ -679,6 +754,9 @@ def submit_client_kyc(
     from datetime import datetime as _dt
 
     client = _get_client_model(session, context=context, client_id=client_id)
+    from caseops_api.services.private_retrieval import private_source_version
+
+    previous_source_version = private_source_version(client)
     _ensure_verification_transition(client.kyc_status, ClientKycStatus.SUBMITTED.value)
     _reject_direct_attachment_refs(payload.documents)
     client.kyc_status = ClientKycStatus.SUBMITTED.value
@@ -690,6 +768,13 @@ def submit_client_kyc(
     client.kyc_rejection_reason = None
     client.kyc_verified_at = None
     client.kyc_verified_by_membership_id = None
+    _propagate_private_client_change(
+        session,
+        context=context,
+        client=client,
+        reason_code="client_kyc_submitted",
+        previous_source_version=previous_source_version,
+    )
     record_from_context(
         session, context,
         action="client.kyc_submitted",
@@ -721,6 +806,9 @@ def verify_client_kyc(
     from datetime import datetime as _dt
 
     client = _get_client_model(session, context=context, client_id=client_id)
+    from caseops_api.services.private_retrieval import private_source_version
+
+    previous_source_version = private_source_version(client)
     current_status = _normalize_kyc_status(client.kyc_status)
     if current_status not in (
         ClientKycStatus.SUBMITTED.value, ClientKycStatus.UNDER_REVIEW.value,
@@ -736,6 +824,13 @@ def verify_client_kyc(
     client.kyc_verified_at = _dt.now(UTC)
     client.kyc_verified_by_membership_id = context.membership.id
     client.kyc_rejection_reason = None
+    _propagate_private_client_change(
+        session,
+        context=context,
+        client=client,
+        reason_code="client_kyc_verified",
+        previous_source_version=previous_source_version,
+    )
     record_from_context(
         session, context,
         action="client.kyc_verified",
@@ -764,6 +859,9 @@ def reject_client_kyc(
     reason MUST be present (schema enforces min_length=4) so the
     lawyer who has to re-collect docs knows what to fix."""
     client = _get_client_model(session, context=context, client_id=client_id)
+    from caseops_api.services.private_retrieval import private_source_version
+
+    previous_source_version = private_source_version(client)
     current_status = _normalize_kyc_status(client.kyc_status)
     if current_status not in (
         ClientKycStatus.SUBMITTED.value, ClientKycStatus.UNDER_REVIEW.value,
@@ -782,6 +880,13 @@ def reject_client_kyc(
 
     client.kyc_verified_at = _dt.now(UTC)
     client.kyc_verified_by_membership_id = context.membership.id
+    _propagate_private_client_change(
+        session,
+        context=context,
+        client=client,
+        reason_code="client_kyc_rejected",
+        previous_source_version=previous_source_version,
+    )
     record_from_context(
         session, context,
         action="client.kyc_rejected",
@@ -905,6 +1010,9 @@ def update_matter_client_verification(
     assignment, client = _load_matter_client_assignment(
         session, matter=matter, client_id=client_id,
     )
+    from caseops_api.services.private_retrieval import private_source_version
+
+    previous_source_version = private_source_version(client)
     matter = require_operational_matter(
         session,
         matter=matter,
@@ -943,6 +1051,13 @@ def update_matter_client_verification(
         )
 
     audit_documents = documents if documents is not None else _kyc_documents(client)
+    _propagate_private_client_change(
+        session,
+        context=context,
+        client=client,
+        reason_code="client_matter_verification_updated",
+        previous_source_version=previous_source_version,
+    )
     record_from_context(
         session,
         context,

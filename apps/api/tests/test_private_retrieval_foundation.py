@@ -34,6 +34,7 @@ from caseops_api.services.private_retrieval import (
     prefilter_private_projection_ids,
     private_retrieval_cache_key,
     private_saved_source_manifest_is_current,
+    private_source_projection_text,
     private_source_version,
     propagate_private_projection_change,
     retrieve_private_content,
@@ -100,15 +101,29 @@ def _projection_payload(matter: Matter, *, text: str) -> PrivateProjectionInput:
     )
 
 
-def test_private_source_version_normalizes_persisted_utc_timestamps() -> None:
+def test_private_source_version_tracks_projection_content_and_access_not_timestamps() -> None:
     timestamp = datetime(2026, 8, 31, 12, 30, 15, 123456)
-    matter = Matter(access_policy_version=7, updated_at=timestamp)
+    matter = Matter(
+        access_policy_version=7,
+        is_active=True,
+        matter_code="PRIVATE-VERSION-001",
+        title="Source version contract",
+        status="active",
+        practice_area="commercial",
+        forum_level="district_court",
+        updated_at=timestamp,
+    )
 
-    naive_version = private_source_version(matter)
+    initial_version = private_source_version(matter)
     matter.updated_at = timestamp.replace(tzinfo=UTC)
 
-    assert private_source_version(matter) == naive_version
-    assert naive_version == "7:2026-08-31T12:30:15.123456+00:00"
+    assert private_source_version(matter) == initial_version
+    matter.title = "A real indexed source change"
+    content_changed_version = private_source_version(matter)
+    assert content_changed_version != initial_version
+    matter.title = "Source version contract"
+    matter.access_policy_version += 1
+    assert private_source_version(matter) != initial_version
 
 
 def test_saved_manifest_survives_only_an_equivalent_unrelated_rebuild(
@@ -213,6 +228,8 @@ def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
         )
         matter_row = session.get(Matter, str(matter["id"]))
         assert matter_row is not None
+        matter_row.title = "Confidential trademark opposition strategy and evidence"
+        session.flush()
         generation = ensure_active_private_generation(session, company_id=company_id)
         projection = upsert_private_projection(
             session,
@@ -222,7 +239,7 @@ def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
             expected_tombstone_generation=generation.tombstone_generation,
             payload=_projection_payload(
                 matter_row,
-                text="Confidential trademark opposition strategy and evidence.",
+                text=private_source_projection_text(matter_row),
             ),
         )
         session.commit()
@@ -308,7 +325,7 @@ def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
             expected_tombstone_generation=generation.tombstone_generation,
             payload=_projection_payload(
                 matter_row,
-                text="Confidential trademark opposition strategy and evidence.",
+                text=private_source_projection_text(matter_row),
             ),
         )
         session.commit()
