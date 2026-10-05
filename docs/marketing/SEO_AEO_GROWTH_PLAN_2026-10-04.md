@@ -46,7 +46,7 @@ Search Console queries and customer interviews are available.
 | CaseOps and brand variants | `/` | Brand/navigation | Live |
 | Law firm software India; legal practice management software India | `/law-firms` | Buyer/comparison | Live metadata updated |
 | Legal matter management India; case management checklist | `/resources/legal-matter-management-india` | Evaluation/education | Live and indexed |
-| Solo lawyer practice management India | `/solo-lawyers` | Persona/buyer | Live metadata updated |
+| Solo lawyer practice management India | `/solo-lawyers` | Persona/buyer | Live and indexed; heading/copy correction in candidate |
 | Legal operations software India; in-house legal matter management | `/general-counsels` | Persona/buyer | Live metadata updated |
 | CaseOps pricing; legal software pricing India | `/pricing` | Transactional | Live metadata updated |
 | Hearing tracking software India; CNR tracking | Future source-aware guide | Workflow | Hold until evidence-rich page is ready |
@@ -105,6 +105,26 @@ Provider and statute limitations must stay visible.
    scheduler resume passed against the exact API image and QA run, returning
    the five-minute cadence to `ENABLED`. The next natural scheduled execution,
    `f9zjf` at 12:40 UTC, also finished clean with zero rebuilds.
+
+## Daily operating cadence
+
+The active Codex heartbeat `caseops-daily-seo-and-aeo` runs once daily at
+09:00 Asia/Kolkata. It checks the exact serving release, public crawl surface,
+Search Console when the owner session remains available, and the dated evidence
+in `docs/marketing/SEO_DAILY_LOG.md`. It should fix and release a verified
+problem, not publish a page or resubmit an unchanged sitemap merely to show
+activity. An unchanged day stays quiet; a new issue or completed improvement
+is reported with source, test and revision evidence.
+
+The 2026-10-05 audit found a real semantic/accessibility gap on persona pages:
+`/general-counsels` and `/solo-lawyers` rendered zero H1s, while `/law-firms`
+rendered one per slide. The candidate makes the cover heading the sole H1 and
+later slides H2s, removes low-contrast decorative slide numbers, and widens
+Playwright link, metadata and accessibility checks to all seven canonical
+pages. It also removes unsupported quantified time savings and absolute
+AI/provider claims from the solo page. These changes are **not production
+claims** until the candidate is deployed and the same browser gate passes on
+its exact serving SHA.
 
 ## Next 90 days
 

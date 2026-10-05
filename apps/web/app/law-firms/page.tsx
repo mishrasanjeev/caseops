@@ -239,6 +239,7 @@ export default function LawFirmPitchPage() {
       <main id="main" tabIndex={-1} className="focus:outline-none">
         <Slide
           id="cover"
+          headingLevel={1}
           index="01"
           tone="ink"
           eyebrow="CaseOps for law firms"
@@ -801,6 +802,7 @@ function Slide({
   title,
   description,
   tone,
+  headingLevel = 2,
   className,
   children,
 }: {
@@ -810,14 +812,17 @@ function Slide({
   title: string;
   description: string;
   tone: "light" | "ink" | "brand";
+  headingLevel?: 1 | 2;
   className?: string;
   children: ReactNode;
 }) {
   const isDark = tone === "ink";
+  const Heading = headingLevel === 1 ? "h1" : "h2";
 
   return (
     <section
       id={id}
+      data-slide-index={index}
       className={cn(
         "relative overflow-hidden border-b border-[var(--color-line)]",
         tone === "light" && "bg-white",
@@ -828,16 +833,6 @@ function Slide({
       )}
     >
       <Container className="relative grid min-h-[88svh] content-center gap-10 py-16 md:min-h-[92svh] md:py-24">
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute right-0 top-6 font-display text-[6rem] leading-none tracking-tight md:text-[10rem]",
-            isDark ? "text-white/6" : "text-[var(--color-ink)]/5",
-          )}
-        >
-          {index}
-        </div>
-
         <div className="relative max-w-3xl">
           <div
             className={cn(
@@ -847,14 +842,14 @@ function Slide({
           >
             {eyebrow}
           </div>
-          <h1
+          <Heading
             className={cn(
               "mt-4 font-display text-4xl font-normal leading-[1.03] tracking-tight md:text-[4.5rem]",
               isDark ? "text-white" : "text-[var(--color-ink)]",
             )}
           >
             {title}
-          </h1>
+          </Heading>
           <p
             className={cn(
               "mt-5 max-w-2xl text-lg leading-relaxed md:text-xl",

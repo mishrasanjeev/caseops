@@ -22,7 +22,7 @@ const flows = [
   },
   {
     persona: "Solo advocate",
-    headline: "Operate like a 20-lawyer practice.",
+    headline: "Run a solo practice from one matter workspace.",
     bullets: [
       "One app for matters, notices, drafts, hearings, litigation intelligence, cause lists, billing, and payment adjustments.",
       "India-ready matter invoices with firm/client GST fields, SAC/HSN, GST split, TDS recording, amount paid, and outstanding.",
