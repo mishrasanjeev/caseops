@@ -464,6 +464,13 @@ requirements when using the fallback.
 - A no-paid-provider rejection is successful test isolation, not evidence that
   the configured provider is unavailable. Regular, bulk, Docker, and
   production regression runs must assert the rejection without spending.
+
+- Private-index embedding reuse may reuse vectors only; it must preserve the
+  canonical `source_version` emitted by the current source-version function.
+  A legacy timestamp version with the same content hash is not interchangeable
+  with a content-hash version. Regress Matter and IP-docket rebuilds from
+  legacy versions and assert exact current-version projections before accepting
+  a generation or running release-owned retrieval QA.
 - An async review history and its selected detail must converge on the same
   terminal record. If the list returns full updated DTOs, a cached running
   detail cannot remain visible after the list turns terminal and disables its
