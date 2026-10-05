@@ -12,6 +12,7 @@ export function Slide({
   title,
   description,
   tone,
+  headingLevel = 2,
   className,
   children,
 }: {
@@ -21,14 +22,17 @@ export function Slide({
   title: string;
   description: string;
   tone: SlideTone;
+  headingLevel?: 1 | 2;
   className?: string;
   children: ReactNode;
 }) {
   const isDark = tone === "ink";
+  const Heading = headingLevel === 1 ? "h1" : "h2";
 
   return (
     <section
       id={id}
+      data-slide-index={index}
       className={cn(
         "relative overflow-hidden border-b border-[var(--color-line)]",
         tone === "light" && "bg-white",
@@ -38,16 +42,6 @@ export function Slide({
       )}
     >
       <Container className="relative grid min-h-[88svh] content-center gap-10 py-16 md:min-h-[92svh] md:py-24">
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute right-0 top-6 font-display text-[6rem] leading-none tracking-tight md:text-[10rem]",
-            isDark ? "text-white/[0.06]" : "text-[var(--color-ink)]/[0.05]",
-          )}
-        >
-          {index}
-        </div>
-
         <div className="relative max-w-3xl">
           <div
             className={cn(
@@ -57,14 +51,14 @@ export function Slide({
           >
             {eyebrow}
           </div>
-          <h2
+          <Heading
             className={cn(
               "mt-4 font-display text-4xl font-normal leading-[1.05] tracking-tight md:text-[3.25rem]",
               isDark ? "text-white" : "text-[var(--color-ink)]",
             )}
           >
             {title}
-          </h2>
+          </Heading>
           <p
             className={cn(
               "mt-5 max-w-2xl text-[16.5px] leading-relaxed md:text-lg",

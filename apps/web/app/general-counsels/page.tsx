@@ -61,10 +61,11 @@ export default function GeneralCounselsPage() {
       <main id="main" tabIndex={-1} className="focus:outline-none">
         <Slide
           id="cover"
+          headingLevel={1}
           index="01"
           tone="ink"
           eyebrow="CaseOps for general counsels"
-          title="The operating layer for in-house legal."
+          title="Legal operations for in-house teams in India."
           description="Portfolio, counsel, contracts, obligations and compliance — one matter graph that gives the GC a real answer when the CEO asks, 'what are we exposed to?'"
         >
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">

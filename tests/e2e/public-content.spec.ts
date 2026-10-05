@@ -11,11 +11,7 @@ const PUBLIC_SITEMAP_PATHS = [
   "/solo-lawyers",
 ] as const;
 
-const PUBLIC_CONTENT_PAGES = [
-  "/",
-  "/guide",
-  "/resources/legal-matter-management-india",
-] as const;
+const PUBLIC_CONTENT_PAGES = PUBLIC_SITEMAP_PATHS;
 
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
@@ -202,6 +198,32 @@ async function checkInternalLinks(
 }
 
 test.describe("Public landing page and user guide", () => {
+  test("every public page has one primary heading and distinct crawl metadata", async ({ page }) => {
+    const titles = new Set<string>();
+    const descriptions = new Set<string>();
+
+    for (const pathname of PUBLIC_SITEMAP_PATHS) {
+      const response = await page.goto(pathname, { waitUntil: "domcontentloaded" });
+      expect(response?.status(), `${pathname} must render`).toBe(200);
+      await expect(page.locator("main h1"), `${pathname} must have one H1`).toHaveCount(1);
+
+      const canonical = await page.locator('link[rel="canonical"]').getAttribute("href");
+      expect(canonical, `${pathname} must have a canonical`).toBeTruthy();
+      const canonicalUrl = new URL(canonical!);
+      expect(canonicalUrl.origin).toBe("https://caseops.ai");
+      expect(canonicalUrl.pathname).toBe(pathname);
+
+      const title = await page.title();
+      const description = await page.locator('meta[name="description"]').getAttribute("content");
+      expect(title.trim(), `${pathname} title must not be empty`).toBeTruthy();
+      expect(description?.trim(), `${pathname} description must not be empty`).toBeTruthy();
+      expect(titles.has(title), `${pathname} title must be unique`).toBe(false);
+      expect(descriptions.has(description!), `${pathname} description must be unique`).toBe(false);
+      titles.add(title);
+      descriptions.add(description!);
+    }
+  });
+
   test("fresh landing and guide content is published", async ({ page }) => {
     await page.goto("/");
     await expect(
@@ -318,6 +340,19 @@ test.describe("Public landing page and user guide", () => {
     const articleNonce = await page.locator("#matter-management-article-jsonld")
       .evaluate((element) => (element as HTMLScriptElement).nonce);
     expect(articleNonce).toBe(nonce);
+  });
+
+  test("solo page does not promise unmeasured savings or universal provider coverage", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#workflows")).toContainText("Run a solo practice from one matter workspace.");
+    await expect(page.locator("#workflows")).not.toContainText("20-lawyer practice");
+
+    await page.goto("/solo-lawyers");
+    await expect(page.locator("main h1")).toHaveText("Practice management for solo advocates in India.");
+    await expect(page.locator("#ai-angle")).toContainText("The advocate checks the facts, citations");
+    await expect(page.locator("#ai-angle")).toContainText("tenant eligibility, court coverage");
+    const copy = await page.locator("main").innerText();
+    expect(copy).not.toMatch(/2[–-]3 hours|Two to three hours|30-second pre-filing|Never a fabricated citation|Under a minute|One login replaces five subscriptions/i);
   });
 
   for (const viewport of VIEWPORTS) {

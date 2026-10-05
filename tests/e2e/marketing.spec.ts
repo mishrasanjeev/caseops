@@ -248,12 +248,12 @@ test.describe("Marketing site", () => {
     },
     {
       path: "/general-counsels",
-      heading: /operating layer for in-house legal/i,
+      heading: /legal operations for in-house teams in india/i,
       canonical: /\/general-counsels$/,
     },
     {
       path: "/solo-lawyers",
-      heading: /operate like a 20-lawyer practice\. alone\./i,
+      heading: /practice management for solo advocates in india/i,
       canonical: /\/solo-lawyers$/,
     },
     {

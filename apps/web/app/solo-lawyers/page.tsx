@@ -37,7 +37,7 @@ export const metadata: Metadata = {
     url: `${siteConfig.url}/solo-lawyers`,
     title: `Practice management software for solo lawyers in India - ${siteConfig.name}`,
     description:
-      "Replace five subscriptions and a paper diary with one workspace built for the solo advocate on laptop, iPad and court mornings.",
+      "Keep matters, hearing dates, review-first drafting, and billing together. Check provider coverage for your courts before relying on automated updates.",
   },
 };
 
@@ -62,15 +62,16 @@ export default function SoloLawyersPage() {
       <main id="main" tabIndex={-1} className="focus:outline-none">
         <Slide
           id="cover"
+          headingLevel={1}
           index="01"
           tone="ink"
           eyebrow="CaseOps for solo advocates"
-          title="Operate like a 20-lawyer practice. Alone."
-          description="The same matter-graph workspace the firms use — tuned and priced for the advocate on a laptop at night and in court by morning. One login replaces five subscriptions and a paper diary."
+          title="Practice management for solo advocates in India."
+          description="Keep the matter record, hearing work, review-first drafting, research and billing in one workspace. Ask us about coverage and early-access terms for your practice."
         >
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
             <div className="grid gap-3 sm:grid-cols-3">
-              <MetricCard inverse value="1" label="Workspace" note="Replaces case diary, research, drafting and billing." />
+              <MetricCard inverse value="1" label="Workspace" note="Matter, hearing, drafting and billing workflows together." />
               <MetricCard inverse value="Matter-linked" label="Hearing pack" note="Compiled from the available matter record." />
               <MetricCard inverse value="UAT gated" label="Payments" note="Invoice PDFs and payment tracking are live; Pine Labs is disabled until UAT." />
             </div>
@@ -129,13 +130,13 @@ export default function SoloLawyersPage() {
           tone="light"
           eyebrow="The AI angle"
           title="The associate you couldn't afford to hire."
-          description="AI takes the clerical half of a solo's day — first drafts, citation chasing, chronology assembly, invoice reconciliation — and hands it back as reviewable work. It never replaces the lawyer's judgment; it removes the work that kept the lawyer from doing judgment."
+          description="AI can help assemble drafts, chronologies and source candidates from available records. The advocate checks the facts, citations and final legal position before use."
         >
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <PitchCard
               icon={FileSignature}
-              title="First drafts in minutes"
-              body="Grounded drafts with inline citations from the matter record. You review and sign; you don't assemble."
+              title="Review-first drafts"
+              body="Drafts use available matter facts and source references. Missing facts and unsupported citations need advocate review before filing."
             />
             <PitchCard
               icon={Search}
@@ -149,8 +150,8 @@ export default function SoloLawyersPage() {
             />
             <PitchCard
               icon={BadgeCheck}
-              title="Refuses to fabricate"
-              body="Never invents a case law citation, never invents a fact. Placeholders and explicit refusals when evidence is thin."
+              title="Source checks and placeholders"
+              body="When evidence is thin, the workflow flags gaps or leaves placeholders. The advocate remains responsible for checking every citation and fact."
             />
           </div>
 
@@ -158,22 +159,19 @@ export default function SoloLawyersPage() {
             <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr] md:items-center">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-brand-600)]">
-                  What a solo gets back
+                  Less assembly, more review
                 </div>
                 <p className="mt-3 text-[15.5px] leading-relaxed text-[var(--color-ink-2)]">
-                  Two to three hours of first-draft assembly. An hour of citation chasing.
-                  Forty minutes reconciling the diary and cause-list. Twenty minutes
-                  building a hearing pack. Every one of those is clerical. Every one is
-                  now a few minutes of review at best — time that goes back to clients,
-                  or back to the family.
+                  Matter-linked drafts, hearing notes and billing records can reduce
+                  repeated copying between tools. The actual time saved depends on
+                  the practice, available source material and the advocate's review.
                 </p>
               </div>
               <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] p-4 text-[13.5px] leading-relaxed text-[var(--color-mute)]">
                 <span className="font-semibold text-[var(--color-ink-2)]">Agentic help:</span>{" "}
-                cause-list reconciler exists as an on-demand action today — click to run
-                against tomorrow's listings. Automated nightly scheduling via Cloud
-                Scheduler ships in the next release. Corpus ingest runs on its own so
-                your research stays current. Every substantive step is yours to accept.
+                cause-list reconciliation is an on-demand action. Scheduled provider
+                updates depend on tenant eligibility, court coverage and configured
+                access. Source material and substantive suggestions remain reviewable.
               </div>
             </div>
           </div>
@@ -196,7 +194,7 @@ export default function SoloLawyersPage() {
             <PitchCard
               icon={Layers}
               title="Hearing pack compile"
-              body="Chronology, last order, proceeding directions, oral points, and source-backed bench context assembled from the matter record. Under a minute."
+              body="Chronology, last order, proceeding directions, oral points and available source-backed bench context assembled from the matter record."
             />
             <PitchCard
               icon={Smartphone}
@@ -218,8 +216,8 @@ export default function SoloLawyersPage() {
             <div className="grid gap-3">
               <ReviewRow
                 icon={FileSignature}
-                title="Never a fabricated citation"
-                body="Inline citations resolve to named authorities. Nothing is invented. Fact gaps render as placeholders for you to fill."
+                title="Check each citation"
+                body="Inspect the named authorities and source links. Fact gaps render as placeholders for you to resolve before use."
               />
               <ReviewRow
                 icon={BookOpenText}
@@ -229,16 +227,16 @@ export default function SoloLawyersPage() {
               <ReviewRow
                 icon={Scale}
                 title="Reviewer findings block"
-                body="At the foot of every draft: open fact placeholders, citation coverage, statute checks. A 30-second pre-filing sanity pass."
+                body="Review open fact placeholders, citation coverage and statute checks before any filing decision."
               />
             </div>
             <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-bg)] p-6">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-brand-600)]">
-                What a solo typically saves
+                A reviewable starting point
               </div>
               <p className="mt-3 text-[15px] leading-relaxed text-[var(--color-ink-2)]">
-                2–3 hours of first-draft assembly, plus an hour of citation chasing, per
-                bail or quashing. That is a billable afternoon back, every day.
+                Start from the available matter record and cited sources, then test
+                the draft against the file. No fixed time saving is promised.
               </p>
               <p className="mt-3 text-[14px] leading-relaxed text-[var(--color-mute)]">
                 The review is still yours. The clerical work isn't.
@@ -307,8 +305,8 @@ export default function SoloLawyersPage() {
             />
             <PitchCard
               icon={BookOpenText}
-              title="Refuses to invent"
-              body="If your query sits outside the corpus, you get an explicit no-result — not a fabricated citation."
+              title="Check coverage before relying on results"
+              body="A no-result response can reflect limited corpus coverage. Inspect each returned authority and do not treat search rank as legal relevance."
             />
           </div>
         </Slide>
