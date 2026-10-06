@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
@@ -43,7 +44,11 @@ from caseops_api.schemas.drive import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.calendar_sync import _decrypt_token_payload, _encrypt_token_payload
-from caseops_api.services.google_workspace import google_workspace_oauth_config
+from caseops_api.services.google_workspace import (
+    GoogleWorkspaceTokenRefreshError,
+    google_workspace_oauth_config,
+    refresh_google_workspace_access_token,
+)
 from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import require_operational_matter
@@ -56,6 +61,10 @@ _STATE_TTL_MINUTES = 10
 
 class GoogleDriveProviderError(RuntimeError):
     """Provider failures safe to redact and show to users."""
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,7 +232,14 @@ class GoogleDriveProvider:
                 timeout=15,
             )
         except httpx.HTTPError as exc:
-            raise GoogleDriveProviderError("Google Drive file listing failed.") from exc
+            status_code = (
+                exc.response.status_code
+                if isinstance(exc, httpx.HTTPStatusError)
+                else None
+            )
+            raise GoogleDriveProviderError(
+                "Google Drive file listing failed.", status_code=status_code
+            ) from exc
         files = response.json().get("files", [])
         return [_parse_drive_file(item) for item in files if isinstance(item, dict)]
 
@@ -249,7 +265,14 @@ class GoogleDriveProvider:
                 timeout=30,
             )
         except httpx.HTTPError as exc:
-            raise GoogleDriveProviderError("Google Drive file import failed.") from exc
+            status_code = (
+                exc.response.status_code
+                if isinstance(exc, httpx.HTTPStatusError)
+                else None
+            )
+            raise GoogleDriveProviderError(
+                "Google Drive file import failed.", status_code=status_code
+            ) from exc
         return bytes(response.content)
 
 
@@ -271,6 +294,38 @@ def _drive_provider(
     return _drive_provider_override or GoogleDriveProvider(
         _google_drive_runtime_config(session, context=context)
     )
+
+
+def _drive_call_with_refresh(
+    session: Session,
+    *,
+    context: SessionContext,
+    connection: UserDriveConnection,
+    operation: Callable[[GoogleDriveProviderProtocol, dict[str, Any]], Any],
+) -> tuple[dict[str, Any], Any]:
+    token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+    provider = _drive_provider(session, context=context)
+    try:
+        return token_payload, operation(provider, token_payload)
+    except GoogleDriveProviderError as exc:
+        if exc.status_code != 401:
+            raise
+    token_payload = refresh_google_workspace_access_token(
+        session,
+        context=context,
+        connector="drive",
+        token_payload=token_payload,
+    )
+    connection.encrypted_token_ref = _encrypt_token_payload(token_payload)
+    try:
+        return token_payload, operation(provider, token_payload)
+    except GoogleDriveProviderError as exc:
+        if exc.status_code == 401:
+            raise GoogleWorkspaceTokenRefreshError(
+                "Google authorization could not be renewed. Reconnect this account.",
+                reauthorization_required=True,
+            ) from exc
+        raise
 
 
 def _google_drive_runtime_config(
@@ -441,7 +496,7 @@ def _match_drive_matter(
     matters = session.scalars(
         select(Matter).where(
             Matter.company_id == context.company.id,
-            visible_matters_filter(context),
+            visible_matters_filter(session, context=context),
         )
     )
     for matter in matters:
@@ -669,14 +724,64 @@ def list_google_drive_files(
 ) -> GoogleDriveFileListResponse:
     connection = _connected_google_drive_connection(session, context=context)
     try:
-        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        files = _drive_provider(session, context=context).list_files(
-            token_payload=token_payload,
-            limit=max(1, min(limit, 100)),
+        _token_payload, files = _drive_call_with_refresh(
+            session,
+            context=context,
+            connection=connection,
+            operation=lambda provider, token: provider.list_files(
+                token_payload=token,
+                limit=max(1, min(limit, 100)),
+            ),
         )
-    except Exception as exc:
-        connection.status = DriveConnectionStatus.ERROR
+    except GoogleWorkspaceTokenRefreshError as exc:
+        if exc.reauthorization_required:
+            connection.status = DriveConnectionStatus.ERROR
         session.add(connection)
+        record_from_context(
+            session,
+            context,
+            action="drive.google.list_failed",
+            target_type="user_drive_connection",
+            target_id=connection.id,
+            result="failed",
+            metadata={
+                "provider": DriveProvider.GOOGLE_DRIVE,
+                "reason": (
+                    "reauthorization_required"
+                    if exc.reauthorization_required
+                    else "token_refresh_unavailable"
+                ),
+            },
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=(
+                status.HTTP_401_UNAUTHORIZED
+                if exc.reauthorization_required
+                else status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=str(exc),
+        ) from exc
+    except GoogleDriveProviderError as exc:
+        record_from_context(
+            session,
+            context,
+            action="drive.google.list_failed",
+            target_type="user_drive_connection",
+            target_id=connection.id,
+            result="failed",
+            metadata={
+                "provider": DriveProvider.GOOGLE_DRIVE,
+                "reason": "provider_unavailable",
+                "status_code": exc.status_code,
+            },
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Google Drive file listing failed. Check the connection and try again.",
+        ) from exc
+    except Exception as exc:
         record_from_context(
             session,
             context,
@@ -692,7 +797,7 @@ def list_google_drive_files(
         session.commit()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Google Drive file listing failed.",
+            detail="Google Drive file listing failed. Check the connection and try again.",
         ) from exc
     connection.last_list_at = datetime.now(UTC)
     session.add(connection)
@@ -723,14 +828,18 @@ def sync_google_drive_candidates(
     connection = _connected_google_drive_connection(session, context=context)
     control = _ensure_drive_control(session, context=context)
     try:
-        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        files = _drive_provider(session, context=context).list_files(
-            token_payload=token_payload,
-            limit=payload.limit,
+        _token_payload, files = _drive_call_with_refresh(
+            session,
+            context=context,
+            connection=connection,
+            operation=lambda provider, token: provider.list_files(
+                token_payload=token,
+                limit=payload.limit,
+            ),
         )
-    except Exception as exc:
-        connection.status = DriveConnectionStatus.ERROR
-        session.add(connection)
+    except GoogleWorkspaceTokenRefreshError as exc:
+        if exc.reauthorization_required:
+            connection.status = DriveConnectionStatus.ERROR
         record_from_context(
             session,
             context,
@@ -740,13 +849,41 @@ def sync_google_drive_candidates(
             result="failed",
             metadata={
                 "provider": DriveProvider.GOOGLE_DRIVE,
-                "error": redact_provider_error(str(exc))[:500],
+                "reason": (
+                    "reauthorization_required"
+                    if exc.reauthorization_required
+                    else "token_refresh_unavailable"
+                ),
+            },
+        )
+        session.add(connection)
+        session.commit()
+        raise HTTPException(
+            status_code=(
+                status.HTTP_401_UNAUTHORIZED
+                if exc.reauthorization_required
+                else status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=str(exc),
+        ) from exc
+    except GoogleDriveProviderError as exc:
+        record_from_context(
+            session,
+            context,
+            action="drive.google.candidate_sync_failed",
+            target_type="user_drive_connection",
+            target_id=connection.id,
+            result="failed",
+            metadata={
+                "provider": DriveProvider.GOOGLE_DRIVE,
+                "reason": "provider_unavailable",
+                "status_code": exc.status_code,
             },
         )
         session.commit()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Google Drive candidate sync failed.",
+            detail="Google Drive sync could not complete. Check the connection and try again.",
         ) from exc
     created = 0
     duplicate = 0
@@ -961,11 +1098,71 @@ def review_drive_candidate(
     if connection is None or connection.company_id != context.company.id:
         raise HTTPException(status_code=409, detail="Drive connection is unavailable.")
     try:
-        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        content = _drive_provider(session, context=context).fetch_file(
-            token_payload=token_payload,
-            file_id=candidate.provider_file_id,
+        _token_payload, content = _drive_call_with_refresh(
+            session,
+            context=context,
+            connection=connection,
+            operation=lambda provider, token: provider.fetch_file(
+                token_payload=token,
+                file_id=candidate.provider_file_id,
+            ),
         )
+    except GoogleWorkspaceTokenRefreshError as exc:
+        if exc.reauthorization_required:
+            connection.status = DriveConnectionStatus.ERROR
+        candidate.last_error_redacted = str(exc)
+        session.add_all([connection, candidate])
+        record_from_context(
+            session,
+            context,
+            action="drive.candidate.import_failed",
+            target_type="drive_file_candidate",
+            target_id=candidate.id,
+            matter_id=matter.id,
+            result="failed",
+            metadata={
+                "provider": candidate.provider,
+                "reason": (
+                    "reauthorization_required"
+                    if exc.reauthorization_required
+                    else "token_refresh_unavailable"
+                ),
+            },
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=(
+                status.HTTP_401_UNAUTHORIZED
+                if exc.reauthorization_required
+                else status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=str(exc),
+        ) from exc
+    except GoogleDriveProviderError as exc:
+        candidate.last_error_redacted = (
+            "Drive file is temporarily unavailable. Try importing it again."
+        )
+        session.add(candidate)
+        record_from_context(
+            session,
+            context,
+            action="drive.candidate.import_failed",
+            target_type="drive_file_candidate",
+            target_id=candidate.id,
+            matter_id=matter.id,
+            result="failed",
+            metadata={
+                "provider": candidate.provider,
+                "reason": "provider_unavailable",
+                "status_code": exc.status_code,
+            },
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Drive file import could not complete. Try again shortly.",
+        ) from exc
+    try:
         from caseops_api.services.communications import _persist_inbound_attachment
 
         attachment, _job_id, _storage_key = _persist_inbound_attachment(

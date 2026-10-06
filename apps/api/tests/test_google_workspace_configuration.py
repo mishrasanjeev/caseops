@@ -3,13 +3,26 @@ from __future__ import annotations
 import json
 from urllib.parse import parse_qs, urlparse
 
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import event, select
 
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import AuditEvent, TenantGoogleWorkspaceConfiguration
+from caseops_api.db.models import (
+    AuditEvent,
+    Company,
+    CompanyMembership,
+    TenantGoogleWorkspaceConfiguration,
+    User,
+)
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import google_workspace as google_workspace_service
+from caseops_api.services.google_workspace import (
+    GoogleWorkspaceTokenRefreshError,
+    refresh_google_workspace_access_token,
+)
+from caseops_api.services.session_context import SessionContext
 from tests.test_legalworkspace_calendar_sync import _auth, _bootstrap_company
 
 
@@ -128,6 +141,7 @@ def test_google_workspace_tenant_config_is_secret_safe_audited_and_used_for_oaut
         "oauth_consent_model_approved",
         "scopes_approved",
     }
+
 
     calendar_start = client.post(
         "/api/calendar/connections/google-calendar/start",
@@ -474,3 +488,107 @@ def test_google_workspace_configuration_is_cross_tenant_scoped(
     assert connectors["google_calendar"]["configured"] is False
     assert connectors["gmail"]["configured"] is False
     assert connectors["google_drive"]["configured"] is False
+
+
+def test_google_workspace_refresh_uses_tenant_secret_and_preserves_refresh_token(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="google-token-refresh",
+        email="owner@google-token-refresh.example",
+    )
+    token = str(bootstrap["access_token"])
+    _configure_google_workspace(client, token)
+    captured: dict[str, object] = {}
+
+    def fake_post(url: str, *, data: dict[str, str], timeout: int) -> httpx.Response:
+        captured.update(url=url, data=data, timeout=timeout)
+        request = httpx.Request("POST", url)
+        return httpx.Response(
+            200,
+            request=request,
+            json={"access_token": "refreshed-access", "expires_in": 3600},
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    with get_session_factory()() as session:
+        company = session.scalar(
+            select(Company).where(Company.slug == "google-token-refresh")
+        )
+        assert company is not None
+        membership = session.scalar(
+            select(CompanyMembership).where(CompanyMembership.company_id == company.id)
+        )
+        assert membership is not None
+        user = session.get(User, membership.user_id)
+        assert user is not None
+        refreshed = refresh_google_workspace_access_token(
+            session,
+            context=SessionContext(company=company, membership=membership, user=user),
+            connector="gmail",
+            token_payload={
+                "access_token": "expired-access",
+                "refresh_token": "existing-refresh",
+            },
+        )
+
+    assert refreshed == {
+        "access_token": "refreshed-access",
+        "refresh_token": "existing-refresh",
+        "expires_in": 3600,
+    }
+    assert captured["url"] == "https://oauth2.googleapis.com/token"
+    assert captured["data"] == {
+        "client_id": "tenant-google-client",
+        "client_secret": "tenant-google-secret",
+        "grant_type": "refresh_token",
+        "refresh_token": "existing-refresh",
+    }
+
+
+def test_google_workspace_invalid_grant_requires_reauthorization(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="google-token-invalid-grant",
+        email="owner@google-token-invalid.example",
+    )
+    token = str(bootstrap["access_token"])
+    _configure_google_workspace(client, token)
+
+    def fake_post(url: str, **kwargs: object) -> httpx.Response:
+        return httpx.Response(
+            400,
+            request=httpx.Request("POST", url),
+            json={"error": "invalid_grant"},
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    with get_session_factory()() as session:
+        company = session.scalar(
+            select(Company).where(Company.slug == "google-token-invalid-grant")
+        )
+        assert company is not None
+        membership = session.scalar(
+            select(CompanyMembership).where(CompanyMembership.company_id == company.id)
+        )
+        assert membership is not None
+        user = session.get(User, membership.user_id)
+        assert user is not None
+        with pytest.raises(GoogleWorkspaceTokenRefreshError) as raised:
+            refresh_google_workspace_access_token(
+                session,
+                context=SessionContext(company=company, membership=membership, user=user),
+                connector="drive",
+                token_payload={
+                    "access_token": "expired-access",
+                    "refresh_token": "revoked-refresh",
+                },
+            )
+
+    assert raised.value.reauthorization_required is True
+    assert "Reconnect" in str(raised.value)
