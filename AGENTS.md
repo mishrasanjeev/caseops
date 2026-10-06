@@ -452,12 +452,16 @@ requirements when using the fallback.
   reopened when disposal actually rolled back.
 - Any source-backed patent writer that later advances private-projection
   authority must take the tenant authority fence before membership, docket,
-  document, or source-version row locks. Document-version replacement already
-  takes the tenant lock first; taking it only when a later source-link event is
-  emitted can deadlock with a patent application holding the membership row
-  while waiting on the version. Regress the order on PostgreSQL by blocking the
-  tenant fence, proving membership remains unlocked, then inserting the real
-  projection event while the source version is locked.
+  document, or source-version row locks. When an entry point also needs the
+  patent-identity advisory lock, acquire that transaction-scoped advisory lock
+  first, then the tenant fence; all duplicate/identity writers must use this
+  order so a waiter never holds the tenant fence while the current identity
+  owner needs it. Document-version replacement takes the tenant lock first;
+  taking it only when a later source-link event is emitted can deadlock with a
+  patent application holding the membership row while waiting on the version.
+  Regress duplicate identity waiters and version-replacement overlap on
+  PostgreSQL, proving blocked writers do not retain later-order locks and the
+  real projection event can commit.
 - Diagnose a private-projection maintenance alert against persisted event epochs
   and the active workload. Continuous production E2E writes in a shared QA
   tenant can correctly fence every shadow; preserve the 300-second blocker,

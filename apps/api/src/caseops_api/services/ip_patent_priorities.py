@@ -426,8 +426,8 @@ def create_patent_priority(
     payload: PatentPriorityCreateRequest,
     idempotency_key: str,
 ) -> PatentPriorityRecord:
-    _lock_private_authority_before_patent_source_write(session, context)
     _lock_application_identity_writer(session, context)
+    _lock_private_authority_before_patent_source_write(session, context)
     context = _lock_ip_writer_context(session, context=context, required_capability="ip:write")
     claim = claim_idempotency(
         session,
