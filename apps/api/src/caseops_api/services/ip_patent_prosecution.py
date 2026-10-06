@@ -46,6 +46,7 @@ from caseops_api.services.ip_patent_applications import (
 from caseops_api.services.ip_patent_families import (
     _error,
     _link_disclosure_source,
+    _lock_private_authority_before_patent_source_write,
     _lock_sources_and_dockets,
     _source_version,
 )
@@ -236,6 +237,7 @@ def list_patent_evidence(
 
 def _lock_work(session, context, application_id, sources):
     assert_domain_operation("patent", session=session)
+    _lock_private_authority_before_patent_source_write(session, context)
     context = _lock_ip_writer_context(session, context=context, required_capability="ip:write")
     application = _application(session, context, application_id)
     docket = _lock_sources_and_dockets(session, context, sources, {application.docket_id})[

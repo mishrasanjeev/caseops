@@ -31,6 +31,7 @@ from caseops_api.services.ip_patent_families import (
     get_patent_family,
     list_patent_families,
 )
+from caseops_api.services.private_retrieval import lock_private_authority_writer
 from tests.test_postgres_validation import (
     _ensure_migrations,  # noqa: F401
     _ip_race_context,
@@ -228,6 +229,7 @@ def test_patent_correction_rechecks_version_after_parent_lock_on_postgres(pg_eng
             raise AssertionError("Stale correction was accepted")
 
     with Session(pg_engine) as winner, ThreadPoolExecutor(max_workers=1) as pool:
+        lock_private_authority_writer(winner, company_id=company_id)
         context = _lock_ip_writer_context(
             winner,
             context=_ip_race_context(winner, company_id=company_id, membership_id=actor_id),

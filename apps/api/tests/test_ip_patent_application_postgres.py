@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    CompanyMembership,
     IpAsset,
     IpDocketRecord,
     IpPatentApplication,
@@ -141,6 +142,80 @@ def test_application_duplicate_waiter_and_other_tenant_are_bounded_on_postgres(
             winner.rollback()
     rows = isolated_postgres_client.get(journeys.BASE, headers=headers).json()["applications"]
     assert len(rows) == 1 and rows[0]["id"] == str(created.id)
+
+
+def test_application_source_writer_takes_tenant_fence_before_actor_and_source_rows_on_postgres(
+    isolated_postgres_client,
+):
+    engine, bootstrap, headers, _, raw = _setup(isolated_postgres_client)
+    payload = PatentApplicationCreateRequest.model_validate(raw)
+    source_version_id = str(payload.facts.source.document_version_id)
+    document_id = str(payload.facts.source.document_id)
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    application_name = f"patent-source-tenant-fence-{uuid4().hex[:12]}"
+
+    def create_application():
+        with Session(engine) as session:
+            session.execute(text("SET lock_timeout = '5s'"))
+            session.execute(
+                text("SELECT set_config('application_name', :name, false)"),
+                {"name": application_name},
+            )
+            created = create_patent_application(
+                session,
+                context=_context(session, bootstrap),
+                payload=payload,
+                idempotency_key=str(uuid4()),
+            )
+            return str(created.id)
+
+    with Session(engine) as document_replacement, ThreadPoolExecutor(max_workers=1) as pool:
+        document_replacement.execute(
+            text("SELECT id FROM companies WHERE id = :id FOR UPDATE"),
+            {"id": company_id},
+        )
+        document_replacement.execute(
+            text("SELECT id FROM ip_document_versions WHERE id = :id FOR UPDATE"),
+            {"id": source_version_id},
+        )
+        future = pool.submit(create_application)
+        try:
+            _wait_for_postgres_lock_wait(engine, application_name=application_name)
+            # Model version replacement: it owns Company and the source version,
+            # then emits an event whose composite membership FK needs KEY SHARE.
+            # Application creation must wait at Company before locking membership.
+            with Session(engine) as source_probe:
+                source_probe.execute(text("SET LOCAL lock_timeout = '500ms'"))
+                membership = source_probe.scalar(
+                    select(CompanyMembership.id)
+                    .where(CompanyMembership.id == membership_id)
+                    .with_for_update(nowait=True)
+                )
+                assert membership == membership_id
+                source_probe.rollback()
+            from caseops_api.services.private_retrieval import (
+                propagate_private_projection_change,
+            )
+
+            propagate_private_projection_change(
+                document_replacement,
+                company_id=company_id,
+                actor_membership_id=membership_id,
+                idempotency_key=f"test-document-version-replacement:{uuid4()}",
+                event_type="source_changed",
+                target_type="ip_document",
+                target_id=document_id,
+                target_version="2",
+                reason_code="test_document_version_replacement",
+            )
+        finally:
+            document_replacement.commit()
+        application_id = future.result(timeout=8)
+
+    persisted = isolated_postgres_client.get(f"{journeys.BASE}/{application_id}", headers=headers)
+    assert persisted.status_code == 200, persisted.text
+    assert persisted.json()["facts"]["source"]["document_version_id"] == source_version_id
 
 
 def test_concurrent_identifier_swaps_and_stale_corrections_roll_back_on_postgres(
