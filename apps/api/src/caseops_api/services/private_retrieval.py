@@ -309,6 +309,12 @@ def _lock_private_company(session: Session, *, company_id: str) -> Company:
     return company
 
 
+def lock_private_authority_writer(session: Session, *, company_id: str) -> None:
+    """Acquire the tenant authority fence before source or actor row locks."""
+
+    _lock_private_company(session, company_id=company_id)
+
+
 def ensure_active_private_generation(
     session: Session, *, company_id: str
 ) -> PrivateIndexGeneration:

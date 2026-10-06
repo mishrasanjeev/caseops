@@ -49,6 +49,7 @@ from caseops_api.services.ip_patent_families import (
     _error,
     _family,
     _link_disclosure_source,
+    _lock_private_authority_before_patent_source_write,
     _lock_sources_and_dockets,
     _patent_docket_lifecycle_history,
     get_patent_family,
@@ -540,6 +541,7 @@ def create_patent_application(
     payload: PatentApplicationCreateRequest,
     idempotency_key: str,
 ) -> PatentApplicationRecord:
+    _lock_private_authority_before_patent_source_write(session, context)
     _lock_application_identity_writer(session, context)
     context = _lock_ip_writer_context(session, context=context, required_capability="ip:write")
     claim = claim_idempotency(

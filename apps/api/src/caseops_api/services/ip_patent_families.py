@@ -62,6 +62,7 @@ from caseops_api.services.matter_access import (
     visible_ip_dockets_filter,
 )
 from caseops_api.services.private_retrieval import (
+    lock_private_authority_writer,
     private_source_version,
     propagate_private_source_creation,
 )
@@ -70,6 +71,12 @@ from caseops_api.services.session_context import SessionContext
 
 def _error(code: str, message: str, status: int = 409) -> HTTPException:
     return HTTPException(status_code=status, detail={"code": code, "message": message})
+
+
+def _lock_private_authority_before_patent_source_write(
+    session: Session, context: SessionContext
+) -> None:
+    lock_private_authority_writer(session, company_id=context.company.id)
 
 
 def _source_version(
@@ -151,6 +158,9 @@ def _lock_sources_and_dockets(
     *,
     read_only_reference_docket_ids: frozenset[str] = frozenset(),
 ) -> dict[str, IpDocketRecord]:
+    # Defensive for future callers; mutation entry points acquire this before
+    # actor, docket, document, or source-version row locks.
+    _lock_private_authority_before_patent_source_write(session, context)
     if len(sources) > 21:
         raise _error("patent_source_limit", "An application may pin at most 21 sources.", 422)
     versions = {}
@@ -604,6 +614,7 @@ def create_patent_family(
     payload: PatentFamilyCreateRequest,
     idempotency_key: str,
 ) -> PatentFamilyRecord:
+    _lock_private_authority_before_patent_source_write(session, context)
     context = _lock_ip_writer_context(session, context=context, required_capability="ip:write")
     claim = claim_idempotency(
         session,
@@ -702,6 +713,7 @@ def correct_patent_family(
     family_id: str,
     payload: PatentFamilyCorrectionRequest,
 ) -> PatentFamilyRecord:
+    _lock_private_authority_before_patent_source_write(session, context)
     context = _lock_ip_writer_context(session, context=context, required_capability="ip:write")
     family = _family(session, context, family_id)
     _client(session, context, payload.facts.client_id)

@@ -26,7 +26,11 @@ from caseops_api.services.ip_patent_applications import (
     _sources,
     get_patent_application,
 )
-from caseops_api.services.ip_patent_families import _error, _lock_sources_and_dockets
+from caseops_api.services.ip_patent_families import (
+    _error,
+    _lock_private_authority_before_patent_source_write,
+    _lock_sources_and_dockets,
+)
 from caseops_api.services.ip_patent_priorities import validate_application_priority_correction
 from caseops_api.services.session_context import SessionContext
 
@@ -38,6 +42,7 @@ def correct_patent_application(
     application_id: str,
     payload: PatentApplicationCorrectionRequest,
 ) -> PatentApplicationRecord:
+    _lock_private_authority_before_patent_source_write(session, context)
     _lock_application_identity_writer(session, context)
     context = _lock_ip_writer_context(session, context=context, required_capability="ip:write")
     application = _application(session, context, application_id)
