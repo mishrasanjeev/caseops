@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from threading import Event
+from time import sleep
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
@@ -825,11 +826,36 @@ def test_unused_consent_before_disconnect_never_restores_a_revoked_connection(
     assert calls == ["initial", "failed-fresh-consent", "fresh-success"]
 
 
+class OAuthBackoffGate:
+    """Hold the post-rollback boundary until the coordinator finishes its writer."""
+
+    def __init__(self, monkeypatch):
+        from caseops_api.services import assignment_memberships
+
+        self.entered = Event()
+        self.resume = Event()
+        self.entries = 0
+        original_sleep = assignment_memberships.sleep
+
+        def hold_backoff(seconds):
+            self.entries += 1
+            self.entered.set()
+            assert self.resume.wait(15), "coordinator never released OAuth after rollback"
+            original_sleep(seconds)
+
+        monkeypatch.setattr(assignment_memberships, "sleep", hold_backoff)
+
+    def wait(self, timeout):
+        return self.entered.wait(timeout)
+
+    def release(self):
+        self.resume.set()
+
+
 @pytest.fixture(params=[
     calendar.CalendarProvider.GOOGLE_CALENDAR, calendar.CalendarProvider.OUTLOOK,
 ])
 def pg_calendar_authority(pg_engine, monkeypatch, request):
-    from caseops_api.services import assignment_memberships
     from tests.test_postgres_validation import _ip_race_context, _seed_company, _seed_membership
 
     with Session(pg_engine) as seed:
@@ -839,14 +865,7 @@ def pg_calendar_authority(pg_engine, monkeypatch, request):
     issued_at = calendar._current_time().timestamp()
     calls = []
     hook = [lambda code: None]
-    retrying = Event()
-    original_sleep = assignment_memberships.sleep
-
-    def observe_backoff(seconds):
-        retrying.set()
-        original_sleep(seconds)
-
-    monkeypatch.setattr(assignment_memberships, "sleep", observe_backoff)
+    retrying = OAuthBackoffGate(monkeypatch)
 
     def context(session):
         value = _ip_race_context(session, company_id=company_id, membership_id=membership_id)
@@ -884,11 +903,14 @@ def pg_calendar_authority(pg_engine, monkeypatch, request):
                 calendar_provider=request.param,
             )
 
-    return SimpleNamespace(
-        engine=pg_engine, company_id=company_id, membership_id=membership_id,
-        context=context, call=call, calls=calls, hook=hook, provider_kind=request.param,
-        retrying=retrying,
-    )
+    try:
+        yield SimpleNamespace(
+            engine=pg_engine, company_id=company_id, membership_id=membership_id,
+            context=context, call=call, calls=calls, hook=hook, provider_kind=request.param,
+            retrying=retrying,
+        )
+    finally:
+        retrying.release()
 
 
 @pytest.mark.postgres
@@ -916,6 +938,8 @@ def test_postgres_tenant_admin_audit_can_finish_while_oauth_waits(pg_calendar_au
             except BaseException:
                 admin.rollback()
                 raise
+            finally:
+                fixture.retrying.release()
         with pytest.raises(HTTPException) as failure:
             worker.result(timeout=10)
     assert failure.value.status_code == 403
@@ -966,14 +990,17 @@ def test_postgres_failure_cleanup_and_disconnect_share_authority_order(
         failed_callback = executor.submit(fixture.call, name="oauth-failing-callback")
         revoked = None
         try:
-            assert cleanup_locked.wait(10), "cleanup never reached its own claim"
-            revoked = executor.submit(disconnect)
-            assert fixture.retrying.wait(10), "disconnect did not encounter cleanup's lock"
+            try:
+                assert cleanup_locked.wait(10), "cleanup never reached its own claim"
+                revoked = executor.submit(disconnect)
+                assert fixture.retrying.wait(10), "disconnect did not encounter cleanup's lock"
+            finally:
+                allow_audit.set()
+            with pytest.raises(HTTPException) as failure:
+                failed_callback.result(timeout=15)
+            assert failure.value.status_code == 502
         finally:
-            allow_audit.set()
-        with pytest.raises(HTTPException) as failure:
-            failed_callback.result(timeout=15)
-        assert failure.value.status_code == 502
+            fixture.retrying.release()
         assert revoked is not None and revoked.result(timeout=15).status == "revoked"
     assert fixture.calls == ["race"]
     with Session(fixture.engine) as verify:
@@ -1042,19 +1069,26 @@ def test_postgres_oauth_cannot_invert_real_matter_disposal_locks(
         disposal = executor.submit(dispose)
         callback = None
         try:
-            assert actor_locked.wait(10), "disposal never fenced the actor"
-            callback = executor.submit(fixture.call, name=name)
-            assert fixture.retrying.wait(10), "OAuth did not encounter disposal's actor lock"
-            # NOWAIT must have rolled back Company before backoff.
-            with Session(fixture.engine) as probe:
-                assert probe.scalar(select(Company).where(
-                    Company.id == fixture.company_id,
-                ).with_for_update(of=Company, nowait=True)) is not None
+            try:
+                assert actor_locked.wait(10), "disposal never fenced the actor"
+                callback = executor.submit(fixture.call, name=name)
+                assert fixture.retrying.wait(10), "OAuth did not encounter disposal's actor lock"
+                # Deliberately exceed the real 25ms backoff. The handshake, not
+                # scheduler timing, must keep a second acquisition out of the probe.
+                sleep(0.075)
+                assert fixture.retrying.entries == 1
+                with Session(fixture.engine) as probe:
+                    assert probe.scalar(select(Company).where(
+                        Company.id == fixture.company_id,
+                    ).with_for_update(of=Company, nowait=True)) is not None
+            finally:
+                continue_disposal.set()
+            assert disposal.result(timeout=15).status == "disposed"
+            assert private_company_locked.is_set(), "disposal skipped private Company lock"
         finally:
-            continue_disposal.set()
-        assert disposal.result(timeout=15).status == "disposed"
-        assert private_company_locked.is_set(), "disposal skipped private-projection Company lock"
+            fixture.retrying.release()
         assert callback is not None and callback.result(timeout=15).status == "connected"
+    assert fixture.calls == ["race"]
     with Session(fixture.engine) as verify:
         assert verify.get(Matter, matter_id).status == "disposed"
         assert verify.get(Matter, matter_id).is_active is False
@@ -1095,17 +1129,22 @@ def test_postgres_oauth_and_real_team_scoping_both_finish(pg_calendar_authority,
         toggled = executor.submit(toggle_scoping)
         callback = None
         try:
-            assert company_locked.wait(10), "team scoping never locked Company"
-            callback = executor.submit(fixture.call, name=name)
-            assert fixture.retrying.wait(10), "OAuth did not encounter team-scoping's Company lock"
-            # OAuth must not hold Membership while it waits on this Company writer.
-            with Session(fixture.engine) as probe:
-                assert probe.scalar(select(CompanyMembership).where(
-                    CompanyMembership.id == fixture.membership_id,
-                ).with_for_update(of=CompanyMembership, nowait=True)) is not None
+            try:
+                assert company_locked.wait(10), "team scoping never locked Company"
+                callback = executor.submit(fixture.call, name=name)
+                assert fixture.retrying.wait(10), "OAuth did not encounter team-scoping's lock"
+                sleep(0.075)
+                assert fixture.retrying.entries == 1
+                # OAuth must release Membership before the Company writer continues.
+                with Session(fixture.engine) as probe:
+                    assert probe.scalar(select(CompanyMembership).where(
+                        CompanyMembership.id == fixture.membership_id,
+                    ).with_for_update(of=CompanyMembership, nowait=True)) is not None
+            finally:
+                continue_scoping.set()
+            assert toggled.result(timeout=15) is True
         finally:
-            continue_scoping.set()
-        assert toggled.result(timeout=15) is True
+            fixture.retrying.release()
         assert callback is not None and callback.result(timeout=15).status == "connected"
     assert fixture.calls == ["race"]
     with Session(fixture.engine) as verify:
@@ -1136,6 +1175,8 @@ def test_postgres_user_session_revocation_cannot_cycle_with_oauth(pg_calendar_au
             except BaseException:
                 writer.rollback()
                 raise
+            finally:
+                fixture.retrying.release()
         with pytest.raises(HTTPException) as failure:
             callback.result(timeout=10)
         assert failure.value.status_code == 401

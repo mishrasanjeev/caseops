@@ -16,6 +16,10 @@
   A completed callback replay must retain the healthy connection but return
   its consumed-attempt rejection, not bypass the durable consumption ledger
   with a fresh success. Assert the service result and browser notice together.
+  A concurrency test must hold the observed post-rollback boundary until its
+  lock probe completes. An event that merely records an earlier backoff does
+  not prove the next attempt has not reacquired the row. Use entered/resume
+  handshakes, preserve NOWAIT probes and require both real writers to finish.
 
 - A repeated report must be tied to the exact serving API and web revision,
   not the newest dirty source tree. Inspect loaded selector options and the

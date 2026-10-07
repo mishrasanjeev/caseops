@@ -154,6 +154,26 @@ or substitute an invented account when userinfo fails.
   The follow-up Calendar and browser-contract check passed **112 tests**, with
   46 PostgreSQL tests explicitly deselected for the subsequent Docker gate.
   Evidence: `.tmp/calendar-oauth-20261008/codeql-cleanup.xml` and its journal.
+- Full Docker PostgreSQL acceptance on `5d079201` completed with **547 tests:
+  546 passed, one failed, zero skips**. All 547 setup/call/teardown identities
+  and the completion event are retained in `docker-final/postgres-results.jsonl`
+  under the dated evidence directory. The only failure was Gmail's shared
+  Matter-disposal lock probe: its event recorded an earlier rollback/backoff,
+  but did not hold OAuth there, allowing a subsequent 25 ms attempt to race
+  the NOWAIT probe. This is a test synchronization defect, not demonstrated
+  production deadlock. The test-only repair must hold the post-rollback
+  boundary with an entered/resume handshake, keep the strict NOWAIT probe and
+  require both actual disposal and callback success. No runtime locking,
+  timeout, provider-exchange or lifecycle rule is relaxed. The failed run is
+  retained and Playwright did not run in it; complete acceptance is still open.
+  Forced second-attempt orchestration reproduced the old probe race for all
+  four connectors. The repaired handshake passed **40/40 delayed overlap
+  cases across five runs**, then **84/84 OAuth PostgreSQL tests** with zero
+  skips and all phases reconciled against the failed gate's exact OAuth
+  inventory. Evidence: `%TEMP%/oauth-delayed-probe-baseline-20261008.jsonl`,
+  `%TEMP%/oauth-delayed-probe-repeat-{1..5}-20261008` and
+  `%TEMP%/oauth-postrollback-handshake-full-pg-20261008.jsonl`. Runtime code is
+  unchanged; a fresh complete frozen Docker run remains mandatory.
 - Required pending: deterministic real-backend emulator Playwright, PostgreSQL
   interleavings, complete frozen Docker gate, exact-head CI, canonical-main
   release, post-release production acceptance and retained summary workbook.

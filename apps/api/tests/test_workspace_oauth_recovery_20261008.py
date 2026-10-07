@@ -211,17 +211,13 @@ def pg_harness(isolated_postgres_client, monkeypatch, request):
 
 @pytest.fixture
 def oauth_retrying(monkeypatch):
-    from caseops_api.services import assignment_memberships
+    from tests.test_calendar_oauth_recovery_20261008 import OAuthBackoffGate
 
-    retrying = Event()
-    original_sleep = assignment_memberships.sleep
-
-    def observe_backoff(seconds):
-        retrying.set()
-        original_sleep(seconds)
-
-    monkeypatch.setattr(assignment_memberships, "sleep", observe_backoff)
-    return retrying
+    gate = OAuthBackoffGate(monkeypatch)
+    try:
+        yield gate
+    finally:
+        gate.release()
 
 
 def _assert_error(harness, state, code, suffix, status=409):
@@ -664,6 +660,7 @@ def test_postgres_authority_lock_allows_membership_writer_audit(pg_harness, oaut
             writer.commit()
         finally:
             writer.rollback()
+            oauth_retrying.release()
         assert callback.result(timeout=10).connected
     with harness.factory() as session:
         assert session.get(AuditEvent, audit_id) is not None
@@ -697,6 +694,7 @@ def test_postgres_authority_lock_allows_company_writer_membership_audit(pg_harne
             writer.commit()
         finally:
             writer.rollback()
+            oauth_retrying.release()
         with pytest.raises(HTTPException) as captured:
             callback.result(timeout=10)
         assert captured.value.status_code == 403
