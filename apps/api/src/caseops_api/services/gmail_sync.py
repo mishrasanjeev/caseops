@@ -872,18 +872,6 @@ def complete_gmail_connection(
     meta = token.get(_OAUTH_META_KEY, {})
     if not isinstance(meta, dict):
         raise _oauth_error("invalid_attempt", "Restart the Gmail connection.")
-    if (
-        connection is not None
-        and connection.status == MailboxConnectionStatus.CONNECTED
-        and meta.get("completed_attempt") == attempt
-        and meta.get("completed_config") == config_fingerprint
-        and not meta.get("marker")
-    ):
-        result = MailboxConnectionCallbackResponse(
-            connected=True, connection=_connection_record(connection)
-        )
-        session.commit()
-        return result
     if meta.get("marker") and float(meta.get("expires_at") or 0) > now.timestamp():
         raise _oauth_error(
             "exchange_in_flight", "An OAuth exchange is already in progress. Wait briefly."
@@ -952,8 +940,6 @@ def complete_gmail_connection(
         "expires_at": min(now.timestamp() + _OAUTH_LEASE_SECONDS, state_payload["exp"]),
         "config": config_fingerprint,
         "prior_connected": bool(prior_connected),
-        "completed_attempt": meta.get("completed_attempt"),
-        "completed_config": meta.get("completed_config"),
     }
     token[_OAUTH_META_KEY] = meta
     connection.status = MailboxConnectionStatus.ERROR
@@ -992,8 +978,6 @@ def complete_gmail_connection(
                     "marker": None,
                     "expires_at": None,
                     "result": "complete",
-                    "completed_attempt": attempt,
-                    "completed_config": config_fingerprint,
                 },
             }
         )

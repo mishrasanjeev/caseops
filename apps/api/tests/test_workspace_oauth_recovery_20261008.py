@@ -27,7 +27,11 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import drive_sync, gmail_sync
 from caseops_api.services.audit import record_audit
-from caseops_api.services.calendar_sync import _decrypt_token_payload, _encrypt_secret
+from caseops_api.services.calendar_sync import (
+    _decrypt_token_payload,
+    _encrypt_secret,
+    _encrypt_token_payload,
+)
 from caseops_api.services.identity import get_session_context
 from tests.test_legalworkspace_calendar_sync import _bootstrap_company
 
@@ -155,6 +159,11 @@ class OAuthHarness:
                 token=token,
                 ciphertext=row.encrypted_token_ref,
                 connected_at=row.connected_at,
+                updated_at=row.updated_at,
+                provider_account_id=row.provider_account_id,
+                display_email=row.display_email,
+                scopes=tuple(row.scopes_json or ()),
+                history_id=getattr(row, "last_history_id", None),
             )
 
     def disconnect(self):
@@ -176,6 +185,16 @@ class OAuthHarness:
                             ),
                         )
                     )
+                )
+            )
+
+    def audit_ids(self):
+        with self.factory() as session:
+            return list(
+                session.scalars(
+                    select(AuditEvent.id)
+                    .where(AuditEvent.company_id == self.company_id)
+                    .order_by(AuditEvent.id)
                 )
             )
 
@@ -211,6 +230,7 @@ def _assert_error(harness, state, code, suffix, status=409):
     assert captured.value.status_code == status
     assert captured.value.detail["code"].endswith(suffix)
     assert "provider-secret" not in str(captured.value.detail)
+    return captured.value
 
 
 @pytest.mark.parametrize("healthy", [False, True])
@@ -242,7 +262,13 @@ def test_failed_exchange_releases_only_own_attempt_and_allows_fresh_start(
         assert row.token["access_token"] == original.token["access_token"]
         assert row.token["refresh_token"] == original.token["refresh_token"]
         assert row.connected_at == original.connected_at
-        assert harness.call(initial_state, "healthy").connected
+        before_replay = harness.row()
+        audit_ids = harness.audit_ids()
+        calls = list(harness.calls)
+        _assert_error(harness, initial_state, "healthy", "attempt_consumed")
+        assert harness.row() == before_replay
+        assert harness.audit_ids() == audit_ids
+        assert harness.calls == calls
     before = len(harness.calls)
     _assert_error(harness, failed_state, "failed", "attempt_consumed")
     _assert_error(harness, failed_state, "different-code", "attempt_consumed")
@@ -254,26 +280,58 @@ def test_failed_exchange_releases_only_own_attempt_and_allows_fresh_start(
     assert harness.audit_count() == (2 if healthy else 1)
 
 
-def test_completed_replay_is_read_only_and_consumption_survives_disconnect(harness):
+def test_completed_replay_is_consumed_without_mutation_and_survives_disconnect(harness):
     state = harness.state()
     first = harness.call(state, "once")
     snapshot = harness.row()
-    replay = harness.call(state, "once")
-    assert replay.connected and replay.connection.id == first.connection.id
-    assert harness.row().connected_at == snapshot.connected_at
-    assert harness.row().ciphertext == snapshot.ciphertext
+    assert first.connected and first.connection.id == snapshot.id
     assert harness.audit_count() == 1
+    audit_ids = harness.audit_ids()
+    for replay_state, replay_code in (
+        (state, "once"),
+        (state, "different-code"),
+        (harness.state(), "once"),
+    ):
+        error = _assert_error(harness, replay_state, replay_code, "attempt_consumed")
+        assert error.detail["code"] == f"{harness.kind}_oauth_attempt_consumed"
+        assert harness.row() == snapshot
+        assert harness.audit_ids() == audit_ids
+        assert harness.calls == ["once"]
+    # Existing connections can retain the superseded completion fields; replay cannot rewrite them.
+    with harness.factory() as session:
+        connection = session.get(harness.model, snapshot.id)
+        token = _decrypt_token_payload(connection.encrypted_token_ref)
+        meta = token[harness.module._OAUTH_META_KEY]
+        assert "completed_attempt" not in meta and "completed_config" not in meta
+        meta.update(completed_attempt=meta["attempt"], completed_config=meta["config"])
+        connection.encrypted_token_ref = _encrypt_token_payload(token)
+        session.commit()
+    snapshot = harness.row()
+    _assert_error(harness, state, "once", "attempt_consumed")
+    assert harness.row() == snapshot
+    assert harness.audit_ids() == audit_ids
     assert harness.calls == ["once"]
-    _assert_error(harness, harness.state(), "once", "attempt_consumed")
     old_unused_state = harness.state()
     harness.disconnect()
-    _assert_error(harness, state, "once", "attempt_consumed")
-    _assert_error(harness, old_unused_state, "unused", "attempt_consumed")
-    _assert_error(harness, harness.state(), "once", "attempt_consumed")
-    assert harness.calls == ["once"]
-    assert harness.row().status == "revoked"
-    assert harness.row().ciphertext is None
+    disconnected = harness.row()
+    audit_ids = harness.audit_ids()
+    for replay_state, replay_code in (
+        (state, "once"),
+        (old_unused_state, "unused"),
+        (harness.state(), "once"),
+    ):
+        _assert_error(harness, replay_state, replay_code, "attempt_consumed")
+        assert harness.row() == disconnected
+        assert harness.audit_ids() == audit_ids
+        assert harness.calls == ["once"]
+    assert disconnected.status == "revoked"
+    assert disconnected.ciphertext is None
     assert harness.call(harness.state(), "new-consent").connected
+
+
+@pytest.mark.postgres
+def test_postgres_completed_replay_is_consumed_without_mutation(pg_harness):
+    test_completed_replay_is_consumed_without_mutation_and_survives_disconnect(pg_harness)
 
 
 def test_interrupted_claim_expires_but_single_use_callback_never_retries(harness):

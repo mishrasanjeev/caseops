@@ -13,6 +13,9 @@
   tenant activity and session revocation, and reject unused consent issued
   before disconnect. Prove cross-provider authority-lock ordering on PostgreSQL,
   including compatibility with ordinary tenant foreign-key inserts.
+  A completed callback replay must retain the healthy connection but return
+  its consumed-attempt rejection, not bypass the durable consumption ledger
+  with a fresh success. Assert the service result and browser notice together.
 
 - A repeated report must be tied to the exact serving API and web revision,
   not the newest dirty source tree. Inspect loaded selector options and the

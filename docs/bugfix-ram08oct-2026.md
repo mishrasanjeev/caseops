@@ -129,6 +129,24 @@ or substitute an invented account when userinfo fails.
   no skips; all 399 phases reconciled. Final and failed evidence retained under
   `.tmp/calendar-oauth-20261008/workspace-evidence/`. These inventories overlap
   earlier focused runs and must not be added to them as unique coverage.
+- PR #523 review found a remaining Gmail/Drive completed-callback shortcut that
+  returned success before the consumption ledger. Those earlier replay tests
+  asserted the wrong outcome. Single-use callbacks must reject even an exact
+  completed replay, while retaining the healthy connection and making zero
+  additional provider calls. The revised service and browser contracts require
+  the provider-specific consumed error and a safe consumed notice.
+  Revised verification: **135 passed**, including **38 PostgreSQL tests**,
+  zero failures/skips and all 405 phases reconciled in
+  `.tmp/oauth-replay-523/final.jsonl` and its JUnit sibling. The two pre-fix
+  failures remain in `repro.xml`. Browser helper/route coverage passed all
+  **54 tests** in `.tmp/calendar-oauth-20261008/route-replay-review.xml`.
+- The first frozen Docker invocation on `f6d26c9d` stopped before startup because
+  the workstation selected Node 24 instead of the repository's Node 22.14.0.
+  A checksum-verified portable official runtime resolved that setup issue. The
+  pinned rerun passed image build, migrations and index-health checks, but was
+  intentionally interrupted during PostgreSQL acceptance to address the PR
+  replay finding. Both run directories and the incremental journal are retained;
+  neither is complete release acceptance. A new frozen candidate must rerun it.
 - Required pending: deterministic real-backend emulator Playwright, PostgreSQL
   interleavings, complete frozen Docker gate, exact-head CI, canonical-main
   release, post-release production acceptance and retained summary workbook.

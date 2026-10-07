@@ -13,6 +13,14 @@ from caseops_api.api import oauth_browser
 from caseops_api.api.routes import calendar, drive, mailbox
 
 
+def _consumed_code(endpoint):
+    if endpoint.startswith("/api/mailbox/"):
+        return "gmail_oauth_attempt_consumed"
+    if endpoint.startswith("/api/drive/"):
+        return "drive_oauth_attempt_consumed"
+    return "calendar_oauth_callback_consumed"
+
+
 @pytest.fixture(
     params=[
         (
@@ -57,7 +65,7 @@ def callback_route(request, monkeypatch):
         else:
             pytest.fail("Blocking OAuth exchange is on the event loop")
         raise HTTPException(
-            409, detail={"code": "calendar_oauth_callback_consumed", "message": "secret"}
+            409, detail={"code": _consumed_code(endpoint), "message": "secret"}
         )
 
     monkeypatch.setattr(module, service_name, service)
@@ -73,7 +81,25 @@ def test_callback_json_error_and_provider_execution_remain_compatible(callback_r
         headers={"Accept": "application/json"},
     )
     assert response.status_code == 409, response.text
-    assert response.json()["detail"]["code"] == "calendar_oauth_callback_consumed"
+    assert response.json()["detail"]["code"] == _consumed_code(endpoint)
+    assert calls == ["off-event-loop"]
+
+
+def test_browser_consumed_callback_returns_explicit_rejection_notice(callback_route):
+    client, _, endpoint, _, calls = callback_route
+    response = client.get(
+        endpoint,
+        params={"code": "one-use-code", "state": "signed-state"},
+        headers={"Accept": "text/html"},
+    )
+    assert response.status_code == 303, response.text
+    target = urlsplit(response.headers["location"])
+    assert target.netloc == "caseops.example"
+    assert parse_qs(target.query)["oauth_result"] == ["consumed"]
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert "one-use-code" not in response.headers["location"]
+    assert "signed-state" not in response.headers["location"]
     assert calls == ["off-event-loop"]
 
 
