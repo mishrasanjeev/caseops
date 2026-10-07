@@ -147,6 +147,13 @@ or substitute an invented account when userinfo fails.
   intentionally interrupted during PostgreSQL acceptance to address the PR
   replay finding. Both run directories and the incremental journal are retained;
   neither is complete release acceptance. A new frozen candidate must rerun it.
+- CodeQL then identified one unused Calendar query result and two unnecessary
+  route-test wrappers. These are removed without changing the locking query or
+  runtime contract. The `09b43d0c` Docker attempt is superseded during image
+  preparation, not accepted as evidence for the final source.
+  The follow-up Calendar and browser-contract check passed **112 tests**, with
+  46 PostgreSQL tests explicitly deselected for the subsequent Docker gate.
+  Evidence: `.tmp/calendar-oauth-20261008/codeql-cleanup.xml` and its journal.
 - Required pending: deterministic real-backend emulator Playwright, PostgreSQL
   interleavings, complete frozen Docker gate, exact-head CI, canonical-main
   release, post-release production acceptance and retained summary workbook.

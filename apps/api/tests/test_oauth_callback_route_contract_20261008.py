@@ -48,8 +48,8 @@ def callback_route(request, monkeypatch):
     session_dependency = next(
         dep.call for dep in route.dependant.dependencies if dep.name == "session"
     )
-    app.dependency_overrides[context_dependency] = lambda: object()
-    app.dependency_overrides[session_dependency] = lambda: object()
+    app.dependency_overrides[context_dependency] = object
+    app.dependency_overrides[session_dependency] = object
     monkeypatch.setattr(
         oauth_browser,
         "get_settings",

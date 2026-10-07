@@ -5085,7 +5085,7 @@ def _locked_calendar_oauth_config(
     # Refresh even an already-loaded row: expire_on_commit=False must not hide
     # an administrator's credential rotation or connector kill switch.
     if provider == CalendarProvider.GOOGLE_CALENDAR:
-        row = session.scalar(
+        session.scalar(
             select(TenantGoogleWorkspaceConfiguration)
             .where(TenantGoogleWorkspaceConfiguration.company_id == context.company.id)
             .with_for_update(of=TenantGoogleWorkspaceConfiguration)
