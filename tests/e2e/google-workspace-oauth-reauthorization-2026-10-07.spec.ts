@@ -7,7 +7,7 @@ const now = "2026-10-07T00:00:00Z";
 
 async function signInFreshTenant(page: Page, provider: string): Promise<void> {
   const slug = `workspace-reauth-${provider}-${Date.now().toString(36)}`;
-  const email = `owner-${slug}@example.test`;
+  const email = `owner-${slug}@example.com`;
   const api = await request.newContext();
   const bootstrap = await api.post(`${apiBaseUrl}/api/bootstrap/company`, {
     data: {
