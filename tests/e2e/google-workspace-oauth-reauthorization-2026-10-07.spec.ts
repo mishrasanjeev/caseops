@@ -26,8 +26,15 @@ async function signInFreshTenant(page: Page, provider: string): Promise<void> {
   await page.locator("#company-slug").fill(slug);
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(localPassword);
+  const login = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/auth/login" &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: /^Sign in$/ }).click();
-  await page.waitForURL(/\/app(?:\/|$)/);
+  const loginResponse = await login;
+  expect(loginResponse.status(), await loginResponse.text()).toBe(200);
+  await page.waitForURL(/\/app(?:[/?]|$)/);
 }
 
 function mailboxStatus(connectionStatus: "connected" | "error") {
