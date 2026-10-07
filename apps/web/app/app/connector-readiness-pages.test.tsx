@@ -7,6 +7,8 @@ const {
   createInboundEmailAliasMock,
   fetchCalendarProviderEventCandidatesMock,
   fetchDriveCandidatesMock,
+  fetchGoogleDriveStatusMock,
+  fetchGmailMailboxStatusMock,
   fetchInboundEmailAliasesMock,
   fetchInboundEmailEventsMock,
   fetchMailboxImportsMock,
@@ -16,6 +18,8 @@ const {
   reviewCalendarProviderEventCandidateMock,
   reviewDriveCandidateMock,
   reviewMailboxImportMock,
+  startGoogleDriveConnectionMock,
+  startGmailMailboxConnectionMock,
   syncGoogleDriveCandidatesMock,
   testMicrosoft365TenantConfigurationMock,
   updateInboundEmailAliasMock,
@@ -25,6 +29,8 @@ const {
   createInboundEmailAliasMock: vi.fn(),
   fetchCalendarProviderEventCandidatesMock: vi.fn(),
   fetchDriveCandidatesMock: vi.fn(),
+  fetchGoogleDriveStatusMock: vi.fn(),
+  fetchGmailMailboxStatusMock: vi.fn(),
   fetchInboundEmailAliasesMock: vi.fn(),
   fetchInboundEmailEventsMock: vi.fn(),
   fetchMailboxImportsMock: vi.fn(),
@@ -34,6 +40,8 @@ const {
   reviewCalendarProviderEventCandidateMock: vi.fn(),
   reviewDriveCandidateMock: vi.fn(),
   reviewMailboxImportMock: vi.fn(),
+  startGoogleDriveConnectionMock: vi.fn(),
+  startGmailMailboxConnectionMock: vi.fn(),
   syncGoogleDriveCandidatesMock: vi.fn(),
   testMicrosoft365TenantConfigurationMock: vi.fn(),
   updateInboundEmailAliasMock: vi.fn(),
@@ -49,6 +57,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   createInboundEmailAlias: createInboundEmailAliasMock,
   fetchCalendarProviderEventCandidates: fetchCalendarProviderEventCandidatesMock,
   fetchDriveCandidates: fetchDriveCandidatesMock,
+  fetchGoogleDriveStatus: fetchGoogleDriveStatusMock,
+  fetchGmailMailboxStatus: fetchGmailMailboxStatusMock,
   fetchInboundEmailAliases: fetchInboundEmailAliasesMock,
   fetchInboundEmailEvents: fetchInboundEmailEventsMock,
   fetchMailboxImports: fetchMailboxImportsMock,
@@ -58,6 +68,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   reviewCalendarProviderEventCandidate: reviewCalendarProviderEventCandidateMock,
   reviewDriveCandidate: reviewDriveCandidateMock,
   reviewMailboxImport: reviewMailboxImportMock,
+  startGoogleDriveConnection: startGoogleDriveConnectionMock,
+  startGmailMailboxConnection: startGmailMailboxConnectionMock,
   syncGoogleDriveCandidates: syncGoogleDriveCandidatesMock,
   testMicrosoft365TenantConfiguration: testMicrosoft365TenantConfigurationMock,
   updateInboundEmailAlias: updateInboundEmailAliasMock,
@@ -84,6 +96,14 @@ const now = "2026-06-10T00:00:00Z";
 describe("connector readiness pages", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fetchGmailMailboxStatusMock.mockResolvedValue({
+      configured: true,
+      connections: [{ status: "connected" }],
+    });
+    fetchGoogleDriveStatusMock.mockResolvedValue({
+      configured: true,
+      connections: [{ status: "connected" }],
+    });
     fetchMailboxImportsMock.mockResolvedValue({
       summary: { imported: 0, unmatched: 1, duplicate: 0, failed: 0, attachment_candidates: 1 },
       imports: [
@@ -295,10 +315,24 @@ describe("connector readiness pages", () => {
     });
   });
 
+  it("disables Gmail sync and offers reconnect when its connection needs attention", async () => {
+    fetchGmailMailboxStatusMock.mockResolvedValue({
+      configured: true,
+      connections: [{ status: "error" }],
+    });
+    renderWithQuery(<MailboxPage />);
+
+    expect(await screen.findByText("Demand notice")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Existing mailbox items are retained");
+    expect(screen.getByRole("button", { name: "Sync Gmail" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reconnect Gmail" })).toBeEnabled();
+  });
+
   it("renders and acts on the Drive review queue", async () => {
     renderWithQuery(<DrivePage />);
 
     expect(await screen.findByText("Signed agreement.pdf")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sync Google Drive" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
     await waitFor(() => {
@@ -308,6 +342,18 @@ describe("connector readiness pages", () => {
         matterId: null,
       });
     });
+  });
+
+  it("disables Drive sync and offers reconnect when its connection needs attention", async () => {
+    fetchGoogleDriveStatusMock.mockResolvedValue({
+      configured: true,
+      connections: [{ status: "error" }],
+    });
+    renderWithQuery(<DrivePage />);
+
+    expect(await screen.findByText("Signed agreement.pdf")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sync Google Drive" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reconnect Google Drive" })).toBeEnabled();
   });
 
   it("renders and reviews calendar conflicts", async () => {

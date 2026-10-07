@@ -8,15 +8,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import UserDriveConnection
+from caseops_api.db.models import DriveConnectionStatus, UserDriveConnection
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.calendar_sync import _decrypt_token_payload
 from caseops_api.services.drive_sync import (
     GOOGLE_DRIVE_SCOPES,
     GoogleDriveFileMetadata,
     GoogleDriveProvider,
+    GoogleDriveProviderError,
     GoogleDriveRuntimeConfig,
     set_google_drive_provider_for_tests,
 )
+from caseops_api.services.google_workspace import GoogleWorkspaceTokenRefreshError
 from tests.test_legalworkspace_calendar_sync import _auth, _bootstrap_company
 
 
@@ -83,6 +86,28 @@ class MissingDriveProvider:
 
     def list_files(self, **kwargs) -> list[GoogleDriveFileMetadata]:  # pragma: no cover
         raise AssertionError("unavailable provider should not list files")
+
+
+class ExpiredOnceDriveProvider(StubDriveProvider):
+    def list_files(
+        self,
+        *,
+        token_payload: dict[str, object],
+        limit: int,
+    ) -> list[GoogleDriveFileMetadata]:
+        self.list_calls += 1
+        if self.list_calls == 1:
+            raise GoogleDriveProviderError("expired access token", status_code=401)
+        assert token_payload["access_token"] == "drive-refreshed-access"
+        return [
+            GoogleDriveFileMetadata(
+                provider_file_id="drive-refreshed-file",
+                name="Refreshed Drive file.pdf",
+                mime_type="application/pdf",
+                size_bytes=1024,
+                modified_time=datetime(2026, 6, 8, tzinfo=UTC),
+            )
+        ][:limit]
 
 
 def _configure_drive_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -195,6 +220,161 @@ def test_google_drive_connect_list_revoke_is_token_safe(
         get_settings.cache_clear()
 
 
+def test_google_drive_sync_refreshes_expired_access_token_and_persists_it(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_drive_env(monkeypatch)
+    provider = ExpiredOnceDriveProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.drive_sync.refresh_google_workspace_access_token",
+        lambda session, **kwargs: {
+            **kwargs["token_payload"],
+            "access_token": "drive-refreshed-access",
+        },
+    )
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="drive-refresh-recovery",
+            email="owner@drive-refresh.example",
+        )
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_drive(client, token, provider)
+
+        response = client.post(
+            "/api/drive/google/candidates/sync",
+            headers=_auth(token),
+            json={"limit": 5},
+        )
+        assert response.status_code == 200, response.text
+        assert provider.list_calls == 2
+        assert response.json()["created_count"] == 1
+
+        with get_session_factory()() as session:
+            connection = session.get(UserDriveConnection, connection_id)
+            assert connection is not None
+            assert connection.status == DriveConnectionStatus.CONNECTED
+            refreshed = _decrypt_token_payload(connection.encrypted_token_ref)
+            assert refreshed["access_token"] == "drive-refreshed-access"
+            assert refreshed["refresh_token"] == "drive-refresh-credential"
+            assert "drive-refreshed-access" not in connection.encrypted_token_ref
+    finally:
+        set_google_drive_provider_for_tests(None)
+        get_settings.cache_clear()
+
+
+def test_google_drive_file_browser_refreshes_expired_access_token(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_drive_env(monkeypatch)
+    provider = ExpiredOnceDriveProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.drive_sync.refresh_google_workspace_access_token",
+        lambda session, **kwargs: {
+            **kwargs["token_payload"],
+            "access_token": "drive-refreshed-access",
+        },
+    )
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="drive-browser-refresh",
+            email="owner@drive-browser-refresh.example",
+        )
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_drive(client, token, provider)
+
+        response = client.get("/api/drive/google/files?limit=5", headers=_auth(token))
+
+        assert response.status_code == 200, response.text
+        assert response.json()["files"][0]["name"] == "Refreshed Drive file.pdf"
+        assert provider.list_calls == 2
+        with get_session_factory()() as session:
+            connection = session.get(UserDriveConnection, connection_id)
+            assert connection is not None
+            assert connection.status == DriveConnectionStatus.CONNECTED
+            payload = _decrypt_token_payload(connection.encrypted_token_ref)
+            assert payload["access_token"] == "drive-refreshed-access"
+            assert payload["refresh_token"] == "drive-refresh-credential"
+    finally:
+        set_google_drive_provider_for_tests(None)
+        get_settings.cache_clear()
+
+
+def test_google_drive_transient_sync_failure_does_not_disable_connection(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_drive_env(monkeypatch)
+    provider = StubDriveProvider()
+    provider.list_files = lambda **kwargs: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        GoogleDriveProviderError("provider unavailable", status_code=503)
+    )
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="drive-refresh-transient",
+            email="owner@drive-transient.example",
+        )
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_drive(client, token, provider)
+        response = client.post(
+            "/api/drive/google/candidates/sync",
+            headers=_auth(token),
+            json={"limit": 5},
+        )
+        assert response.status_code == 502
+        assert "try again" in response.json()["detail"].lower()
+        with get_session_factory()() as session:
+            connection = session.get(UserDriveConnection, connection_id)
+            assert connection is not None
+            assert connection.status == DriveConnectionStatus.CONNECTED
+    finally:
+        set_google_drive_provider_for_tests(None)
+        get_settings.cache_clear()
+
+
+def test_google_drive_invalid_refresh_requires_reauthorization(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_drive_env(monkeypatch)
+    provider = ExpiredOnceDriveProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.drive_sync.refresh_google_workspace_access_token",
+        lambda session, **kwargs: (_ for _ in ()).throw(
+            GoogleWorkspaceTokenRefreshError(
+                "Google authorization expired or was revoked. Reconnect this account.",
+                reauthorization_required=True,
+            )
+        ),
+    )
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="drive-refresh-revoked",
+            email="owner@drive-revoked.example",
+        )
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_drive(client, token, provider)
+        response = client.post(
+            "/api/drive/google/candidates/sync",
+            headers=_auth(token),
+            json={"limit": 5},
+        )
+        assert response.status_code == 409
+        assert "Reconnect this account" in response.json()["detail"]
+        with get_session_factory()() as session:
+            connection = session.get(UserDriveConnection, connection_id)
+            assert connection is not None
+            assert connection.status == DriveConnectionStatus.ERROR
+    finally:
+        set_google_drive_provider_for_tests(None)
+        get_settings.cache_clear()
+
+
 def test_google_drive_connections_are_cross_tenant_scoped(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -259,3 +439,32 @@ def test_google_drive_provider_retries_transient_file_listing(
 
     assert [file.name for file in files] == ["Retried.pdf"]
     assert calls == 2
+
+
+@pytest.mark.parametrize("operation", ["list", "fetch"])
+def test_google_drive_provider_preserves_unauthorized_status_for_safe_reads(
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    def unauthorized_request(method: str, url: str, **kwargs: object) -> httpx.Response:
+        return httpx.Response(401, request=httpx.Request(method, url), json={"error": "expired"})
+
+    monkeypatch.setattr(httpx, "request", unauthorized_request)
+    provider = GoogleDriveProvider(
+        GoogleDriveRuntimeConfig(
+            client_id="drive-client",
+            client_secret="drive-secret",
+            redirect_uri="https://api.caseops.ai/api/drive/google/callback",
+        )
+    )
+
+    with pytest.raises(GoogleDriveProviderError) as raised:
+        if operation == "list":
+            provider.list_files(token_payload={"access_token": "expired"}, limit=5)
+        else:
+            provider.fetch_file(
+                token_payload={"access_token": "expired"},
+                file_id="drive-file-id",
+            )
+
+    assert raised.value.status_code == 401

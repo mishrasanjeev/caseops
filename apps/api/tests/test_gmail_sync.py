@@ -23,6 +23,7 @@ from caseops_api.db.models import (
     Communication,
     MailboxAttachmentCandidate,
     MailboxAttachmentCandidateStatus,
+    MailboxConnectionStatus,
     MailboxImportStatus,
     MailboxMessageImport,
     MailboxWebhookEvent,
@@ -31,14 +32,17 @@ from caseops_api.db.models import (
     UserMailboxConnection,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.calendar_sync import _decrypt_token_payload
 from caseops_api.services.gmail_sync import (
     GMAIL_SCOPES,
     GmailAttachmentMetadata,
     GmailMessageMetadata,
+    GmailProviderError,
     GmailRuntimeConfig,
     GoogleGmailProvider,
     set_gmail_provider_for_tests,
 )
+from caseops_api.services.google_workspace import GoogleWorkspaceTokenRefreshError
 from tests.test_legalworkspace_calendar_sync import (
     _auth,
     _bootstrap_company,
@@ -165,6 +169,46 @@ class MissingGmailProvider:
         raise AssertionError("unavailable provider should not fetch attachments")
 
 
+class ExpiredOnceGmailProvider(StubGmailProvider):
+    def list_recent_messages(
+        self,
+        *,
+        token_payload: dict[str, object],
+        limit: int,
+    ) -> list[GmailMessageMetadata]:
+        self.recent_calls.append(limit)
+        if len(self.recent_calls) == 1:
+            raise GmailProviderError("expired access token", status_code=401)
+        assert token_payload["access_token"] == "gmail-refreshed-access"
+        return self.messages[:limit]
+
+
+class ExpiredOnceGmailAttachmentProvider(StubGmailProvider):
+    def fetch_attachment(
+        self,
+        *,
+        token_payload: dict[str, object],
+        message_id: str,
+        attachment_id: str,
+    ) -> bytes:
+        self.fetch_calls.append({"message_id": message_id, "attachment_id": attachment_id})
+        if len(self.fetch_calls) == 1:
+            raise GmailProviderError("expired access token", status_code=401)
+        assert token_payload["access_token"] == "gmail-refreshed-access"
+        return b"safe attachment bytes after refresh"
+
+
+class AlwaysUnauthorizedGmailProvider(StubGmailProvider):
+    def list_recent_messages(
+        self,
+        *,
+        token_payload: dict[str, object],
+        limit: int,
+    ) -> list[GmailMessageMetadata]:
+        self.recent_calls.append(limit)
+        raise GmailProviderError("authorization rejected", status_code=401)
+
+
 def _message(
     *,
     message_id: str,
@@ -250,7 +294,6 @@ def test_gmail_status_and_start_fail_closed_without_config(
         assert "gmail-access-credential" not in start.text
     finally:
         set_gmail_provider_for_tests(None)
-
 
 def test_gmail_import_is_metadata_only_review_first_and_token_safe(
     client: TestClient,
@@ -348,6 +391,262 @@ def test_gmail_import_is_metadata_only_review_first_and_token_safe(
             assert candidate.status == MailboxAttachmentCandidateStatus.REJECTED
             assert candidate.encrypted_provider_attachment_ref is not None
             assert "provider-attachment-secret" not in (candidate.encrypted_provider_attachment_ref)
+    finally:
+        set_gmail_provider_for_tests(None)
+
+
+def test_gmail_import_refreshes_expired_access_token_and_persists_it(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = ExpiredOnceGmailProvider(messages=[_message(
+        message_id="gmail-refresh-message",
+        subject="Refresh-token regression",
+        snippet="Metadata only.",
+    )])
+    set_gmail_provider_for_tests(provider)
+    monkeypatch.setattr(
+        "caseops_api.services.gmail_sync.refresh_google_workspace_access_token",
+        lambda session, **kwargs: {
+            **kwargs["token_payload"],
+            "access_token": "gmail-refreshed-access",
+        },
+    )
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="gmail-refresh-recovery",
+            email="owner@gmail-refresh.example",
+        )
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_gmail(client, token, provider)
+
+        response = client.post(
+            "/api/mailbox/gmail/import",
+            headers=_auth(token),
+            json={"limit": 10},
+        )
+        assert response.status_code == 200, response.text
+        assert provider.recent_calls == [10, 10]
+        assert response.json()["summary"]["unmatched"] == 1
+
+        with get_session_factory()() as session:
+            connection = session.get(UserMailboxConnection, connection_id)
+            assert connection is not None
+            assert connection.status == MailboxConnectionStatus.CONNECTED
+            refreshed = _decrypt_token_payload(connection.encrypted_token_ref)
+            assert refreshed["access_token"] == "gmail-refreshed-access"
+            assert refreshed["refresh_token"] == "gmail-refresh-credential"
+            assert "gmail-refreshed-access" not in connection.encrypted_token_ref
+    finally:
+        set_gmail_provider_for_tests(None)
+
+
+def test_gmail_attachment_review_refreshes_before_safe_read_retry(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = ExpiredOnceGmailAttachmentProvider(
+        messages=[
+            _message(
+                message_id="gmail-attachment-refresh",
+                subject="GMAIL-ATTACHMENT-REFRESH evidence",
+                snippet="Please review the attached evidence for GMAIL-ATTACHMENT-REFRESH.",
+                attachments=(
+                    GmailAttachmentMetadata(
+                        attachment_id="expired-then-refreshed-attachment",
+                        filename="evidence.txt",
+                        content_type="text/plain",
+                        size_bytes=32,
+                    ),
+                ),
+            )
+        ]
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.gmail_sync.refresh_google_workspace_access_token",
+        lambda session, **kwargs: {
+            **kwargs["token_payload"],
+            "access_token": "gmail-refreshed-access",
+        },
+    )
+    set_gmail_provider_for_tests(provider)
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="gmail-attachment-refresh",
+            email="owner@gmail-attachment-refresh.example",
+        )
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_gmail(client, token, provider)
+        matter = _create_matter(client, token, "GMAIL-ATTACHMENT-REFRESH")
+        imported = client.post(
+            "/api/mailbox/gmail/import",
+            headers=_auth(token),
+            json={"limit": 10},
+        )
+        assert imported.status_code == 200, imported.text
+        candidates = client.get("/api/mailbox/attachment-candidates", headers=_auth(token))
+        assert candidates.status_code == 200, candidates.text
+        candidate_id = candidates.json()["candidates"][0]["id"]
+
+        approved = client.patch(
+            f"/api/mailbox/attachment-candidates/{candidate_id}",
+            headers=_auth(token),
+            json={"action": "approve_import"},
+        )
+
+        assert approved.status_code == 200, approved.text
+        assert approved.json()["candidate"]["status"] == "approved_imported"
+        assert approved.json()["imported_attachment_id"]
+        assert len(provider.fetch_calls) == 2
+        with get_session_factory()() as session:
+            connection = session.get(UserMailboxConnection, connection_id)
+            assert connection is not None
+            assert connection.status == MailboxConnectionStatus.CONNECTED
+            refreshed = _decrypt_token_payload(connection.encrypted_token_ref)
+            assert refreshed["access_token"] == "gmail-refreshed-access"
+            assert refreshed["refresh_token"] == "gmail-refresh-credential"
+            candidate = session.get(MailboxAttachmentCandidate, candidate_id)
+            assert candidate is not None
+            assert candidate.imported_attachment_id == approved.json()["imported_attachment_id"]
+            assert str(matter["id"]) == candidate.matter_id
+    finally:
+        set_gmail_provider_for_tests(None)
+
+
+def test_gmail_repeated_unauthorized_response_stops_after_one_refresh(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = AlwaysUnauthorizedGmailProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.gmail_sync.refresh_google_workspace_access_token",
+        lambda session, **kwargs: {
+            **kwargs["token_payload"],
+            "access_token": "gmail-refreshed-access",
+        },
+    )
+    set_gmail_provider_for_tests(provider)
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="gmail-repeated-unauthorized",
+            email="owner@gmail-repeated-unauthorized.example",
+        )
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_gmail(client, token, provider)
+
+        response = client.post(
+            "/api/mailbox/gmail/import",
+            headers=_auth(token),
+            json={"limit": 10},
+        )
+
+        assert response.status_code == 409
+        assert "reconnect" in response.json()["detail"].lower()
+        assert provider.recent_calls == [10, 10]
+        with get_session_factory()() as session:
+            connection = session.get(UserMailboxConnection, connection_id)
+            assert connection is not None
+            assert connection.status == MailboxConnectionStatus.ERROR
+    finally:
+        set_gmail_provider_for_tests(None)
+
+
+def test_gmail_revoked_refresh_is_actionable_and_transient_failure_keeps_connection(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = ExpiredOnceGmailProvider()
+    set_gmail_provider_for_tests(provider)
+    monkeypatch.setattr(
+        "caseops_api.services.gmail_sync.refresh_google_workspace_access_token",
+        lambda session, **kwargs: (_ for _ in ()).throw(
+            GoogleWorkspaceTokenRefreshError(
+                "Google authorization expired or was revoked. Reconnect this account.",
+                reauthorization_required=True,
+            )
+        ),
+    )
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="gmail-refresh-revoked",
+            email="owner@gmail-revoked.example",
+        )
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_gmail(client, token, provider)
+        response = client.post(
+            "/api/mailbox/gmail/import",
+            headers=_auth(token),
+            json={"limit": 10},
+        )
+        assert response.status_code == 409
+        assert "Reconnect this account" in response.json()["detail"]
+        with get_session_factory()() as session:
+            connection = session.get(UserMailboxConnection, connection_id)
+            assert connection is not None
+            assert connection.status == MailboxConnectionStatus.ERROR
+    finally:
+        set_gmail_provider_for_tests(None)
+
+    transient = StubGmailProvider()
+    transient.list_recent_messages = lambda **kwargs: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        GmailProviderError("upstream unavailable", status_code=503)
+    )
+    set_gmail_provider_for_tests(transient)
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="gmail-refresh-transient",
+            email="owner@gmail-transient.example",
+        )
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_gmail(client, token, transient)
+        response = client.post(
+            "/api/mailbox/gmail/import",
+            headers=_auth(token),
+            json={"limit": 10},
+        )
+        assert response.status_code == 502
+        assert "try again" in response.json()["detail"].lower()
+        with get_session_factory()() as session:
+            connection = session.get(UserMailboxConnection, connection_id)
+            assert connection is not None
+            assert connection.status == MailboxConnectionStatus.CONNECTED
+    finally:
+        set_gmail_provider_for_tests(None)
+
+    expired = ExpiredOnceGmailProvider()
+    set_gmail_provider_for_tests(expired)
+    monkeypatch.setattr(
+        "caseops_api.services.gmail_sync.refresh_google_workspace_access_token",
+        lambda session, **kwargs: (_ for _ in ()).throw(
+            GoogleWorkspaceTokenRefreshError(
+                "Google token refresh is temporarily unavailable. Try again shortly."
+            )
+        ),
+    )
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="gmail-refresh-provider-outage",
+            email="owner@gmail-refresh-outage.example",
+        )
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_gmail(client, token, expired)
+        response = client.post(
+            "/api/mailbox/gmail/import",
+            headers=_auth(token),
+            json={"limit": 10},
+        )
+        assert response.status_code == 503
+        assert "temporarily unavailable" in response.json()["detail"].lower()
+        with get_session_factory()() as session:
+            connection = session.get(UserMailboxConnection, connection_id)
+            assert connection is not None
+            assert connection.status == MailboxConnectionStatus.CONNECTED
     finally:
         set_gmail_provider_for_tests(None)
 
@@ -617,3 +916,35 @@ def test_google_gmail_provider_retries_transient_message_listing(
 
     assert messages == []
     assert calls == 2
+
+
+@pytest.mark.parametrize("operation", ["list", "attachment"])
+def test_google_gmail_provider_preserves_unauthorized_status_for_safe_reads(
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    def unauthorized_request(method: str, url: str, **kwargs: object) -> httpx.Response:
+        return httpx.Response(401, request=httpx.Request(method, url), json={"error": "expired"})
+
+    monkeypatch.setattr(httpx, "request", unauthorized_request)
+    provider = GoogleGmailProvider(
+        GmailRuntimeConfig(
+            client_id="gmail-client",
+            client_secret="gmail-secret",
+            redirect_uri="https://api.caseops.ai/api/mailbox/gmail/callback",
+            pubsub_topic=None,
+            webhook_verification_token=None,
+        )
+    )
+
+    with pytest.raises(GmailProviderError) as raised:
+        if operation == "list":
+            provider.list_recent_messages(token_payload={"access_token": "expired"}, limit=5)
+        else:
+            provider.fetch_attachment(
+                token_payload={"access_token": "expired"},
+                message_id="message-id",
+                attachment_id="attachment-id",
+            )
+
+    assert raised.value.status_code == 401

@@ -119,6 +119,98 @@ class GoogleWorkspaceOAuthConfig:
         )
 
 
+class GoogleWorkspaceTokenRefreshError(RuntimeError):
+    def __init__(self, message: str, *, reauthorization_required: bool = False) -> None:
+        super().__init__(message)
+        self.reauthorization_required = reauthorization_required
+
+
+def refresh_google_workspace_access_token(
+    session: Session,
+    *,
+    context: SessionContext,
+    connector: GoogleWorkspaceConnector,
+    token_payload: dict[str, object],
+) -> dict[str, object]:
+    """Exchange a stored Google refresh token without exposing credentials."""
+    config = google_workspace_oauth_config(
+        session,
+        context=context,
+        connector=connector,
+    )
+    refresh_token = str(token_payload.get("refresh_token") or "")
+    if not config.configured:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google Workspace OAuth configuration is incomplete."
+        )
+    if not refresh_token:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google authorization must be renewed.", reauthorization_required=True
+        )
+
+    try:
+        import httpx
+    except ImportError as exc:  # pragma: no cover - dependency is present in app envs
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google token refresh is unavailable in this service."
+        ) from exc
+    try:
+        response = httpx.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": config.client_id,
+                "client_secret": config.client_secret,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            },
+            timeout=15,
+        )
+    except httpx.HTTPError as exc:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google token refresh is temporarily unavailable. Try again shortly."
+        ) from exc
+
+    if response.status_code in {400, 401}:
+        try:
+            error_code = str(response.json().get("error") or "")
+        except (ValueError, AttributeError):
+            error_code = ""
+        if error_code == "invalid_grant":
+            raise GoogleWorkspaceTokenRefreshError(
+                "Google authorization expired or was revoked. Reconnect this account.",
+                reauthorization_required=True,
+            )
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google rejected token refresh. Check the tenant's Google Workspace setup."
+        )
+    if response.status_code == 429 or response.status_code >= 500:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google token refresh is temporarily unavailable. Try again shortly."
+        )
+    if response.is_error:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google token refresh could not be completed. "
+            "Check the tenant's Google Workspace setup."
+        )
+
+    try:
+        returned = response.json()
+    except ValueError as exc:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google returned an invalid token refresh response."
+        ) from exc
+    access_token = returned.get("access_token") if isinstance(returned, dict) else None
+    if not isinstance(access_token, str) or not access_token:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google did not return a refreshed access token."
+        )
+    refreshed = dict(token_payload)
+    refreshed.update(returned)
+    if not returned.get("refresh_token"):
+        refreshed["refresh_token"] = refresh_token
+    return refreshed
+
+
 def _fernet() -> Fernet:
     digest = hashlib.sha256(get_settings().auth_secret.encode("utf-8")).digest()
     return Fernet(base64.urlsafe_b64encode(digest))

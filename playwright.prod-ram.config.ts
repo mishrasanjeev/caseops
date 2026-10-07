@@ -50,6 +50,7 @@ export default defineConfig({
     /ram-2026-09-07-statute-source-data\.spec\.ts$/,
     PATENT_PROD_SPECS,
     SAVED_MANIFEST_PROD_SPEC,
+    /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/,
   ],
   timeout: 120_000,
   expect: { timeout: 10_000 },
@@ -90,7 +91,7 @@ export default defineConfig({
     },
     {
       name: "tester-prod-chromium",
-      testMatch: [TESTER_AUTH_PROD_SPECS, SAVED_MANIFEST_PROD_SPEC, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/, /ram-2026-09-21-bugfixes\.spec\.ts$/, /ram-2026-09-24-bugs\.spec\.ts$/, /ram-2026-09-26-bugs\.spec\.ts$/],
+      testMatch: [TESTER_AUTH_PROD_SPECS, SAVED_MANIFEST_PROD_SPEC, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/, /ram-2026-09-21-bugfixes\.spec\.ts$/, /ram-2026-09-24-bugs\.spec\.ts$/, /ram-2026-09-26-bugs\.spec\.ts$/, /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/],
       use: {
         ...devices["Desktop Chrome"],
         storageState: { cookies: [], origins: [] },

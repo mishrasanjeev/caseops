@@ -15,9 +15,11 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
+  fetchGmailMailboxStatus,
   fetchMailboxImports,
   importRecentGmailMessages,
   reviewMailboxImport,
+  startGmailMailboxConnection,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import type { MailboxMessageImportRecord } from "@/lib/api/schemas";
@@ -130,6 +132,27 @@ export default function MailboxPage() {
         limit: 75,
       }),
   });
+  const connectionQuery = useQuery({
+    queryKey: ["mailbox", "gmail", "status"],
+    queryFn: fetchGmailMailboxStatus,
+  });
+  const connected = connectionQuery.data?.connections.some(
+    (connection) => connection.status === "connected",
+  ) ?? false;
+  const needsReconnect = connectionQuery.data?.connections.some(
+    (connection) => connection.status === "error",
+  ) ?? false;
+  const connectMutation = useMutation({
+    mutationFn: startGmailMailboxConnection,
+    onSuccess: (result) => {
+      if (result.auth_url) {
+        window.location.assign(result.auth_url);
+        return;
+      }
+      toast.error(result.unavailable_reason ?? "Gmail connection is unavailable.");
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not connect Gmail.")),
+  });
   const rows = query.data?.imports ?? [];
   const selectedRows = useMemo(
     () => rows.filter((row) => selected.has(row.id)),
@@ -140,8 +163,12 @@ export default function MailboxPage() {
     onSuccess: () => {
       toast.success("Gmail metadata synced");
       queryClient.invalidateQueries({ queryKey: ["mailbox-imports"] });
+      queryClient.invalidateQueries({ queryKey: ["mailbox", "gmail", "status"] });
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not sync Gmail metadata.")),
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: ["mailbox", "gmail", "status"] });
+      toast.error(apiErrorMessage(error, "Could not sync Gmail metadata."));
+    },
   });
   const reviewMutation = useMutation({
     mutationFn: (input: {
@@ -184,7 +211,15 @@ export default function MailboxPage() {
             </Button>
             <Button
               type="button"
-              disabled={syncMutation.isPending}
+              variant="outline"
+              disabled={connectMutation.isPending || connectionQuery.isPending}
+              onClick={() => connectMutation.mutate()}
+            >
+              {connected || needsReconnect ? "Reconnect Gmail" : "Connect Gmail"}
+            </Button>
+            <Button
+              type="button"
+              disabled={syncMutation.isPending || connectionQuery.isPending || !connected}
               onClick={() => syncMutation.mutate()}
             >
               {syncMutation.isPending ? (
@@ -197,6 +232,12 @@ export default function MailboxPage() {
           </div>
         }
       />
+
+      {needsReconnect ? (
+        <p role="status" className="text-sm text-amber-800">
+          Gmail authorization needs to be reconnected. Existing mailbox items are retained.
+        </p>
+      ) : null}
 
       <Card>
         <CardContent className="grid gap-3 md:grid-cols-3">

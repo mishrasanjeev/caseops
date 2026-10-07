@@ -15,8 +15,10 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
+  fetchGoogleDriveStatus,
   fetchDriveCandidates,
   reviewDriveCandidate,
+  startGoogleDriveConnection,
   syncGoogleDriveCandidates,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
@@ -114,14 +116,39 @@ export default function DrivePage() {
     queryKey: ["drive-candidates", status],
     queryFn: () => fetchDriveCandidates({ status: status || undefined, limit: 75 }),
   });
+  const connectionQuery = useQuery({
+    queryKey: ["drive", "google", "status"],
+    queryFn: fetchGoogleDriveStatus,
+  });
+  const connected = connectionQuery.data?.connections.some(
+    (connection) => connection.status === "connected",
+  ) ?? false;
+  const needsReconnect = connectionQuery.data?.connections.some(
+    (connection) => connection.status === "error",
+  ) ?? false;
+  const connectMutation = useMutation({
+    mutationFn: startGoogleDriveConnection,
+    onSuccess: (result) => {
+      if (result.auth_url) {
+        window.location.assign(result.auth_url);
+        return;
+      }
+      toast.error(result.unavailable_reason ?? "Google Drive connection is unavailable.");
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not connect Google Drive.")),
+  });
   const rows = query.data?.candidates ?? [];
   const syncMutation = useMutation({
     mutationFn: () => syncGoogleDriveCandidates({ limit: 25 }),
     onSuccess: () => {
       toast.success("Drive metadata synced");
       queryClient.invalidateQueries({ queryKey: ["drive-candidates"] });
+      queryClient.invalidateQueries({ queryKey: ["drive", "google", "status"] });
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not sync Drive metadata.")),
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: ["drive", "google", "status"] });
+      toast.error(apiErrorMessage(error, "Could not sync Drive metadata."));
+    },
   });
   const reviewMutation = useMutation({
     mutationFn: (input: {
@@ -144,20 +171,36 @@ export default function DrivePage() {
         title="Document review queue"
         description="Google Drive and OneDrive/SharePoint candidates."
         actions={
-          <Button
-            type="button"
-            disabled={syncMutation.isPending}
-            onClick={() => syncMutation.mutate()}
-          >
-            {syncMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <RefreshCw className="h-4 w-4" aria-hidden />
-            )}
-            Sync Google Drive
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={connectMutation.isPending || connectionQuery.isPending}
+              onClick={() => connectMutation.mutate()}
+            >
+              {connected || needsReconnect ? "Reconnect Google Drive" : "Connect Google Drive"}
+            </Button>
+            <Button
+              type="button"
+              disabled={syncMutation.isPending || connectionQuery.isPending || !connected}
+              onClick={() => syncMutation.mutate()}
+            >
+              {syncMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <RefreshCw className="h-4 w-4" aria-hidden />
+              )}
+              Sync Google Drive
+            </Button>
+          </div>
         }
       />
+
+      {needsReconnect ? (
+        <p role="status" className="text-sm text-amber-800">
+          Google Drive authorization needs to be reconnected. Existing review items are retained.
+        </p>
+      ) : null}
 
       <Card>
         <CardContent className="grid gap-3 md:grid-cols-2">

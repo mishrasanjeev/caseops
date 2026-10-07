@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
@@ -72,7 +73,11 @@ from caseops_api.services.calendar_sync import (
     _encrypt_token_payload,
 )
 from caseops_api.services.durable_workflows import redact_identifier
-from caseops_api.services.google_workspace import google_workspace_oauth_config
+from caseops_api.services.google_workspace import (
+    GoogleWorkspaceTokenRefreshError,
+    google_workspace_oauth_config,
+    refresh_google_workspace_access_token,
+)
 from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import require_operational_matter
@@ -86,6 +91,10 @@ _MAX_SNIPPET_CHARS = 1000
 
 class GmailProviderError(RuntimeError):
     """Provider failures safe to persist/display as redacted mailbox errors."""
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,7 +328,14 @@ class GoogleGmailProvider:
                 )
                 messages.append(_parse_gmail_message_metadata(fetched.json()))
         except httpx.HTTPError as exc:
-            raise GmailProviderError("Gmail message metadata import failed.") from exc
+            status_code = (
+                exc.response.status_code
+                if isinstance(exc, httpx.HTTPStatusError)
+                else None
+            )
+            raise GmailProviderError(
+                "Gmail message metadata import failed.", status_code=status_code
+            ) from exc
         return messages
 
     def start_watch(self, *, token_payload: dict[str, Any]) -> dict[str, Any]:
@@ -372,7 +388,14 @@ class GoogleGmailProvider:
                 timeout=15,
             )
         except httpx.HTTPError as exc:
-            raise GmailProviderError("Gmail attachment fetch failed.") from exc
+            status_code = (
+                exc.response.status_code
+                if isinstance(exc, httpx.HTTPStatusError)
+                else None
+            )
+            raise GmailProviderError(
+                "Gmail attachment fetch failed.", status_code=status_code
+            ) from exc
         encoded = str(response.json().get("data") or "")
         return base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
 
@@ -393,6 +416,38 @@ def _gmail_provider(
     return _gmail_provider_override or GoogleGmailProvider(
         _gmail_runtime_config(session, context=context)
     )
+
+
+def _gmail_call_with_refresh(
+    session: Session,
+    *,
+    context: SessionContext,
+    connection: UserMailboxConnection,
+    operation: Callable[[GmailProvider, dict[str, Any]], Any],
+) -> tuple[dict[str, Any], Any]:
+    token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+    provider = _gmail_provider(session, context=context)
+    try:
+        return token_payload, operation(provider, token_payload)
+    except GmailProviderError as exc:
+        if exc.status_code != 401:
+            raise
+    token_payload = refresh_google_workspace_access_token(
+        session,
+        context=context,
+        connector="gmail",
+        token_payload=token_payload,
+    )
+    connection.encrypted_token_ref = _encrypt_token_payload(token_payload)
+    try:
+        return token_payload, operation(provider, token_payload)
+    except GmailProviderError as exc:
+        if exc.status_code == 401:
+            raise GoogleWorkspaceTokenRefreshError(
+                "Gmail authorization could not be renewed. Reconnect this account.",
+                reauthorization_required=True,
+            ) from exc
+        raise
 
 
 def _gmail_runtime_config(
@@ -720,12 +775,34 @@ def import_recent_gmail_messages(
     payload: MailboxImportRequest,
 ) -> MailboxImportResponse:
     connection = _connected_gmail_connection(session, context=context)
-    token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-    provider = _gmail_provider(session, context=context)
-    messages = provider.list_recent_messages(
-        token_payload=token_payload,
-        limit=payload.limit,
-    )
+    try:
+        _token_payload, messages = _gmail_call_with_refresh(
+            session,
+            context=context,
+            connection=connection,
+            operation=lambda provider, token: provider.list_recent_messages(
+                token_payload=token,
+                limit=payload.limit,
+            ),
+        )
+    except GoogleWorkspaceTokenRefreshError as exc:
+        if exc.reauthorization_required:
+            connection.status = MailboxConnectionStatus.ERROR
+        session.add(connection)
+        session.commit()
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+                if exc.reauthorization_required
+                else status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=str(exc),
+        ) from exc
+    except GmailProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Gmail sync could not complete. Check the connection and try again.",
+        ) from exc
     imports = _upsert_message_imports(
         session,
         context=context,
@@ -1397,12 +1474,69 @@ def review_attachment_candidate(
     if not provider_attachment_id:
         raise HTTPException(status_code=409, detail="Provider attachment reference is missing.")
     try:
-        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        content = _gmail_provider(session, context=context).fetch_attachment(
-            token_payload=token_payload,
-            message_id=candidate.message_import.provider_message_id,
-            attachment_id=provider_attachment_id,
+        _token_payload, content = _gmail_call_with_refresh(
+            session,
+            context=context,
+            connection=connection,
+            operation=lambda provider, token: provider.fetch_attachment(
+                token_payload=token,
+                message_id=candidate.message_import.provider_message_id,
+                attachment_id=provider_attachment_id,
+            ),
         )
+    except GoogleWorkspaceTokenRefreshError as exc:
+        if exc.reauthorization_required:
+            connection.status = MailboxConnectionStatus.ERROR
+        candidate.last_error_redacted = str(exc)
+        session.add_all([connection, candidate])
+        record_from_context(
+            session,
+            context,
+            action="mailbox.gmail_attachment.import_failed",
+            target_type="mailbox_attachment_candidate",
+            target_id=candidate.id,
+            matter_id=matter.id,
+            result="failed",
+            metadata={
+                "provider": MailboxProvider.GMAIL,
+                "reason": (
+                    "reauthorization_required"
+                    if exc.reauthorization_required
+                    else "token_refresh_unavailable"
+                ),
+            },
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+                if exc.reauthorization_required
+                else status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=str(exc),
+        ) from exc
+    except GmailProviderError as exc:
+        candidate.last_error_redacted = "Gmail attachment is temporarily unavailable. Try again."
+        session.add(candidate)
+        record_from_context(
+            session,
+            context,
+            action="mailbox.gmail_attachment.import_failed",
+            target_type="mailbox_attachment_candidate",
+            target_id=candidate.id,
+            matter_id=matter.id,
+            result="failed",
+            metadata={
+                "provider": MailboxProvider.GMAIL,
+                "reason": "provider_unavailable",
+                "status_code": exc.status_code,
+            },
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Gmail attachment import could not complete. Try again shortly.",
+        ) from exc
     except Exception as exc:
         candidate.last_error_redacted = _safe_error(exc)
         session.add(candidate)
