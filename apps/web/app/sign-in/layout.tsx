@@ -6,6 +6,7 @@ import { AppProviders } from "@/lib/providers";
 export const metadata: Metadata = {
   title: { absolute: "Sign in — CaseOps" },
   description: "Sign in to your CaseOps workspace.",
+  alternates: { canonical: "/sign-in" },
   robots: { index: false, follow: false },
 };
 

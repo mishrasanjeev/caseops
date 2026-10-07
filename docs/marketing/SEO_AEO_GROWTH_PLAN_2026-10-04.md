@@ -1,6 +1,7 @@
 # CaseOps Organic Discovery Plan
 
-Date: 2026-10-04 IST. Owner: CaseOps. Scope: public `caseops.ai` pages only.
+Date: 2026-10-04 IST. Updated: 2026-10-07 IST. Owner: CaseOps.
+Scope: public `caseops.ai` pages only.
 
 ## Outcome and evidence bar
 
@@ -28,9 +29,11 @@ observation, not the post-release result.
 `GET /sites` on the Search Console API returned 403 with the workstation's
 `gcloud` token. This token is not the owner-authorized browser session used
 below. The public HTML and Cloud Run web configuration did not show a GA4
-measurement ID. Search Console is still processing the newly verified property,
-so impressions, clicks, rankings, Core Web Vitals field data, and demo
-attribution have **no verified baseline here**.
+measurement ID. This was the initial acquisition baseline. As of 2026-10-07,
+Search Console has an initial Oct 3-4 Web sample: 10 impressions, zero clicks,
+0% CTR and average position 5.5. It is too small to establish qualified
+non-brand demand or improvement. External links are still processing, Core
+Web Vitals has insufficient data, and demo attribution remains unverified.
 Do not infer them from `site:` queries or from synthetic Lighthouse scores.
 Other products use the CaseOps name on separate domains. Branded copy and
 profiles must consistently identify `caseops.ai` and Orchestrum Technologies
@@ -46,7 +49,7 @@ Search Console queries and customer interviews are available.
 | CaseOps and brand variants | `/` | Brand/navigation | Live |
 | Law firm software India; legal practice management software India | `/law-firms` | Buyer/comparison | Live metadata updated |
 | Legal matter management India; case management checklist | `/resources/legal-matter-management-india` | Evaluation/education | Live and indexed |
-| Solo lawyer practice management India | `/solo-lawyers` | Persona/buyer | Live and indexed; heading/copy correction in candidate |
+| Solo lawyer practice management India | `/solo-lawyers` | Persona/buyer | Live and indexed; initial heading/copy correction verified; broader #515 audit open |
 | Legal operations software India; in-house legal matter management | `/general-counsels` | Persona/buyer | Live metadata updated |
 | CaseOps pricing; legal software pricing India | `/pricing` | Transactional | Live metadata updated |
 | Hearing tracking software India; CNR tracking | Future source-aware guide | Workflow | Hold until evidence-rich page is ready |
@@ -122,15 +125,18 @@ rendered one per slide. The candidate makes the cover heading the sole H1 and
 later slides H2s, removes low-contrast decorative slide numbers, and widens
 Playwright link, metadata and accessibility checks to all seven canonical
 pages. It also removes unsupported quantified time savings and absolute
-AI/provider claims from the solo page. These changes are **not production
-claims** until the candidate is deployed and the same browser gate passes on
-its exact serving SHA.
+AI/provider claims from the solo page. These corrections are now live and
+verified by all 20 release-owned public-content tests on `82a6d932` on
+2026-10-07. They do not close the broader persona/pilot claims issue #515.
+The same audit found `/sign-in` indexed though blocked by robots.txt (#521):
+its noindex must be crawlable. The narrow correction has local proof only;
+do not call it deployed or deindexed until each separate gate is observed.
 
 ## Next 90 days
 
 | Window | Work | Exit criterion |
 | --- | --- | --- |
-| Days 1-14 | Monitor page indexing and canonical reports in the verified Search Console URL-prefix property; establish GA4 or consent-reviewed first-party analytics and demo conversion events. Consider a separate DNS-verified domain property only with DNS-owner access. | Baseline export with date, query/page, clicks, impressions, CTR, position, conversions, and consent decision. |
+| Days 1-14 | Monitor page indexing and canonical reports; implement privacy-reviewed server-side attribution and durable lead admission across every CTA (#513). Keep GA4 and browser telemetry disabled. Consider a domain property only with DNS-owner access. | Dated query/page baseline; minimized attribution fields, bounded retention, reviewed notice and durable admission before conversion claims. |
 | Days 15-30 | Interview 5-10 target buyers; publish a source-checked hearing-tracking guide only if provider coverage and caveats can be shown. | One original page with product evidence, official sources, internal links, and browser QA. |
 | Days 31-60 | Publish one legal-billing workflow guide and one review-first drafting guide. Refresh the existing persona pages using observed buyer questions. | Unique intent per page, no unsupported claims, indexing checked. |
 | Days 61-90 | Revise pages with impressions but weak CTR, improve pages with clicks but weak demo conversion, and produce an original downloadable checklist or anonymized workflow study if consent permits. | A before/after report using the same Search Console and conversion definitions. |
@@ -177,8 +183,10 @@ and provider reality.
 
 - The owner-authorized Search Console browser session is connected; the
   workstation `gcloud` token remains insufficient for the Search Console API.
-  GA4 property/measurement ID and a privacy/consent decision are still missing.
-  Do not activate browser telemetry merely to fill a dashboard.
+  The owner chose privacy-first server-side attribution on 2026-10-05; a GA4
+  property is not a dependency. The reviewed notice, minimization, retention,
+  durable admission and dormant-GA4 removal remain implementation gaps in
+  #513. Do not activate browser telemetry merely to fill a dashboard.
 - Search Console has accepted the submitted sitemap and discovered seven pages;
   the new guide is indexed. Recrawling the refreshed metadata remains
   asynchronous; indexing and crawl requests do not guarantee ranking.

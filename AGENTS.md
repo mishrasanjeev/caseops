@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A public authentication entry page that must disappear from search needs a
+  crawler-readable noindex, not a robots.txt block that hides that directive.
+  Keep authenticated app/API exclusions and real access control unchanged;
+  regress the rendered metadata, crawl policy and sitemap together. A local
+  correction or recrawl request is not proof of Google deindexing the URL.
+
 - A repeated report must be tied to the exact serving API and web revision,
   not the newest dirty source tree. Inspect loaded selector options and the
   reported persisted records before choosing between missing deployment,
