@@ -36,9 +36,11 @@ from caseops_api.db.models import (
     MatterHearingStatus,
     MatterTask,
     MatterTaskStatus,
+    TenantGoogleWorkspaceConfiguration,
     TenantOutlookConfiguration,
     UserCalendarConnection,
 )
+from caseops_api.db.session import serialize_sqlite_writer
 from caseops_api.schemas.calendar import (
     CalendarConnectionListResponse,
     CalendarConnectionRecord,
@@ -64,9 +66,10 @@ from caseops_api.schemas.calendar import (
 )
 from caseops_api.services.assignment_memberships import (
     lock_company_memberships_for_assignment,
+    lock_company_memberships_for_oauth,
     require_locked_membership_capability,
 )
-from caseops_api.services.audit import record_from_context
+from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.calendar_projection_safety import (
     CALENDAR_UPSERT_CLAIM_PREFIX,
     CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON,
@@ -77,8 +80,17 @@ from caseops_api.services.calendar_projection_safety import (
     materialize_expired_calendar_sync_upsert_claim,
 )
 from caseops_api.services.durable_workflows import redact_identifier
-from caseops_api.services.google_workspace import google_workspace_oauth_config
+from caseops_api.services.google_workspace import (
+    GOOGLE_WORKSPACE_CALENDAR_SCOPES,
+    google_workspace_oauth_config,
+)
 from caseops_api.services.http_retries import request_with_retries
+from caseops_api.services.idempotency import (
+    IdempotencyClaimOutcome,
+    claim_idempotency,
+    complete_idempotency,
+)
+from caseops_api.services.identity import get_session_context
 from caseops_api.services.matter_access import (
     assert_access,
     can_access,
@@ -98,7 +110,7 @@ from caseops_api.workflows.notification_intent_contracts import (
 )
 
 OUTLOOK_SCOPES = ["offline_access", "User.Read", "Calendars.ReadWrite"]
-GOOGLE_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+GOOGLE_CALENDAR_SCOPES = list(GOOGLE_WORKSPACE_CALENDAR_SCOPES)
 OUTLOOK_MACHINE_CONTROL_VERSION = "outlook-connector-controls/2026-08-30.1"
 _STATE_KINDS = {
     CalendarProvider.OUTLOOK: "outlook_calendar_oauth",
@@ -111,6 +123,7 @@ _CALENDAR_DELETE_CLAIM_PREFIX = "provider_delete_claim:"
 _CALENDAR_DRIFT_CLAIM_PREFIX = "provider_drift_claim:"
 _CALENDAR_OAUTH_CLAIM_KEY = "_caseops_calendar_oauth_claim"
 _CALENDAR_OAUTH_CLAIM_EXPIRES_KEY = "_caseops_calendar_oauth_claim_expires_at"
+_CALENDAR_OAUTH_REVOKED_AT_KEY = "_caseops_calendar_oauth_revoked_at"
 
 # These are the only coverage states that confer live projection authority.
 # Historical or terminal coverage rows still classify the source as IP-owned,
@@ -127,6 +140,60 @@ _IP_OPERATIONAL_COVERAGE_STATUSES = {
 
 class CalendarProviderError(RuntimeError):
     """Provider failures safe to persist/display as sync errors."""
+
+
+class CalendarOAuthError(CalendarProviderError):
+    def __init__(self, message: str, *, code: str, status_code: int) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status_code = status_code
+
+
+def _invalid_google_oauth_response() -> CalendarOAuthError:
+    return CalendarOAuthError(
+        "Google returned incomplete calendar credentials or account identity. "
+        "Start Connect Google Calendar again.",
+        code="calendar_oauth_invalid_response",
+        status_code=status.HTTP_502_BAD_GATEWAY,
+    )
+
+
+def _google_oauth_identity(userinfo: Any) -> tuple[str, str]:
+    if not isinstance(userinfo, dict):
+        raise _invalid_google_oauth_response()
+    subject, email = userinfo.get("sub"), userinfo.get("email")
+    if (
+        not isinstance(subject, str) or not subject.strip() or len(subject) > 255
+        or not isinstance(email, str) or not email.strip() or len(email) > 320
+        or "@" not in email or any(character.isspace() for character in email)
+    ):
+        raise _invalid_google_oauth_response()
+    return subject, email
+
+
+def _invalid_outlook_oauth_response() -> CalendarOAuthError:
+    return CalendarOAuthError(
+        "Microsoft returned incomplete calendar credentials or account identity. "
+        "Start Connect Outlook again.",
+        code="calendar_oauth_invalid_response",
+        status_code=status.HTTP_502_BAD_GATEWAY,
+    )
+
+
+def _outlook_oauth_identity(userinfo: Any) -> tuple[str, str | None]:
+    if not isinstance(userinfo, dict):
+        raise _invalid_outlook_oauth_response()
+    subject = userinfo.get("id")
+    email = userinfo.get("mail") or userinfo.get("userPrincipalName")
+    if (
+        not isinstance(subject, str) or not subject.strip() or len(subject) > 255
+        or (email is not None and (
+            not isinstance(email, str) or not email.strip() or len(email) > 320
+            or "@" not in email or any(character.isspace() for character in email)
+        ))
+    ):
+        raise _invalid_outlook_oauth_response()
+    return subject, email
 
 
 class CalendarProviderPreconditionError(CalendarProviderError):
@@ -409,9 +476,28 @@ class MicrosoftGraphOutlookProvider:
             )
             token_response.raise_for_status()
             token_payload = token_response.json()
-            access_token = str(token_payload.get("access_token") or "")
-            if not access_token:
-                raise CalendarProviderError("Microsoft Graph did not return an access token.")
+            if not isinstance(token_payload, dict):
+                raise _invalid_outlook_oauth_response()
+            access_token = token_payload.get("access_token")
+            if not isinstance(access_token, str) or not access_token.strip():
+                raise _invalid_outlook_oauth_response()
+            # Microsoft's token contract permits omission only: in that case
+            # the token has the original request's scopes. Never coerce a
+            # malformed supplied grant or replace an explicitly empty grant.
+            scope_text = token_payload.get("scope", " ".join(OUTLOOK_SCOPES))
+            if not isinstance(scope_text, str) or not scope_text.strip():
+                raise _invalid_outlook_oauth_response()
+            granted = {
+                scope.removeprefix("https://graph.microsoft.com/")
+                for scope in scope_text.split()
+            }
+            if not {"User.Read", "Calendars.ReadWrite"}.issubset(granted):
+                raise CalendarOAuthError(
+                    "Outlook calendar and account identity permissions are required. "
+                    "Start Connect Outlook again and grant those permissions.",
+                    code="calendar_oauth_reconnect_required",
+                    status_code=status.HTTP_409_CONFLICT,
+                )
             me_response = request_with_retries(
                 "GET",
                 "https://graph.microsoft.com/v1.0/me",
@@ -421,15 +507,15 @@ class MicrosoftGraphOutlookProvider:
             me = me_response.json()
         except httpx.HTTPError as exc:
             raise CalendarProviderError("Microsoft Graph OAuth exchange failed.") from exc
+        except ValueError as exc:
+            raise _invalid_outlook_oauth_response() from exc
 
-        scopes = str(token_payload.get("scope") or " ".join(OUTLOOK_SCOPES)).split()
+        subject, email = _outlook_oauth_identity(me)
         return {
             "token_payload": token_payload,
-            "provider_account_id": str(me.get("id") or ""),
-            "display_email": str(
-                me.get("mail") or me.get("userPrincipalName") or ""
-            ) or None,
-            "scopes": scopes,
+            "provider_account_id": subject,
+            "display_email": email,
+            "scopes": scope_text.split(),
         }
 
     def validate_connection(self, *, token_payload: dict[str, Any]) -> dict[str, Any]:
@@ -437,8 +523,8 @@ class MicrosoftGraphOutlookProvider:
             import httpx
         except ImportError as exc:  # pragma: no cover - dependency is present in app envs
             raise CalendarProviderError("Microsoft Graph HTTP client is unavailable.") from exc
-        access_token = str(token_payload.get("access_token") or "")
-        if not access_token:
+        access_token = token_payload.get("access_token")
+        if not isinstance(access_token, str) or not access_token.strip():
             raise CalendarProviderError("Stored Outlook token is unavailable.")
         try:
             me_response = request_with_retries(
@@ -450,11 +536,12 @@ class MicrosoftGraphOutlookProvider:
             me = me_response.json()
         except httpx.HTTPError as exc:
             raise CalendarProviderError("Microsoft Graph connection test failed.") from exc
+        except ValueError as exc:
+            raise _invalid_outlook_oauth_response() from exc
+        subject, email = _outlook_oauth_identity(me)
         return {
-            "provider_account_id": str(me.get("id") or ""),
-            "display_email": str(
-                me.get("mail") or me.get("userPrincipalName") or ""
-            ) or None,
+            "provider_account_id": subject,
+            "display_email": email,
         }
 
     def upsert_hearing_event(
@@ -691,9 +778,24 @@ class GoogleCalendarProvider:
             )
             token_response.raise_for_status()
             token_payload = token_response.json()
-            access_token = str(token_payload.get("access_token") or "")
-            if not access_token:
-                raise CalendarProviderError("Google did not return an access token.")
+            if not isinstance(token_payload, dict):
+                raise _invalid_google_oauth_response()
+            access_token = token_payload.get("access_token")
+            if not isinstance(access_token, str) or not access_token.strip():
+                raise _invalid_google_oauth_response()
+            scope_text = token_payload.get("scope")
+            if not isinstance(scope_text, str):
+                raise _invalid_google_oauth_response()
+            granted = set(scope_text.split())
+            if "https://www.googleapis.com/auth/userinfo.email" in granted:
+                granted.add("email")
+            if not set(GOOGLE_CALENDAR_SCOPES).issubset(granted):
+                raise CalendarOAuthError(
+                    "Google Calendar and account identity permissions are required. "
+                    "Start Connect Google Calendar again and grant those permissions.",
+                    code="calendar_oauth_reconnect_required",
+                    status_code=status.HTTP_409_CONFLICT,
+                )
             userinfo_response = request_with_retries(
                 "GET",
                 "https://www.googleapis.com/oauth2/v3/userinfo",
@@ -702,13 +804,31 @@ class GoogleCalendarProvider:
             )
             userinfo = userinfo_response.json()
         except httpx.HTTPError as exc:
-            raise CalendarProviderError("Google Calendar OAuth exchange failed.") from exc
+            denied = (
+                isinstance(exc, httpx.HTTPStatusError)
+                and exc.response.status_code in {400, 401, 403}
+            )
+            raise CalendarOAuthError(
+                (
+                    "Google Calendar consent could not be completed. "
+                    "Start Connect Google Calendar again."
+                    if denied else
+                    "Google Calendar is temporarily unavailable. "
+                    "Start Connect Google Calendar again when it recovers."
+                ),
+                code=("calendar_oauth_reconnect_required" if denied
+                      else "calendar_oauth_provider_unavailable"),
+                status_code=(status.HTTP_409_CONFLICT if denied
+                             else status.HTTP_503_SERVICE_UNAVAILABLE),
+            ) from exc
+        except ValueError as exc:
+            raise _invalid_google_oauth_response() from exc
 
-        scope_text = str(token_payload.get("scope") or " ".join(GOOGLE_CALENDAR_SCOPES))
+        subject, email = _google_oauth_identity(userinfo)
         return {
             "token_payload": token_payload,
-            "provider_account_id": str(userinfo.get("sub") or ""),
-            "display_email": str(userinfo.get("email") or "") or None,
+            "provider_account_id": subject,
+            "display_email": email,
             "scopes": scope_text.split(),
         }
 
@@ -730,9 +850,12 @@ class GoogleCalendarProvider:
             userinfo = userinfo_response.json()
         except httpx.HTTPError as exc:
             raise CalendarProviderError("Google Calendar connection test failed.") from exc
+        except ValueError as exc:
+            raise _invalid_google_oauth_response() from exc
+        subject, email = _google_oauth_identity(userinfo)
         return {
-            "provider_account_id": str(userinfo.get("sub") or ""),
-            "display_email": str(userinfo.get("email") or "") or None,
+            "provider_account_id": subject,
+            "display_email": email,
         }
 
     def upsert_hearing_event(
@@ -1080,6 +1203,8 @@ def _sign_state(context: SessionContext, *, provider: CalendarProvider) -> str:
         "provider": provider,
         "company_id": context.company.id,
         "membership_id": context.membership.id,
+        "jti": uuid4().hex,
+        "started_at": now.isoformat(),
         "iat": now,
         "exp": now + timedelta(minutes=_STATE_TTL_MINUTES),
     }
@@ -1091,7 +1216,7 @@ def _verify_state(
     state: str,
     *,
     provider: CalendarProvider,
-) -> None:
+) -> datetime:
     try:
         payload = jwt.decode(state, get_settings().auth_secret, algorithms=["HS256"])
     except InvalidTokenError as exc:
@@ -1109,6 +1234,22 @@ def _verify_state(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Calendar connection state does not match the current session.",
         )
+    try:
+        # Legacy signed states only carry second-resolution iat. Conservatively
+        # reject them if a disconnect happened in that same second.
+        started_at = (
+            datetime.fromisoformat(payload["started_at"])
+            if "started_at" in payload
+            else datetime.fromtimestamp(float(payload["iat"]), tz=UTC)
+        )
+        if started_at.tzinfo is None:
+            raise ValueError("Missing timezone")
+        return _aware(started_at)
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid calendar connection state.",
+        ) from exc
 
 
 def _connection_record(connection: UserCalendarConnection) -> CalendarConnectionRecord:
@@ -4547,6 +4688,45 @@ def _oauth_claim_from_connection(
     return token_payload, marker, expires_at
 
 
+def _calendar_oauth_revocation_cutoff(
+    connection: UserCalendarConnection, payload: dict[str, Any],
+) -> datetime | None:
+    if connection.status == CalendarConnectionStatus.REVOKED:
+        return _aware(connection.updated_at)
+    raw = payload.get(_CALENDAR_OAUTH_REVOKED_AT_KEY)
+    if raw is None:
+        return None
+    try:
+        return _aware(datetime.fromisoformat(raw))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "calendar_oauth_reconnect_required",
+                    "message": "Disconnect this calendar and start Connect again."},
+        ) from exc
+
+
+def _lock_calendar_oauth_authority(
+    session: Session, *, context: SessionContext, purpose: str,
+) -> SessionContext:
+    company_id, membership_id = context.company.id, context.membership.id
+    token_issued_at = context.token_issued_at
+    serialize_sqlite_writer(session)
+    company, actors = lock_company_memberships_for_oauth(
+        session, company_id=company_id, membership_ids=(membership_id,),
+    )
+    actor = actors.get(membership_id)
+    if company is None or actor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An active calendar membership is required.",
+        )
+    require_locked_membership_capability(session, actor, "calendar:sync")
+    context = get_session_context(session, membership_id, token_issued_at=token_issued_at)
+    require_recent_step_up(session, context=context, purpose=purpose)
+    return context
+
+
 def _complete_connection(
     session: Session,
     *,
@@ -4555,35 +4735,19 @@ def _complete_connection(
     state: str,
     calendar_provider: CalendarProvider,
 ) -> CalendarConnectionRecord:
+    started_at = _verify_state(context, state, provider=calendar_provider)
+    context = _lock_calendar_oauth_authority(
+        session, context=context, purpose="calendar_connection_oauth",
+    )
+    oauth_config = _locked_calendar_oauth_config(
+        session, context=context, provider=calendar_provider,
+    )
     provider = _provider_for(calendar_provider, session, context=context)
     if not provider.configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=provider.unavailable_reason or "Calendar sync is unavailable.",
-    )
-    _verify_state(context, state, provider=calendar_provider)
-    actor_memberships = lock_company_memberships_for_assignment(
-        session,
-        company_id=context.company.id,
-        membership_ids=(context.membership.id,),
-    )
-    actor = actor_memberships.get(context.membership.id)
-    if actor is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="An active calendar membership is required.",
         )
-    require_locked_membership_capability(session, actor, "calendar:sync")
-    context = SessionContext(
-        company=context.company,
-        membership=actor,
-        user=actor.user,
-    )
-    require_recent_step_up(
-        session,
-        context=context,
-        purpose="calendar_connection_oauth",
-    )
     advisory_connection = session.scalar(
         select(UserCalendarConnection).where(
             UserCalendarConnection.company_id == context.company.id,
@@ -4636,6 +4800,17 @@ def _complete_connection(
         prior_token, prior_claim, prior_claim_expires_at = (
             _oauth_claim_from_connection(connection)
         )
+        revoked_at = _calendar_oauth_revocation_cutoff(connection, prior_token)
+        if revoked_at is not None:
+            if started_at <= revoked_at:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "calendar_oauth_callback_consumed",
+                        "message": "This consent predates a disconnect. Start Connect again.",
+                    },
+                )
+            prior_token[_CALENDAR_OAUTH_REVOKED_AT_KEY] = revoked_at.isoformat()
         if (
             prior_claim is not None
             and prior_claim_expires_at is not None
@@ -4658,6 +4833,40 @@ def _complete_connection(
         session.add(connection)
         session.flush()
         prior_token = {}
+    # Consumption, unlike the short in-flight lease, is terminal. The shared
+    # digest-only ledger survives revocation and never replays a one-use code.
+    for kind, value in (("state", state), ("code", code)):
+        digest = hashlib.sha256(value.encode()).hexdigest()
+        consumed = claim_idempotency(
+            session,
+            company_id=context.company.id,
+            actor_scope=f"membership:{context.membership.id}",
+            actor_membership_id=context.membership.id,
+            http_method="GET",
+            operation=f"calendar.oauth.{calendar_provider}.{kind}_consumed",
+            idempotency_key=digest,
+            request_hash=digest,
+        )
+        if consumed.outcome != IdempotencyClaimOutcome.CLAIMED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "calendar_oauth_callback_consumed",
+                    "message": "This calendar consent callback was already used. "
+                    "Check the connection status or start Connect again.",
+                },
+            )
+        assert consumed.claim_token is not None and consumed.claim_generation is not None
+        complete_idempotency(
+            session,
+            company_id=context.company.id,
+            record_id=consumed.record.id,
+            claim_token=consumed.claim_token,
+            claim_generation=consumed.claim_generation,
+            response_status=status.HTTP_202_ACCEPTED,
+            result_type="calendar_oauth_consumption",
+            result_id=connection.id,
+        )
     claim_marker = uuid4().hex
     claim_expires_at = _current_time() + _CALENDAR_PROVIDER_LEASE
     claim_payload = {
@@ -4681,39 +4890,114 @@ def _complete_connection(
         metadata={"provider": calendar_provider},
     )
     connection_id = connection.id
+    company_id = context.company.id
+    membership_id = context.membership.id
     session.commit()
 
     # The provider exchange is intentionally outside every DB transaction.
-    exchanged = provider.exchange_code(code=code)
-    token_payload = exchanged.get("token_payload")
-    if not isinstance(token_payload, dict):
-        raise HTTPException(
+    try:
+        exchanged = provider.exchange_code(code=code)
+        return _finalize_calendar_oauth(
+            session, context=context, exchanged=exchanged,
+            calendar_provider=calendar_provider, connection_id=connection_id,
+            claim_marker=claim_marker, oauth_config=oauth_config,
+        )
+    except Exception as exc:
+        # Also release on post-transport authority/validation failures. Only
+        # this claim may be removed; a newer exchange or revocation always wins.
+        session.rollback()
+        _release_calendar_oauth_claim(
+            session, company_id=company_id, connection_id=connection_id,
+            membership_id=membership_id, claim_marker=claim_marker,
+        )
+        if isinstance(exc, CalendarProviderError):
+            raise HTTPException(
+                status_code=(exc.status_code if isinstance(exc, CalendarOAuthError)
+                             else status.HTTP_502_BAD_GATEWAY),
+                detail={
+                    "code": (exc.code if isinstance(exc, CalendarOAuthError)
+                             else "calendar_oauth_provider_unavailable"),
+                    "message": (str(exc) if isinstance(exc, CalendarOAuthError) else
+                                "Calendar consent could not be completed. Start Connect again."),
+                },
+            ) from exc
+        raise
+
+
+def _release_calendar_oauth_claim(
+    session: Session, *, company_id: str, connection_id: str, claim_marker: str,
+    membership_id: str,
+) -> None:
+    # Failed attempts may release their own marker after access was revoked,
+    # but must take authority locks before the connection/audit FK locks.
+    serialize_sqlite_writer(session)
+    lock_company_memberships_for_oauth(
+        session, company_id=company_id, membership_ids=(membership_id,),
+    )
+    connection = session.scalar(
+        select(UserCalendarConnection)
+        .where(UserCalendarConnection.id == connection_id,
+               UserCalendarConnection.company_id == company_id,
+               UserCalendarConnection.membership_id == membership_id)
+        .with_for_update(of=UserCalendarConnection)
+        .execution_options(populate_existing=True)
+    )
+    if connection is not None and connection.status == CalendarConnectionStatus.ERROR:
+        payload, marker, _ = _oauth_claim_from_connection(connection)
+        if marker == claim_marker:
+            payload.pop(_CALENDAR_OAUTH_CLAIM_KEY, None)
+            payload.pop(_CALENDAR_OAUTH_CLAIM_EXPIRES_KEY, None)
+            connection.encrypted_token_ref = _encrypt_token_payload(payload) if payload else None
+            record_audit(
+                session, company_id=company_id,
+                actor_membership_id=connection.membership_id,
+                action="calendar.connection.oauth_failed",
+                target_type="user_calendar_connection", target_id=connection_id,
+                result="failed", metadata={"provider": connection.provider, "claim_released": True},
+            )
+    session.commit()
+
+
+def _finalize_calendar_oauth(
+    session: Session, *, context: SessionContext, exchanged: dict[str, Any],
+    calendar_provider: CalendarProvider, connection_id: str, claim_marker: str,
+    oauth_config: GoogleCalendarRuntimeConfig | OutlookRuntimeConfig,
+) -> CalendarConnectionRecord:
+    token_payload = exchanged.get("token_payload") if isinstance(exchanged, dict) else None
+    access_token = token_payload.get("access_token") if isinstance(token_payload, dict) else None
+    subject = exchanged.get("provider_account_id") if isinstance(exchanged, dict) else None
+    email = exchanged.get("display_email") if isinstance(exchanged, dict) else None
+    scopes = exchanged.get("scopes") if isinstance(exchanged, dict) else None
+    if (
+        not isinstance(access_token, str) or not access_token.strip()
+        or not isinstance(subject, str) or not subject.strip() or len(subject) > 255
+        or (email is not None and (
+            not isinstance(email, str) or not email.strip() or len(email) > 320
+            or "@" not in email or any(character.isspace() for character in email)
+        ))
+        or not isinstance(scopes, list) or not scopes
+        or any(not isinstance(scope, str) or not scope.strip() for scope in scopes)
+    ):
+        raise CalendarOAuthError(
+            "Calendar credentials or account identity were incomplete. Start Connect again.",
+            code="calendar_oauth_invalid_response",
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Calendar OAuth provider returned an invalid token response.",
         )
 
-    final_memberships = lock_company_memberships_for_assignment(
-        session,
-        company_id=context.company.id,
-        membership_ids=(context.membership.id,),
+    context = _lock_calendar_oauth_authority(
+        session, context=context, purpose="calendar_connection_oauth",
     )
-    final_actor = final_memberships.get(context.membership.id)
-    if final_actor is None:
+    current_config = _locked_calendar_oauth_config(
+        session, context=context, provider=calendar_provider,
+    )
+    if current_config != oauth_config:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="An active calendar membership is required.",
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "calendar_oauth_configuration_changed",
+                "message": "Calendar configuration changed during consent. Start Connect again.",
+            },
         )
-    require_locked_membership_capability(session, final_actor, "calendar:sync")
-    context = SessionContext(
-        company=context.company,
-        membership=final_actor,
-        user=final_actor.user,
-    )
-    require_recent_step_up(
-        session,
-        context=context,
-        purpose="calendar_connection_oauth",
-    )
     syncs = list(
         session.scalars(
             select(CalendarEventSync)
@@ -4742,10 +5026,12 @@ def _complete_connection(
             status_code=status.HTTP_409_CONFLICT,
             detail="Calendar connection changed during OAuth; restart the connection.",
         )
-    _, final_claim, _ = _oauth_claim_from_connection(connection)
+    prior_token, final_claim, final_expiry = _oauth_claim_from_connection(connection)
     if (
         connection.status != CalendarConnectionStatus.ERROR
         or final_claim != claim_marker
+        or final_expiry is None
+        or final_expiry <= _current_time()
         or _calendar_connection_has_unresolved_remote_work(syncs)
     ):
         raise HTTPException(
@@ -4759,18 +5045,22 @@ def _complete_connection(
             },
         )
     now = datetime.now(UTC)
-    connection.provider_account_id = str(exchanged.get("provider_account_id") or "") or None
-    connection.display_email = str(exchanged.get("display_email") or "") or None
+    connection.provider_account_id = subject
+    connection.display_email = email
     connection.status = CalendarConnectionStatus.CONNECTED
-    connection.encrypted_token_ref = _encrypt_token_payload(token_payload)
-    default_scopes = (
-        OUTLOOK_SCOPES
-        if calendar_provider == CalendarProvider.OUTLOOK
-        else GOOGLE_CALENDAR_SCOPES
-    )
-    connection.scopes_json = [
-        str(scope) for scope in exchanged.get("scopes", default_scopes) if str(scope)
-    ]
+    persisted_token = {
+        key: value for key, value in token_payload.items()
+        if key not in {
+            _CALENDAR_OAUTH_CLAIM_KEY, _CALENDAR_OAUTH_CLAIM_EXPIRES_KEY,
+            _CALENDAR_OAUTH_REVOKED_AT_KEY,
+        }
+    }
+    if _CALENDAR_OAUTH_REVOKED_AT_KEY in prior_token:
+        persisted_token[_CALENDAR_OAUTH_REVOKED_AT_KEY] = (
+            prior_token[_CALENDAR_OAUTH_REVOKED_AT_KEY]
+        )
+    connection.encrypted_token_ref = _encrypt_token_payload(persisted_token)
+    connection.scopes_json = scopes
     connection.connected_at = now
     session.add(connection)
     record_from_context(
@@ -4787,6 +5077,29 @@ def _complete_connection(
     )
     session.commit()
     return _connection_record(connection)
+
+
+def _locked_calendar_oauth_config(
+    session: Session, *, context: SessionContext, provider: CalendarProvider,
+) -> GoogleCalendarRuntimeConfig | OutlookRuntimeConfig:
+    # Refresh even an already-loaded row: expire_on_commit=False must not hide
+    # an administrator's credential rotation or connector kill switch.
+    if provider == CalendarProvider.GOOGLE_CALENDAR:
+        row = session.scalar(
+            select(TenantGoogleWorkspaceConfiguration)
+            .where(TenantGoogleWorkspaceConfiguration.company_id == context.company.id)
+            .with_for_update(of=TenantGoogleWorkspaceConfiguration)
+            .execution_options(populate_existing=True)
+        )
+        return _google_calendar_runtime_config(session, context=context)
+    row = session.scalar(
+        select(TenantOutlookConfiguration)
+        .where(TenantOutlookConfiguration.company_id == context.company.id,
+               TenantOutlookConfiguration.provider == provider)
+        .with_for_update(of=TenantOutlookConfiguration)
+        .execution_options(populate_existing=True)
+    )
+    return _outlook_runtime_config_from_row(row)
 
 
 def revoke_connection(
@@ -4807,27 +5120,8 @@ def revoke_connection(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Calendar connection not found.",
         )
-    actor_memberships = lock_company_memberships_for_assignment(
-        session,
-        company_id=context.company.id,
-        membership_ids=(context.membership.id,),
-    )
-    actor = actor_memberships.get(context.membership.id)
-    if actor is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="An active calendar membership is required.",
-        )
-    require_locked_membership_capability(session, actor, "calendar:sync")
-    context = SessionContext(
-        company=context.company,
-        membership=actor,
-        user=actor.user,
-    )
-    require_recent_step_up(
-        session,
-        context=context,
-        purpose="connector_disconnect",
+    context = _lock_calendar_oauth_authority(
+        session, context=context, purpose="connector_disconnect",
     )
     # Canonical order is sync -> connection. Queue every known remote copy
     # before revoking, and retain the encrypted credential until those exact
@@ -4903,6 +5197,7 @@ def revoke_connection(
         sync.updated_at = now
         session.add(sync)
     connection.status = CalendarConnectionStatus.REVOKED
+    connection.updated_at = now
     session.add(connection)
     _maybe_clear_revoked_calendar_credential(session, connection=connection)
     record_from_context(

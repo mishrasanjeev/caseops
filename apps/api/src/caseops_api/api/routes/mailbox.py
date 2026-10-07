@@ -9,8 +9,10 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, Query, Request
+from fastapi.responses import Response
 
 from caseops_api.api.dependencies import DbSession, require_capability
+from caseops_api.api.oauth_browser import OAuthCallbackRoute, complete_browser_oauth, oauth_callback
 from caseops_api.schemas.inbound_email import (
     InboundEmailAliasCreateRequest,
     InboundEmailAliasListResponse,
@@ -65,7 +67,7 @@ from caseops_api.services.inbound_email import (
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 
-router = APIRouter()
+router = APIRouter(route_class=OAuthCallbackRoute)
 MailboxViewer = Annotated[SessionContext, Depends(require_capability("calendar:view"))]
 MailboxOperator = Annotated[SessionContext, Depends(require_capability("calendar:sync"))]
 WorkspaceAdmin = Annotated[SessionContext, Depends(require_capability("workspace:admin"))]
@@ -100,17 +102,23 @@ async def start_gmail(
     response_model=MailboxConnectionCallbackResponse,
     summary="Complete Gmail OAuth callback.",
 )
-async def complete_gmail(
+@oauth_callback("gmail")
+def complete_gmail(
+    request: Request,
     context: MailboxOperator,
     session: DbSession,
     code: Annotated[str, Query(min_length=1)],
     state: Annotated[str, Query(min_length=1)],
-) -> MailboxConnectionCallbackResponse:
-    return complete_gmail_connection(
-        session,
-        context=context,
-        code=code,
-        state=state,
+) -> MailboxConnectionCallbackResponse | Response:
+    return complete_browser_oauth(
+        request,
+        provider="gmail",
+        complete=lambda: complete_gmail_connection(
+            session,
+            context=context,
+            code=code,
+            state=state,
+        ),
     )
 
 
@@ -119,7 +127,7 @@ async def complete_gmail(
     response_model=MailboxConnectionRecord,
     summary="Revoke a Gmail mailbox connection for the caller.",
 )
-async def revoke_gmail(
+def revoke_gmail(
     context: MailboxOperator,
     session: DbSession,
     connection_id: str,

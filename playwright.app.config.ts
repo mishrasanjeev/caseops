@@ -141,10 +141,15 @@ export default defineConfig({
       // bucket scripts) holds a lock on a .venv/Scripts/*.exe.
       command:
         process.platform === "win32"
-          ? `apps\\api\\.venv\\Scripts\\python.exe -m uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir apps/api/src`
-          : `apps/api/.venv/bin/uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir apps/api/src`,
+          ? `apps\\api\\.venv\\Scripts\\python.exe -m uvicorn oauth_emulator_api:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`
+          : `apps/api/.venv/bin/uvicorn oauth_emulator_api:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`,
       cwd: repoRoot,
-      env: e2eEnv,
+      env: {
+        ...e2eEnv,
+        CASEOPS_PUBLIC_APP_URL: webBaseUrl,
+        CASEOPS_E2E_OAUTH_EMULATOR: "calendar-20261008",
+        PYTHONPATH: path.join(repoRoot, "apps", "api", "src"),
+      },
       url: `${apiBaseUrl}/api/health`,
       timeout: 120_000,
       // Playwright creates and disposes many APIRequestContexts. Uvicorn's

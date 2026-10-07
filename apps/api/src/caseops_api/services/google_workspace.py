@@ -47,6 +47,8 @@ from caseops_api.services.session_context import SessionContext
 GoogleWorkspaceConnector = Literal["calendar", "gmail", "drive"]
 
 GOOGLE_WORKSPACE_CALENDAR_SCOPES = [
+    "openid",
+    "email",
     "https://www.googleapis.com/auth/calendar.events"
 ]
 GOOGLE_WORKSPACE_GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]

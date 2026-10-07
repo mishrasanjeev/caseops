@@ -53,8 +53,10 @@ inspected or changed.
    review the project budget before increasing usage.
 2. In [Google Auth Platform](https://console.cloud.google.com/auth/overview),
    configure the application's branding/audience and consent screen. Request
-   only the scopes CaseOps uses: `calendar.events`, `gmail.readonly`, and
-   `drive.readonly`. Complete any Google verification required by the chosen
+   only the scopes CaseOps uses: `openid`, `email`, `calendar.events`,
+   `gmail.readonly`, and `drive.readonly`. Calendar uses the identity scopes
+   to confirm the connected Google account; existing consent must not be
+   treated as granting newly requested scopes. Complete any Google verification required by the chosen
    audience and sensitive/restricted scopes.
 3. Create a **Web application** OAuth client. Register exactly these redirects:
    `https://api.caseops.ai/api/calendar/connections/google-calendar/callback`,

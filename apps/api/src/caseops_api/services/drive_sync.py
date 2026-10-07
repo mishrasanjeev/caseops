@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from typing import Any, Protocol
 from urllib.parse import urlencode
+from uuid import uuid4
 
 import jwt
 from fastapi import HTTPException, status
 from jwt import InvalidTokenError
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from caseops_api.core.redaction import redact_provider_error
@@ -24,8 +25,10 @@ from caseops_api.db.models import (
     DriveSyncControl,
     Matter,
     ReviewCandidateStatus,
+    TenantGoogleWorkspaceConfiguration,
     UserDriveConnection,
 )
+from caseops_api.db.session import serialize_sqlite_writer
 from caseops_api.schemas.drive import (
     DriveCandidateListResponse,
     DriveCandidateRecord,
@@ -42,6 +45,10 @@ from caseops_api.schemas.drive import (
     GoogleDriveFileRecord,
     GoogleDriveStatusResponse,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_oauth,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.calendar_sync import _decrypt_token_payload, _encrypt_token_payload
 from caseops_api.services.google_workspace import (
@@ -50,6 +57,12 @@ from caseops_api.services.google_workspace import (
     refresh_google_workspace_access_token,
 )
 from caseops_api.services.http_retries import request_with_retries
+from caseops_api.services.idempotency import (
+    IdempotencyClaimOutcome,
+    claim_idempotency,
+    complete_idempotency,
+)
+from caseops_api.services.identity import get_session_context
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
@@ -57,6 +70,8 @@ from caseops_api.services.session_context import SessionContext
 GOOGLE_DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 _STATE_KIND = "google_drive_oauth"
 _STATE_TTL_MINUTES = 10
+_OAUTH_META_KEY = "_caseops_drive_oauth"
+_OAUTH_LEASE_SECONDS = 300
 
 
 class GoogleDriveProviderError(RuntimeError):
@@ -65,6 +80,59 @@ class GoogleDriveProviderError(RuntimeError):
     def __init__(self, message: str, *, status_code: int | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
+
+
+def _oauth_token_scopes(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        raise GoogleDriveProviderError("Google returned an invalid token object.")
+    access_token = payload.get("access_token")
+    if (
+        not isinstance(access_token, str)
+        or not access_token
+        or any(character.isspace() for character in access_token)
+    ):
+        raise GoogleDriveProviderError("Google returned an invalid access token.")
+    if "refresh_token" in payload and (
+        not isinstance(payload["refresh_token"], str)
+        or not payload["refresh_token"]
+        or any(character.isspace() for character in payload["refresh_token"])
+    ):
+        raise GoogleDriveProviderError("Google returned an invalid refresh token.")
+    if "token_type" in payload and (
+        not isinstance(payload["token_type"], str) or payload["token_type"].lower() != "bearer"
+    ):
+        raise GoogleDriveProviderError("Google returned an unsupported token type.")
+    # RFC 6749 section 5.1 permits omission only for the original requested grant.
+    scope_text = payload.get("scope", " ".join(GOOGLE_DRIVE_SCOPES))
+    if not isinstance(scope_text, str) or not set(GOOGLE_DRIVE_SCOPES).issubset(scope_text.split()):
+        raise GoogleDriveProviderError("Google did not grant the required connector permission.")
+    try:
+        bounded = len(json.dumps(payload, allow_nan=False)) <= 65536
+    except (TypeError, ValueError) as exc:
+        raise GoogleDriveProviderError("Google returned an invalid token object.") from exc
+    if not bounded:
+        raise GoogleDriveProviderError("Google returned an oversized token object.")
+    return scope_text.split()
+
+
+def _validate_oauth_identity(subject: Any, email: Any) -> None:
+    if (
+        not isinstance(subject, str)
+        or not subject
+        or len(subject) > 255
+        or any(character.isspace() for character in subject)
+    ):
+        raise GoogleDriveProviderError("Google returned an invalid account identity.")
+    if email is not None:
+        if (
+            not isinstance(email, str)
+            or not email
+            or len(email) > 320
+            or email.count("@") != 1
+            or not all(email.split("@"))
+            or any(character.isspace() for character in email)
+        ):
+            raise GoogleDriveProviderError("Google returned an invalid account email.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,9 +249,8 @@ class GoogleDriveProvider:
             )
             token_response.raise_for_status()
             token_payload = token_response.json()
-            access_token = str(token_payload.get("access_token") or "")
-            if not access_token:
-                raise GoogleDriveProviderError("Google did not return an access token.")
+            scopes = _oauth_token_scopes(token_payload)
+            access_token = token_payload["access_token"]
             about_response = request_with_retries(
                 "GET",
                 "https://www.googleapis.com/drive/v3/about",
@@ -194,13 +261,16 @@ class GoogleDriveProvider:
             about = about_response.json()
         except httpx.HTTPError as exc:
             raise GoogleDriveProviderError("Google Drive OAuth exchange failed.") from exc
-        user = about.get("user") if isinstance(about.get("user"), dict) else {}
-        scope_text = str(token_payload.get("scope") or " ".join(GOOGLE_DRIVE_SCOPES))
+        if not isinstance(about, dict) or not isinstance(about.get("user"), dict):
+            raise GoogleDriveProviderError("Google returned an invalid Drive account object.")
+        user = about["user"]
+        subject, email = user.get("permissionId"), user.get("emailAddress")
+        _validate_oauth_identity(subject, email)
         return {
             "token_payload": token_payload,
-            "provider_account_id": str(user.get("permissionId") or "") or None,
-            "display_email": str(user.get("emailAddress") or "") or None,
-            "scopes": scope_text.split(),
+            "provider_account_id": subject,
+            "display_email": email,
+            "scopes": scopes,
         }
 
     def list_files(
@@ -370,6 +440,8 @@ def _sign_state(context: SessionContext) -> str:
     now = datetime.now(UTC)
     payload = {
         "kind": _STATE_KIND,
+        "nonce": uuid4().hex,
+        "started_at": now.isoformat(),
         "company_id": context.company.id,
         "membership_id": context.membership.id,
         "iat": now,
@@ -378,7 +450,7 @@ def _sign_state(context: SessionContext) -> str:
     return jwt.encode(payload, get_settings().auth_secret, algorithm="HS256")
 
 
-def _verify_state(context: SessionContext, state: str) -> None:
+def _verify_state(context: SessionContext, state: str) -> dict[str, Any]:
     try:
         payload = jwt.decode(state, get_settings().auth_secret, algorithms=["HS256"])
     except InvalidTokenError as exc:
@@ -395,6 +467,7 @@ def _verify_state(context: SessionContext, state: str) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Google Drive connection state does not match the current session.",
         )
+    return payload
 
 
 def _connection_record(connection: UserDriveConnection) -> GoogleDriveConnectionRecord:
@@ -616,6 +689,126 @@ def start_google_drive_connection(
     )
 
 
+def _oauth_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _oauth_error(reason: str, message: str, status_code: int = 409) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": "drive_oauth_" + reason, "message": message},
+    )
+
+
+def _lock_oauth_authority(
+    session: Session,
+    context: SessionContext,
+    *,
+    check_config: bool = True,
+) -> tuple[SessionContext, str]:
+    # Serialize absent connection rows as well as existing ones; release before I/O.
+    serialize_sqlite_writer(session)
+    company_id, membership_id = context.company.id, context.membership.id
+    token_issued_at = context.token_issued_at
+    company, actors = lock_company_memberships_for_oauth(
+        session,
+        company_id=company_id,
+        membership_ids=(membership_id,),
+    )
+    actor = actors.get(membership_id)
+    if actor is None:
+        raise _oauth_error("authority_changed", "An active membership is required.", 403)
+    if company is None or not company.is_active:
+        raise _oauth_error("authority_changed", "The workspace is not active.", 403)
+    require_locked_membership_capability(session, actor, "documents:upload")
+    context = get_session_context(
+        session,
+        membership_id,
+        token_issued_at=token_issued_at,
+    )
+    if not check_config:
+        return context, ""
+    configuration = session.scalar(
+        select(TenantGoogleWorkspaceConfiguration)
+        .where(TenantGoogleWorkspaceConfiguration.company_id == company_id)
+        .with_for_update(of=TenantGoogleWorkspaceConfiguration)
+        .execution_options(populate_existing=True)
+    )
+    runtime = _google_drive_runtime_config(session, context=context)
+    fingerprint = hashlib.sha256(
+        repr(
+            (
+                runtime.client_id,
+                runtime.client_secret,
+                runtime.redirect_uri,
+                configuration.id if configuration else None,
+                configuration.updated_at if configuration else None,
+            )
+        ).encode()
+    ).hexdigest()
+    return context, fingerprint
+
+
+def _oauth_connection(session: Session, context: SessionContext) -> UserDriveConnection | None:
+    return session.scalar(
+        select(UserDriveConnection)
+        .where(
+            UserDriveConnection.company_id == context.company.id,
+            UserDriveConnection.membership_id == context.membership.id,
+            UserDriveConnection.provider == DriveProvider.GOOGLE_DRIVE,
+        )
+        .with_for_update(of=UserDriveConnection)
+        .execution_options(populate_existing=True)
+    )
+
+
+def _fail_oauth_claim(
+    session: Session,
+    *,
+    context: SessionContext,
+    company_id: str,
+    connection_id: str,
+    marker: str,
+    config_fingerprint: str,
+) -> None:
+    session.rollback()
+    restore_connected = False
+    try:
+        _, current_config = _lock_oauth_authority(session, context)
+        restore_connected = current_config == config_fingerprint
+    except HTTPException:
+        # A revoked session may release its own claim but cannot restore access.
+        session.rollback()
+    connection = session.scalar(
+        select(UserDriveConnection)
+        .where(
+            UserDriveConnection.id == connection_id,
+            UserDriveConnection.company_id == company_id,
+        )
+        .with_for_update(of=UserDriveConnection)
+        .execution_options(populate_existing=True)
+    )
+    if connection is not None and connection.status == DriveConnectionStatus.ERROR:
+        token = (
+            _decrypt_token_payload(connection.encrypted_token_ref)
+            if connection.encrypted_token_ref
+            else {}
+        )
+        meta = token.get(_OAUTH_META_KEY, {})
+        if isinstance(meta, dict) and meta.get("marker") == marker:
+            # Cleanup owns only this attempt, never a replacement or revocation.
+            token[_OAUTH_META_KEY] = {
+                **meta,
+                "marker": None,
+                "expires_at": None,
+                "result": "failed",
+            }
+            if restore_connected and meta.get("prior_connected") and token.get("access_token"):
+                connection.status = DriveConnectionStatus.CONNECTED
+            connection.encrypted_token_ref = _encrypt_token_payload(token)
+    session.commit()
+
+
 def complete_google_drive_connection(
     session: Session,
     *,
@@ -623,65 +816,207 @@ def complete_google_drive_connection(
     code: str,
     state: str,
 ) -> GoogleDriveConnectionCallbackResponse:
+    state_payload = _verify_state(context, state)
+    context, config_fingerprint = _lock_oauth_authority(session, context)
     provider = _drive_provider(session, context=context)
     if not provider.configured:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Google Drive OAuth is not configured.",
-        )
-    _verify_state(context, state)
-    try:
-        exchanged = provider.exchange_code(code=code)
-    except GoogleDriveProviderError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Google Drive OAuth exchange failed.",
-        ) from exc
-    token_payload = exchanged["token_payload"]
-    now = datetime.now(UTC)
-    existing = session.scalar(
-        select(UserDriveConnection).where(
-            UserDriveConnection.company_id == context.company.id,
-            UserDriveConnection.membership_id == context.membership.id,
-            UserDriveConnection.provider == DriveProvider.GOOGLE_DRIVE,
-        )
+        raise _oauth_error("unavailable", "Google Drive OAuth is not configured.", 503)
+    now = _oauth_now()
+    attempt = hashlib.sha256((state + "\\0" + code).encode()).hexdigest()
+    connection = _oauth_connection(session, context)
+    token = (
+        _decrypt_token_payload(connection.encrypted_token_ref)
+        if connection is not None and connection.encrypted_token_ref
+        else {}
     )
-    if existing is None:
-        existing = UserDriveConnection(
+    meta = token.get(_OAUTH_META_KEY, {})
+    if not isinstance(meta, dict):
+        raise _oauth_error("invalid_attempt", "Restart the Google Drive connection.")
+    if (
+        connection is not None
+        and connection.status == DriveConnectionStatus.CONNECTED
+        and meta.get("completed_attempt") == attempt
+        and meta.get("completed_config") == config_fingerprint
+        and not meta.get("marker")
+    ):
+        result = GoogleDriveConnectionCallbackResponse(
+            connected=True, connection=_connection_record(connection)
+        )
+        session.commit()
+        return result
+    if meta.get("marker") and float(meta.get("expires_at") or 0) > now.timestamp():
+        raise _oauth_error(
+            "exchange_in_flight", "An OAuth exchange is already in progress. Wait briefly."
+        )
+    if connection is not None and connection.status == DriveConnectionStatus.REVOKED:
+        started = (
+            datetime.fromisoformat(state_payload["started_at"])
+            if state_payload.get("started_at")
+            else datetime.fromtimestamp(state_payload["iat"], UTC)
+        )
+        revoked_at = (
+            connection.updated_at.replace(tzinfo=UTC)
+            if connection.updated_at.tzinfo is None
+            else connection.updated_at
+        )
+        if started <= revoked_at:
+            raise _oauth_error(
+                "attempt_consumed", "This connection attempt was revoked. Start a new connection."
+            )
+    if connection is None:
+        connection = UserDriveConnection(
             company_id=context.company.id,
             membership_id=context.membership.id,
             provider=DriveProvider.GOOGLE_DRIVE,
         )
-        session.add(existing)
-    existing.provider_account_id = exchanged.get("provider_account_id")
-    existing.display_email = exchanged.get("display_email")
-    existing.status = DriveConnectionStatus.CONNECTED
-    existing.encrypted_token_ref = _encrypt_token_payload(token_payload)
-    existing.scopes_json = list(exchanged.get("scopes") or GOOGLE_DRIVE_SCOPES)
-    existing.connected_at = now
-    try:
+        session.add(connection)
         session.flush()
-    except IntegrityError:
-        session.rollback()
-        raise
-    record_from_context(
-        session,
-        context,
-        action="drive.google.connected",
-        target_type="user_drive_connection",
-        target_id=existing.id,
-        metadata={
-            "provider": DriveProvider.GOOGLE_DRIVE,
-            "scope_count": len(existing.scopes_json or []),
-            "display_email_present": bool(existing.display_email),
-        },
+    # Digest-only consumption survives disconnect; neither state nor code is retried.
+    for kind, value in (("state", state), ("code", code)):
+        digest = hashlib.sha256(value.encode()).hexdigest()
+        consumed = claim_idempotency(
+            session,
+            company_id=context.company.id,
+            actor_scope=f"membership:{context.membership.id}",
+            actor_membership_id=context.membership.id,
+            http_method="GET",
+            operation=f"workspace.oauth.google_drive.{kind}_consumed",
+            idempotency_key=digest,
+            request_hash=digest,
+        )
+        if consumed.outcome != IdempotencyClaimOutcome.CLAIMED:
+            raise _oauth_error(
+                "attempt_consumed", "This connection attempt has finished. Start a new connection."
+            )
+        assert consumed.claim_token is not None and consumed.claim_generation is not None
+        complete_idempotency(
+            session,
+            company_id=context.company.id,
+            record_id=consumed.record.id,
+            claim_token=consumed.claim_token,
+            claim_generation=consumed.claim_generation,
+            response_status=202,
+            result_type="workspace_oauth_consumption",
+            result_id=connection.id,
+        )
+    marker = uuid4().hex
+    prior_connected = connection.status == DriveConnectionStatus.CONNECTED or (
+        meta.get("result") == "pending"
+        and meta.get("prior_connected")
+        and meta.get("config") == config_fingerprint
     )
+    meta = {
+        "attempt": attempt,
+        "marker": marker,
+        "result": "pending",
+        "expires_at": min(now.timestamp() + _OAUTH_LEASE_SECONDS, state_payload["exp"]),
+        "config": config_fingerprint,
+        "prior_connected": bool(prior_connected),
+        "completed_attempt": meta.get("completed_attempt"),
+        "completed_config": meta.get("completed_config"),
+    }
+    token[_OAUTH_META_KEY] = meta
+    connection.status = DriveConnectionStatus.ERROR
+    connection.encrypted_token_ref = _encrypt_token_payload(token)
+    connection_id, company_id = connection.id, context.company.id
     session.commit()
-    session.refresh(existing)
-    return GoogleDriveConnectionCallbackResponse(
-        connected=True,
-        connection=_connection_record(existing),
-    )
+
+    try:
+        exchanged = provider.exchange_code(code=code)
+        token_payload = exchanged.get("token_payload") if isinstance(exchanged, dict) else None
+        _oauth_token_scopes(token_payload)
+        _validate_oauth_identity(
+            exchanged.get("provider_account_id"),
+            exchanged.get("display_email"),
+        )
+        scopes = exchanged.get("scopes")
+        if (
+            not isinstance(scopes, (list, tuple))
+            or any(not isinstance(scope, str) or not scope.strip() for scope in scopes)
+            or not set(GOOGLE_DRIVE_SCOPES).issubset(scopes)
+        ):
+            raise GoogleDriveProviderError(
+                "Google did not grant the required connector permission."
+            )
+        encrypted_token = _encrypt_token_payload(
+            {
+                **token_payload,
+                _OAUTH_META_KEY: {
+                    **meta,
+                    "marker": None,
+                    "expires_at": None,
+                    "result": "complete",
+                    "completed_attempt": attempt,
+                    "completed_config": config_fingerprint,
+                },
+            }
+        )
+    except Exception as exc:
+        _fail_oauth_claim(
+            session,
+            context=context,
+            company_id=company_id,
+            connection_id=connection_id,
+            marker=marker,
+            config_fingerprint=config_fingerprint,
+        )
+        raise _oauth_error(
+            "exchange_failed",
+            "Google Drive authorization could not complete. Start a new connection.",
+            502,
+        ) from exc
+
+    try:
+        context, current_config = _lock_oauth_authority(session, context)
+        connection = _oauth_connection(session, context)
+        current = (
+            _decrypt_token_payload(connection.encrypted_token_ref).get(_OAUTH_META_KEY, {})
+            if connection is not None and connection.encrypted_token_ref
+            else {}
+        )
+        if (
+            current_config != config_fingerprint
+            or connection is None
+            or connection.id != connection_id
+            or connection.status != DriveConnectionStatus.ERROR
+            or current.get("marker") != marker
+            or float(current.get("expires_at") or 0) <= _oauth_now().timestamp()
+        ):
+            raise _oauth_error(
+                "finalize_stale", "Connection authority changed. Start a new connection."
+            )
+        connection.provider_account_id = exchanged["provider_account_id"]
+        connection.display_email = exchanged.get("display_email")
+        connection.status = DriveConnectionStatus.CONNECTED
+        connection.encrypted_token_ref = encrypted_token
+        connection.scopes_json = list(scopes)
+        connection.connected_at = _oauth_now()
+        record_from_context(
+            session,
+            context,
+            action="drive.google.connected",
+            target_type="user_drive_connection",
+            target_id=connection.id,
+            metadata={
+                "provider": DriveProvider.GOOGLE_DRIVE,
+                "scope_count": len(connection.scopes_json),
+                "display_email_present": bool(connection.display_email),
+            },
+        )
+        session.commit()
+        return GoogleDriveConnectionCallbackResponse(
+            connected=True, connection=_connection_record(connection)
+        )
+    except Exception:
+        _fail_oauth_claim(
+            session,
+            context=context,
+            company_id=company_id,
+            connection_id=connection_id,
+            marker=marker,
+            config_fingerprint=config_fingerprint,
+        )
+        raise
 
 
 def revoke_google_drive_connection(
@@ -690,13 +1025,17 @@ def revoke_google_drive_connection(
     context: SessionContext,
     connection_id: str,
 ) -> GoogleDriveConnectionRecord:
+    context, _ = _lock_oauth_authority(session, context, check_config=False)
     connection = session.scalar(
-        select(UserDriveConnection).where(
+        select(UserDriveConnection)
+        .where(
             UserDriveConnection.id == connection_id,
             UserDriveConnection.company_id == context.company.id,
             UserDriveConnection.membership_id == context.membership.id,
             UserDriveConnection.provider == DriveProvider.GOOGLE_DRIVE,
         )
+        .with_for_update(of=UserDriveConnection)
+        .execution_options(populate_existing=True)
     )
     if connection is None:
         raise HTTPException(status_code=404, detail="Google Drive connection not found.")

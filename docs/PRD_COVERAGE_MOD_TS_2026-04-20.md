@@ -1,5 +1,16 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 8 OAuth Acceptance In Progress
+
+J08 / M08 / MOD-TS-006: Calendar UI and bounded Google/Outlook connector code
+exist; historical module entries below are not a current inventory. The two
+October 8 workbook rows expose initial-consent callback and failed-claim
+recovery defects on production `82a6d932`. Candidate repairs cover all four
+Workspace callbacks and real-backend browser acceptance. Both rows remain
+**Inconclusive** until Docker, CI and exact-release production proof, including
+the owner-authorized Google account consent. See `docs/bugfix-ram08oct-2026.md`.
+This does not close always-on calendar automation or unrelated programme gaps.
+
 ## September 10 Workbook In Progress
 
 BUG-013 and BUG-014 remain **Inconclusive** pending complete local Docker and

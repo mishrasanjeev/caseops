@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import Response
 
 from caseops_api.api.dependencies import DbSession, require_capability
+from caseops_api.api.oauth_browser import OAuthCallbackRoute, complete_browser_oauth, oauth_callback
 from caseops_api.schemas.drive import (
     DriveCandidateListResponse,
     DriveCandidateReviewRequest,
@@ -35,7 +37,7 @@ from caseops_api.services.drive_sync import (
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 
-router = APIRouter()
+router = APIRouter(route_class=OAuthCallbackRoute)
 DriveViewer = Annotated[SessionContext, Depends(require_capability("documents:upload"))]
 WorkspaceAdmin = Annotated[SessionContext, Depends(require_capability("workspace:admin"))]
 
@@ -69,17 +71,23 @@ async def start_google_drive(
     response_model=GoogleDriveConnectionCallbackResponse,
     summary="Complete Google Drive OAuth callback.",
 )
-async def complete_google_drive(
+@oauth_callback("google_drive")
+def complete_google_drive(
+    request: Request,
     context: DriveViewer,
     session: DbSession,
     code: Annotated[str, Query(min_length=1)],
     state: Annotated[str, Query(min_length=1)],
-) -> GoogleDriveConnectionCallbackResponse:
-    return complete_google_drive_connection(
-        session,
-        context=context,
-        code=code,
-        state=state,
+) -> GoogleDriveConnectionCallbackResponse | Response:
+    return complete_browser_oauth(
+        request,
+        provider="google_drive",
+        complete=lambda: complete_google_drive_connection(
+            session,
+            context=context,
+            code=code,
+            state=state,
+        ),
     )
 
 
@@ -88,7 +96,7 @@ async def complete_google_drive(
     response_model=GoogleDriveConnectionRecord,
     summary="Revoke a Google Drive connection for the current user.",
 )
-async def revoke_google_drive(
+def revoke_google_drive(
     connection_id: str,
     context: DriveViewer,
     session: DbSession,

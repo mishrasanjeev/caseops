@@ -5,6 +5,7 @@ import { FileCheck2, HardDrive, Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { OAuthCallbackNotice } from "@/components/app/OAuthCallbackNotice";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -166,6 +167,7 @@ export default function DrivePage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <OAuthCallbackNotice area="drive" />
       <PageHeader
         eyebrow="Drive"
         title="Document review queue"

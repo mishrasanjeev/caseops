@@ -56,6 +56,8 @@ import type {
 import { useCapability } from "@/lib/capabilities";
 
 const GOOGLE_WORKSPACE_SCOPES = [
+  "openid",
+  "email",
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/gmail.readonly",

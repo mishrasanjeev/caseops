@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 8 Calendar OAuth Workbook In Progress
+
+`CaseOps_Bugs(ll).xlsx` contains exactly two issues, BUG-003/004, both valid
+Calendar OAuth bugs. Current production `82a6d932` reproduces the missing
+identity scopes and uncaught userinfo failure; the related committed claim
+causes bounded in-flight conflicts. Adjacent Outlook, Gmail and Drive paths
+are included in the repair. Both verdicts remain **Inconclusive** pending
+Docker and exact-release browser proof; this candidate is not yet deployed.
+Root causes, prior coverage attribution errors, original failed evidence and
+live Google consent boundary: `docs/bugfix-ram08oct-2026.md`.
+
 ## September 14 Release Engineering Checkpoint
 
 Recorded 2026-09-14 by the release-engineering handover session; the
