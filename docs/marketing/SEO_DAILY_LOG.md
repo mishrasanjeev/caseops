@@ -44,6 +44,8 @@ These are report observations, not real-time counts or growth claims.
 | Devices | Desktop 6 impressions, mobile 4; all zero clicks. |
 | Countries | India 4, US 2, Pakistan/Paraguay/Brazil/Mexico 1 each; all zero clicks. |
 | Page indexing | Updated Oct 4: 8 indexed, 4 not indexed. Reasons: noindex 1, robots-blocked 1, crawled-not-indexed 2. Indexed does not mean eight approved public HTML pages. |
+| Noindex example | `/portal/sign-in`, last crawled Jul 18. Expected authentication entry exclusion; the candidate's adjacent browser regression preserves it. |
+| Robots-blocked example | `/app`, last crawled Aug 19. Expected app exclusion; do not remove its rule to improve the aggregate count. |
 | Crawled-not-indexed examples | `/icon?988433409fad5a4b` and `/opengraph-image?6d291527fcf52b8d`; image endpoints, not missing buyer landing pages. |
 | Indexed-but-blocked warning | `/sign-in`, last crawled Sep 22; first detected Oct 5. See #521 below. |
 | Priority URL inspections | Home, resource, solo, law-firms and pricing each report URL on Google / page indexed. No indexing request repeated. |
@@ -97,12 +99,15 @@ discovery, demand, conversion, or a before/after ranking improvement.
   `public-content-results.json` (20 live passes),
   `sign-in-before-results.json` (live failure), `sign-in-before/`, and
   `local-first-run-label-failure/` (preserved first local failure).
-- Release candidate is not deployed. Complete review, green CI and required
+- Release candidate [draft PR #522](https://github.com/mishrasanjeev/caseops/pull/522)
+  is not deployed. Complete review, green CI and required
   Docker/release gates before merging and guarded exact-SHA deployment; then
   replay all 23 tests live. Keep #521 open until Search Console separately
   proves noindex exclusion. Do not use Validate Fix as evidence of resolution.
   Next daily run should resume this candidate, then #513/#515, without
   launching a competing release or repeating unchanged sitemap submissions.
+  The existing daily automation now names #521/#522 explicitly; its saved
+  daily schedule and quiet-on-unchanged notification behavior were preserved.
 - Sources: [Google noindex behavior](https://developers.google.com/search/docs/crawling-indexing/block-indexing),
   [Google AI features guidance](https://developers.google.com/search/docs/appearance/ai-features),
   [official eCourts search](https://services.ecourts.gov.in/ecourtindia_v6/).

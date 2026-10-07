@@ -111,8 +111,8 @@ Provider and statute limitations must stay visible.
 
 ## Daily operating cadence
 
-The active Codex heartbeat `caseops-daily-seo-and-aeo` runs once daily at
-09:00 Asia/Kolkata. It checks the exact serving release, public crawl surface,
+The active Codex heartbeat `caseops-daily-seo-and-aeo` runs once daily on its
+saved app schedule. It checks the exact serving release, public crawl surface,
 Search Console when the owner session remains available, and the dated evidence
 in `docs/marketing/SEO_DAILY_LOG.md`. It should fix and release a verified
 problem, not publish a page or resubmit an unchanged sitemap merely to show
