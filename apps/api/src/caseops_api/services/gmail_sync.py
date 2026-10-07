@@ -792,7 +792,7 @@ def import_recent_gmail_messages(
         session.commit()
         raise HTTPException(
             status_code=(
-                status.HTTP_401_UNAUTHORIZED
+                status.HTTP_409_CONFLICT
                 if exc.reauthorization_required
                 else status.HTTP_503_SERVICE_UNAVAILABLE
             ),
@@ -1509,7 +1509,7 @@ def review_attachment_candidate(
         session.commit()
         raise HTTPException(
             status_code=(
-                status.HTTP_401_UNAUTHORIZED
+                status.HTTP_409_CONFLICT
                 if exc.reauthorization_required
                 else status.HTTP_503_SERVICE_UNAVAILABLE
             ),

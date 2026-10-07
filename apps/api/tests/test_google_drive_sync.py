@@ -364,7 +364,7 @@ def test_google_drive_invalid_refresh_requires_reauthorization(
             headers=_auth(token),
             json={"limit": 5},
         )
-        assert response.status_code == 401
+        assert response.status_code == 409
         assert "Reconnect this account" in response.json()["detail"]
         with get_session_factory()() as session:
             connection = session.get(UserDriveConnection, connection_id)

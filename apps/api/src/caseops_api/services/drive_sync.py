@@ -756,7 +756,7 @@ def list_google_drive_files(
         session.commit()
         raise HTTPException(
             status_code=(
-                status.HTTP_401_UNAUTHORIZED
+                status.HTTP_409_CONFLICT
                 if exc.reauthorization_required
                 else status.HTTP_503_SERVICE_UNAVAILABLE
             ),
@@ -860,7 +860,7 @@ def sync_google_drive_candidates(
         session.commit()
         raise HTTPException(
             status_code=(
-                status.HTTP_401_UNAUTHORIZED
+                status.HTTP_409_CONFLICT
                 if exc.reauthorization_required
                 else status.HTTP_503_SERVICE_UNAVAILABLE
             ),
@@ -1132,7 +1132,7 @@ def review_drive_candidate(
         session.commit()
         raise HTTPException(
             status_code=(
-                status.HTTP_401_UNAUTHORIZED
+                status.HTTP_409_CONFLICT
                 if exc.reauthorization_required
                 else status.HTTP_503_SERVICE_UNAVAILABLE
             ),

@@ -543,7 +543,7 @@ def test_gmail_repeated_unauthorized_response_stops_after_one_refresh(
             json={"limit": 10},
         )
 
-        assert response.status_code == 401
+        assert response.status_code == 409
         assert "reconnect" in response.json()["detail"].lower()
         assert provider.recent_calls == [10, 10]
         with get_session_factory()() as session:
@@ -582,7 +582,7 @@ def test_gmail_revoked_refresh_is_actionable_and_transient_failure_keeps_connect
             headers=_auth(token),
             json={"limit": 10},
         )
-        assert response.status_code == 401
+        assert response.status_code == 409
         assert "Reconnect this account" in response.json()["detail"]
         with get_session_factory()() as session:
             connection = session.get(UserMailboxConnection, connection_id)

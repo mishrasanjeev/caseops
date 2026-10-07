@@ -490,9 +490,15 @@ def test_google_workspace_configuration_is_cross_tenant_scoped(
     assert connectors["google_drive"]["configured"] is False
 
 
+@pytest.mark.parametrize(
+    ("rotated_refresh_token", "expected_refresh_token"),
+    [(None, "existing-refresh"), ("rotated-refresh", "rotated-refresh")],
+)
 def test_google_workspace_refresh_uses_tenant_secret_and_preserves_refresh_token(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    rotated_refresh_token: str | None,
+    expected_refresh_token: str,
 ) -> None:
     bootstrap = _bootstrap_company(
         client,
@@ -506,10 +512,16 @@ def test_google_workspace_refresh_uses_tenant_secret_and_preserves_refresh_token
     def fake_post(url: str, *, data: dict[str, str], timeout: int) -> httpx.Response:
         captured.update(url=url, data=data, timeout=timeout)
         request = httpx.Request("POST", url)
+        response_body: dict[str, object] = {
+            "access_token": "refreshed-access",
+            "expires_in": 3600,
+        }
+        if rotated_refresh_token:
+            response_body["refresh_token"] = rotated_refresh_token
         return httpx.Response(
             200,
             request=request,
-            json={"access_token": "refreshed-access", "expires_in": 3600},
+            json=response_body,
         )
 
     monkeypatch.setattr(httpx, "post", fake_post)
@@ -536,7 +548,7 @@ def test_google_workspace_refresh_uses_tenant_secret_and_preserves_refresh_token
 
     assert refreshed == {
         "access_token": "refreshed-access",
-        "refresh_token": "existing-refresh",
+        "refresh_token": expected_refresh_token,
         "expires_in": 3600,
     }
     assert captured["url"] == "https://oauth2.googleapis.com/token"

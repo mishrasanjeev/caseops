@@ -1398,7 +1398,9 @@ requirements when using the fallback.
   server-side tenant OAuth configuration to refresh on provider 401, retry that
   read at most once, and persist refreshed tokens encrypted while retaining
   the old refresh token if Google omits a rotated value. Treat invalid/revoked
-  consent as an explicit reconnect state; 429s, timeouts, and 5xx responses are
+  consent as an explicit reconnect state using a non-auth 409 response; never
+  return provider-consent failure as HTTP 401, which the shared web client
+  interprets as an expired CaseOps login. 429s, timeouts, and 5xx responses are
   temporary and must not permanently mark a connection or review candidate
   broken. Convert provider exceptions to typed API responses so browser CORS
   does not turn an upstream failure into a misleading "API unreachable"
