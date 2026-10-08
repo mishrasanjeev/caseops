@@ -1175,6 +1175,10 @@ This item is split for ledger accuracy:
 #### 12.3a Calendar sync -- **DONE for bounded manual sync**
 
 - **Landed:** bounded manual Outlook bulk sync for hearing dates.
+- **October 8 exception:** initial Google consent and callback recovery are
+  **Inconclusive**, not covered by the bounded-sync completion above. Workbook
+  BUG-003/004 reproduce on serving `82a6d932`; candidate acceptance and the
+  exact-release deployment remain pending in `docs/bugfix-ram08oct-2026.md`.
 - **Still open elsewhere:** durable always-on calendar automation remains gated
   on Temporal and the notification service.
 

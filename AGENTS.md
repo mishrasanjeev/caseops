@@ -1,5 +1,26 @@
 # CaseOps agent instructions
 
+- OAuth acceptance must exercise authorization scopes, token exchange, account
+  identity, durable claim cleanup and the browser's return to the work area.
+  An existing-connection refresh test cannot close a new-connection callback
+  defect. Persist attempt identity, reject stale/expired finalizers and replay,
+  release transactions over provider I/O, and recheck current authorization and
+  connector configuration before publishing credentials. Failure cleanup may
+  alter only its own claim, never a newer attempt or a disconnect. Prove the
+  round trip with an isolated provider emulator and keep live Google consent
+  explicitly unverified until an authorized account completes it.
+  Retain session issuance metadata when refreshing context, recheck current
+  tenant activity and session revocation, and reject unused consent issued
+  before disconnect. Prove cross-provider authority-lock ordering on PostgreSQL,
+  including compatibility with ordinary tenant foreign-key inserts.
+  A completed callback replay must retain the healthy connection but return
+  its consumed-attempt rejection, not bypass the durable consumption ledger
+  with a fresh success. Assert the service result and browser notice together.
+  A concurrency test must hold the observed post-rollback boundary until its
+  lock probe completes. An event that merely records an earlier backoff does
+  not prove the next attempt has not reacquired the row. Use entered/resume
+  handshakes, preserve NOWAIT probes and require both real writers to finish.
+
 - A repeated report must be tied to the exact serving API and web revision,
   not the newest dirty source tree. Inspect loaded selector options and the
   reported persisted records before choosing between missing deployment,

@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from typing import Any, Protocol
 from urllib.parse import urlencode
+from uuid import uuid4
 
 import jwt
 from fastapi import HTTPException, status
@@ -45,8 +46,10 @@ from caseops_api.db.models import (
     MatterTask,
     MatterTaskPriority,
     MatterTaskStatus,
+    TenantGoogleWorkspaceConfiguration,
     UserMailboxConnection,
 )
+from caseops_api.db.session import serialize_sqlite_writer
 from caseops_api.schemas.mailbox import (
     MailboxAttachmentCandidateListResponse,
     MailboxAttachmentCandidateRecord,
@@ -66,6 +69,10 @@ from caseops_api.schemas.mailbox import (
     MailboxWebhookIngestResponse,
     OutlookMailCandidateCreateRequest,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_oauth,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.calendar_sync import (
     _decrypt_token_payload,
@@ -79,6 +86,12 @@ from caseops_api.services.google_workspace import (
     refresh_google_workspace_access_token,
 )
 from caseops_api.services.http_retries import request_with_retries
+from caseops_api.services.idempotency import (
+    IdempotencyClaimOutcome,
+    claim_idempotency,
+    complete_idempotency,
+)
+from caseops_api.services.identity import get_session_context
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
@@ -86,6 +99,8 @@ from caseops_api.services.session_context import SessionContext
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 _STATE_KIND = "gmail_mailbox_oauth"
 _STATE_TTL_MINUTES = 10
+_OAUTH_META_KEY = "_caseops_gmail_oauth"
+_OAUTH_LEASE_SECONDS = 300
 _MAX_SNIPPET_CHARS = 1000
 
 
@@ -95,6 +110,58 @@ class GmailProviderError(RuntimeError):
     def __init__(self, message: str, *, status_code: int | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
+
+
+def _oauth_token_scopes(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        raise GmailProviderError("Google returned an invalid token object.")
+    access_token = payload.get("access_token")
+    if (
+        not isinstance(access_token, str)
+        or not access_token
+        or any(character.isspace() for character in access_token)
+    ):
+        raise GmailProviderError("Google returned an invalid access token.")
+    if "refresh_token" in payload and (
+        not isinstance(payload["refresh_token"], str)
+        or not payload["refresh_token"]
+        or any(character.isspace() for character in payload["refresh_token"])
+    ):
+        raise GmailProviderError("Google returned an invalid refresh token.")
+    if "token_type" in payload and (
+        not isinstance(payload["token_type"], str) or payload["token_type"].lower() != "bearer"
+    ):
+        raise GmailProviderError("Google returned an unsupported token type.")
+    # RFC 6749 section 5.1 permits omission only for the original requested grant.
+    scope_text = payload.get("scope", " ".join(GMAIL_SCOPES))
+    if not isinstance(scope_text, str) or not set(GMAIL_SCOPES).issubset(scope_text.split()):
+        raise GmailProviderError("Google did not grant the required connector permission.")
+    try:
+        bounded = len(json.dumps(payload, allow_nan=False)) <= 65536
+    except (TypeError, ValueError) as exc:
+        raise GmailProviderError("Google returned an invalid token object.") from exc
+    if not bounded:
+        raise GmailProviderError("Google returned an oversized token object.")
+    return scope_text.split()
+
+
+def _validate_oauth_identity(subject: Any, email: Any) -> None:
+    if (
+        not isinstance(subject, str)
+        or not subject
+        or len(subject) > 255
+        or any(character.isspace() for character in subject)
+    ):
+        raise GmailProviderError("Google returned an invalid account identity.")
+    if (
+        not isinstance(email, str)
+        or not email
+        or len(email) > 320
+        or email.count("@") != 1
+        or not all(email.split("@"))
+        or any(character.isspace() for character in email)
+    ):
+        raise GmailProviderError("Google returned an invalid account email.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,9 +313,8 @@ class GoogleGmailProvider:
             )
             token_response.raise_for_status()
             token_payload = token_response.json()
-            access_token = str(token_payload.get("access_token") or "")
-            if not access_token:
-                raise GmailProviderError("Google did not return an access token.")
+            scopes = _oauth_token_scopes(token_payload)
+            access_token = token_payload["access_token"]
             profile_response = request_with_retries(
                 "GET",
                 "https://gmail.googleapis.com/gmail/v1/users/me/profile",
@@ -258,14 +324,24 @@ class GoogleGmailProvider:
             profile = profile_response.json()
         except httpx.HTTPError as exc:
             raise GmailProviderError("Gmail OAuth exchange failed.") from exc
-        scope_text = str(token_payload.get("scope") or " ".join(GMAIL_SCOPES))
-        email = str(profile.get("emailAddress") or "") or None
+        if not isinstance(profile, dict):
+            raise GmailProviderError("Google returned an invalid Gmail profile.")
+        email = profile.get("emailAddress")
+        _validate_oauth_identity(email, email)
+        history_id = profile.get("historyId")
+        if history_id is not None and (
+            not isinstance(history_id, str)
+            or not history_id
+            or len(history_id) > 120
+            or any(character.isspace() for character in history_id)
+        ):
+            raise GmailProviderError("Google returned an invalid mailbox history identity.")
         return {
             "token_payload": token_payload,
             "provider_account_id": email,
             "display_email": email,
-            "history_id": str(profile.get("historyId") or "") or None,
-            "scopes": scope_text.split(),
+            "history_id": history_id,
+            "scopes": scopes,
         }
 
     def list_recent_messages(
@@ -506,6 +582,8 @@ def _sign_state(context: SessionContext) -> str:
     now = datetime.now(UTC)
     payload = {
         "kind": _STATE_KIND,
+        "nonce": uuid4().hex,
+        "started_at": now.isoformat(),
         "company_id": context.company.id,
         "membership_id": context.membership.id,
         "iat": now,
@@ -514,7 +592,7 @@ def _sign_state(context: SessionContext) -> str:
     return jwt.encode(payload, get_settings().auth_secret, algorithm="HS256")
 
 
-def _verify_state(context: SessionContext, state: str) -> None:
+def _verify_state(context: SessionContext, state: str) -> dict[str, Any]:
     try:
         payload = jwt.decode(state, get_settings().auth_secret, algorithms=["HS256"])
     except InvalidTokenError as exc:
@@ -531,6 +609,7 @@ def _verify_state(context: SessionContext, state: str) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Gmail connection state does not match the current session.",
         )
+    return payload
 
 
 def _hash(value: str | None) -> str | None:
@@ -650,6 +729,126 @@ def start_gmail_connection(
     )
 
 
+def _oauth_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _oauth_error(reason: str, message: str, status_code: int = 409) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": "gmail_oauth_" + reason, "message": message},
+    )
+
+
+def _lock_oauth_authority(
+    session: Session,
+    context: SessionContext,
+    *,
+    check_config: bool = True,
+) -> tuple[SessionContext, str]:
+    # Serialize absent connection rows as well as existing ones; release before I/O.
+    serialize_sqlite_writer(session)
+    company_id, membership_id = context.company.id, context.membership.id
+    token_issued_at = context.token_issued_at
+    company, actors = lock_company_memberships_for_oauth(
+        session,
+        company_id=company_id,
+        membership_ids=(membership_id,),
+    )
+    actor = actors.get(membership_id)
+    if actor is None:
+        raise _oauth_error("authority_changed", "An active membership is required.", 403)
+    if company is None or not company.is_active:
+        raise _oauth_error("authority_changed", "The workspace is not active.", 403)
+    require_locked_membership_capability(session, actor, "calendar:sync")
+    context = get_session_context(
+        session,
+        membership_id,
+        token_issued_at=token_issued_at,
+    )
+    if not check_config:
+        return context, ""
+    configuration = session.scalar(
+        select(TenantGoogleWorkspaceConfiguration)
+        .where(TenantGoogleWorkspaceConfiguration.company_id == company_id)
+        .with_for_update(of=TenantGoogleWorkspaceConfiguration)
+        .execution_options(populate_existing=True)
+    )
+    runtime = _gmail_runtime_config(session, context=context)
+    fingerprint = hashlib.sha256(
+        repr(
+            (
+                runtime.client_id,
+                runtime.client_secret,
+                runtime.redirect_uri,
+                configuration.id if configuration else None,
+                configuration.updated_at if configuration else None,
+            )
+        ).encode()
+    ).hexdigest()
+    return context, fingerprint
+
+
+def _oauth_connection(session: Session, context: SessionContext) -> UserMailboxConnection | None:
+    return session.scalar(
+        select(UserMailboxConnection)
+        .where(
+            UserMailboxConnection.company_id == context.company.id,
+            UserMailboxConnection.membership_id == context.membership.id,
+            UserMailboxConnection.provider == MailboxProvider.GMAIL,
+        )
+        .with_for_update(of=UserMailboxConnection)
+        .execution_options(populate_existing=True)
+    )
+
+
+def _fail_oauth_claim(
+    session: Session,
+    *,
+    context: SessionContext,
+    company_id: str,
+    connection_id: str,
+    marker: str,
+    config_fingerprint: str,
+) -> None:
+    session.rollback()
+    restore_connected = False
+    try:
+        _, current_config = _lock_oauth_authority(session, context)
+        restore_connected = current_config == config_fingerprint
+    except HTTPException:
+        # A revoked session may release its own claim but cannot restore access.
+        session.rollback()
+    connection = session.scalar(
+        select(UserMailboxConnection)
+        .where(
+            UserMailboxConnection.id == connection_id,
+            UserMailboxConnection.company_id == company_id,
+        )
+        .with_for_update(of=UserMailboxConnection)
+        .execution_options(populate_existing=True)
+    )
+    if connection is not None and connection.status == MailboxConnectionStatus.ERROR:
+        token = (
+            _decrypt_token_payload(connection.encrypted_token_ref)
+            if connection.encrypted_token_ref
+            else {}
+        )
+        meta = token.get(_OAUTH_META_KEY, {})
+        if isinstance(meta, dict) and meta.get("marker") == marker:
+            # Cleanup owns only this attempt, never a replacement or revocation.
+            token[_OAUTH_META_KEY] = {
+                **meta,
+                "marker": None,
+                "expires_at": None,
+                "result": "failed",
+            }
+            if restore_connected and meta.get("prior_connected") and token.get("access_token"):
+                connection.status = MailboxConnectionStatus.CONNECTED
+            connection.encrypted_token_ref = _encrypt_token_payload(token)
+    session.commit()
+
+
 def complete_gmail_connection(
     session: Session,
     *,
@@ -657,28 +856,41 @@ def complete_gmail_connection(
     code: str,
     state: str,
 ) -> MailboxConnectionCallbackResponse:
+    state_payload = _verify_state(context, state)
+    context, config_fingerprint = _lock_oauth_authority(session, context)
     provider = _gmail_provider(session, context=context)
     if not provider.configured:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=provider.unavailable_reason or "Gmail is unavailable.",
-        )
-    _verify_state(context, state)
-    exchanged = provider.exchange_code(code=code)
-    token_payload = exchanged.get("token_payload")
-    if not isinstance(token_payload, dict):
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Gmail OAuth provider returned an invalid token response.",
-        )
-    now = datetime.now(UTC)
-    connection = session.scalar(
-        select(UserMailboxConnection).where(
-            UserMailboxConnection.company_id == context.company.id,
-            UserMailboxConnection.membership_id == context.membership.id,
-            UserMailboxConnection.provider == MailboxProvider.GMAIL,
-        )
+        raise _oauth_error("unavailable", "Gmail OAuth is not configured.", 503)
+    now = _oauth_now()
+    attempt = hashlib.sha256((state + "\\0" + code).encode()).hexdigest()
+    connection = _oauth_connection(session, context)
+    token = (
+        _decrypt_token_payload(connection.encrypted_token_ref)
+        if connection is not None and connection.encrypted_token_ref
+        else {}
     )
+    meta = token.get(_OAUTH_META_KEY, {})
+    if not isinstance(meta, dict):
+        raise _oauth_error("invalid_attempt", "Restart the Gmail connection.")
+    if meta.get("marker") and float(meta.get("expires_at") or 0) > now.timestamp():
+        raise _oauth_error(
+            "exchange_in_flight", "An OAuth exchange is already in progress. Wait briefly."
+        )
+    if connection is not None and connection.status == MailboxConnectionStatus.REVOKED:
+        started = (
+            datetime.fromisoformat(state_payload["started_at"])
+            if state_payload.get("started_at")
+            else datetime.fromtimestamp(state_payload["iat"], UTC)
+        )
+        revoked_at = (
+            connection.updated_at.replace(tzinfo=UTC)
+            if connection.updated_at.tzinfo is None
+            else connection.updated_at
+        )
+        if started <= revoked_at:
+            raise _oauth_error(
+                "attempt_consumed", "This connection attempt was revoked. Start a new connection."
+            )
     if connection is None:
         connection = UserMailboxConnection(
             company_id=context.company.id,
@@ -687,33 +899,155 @@ def complete_gmail_connection(
         )
         session.add(connection)
         session.flush()
-    connection.provider_account_id = str(exchanged.get("provider_account_id") or "") or None
-    connection.display_email = str(exchanged.get("display_email") or "") or None
-    connection.status = MailboxConnectionStatus.CONNECTED
-    connection.encrypted_token_ref = _encrypt_token_payload(token_payload)
-    connection.scopes_json = [
-        str(scope) for scope in exchanged.get("scopes", GMAIL_SCOPES) if str(scope)
-    ]
-    connection.last_history_id = str(exchanged.get("history_id") or "") or None
-    connection.connected_at = now
-    session.add(connection)
-    record_from_context(
-        session,
-        context,
-        action="mailbox.gmail.connected",
-        target_type="user_mailbox_connection",
-        target_id=connection.id,
-        metadata={
-            "provider": MailboxProvider.GMAIL,
-            "display_email": connection.display_email,
-            "scopes": connection.scopes_json,
-        },
+    # Digest-only consumption survives disconnect; neither state nor code is retried.
+    for kind, value in (("state", state), ("code", code)):
+        digest = hashlib.sha256(value.encode()).hexdigest()
+        consumed = claim_idempotency(
+            session,
+            company_id=context.company.id,
+            actor_scope=f"membership:{context.membership.id}",
+            actor_membership_id=context.membership.id,
+            http_method="GET",
+            operation=f"workspace.oauth.gmail.{kind}_consumed",
+            idempotency_key=digest,
+            request_hash=digest,
+        )
+        if consumed.outcome != IdempotencyClaimOutcome.CLAIMED:
+            raise _oauth_error(
+                "attempt_consumed", "This connection attempt has finished. Start a new connection."
+            )
+        assert consumed.claim_token is not None and consumed.claim_generation is not None
+        complete_idempotency(
+            session,
+            company_id=context.company.id,
+            record_id=consumed.record.id,
+            claim_token=consumed.claim_token,
+            claim_generation=consumed.claim_generation,
+            response_status=202,
+            result_type="workspace_oauth_consumption",
+            result_id=connection.id,
+        )
+    marker = uuid4().hex
+    prior_connected = connection.status == MailboxConnectionStatus.CONNECTED or (
+        meta.get("result") == "pending"
+        and meta.get("prior_connected")
+        and meta.get("config") == config_fingerprint
     )
+    meta = {
+        "attempt": attempt,
+        "marker": marker,
+        "result": "pending",
+        "expires_at": min(now.timestamp() + _OAUTH_LEASE_SECONDS, state_payload["exp"]),
+        "config": config_fingerprint,
+        "prior_connected": bool(prior_connected),
+    }
+    token[_OAUTH_META_KEY] = meta
+    connection.status = MailboxConnectionStatus.ERROR
+    connection.encrypted_token_ref = _encrypt_token_payload(token)
+    connection_id, company_id = connection.id, context.company.id
     session.commit()
-    return MailboxConnectionCallbackResponse(
-        connected=True,
-        connection=_connection_record(connection),
-    )
+
+    try:
+        exchanged = provider.exchange_code(code=code)
+        token_payload = exchanged.get("token_payload") if isinstance(exchanged, dict) else None
+        _oauth_token_scopes(token_payload)
+        _validate_oauth_identity(
+            exchanged.get("provider_account_id"),
+            exchanged.get("display_email"),
+        )
+        history_id = exchanged.get("history_id")
+        if history_id is not None and (
+            not isinstance(history_id, str)
+            or not history_id
+            or len(history_id) > 120
+            or any(character.isspace() for character in history_id)
+        ):
+            raise GmailProviderError("Google returned an invalid mailbox history identity.")
+        scopes = exchanged.get("scopes")
+        if (
+            not isinstance(scopes, (list, tuple))
+            or any(not isinstance(scope, str) or not scope.strip() for scope in scopes)
+            or not set(GMAIL_SCOPES).issubset(scopes)
+        ):
+            raise GmailProviderError("Google did not grant the required connector permission.")
+        encrypted_token = _encrypt_token_payload(
+            {
+                **token_payload,
+                _OAUTH_META_KEY: {
+                    **meta,
+                    "marker": None,
+                    "expires_at": None,
+                    "result": "complete",
+                },
+            }
+        )
+    except Exception as exc:
+        _fail_oauth_claim(
+            session,
+            context=context,
+            company_id=company_id,
+            connection_id=connection_id,
+            marker=marker,
+            config_fingerprint=config_fingerprint,
+        )
+        raise _oauth_error(
+            "exchange_failed",
+            "Gmail authorization could not complete. Start a new connection.",
+            502,
+        ) from exc
+
+    try:
+        context, current_config = _lock_oauth_authority(session, context)
+        connection = _oauth_connection(session, context)
+        current = (
+            _decrypt_token_payload(connection.encrypted_token_ref).get(_OAUTH_META_KEY, {})
+            if connection is not None and connection.encrypted_token_ref
+            else {}
+        )
+        if (
+            current_config != config_fingerprint
+            or connection is None
+            or connection.id != connection_id
+            or connection.status != MailboxConnectionStatus.ERROR
+            or current.get("marker") != marker
+            or float(current.get("expires_at") or 0) <= _oauth_now().timestamp()
+        ):
+            raise _oauth_error(
+                "finalize_stale", "Connection authority changed. Start a new connection."
+            )
+        connection.provider_account_id = exchanged["provider_account_id"]
+        connection.display_email = exchanged.get("display_email")
+        connection.status = MailboxConnectionStatus.CONNECTED
+        connection.encrypted_token_ref = encrypted_token
+        connection.scopes_json = list(scopes)
+        connection.last_history_id = history_id
+        connection.connected_at = _oauth_now()
+        record_from_context(
+            session,
+            context,
+            action="mailbox.gmail.connected",
+            target_type="user_mailbox_connection",
+            target_id=connection.id,
+            metadata={
+                "provider": MailboxProvider.GMAIL,
+                "display_email": connection.display_email,
+                "scopes": connection.scopes_json,
+            },
+        )
+        session.commit()
+        return MailboxConnectionCallbackResponse(
+            connected=True, connection=_connection_record(connection)
+        )
+    except Exception:
+        _fail_oauth_claim(
+            session,
+            context=context,
+            company_id=company_id,
+            connection_id=connection_id,
+            marker=marker,
+            config_fingerprint=config_fingerprint,
+        )
+        raise
 
 
 def _connected_gmail_connection(
@@ -743,13 +1077,17 @@ def revoke_gmail_connection(
     context: SessionContext,
     connection_id: str,
 ) -> MailboxConnectionRecord:
+    context, _ = _lock_oauth_authority(session, context, check_config=False)
     connection = session.scalar(
-        select(UserMailboxConnection).where(
+        select(UserMailboxConnection)
+        .where(
             UserMailboxConnection.id == connection_id,
             UserMailboxConnection.company_id == context.company.id,
             UserMailboxConnection.membership_id == context.membership.id,
             UserMailboxConnection.provider == MailboxProvider.GMAIL,
         )
+        .with_for_update(of=UserMailboxConnection)
+        .execution_options(populate_existing=True)
     )
     if connection is None:
         raise HTTPException(status_code=404, detail="Gmail connection not found.")

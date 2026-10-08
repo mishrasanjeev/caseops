@@ -145,7 +145,7 @@ $WebPort = ($PortBase + 2).ToString()
 $PostgresPort = ($PortBase + 3).ToString()
 $ValkeyPort = ($PortBase + 4).ToString()
 
-$DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .nvmrc .dockerignore .gcloudignore playwright.docker.config.ts scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
+$DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .nvmrc .dockerignore .gcloudignore playwright.app.config.ts playwright.docker.config.ts tests/e2e/support/oauth scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
 if ($DirtyContext -and -not $PreCommit) {
     throw "Docker acceptance requires a committed, clean build context. Commit the candidate first.`n$DirtyContext"
 }
@@ -313,6 +313,9 @@ $AcceptanceEnvironment = @{
     COMPOSE_PROFILES = "acceptance"
     CASEOPS_RELEASE_SHA = $ReleaseSha
     CASEOPS_DOCKER_ENV = "e2e"
+    CASEOPS_DOCKER_API_APP = "oauth_emulator_api:app"
+    CASEOPS_DOCKER_API_APP_DIR = "/oauth-harness"
+    CASEOPS_E2E_OAUTH_EMULATOR = "calendar-20261008"
     CASEOPS_DOCKER_INTERNAL_WORKER_NETWORK = "true"
     CASEOPS_DOCKER_API_PORT = $ApiPort
     CASEOPS_DOCKER_WEB_PORT = $WebPort

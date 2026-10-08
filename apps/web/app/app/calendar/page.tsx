@@ -25,6 +25,7 @@ import {
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { OAuthCallbackNotice } from "@/components/app/OAuthCallbackNotice";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -431,6 +432,7 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      <OAuthCallbackNotice area="calendar" />
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)]">

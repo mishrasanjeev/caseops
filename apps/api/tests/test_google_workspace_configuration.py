@@ -40,6 +40,8 @@ def _configure_google_workspace(client: TestClient, token: str) -> None:
             "gmail_redirect_uri": "https://api.tenant.example/api/mailbox/gmail/callback",
             "drive_redirect_uri": "https://api.tenant.example/api/drive/google/callback",
             "scopes": [
+                "openid",
+                "email",
                 "https://www.googleapis.com/auth/calendar.events",
                 "https://www.googleapis.com/auth/drive.readonly",
                 "https://www.googleapis.com/auth/gmail.readonly",
@@ -306,6 +308,48 @@ def test_google_scope_authority_rejects_partial_approved_scope_set(
         if item["key"] == "scopes_approved"
     )
     assert scopes["approved"] is False
+
+
+def test_calendar_only_legacy_scopes_do_not_claim_identity_readiness(client: TestClient) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="calendar-legacy-identity",
+        email="owner@calendar-identity.example",
+    )
+    token = str(bootstrap["access_token"])
+    _configure_google_workspace(client, token)
+    legacy = client.patch(
+        "/api/admin/google-workspace-configuration",
+        headers=_auth(token),
+        json={
+            "scopes": ["https://www.googleapis.com/auth/calendar.events"],
+            "oauth_consent_model_approved": True,
+            "scopes_approved": True,
+            "calendar_enabled": True,
+            "gmail_enabled": False,
+            "drive_enabled": False,
+            "enabled": True,
+        },
+    )
+    assert legacy.status_code == 200, legacy.text
+    assert "scopes_approved" in legacy.json()["missing_approval_keys"]
+    assert legacy.json()["approved_scopes"] == ["https://www.googleapis.com/auth/calendar.events"]
+    complete = client.patch(
+        "/api/admin/google-workspace-configuration",
+        headers=_auth(token),
+        json={
+            "scopes": list(google_workspace_service.GOOGLE_WORKSPACE_CALENDAR_SCOPES),
+            "oauth_consent_model_approved": True,
+            "scopes_approved": True,
+            "calendar_enabled": True,
+            "gmail_enabled": False,
+            "drive_enabled": False,
+            "enabled": True,
+        },
+    )
+    assert complete.status_code == 200, complete.text
+    assert "scopes_approved" not in complete.json()["missing_approval_keys"]
+
 
 
 def test_disabled_google_tenant_row_never_falls_back_to_environment_credentials(

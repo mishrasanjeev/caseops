@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## October 8 OAuth Finalization Audit
+
+**Partially implemented**: Google Calendar/Outlook durable exchange claims
+lack complete failure, expiry and replay handling; Gmail/Drive finalization
+can ignore a concurrent disconnect and retains provider-I/O transactions.
+These are active control gaps under repair, not closures from the October 7
+safe-read refresh tests. Browser callbacks also omit the return journey.
+Exact production evidence, isolated regressions and outstanding release proof:
+`docs/bugfix-ram08oct-2026.md`. This candidate remains **NO-GO** until its gates
+complete; unrelated provider/legal-data programme gaps remain unchanged.
+
 ## September 14 Release Engineering Checkpoint
 
 Recorded 2026-09-14 by the release-engineering handover session; the
