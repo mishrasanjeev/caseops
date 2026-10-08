@@ -358,6 +358,15 @@ containers, volumes and networks. Its logs and incremental journal remain in
 
 Implementation and scoped affected-file regressions are complete. Their
 overlapping inventories must not be added together as one full-suite result.
+The second candidate `b7a61163` passed the map change gate but CI `37736110499`
+correctly rejected the stale generated runtime data-class projection. Updating
+the reviewed map requires both its human view and its compiled runtime
+fingerprint to be regenerated. The compiler now refreshes that fingerprint;
+the reviewed admitted classes and dispositions are unchanged. The complete CI
+preflight, rather than a selected subset, must pass before the next freeze.
+`docker-b7a61163-r1` was deliberately interrupted during PostgreSQL execution
+and is also incomplete, with its incremental journal and original CI failure
+retained. Neither interrupted run certifies the release.
 Require fresh exact-tree full PostgreSQL Docker/Playwright, green PR and
 merged-main CI, and guarded canonical-SHA deployment. The standard collection
 currently discovers 1,459 PostgreSQL cases; collection is not execution proof.
