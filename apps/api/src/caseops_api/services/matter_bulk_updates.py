@@ -40,6 +40,7 @@ from caseops_api.schemas.matters import MatterUpdateRequest, normalize_matter_co
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access, can_access, visible_matters_filter
 from caseops_api.services.matter_imports import _unsafe_import_cell
+from caseops_api.services.matter_write_fence import lock_matter_private_authority
 from caseops_api.services.matters import update_matter
 from caseops_api.services.session_context import SessionContext
 
@@ -354,6 +355,9 @@ def _planned_changes(
 ) -> dict[str, dict[str, object]]:
     if not updates:
         return {}
+    # Retain tenant admission when the preview savepoint rolls back; entering
+    # only inside update_matter would release it with the projected changes.
+    lock_matter_private_authority(session, company_id=context.company.id)
     fields = _planned_fields(updates)
     before = {field: _json_value(getattr(matter, field)) for field in fields}
     savepoint = session.begin_nested()
@@ -479,6 +483,7 @@ def preview_matter_bulk_update(
     session: Session, *, context: SessionContext, content: bytes, filename: str
 ) -> MatterBulkUpdatePreviewResponse:
     file_hash, rows, _ = _parse_rows(content, filename)
+    lock_matter_private_authority(session, company_id=context.company.id)
     plans = _preview_rows(session, context=context, rows=rows)
     token = _preview_token(file_hash, plans)
     changed = sum(plan.status == "changed" for plan in plans)
@@ -507,7 +512,10 @@ def apply_matter_bulk_update(
     preview_token: str,
 ) -> MatterBulkUpdateApplyResponse:
     file_hash, rows, manifest_format = _parse_rows(content, filename)
+    lock_matter_private_authority(session, company_id=context.company.id)
     plans = _preview_rows(session, context=context, rows=rows)
+    # A preview access-denial audit may commit and release the earlier fence.
+    lock_matter_private_authority(session, company_id=context.company.id)
     current_token = _preview_token(file_hash, plans)
     safe_filename = (
         os.path.basename(filename).replace("\\", "_").replace("/", "_")[:255] or "upload"

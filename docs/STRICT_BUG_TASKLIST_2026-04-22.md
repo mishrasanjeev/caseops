@@ -1,5 +1,21 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 8 Confirmed Follow-Up Causes
+
+**Not fixed** on serving `b20f86bd`: canonical source/projection whitespace
+hash disagreement is reproduced and confirmed against bounded read-only
+production data. Separate same-actor Company/Membership deadlocks are proven
+on real PostgreSQL for both worker and interactive patent producers versus
+Matter metadata/disposal. Do not conflate these with benign concurrency or
+PR #524's source-version cycle. Evidence, dependency closure and open gates:
+`docs/bugfix-private-authority-followup-2026-10-08.md`.
+Adjacent confirmed causes include nullable notice visibility, file deletion
+after an uncertain commit response, and omitted retained IP bytes in quota.
+Local replacements retain their failed baselines and full inventories. A
+candidate-only old-upload admission across an explicit dispose/reopen cycle
+was reproduced and repaired; this is not proof of automatic case resurrection.
+PR #524 and its main CI are green; this follow-up is not yet deployed.
+
 ## October 8 Production Acceptance Follow-Up
 
 PR #523 is deployed as `b20f86bd` on both services after full Docker and green

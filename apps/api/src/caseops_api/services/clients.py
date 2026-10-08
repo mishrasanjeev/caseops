@@ -17,6 +17,7 @@ from caseops_api.db.models import (
     Client,
     ClientKycStatus,
     ClientType,
+    CompanyMembership,
     Matter,
     MatterAttachment,
     MatterClientAssignment,
@@ -36,7 +37,12 @@ from caseops_api.schemas.clients import (
     MatterClientVerificationListResponse,
     MatterClientVerificationRecord,
 )
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.identity import get_session_context
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
@@ -105,6 +111,70 @@ _ALLOWED_VERIFICATION_TRANSITIONS = {
         ClientKycStatus.EXPIRED.value,
     },
 }
+
+
+def lock_client_provenance_references(
+    session: Session,
+    *,
+    company_id: str,
+    client_id: str | None,
+    actor_membership_id: str | None,
+) -> set[str]:
+    """Pre-acquire retained FK references, not current-user authorization."""
+    with session.no_autoflush:
+        actor_ids = {actor_membership_id} if actor_membership_id is not None else set()
+        if client_id is not None:
+            references = session.execute(
+                select(Client.created_by_membership_id, Client.kyc_verified_by_membership_id)
+                .where(Client.id == client_id, Client.company_id == company_id)
+            ).first()
+            if references is not None:
+                actor_ids.update(value for value in references if value is not None)
+        if not actor_ids:
+            return set()
+        # A second source flush can recheck unchanged FKs. Acquire them with the
+        # event/audit actor in the same order as employee offboarding.
+        return set(session.scalars(
+            select(CompanyMembership.id)
+            .where(
+                CompanyMembership.company_id == company_id,
+                CompanyMembership.id.in_(actor_ids),
+            )
+            .order_by(CompanyMembership.id)
+            .with_for_update(of=CompanyMembership, read=True, key_share=True)
+        ))
+
+
+def _lock_private_client_writer(
+    session: Session, *, context: SessionContext, required_capability: str,
+    client_id: str | None = None,
+) -> None:
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+    # Enter before parent/source writes, including implicit FK actor locks.
+    with session.no_autoflush:
+        lock_private_authority_writer(session, company_id=context.company.id)
+        locked = lock_client_provenance_references(
+            session, company_id=context.company.id, client_id=client_id,
+            actor_membership_id=context.membership.id,
+        )
+        if context.membership.id not in locked:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="The current company membership is unavailable.",
+            )
+        # Retained references remain KEY SHARE provenance. Upgrade only the live
+        # caller, then fence User and reauthorize the original session after waits.
+        lock_company_memberships_for_assignment(
+            session, company_id=context.company.id, membership_ids={context.membership.id},
+        )
+        current = get_session_context(
+            session, context.membership.id, token_issued_at=context.token_issued_at,
+        )
+        require_locked_membership_capability(session, current.membership, required_capability)
+        context.company = current.company
+        context.membership = current.membership
+        context.user = current.user
 
 
 def _propagate_private_client_change(
@@ -230,6 +300,7 @@ def _matter_links_for(session: Session, client: Client) -> list[ClientMatterLink
 def create_client(
     session: Session, *, context: SessionContext, payload: ClientCreateRequest,
 ) -> ClientRecord:
+    _lock_private_client_writer(session, context=context, required_capability="clients:create")
     if payload.client_type not in _ALLOWED_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -355,6 +426,9 @@ def update_client(
     client_id: str,
     payload: ClientUpdateRequest,
 ) -> ClientRecord:
+    _lock_private_client_writer(
+        session, context=context, client_id=client_id, required_capability="clients:edit",
+    )
     client = _get_client_model(session, context=context, client_id=client_id)
     from caseops_api.services.private_retrieval import private_source_version
 
@@ -437,6 +511,9 @@ def archive_client(
 ) -> ClientRecord:
     """Soft-delete — flip ``is_active`` to false. Keeps the rows
     linked to historical matters for audit continuity."""
+    _lock_private_client_writer(
+        session, context=context, client_id=client_id, required_capability="clients:archive",
+    )
     client = _get_client_model(session, context=context, client_id=client_id)
     from caseops_api.services.private_retrieval import private_source_version
 
@@ -474,6 +551,9 @@ def unarchive_client(
     an already-active client just no-ops the audit row and returns
     the current record so the UI's optimistic refresh is safe.
     """
+    _lock_private_client_writer(
+        session, context=context, client_id=client_id, required_capability="clients:archive",
+    )
     client = _get_client_model(session, context=context, client_id=client_id)
     if not client.is_active:
         from caseops_api.services.private_retrieval import private_source_version
@@ -514,6 +594,9 @@ def assign_client_to_matter(
     matter_id: str,
     payload: MatterClientAssignRequest,
 ) -> MatterClientAssignmentRecord:
+    _lock_private_client_writer(
+        session, context=context, client_id=payload.client_id, required_capability="clients:edit",
+    )
     matter = session.scalar(
         select(Matter).where(
             Matter.id == matter_id,
@@ -577,6 +660,9 @@ def remove_client_from_matter(
     matter_id: str,
     client_id: str,
 ) -> None:
+    _lock_private_client_writer(
+        session, context=context, client_id=client_id, required_capability="clients:edit",
+    )
     matter = session.scalar(
         select(Matter).where(
             Matter.id == matter_id,
@@ -753,6 +839,9 @@ def submit_client_kyc(
     from datetime import UTC
     from datetime import datetime as _dt
 
+    _lock_private_client_writer(
+        session, context=context, client_id=client_id, required_capability="clients:kyc_submit",
+    )
     client = _get_client_model(session, context=context, client_id=client_id)
     from caseops_api.services.private_retrieval import private_source_version
 
@@ -805,6 +894,9 @@ def verify_client_kyc(
     from datetime import UTC
     from datetime import datetime as _dt
 
+    _lock_private_client_writer(
+        session, context=context, client_id=client_id, required_capability="clients:kyc_review",
+    )
     client = _get_client_model(session, context=context, client_id=client_id)
     from caseops_api.services.private_retrieval import private_source_version
 
@@ -858,6 +950,9 @@ def reject_client_kyc(
     """Staff reviewer rejects a submitted KYC pack with a reason. The
     reason MUST be present (schema enforces min_length=4) so the
     lawyer who has to re-collect docs knows what to fix."""
+    _lock_private_client_writer(
+        session, context=context, client_id=client_id, required_capability="clients:kyc_review",
+    )
     client = _get_client_model(session, context=context, client_id=client_id)
     from caseops_api.services.private_retrieval import private_source_version
 
@@ -1004,6 +1099,9 @@ def update_matter_client_verification(
     client_id: str,
     payload: ClientVerificationUpdateRequest,
 ) -> MatterClientVerificationRecord:
+    _lock_private_client_writer(
+        session, context=context, client_id=client_id, required_capability="clients:kyc_review",
+    )
     matter = _load_matter_for_client_verification(
         session, context=context, matter_id=matter_id,
     )

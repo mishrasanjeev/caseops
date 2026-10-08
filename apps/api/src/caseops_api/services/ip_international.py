@@ -133,6 +133,10 @@ def create_international_record(
     context: SessionContext,
     payload: TrademarkInternationalRecordCreateRequest,
 ) -> TrademarkInternationalRegistration:
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+    with session.no_autoflush:
+        lock_private_authority_writer(session, company_id=context.company.id)
     context = _lock_ip_writer_context(
         session,
         context=context,

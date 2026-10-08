@@ -258,13 +258,19 @@ def private_source_version(row: Client | Matter | IpDocketRecord) -> str:
     return f"{is_active}:{content_hash}"
 
 
+def normalize_private_projection_text(content: str) -> str:
+    """Use the same bytes for stored text, content hashes and embedding reuse."""
+
+    return " ".join(content.split())
+
+
 def private_source_projection_text(row: Client | Matter | IpDocketRecord) -> str:
     """Canonical text used by both indexing and source-currentness checks."""
 
     if isinstance(row, Client):
-        return f"Client {row.name}. Type {row.client_type}. KYC {row.kyc_status}."
-    if isinstance(row, Matter):
-        return " ".join(
+        content = f"Client {row.name}. Type {row.client_type}. KYC {row.kyc_status}."
+    elif isinstance(row, Matter):
+        content = " ".join(
             value
             for value in (
                 f"Matter {row.matter_code}: {row.title}.",
@@ -276,10 +282,12 @@ def private_source_projection_text(row: Client | Matter | IpDocketRecord) -> str
             )
             if value
         )
-    return (
-        f"IP docket {row.title}. Type {row.record_type}. Status {row.status}. "
-        f"Primary identifier {row.primary_identifier or 'not allocated'}."
-    )
+    else:
+        content = (
+            f"IP docket {row.title}. Type {row.record_type}. Status {row.status}. "
+            f"Primary identifier {row.primary_identifier or 'not allocated'}."
+        )
+    return normalize_private_projection_text(content)
 
 
 def _active_generation_statement(company_id: str):
@@ -613,7 +621,7 @@ def _apply_private_projection_payload(
     generation: PrivateIndexGeneration,
     now: datetime,
 ) -> None:
-    content = " ".join(payload.content.split())
+    content = normalize_private_projection_text(payload.content)
     encoded_embedding = (
         json.dumps(list(payload.embedding), separators=(",", ":"))
         if payload.embedding is not None
@@ -2598,6 +2606,7 @@ __all__ = [
     "hydrate_private_projection_results",
     "insert_private_projection_batch",
     "mark_private_generation_ready",
+    "normalize_private_projection_text",
     "prefilter_private_projection_ids",
     "private_retrieval_activation",
     "private_retrieval_cache_key",

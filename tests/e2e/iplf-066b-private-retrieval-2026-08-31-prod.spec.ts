@@ -1,7 +1,7 @@
 /** IPLF-066B exact-release production acceptance for private revocation. */
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { expectStatus } from "./support/iplf058b";
@@ -287,6 +287,38 @@ test("IPLF-066B production locks answers after access restore and revokes privat
     return;
   }
 
+  const sourceResponse = await page.request.get(`${API}/api/matters/${matter.id}`, { headers });
+  await expectStatus(sourceResponse, 200, "read new release-scoped whitespace source");
+  const source = await sourceResponse.json();
+  const whitespaceDescription =
+    "Synthetic QA Matter used only to prove  tenant-private retrieval\n" +
+    "revocation\ton one exact production release.";
+  expect(source.description).toBe(whitespaceDescription);
+  const canonicalContent = [
+    `Matter ${matter.matter_code}: ${matter.title}.`,
+    "Status active. Practice area Intellectual Property.",
+    "Forum Trade Marks Registry Synthetic QA.",
+    "Synthetic QA Matter used only to prove tenant-private retrieval",
+    "revocation on one exact production release.",
+  ].join(" ");
+  const matterSearch = {
+    query: "tenant-private retrieval",
+    source_types: ["matter"],
+    scope_ids: { matter: [matter.id] },
+    limit: 10,
+  };
+  const projectedMatter = await page.request.post(`${API}/api/private-retrieval/search`, {
+    headers, data: matterSearch,
+  });
+  await expectStatus(projectedMatter, 200, "search canonical whitespace source after guarded rebuild");
+  const projectedMatters = (await projectedMatter.json()).items;
+  expect(projectedMatters).toHaveLength(1);
+  expect(projectedMatters[0].source_id).toBe(matter.id);
+  expect(projectedMatters[0].content).toBe(canonicalContent);
+  expect(projectedMatters[0].source_version).toMatch(new RegExp(
+    `^[0-9]+:1:${createHash("sha256").update(canonicalContent).digest("hex")}$`,
+  ));
+
   const before = await page.request.post(
     `${API}/api/private-retrieval/search`,
     {
@@ -456,6 +488,11 @@ test("IPLF-066B production locks answers after access restore and revokes privat
   });
   await expectStatus(after, 200, "search after private revocation");
   expect((await after.json()).items).toEqual([]);
+  const revokedMatter = await page.request.post(`${API}/api/private-retrieval/search`, {
+    headers, data: matterSearch,
+  });
+  await expectStatus(revokedMatter, 200, "whitespace Matter search remains revoked after disposal");
+  expect((await revokedMatter.json()).items).toEqual([]);
 
   await page.setViewportSize({ width: 360, height: 800 });
   await expect(

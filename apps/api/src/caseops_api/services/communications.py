@@ -12,6 +12,7 @@ The service helper that loads the matter (``_load_matter``) raises
 404 — we never report 403 on a matter the caller doesn't own
 because that confirms the matter exists.
 """
+
 from __future__ import annotations
 
 import base64
@@ -20,9 +21,10 @@ import hashlib
 import logging
 from datetime import UTC, datetime
 from io import BytesIO
+from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -55,6 +57,10 @@ from caseops_api.schemas.communications import (
     InboundEmailImportResponse,
 )
 from caseops_api.schemas.email_templates import EmailSendRequest
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.document_jobs import enqueue_processing_job
 from caseops_api.services.document_storage import (
@@ -65,6 +71,7 @@ from caseops_api.services.document_storage import (
 from caseops_api.services.email_templates import render_template
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
+from caseops_api.services.matter_write_fence import lock_matter_private_authority
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
@@ -573,26 +580,23 @@ def _decode_attachment_content(attachment: InboundEmailAttachmentImport) -> Byte
 def _persist_inbound_attachment(
     session: Session,
     *,
-    context: SessionContext,
-    matter: Matter,
+    company_id: str,
+    matter_id: str,
+    actor_id: str,
+    staged_size_bytes: int,
     filename: str,
     content_type: str | None,
     stream: BytesIO,
-) -> tuple[MatterAttachment, str, str]:
-    """Persist one imported email artifact without committing.
-
-    This mirrors the matter upload pipeline: upload validation, storage,
-    virus scan, MatterAttachment row, processing job, and matter activity.
-    The caller owns the transaction so the Communication row, metadata,
-    audit event, and all imported attachments commit together.
-    """
+) -> MatterAttachment:
+    """Stage bytes, leaving the attachment transient for outer atomic admission."""
     from caseops_api.services.file_security import verify_upload
     from caseops_api.services.virus_scan import reject_if_infected
 
     verify_upload(filename=filename, content_type=content_type, stream=stream)
     attachment = MatterAttachment(
-        matter_id=matter.id,
-        uploaded_by_membership_id=context.membership.id,
+        id=str(uuid4()),
+        matter_id=matter_id,
+        uploaded_by_membership_id=actor_id,
         original_filename=sanitize_filename(filename),
         storage_key="pending",
         content_type=content_type,
@@ -601,21 +605,25 @@ def _persist_inbound_attachment(
         document_type=_EMAIL_BODY_ATTACHMENT_TYPE,
         lifecycle_stage=_EMAIL_BODY_LIFECYCLE_STAGE,
     )
-    session.add(attachment)
-    session.flush()
+
+    def preflight_quota(size_bytes: int) -> None:
+        try:
+            assert_storage_quota_allows_upload(
+                session,
+                company_id=company_id,
+                matter_id=matter_id,
+                incoming_size_bytes=staged_size_bytes + size_bytes,
+            )
+        finally:
+            session.rollback()
 
     stored = persist_matter_attachment(
-        company_id=context.company.id,
-        matter_id=matter.id,
+        company_id=company_id,
+        matter_id=matter_id,
         attachment_id=attachment.id,
         filename=filename,
         stream=stream,
-        before_store=lambda size_bytes: assert_storage_quota_allows_upload(
-            session,
-            company_id=context.company.id,
-            matter_id=matter.id,
-            incoming_size_bytes=size_bytes,
-        ),
+        before_store=preflight_quota,
         validate_temp_file=lambda path: reject_if_infected(
             path,
             filename=filename,
@@ -625,25 +633,36 @@ def _persist_inbound_attachment(
     attachment.storage_key = stored.storage_key
     attachment.size_bytes = stored.size_bytes
     attachment.sha256_hex = stored.sha256_hex
-    job = enqueue_processing_job(
-        session,
-        company_id=context.company.id,
-        requested_by_membership_id=context.membership.id,
-        target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
-        attachment_id=attachment.id,
-        action=DocumentProcessingAction.INITIAL_INDEX,
-    )
-    session.add(attachment)
-    session.add(
-        MatterActivity(
-            matter_id=matter.id,
-            actor_membership_id=context.membership.id,
-            event_type="inbound_email_attachment_added",
-            title="Inbound email artifact imported",
-            detail=f"{attachment.original_filename} queued for document processing.",
+    return attachment
+
+
+def _admit_inbound_import(
+    session: Session,
+    *,
+    company_id: str,
+    actor_id: str,
+    token_issued_at: float | None,
+    matter_id: str,
+) -> tuple[SessionContext, Matter]:
+    from caseops_api.services.identity import get_session_context
+
+    with session.no_autoflush:
+        lock_matter_private_authority(session, company_id=company_id)
+        actors = lock_company_memberships_for_assignment(
+            session,
+            company_id=company_id,
+            membership_ids={actor_id},
+            # Parent-first log writers must finish their actor FK checks.
+            # Non-key authority updates/revocation still conflict with this fence.
+            no_key_update=True,
         )
-    )
-    return attachment, job.id, stored.storage_key
+        if actor_id not in actors:
+            raise HTTPException(status_code=403, detail="The current session is no longer active.")
+        context = get_session_context(session, actor_id, token_issued_at=token_issued_at)
+        require_locked_membership_capability(session, actors[actor_id], "communications:write")
+        matter = _load_matter(session, context=context, matter_id=matter_id)
+        matter = require_operational_matter(session, matter=matter, operation="import an email")
+    return context, matter
 
 
 def _existing_import_response(
@@ -666,6 +685,26 @@ def _existing_import_response(
     )
 
 
+def _require_read_only_import_session(session: Session) -> None:
+    """Do not release a caller's pending, flushed or Core-written transaction."""
+    read_only = not (
+        session.new or session.dirty or session.deleted or session.in_nested_transaction()
+    )
+    if read_only and session.in_transaction():
+        connection = session.connection()
+        if connection.dialect.name == "postgresql":
+            read_only = connection.scalar(text("SELECT pg_current_xact_id_if_assigned() IS NULL"))
+        elif connection.dialect.name == "sqlite":
+            read_only = not connection.connection.driver_connection.in_transaction
+        else:
+            read_only = False
+    if not read_only:
+        raise HTTPException(
+            status_code=409,
+            detail="Email import requires a read-only session before its upload boundary.",
+        )
+
+
 def import_inbound_email(
     session: Session,
     *,
@@ -680,11 +719,18 @@ def import_inbound_email(
     the standard matter access rules run, then we persist a preview in
     Communications and the full body/attachments through MatterAttachment.
     """
-    matter = _load_matter(session, context=context, matter_id=matter_id)
-    matter = require_operational_matter(
+    _require_read_only_import_session(session)
+    company_id, actor_id, token_issued_at = (
+        context.company.id,
+        context.membership.id,
+        context.token_issued_at,
+    )
+    context, matter = _admit_inbound_import(
         session,
-        matter=matter,
-        operation="import an email",
+        company_id=company_id,
+        actor_id=actor_id,
+        token_issued_at=token_issued_at,
+        matter_id=matter_id,
     )
     provider = _normalised_provider(payload.provider)
     provider_message_id = payload.provider_message_id.strip()
@@ -700,6 +746,9 @@ def import_inbound_email(
     if existing is not None:
         return _existing_import_response(matter_id=matter.id, row=existing)
 
+    lifecycle_version = matter.lifecycle_version
+    session.rollback()
+
     received_at = payload.received_at or datetime.now(UTC)
     body_preview = _preview_from_payload(payload)
     sender_email = str(payload.sender_email).strip().lower()
@@ -707,52 +756,112 @@ def import_inbound_email(
     imported_attachments: list[MatterAttachment] = []
     processing_job_ids: list[str] = []
     body_attachment_id: str | None = None
+    commit_attempted = False
 
-    row = Communication(
-        company_id=context.company.id,
-        matter_id=matter.id,
-        direction=CommunicationDirection.INBOUND,
-        channel=CommunicationChannel.EMAIL,
-        subject=payload.subject.strip() if payload.subject else None,
-        body=body_preview,
-        recipient_name=payload.sender_name.strip() if payload.sender_name else None,
-        recipient_email=sender_email,
-        status=CommunicationStatus.LOGGED,
-        occurred_at=received_at,
-        external_message_id=external_id,
-        created_by_membership_id=context.membership.id,
-    )
-    session.add(row)
+    def discard_staged() -> None:
+        for storage_key in stored_keys:
+            try:
+                delete_stored_document(storage_key)
+            except Exception:
+                logger.exception("inbound_email.staged_cleanup_failed")
 
     try:
-        session.flush()
         if payload.body_text and payload.body_text.strip():
             body_stream = BytesIO(payload.body_text.encode("utf-8"))
-            body_attachment, job_id, storage_key = _persist_inbound_attachment(
+            body_attachment = _persist_inbound_attachment(
                 session,
-                context=context,
-                matter=matter,
+                company_id=company_id,
+                matter_id=matter_id,
+                actor_id=actor_id,
+                staged_size_bytes=0,
                 filename="email-body.txt",
                 content_type="text/plain",
                 stream=body_stream,
             )
             imported_attachments.append(body_attachment)
-            processing_job_ids.append(job_id)
-            stored_keys.append(storage_key)
+            stored_keys.append(body_attachment.storage_key)
             body_attachment_id = body_attachment.id
 
         for attachment_payload in payload.attachments:
-            attachment, job_id, storage_key = _persist_inbound_attachment(
+            attachment = _persist_inbound_attachment(
                 session,
-                context=context,
-                matter=matter,
+                company_id=company_id,
+                matter_id=matter_id,
+                actor_id=actor_id,
+                staged_size_bytes=sum(item.size_bytes for item in imported_attachments),
                 filename=attachment_payload.filename,
                 content_type=attachment_payload.content_type,
                 stream=_decode_attachment_content(attachment_payload),
             )
             imported_attachments.append(attachment)
-            processing_job_ids.append(job_id)
-            stored_keys.append(storage_key)
+            stored_keys.append(attachment.storage_key)
+
+        context, matter = _admit_inbound_import(
+            session,
+            company_id=company_id,
+            actor_id=actor_id,
+            token_issued_at=token_issued_at,
+            matter_id=matter_id,
+        )
+        if matter.lifecycle_version != lifecycle_version:
+            raise HTTPException(
+                status_code=409, detail="Matter lifecycle changed during email import."
+            )
+        existing = session.scalar(
+            select(Communication).where(
+                Communication.company_id == company_id,
+                Communication.matter_id == matter_id,
+                Communication.external_message_id == external_id,
+            )
+        )
+        if existing is not None:
+            result = _existing_import_response(matter_id=matter_id, row=existing)
+            session.rollback()
+            discard_staged()
+            return result
+        if imported_attachments:
+            assert_storage_quota_allows_upload(
+                session,
+                company_id=company_id,
+                matter_id=matter_id,
+                incoming_size_bytes=sum(item.size_bytes for item in imported_attachments),
+            )
+        row = Communication(
+            company_id=company_id,
+            matter_id=matter_id,
+            direction=CommunicationDirection.INBOUND,
+            channel=CommunicationChannel.EMAIL,
+            subject=payload.subject.strip() if payload.subject else None,
+            body=body_preview,
+            recipient_name=payload.sender_name.strip() if payload.sender_name else None,
+            recipient_email=sender_email,
+            status=CommunicationStatus.LOGGED,
+            occurred_at=received_at,
+            external_message_id=external_id,
+            created_by_membership_id=actor_id,
+        )
+        session.add(row)
+        session.add_all(imported_attachments)
+        session.flush()
+        for attachment in imported_attachments:
+            job = enqueue_processing_job(
+                session,
+                company_id=company_id,
+                requested_by_membership_id=actor_id,
+                target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
+                attachment_id=attachment.id,
+                action=DocumentProcessingAction.INITIAL_INDEX,
+            )
+            processing_job_ids.append(job.id)
+            session.add(
+                MatterActivity(
+                    matter_id=matter_id,
+                    actor_membership_id=actor_id,
+                    event_type="inbound_email_attachment_added",
+                    title="Inbound email artifact imported",
+                    detail=f"{attachment.original_filename} queued for document processing.",
+                )
+            )
 
         attachment_ids = [attachment.id for attachment in imported_attachments]
         row.metadata_json = {
@@ -790,14 +899,18 @@ def import_inbound_email(
                 "automation_mode": "manual_only",
             },
         )
+        commit_attempted = True
         session.commit()
     except IntegrityError:
         session.rollback()
-        for storage_key in stored_keys:
-            try:
-                delete_stored_document(storage_key)
-            except Exception:
-                logger.warning("inbound_email.duplicate_cleanup_failed")
+        discard_staged()
+        context, matter = _admit_inbound_import(
+            session,
+            company_id=company_id,
+            actor_id=actor_id,
+            token_issued_at=token_issued_at,
+            matter_id=matter_id,
+        )
         existing_after_race = session.scalar(
             select(Communication).where(
                 Communication.company_id == context.company.id,
@@ -810,25 +923,19 @@ def import_inbound_email(
         raise
     except StorageQuotaExceeded as exc:
         session.rollback()
-        for storage_key in stored_keys:
-            try:
-                delete_stored_document(storage_key)
-            except Exception:
-                logger.warning("inbound_email.quota_block_cleanup_failed")
+        discard_staged()
         record_storage_quota_blocked_upload(
             session,
             context=context,
-            matter_id=matter.id,
+            matter_id=matter_id,
             error=exc,
         )
         raise exc.to_http_exception() from exc
     except Exception:
         session.rollback()
-        for storage_key in stored_keys:
-            try:
-                delete_stored_document(storage_key)
-            except Exception:
-                logger.warning("inbound_email.failed_import_cleanup_failed")
+        # A commit acknowledgement failure does not prove the rows rolled back.
+        if not commit_attempted:
+            discard_staged()
         raise
 
     session.refresh(row)

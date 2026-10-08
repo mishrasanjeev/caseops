@@ -1,5 +1,48 @@
 # CaseOps agent instructions
 
+- Upload admission must release database transactions before scanning/object
+  storage, then recheck current tenant, actor, token cutoff, capability, quota,
+  parent lifecycle and references before publishing. Keep the object transient
+  until admission and compensate rejected storage only after rollback. Company
+  quota serialization must allow unrelated audit FK KEY SHARE while excluding
+  concurrent quota writers; prove the real employee/upload overlap and exact
+  one-winner quota admission on PostgreSQL, not only generated lock SQL.
+  Compare the captured lifecycle version after I/O, not only current status:
+  a dispose/reopen cycle must reject the old request while a fresh upload into
+  the explicitly reopened engagement remains allowed.
+- A permission predicate can evaluate to SQL NULL when an optional assignee
+  is absent. Hidden-child checks must require explicit TRUE for visibility,
+  not negate a nullable predicate. Regress restricted unassigned records on
+  list/detail/download/update/upload alongside authorized owner controls.
+- Upload cleanup must distinguish rejected pre-commit admission from an
+  uncertain commit response. After commit is attempted, retain object bytes
+  unless authoritative evidence proves no durable record references them;
+  never delete a committed document or automatically retry its mutation.
+- A service releasing its request transaction for upload I/O must not discard
+  caller-owned writes. ORM new/dirty/deleted checks miss already-flushed and
+  Core SQL writes. Verify read-only ownership without assigning a transaction
+  ID, reject before transport and preserve the caller's transaction. Regress
+  both direct read-only HTTP admission and pending/flushed/Core-write rejection.
+- Shared storage quota must count every retained IP document version once,
+  including superseded and terminal history. Links do not allocate extra
+  bytes; lifecycle or visibility filters must not erase physical storage.
+  Prove exact historical accounting and concurrent one-winner admission.
+- A destructive migration regression must use the independently fresh
+  migration fixture, not require its file to run first on a shared database.
+  Prove both orders beside real preceding fixtures, retain the exact expected
+  preservation guard and downgrade/recovery assertions, and leave the source
+  database untouched. Reordering a green run is not test isolation.
+
+- Projection currentness must hash exactly the same canonical text as the
+  writer. Regress repeated spaces, CRLF, tabs and Unicode whitespace across
+  all metadata source types through two rebuilds and retrieval. A valid
+  generation manifest alone does not prove canonical-source equivalence;
+  preserve exact source-version, access and tombstone fences for saved output.
+- A Company-first source fix is not a complete lock-order proof when a later
+  event FK or actor check can wait on Membership. Force same-actor overlap
+  between background and interactive writers in both acquisition orders;
+  retain non-null provenance, authorization locks and post-I/O lifecycle checks.
+
 - An immediate post-upload source save must survive background extraction.
   ORM autoflush before a SELECT can lock the source before tenant authority.
   Acquire the shared tenant fence with autoflush suppressed after extraction

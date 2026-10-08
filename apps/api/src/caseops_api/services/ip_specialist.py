@@ -109,7 +109,11 @@ def contracts(session: Session) -> list[SpecialistContract]:
 def _writer(session: Session, context: SessionContext, domain: str) -> SessionContext:
     # Tenant first: ACL/lifecycle writers and private-generation transitions use
     # this same tenant fence before taking any source-parent locks.
-    session.scalar(select(Company).where(Company.id == context.company.id).with_for_update())
+    # Offboarding holds actors while inserting Company FKs; do not block KEY SHARE.
+    with session.no_autoflush:
+        session.scalar(
+            select(Company).where(Company.id == context.company.id).with_for_update(key_share=True)
+        )
     context = _lock_ip_writer_context(session, context=context, required_capability="ip:write")
     ip_domain_catalog.assert_domain_operation(domain, session=session)
     if not _registered(domain):
@@ -389,8 +393,10 @@ def create_record(
 def correct_record(
     session: Session, *, context: SessionContext, record_id: str, payload: SpecialistCorrection
 ):
-    row = _header(session, context, record_id)
-    context = _writer(session, context, row.domain)
+    # Domain discovery must not flush pending source writes before admission.
+    with session.no_autoflush:
+        row = _header(session, context, record_id)
+        context = _writer(session, context, row.domain)
     docket = _docket(session, context, row, write=True)
     _stale(docket, payload.expected_version, payload.expected_lifecycle_version)
     if payload.facts.details.domain != row.domain or str(payload.facts.client_id) != row.client_id:

@@ -53,6 +53,7 @@ from caseops_api.services.private_retrieval import (
     ensure_active_private_generation,
     insert_private_projection_batch,
     mark_private_generation_ready,
+    normalize_private_projection_text,
     private_source_projection_text,
     private_source_version,
 )
@@ -580,7 +581,9 @@ def _reuse_current_embeddings(
     }
     reused: list[PrivateProjectionInput] = []
     for payload in payloads:
-        content_hash = hashlib.sha256(payload.content.encode()).hexdigest()
+        content_hash = hashlib.sha256(
+            normalize_private_projection_text(payload.content).encode("utf-8")
+        ).hexdigest()
         row = reusable.get(
             (
                 payload.source_type,

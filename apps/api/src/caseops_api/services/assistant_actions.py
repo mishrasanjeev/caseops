@@ -46,6 +46,7 @@ from caseops_api.services.drafting import (
     create_ip_draft,
     list_ip_drafting_templates,
 )
+from caseops_api.services.matter_write_fence import lock_matter_private_authority
 from caseops_api.services.matters import create_matter_task, update_matter
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.shared_work import create_ip_shared_task
@@ -650,6 +651,7 @@ def confirm_assistant_action(
     preview_id: str,
     payload: AssistantActionConfirmRequest,
 ) -> AssistantActionPreviewResponse:
+    lock_matter_private_authority(session, company_id=context.company.id)
     discovered = session.scalar(
         select(AssistantActionPreview).where(
             AssistantActionPreview.id == preview_id,

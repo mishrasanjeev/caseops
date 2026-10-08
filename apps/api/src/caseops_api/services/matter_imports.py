@@ -58,6 +58,7 @@ from caseops_api.services.forum_catalog import (
     normalize_forum_catalog_value,
 )
 from caseops_api.services.matter_access import visible_matters_filter
+from caseops_api.services.matter_write_fence import lock_matter_private_authority
 from caseops_api.services.matters import create_matter
 from caseops_api.services.notification_delivery import enqueue_notification_delivery_intent
 from caseops_api.services.session_context import SessionContext
@@ -3066,6 +3067,7 @@ def commit_matter_import(
     context: SessionContext,
     job_id: str,
 ) -> MatterImportCommitResponse:
+    lock_matter_private_authority(session, company_id=context.company.id)
     job = _load_job(session, context=context, job_id=job_id)
     terminal = {
         MatterImportJobStatus.COMPLETED,
@@ -3178,6 +3180,9 @@ def commit_matter_import(
 
     valid_row_ids = [row.id for row in persisted_rows if row.status == MatterImportRowStatus.VALID]
     for row_id in valid_row_ids:
+        # Each row commits independently. Reacquire before loading/flushing the
+        # next row, without extending a tenant lock across the whole import.
+        lock_matter_private_authority(session, company_id=context.company.id)
         row = session.get(MatterBulkImportRow, row_id)
         if row is None:
             continue

@@ -1,5 +1,24 @@
 # CaseOps  - Work To Be Done
 
+## October 8 Private Authority Follow-Up
+
+Production `b20f86bd` remains uncertified. Quiescent maintenance `kxm4s`
+rebuilt two tenants that immediately failed canonical-source integrity;
+read-only persisted evidence confirms whitespace-normalization disagreement
+on eight current Matter sources. Separate real PostgreSQL races confirm
+pre-existing Company/actor cycles beyond PR #524's document-version fix.
+Repairs and full regression/release gates are in progress, not deployed or
+closed. Details and retained failed evidence:
+`docs/bugfix-private-authority-followup-2026-10-08.md`.
+PR #524 is merged as `f146ad8c` and its main CI is green, but has not been
+deployed. Follow-up local evidence includes the 302-case Matter/notice gate,
+173-case inbound/outside-counsel gate, 229-case client/portal gate and two
+desktop/mobile notice browser journeys. These are overlapping scoped gates,
+not combined Docker or production certification. The isolated migration-order
+proof also passes both orders and the complete eight-case patent file; IP final
+acceptance now passes 599 tests across 18 complete files with exact phase/XML
+reconciliation. One frozen candidate still requires full Docker and new PR CI.
+
 ## October 8 Production Acceptance Follow-Up
 
 Calendar repair PR #523 is deployed as `b20f86bd`; both services route 100%

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from hashlib import sha256
 
 from sqlalchemy import func, select
 
@@ -29,8 +30,14 @@ from caseops_api.scripts.bootstrap_ip_production_qa import (
 )
 from caseops_api.services.ip_operations import get_ip_docket
 from caseops_api.services.private_retrieval import private_source_version
+from caseops_api.services.private_retrieval_jobs import inspect_private_index_integrity
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import authority_source_verified
+
+WHITESPACE_DESCRIPTION = (
+    "Synthetic QA Matter used only to prove  tenant-private retrieval\n"
+    "revocation\ton one exact production release."
+)
 
 
 def test_bootstrap_ip_production_qa_is_bounded_and_idempotent(client) -> None:
@@ -319,6 +326,7 @@ def test_bootstrap_private_retrieval_fixture_is_release_scoped_and_idempotent(
         assert created_matter is not None
         assert created_attachment is not None
         assert created_docket is not None
+        assert created_matter.description == WHITESPACE_DESCRIPTION
         expected_versions = {
             ("matter", created.matter_id): private_source_version(created_matter),
             ("matter_document", created.attachment_id): created_attachment.sha256_hex,
@@ -339,6 +347,27 @@ def test_bootstrap_private_retrieval_fixture_is_release_scoped_and_idempotent(
             if (row.source_type, row.source_id) in expected_versions
         }
         assert actual_versions == expected_versions
+        matter_projection = next(row for row in created_projections if row.source_type == "matter")
+        canonical_content = (
+            "Matter IPLF-066B-AAAAAAAAAAAA: IPLF-066B exact-release revocation aaaaaaaaaaaa. "
+            "Status active. Practice area Intellectual Property. "
+            "Forum Trade Marks Registry Synthetic QA. "
+            "Synthetic QA Matter used only to prove tenant-private retrieval "
+            "revocation on one exact production release."
+        )
+        assert matter_projection.content_text == canonical_content
+        assert matter_projection.content_sha256 == sha256(canonical_content.encode()).hexdigest()
+        report = inspect_private_index_integrity(session, company_id=tenant.company_id)
+        assert report.blockers == ()
+        assert report.stale_source_count == 0
+
+        # An existing pre-whitespace fixture is immutable on bootstrap replay.
+        created_matter.description = " ".join(WHITESPACE_DESCRIPTION.split())
+        session.commit()
+        session.refresh(created_matter)
+        original_matter = {
+            column.name: getattr(created_matter, column.name) for column in Matter.__table__.columns
+        }
         repeated = ensure_ip_production_qa_private_retrieval_fixture(
             session,
             company_id=tenant.company_id,
@@ -357,6 +386,11 @@ def test_bootstrap_private_retrieval_fixture_is_release_scoped_and_idempotent(
         )
 
         matter = session.get(Matter, created.matter_id)
+        assert matter is not None
+        session.refresh(matter)
+        assert {
+            column.name: getattr(matter, column.name) for column in Matter.__table__.columns
+        } == original_matter
         attachment = session.get(MatterAttachment, created.attachment_id)
         chunks = list(
             session.scalars(
@@ -500,9 +534,14 @@ def test_bootstrap_private_retrieval_fixture_creates_a_new_terminal_safe_iterati
         )
         matter = session.get(Matter, fixture.matter_id)
         assert matter is not None
+        matter.description = " ".join(WHITESPACE_DESCRIPTION.split())
         matter.status = "disposed"
         matter.is_active = False
         session.commit()
+        session.refresh(matter)
+        terminal_snapshot = {
+            column.name: getattr(matter, column.name) for column in Matter.__table__.columns
+        }
 
         replacement = ensure_ip_production_qa_private_retrieval_fixture(
             session,
@@ -518,6 +557,11 @@ def test_bootstrap_private_retrieval_fixture_creates_a_new_terminal_safe_iterati
         )
         original = session.get(Matter, fixture.matter_id)
         current = session.get(Matter, replacement.matter_id)
+        assert original is not None
+        session.refresh(original)
+        assert {
+            column.name: getattr(original, column.name) for column in Matter.__table__.columns
+        } == terminal_snapshot
 
     assert original is not None
     assert original.status == "disposed"
@@ -526,6 +570,7 @@ def test_bootstrap_private_retrieval_fixture_creates_a_new_terminal_safe_iterati
     assert replacement.matter_id != fixture.matter_id
     assert replacement.matter_code == "IPLF-066B-BBBBBBBBBBBB-R2"
     assert current is not None and current.status == "active" and current.is_active is True
+    assert current.description == WHITESPACE_DESCRIPTION
     assert repeated.created_fixture is False
     assert repeated.matter_id == replacement.matter_id
     assert repeated.attachment_id == replacement.attachment_id

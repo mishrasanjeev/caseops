@@ -6,6 +6,7 @@ import logging
 import zipfile
 from datetime import UTC, date, datetime, time, timedelta
 from typing import BinaryIO, NamedTuple
+from uuid import uuid4
 from xml.etree import ElementTree
 
 from fastapi import HTTPException, status
@@ -122,6 +123,7 @@ from caseops_api.services.document_jobs import (
     load_latest_processing_jobs,
 )
 from caseops_api.services.document_storage import (
+    delete_stored_document,
     persist_matter_attachment,
     resolve_storage_path,
     sanitize_filename,
@@ -147,6 +149,7 @@ from caseops_api.services.matter_billing import (
 )
 from caseops_api.services.matter_operational_guard import matter_is_operational
 from caseops_api.services.matter_tags import slugify_tag
+from caseops_api.services.matter_write_fence import lock_matter_private_authority
 from caseops_api.services.next_hearing import apply_next_hearing_update, clear_next_hearing
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
@@ -1933,6 +1936,7 @@ def create_matter(
     commit: bool = True,
     required_capability: str | None = None,
 ) -> MatterRecord:
+    lock_matter_private_authority(session, company_id=context.company.id)
     assignment_memberships = lock_company_memberships_for_assignment(
         session,
         company_id=context.company.id,
@@ -2630,6 +2634,7 @@ def update_matter(
     commit: bool = True,
     commit_access_denial: bool = True,
 ) -> MatterRecord:
+    lock_matter_private_authority(session, company_id=context.company.id)
     requested_updates = payload.model_dump(exclude_unset=True)
     matter_roles = _discover_matter_role_snapshot(
         session,
@@ -3389,6 +3394,7 @@ def transition_matter_lifecycle_status(
     payload: MatterLifecycleStatusRequest,
 ) -> MatterRecord:
     """Perform the only legal terminal lifecycle edges in one transaction."""
+    lock_matter_private_authority(session, company_id=context.company.id)
     # Lifecycle writes append multiple rows with actor-membership foreign keys.
     # Fence that actor before the Matter parent so a concurrent assignment
     # transaction cannot hold Membership -> wait on Matter while disposal holds
@@ -5371,16 +5377,19 @@ def create_matter_attachment(
     linked_court_order_id: str | None = None,
     hearing_id: str | None = None,
 ) -> tuple[MatterAttachmentRecord, str]:
+    from caseops_api.services.identity import get_session_context
+
+    lock_matter_private_authority(session, company_id=context.company.id)
     _lock_matter_mutation_actor(
         session,
         context=context,
         required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_attachment"],
     )
-    # Hold a shared lifecycle fence while deriving notice deadlines and
-    # enqueueing document work. Independent uploads/processors may proceed
-    # together, while disposal/reopening remains exclusive: either this upload
-    # commits first and disposal neutralizes its work, or disposal wins and the
-    # derived deadline path observes the terminal state.
+    context = get_session_context(
+        session, context.membership.id, token_issued_at=context.token_issued_at,
+    )
+    # Preflight current authority before accepting bytes. These locks are
+    # released before scanning/storage, then reacquired tenant-first to publish.
     matter = _get_matter_model(
         session,
         context=context,
@@ -5389,6 +5398,9 @@ def create_matter_attachment(
     )
     _assert_matter_not_disposed(matter, operation="upload an attachment")
     audit_matter_id = matter.id
+    upload_company_id = context.company.id
+    upload_actor_id = context.membership.id
+    upload_lifecycle_version = matter.lifecycle_version
     linked_court_order_id = _validated_attachment_court_order_id(
         session,
         matter_id=matter.id,
@@ -5419,8 +5431,9 @@ def create_matter_attachment(
 
     verify_upload(filename=filename, content_type=content_type, stream=stream)
     attachment = MatterAttachment(
+        id=str(uuid4()),
         matter_id=matter.id,
-        uploaded_by_membership_id=context.membership.id,
+        uploaded_by_membership_id=upload_actor_id,
         original_filename=sanitize_filename(filename),
         storage_key="pending",
         content_type=content_type,
@@ -5461,32 +5474,87 @@ def create_matter_attachment(
         linked_court_order_id=linked_court_order_id,
         hearing_id=hearing_id,
     )
-    session.add(attachment)
-    session.flush()
+    # The attachment remains transient until final admission; no database row
+    # or transaction is needed by either the scanner or object-store transport.
+    session.rollback()
+    stored_key: str | None = None
+    commit_attempted = False
+
+    def discard_unpublished_object() -> None:
+        if stored_key is not None:
+            try:
+                delete_stored_document(stored_key)
+            except Exception:
+                logger.exception("Could not remove unpublished attachment %s", attachment.id)
+
+    def preflight_storage_quota(size_bytes: int) -> None:
+        try:
+            assert_storage_quota_allows_upload(
+                session,
+                company_id=upload_company_id,
+                matter_id=audit_matter_id,
+                incoming_size_bytes=size_bytes,
+            )
+        finally:
+            # This early check is advisory. Final admission serializes quota
+            # again after I/O, so parallel uploads cannot oversubscribe it.
+            session.rollback()
 
     try:
         from caseops_api.services.virus_scan import reject_if_infected
 
         stored = persist_matter_attachment(
-            company_id=context.company.id,
-            matter_id=matter.id,
+            company_id=upload_company_id,
+            matter_id=audit_matter_id,
             attachment_id=attachment.id,
             filename=filename,
             stream=stream,
-            before_store=lambda size_bytes: assert_storage_quota_allows_upload(
-                session,
-                company_id=context.company.id,
-                matter_id=matter.id,
-                incoming_size_bytes=size_bytes,
-            ),
+            before_store=preflight_storage_quota,
             validate_temp_file=lambda path: reject_if_infected(
                 path,
                 filename=filename,
             ),
         )
+        stored_key = stored.storage_key
+        # Quota owns Company before actor, lifecycle parent and child locks.
+        # Nothing has been inserted, so incoming bytes are counted exactly once.
+        assert_storage_quota_allows_upload(
+            session,
+            company_id=upload_company_id,
+            matter_id=audit_matter_id,
+            incoming_size_bytes=stored.size_bytes,
+        )
+        _lock_matter_mutation_actor(
+            session,
+            context=context,
+            required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_attachment"],
+        )
+        context = get_session_context(
+            session, context.membership.id, token_issued_at=context.token_issued_at,
+        )
+        matter = _get_matter_model(
+            session, context=context, matter_id=audit_matter_id, lock_for_share=True,
+        )
+        _assert_matter_not_disposed(matter, operation="upload an attachment")
+        if matter.lifecycle_version != upload_lifecycle_version:
+            raise HTTPException(
+                status_code=409, detail="Matter lifecycle changed during upload.",
+            )
+        attachment.linked_court_order_id = _validated_attachment_court_order_id(
+            session, matter_id=matter.id, court_order_id=linked_court_order_id,
+        )
+        attachment.hearing_id = _validated_attachment_hearing_id(
+            session, matter_id=matter.id, hearing_id=hearing_id,
+        )
+        attachment.notice_parent_attachment_id = _validated_notice_parent_attachment_id(
+            session, matter_id=matter.id, parent_attachment_id=notice_parent_attachment_id,
+            document_role=notice_document_role,
+        )
         attachment.storage_key = stored.storage_key
         attachment.size_bytes = stored.size_bytes
         attachment.sha256_hex = stored.sha256_hex
+        session.add(attachment)
+        session.flush()
         job = enqueue_processing_job(
             session,
             company_id=context.company.id,
@@ -5571,9 +5639,11 @@ def create_matter_attachment(
                     attachment.id,
                     exc,
                 )
+        commit_attempted = True
         session.commit()
     except StorageQuotaExceeded as exc:
         session.rollback()
+        discard_unpublished_object()
         record_storage_quota_blocked_upload(
             session,
             context=context,
@@ -5583,6 +5653,12 @@ def create_matter_attachment(
         raise exc.to_http_exception() from exc
     except Exception:
         session.rollback()
+        # A lost commit acknowledgement can leave a durable attachment. Never
+        # remove its bytes merely because the request cannot report success.
+        if not commit_attempted:
+            discard_unpublished_object()
+        else:
+            logger.warning("Attachment upload commit outcome is uncertain: %s", attachment.id)
         raise
 
     refreshed_attachment = session.scalar(

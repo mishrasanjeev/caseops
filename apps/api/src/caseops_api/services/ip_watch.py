@@ -50,6 +50,7 @@ from caseops_api.services.ip_matter_links import create_matter_link
 from caseops_api.services.ip_operations import _docket_or_404, _lock_ip_writer_context
 from caseops_api.services.ip_records import create_ip_proceeding
 from caseops_api.services.matter_access import visible_ip_dockets_filter
+from caseops_api.services.matter_write_fence import lock_matter_private_authority
 from caseops_api.services.matters import create_matter
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
@@ -1048,6 +1049,7 @@ def create_watch_handoff(
     hit_id: str,
     payload: IpWatchHandoffRequest,
 ) -> IpWatchHandoff:
+    lock_matter_private_authority(session, company_id=context.company.id)
     locked = _lock_ip_writer_context(
         session, context=context, required_capability="ip:watch_manage"
     )

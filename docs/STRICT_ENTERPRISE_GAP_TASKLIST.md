@@ -1,5 +1,20 @@
 # Strict Enterprise Gap Tasklist
 
+## October 8 Private Integrity And Actor Ordering
+
+The actor-FK risk below is now **confirmed**, not merely a source-audit
+suspicion: real PostgreSQL same-actor races deadlock on both prior and current
+candidate code. Private-source text/hash normalization also disagrees between
+writer and verifier; read-only production evidence confirms the immediate
+post-rebuild failure. Both remain **Not fixed** on serving `b20f86bd` while
+repairs and regression/release gates run. Keep older epoch/manifest blockers
+distinct. `docs/bugfix-private-authority-followup-2026-10-08.md` records proof.
+Upload authority and byte-retention hardening is **Partially implemented**:
+local complete-file PostgreSQL/HTTP gates and the notice browser journey pass
+in their recorded scopes, while combined Docker, CI and serving-release proof
+remain outstanding. Runtime repairs retain scanner, current-actor, lifecycle,
+quota and uncertain-commit safety boundaries; failed historical evidence remains.
+
 ## October 8 Document Worker Lock-Order Gap
 
 Production `b20f86bd` passed local Docker and main CI but its exact-release

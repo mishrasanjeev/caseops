@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from hashlib import sha256
@@ -107,12 +106,13 @@ def _seed(engine):
         return company_id, actor_id, family
 
 
-def test_patent_family_pg_persistence_tenant_constraints_and_atomic_rollback(pg_engine):
+def test_patent_family_pg_persistence_tenant_constraints_and_atomic_rollback(migration_pg_engine):
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
     from alembic import command
 
+    pg_engine = migration_pg_engine
     company_id, actor_id, family = _seed(pg_engine)
     with Session(pg_engine) as session:
         context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
@@ -178,7 +178,7 @@ def test_patent_family_pg_persistence_tenant_constraints_and_atomic_rollback(pg_
     root = Path(__file__).resolve().parents[1]
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
-    config.set_main_option("sqlalchemy.url", os.environ["CASEOPS_TEST_POSTGRES_URL"])
+    config.set_main_option("sqlalchemy.url", pg_engine.url.render_as_string(hide_password=False))
     head = ScriptDirectory.from_config(config).get_current_head()
     for _attempt in range(2):
         with pytest.raises(RuntimeError, match="Patent disclosure evidence exists"):

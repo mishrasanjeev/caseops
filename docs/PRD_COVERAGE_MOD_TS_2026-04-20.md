@@ -1,5 +1,18 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 8 Private Authority Acceptance
+
+Existing private retrieval/IPLF-066 and UJ-29/PAT-01 source-writer acceptance
+remain partial. Production `b20f86bd` has a confirmed canonical hash mismatch;
+PostgreSQL proves a separate actor/Company inversion. No new feature or module
+closure is claimed. Follow-up scope, evidence and required gates:
+`docs/bugfix-private-authority-followup-2026-10-08.md`.
+J03/J04, M02/M03 and US-007/008/036/051 additionally cover the confirmed
+upload transaction, notice visibility and retained-storage accounting findings.
+Local authority/byte-retention regressions and the two-width notice journey
+pass in their recorded scopes; exact-tree Docker and production replay remain
+required. No live Google consent or product-wide completion is implied.
+
 ## October 8 OAuth Acceptance In Progress
 
 Production follow-up: `b20f86bd` now serves the OAuth repair after full Docker
