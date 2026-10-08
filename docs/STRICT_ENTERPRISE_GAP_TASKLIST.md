@@ -26,6 +26,14 @@ Drive content import is also confirmed broken by the staging-helper contract
 change. Its existing metadata-only tests did not exercise content admission.
 Keep the caller repair, source/control checks and import/reload/download browser
 proof open; do not classify that known regression as out of scope.
+The complete corrected Drive local gate subsequently passes 369 tests and its
+five browser cases pass at desktop/mobile widths. Production closure remains
+open. Candidate `2d52545f` CI independently exposes a patent-list scale failure:
+the five-second deadline expires, and a deterministic plan-work regression
+rejects 10,001 docket checks for a 101-row page. Preserve the deadline and current
+ACL/lifecycle gates while repairing query work. API coverage shards previously
+omitted structured phase evidence; the existing journal is now enabled with
+unique XML/file inventories in a locally tested, not-yet-committed workflow patch.
 
 ## October 8 Document Worker Lock-Order Gap
 

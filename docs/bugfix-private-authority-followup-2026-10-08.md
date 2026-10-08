@@ -488,6 +488,13 @@ finds no remaining actionable runtime issue across atomic admission, current
 authority, lifecycle, metadata concurrency, source identity, bounded streaming,
 replay, compensation and unknown-commit retention.
 
+The complete corrected replacement `affected-final-r3` now passes **369/369**
+with zero skips in 1,314.41 seconds. Its setup/call/teardown journal and final
+XML are retained beside the earlier failed evidence; final ordered-identity
+and frozen-source reconciliation confirms all 369 unique cases, 1,107 passing
+phases, exact ordered collection/XML agreement, successful completion and
+unchanged before/after/current source hashes. This remains scoped local proof.
+
 The fresh-build local Drive browser gate passes all five collected cases with
 matching journal/XML identities and completion, zero skips: actual import,
 persisted reload, one job/audit, byte-identical Matter download and reconnect
@@ -505,6 +512,48 @@ matching the independently collected full inventory with zero differences.
 Security, CodeQL, web and API static gates pass; its CI browser gate is still
 running. This predates the Drive repair and is not acceptance for the later tree.
 Retained artifacts: `.tmp/release-followup-20261008/ci-6cbbbe4a-postgres/`.
+
+Hosted candidate `2d52545f` is also not release-ready. PostgreSQL shard 2
+completes with 481 passes and one failure in the 10,000-family list regression:
+the first authorized list query exceeds the existing five-second statement
+deadline. Its query is unchanged from canonical main; the earlier green run
+does not prove stable bounded work. Retain the full query/structured failure,
+inspect real execution plans and repair the work bound without increasing the
+deadline, retrying or weakening ACL checks. API coverage shard 6 completes with
+491 passes, 176 skips and one configuration-contract failure: the combined
+Notice/Drive regex is semantically discoverable but does not retain the existing
+exact Notice selector assertion. Keep the Notice selector and add Drive
+separately, then reconcile the complete browser inventory and replay the whole
+workflow-contract file. Neither failed gate is overridden by scoped green tests.
+The unchanged complete workflow-contract file subsequently passes **16/16**
+with 48 passing phases, matching ordered collection/XML identities and successful
+completion; evidence is `workflow-config-r2.*` in the follow-up evidence folder.
+Final hosted reconciliation confirms **1,928 passed, one failed** across all
+1,929 PostgreSQL identities and 5,787 phases, with matching XML/completion and
+no missing/duplicate cases. Thirteen API logs cover 510 files exactly once:
+5,356 passes, one failure and 1,931 skips across 7,288 terminal results. Those
+logs lack per-node structured phases and must not be presented as such. Browser
+execution is prerequisite-skipped. Evidence:
+`.tmp/faraday-ci-37746933446-20261008-r1/final-report-r2.json`.
+
+The API workflow now activates the existing incremental result journal and
+retains unique selected-file inventories, XML and journals with each coverage
+artifact. No planner, coverage threshold or prerequisite is relaxed. Its three
+complete contract files pass **38 tests / 114 phases**, with matching ordered
+collection/XML and completion; this dirty local patch still needs hosted proof.
+The stronger patent work regression fails on unchanged production-shaped code:
+10,001 docket checks exceed the deterministic alternating-grant page bound of
+204. Local elapsed-time samples can pass while this work bound fails; preserve
+both facts and the actual hosted timeout, not a fabricated local timeout.
+The candidate now preserves an ordered family subquery with an optimizer
+barrier, the original current-ACL/lifecycle/title predicate and final authorized
+page LIMIT. It does not cap raw candidates or omit late selective matches.
+The targeted replacement passes the unchanged five-second/query-count gate
+plus actual executor-work bounds for custom and generic plans at limits 101
+and 1, exact first/second-page identities and a match beyond thousands of
+nonmatching rows. Evidence: `.tmp/patent-family-list-20261008/fixed-01.*`.
+The complete 17-file, 252-case affected replay is in progress; targeted proof
+does not replace that replay, fresh Docker, green CI or production acceptance.
 
 The OAuth correction reproduces all four original failures against frozen
 `e9faae03`, then passes both complete Calendar/workspace files: **216 cases,

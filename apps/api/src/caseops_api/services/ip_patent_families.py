@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import select, tuple_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from caseops_api.db.models import (
     Client,
@@ -452,18 +452,24 @@ def list_patent_families(
             | (~IpDocketRecord.is_active & IpDocketRecord.status.in_(TERMINAL_IP_DOCKET_STATUSES))
         )
     )
+    candidates = select(IpPatentFamily).where(IpPatentFamily.company_id == context.company.id)
+    if cursor:
+        candidates = candidates.where(IpPatentFamily.id > cursor)
+    # OFFSET 0 preserves ordered, lazy ACL evaluation before the page LIMIT even
+    # with stale import statistics. Do not cap candidates before authorization.
+    family = aliased(IpPatentFamily, candidates.order_by(IpPatentFamily.id).offset(0).subquery())
     visible_docket = (
         select(IpDocketRecord.id)
         .where(
-            IpDocketRecord.id == IpPatentFamily.docket_id,
-            IpDocketRecord.company_id == context.company.id,
+            IpDocketRecord.id == family.docket_id,
+            IpDocketRecord.company_id == family.company_id,
             IpDocketRecord.record_type == "patent_family",
             IpDocketRecord.restricted,
             lifecycle_filter,
             ~IpDocketRecord.archived_by_matter_disposal,
             visible_ip_dockets_filter(session, context=context),
         )
-        .correlate(IpPatentFamily)
+        .correlate(family)
         .limit(1)
     )
     if query:
@@ -472,15 +478,8 @@ def list_patent_families(
         visible_docket = visible_docket.where(
             IpDocketRecord.title.icontains(query, autoescape=True)
         )
-    # A scalar lookup cannot be flattened into a stale-statistics join that
-    # repeatedly scans a whole imported tenant. Authorization still precedes LIMIT.
-    statement = select(IpPatentFamily).where(
-        IpPatentFamily.company_id == context.company.id,
-        visible_docket.scalar_subquery().is_not(None),
-    )
-    if cursor:
-        statement = statement.where(IpPatentFamily.id > cursor)
-    rows = list(session.scalars(statement.order_by(IpPatentFamily.id).limit(limit + 1)))
+    statement = select(family).where(visible_docket.scalar_subquery().is_not(None))
+    rows = list(session.scalars(statement.order_by(family.id).limit(limit + 1)))
     families = rows[:limit]
     dockets = (
         {

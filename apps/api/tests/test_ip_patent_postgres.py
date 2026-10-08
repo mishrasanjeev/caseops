@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from hashlib import sha256
 from pathlib import Path
 from threading import Event
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
+from psycopg import sql
+from psycopg.pq import TransactionStatus
 from sqlalchemy import event, func, insert, select, text
+from sqlalchemy.dialects.postgresql.psycopg import dialect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -483,6 +487,61 @@ def test_patent_source_correction_and_index_worker_take_company_before_version_o
         )
 
 
+def _assert_patent_family_page_work(session, statement, *, limit, generic):
+    compiled = statement.limit(limit).compile(
+        dialect=dialect(paramstyle="numeric_dollar"),
+        compile_kwargs={"render_postcompile": True},
+    )
+    name = f"patent_page_{uuid4().hex}"
+    with session.connection().connection.cursor() as cursor:
+        cursor.execute(
+            "SET LOCAL plan_cache_mode = "
+            + ("'force_generic_plan'" if generic else "'force_custom_plan'")
+        )
+        cursor.execute(
+            sql.SQL("PREPARE {} AS ").format(sql.Identifier(name)) + sql.SQL(str(compiled))
+        )
+        try:
+            cursor.execute(
+                sql.SQL("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) EXECUTE {} ({})").format(
+                    sql.Identifier(name),
+                    sql.SQL(",").join(
+                        sql.Literal(compiled.params[key]) for key in compiled.positiontup
+                    ),
+                )
+            )
+            plan = cursor.fetchone()[0][0]
+        finally:
+            if cursor.connection.info.transaction_status != TransactionStatus.INERROR:
+                cursor.execute(sql.SQL("DEALLOCATE {}").format(sql.Identifier(name)))
+
+    def nodes(node):
+        yield node
+        for child in node.get("Plans", []):
+            yield from nodes(child)
+
+    def work(node):
+        return node.get("Actual Loops", 0) * sum(
+            node.get(key, 0)
+            for key in (
+                "Actual Rows",
+                "Rows Removed by Filter",
+                "Rows Removed by Join Filter",
+                "Rows Removed by Index Recheck",
+            )
+        )
+
+    all_nodes = list(nodes(plan["Plan"]))
+    docket_nodes = [node for node in all_nodes if node.get("Relation Name") == "ip_docket_records"]
+    # Retained pytest phase output includes the actual plan, even on assertion failure.
+    print(json.dumps({"generic": generic, "limit": limit, "plan": plan}))
+    assert docket_nodes
+    assert sum(node["Actual Loops"] for node in docket_nodes) <= 2 * limit + 2
+    assert sum(work(node) for node in docket_nodes) <= 2 * limit + 2
+    assert sum(work(node) for node in all_nodes) < 50_000
+    assert plan["Plan"]["Shared Hit Blocks"] + plan["Plan"]["Shared Read Blocks"] < 10_000
+
+
 def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(pg_engine):
     company_id, actor_id, family = _seed(pg_engine)
     with Session(pg_engine) as session:
@@ -506,10 +565,13 @@ def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(p
                 **changes,
             }
 
+        family_uuid_base = uuid4().int & ~((1 << 32) - 1)
         for batch in range(20):
             dockets, assets, families, versions, grants = [], [], [], [], []
             for offset in range(500):
-                docket_id, asset_id, family_id = (str(uuid4()) for _ in range(3))
+                docket_id, asset_id = (str(uuid4()) for _ in range(2))
+                # Stable ordering alternates granted/denied rows without changing cardinality.
+                family_id = str(UUID(int=family_uuid_base + batch * 500 + offset))
                 dockets.append(
                     clone(docket, id=docket_id, title=f"Scale disclosure {batch}-{offset}")
                 )
@@ -531,12 +593,15 @@ def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(p
             session.commit()
         context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
         statements = []
+        page_statements = []
         session.execute(text("SET LOCAL statement_timeout = '5s'"))
         session.execute(text("SET LOCAL enable_hashjoin = off"))
         session.execute(text("SET LOCAL enable_mergejoin = off"))
 
         def capture(_conn, _cursor, statement, _params, _context, _many):
             statements.append(statement)
+            if _context.compiled is not None:
+                page_statements.append(_context.compiled.statement)
 
         event.listen(pg_engine, "before_cursor_execute", capture)
         try:
@@ -545,6 +610,11 @@ def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(p
             event.remove(pg_engine, "before_cursor_execute", capture)
         assert len(result.families) == 100 and result.next_cursor is not None
         assert len(statements) <= 12
+        for generic in (False, True):
+            for plan_limit in (101, 1):
+                _assert_patent_family_page_work(
+                    session, page_statements[0], limit=plan_limit, generic=generic
+                )
         allowed = set(
             session.scalars(
                 select(MatterAccessGrant.ip_docket_id).where(
@@ -554,3 +624,26 @@ def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(p
             )
         )
         assert all(str(row.docket_id) in allowed for row in result.families)
+        expected = sorted(
+            session.scalars(
+                select(IpPatentFamily.id).where(
+                    IpPatentFamily.company_id == company_id,
+                    IpPatentFamily.docket_id.in_(allowed),
+                )
+            )
+        )
+        assert len(expected) == 5001
+        assert [str(row.id) for row in result.families] == expected[:100]
+        assert result.next_cursor == expected[99]
+        second = list_patent_families(
+            session, context=context, limit=100, cursor=result.next_cursor
+        )
+        assert [str(row.id) for row in second.families] == expected[100:200]
+        # A selective match beyond thousands of denied/nonmatching candidates must not be capped.
+        found = list_patent_families(
+            session, context=context, limit=1, query="Scale disclosure 19-498"
+        )
+        assert [str(row.id) for row in found.families] == [
+            str(UUID(int=family_uuid_base + 19 * 500 + 498))
+        ]
+        assert found.next_cursor is None

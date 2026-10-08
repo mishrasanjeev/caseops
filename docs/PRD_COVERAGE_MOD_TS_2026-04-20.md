@@ -16,6 +16,10 @@ Reviewed Gmail/Drive content admission is part of these existing document
 journeys, not a new integration claim. The upload-helper caller inventory found
 both obsolete contracts; complete content import, reload and stored-byte proof
 must replace metadata-sync-only evidence before release certification.
+UJ-29/PAT-01 family-list scale acceptance remains blocked by a five-second
+query timeout and reproduced tenant-wide correlated authorization work before
+sorting. Actual plan-work bounds complement, not replace, existing query-count,
+ACL/lifecycle, cursor, selective-search and deployed browser regressions.
 
 ## October 8 OAuth Acceptance In Progress
 

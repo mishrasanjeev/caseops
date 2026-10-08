@@ -31,6 +31,16 @@ verification remain open; current collection selects 1,743 PostgreSQL cases.
 The final helper-caller inventory additionally found Drive content import still
 using the obsolete contract. It is a known release blocker, under repair with
 PostgreSQL and emulator-backed browser coverage, not deferred adjacent work.
+The later `2d52545f` inventory supersedes that count with 1,929 PostgreSQL
+cases and 475 app/Docker browser cases. Drive's complete corrected local gate
+passes 369 cases and all five desktop/mobile browser cases; it is not production
+closure. Hosted CI completes with two failing tests: a selector-contract mismatch
+(replacement whole-file 16/16 passes) and a patent 10,000-row query timeout.
+Real plans plus a failing work-bound regression confirm tenant-wide authorization
+before sorting; optimization and final committed-candidate acceptance remain open.
+API CI shards now also need unique incremental journals, XML and selected-file
+inventories retained with coverage; that workflow correction passes 38 local
+tests, but has not yet run on a committed candidate.
 
 ## October 8 Production Acceptance Follow-Up
 

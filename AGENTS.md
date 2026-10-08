@@ -102,6 +102,8 @@
   characters as diagnoses. An interrupted run without a completion event is
   incomplete, and prior failures remain open until their full details and the
   complete replacement inventory are reconciled. Never overwrite failed evidence.
+  API coverage shards are not exempt: archive each shard's unique selected-file
+  inventory, incremental journal and JUnit report alongside its coverage data.
 
 - Isolated PostgreSQL HTTP fixtures may clone only a separately migrated,
   connection-disabled test template, never the shared application database or
@@ -1493,6 +1495,11 @@ requirements when using the fallback.
   Provider downloads must enforce the smaller tenant and server byte limits
   while streaming, plus one total deadline across refresh and replay; a later
   storage-size rejection cannot protect an earlier unbounded allocation.
+- A page LIMIT does not bound correlated authorization work when the planner
+  filters a whole tenant before sorting. Preserve ACL-before-pagination and
+  selective matches beyond the first page; prove actual row/loop and buffer work
+  under stale statistics and custom/generic plans beside the unchanged deadline.
+  A passing elapsed-time sample or bounded SQL statement count is insufficient.
 - A clean or fresh SQLAlchemy Session can still be bound to a Connection whose
   transaction belongs to its caller. Reject that boundary before querying or
   rolling back, including savepoint and control-fully join modes. Prove the
