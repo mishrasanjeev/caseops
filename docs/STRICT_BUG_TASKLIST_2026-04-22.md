@@ -19,9 +19,12 @@ PR #524 and its main CI are green; this follow-up is not yet deployed.
 PR #525's shared inbound-helper change also exposed obsolete Gmail and Drive
 production callers. Both require outer-owned atomic admission and fresh current
 authority, not only a signature adjustment. Gmail's complete six-file 425-case
-gate passes; Drive's five desktop/mobile browser cases pass locally, with its
-complete corrected database replay and final committed-candidate Docker/CI still
-pending. These overlapping scoped results do not certify production. Evidence
+gate passes; Drive's complete 369-case corrected database replay and five
+desktop/mobile browser cases pass locally. Final committed-candidate Docker/CI
+and serving-release acceptance remain pending. Candidate `329175eb` additionally
+fails patent scale acceptance on 1,010,427 docket rows examined despite a
+252-case local pass; keep its unique-identity lookup repair open. These
+overlapping scoped results do not certify production. Evidence
 and retained failed fixtures are in the follow-up document above.
 
 ## October 8 Production Acceptance Follow-Up

@@ -33,7 +33,14 @@ the five-second deadline expires, and a deterministic plan-work regression
 rejects 10,001 docket checks for a 101-row page. Preserve the deadline and current
 ACL/lifecycle gates while repairing query work. API coverage shards previously
 omitted structured phase evidence; the existing journal is now enabled with
-unique XML/file inventories in a locally tested, not-yet-committed workflow patch.
+unique XML/file inventories in committed candidate `329175eb`; complete hosted
+artifact reconciliation verifies all thirteen API sessions and their 7,289
+identities (5,358 passed, 1,931 classified skips) without missing phases or XML
+disagreements. That candidate's PostgreSQL shard 2
+also rejects 1,010,427 docket rows examined for the same 101-row page: the
+ordered outer barrier leaves a repeated company-only inner scan. The 252-case
+local pass does not close this counterexample. Keep the query repair and full
+Docker/CI/deployed acceptance open, with no budget or assertion relaxation.
 
 ## October 8 Document Worker Lock-Order Gap
 

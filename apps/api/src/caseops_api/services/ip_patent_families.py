@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session, aliased
+from sqlalchemy.sql.util import ClauseAdapter
 
 from caseops_api.db.models import (
     Client,
@@ -458,16 +459,36 @@ def list_patent_families(
     # OFFSET 0 preserves ordered, lazy ACL evaluation before the page LIMIT even
     # with stale import statistics. Do not cap candidates before authorization.
     family = aliased(IpPatentFamily, candidates.order_by(IpPatentFamily.id).offset(0).subquery())
-    visible_docket = (
-        select(IpDocketRecord.id)
-        .where(
-            IpDocketRecord.id == family.docket_id,
-            IpDocketRecord.company_id == family.company_id,
-            IpDocketRecord.record_type == "patent_family",
+    # Resolve the unique ID before policy filters, which can otherwise make a
+    # stale tenant/status index look cheaper than the docket key. This LIMIT
+    # bounds one unique record, never the family candidates or authorized page.
+    docket_row = (
+        select(
+            IpDocketRecord.id,
+            IpDocketRecord.company_id,
+            IpDocketRecord.record_type,
             IpDocketRecord.restricted,
-            lifecycle_filter,
-            ~IpDocketRecord.archived_by_matter_disposal,
-            visible_ip_dockets_filter(session, context=context),
+            IpDocketRecord.is_active,
+            IpDocketRecord.status,
+            IpDocketRecord.archived_by_matter_disposal,
+            IpDocketRecord.title,
+        )
+        .where(IpDocketRecord.id == family.docket_id)
+        .correlate(family)
+        .limit(1)
+        .subquery()
+    )
+    docket = aliased(IpDocketRecord, docket_row)
+    docket_policy = ClauseAdapter(docket_row)
+    visible_docket = (
+        select(docket.id)
+        .where(
+            docket.company_id == family.company_id,
+            docket.record_type == "patent_family",
+            docket.restricted,
+            docket_policy.traverse(lifecycle_filter),
+            ~docket.archived_by_matter_disposal,
+            docket_policy.traverse(visible_ip_dockets_filter(session, context=context)),
         )
         .correlate(family)
         .limit(1)
@@ -475,9 +496,7 @@ def list_patent_families(
     if query:
         if len(query) > 200:
             raise _error("patent_query_limit", "Search text is too long.", 422)
-        visible_docket = visible_docket.where(
-            IpDocketRecord.title.icontains(query, autoescape=True)
-        )
+        visible_docket = visible_docket.where(docket.title.icontains(query, autoescape=True))
     statement = select(family).where(visible_docket.scalar_subquery().is_not(None))
     rows = list(session.scalars(statement.order_by(family.id).limit(limit + 1)))
     families = rows[:limit]

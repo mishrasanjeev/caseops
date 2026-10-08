@@ -1500,6 +1500,9 @@ requirements when using the fallback.
   selective matches beyond the first page; prove actual row/loop and buffer work
   under stale statistics and custom/generic plans beside the unchanged deadline.
   A passing elapsed-time sample or bounded SQL statement count is insufficient.
+  Bound inner identity lookups too: an ordered outer barrier can still repeat
+  a company-only scan thousands of times. Retain the hosted counterexample and
+  prove examined rows, not merely outer loops or one favorable local plan.
 - A clean or fresh SQLAlchemy Session can still be bound to a Connection whose
   transaction belongs to its caller. Reject that boundary before querying or
   rolling back, including savepoint and control-fully join modes. Prove the

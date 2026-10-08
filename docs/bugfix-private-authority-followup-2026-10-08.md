@@ -552,8 +552,69 @@ The targeted replacement passes the unchanged five-second/query-count gate
 plus actual executor-work bounds for custom and generic plans at limits 101
 and 1, exact first/second-page identities and a match beyond thousands of
 nonmatching rows. Evidence: `.tmp/patent-family-list-20261008/fixed-01.*`.
-The complete 17-file, 252-case affected replay is in progress; targeted proof
-does not replace that replay, fresh Docker, green CI or production acceptance.
+The complete 17-file affected replay subsequently passes **252/252** with
+756 passing phases, exact ordered collection/XML agreement and successful
+completion. Main independently reconciles the frozen source and results in
+`.tmp/release-followup-20261008/patent-affected-main-reconciliation.json`.
+That is scoped local proof, not evidence that every admissible PostgreSQL plan
+is bounded or that the combined candidate is release-ready.
+
+Hosted candidate `329175eb` disproves that optimization's completeness. CI
+`37752245787`, PostgreSQL shard 2, completes with 481 passes and one failure:
+the strengthened regression records **1,010,427 docket rows examined**, above
+the unchanged 204-row bound for the alternating-grant 101-row page. The ordered
+family barrier bounds outer authorization checks, but PostgreSQL chooses
+`ix_ip_docket_company_status` using only company identity; 201 repeated docket
+lookups each discard about 5,026 tenant rows. This plan finishes in 233.014 ms,
+so classify this as a work-bound failure, not another observed timeout. A
+bounded outer loop is insufficient if its inner identity lookup still scans
+the tenant. Preserve all ACL/lifecycle predicates and prove bounded docket
+identity lookup under the actual counterexample before replacing the candidate.
+The earlier 252-case local pass and no-finding review remain historical limited
+evidence, not a successful permanent fix. Full failed phases and plan:
+`.tmp/release-followup-20261008/ci-329175eb-postgres/shard-2/`.
+
+`docker-329175eb-r1` is interrupted during image builds after this known CI
+blocker. Its guard/proxy checks and 475-case browser discovery ran, but neither
+the full PostgreSQL gate nor browser execution started. The wrapper stopped,
+and only compose project `caseops-acceptance-329175eb1540-853eab35fed0` was
+cleaned up. This fourth incomplete Docker attempt is neither a pass nor a
+product-test failure. PR #525 remains open and production remains `b20f86bd`.
+
+The next local replacement isolates the unique docket-ID lookup behind its own
+one-row barrier, then applies tenant equality and the unchanged canonical
+ACL/lifecycle/title policy to that bounded row. It does not limit candidate
+families before authorization. Two complete scale regressions pass locally,
+including newly trained stale unique-tenant statistics; main independently
+reconciles all eight custom/generic 101/1 execution plans. They examine 201
+docket rows for the alternating-grant 101-row page and one for the one-row page,
+using unique docket identity indexes instead of the company-only scan. Keep
+this scoped proof separate from hosted and full-suite acceptance. A separate
+canonical effective-ACL test passes grant revocation, effective/expiry windows,
+active-team membership and team/member ethical-wall cases. Evidence:
+`.tmp/patent-family-list-20261008/pk-fixed-01.*` and `pk-acl-01.*`, plus
+`.tmp/release-followup-20261008/pk-fixed-main-plan-reconciliation.json`.
+Independent compile/design review of runtime SHA256
+`f786a0ebd8bcb00ca49391f02ff5f267516e1e36089c0c25ea846ab95c8e2019`
+finds no actionable issue in six active/terminal/all title/cursor cases. It is
+not database execution or a complete-fix verdict. The complete 17-file
+replacement passes **254/254**, zero skips, in 787.37 seconds. Main independently
+reconciles all 254 unique ordered collection/call/XML identities, 762 passing
+setup/call/teardown phases, successful completion and unchanged source hashes
+in `.tmp/release-followup-20261008/patent-pk-affected-main-reconciliation.json`.
+Ruff and all eleven contract validators also pass. Fresh committed-candidate
+CI/Docker, canonical merge and serving-release acceptance remain open.
+
+Complete hosted `329175eb` reconciliation confirms all thirteen API shards:
+510 files exactly once, 7,289 identities, 5,358 passing calls and 1,931
+classified skips, with 19,936 ordered phase reports and successful session
+completion. Unique journal/XML/file-inventory retention is now hosted-proven.
+All four PostgreSQL shards reconcile 1,929 identities and 5,787 phases: 1,928
+pass and only the patent scale call fails; its setup/teardown pass and the
+aggregate failure is propagation. No identities, phases or XML results are
+missing or duplicated. API coverage, web, Security and CodeQL pass; Playwright
+is prerequisite-skipped, not verified. Full retained audit:
+`.tmp/faraday-ci-37752245787-329175eb-20261008-r1/final-report-20261008T091558487246Z.json`.
 
 The OAuth correction reproduces all four original failures against frozen
 `e9faae03`, then passes both complete Calendar/workspace files: **216 cases,

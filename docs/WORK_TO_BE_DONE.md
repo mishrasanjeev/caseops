@@ -40,7 +40,15 @@ Real plans plus a failing work-bound regression confirm tenant-wide authorizatio
 before sorting; optimization and final committed-candidate acceptance remain open.
 API CI shards now also need unique incremental journals, XML and selected-file
 inventories retained with coverage; that workflow correction passes 38 local
-tests, but has not yet run on a committed candidate.
+tests and is committed in `329175eb`; hosted evidence reconciliation confirms
+all thirteen API sessions, 510 files exactly once and 7,289 identities, with
+5,358 passes and 1,931 classified skips. That candidate's PostgreSQL shard 2
+fails the strengthened work bound:
+an ordered outer barrier still permits 1,010,427 docket rows examined through
+a company-only inner scan. The complete 252-case local pass is limited evidence,
+not a permanent repair. Its Docker attempt is interrupted during image builds
+before PostgreSQL/browser execution; preserve it as incomplete and replace only
+after the bounded-identity lookup is proven. PR #525 is still not deployed.
 
 ## October 8 Production Acceptance Follow-Up
 

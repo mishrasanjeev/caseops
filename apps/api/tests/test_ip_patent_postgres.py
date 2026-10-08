@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
 from threading import Event
@@ -19,11 +19,13 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from caseops_api.db.models import (
     Client,
+    CompanyMembership,
     DocumentProcessingAction,
     DocumentProcessingJob,
     DocumentProcessingJobStatus,
     DocumentProcessingStatus,
     DocumentProcessingTargetType,
+    EthicalWall,
     IpAsset,
     IpDocketRecord,
     IpDocument,
@@ -33,7 +35,10 @@ from caseops_api.db.models import (
     IpPatentFamily,
     IpPatentFamilyVersion,
     MatterAccessGrant,
+    MembershipRole,
     PrivateProjectionEvent,
+    Team,
+    TeamMembership,
 )
 from caseops_api.schemas.ip_patents import (
     PatentDocumentSource,
@@ -47,6 +52,7 @@ from caseops_api.services.ip_patent_families import (
     get_patent_family,
     list_patent_families,
 )
+from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.private_retrieval import (
     ensure_active_private_generation,
     lock_private_authority_writer,
@@ -647,3 +653,87 @@ def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(p
             str(UUID(int=family_uuid_base + 19 * 500 + 498))
         ]
         assert found.next_cursor is None
+
+
+def test_patent_family_list_stale_unique_tenant_statistics_bound_docket_work(
+    migration_pg_engine,
+):
+    # Train unique tenant statistics before a concentrated import; do not analyze it away.
+    for _ in range(32):
+        _seed(migration_pg_engine)
+    with migration_pg_engine.begin() as connection:
+        connection.execute(text("ANALYZE ip_docket_records"))
+        connection.execute(text("ANALYZE ip_patent_families"))
+        connection.execute(text("ANALYZE matter_access_grants"))
+        connection.execute(text("ANALYZE ethical_walls"))
+    test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(migration_pg_engine)
+
+
+def test_patent_family_key_barrier_preserves_canonical_effective_acl(pg_engine):
+    company_id, actor_id, family = _seed(pg_engine)
+    with Session(pg_engine) as session:
+        session.get(CompanyMembership, actor_id).role = MembershipRole.OWNER
+        session.commit()
+        context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
+        grant = session.scalars(
+            select(MatterAccessGrant).where(MatterAccessGrant.ip_docket_id == str(family.docket_id))
+        ).one()
+        now = datetime.now(UTC)
+
+        def assert_visible(expected):
+            session.flush()
+            canonical = session.scalar(
+                select(IpDocketRecord.id).where(
+                    IpDocketRecord.id == str(family.docket_id),
+                    IpDocketRecord.company_id == company_id,
+                    visible_ip_dockets_filter(session, context=context),
+                )
+            )
+            assert (canonical is not None) is expected
+            for scope in ("active", "all"):
+                page = list_patent_families(session, context=context, status_scope=scope)
+                assert [str(row.id) for row in page.families] == (
+                    [str(family.id)] if expected else []
+                )
+
+        assert_visible(True)
+        grant.revoked_at = now
+        assert_visible(False)
+        grant.revoked_at = None
+        grant.effective_from = now + timedelta(days=1)
+        assert_visible(False)
+        grant.effective_from = now - timedelta(days=2)
+        grant.expires_at = now - timedelta(days=1)
+        assert_visible(False)
+        grant.expires_at = None
+        team = Team(company_id=company_id, name="Family review", slug=f"family-{uuid4().hex}")
+        session.add(team)
+        session.flush()
+        session.add(TeamMembership(team_id=team.id, membership_id=actor_id))
+        grant.membership_id = None
+        grant.team_id = team.id
+        assert_visible(True)
+        team.is_active = False
+        assert_visible(False)
+        team.is_active = True
+        wall = EthicalWall(
+            company_id=company_id,
+            ip_docket_id=str(family.docket_id),
+            excluded_team_id=team.id,
+            reason="Conflict blocks the family page.",
+            created_by_membership_id=actor_id,
+        )
+        session.add(wall)
+        assert_visible(False)
+        wall.effective_from = now + timedelta(days=1)
+        assert_visible(True)
+        wall.effective_from = now - timedelta(days=2)
+        wall.expires_at = now - timedelta(days=1)
+        assert_visible(True)
+        wall.expires_at = None
+        wall.revoked_at = now
+        assert_visible(True)
+        wall.revoked_at = None
+        wall.excluded_team_id = None
+        wall.excluded_membership_id = actor_id
+        assert_visible(False)
