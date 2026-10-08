@@ -663,6 +663,13 @@ def _process_ip_document_version_job(session: Session, job: DocumentProcessingJo
         _mark_job_failed(session, job, error_message="IP document version could not be found.")
         return
     index_ip_document_version(version)
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+    # Extraction dirties the version. Fence authority before even a SELECT can
+    # autoflush it; patent source writers already lock Company before versions.
+    # Keep extraction outside the tenant lock.
+    with session.no_autoflush:
+        lock_private_authority_writer(session, company_id=job.company_id)
     job.processed_char_count = version.extracted_char_count
     job.error_message = version.extraction_error
     job.completed_at = utcnow()

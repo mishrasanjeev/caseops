@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 8 Production Acceptance Follow-Up
+
+Calendar repair PR #523 is deployed as `b20f86bd`; both services route 100%
+to that revision and main CI was green. Exact-release verification
+`37716144183` failed the 393px patent source correction with a Cloud SQL
+deadlock. Repair worker/autoflush and adjacent document-writer ordering, then
+repeat fresh Docker, CI, canonical release and complete production acceptance.
+Private cadence stays under its guarded hold. Actual Google consent for the
+owner-authorized account remains outstanding; both workbook bugs remain
+**Inconclusive**. Evidence: `docs/bugfix-patent-source-deadlock-2026-10-08.md`.
+
 ## September 14 Release Engineering Checkpoint
 
 Recorded 2026-09-14 by the release-engineering handover session; the

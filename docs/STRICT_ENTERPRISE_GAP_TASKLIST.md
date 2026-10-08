@@ -1,5 +1,22 @@
 # Strict Enterprise Gap Tasklist
 
+## October 8 Document Worker Lock-Order Gap
+
+Production `b20f86bd` passed local Docker and main CI but its exact-release
+patent acceptance found a background indexing/source-correction deadlock.
+The worker flushed a source-version update before tenant authority (the earlier
+SELECT also triggers it when autoflush is enabled).
+Adjacent link/state writers require the same audit. **Not fixed** on the
+serving release; no green certification or private-cadence resume is claimed.
+See `docs/bugfix-patent-source-deadlock-2026-10-08.md` for Cloud SQL evidence,
+forced-overlap regression requirements and release gates. OAuth is now
+deployed, but its real Google consent acceptance remains **Inconclusive**.
+
+Independent review separately leaves the existing Company/event actor-FK
+versus Matter Membership/Company ordering risk **open and unverified by a
+forced-overlap regression**. The source-version repair does not certify that
+actor cycle or authorize dropping provenance or weakening lifecycle fencing.
+
 ## October 8 OAuth Finalization Audit
 
 **Partially implemented**: Google Calendar/Outlook durable exchange claims
