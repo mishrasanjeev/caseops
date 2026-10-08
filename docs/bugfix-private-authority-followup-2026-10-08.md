@@ -340,6 +340,22 @@ stopped and its temporary databases and sessions are drained.
 
 ## Remaining Gates
 
+PR #525 first candidate `f076acfc` failed CI `37734976322` because the
+inbound-communication storage boundary lacked its required governance-map
+change note. The pre-commit local change gate compared base...HEAD and did not
+include the dirty diff, so its green result was insufficient. The committed
+candidate reproduces the failure. The canonical note now records atomic
+admission, transient objects, unknown-commit retention, quota and private hash
+handling without claiming new retention or disposition authority; its human
+view is regenerated. The actual gate is retained, not bypassed.
+
+The `docker-f076acfc-r1` run was deliberately interrupted during PostgreSQL
+execution so the corrected committed candidate can receive a fresh complete
+run. It has no final pytest completion and is **incomplete**, not an application
+failure or acceptance pass. The wrapper completed cleanup of its isolated
+containers, volumes and networks. Its logs and incremental journal remain in
+`.tmp/release-followup-20261008/`; CI's original failing job log is retained there.
+
 Implementation and scoped affected-file regressions are complete. Their
 overlapping inventories must not be added together as one full-suite result.
 Require fresh exact-tree full PostgreSQL Docker/Playwright, green PR and

@@ -32,6 +32,10 @@
   Prove both orders beside real preceding fixtures, retain the exact expected
   preservation guard and downgrade/recovery assertions, and leave the source
   database untouched. Reordering a green run is not test isolation.
+- A Git change gate comparing base...HEAD must run after the candidate is
+  committed. A pre-commit green result does not cover dirty or untracked
+  changes. Re-run governance and migration diff gates on the exact candidate
+  before publication; preserve a superseded interrupted acceptance as incomplete.
 
 - Projection currentness must hash exactly the same canonical text as the
   writer. Regress repeated spaces, CRLF, tabs and Unicode whitespace across
