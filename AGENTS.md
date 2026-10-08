@@ -1483,6 +1483,16 @@ requirements when using the fallback.
   Every upload that rolls back before I/O must first reject new, dirty, deleted,
   flushed/Core-written or nested caller transactions without discarding them.
   Prove the caller can still commit its original work after the rejection.
+  Maintain a fast complete caller-contract inventory beside workflow tests:
+  reviewed Drive imports share this helper too. A known broken adjacent caller
+  cannot be deferred as out of scope while releasing that helper change.
+- Connector review actions must serialize against the same freshly locked
+  candidate as content admission. A completed import cannot be reset by a
+  stale ignore, retry or metadata-link writer. Prove both overlap orders and
+  keep metadata review available without live provider consent where allowed.
+  Provider downloads must enforce the smaller tenant and server byte limits
+  while streaming, plus one total deadline across refresh and replay; a later
+  storage-size rejection cannot protect an earlier unbounded allocation.
 - A clean or fresh SQLAlchemy Session can still be bound to a Connection whose
   transaction belongs to its caller. Reject that boundary before querying or
   rolling back, including savepoint and control-fully join modes. Prove the

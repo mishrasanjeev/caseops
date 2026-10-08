@@ -162,7 +162,10 @@ export default function DrivePage() {
         matterId: matterId || null,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["drive-candidates"] }),
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not review Drive file.")),
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: ["drive", "google", "status"] });
+      toast.error(apiErrorMessage(error, "Could not review Drive file."));
+    },
   });
 
   return (

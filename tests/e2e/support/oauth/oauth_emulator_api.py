@@ -23,6 +23,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse  # noqa: E402
 
 from caseops_api.main import app  # noqa: E402
 from caseops_api.services.calendar_sync import GoogleCalendarProvider  # noqa: E402
+from drive_import_emulator import install_drive_import_emulator  # noqa: E402
+
+install_drive_import_emulator(app)
 
 emulator = CalendarOAuthEmulator()
 transport_origin = emulator.start()

@@ -453,12 +453,58 @@ candidate and Matter lifecycle before one atomic attachment/job/activity/audit
 commit. Refreshed tokens use captured configuration without a database session;
 stale authority cannot restore credentials or commit bytes. Known pre-commit
 failure compensates its unique object, while an unknown commit retains bytes
-for reconciliation. The complete eight-file affected gate passes **425/425**,
+for reconciliation. The complete six-file affected gate passes **425/425**,
 including 138 Gmail PostgreSQL cases and thirteen existing Gmail tests, with
 1,275 phase reports and matching ordered collection/XML identities. Independent
 source review finds no remaining actionable Gmail-specific blocker. Evidence:
 `.tmp/gmail-attachment-admission-20261008/affected-final-r1.*`. This is not a
 production Gmail workflow acceptance claim.
+
+The final explicit caller inventory still found Drive review using the obsolete
+signature and tuple return. This is a known release-blocking adjacent regression,
+not out-of-scope work. Earlier inbound/Gmail-only verification omitted that
+production caller; do not repeat its coverage claim as a complete caller audit.
+The new fast AST contract regression inventories both inbound calls plus Gmail
+and Drive, binds each to the current helper signature and rejects tuple-return
+assumptions. Full Drive atomic admission and actual browser import/reload proof
+are required before freezing another Docker candidate.
+The first complete Drive affected-file run finishes with **341 passed and one
+failed** across 342 collected cases: the existing disposed-parent negative
+still rejects both actions, but import checks its missing connection before
+returning the required disposed-Matter explanation. Preserve that failed run
+and restore the current-actor/parent admission order; do not weaken the existing
+assertion. Review also identifies stale metadata actions overwriting a completed
+import, and a tenant-only download limit exceeding the server cap. Both need
+their deterministic regressions and a complete replacement run. These are
+candidate findings, not evidence of an automatically reopened production Matter.
+
+The second complete Drive replay collects 369 cases. Two added cap tests fail
+during fixture setup because a trillion-byte value exceeds PostgreSQL INTEGER,
+before any product boundary executes. Use a valid large integer, preserve the
+failed journal and require the complete replacement; neither these failures nor
+an unfinished run certify the candidate. Independent read-only review of Drive
+source SHA256 `5273e6dbc70eec940e67447f9e9b9950517f25748af99a1a108bd13d34df4d06`
+finds no remaining actionable runtime issue across atomic admission, current
+authority, lifecycle, metadata concurrency, source identity, bounded streaming,
+replay, compensation and unknown-commit retention.
+
+The fresh-build local Drive browser gate passes all five collected cases with
+matching journal/XML identities and completion, zero skips: actual import,
+persisted reload, one job/audit, byte-identical Matter download and reconnect
+after revoked consent at 1280px and 393px, plus the emulator's production fence.
+Both stored objects match their independently recorded SHA256. Seven emulator
+unit cases, two UI cases, typechecks and the canonical build also pass. Evidence:
+`.tmp/drive-browser-20261008/`; the source manifest matches the reviewed Drive
+runtime above. This is deterministic loopback proof, not Google consent or
+production acceptance. The new dated spec is included in both standard app and
+Docker discovery; reconcile the complete committed-candidate inventory again.
+
+Hosted candidate `6cbbbe4a` passes all four PostgreSQL shards and the aggregate:
+**1,743 unique collected cases, 1,743 passing calls and 5,229 passing phases**,
+matching the independently collected full inventory with zero differences.
+Security, CodeQL, web and API static gates pass; its CI browser gate is still
+running. This predates the Drive repair and is not acceptance for the later tree.
+Retained artifacts: `.tmp/release-followup-20261008/ci-6cbbbe4a-postgres/`.
 
 The OAuth correction reproduces all four original failures against frozen
 `e9faae03`, then passes both complete Calendar/workspace files: **216 cases,

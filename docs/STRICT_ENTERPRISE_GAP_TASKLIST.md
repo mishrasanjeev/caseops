@@ -22,6 +22,10 @@ tests, with independent source review. Passing the inbound-email helper alone
 did not establish caller compatibility. The 531-case replacement upload/authority
 gate and separate 120-case external-transaction ownership proof also pass, but
 these overlapping scopes are not full committed-candidate release proof.
+Drive content import is also confirmed broken by the staging-helper contract
+change. Its existing metadata-only tests did not exercise content admission.
+Keep the caller repair, source/control checks and import/reload/download browser
+proof open; do not classify that known regression as out of scope.
 
 ## October 8 Document Worker Lock-Order Gap
 

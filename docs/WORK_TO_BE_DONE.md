@@ -28,6 +28,9 @@ PostgreSQL proof. These inventories overlap and must not be summed. Independent
 reviews found no remaining actionable blocker in the repaired shared ownership
 guard or Gmail admission. Full committed-candidate CI, Docker and serving-release
 verification remain open; current collection selects 1,743 PostgreSQL cases.
+The final helper-caller inventory additionally found Drive content import still
+using the obsolete contract. It is a known release blocker, under repair with
+PostgreSQL and emulator-backed browser coverage, not deferred adjacent work.
 
 ## October 8 Production Acceptance Follow-Up
 

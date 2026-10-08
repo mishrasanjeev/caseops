@@ -16,6 +16,14 @@ candidate-only old-upload admission across an explicit dispose/reopen cycle
 was reproduced and repaired; this is not proof of automatic case resurrection.
 PR #524 and its main CI are green; this follow-up is not yet deployed.
 
+PR #525's shared inbound-helper change also exposed obsolete Gmail and Drive
+production callers. Both require outer-owned atomic admission and fresh current
+authority, not only a signature adjustment. Gmail's complete six-file 425-case
+gate passes; Drive's five desktop/mobile browser cases pass locally, with its
+complete corrected database replay and final committed-candidate Docker/CI still
+pending. These overlapping scoped results do not certify production. Evidence
+and retained failed fixtures are in the follow-up document above.
+
 ## October 8 Production Acceptance Follow-Up
 
 PR #523 is deployed as `b20f86bd` on both services after full Docker and green

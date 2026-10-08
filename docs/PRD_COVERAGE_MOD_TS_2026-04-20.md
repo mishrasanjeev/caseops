@@ -12,6 +12,10 @@ upload transaction, notice visibility and retained-storage accounting findings.
 Local authority/byte-retention regressions and the two-width notice journey
 pass in their recorded scopes; exact-tree Docker and production replay remain
 required. No live Google consent or product-wide completion is implied.
+Reviewed Gmail/Drive content admission is part of these existing document
+journeys, not a new integration claim. The upload-helper caller inventory found
+both obsolete contracts; complete content import, reload and stored-byte proof
+must replace metadata-sync-only evidence before release certification.
 
 ## October 8 OAuth Acceptance In Progress
 
