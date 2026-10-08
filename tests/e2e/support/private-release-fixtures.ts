@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { noPaidProviderHeaders } from "./cost-controls";
 import { expectStatus } from "./iplf058b";
 
 type Fixture = {
@@ -56,8 +57,16 @@ export async function verifyRetainedPrivateRevocation(
     matter: Fixture; filename: string; evidenceToken: string;
   },
 ): Promise<void> {
-  const { api, web, headers, matter, filename, evidenceToken } = input;
+  const { api, web, matter, filename, evidenceToken } = input;
+  const headers = { ...input.headers, ...noPaidProviderHeaders };
   expect(matter.status).toBe("disposed");
+  const initialResponse = await page.request.get(`${api}/api/matters/${matter.id}`, { headers });
+  await expectStatus(initialResponse, 200, "read retained terminal source before revocation proof");
+  const initial = await initialResponse.json();
+  expect(initial).toMatchObject({
+    id: matter.id, matter_code: matter.matter_code, status: "disposed", is_active: false,
+    updated_at: matter.updated_at,
+  });
   const sessionsResponse = await page.request.get(`${api}/api/workspace-assistant/sessions`, {
     headers,
     params: { title: `Ask \u00b7 ${filename}`, limit: 100, offset: 0 },
@@ -77,26 +86,45 @@ export async function verifyRetainedPrivateRevocation(
     await expectStatus(exported, 200, "reauthorize retained answer export");
     assertRevokedTurns((await exported.json()).turns, evidenceToken);
   }
-  const filters = { query: evidenceToken, source_types: ["matter_document"], scope_ids: { matter: [matter.id] }, limit: 10 };
-  for (const endpoint of ["search", "autocomplete", "count"]) {
-    const response = await page.request.post(`${api}/api/private-retrieval/${endpoint}`, { headers, data: filters });
-    await expectStatus(response, 200, `retained revocation ${endpoint}`);
-    const body = await response.json();
-    if (endpoint === "count") expect(body.visible_match_count).toBe(0);
-    else expect(body.items).toEqual([]);
+  // Metadata and documents have independent projections; neither may survive disposal.
+  for (const source of [
+    { sourceType: "matter_document", query: evidenceToken },
+    { sourceType: "matter", query: matter.matter_code },
+  ]) {
+    const filters = { query: source.query, source_types: [source.sourceType], scope_ids: { matter: [matter.id] }, limit: 10 };
+    for (const endpoint of ["search", "autocomplete", "count"]) {
+      const response = await page.request.post(`${api}/api/private-retrieval/${endpoint}`, { headers, data: filters });
+      await expectStatus(response, 200, `retained ${source.sourceType} revocation ${endpoint}`);
+      const body = await response.json();
+      if (endpoint === "count") expect(body).toMatchObject({ visible_match_count: 0, count_is_capped: false });
+      else expect(body.items).toEqual([]);
+    }
   }
-  await page.goto(`${web}/app/assistant`);
-  await page.setViewportSize({ width: 360, height: 800 });
-  await page.getByRole("textbox", { name: "Find workspace records" }).fill(filename);
-  const scopeResponse = page.waitForResponse((response) => response.url().includes("/api/workspace-assistant/scope-options?"));
-  await page.getByRole("button", { name: "Find permitted records" }).click();
-  const response = await scopeResponse;
-  expect(response.status()).toBe(200);
-  expect((await response.json()).items).toEqual([]);
-  await expect(page.getByRole("button", { name: `Add ${filename}` })).toHaveCount(0);
+  for (const width of [1280, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto(`${web}/app/assistant`);
+    for (const query of [filename, matter.matter_code]) {
+      await page.getByRole("textbox", { name: "Find workspace records" }).fill(query);
+      const scopeResponse = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === "/api/workspace-assistant/scope-options"
+          && url.searchParams.get("q") === query;
+      });
+      await page.getByRole("button", { name: "Find permitted records" }).click();
+      const response = await scopeResponse;
+      await expectStatus(response, 200, "terminal documents and metadata stay out of scope discovery");
+      expect(await response.request().headerValue("X-CaseOps-Automated-Test")).toBe("no-paid-providers");
+      expect((await response.json()).items).toEqual([]);
+      for (const label of [filename, matter.title]) {
+        await expect(page.getByRole("button", { name: `Add ${label}`, exact: true })).toHaveCount(0);
+      }
+    }
+    expect(await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    )).toBe(false);
+  }
   const persisted = await page.request.get(`${api}/api/matters/${matter.id}`, { headers });
   await expectStatus(persisted, 200, "terminal fixture remains unchanged");
   const final = await persisted.json();
-  expect(final.status).toBe("disposed");
-  expect(final.updated_at).toBe(matter.updated_at);
+  expect(final).toEqual(initial);
 }

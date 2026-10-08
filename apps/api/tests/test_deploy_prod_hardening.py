@@ -275,12 +275,82 @@ def test_production_playwright_does_not_retain_authenticated_media(
     assert "only-on-failure" not in config
 
 
+def _assert_private_revocation_probe_inventory(spec: str, fixtures: str) -> None:
+    retained_branch = spec.split('if (matter.status === "disposed") {', 1)[1].split(
+        "    return;", 1
+    )[0]
+    first_run_disposal = spec.split(
+        "await disposeFixture(page.request, cleanupState);", 1
+    )[1]
+    assert "await verifyRetainedPrivateRevocation(page, {" in retained_branch
+    assert "headers, matter, filename, evidenceToken," in retained_branch
+    assert "await verifyRetainedPrivateRevocation(page, {" in first_run_disposal
+    assert "matter: await disposedSource.json(), filename, evidenceToken," in first_run_disposal
+
+    # Both lifecycle branches must execute the same six negative retrieval probes.
+    source_matrix = fixtures.split("for (const source of [", 1)[1].split(
+        "  ]) {", 1
+    )[0]
+    assert [line.strip() for line in source_matrix.strip().splitlines()] == [
+        '{ sourceType: "matter_document", query: evidenceToken },',
+        '{ sourceType: "matter", query: matter.matter_code },',
+    ]
+    assert 'for (const endpoint of ["search", "autocomplete", "count"]) {' in fixtures
+    assert "query: source.query, source_types: [source.sourceType]" in fixtures
+    assert "scope_ids: { matter: [matter.id] }, limit: 10" in fixtures
+    assert (
+        "post(`${api}/api/private-retrieval/${endpoint}`, { headers, data: filters })"
+    ) in fixtures
+    assert (
+        "await expectStatus(response, 200, `retained ${source.sourceType} revocation ${endpoint}`)"
+    ) in fixtures
+    assert (
+        'if (endpoint === "count") expect(body).toMatchObject({ '
+        "visible_match_count: 0, count_is_capped: false });"
+    ) in fixtures
+    assert "else expect(body.items).toEqual([]);" in fixtures
+
+    for assurance in (
+        "const headers = { ...input.headers, ...noPaidProviderHeaders };",
+        'expect(matter.status).toBe("disposed");',
+        'status: "disposed", is_active: false,',
+        "updated_at: matter.updated_at,",
+        'expect(answers.length, "retained evidence must contain an actual prior answer")'
+        ".toBeGreaterThan(0);",
+        'expect(matches.length, "a retired fixture needs retained answer evidence")'
+        ".toBeGreaterThan(0);",
+        'params: { title: `Ask \\u00b7 ${filename}`, limit: 100, offset: 0 },',
+        'expect(body.has_more, "exact retained-session lookup must remain bounded").toBe(false);',
+        'expect(body.has_more, "QA conversation must remain bounded").toBe(false);',
+        'expect(answer.render_status).toBe("permission_changed");',
+        "expect(answer.content).not.toContain(evidenceToken);",
+        "expect(answer.citations).toEqual([]);",
+        "expect(answer.proposed_actions).toEqual([]);",
+        "assertRevokedTurns(body.items, evidenceToken);",
+        "assertRevokedTurns((await exported.json()).turns, evidenceToken);",
+        "for (const width of [1280, 360])",
+        "for (const query of [filename, matter.matter_code])",
+        'url.pathname === "/api/workspace-assistant/scope-options"',
+        'url.searchParams.get("q") === query',
+        'headerValue("X-CaseOps-Automated-Test")).toBe("no-paid-providers")',
+        "expect((await response.json()).items).toEqual([]);",
+        "for (const label of [filename, matter.title])",
+        "name: `Add ${label}`, exact: true })).toHaveCount(0);",
+        "expect(final).toEqual(initial);",
+    ):
+        assert assurance in fixtures, assurance
+    assert "/lifecycle/status" not in fixtures
+    for method in ("patch", "put", "delete"):
+        assert f"page.request.{method}(" not in fixtures
+
+
 def test_private_retrieval_production_acceptance_is_exact_and_release_owned() -> None:
     config = _read_repo_text("playwright.prod-ram.config.ts")
     workflow = _read_repo_text(".github/workflows/prod-verify.yml")
     deploy = _read_repo_text("scripts/deploy-prod.sh")
     bootstrap = _read_repo_text("apps/api/src/caseops_api/scripts/bootstrap_ip_production_qa.py")
     spec = _read_repo_text("tests/e2e/iplf-066b-private-retrieval-2026-08-31-prod.spec.ts")
+    fixtures = _read_repo_text("tests/e2e/support/private-release-fixtures.ts")
 
     assert config.count("iplf-066b-private-retrieval-2026-08-31-prod") == 2
     assert "playwright.prod-ram.config.ts" in workflow
@@ -288,7 +358,15 @@ def test_private_retrieval_production_acceptance_is_exact_and_release_owned() ->
     assert 'required("CASEOPS_IP_QA_PASSWORD")' in spec
     assert "`${API}/api/build`" in spec
     assert "`${WEB}/api/release-identity`" in spec
-    assert spec.count("/api/private-retrieval/search") == 2
+    _assert_private_revocation_probe_inventory(spec, fixtures)
+    assert 'source_types: ["matter"]' in spec
+    assert 'source_types: ["matter_document"]' in spec
+    assert "expect(source.description).toBe(whitespaceDescription);" in spec
+    assert "expect(projectedMatters[0].content).toBe(canonicalContent);" in spec
+    assert 'createHash("sha256").update(canonicalContent).digest("hex")' in spec
+    assert "expect(beforeItems[0].content).toContain(evidenceToken);" in spec
+    assert "expect((await after.json()).items).toEqual([]);" in spec
+    assert "expect((await revokedMatter.json()).items).toEqual([]);" in spec
     assert "/lifecycle/status" in spec
     assert "expected_updated_at: current.updated_at" in spec
     assert "This answer is hidden because access" in spec
@@ -306,6 +384,72 @@ def test_private_retrieval_production_acceptance_is_exact_and_release_owned() ->
     assert deploy.index("run jobs execute caseops-ip-qa-bootstrap") < deploy.index(
         "gh workflow run prod-verify.yml"
     )
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        '{ sourceType: "matter_document", query: evidenceToken },',
+        '{ sourceType: "matter", query: matter.matter_code },',
+        '"search", ',
+        '"autocomplete", ',
+        ', "count"',
+        "source_types: [source.sourceType]",
+        "scope_ids: { matter: [matter.id] }",
+        "{ headers, data: filters }",
+        "await expectStatus(response, 200, "
+        "`retained ${source.sourceType} revocation ${endpoint}`);",
+        "visible_match_count: 0",
+        "count_is_capped: false",
+        "else expect(body.items).toEqual([]);",
+        "...noPaidProviderHeaders",
+        'expect(matter.status).toBe("disposed");',
+        'is_active: false',
+        "updated_at: matter.updated_at",
+        'expect(answers.length, "retained evidence must contain an actual prior answer")'
+        ".toBeGreaterThan(0);",
+        'expect(matches.length, "a retired fixture needs retained answer evidence")'
+        ".toBeGreaterThan(0);",
+        'params: { title: `Ask \\u00b7 ${filename}`, limit: 100, offset: 0 },',
+        'expect(body.has_more, "exact retained-session lookup must remain bounded").toBe(false);',
+        'expect(body.has_more, "QA conversation must remain bounded").toBe(false);',
+        'expect(answer.render_status).toBe("permission_changed");',
+        "expect(answer.content).not.toContain(evidenceToken);",
+        "expect(answer.citations).toEqual([]);",
+        "expect(answer.proposed_actions).toEqual([]);",
+        "assertRevokedTurns(body.items, evidenceToken);",
+        "assertRevokedTurns((await exported.json()).turns, evidenceToken);",
+        "for (const width of [1280, 360])",
+        "for (const query of [filename, matter.matter_code])",
+        'url.pathname === "/api/workspace-assistant/scope-options"',
+        'url.searchParams.get("q") === query',
+        'headerValue("X-CaseOps-Automated-Test")).toBe("no-paid-providers")',
+        "expect((await response.json()).items).toEqual([]);",
+        "for (const label of [filename, matter.title])",
+        "name: `Add ${label}`, exact: true })).toHaveCount(0);",
+        "expect(final).toEqual(initial);",
+    ],
+)
+def test_private_revocation_contract_rejects_missing_probe_or_assurance(missing: str) -> None:
+    spec = _read_repo_text("tests/e2e/iplf-066b-private-retrieval-2026-08-31-prod.spec.ts")
+    fixtures = _read_repo_text("tests/e2e/support/private-release-fixtures.ts")
+    assert missing in fixtures
+    with pytest.raises(AssertionError):
+        _assert_private_revocation_probe_inventory(spec, fixtures.replace(missing, "", 1))
+
+
+@pytest.mark.parametrize("branch", ["retained", "first-run"])
+def test_private_revocation_contract_rejects_an_unprobed_lifecycle_branch(branch: str) -> None:
+    spec = _read_repo_text("tests/e2e/iplf-066b-private-retrieval-2026-08-31-prod.spec.ts")
+    fixtures = _read_repo_text("tests/e2e/support/private-release-fixtures.ts")
+    call = "await verifyRetainedPrivateRevocation(page, {"
+    before, retained, first_run = spec.split(call)
+    if branch == "retained":
+        changed = before + "await omittedRevocation(page, {" + retained + call + first_run
+    else:
+        changed = before + call + retained + "await omittedRevocation(page, {" + first_run
+    with pytest.raises(AssertionError):
+        _assert_private_revocation_probe_inventory(changed, fixtures)
 
 
 def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:

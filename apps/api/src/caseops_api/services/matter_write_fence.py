@@ -1,9 +1,33 @@
 """Explicit tenant admission for Matter writes that emit private events."""
 
-from sqlalchemy import select
+from fastapi import HTTPException
+from sqlalchemy import select, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import CompanyMembership, PrivateIndexGeneration
+
+
+def require_read_only_upload_session(session: Session, *, detail: str) -> None:
+    """Reject caller-owned writes before an upload can release a transaction."""
+    bind = session.get_bind()
+    # A fresh Session can join a transaction it does not own on its first query.
+    if isinstance(bind, Connection) and bind.in_transaction():
+        raise HTTPException(status_code=409, detail=detail)
+    caller_owns_writes = bool(
+        session.new or session.dirty or session.deleted or session.in_nested_transaction()
+    )
+    if not caller_owns_writes:
+        if not session.in_transaction():
+            return
+        connection = session.connection()
+        if connection.dialect.name == "postgresql":
+            if connection.scalar(text("SELECT pg_current_xact_id_if_assigned() IS NULL")) is True:
+                return
+        elif connection.dialect.name == "sqlite":
+            if not connection.connection.driver_connection.in_transaction:
+                return
+    raise HTTPException(status_code=409, detail=detail)
 
 
 def lock_matter_private_authority(session: Session, *, company_id: str) -> None:

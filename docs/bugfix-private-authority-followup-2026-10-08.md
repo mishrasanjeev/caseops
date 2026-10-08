@@ -356,7 +356,7 @@ failure or acceptance pass. The wrapper completed cleanup of its isolated
 containers, volumes and networks. Its logs and incremental journal remain in
 `.tmp/release-followup-20261008/`; CI's original failing job log is retained there.
 
-Implementation and scoped affected-file regressions are complete. Their
+The earlier scoped affected-file regressions completed. Their
 overlapping inventories must not be added together as one full-suite result.
 The second candidate `b7a61163` passed the map change gate but CI `37736110499`
 correctly rejected the stale generated runtime data-class projection. Updating
@@ -367,9 +367,129 @@ preflight, rather than a selected subset, must pass before the next freeze.
 `docker-b7a61163-r1` was deliberately interrupted during PostgreSQL execution
 and is also incomplete, with its incremental journal and original CI failure
 retained. Neither interrupted run certifies the release.
+### Third Candidate Findings
+
+Candidate `e9faae03` passed the complete hosted static/governance gate, web
+typecheck/unit/build and security workflow, but is not release-ready. All four
+PostgreSQL shards finished: **1,439 passed, 20 failed, zero errors/skips across
+1,459 collected cases**. Every failed XML result was read and reconciled:
+
+- Twelve communication/outside-counsel revocation cases and four notice-edit
+  cases found the race harness's own JSONL in the upload root. Prior scoped
+  runs supplied a separate evidence directory; CI's unset default exposed this
+  test-harness defect. Diagnostics now use independent temporary storage by
+  default. Original no-orphan-file assertions remain unchanged.
+- Four provider-parametrized OAuth/disposal tests incorrectly expected Company
+  to be unlocked while the newly corrected tenant-first lifecycle writer was
+  paused holding it. The replacement must prove the callback's rollback and
+  absence of locks through independent PostgreSQL backend observations, retain
+  the legitimate disposal ownership, and prove both operations complete with
+  the Matter still disposed and its private tombstone applied.
+- API coverage shard 5 finished with 552 passes, 47 skips and one failure: its
+  static private-acceptance inventory still expected two search calls after
+  fresh and retained metadata revocation coverage added two more. Reconcile
+  the actual probes and both branches, not an unexplained numeric allowance.
+- API coverage shard 9 finished with 560 passes, 45 skips and one real Gmail
+  attachment-review failure (502). Its caller still used the old inbound
+  helper signature and tuple return, after that helper became an outer-owned
+  transient staging operation. Correcting only arguments would still omit
+  atomic attachment/job/candidate admission and could retain locks through I/O.
+  Repair and regress the complete Gmail caller boundary before release.
+
+The hosted CodeQL check also flagged two notice error logs carrying a request
+identifier and ambiguous local assignments. Error messages now contain fixed
+text rather than user-controlled identifiers. The read-only session guard has
+explicit success returns and still rejects pending, flushed, Core-written and
+nested caller transactions without rolling them back. Cleanup-failure and
+unknown-commit tests assert fixed log arguments alongside retained bytes and
+the original authorization/stale-write result. No analyzer suppression or
+security relaxation is used. Existing cyclic-import notes are not a reason
+for an unrelated service refactor.
+
+The first replacement launch (`codeql-affected-r1`) used a missing Docker
+POSTGRES_USER value, causing database-role authentication setup failures. It
+was stopped and is incomplete infrastructure evidence, not a reproduced
+product defect. The complete six-file `codeql-affected-r2` run collected 531
+cases and finished with 521 passes and ten new log-capture assertion failures:
+Alembic disables preexisting loggers in this harness. Those tests now configure
+the specific logger explicitly, following the existing IP regression pattern;
+the complete replacement `codeql-affected-r3` passes **531 cases** with all
+1,593 setup/call/teardown reports, ordered collection, matching XML identities
+and successful completion. The evidence-directory override is deliberately
+unset, proving the CI-default harness correction. Preserve both failed journals
+and the original hosted job logs under
+`.tmp/release-followup-20261008/`.
+
+PR review separately identified missing caller-transaction ownership guards in
+Matter and standalone-notice uploads. Twenty-four PostgreSQL cases reproduce
+the defect before the guard: new, dirty, flushed, Core-written, deleted and
+nested sessions each reached forbidden scanner/storage transport with both
+autoflush settings and both upload surfaces. A shared early guard now uses
+the nonassigning PostgreSQL transaction-ID probe and SQLite's actual driver
+state, preserving the original transaction on rejection. The first replacement
+correctly rejected and preserved caller work, but its final zero-attachment
+assertion overlooked the shared fixture's existing attachment. Preserve that
+failed report as a test-inventory mistake; the replacement requires the exact
+original attachment identity and no additional row, not an empty-fixture claim.
+The complete fifteen-file replacement passes **470 cases**, with 1,410 phase
+reports, ordered collection, matching XML identities and successful completion.
+This is scoped evidence, not final committed-candidate release acceptance.
+
+Independent review found a second ownership boundary: a fresh Session bound to
+an externally transacted Connection could release work it did not own. This is
+a reproduced latent defect, not a claim that a current production caller uses
+that binding. The initial 48-case baseline has 36 failures: 30 reach forbidden
+transport and six hit an existing notice stale-write check first; twelve are
+already rejected by the xid guard. The expanded replacement passes **120
+PostgreSQL cases** across five upload boundaries, three join modes, both
+autoflush settings, fresh/begun Sessions and read/write external transactions.
+It requires unchanged Session/outer-transaction state, no transport and a
+successful caller commit. The shared guard conservatively rejects an active
+externally owned Connection transaction before starting any query.
+
+Gmail's outer admission now stages transient bytes without a transaction and
+rechecks current actor, mailbox owner, configuration, connection, message,
+candidate and Matter lifecycle before one atomic attachment/job/activity/audit
+commit. Refreshed tokens use captured configuration without a database session;
+stale authority cannot restore credentials or commit bytes. Known pre-commit
+failure compensates its unique object, while an unknown commit retains bytes
+for reconciliation. The complete eight-file affected gate passes **425/425**,
+including 138 Gmail PostgreSQL cases and thirteen existing Gmail tests, with
+1,275 phase reports and matching ordered collection/XML identities. Independent
+source review finds no remaining actionable Gmail-specific blocker. Evidence:
+`.tmp/gmail-attachment-admission-20261008/affected-final-r1.*`. This is not a
+production Gmail workflow acceptance claim.
+
+The OAuth correction reproduces all four original failures against frozen
+`e9faae03`, then passes both complete Calendar/workspace files: **216 cases,
+648 phase reports, zero skips**, with independent ordered collection and XML
+identity reconciliation. The callback is idle without transaction, xid, xmin
+or locks during backoff; disposal owns the legitimate tenant/actor fences and
+commits first. The callback then completes once, with disposal and the applied
+private tombstone retained. Evidence:
+`.tmp/oauth-ci-regression-20261008/handoff.json`.
+
+The first and retained private-acceptance branches now share document and
+Matter-metadata search/autocomplete/count and desktop/mobile discovery
+revocation proof, plus actual retained answers, exports and unchanged terminal
+state. Fresh-build loopback PostgreSQL browser runs pass first **1/1**, retained
+**1/1** and other shared consumers **3/3**. Six deliberate helper leak injections
+prove all six negative retrieval checks are sensitive; the old helper missed
+the three metadata probes. Complete offline Linux deploy hardening passes
+**189/189**, including 38 negative inventory cases. These local results use a
+recorded source fingerprint, not a clean release commit or production proof.
+The failed noncanonical webpack build and incomplete earlier attempts remain
+retained. Evidence: `.tmp/retained-metadata-20261008-r3/RESULTS.md`.
+
+`docker-e9faae03-r1` was interrupted after these findings and cleaned up. It is
+the third incomplete Docker run, never a pass. The retained-Matter branch now
+repeats the new metadata invariant so replay cannot omit the originally leaking
+source. Its scoped loopback proof above does not replace serving-release proof.
 Require fresh exact-tree full PostgreSQL Docker/Playwright, green PR and
-merged-main CI, and guarded canonical-SHA deployment. The standard collection
-currently discovers 1,459 PostgreSQL cases; collection is not execution proof.
+merged-main CI, and guarded canonical-SHA deployment. Current independent full
+PostgreSQL collection completes with **1,743 selected identities**, including
+218 notice-upload and 138 Gmail-admission cases. Collection is inventory, not
+test execution; reconcile the final Docker results against it.
 
 Then rerun complete production acceptance, including the original patent
 journey without retries, and obtain two later clean exact-image maintenance

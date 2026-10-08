@@ -78,6 +78,7 @@ from caseops_api.services.ip_operations import (
     _lock_ip_writer_context,
 )
 from caseops_api.services.matter_access import visible_ip_dockets_filter
+from caseops_api.services.matter_write_fence import require_read_only_upload_session
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
@@ -785,26 +786,10 @@ def _require_clean_upload_session(session: Session) -> None:
     # Both HTTP callers enter from read-only authentication/metadata parsing.
     # Never commit or silently discard a caller's pending work to release I/O.
     error = "IP upload requires a request-owned read-only transaction without pending writes."
-    if session.new or session.dirty or session.deleted:
-        raise RuntimeError(error)
-    if session.in_nested_transaction():
-        raise RuntimeError(error)
-    if not session.in_transaction():
-        return
-    connection = session.connection()
-    if connection.dialect.name == "postgresql":
-        # Read-only auth has no assigned xid; flushed/DML writes and prior row
-        # locks do. Unlike txid_current(), this probe never assigns one itself.
-        with session.no_autoflush:
-            if session.scalar(select(func.pg_current_xact_id_if_assigned())) is not None:
-                raise RuntimeError(error)
-    elif connection.dialect.name == "sqlite":
-        # CaseOps uses sqlite3 legacy transaction mode with no BEGIN hook:
-        # SELECT-only auth does not start a DBAPI transaction; DML does.
-        if connection.connection.driver_connection.in_transaction:
-            raise RuntimeError(error)
-    else:
-        raise RuntimeError("IP upload cannot verify read-only transaction ownership.")
+    try:
+        require_read_only_upload_session(session, detail=error)
+    except HTTPException as exc:
+        raise RuntimeError(error) from exc
 
 
 def _discard_ip_upload(storage_key: str) -> None:

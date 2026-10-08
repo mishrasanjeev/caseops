@@ -24,7 +24,7 @@ from io import BytesIO
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -71,7 +71,10 @@ from caseops_api.services.document_storage import (
 from caseops_api.services.email_templates import render_template
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
-from caseops_api.services.matter_write_fence import lock_matter_private_authority
+from caseops_api.services.matter_write_fence import (
+    lock_matter_private_authority,
+    require_read_only_upload_session,
+)
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
@@ -687,22 +690,10 @@ def _existing_import_response(
 
 def _require_read_only_import_session(session: Session) -> None:
     """Do not release a caller's pending, flushed or Core-written transaction."""
-    read_only = not (
-        session.new or session.dirty or session.deleted or session.in_nested_transaction()
+    require_read_only_upload_session(
+        session,
+        detail="Email import requires a read-only session before its upload boundary.",
     )
-    if read_only and session.in_transaction():
-        connection = session.connection()
-        if connection.dialect.name == "postgresql":
-            read_only = connection.scalar(text("SELECT pg_current_xact_id_if_assigned() IS NULL"))
-        elif connection.dialect.name == "sqlite":
-            read_only = not connection.connection.driver_connection.in_transaction
-        else:
-            read_only = False
-    if not read_only:
-        raise HTTPException(
-            status_code=409,
-            detail="Email import requires a read-only session before its upload boundary.",
-        )
 
 
 def import_inbound_email(

@@ -228,8 +228,13 @@ class _Race:
 
 
 @pytest.fixture
-def race(pg_engine, request, tmp_path, autoflush):
-    directory = Path(os.environ.get("CASEOPS_ACTOR_AUDIT_DIR", str(tmp_path)))
+def race(pg_engine, request, tmp_path_factory, autoflush):
+    configured_directory = os.environ.get("CASEOPS_ACTOR_AUDIT_DIR")
+    directory = (
+        Path(configured_directory)
+        if configured_directory
+        else tmp_path_factory.mktemp("caseops-race-evidence")
+    )
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / (sha256(request.node.nodeid.encode()).hexdigest()[:20] + ".jsonl")
     with path.open("x", encoding="utf-8") as evidence:

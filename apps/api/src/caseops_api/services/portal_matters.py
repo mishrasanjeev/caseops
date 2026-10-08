@@ -355,7 +355,7 @@ def submit_matter_kyc(
             session, portal_user=portal_user, matter_id=matter_id, role="client",
         )
         # Preserve lifecycle error precedence; the authoritative write lock follows actors.
-        matter = require_operational_matter(
+        require_operational_matter(
             session, matter=matter, operation="submit KYC", lock_for_write=False,
         )
         target = session.scalar(

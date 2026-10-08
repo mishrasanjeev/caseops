@@ -149,7 +149,10 @@ from caseops_api.services.matter_billing import (
 )
 from caseops_api.services.matter_operational_guard import matter_is_operational
 from caseops_api.services.matter_tags import slugify_tag
-from caseops_api.services.matter_write_fence import lock_matter_private_authority
+from caseops_api.services.matter_write_fence import (
+    lock_matter_private_authority,
+    require_read_only_upload_session,
+)
 from caseops_api.services.next_hearing import apply_next_hearing_update, clear_next_hearing
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
@@ -5379,6 +5382,9 @@ def create_matter_attachment(
 ) -> tuple[MatterAttachmentRecord, str]:
     from caseops_api.services.identity import get_session_context
 
+    require_read_only_upload_session(
+        session, detail="Matter upload requires a read-only session before its I/O boundary.",
+    )
     lock_matter_private_authority(session, company_id=context.company.id)
     _lock_matter_mutation_actor(
         session,

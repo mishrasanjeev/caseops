@@ -166,9 +166,10 @@ def _write(session, fixture, writer, *, dirty_source=False, context=None):
             payload=MatterClientAssignRequest(client_id=fixture["client_id"]),
         )
     if writer == "remove":
-        return clients.remove_client_from_matter(
+        clients.remove_client_from_matter(
             session, **kwargs, matter_id=fixture["matter_id"],
         )
+        return None
     assert writer == "portal-kyc"
     return portal_matters.submit_matter_kyc(
         session,
@@ -302,6 +303,7 @@ def test_client_actor_fk_precedes_real_offboarding_parent(
                     )
                 )
                 session.rollback()
+                return None
             finally:
                 thread.role = None
 
@@ -508,6 +510,7 @@ def test_client_private_writer_serializes_with_real_ip_writer(
                     )
                 )
                 session.rollback()
+                return None
             finally:
                 thread.role = None
 

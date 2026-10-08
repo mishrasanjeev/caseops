@@ -1014,6 +1014,7 @@ def test_upload_authority_allows_ordinary_parent_first_actor_fks(
 
     monkeypatch.setattr(document_storage, "_place_local_temp_file", store)
     uploaded = None
+    logged = None
     try:
         if first == "upload":
             uploaded = race.submit("upload", upload)
@@ -1032,6 +1033,8 @@ def test_upload_authority_allows_ordinary_parent_first_actor_fks(
                 uploaded = race.submit("upload", upload)
             race.blocked("upload", "ordinary", "SELECT matters.id")
         race.release.set()
+        assert logged is not None
+        assert uploaded is not None
         assert logged.result(timeout=15)
         assert uploaded.result(timeout=15)
     finally:

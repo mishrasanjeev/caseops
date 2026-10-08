@@ -41,7 +41,7 @@ from typing import BinaryIO
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -65,7 +65,10 @@ from caseops_api.services.document_storage import (
 )
 from caseops_api.services.file_security import verify_upload
 from caseops_api.services.matter_operational_guard import require_operational_matter
-from caseops_api.services.matter_write_fence import lock_matter_private_authority
+from caseops_api.services.matter_write_fence import (
+    lock_matter_private_authority,
+    require_read_only_upload_session,
+)
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
     assert_storage_quota_allows_upload,
@@ -221,22 +224,10 @@ def _admit_oc_upload(
 
 def _require_read_only_upload_session(session: Session) -> None:
     """Do not release a caller's pending, flushed or Core-written transaction."""
-    read_only = not (
-        session.new or session.dirty or session.deleted or session.in_nested_transaction()
+    require_read_only_upload_session(
+        session,
+        detail="Outside-counsel upload requires a read-only session before its I/O boundary.",
     )
-    if read_only and session.in_transaction():
-        connection = session.connection()
-        if connection.dialect.name == "postgresql":
-            read_only = connection.scalar(text("SELECT pg_current_xact_id_if_assigned() IS NULL"))
-        elif connection.dialect.name == "sqlite":
-            read_only = not connection.connection.driver_connection.in_transaction
-        else:
-            read_only = False
-    if not read_only:
-        raise HTTPException(
-            status_code=409,
-            detail="Outside-counsel upload requires a read-only session before its I/O boundary.",
-        )
 
 
 def upload_oc_work_product(

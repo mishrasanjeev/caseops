@@ -1226,8 +1226,12 @@ def upload_notice_file(
         require_locked_membership_capability,
     )
     from caseops_api.services.identity import get_session_context
+    from caseops_api.services.matter_write_fence import require_read_only_upload_session
     from caseops_api.services.private_retrieval import lock_private_authority_writer
 
+    require_read_only_upload_session(
+        session, detail="Notice upload requires a read-only session before its I/O boundary.",
+    )
     company_id, actor_id = context.company.id, context.membership.id
     token_issued_at = context.token_issued_at
 
@@ -1274,7 +1278,7 @@ def upload_notice_file(
                 delete_stored_document(stored.storage_key)
             except Exception:
                 logger.warning(
-                    "Failed to clean up rejected notice upload %s", notice_id, exc_info=True,
+                    "Failed to clean up rejected notice upload", exc_info=True,
                 )
 
     def preflight_quota(size_bytes: int) -> None:
@@ -1349,7 +1353,7 @@ def upload_notice_file(
         if not commit_attempted:
             discard_unpublished_object()
         else:
-            logger.warning("Notice upload commit outcome is uncertain: %s", notice_id)
+            logger.warning("Notice upload commit outcome is uncertain")
         raise
 
     if old_storage_key and old_storage_key != stored.storage_key:

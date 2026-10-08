@@ -505,4 +505,10 @@ test("IPLF-066B production locks answers after access restore and revokes privat
         document.documentElement.clientWidth + 1,
     ),
   ).toBe(false);
+
+  const disposedSource = await page.request.get(`${API}/api/matters/${matter.id}`, { headers });
+  await expectStatus(disposedSource, 200, "read authoritative terminal source for shared revocation proof");
+  await verifyRetainedPrivateRevocation(page, {
+    api: API, web: WEB, headers, matter: await disposedSource.json(), filename, evidenceToken,
+  });
 });

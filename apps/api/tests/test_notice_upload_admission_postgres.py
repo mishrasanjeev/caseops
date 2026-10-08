@@ -5,10 +5,11 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from io import BytesIO
 from threading import Barrier, Event
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -22,7 +23,15 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.schemas.notices import NoticeListFilters, NoticeUpdateRequest
-from caseops_api.services import document_storage, matters, notices, virus_scan
+from caseops_api.services import (
+    communications,
+    document_storage,
+    ip_document_workflow,
+    matters,
+    notices,
+    portal_outside_counsel,
+    virus_scan,
+)
 from tests.test_matter_writer_admission_postgres import _fixture, race  # noqa: F401
 from tests.test_postgres_validation import _ensure_migrations, _ip_race_context  # noqa: F401
 
@@ -52,6 +61,168 @@ def _notice(engine, fixture, old_key=None):
         )
         session.commit()
         return row.id, row.updated_at
+
+
+@pytest.mark.parametrize("autoflush", [False, True])
+@pytest.mark.parametrize("kind", ["matter", "notice"])
+@pytest.mark.parametrize("ownership", ["new", "pending", "flushed", "core", "deleted", "nested"])
+def test_upload_rejects_caller_owned_writes_without_discarding_them(
+    pg_engine, monkeypatch, autoflush, kind, ownership,
+):
+    fixture = _fixture(pg_engine)
+    notice_id, expected = _notice(pg_engine, fixture)
+    with Session(pg_engine) as seed:
+        caller = CompanyNotice(
+            company_id=fixture.company, created_by_membership_id=fixture.actor,
+            subject="Caller-owned original",
+        )
+        seed.add(caller)
+        seed.commit()
+        caller_id = caller.id
+    transported = []
+
+    def forbidden_transport(*args, **kwargs):
+        transported.append(True)
+        raise AssertionError("Write-owned session reached scanner or storage")
+
+    monkeypatch.setattr(virus_scan, "scan_file_for_viruses", forbidden_transport)
+    monkeypatch.setattr(matters, "persist_matter_attachment", forbidden_transport)
+    monkeypatch.setattr(notices, "persist_workspace_attachment", forbidden_transport)
+    created_id = str(uuid4())
+    with Session(pg_engine, autoflush=autoflush) as session:
+        context = _ip_race_context(session, company_id=fixture.company, membership_id=fixture.actor)
+        caller = session.get(CompanyNotice, caller_id)
+        if ownership == "new":
+            session.add(CompanyNotice(
+                id=created_id, company_id=fixture.company,
+                created_by_membership_id=fixture.actor, subject="Caller-owned new",
+            ))
+        elif ownership in {"pending", "flushed"}:
+            caller.subject = "Caller-owned changed"
+            if ownership == "flushed":
+                session.flush()
+        elif ownership == "core":
+            session.execute(update(CompanyNotice).where(CompanyNotice.id == caller_id).values(
+                subject="Caller-owned changed",
+            ).execution_options(synchronize_session=False))
+        elif ownership == "deleted":
+            session.delete(caller)
+        else:
+            session.begin_nested()
+        transaction = session.get_transaction()
+        nested = session.get_nested_transaction()
+        with pytest.raises(HTTPException) as rejected:
+            if kind == "matter":
+                matters.create_matter_attachment(
+                    session, context=context, matter_id=fixture.matter,
+                    filename="owned.txt", content_type="text/plain", stream=BytesIO(b"owned"),
+                )
+            else:
+                notices.upload_notice_file(
+                    session, context=context, notice_id=notice_id, expected_updated_at=expected,
+                    filename="owned.txt", content_type="text/plain", stream=BytesIO(b"owned"),
+                )
+        assert rejected.value.status_code == 409
+        assert "read-only session" in rejected.value.detail
+        assert session.get_transaction() is transaction and transaction.is_active
+        assert session.get_nested_transaction() is nested
+        assert transported == []
+        if ownership == "new":
+            assert any(row.id == created_id for row in session.new)
+        elif ownership == "pending":
+            assert caller in session.dirty and caller.subject == "Caller-owned changed"
+        elif ownership == "deleted":
+            assert caller in session.deleted
+        session.commit()
+    with Session(pg_engine) as observer:
+        persisted = observer.get(CompanyNotice, caller_id)
+        if ownership == "deleted":
+            assert persisted is None
+        else:
+            assert persisted.subject == (
+                "Caller-owned changed" if ownership in {"pending", "flushed", "core"}
+                else "Caller-owned original"
+            )
+        if ownership == "new":
+            assert observer.get(CompanyNotice, created_id).subject == "Caller-owned new"
+        assert observer.get(CompanyNotice, notice_id).storage_key is None
+        assert observer.scalars(select(MatterAttachment.id).where(
+            MatterAttachment.matter_id == fixture.matter,
+        )).all() == [fixture.attachment]
+
+
+@pytest.mark.parametrize("autoflush", [False, True])
+@pytest.mark.parametrize("kind", ["matter", "notice", "email", "outside-counsel", "ip"])
+@pytest.mark.parametrize("join_mode", ["rollback_only", "create_savepoint", "control_fully"])
+@pytest.mark.parametrize("session_begun", [False, True])
+@pytest.mark.parametrize("caller_wrote", [False, True])
+def test_upload_cannot_release_an_externally_owned_connection_transaction(
+    pg_engine, monkeypatch, autoflush, kind, join_mode, session_begun, caller_wrote,
+):
+    fixture = _fixture(pg_engine)
+    notice_id, expected = _notice(pg_engine, fixture)
+    with Session(pg_engine) as read:
+        context = _ip_race_context(read, company_id=fixture.company, membership_id=fixture.actor)
+        read.expunge_all()
+    transported = []
+
+    def forbidden_transport(*args, **kwargs):
+        transported.append(True)
+        raise AssertionError("Externally owned transaction reached scanner or storage")
+
+    monkeypatch.setattr(virus_scan, "scan_file_for_viruses", forbidden_transport)
+    monkeypatch.setattr(matters, "persist_matter_attachment", forbidden_transport)
+    monkeypatch.setattr(notices, "persist_workspace_attachment", forbidden_transport)
+    with pg_engine.connect() as connection:
+        outer = connection.begin()
+        if caller_wrote:
+            connection.execute(update(CompanyNotice).where(CompanyNotice.id == notice_id).values(
+                subject="External caller changed",
+            ))
+        with Session(connection, join_transaction_mode=join_mode, autoflush=autoflush) as session:
+            if session_begun:
+                session.execute(text("SELECT 1"))
+            transaction = session.get_transaction()
+            failure_type = RuntimeError if kind == "ip" else HTTPException
+            with pytest.raises(failure_type) as rejected:
+                if kind == "matter":
+                    matters.create_matter_attachment(
+                        session, context=context, matter_id=fixture.matter,
+                        filename="owned.txt", content_type="text/plain", stream=BytesIO(b"owned"),
+                    )
+                elif kind == "notice":
+                    notices.upload_notice_file(
+                        session, context=context, notice_id=notice_id, expected_updated_at=expected,
+                        filename="owned.txt", content_type="text/plain", stream=BytesIO(b"owned"),
+                    )
+                elif kind == "email":
+                    communications._require_read_only_import_session(session)
+                elif kind == "outside-counsel":
+                    portal_outside_counsel._require_read_only_upload_session(session)
+                else:
+                    ip_document_workflow._require_clean_upload_session(session)
+            if kind == "ip":
+                assert "request-owned read-only transaction" in str(rejected.value)
+            else:
+                assert rejected.value.status_code == 409
+                assert "read-only session" in rejected.value.detail
+            assert session.get_transaction() is transaction
+            assert outer.is_active and connection.in_transaction()
+            assert transported == []
+            assert connection.scalar(select(CompanyNotice.subject).where(
+                CompanyNotice.id == notice_id,
+            )) == ("External caller changed" if caller_wrote else "Upload admission")
+            # The owner commits before Session cleanup, proving no rollback-only residue.
+            outer.commit()
+    with Session(pg_engine) as observer:
+        persisted = observer.get(CompanyNotice, notice_id)
+        assert persisted.subject == (
+            "External caller changed" if caller_wrote else "Upload admission"
+        )
+        assert persisted.storage_key is None
+        assert observer.scalars(select(MatterAttachment.id).where(
+            MatterAttachment.matter_id == fixture.matter,
+        )).all() == [fixture.attachment]
 
 
 @pytest.mark.parametrize("autoflush", [False, True])
@@ -422,10 +593,14 @@ def test_upload_commit_unknown_outcome_keeps_object_bytes(
     pg_engine,
     monkeypatch,
     tmp_path,
+    caplog,
     autoflush,
     kind,
     outcome,
 ):
+    # Alembic's fileConfig disables preexisting application loggers.
+    monkeypatch.setattr(notices.logger, "disabled", False)
+    caplog.set_level("WARNING", logger=notices.__name__)
     fixture = _fixture(pg_engine)
     old_key = f"{fixture.company}/retained/old.txt" if kind == "notice-replacement" else None
     if old_key:
@@ -471,6 +646,14 @@ def test_upload_commit_unknown_outcome_keeps_object_bytes(
                     content_type="text/plain",
                     stream=BytesIO(content),
                 )
+    if kind.startswith("notice"):
+        uncertain_logs = [
+            row for row in caplog.records
+            if row.name == notices.__name__
+            and row.getMessage() == "Notice upload commit outcome is uncertain"
+        ]
+        assert len(uncertain_logs) == 1
+        assert uncertain_logs[0].args == ()
     files = [path for path in tmp_path.rglob("*") if path.is_file()]
     expected_bytes = [content, b"old"] if old_key else [content]
     assert sorted(path.read_bytes() for path in files) == sorted(expected_bytes)
@@ -495,3 +678,61 @@ def test_upload_commit_unknown_outcome_keeps_object_bytes(
             row = rows[0] if rows else None
         if outcome == "after-commit":
             assert row.sha256_hex == sha256(content).hexdigest()
+
+
+@pytest.mark.parametrize("replacement", [False, True])
+def test_rejected_notice_cleanup_logs_fixed_text_without_masking_stale_write(
+    pg_engine, monkeypatch, tmp_path, caplog, replacement,
+):
+    monkeypatch.setattr(notices.logger, "disabled", False)
+    caplog.set_level("WARNING", logger=notices.__name__)
+    fixture = _fixture(pg_engine)
+    old_key = f"{fixture.company}/retained/old.txt" if replacement else None
+    if old_key:
+        old_path = tmp_path / old_key
+        old_path.parent.mkdir(parents=True)
+        old_path.write_bytes(b"old")
+    notice_id, expected = _notice(pg_engine, fixture, old_key)
+    monkeypatch.setattr(document_storage, "_storage_backend", lambda: "local")
+    monkeypatch.setattr(document_storage, "_document_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        virus_scan, "scan_file_for_viruses",
+        lambda _: virus_scan.ScanResult(status="clean", signature=None),
+    )
+    place = document_storage._place_local_temp_file
+
+    def store(temp, target):
+        with Session(pg_engine) as concurrent:
+            concurrent.get(CompanyNotice, notice_id).subject = "Concurrent notice edit"
+            concurrent.commit()
+        return place(temp, target)
+
+    def unavailable_cleanup(_key):
+        raise RuntimeError("Cleanup backend unavailable")
+
+    monkeypatch.setattr(document_storage, "_place_local_temp_file", store)
+    monkeypatch.setattr(notices, "delete_stored_document", unavailable_cleanup)
+    with Session(pg_engine, autoflush=False) as session:
+        context = _ip_race_context(session, company_id=fixture.company, membership_id=fixture.actor)
+        with pytest.raises(HTTPException) as error:
+            notices.upload_notice_file(
+                session, context=context, notice_id=notice_id,
+                expected_updated_at=expected, filename="rejected.txt",
+                content_type="text/plain", stream=BytesIO(b"Rejected notice bytes"),
+            )
+        assert error.value.status_code == 409
+    cleanup_logs = [
+        row for row in caplog.records
+        if row.name == notices.__name__
+        and row.getMessage() == "Failed to clean up rejected notice upload"
+    ]
+    assert len(cleanup_logs) == 1
+    assert cleanup_logs[0].args == ()
+    assert cleanup_logs[0].exc_info is not None
+    with Session(pg_engine) as verify:
+        notice = verify.get(CompanyNotice, notice_id)
+        assert notice.subject == "Concurrent notice edit"
+        assert notice.storage_key == old_key
+    files = sorted(path.read_bytes() for path in tmp_path.rglob("*") if path.is_file())
+    expected_files = [b"Rejected notice bytes", b"old"] if old_key else [b"Rejected notice bytes"]
+    assert files == sorted(expected_files)

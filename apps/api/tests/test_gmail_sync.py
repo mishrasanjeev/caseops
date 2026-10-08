@@ -21,6 +21,7 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
     Communication,
+    DocumentProcessingJob,
     MailboxAttachmentCandidate,
     MailboxAttachmentCandidateStatus,
     MailboxConnectionStatus,
@@ -29,6 +30,8 @@ from caseops_api.db.models import (
     MailboxWebhookEvent,
     MailboxWebhookStatus,
     Matter,
+    MatterActivity,
+    MatterAttachment,
     UserMailboxConnection,
 )
 from caseops_api.db.session import get_session_factory
@@ -463,13 +466,25 @@ def test_gmail_attachment_review_refreshes_before_safe_read_retry(
             )
         ]
     )
-    monkeypatch.setattr(
-        "caseops_api.services.gmail_sync.refresh_google_workspace_access_token",
-        lambda session, **kwargs: {
-            **kwargs["token_payload"],
-            "access_token": "gmail-refreshed-access",
-        },
-    )
+    monkeypatch.setenv("CASEOPS_GMAIL_CLIENT_ID", "attachment-review-client")
+    monkeypatch.setenv("CASEOPS_GMAIL_CLIENT_SECRET", "attachment-review-secret")
+    monkeypatch.setenv("CASEOPS_GMAIL_REDIRECT_URI", "http://testserver/api/mailbox/gmail/callback")
+    get_settings.cache_clear()
+    refresh_calls = []
+
+    def refresh(url, *, data, timeout):
+        assert url == "https://oauth2.googleapis.com/token"
+        assert data == {
+            "client_id": "attachment-review-client",
+            "client_secret": "attachment-review-secret",
+            "grant_type": "refresh_token",
+            "refresh_token": "gmail-refresh-credential",
+        }
+        assert timeout == 15
+        refresh_calls.append(url)
+        return httpx.Response(200, json={"access_token": "gmail-refreshed-access"})
+
+    monkeypatch.setattr(httpx, "post", refresh)
     set_gmail_provider_for_tests(provider)
     try:
         bootstrap = _bootstrap_company(
@@ -500,6 +515,7 @@ def test_gmail_attachment_review_refreshes_before_safe_read_retry(
         assert approved.json()["candidate"]["status"] == "approved_imported"
         assert approved.json()["imported_attachment_id"]
         assert len(provider.fetch_calls) == 2
+        assert len(refresh_calls) == 1
         with get_session_factory()() as session:
             connection = session.get(UserMailboxConnection, connection_id)
             assert connection is not None
@@ -511,6 +527,49 @@ def test_gmail_attachment_review_refreshes_before_safe_read_retry(
             assert candidate is not None
             assert candidate.imported_attachment_id == approved.json()["imported_attachment_id"]
             assert str(matter["id"]) == candidate.matter_id
+            attachment = session.get(MatterAttachment, candidate.imported_attachment_id)
+            assert attachment is not None
+            assert attachment.original_filename == "evidence.txt"
+            assert attachment.size_bytes == len(b"safe attachment bytes after refresh")
+            jobs = list(
+                session.scalars(
+                    select(DocumentProcessingJob).where(
+                        DocumentProcessingJob.attachment_id == attachment.id,
+                    )
+                )
+            )
+            assert len(jobs) == 1
+            assert jobs[0].action == "initial_index"
+            assert jobs[0].target_type == "matter_attachment"
+            activities = list(
+                session.scalars(
+                    select(MatterActivity).where(
+                        MatterActivity.matter_id == matter["id"],
+                        MatterActivity.event_type == "inbound_email_attachment_added",
+                    )
+                )
+            )
+            assert len(activities) == 1
+            imported_audits = list(
+                session.scalars(
+                    select(AuditEvent).where(
+                        AuditEvent.action == "mailbox.gmail_attachment.imported",
+                        AuditEvent.target_id == candidate_id,
+                    )
+                )
+            )
+            assert len(imported_audits) == 1
+            assert "gmail-refreshed-access" not in connection.encrypted_token_ref
+        repeated = client.patch(
+            f"/api/mailbox/attachment-candidates/{candidate_id}",
+            headers=_auth(token),
+            json={"action": "approve_import"},
+        )
+        assert repeated.status_code == 200, repeated.text
+        assert (
+            repeated.json()["imported_attachment_id"] == approved.json()["imported_attachment_id"]
+        )
+        assert len(provider.fetch_calls) == 2
     finally:
         set_gmail_provider_for_tests(None)
 

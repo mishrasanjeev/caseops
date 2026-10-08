@@ -11,8 +11,10 @@ from uuid import uuid4
 import httpx
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import NullPool
 
 from caseops_api.db.models import (
     ApiIdempotencyRecord,
@@ -1031,10 +1033,21 @@ def test_postgres_oauth_cannot_invert_real_matter_disposal_locks(
         matter_id, updated_at = matter.id, matter.updated_at
         private_retrieval.ensure_active_private_generation(seed, company_id=fixture.company_id)
         seed.commit()
-    actor_locked, continue_disposal = Event(), Event()
+    authority_locked, actor_locked, continue_disposal = Event(), Event(), Event()
     private_company_locked = Event()
+    disposal_pids = []
+    original_authority = matters.lock_matter_private_authority
     original_actor = matters._lock_matter_mutation_actor
     original_private_company = private_retrieval._lock_private_company
+
+    def observe_authority(session, **kwargs):
+        value = original_authority(session, **kwargs)
+        assert kwargs["company_id"] == fixture.company_id
+        disposal_pids.append(session.scalar(text("SELECT pg_backend_pid()")))
+        authority_locked.set()
+        return value
+
+    monkeypatch.setattr(matters, "lock_matter_private_authority", observe_authority)
 
     def observe_private_company(session, **kwargs):
         value = original_private_company(session, **kwargs)
@@ -1045,6 +1058,7 @@ def test_postgres_oauth_cannot_invert_real_matter_disposal_locks(
     monkeypatch.setattr(private_retrieval, "_lock_private_company", observe_private_company)
 
     def pause_actor(*args, **kwargs):
+        assert authority_locked.is_set(), "disposal must fence Company before its actor"
         value = original_actor(*args, **kwargs)
         actor_locked.set()
         assert continue_disposal.wait(15), "coordinator never released Matter disposal"
@@ -1065,29 +1079,81 @@ def test_postgres_oauth_cannot_invert_real_matter_disposal_locks(
             )
 
     name = f"oauth-matter-{uuid4().hex[:8]}"
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        disposal = executor.submit(dispose)
-        callback = None
-        try:
+    # Rollback may return Calendar's named connection to its pool. An observer
+    # must never borrow that connection and mistake its own transaction for OAuth.
+    observer = create_engine(fixture.engine.url, poolclass=NullPool)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            disposal = executor.submit(dispose)
+            callback = None
             try:
-                assert actor_locked.wait(10), "disposal never fenced the actor"
-                callback = executor.submit(fixture.call, name=name)
-                assert fixture.retrying.wait(10), "OAuth did not encounter disposal's actor lock"
-                # Deliberately exceed the real 25ms backoff. The handshake, not
-                # scheduler timing, must keep a second acquisition out of the probe.
-                sleep(0.075)
-                assert fixture.retrying.entries == 1
-                with Session(fixture.engine) as probe:
+                try:
+                    assert actor_locked.wait(10), "disposal never fenced the actor"
+                    callback = executor.submit(fixture.call, name=name)
+                    assert fixture.retrying.wait(10), (
+                        "OAuth did not encounter disposal's Company lock"
+                    )
+                    # Deliberately exceed the real 25ms backoff. The handshake, not
+                    # scheduler timing, must keep a second acquisition out of the probe.
+                    sleep(0.075)
+                    assert fixture.retrying.entries == 1
+                    assert not callback.done() and not disposal.done()
+                    assert fixture.calls == []
+                    with Session(observer) as probe:
+                        activity = probe.execute(text(
+                            "SELECT pid, state, xact_start, backend_xid, backend_xmin "
+                            "FROM pg_stat_activity WHERE datname = current_database() "
+                            "AND application_name = :name"
+                        ), {"name": name}).mappings().one()
+                        assert activity["state"] == "idle", activity
+                        assert activity["xact_start"] is None, activity
+                        assert activity["backend_xid"] is None, activity
+                        assert activity["backend_xmin"] is None, activity
+                        assert probe.execute(text(
+                            "SELECT locktype, mode, granted FROM pg_locks WHERE pid = :pid"
+                        ), {"pid": activity["pid"]}).all() == []
+                        assert len(disposal_pids) == 1
+                        assert len({
+                            activity["pid"], disposal_pids[0],
+                            probe.scalar(text("SELECT pg_backend_pid()")),
+                        }) == 3
+                        owner = probe.execute(text(
+                            "SELECT state, xact_start FROM pg_stat_activity WHERE pid = :pid"
+                        ), {"pid": disposal_pids[0]}).mappings().one()
+                        assert owner["state"] == "idle in transaction", owner
+                        assert owner["xact_start"] is not None, owner
+                        assert {"companies", "company_memberships", "users"} <= set(
+                            probe.scalars(text(
+                                "SELECT relation::regclass::text FROM pg_locks WHERE pid = :pid "
+                                "AND mode = 'RowShareLock' AND granted"
+                            ), {"pid": disposal_pids[0]})
+                        )
+                        # The callback owns no locks; the paused disposal is the
+                        # legitimate Company owner under the tenant-first protocol.
+                        with pytest.raises(DBAPIError) as held:
+                            probe.scalar(select(Company.id).where(
+                                Company.id == fixture.company_id,
+                            ).with_for_update(of=Company, nowait=True))
+                        assert held.value.orig.sqlstate == "55P03"
+                finally:
+                    continue_disposal.set()
+                assert disposal.result(timeout=15).status == "disposed"
+                assert private_company_locked.is_set(), "disposal skipped private Company lock"
+                assert fixture.retrying.entries == 1 and not callback.done()
+                # Keep OAuth at backoff while proving disposal released both
+                # authority fences, then permit the actual callback to finish.
+                with Session(observer) as probe:
                     assert probe.scalar(select(Company).where(
                         Company.id == fixture.company_id,
                     ).with_for_update(of=Company, nowait=True)) is not None
+                    assert probe.scalar(select(CompanyMembership).where(
+                        CompanyMembership.id == fixture.membership_id,
+                    ).with_for_update(of=CompanyMembership, nowait=True)) is not None
             finally:
-                continue_disposal.set()
-            assert disposal.result(timeout=15).status == "disposed"
-            assert private_company_locked.is_set(), "disposal skipped private Company lock"
-        finally:
-            fixture.retrying.release()
-        assert callback is not None and callback.result(timeout=15).status == "connected"
+                fixture.retrying.release()
+            assert callback is not None and callback.result(timeout=15).status == "connected"
+    finally:
+        observer.dispose()
     assert fixture.calls == ["race"]
     with Session(fixture.engine) as verify:
         assert verify.get(Matter, matter_id).status == "disposed"

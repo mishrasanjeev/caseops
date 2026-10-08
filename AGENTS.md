@@ -1462,6 +1462,32 @@ requirements when using the fallback.
   committed branch history, so uncommitted map edits cannot satisfy it. A
   governance-note edit must render and validate both the Markdown map and
   generated data-class projection before freezing a Docker candidate.
+- Race diagnostics must live outside the upload/storage root whose contents a
+  test asserts. Exercise the harness with its evidence-directory override unset
+  as well as configured; never ignore unexpected files or weaken atomic cleanup
+  assertions to accommodate a journal created by the test itself.
+- A lock-order regression must identify the actual PostgreSQL lock owner.
+  Tenant-first lifecycle admission legitimately holds Company while OAuth backs
+  off; prove the callback has rolled back with independent backend/activity and
+  lock observations, then prove disposal and callback complete. An observer must
+  not borrow the callback's named pooled connection and misattribute its own
+  transaction to OAuth.
+- Finish static, governance, security and complete affected-file gates before
+  freezing a full Docker candidate. Preserve interrupted runs as incomplete.
+  A retained-fixture browser branch must repeat every new revocation assertion
+  from the fresh branch, and its release-contract inventory must change with it.
+- Changing a private upload helper's signature, return value or transaction
+  ownership is a caller contract change. Inventory every production caller and
+  rerun its complete workflow tests, including Gmail reviewed attachments; a
+  passing inbound-email suite cannot certify a caller omitted from that suite.
+  Every upload that rolls back before I/O must first reject new, dirty, deleted,
+  flushed/Core-written or nested caller transactions without discarding them.
+  Prove the caller can still commit its original work after the rejection.
+- A clean or fresh SQLAlchemy Session can still be bound to a Connection whose
+  transaction belongs to its caller. Reject that boundary before querying or
+  rolling back, including savepoint and control-fully join modes. Prove the
+  external transaction and Session state remain unchanged and caller work can
+  commit; a nonassigning PostgreSQL xid probe alone cannot identify ownership.
 - A Cloud Run request timestamp plus its latency can identify a request that
   waited for a new scanner-gated API instance. Correlate the instance startup
   logs before calling a missing browser row a data or permission defect. Keep

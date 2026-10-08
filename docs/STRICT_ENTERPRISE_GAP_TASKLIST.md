@@ -14,6 +14,14 @@ local complete-file PostgreSQL/HTTP gates and the notice browser journey pass
 in their recorded scopes, while combined Docker, CI and serving-release proof
 remain outstanding. Runtime repairs retain scanner, current-actor, lifecycle,
 quota and uncertain-commit safety boundaries; failed historical evidence remains.
+PR #525's combined CI also found the Gmail reviewed-attachment caller still
+using the prior helper contract (HTTP 502). Its complete outer admission and
+post-I/O authority repair is **Partially implemented**: 425 complete affected-file
+tests pass, including 138 Gmail PostgreSQL cases and thirteen existing Gmail
+tests, with independent source review. Passing the inbound-email helper alone
+did not establish caller compatibility. The 531-case replacement upload/authority
+gate and separate 120-case external-transaction ownership proof also pass, but
+these overlapping scopes are not full committed-candidate release proof.
 
 ## October 8 Document Worker Lock-Order Gap
 

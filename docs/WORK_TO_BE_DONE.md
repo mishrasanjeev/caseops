@@ -18,6 +18,16 @@ not combined Docker or production certification. The isolated migration-order
 proof also passes both orders and the complete eight-case patent file; IP final
 acceptance now passes 599 tests across 18 complete files with exact phase/XML
 reconciliation. One frozen candidate still requires full Docker and new PR CI.
+PR #525 is still open and not deployed. Candidate `e9faae03` exposed CI-default
+race evidence stored inside the upload root, stale OAuth lock-owner expectations,
+dated browser inventory drift and a real Gmail attachment caller-contract 502.
+The harness/static-analysis correction passes its complete 531-case gate;
+OAuth replacement passes 216, caller-ownership/upload coverage 470 and the
+Gmail affected-file gate 425. External-Connection ownership has another 120-case
+PostgreSQL proof. These inventories overlap and must not be summed. Independent
+reviews found no remaining actionable blocker in the repaired shared ownership
+guard or Gmail admission. Full committed-candidate CI, Docker and serving-release
+verification remain open; current collection selects 1,743 PostgreSQL cases.
 
 ## October 8 Production Acceptance Follow-Up
 
