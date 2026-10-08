@@ -1,5 +1,13 @@
 # CaseOps agent instructions
 
+- An immediate post-upload source save must survive background extraction.
+  ORM autoflush before a SELECT can lock the source before tenant authority.
+  Acquire the shared tenant fence with autoflush suppressed after extraction
+  and before source/job writes; audit document link/state writers as well.
+  Prove forced worker/correction overlap on PostgreSQL and retain the browser's
+  immediate save, response, source hash, reload and download assertions. Never
+  hide the failed mutation with a retry or a wait for indexing completion.
+
 - OAuth acceptance must exercise authorization scopes, token exchange, account
   identity, durable claim cleanup and the browser's return to the work area.
   An existing-connection refresh test cannot close a new-connection callback

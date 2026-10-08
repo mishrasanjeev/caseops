@@ -3,24 +3,37 @@ from __future__ import annotations
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
+from hashlib import sha256
 from pathlib import Path
+from threading import Event
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import event, func, insert, select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from caseops_api.db.models import (
     Client,
+    DocumentProcessingAction,
+    DocumentProcessingJob,
+    DocumentProcessingJobStatus,
+    DocumentProcessingStatus,
+    DocumentProcessingTargetType,
     IpAsset,
     IpDocketRecord,
+    IpDocument,
+    IpDocumentLink,
+    IpDocumentTaxonomyEntry,
+    IpDocumentVersion,
     IpPatentFamily,
     IpPatentFamilyVersion,
     MatterAccessGrant,
+    PrivateProjectionEvent,
 )
 from caseops_api.schemas.ip_patents import (
+    PatentDocumentSource,
     PatentFamilyCorrectionRequest,
     PatentFamilyCreateRequest,
 )
@@ -31,7 +44,10 @@ from caseops_api.services.ip_patent_families import (
     get_patent_family,
     list_patent_families,
 )
-from caseops_api.services.private_retrieval import lock_private_authority_writer
+from caseops_api.services.private_retrieval import (
+    ensure_active_private_generation,
+    lock_private_authority_writer,
+)
 from tests.test_postgres_validation import (
     _ensure_migrations,  # noqa: F401
     _ip_race_context,
@@ -262,6 +278,206 @@ def test_patent_correction_rechecks_version_after_parent_lock_on_postgres(pg_eng
                 .where(
                     IpPatentFamilyVersion.family_id == str(family.id),
                 )
+            )
+            == 2
+        )
+
+
+@pytest.mark.parametrize(
+    "autoflush", [False, True], ids=["production-session", "autoflush-session"]
+)
+def test_patent_source_correction_and_index_worker_take_company_before_version_on_postgres(
+    pg_engine, monkeypatch, autoflush
+):
+    from caseops_api.services import document_jobs, document_processing
+
+    company_id, actor_id, family = _seed(pg_engine)
+    content = "Original immutable inventor evidence for the PostgreSQL worker race."
+    content_hash = sha256(content.encode()).hexdigest()
+    with Session(pg_engine) as seed:
+        taxonomy = IpDocumentTaxonomyEntry(
+            company_id=company_id,
+            key="patent-worker-evidence",
+            label="Inventor evidence",
+            updated_by_membership_id=actor_id,
+        )
+        seed.add(taxonomy)
+        seed.flush()
+        document = IpDocument(
+            company_id=company_id,
+            taxonomy_entry_id=taxonomy.id,
+            title="Original inventor source",
+            confidentiality="restricted",
+            created_by_membership_id=actor_id,
+        )
+        seed.add(document)
+        seed.flush()
+        version = IpDocumentVersion(
+            company_id=company_id,
+            document_id=document.id,
+            version=1,
+            original_filename="inventor.txt",
+            display_name="inventor.txt",
+            storage_key=f"patent-worker-race/{uuid4()}/inventor.txt",
+            content_type="text/plain",
+            size_bytes=len(content.encode()),
+            sha256_hex=content_hash,
+            uploaded_by_membership_id=actor_id,
+        )
+        seed.add(version)
+        seed.flush()
+        seed.add(
+            IpDocumentLink(
+                company_id=company_id,
+                document_id=document.id,
+                target_type="docket",
+                target_id=str(family.docket_id),
+                docket_id=str(family.docket_id),
+                created_by_membership_id=actor_id,
+            )
+        )
+        job = DocumentProcessingJob(
+            company_id=company_id,
+            requested_by_membership_id=actor_id,
+            target_type=DocumentProcessingTargetType.IP_DOCUMENT_VERSION,
+            attachment_id=version.id,
+            action=DocumentProcessingAction.INITIAL_INDEX,
+        )
+        seed.add(job)
+        # Without an active generation the worker's real event path returns early.
+        ensure_active_private_generation(seed, company_id=company_id)
+        seed.commit()
+        job_id, document_id, version_id = job.id, document.id, version.id
+        storage_key = version.storage_key
+
+    source = PatentDocumentSource(
+        document_id=document_id,
+        document_version_id=version_id,
+        content_sha256=content_hash,
+    )
+    payload = PatentFamilyCorrectionRequest(
+        expected_version=family.version,
+        expected_lifecycle_version=family.lifecycle_version,
+        facts=family.facts.model_copy(update={"source": source}),
+        reason="Pin inventor source while background extraction completes.",
+    )
+    extraction_entered, release_extraction = Event(), Event()
+    worker_name = f"patent-index-worker-{uuid4().hex[:12]}"
+    factory = sessionmaker(bind=pg_engine, autoflush=autoflush, expire_on_commit=False)
+
+    def worker_session():
+        session = factory()
+        session.execute(text("SET lock_timeout = '10s'"))
+        session.execute(
+            text("SELECT set_config('application_name', :name, false)"), {"name": worker_name}
+        )
+        return session
+
+    def paused_parse(key, content_type):
+        assert (key, content_type) == (storage_key, "text/plain")
+        extraction_entered.set()
+        assert release_extraction.wait(timeout=15)
+        return document_processing.ParsedDocument(
+            status=DocumentProcessingStatus.INDEXED,
+            extracted_text=content,
+            chunks=[content],
+            error=None,
+        )
+
+    monkeypatch.setattr(document_jobs, "get_session_factory", lambda: worker_session)
+    monkeypatch.setattr(document_processing, "parse_attachment", paused_parse)
+    with ThreadPoolExecutor(max_workers=1) as pool, Session(pg_engine) as correction:
+        worker = pool.submit(document_jobs.run_document_processing_job, job_id)
+        try:
+            assert extraction_entered.wait(timeout=15)
+            correction.execute(text("SET LOCAL lock_timeout = '1s'"))
+            context = _ip_race_context(correction, company_id=company_id, membership_id=actor_id)
+            # This must succeed while storage/OCR is still paused, before taking source locks.
+            lock_private_authority_writer(correction, company_id=company_id)
+            correction_pid = correction.scalar(text("SELECT pg_backend_pid()"))
+            with Session(pg_engine) as probe:
+                for model, row_id in ((IpDocument, document_id), (IpDocumentVersion, version_id)):
+                    assert (
+                        probe.scalar(
+                            select(model.id).where(model.id == row_id).with_for_update(nowait=True)
+                        )
+                        == row_id
+                    )
+                probe.rollback()
+
+            release_extraction.set()
+            _wait_for_postgres_lock_wait(pg_engine, application_name=worker_name)
+            with pg_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as observer:
+                waiting = (
+                    observer.execute(
+                        text(
+                            "SELECT query, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity "
+                            "WHERE application_name = :name AND wait_event_type = 'Lock'"
+                        ),
+                        {"name": worker_name},
+                    )
+                    .mappings()
+                    .one()
+                )
+                assert "FROM companies" in waiting["query"]
+                assert "FOR NO KEY UPDATE" in waiting["query"]
+                assert correction_pid in waiting["blockers"]
+
+            # The Company waiter must not own the version needed by this correction.
+            # Keep Company held through this probe and the real writer, not just a signal.
+            with Session(pg_engine) as probe:
+                assert (
+                    probe.scalar(
+                        select(IpDocumentVersion.id)
+                        .where(IpDocumentVersion.id == version_id)
+                        .with_for_update(nowait=True)
+                    )
+                    == version_id
+                )
+                probe.rollback()
+            corrected = correct_patent_family(
+                correction, context=context, family_id=str(family.id), payload=payload
+            )
+            assert corrected.version == family.version + 1
+            assert corrected.facts.source == source
+        finally:
+            release_extraction.set()
+            correction.rollback()
+        worker.result(timeout=15)
+
+    with Session(pg_engine) as verify:
+        job = verify.get(DocumentProcessingJob, job_id)
+        assert job.status == DocumentProcessingJobStatus.COMPLETED, job.error_message
+        assert job.attempt_count == 1
+        assert job.error_message is None and job.completed_at is not None
+        assert job.processed_char_count == len(content)
+        version = verify.get(IpDocumentVersion, version_id)
+        assert version.processing_status == DocumentProcessingStatus.INDEXED
+        assert version.extracted_text == content
+        assert version.sha256_hex == content_hash and version.storage_key == storage_key
+        assert version.state == "draft"
+        assert verify.get(IpDocument, document_id).current_version == 1
+        worker_event = verify.scalars(
+            select(PrivateProjectionEvent).where(
+                PrivateProjectionEvent.company_id == company_id,
+                PrivateProjectionEvent.idempotency_key == f"ip-document-indexed:{job_id}",
+            )
+        ).one()
+        assert worker_event.status == "applied"
+        assert worker_event.target_id == document_id and worker_event.target_version == "1"
+        assert worker_event.reason_code == "ip_document_processing_completed"
+        context = _ip_race_context(verify, company_id=company_id, membership_id=actor_id)
+        retained = get_patent_family(verify, context=context, family_id=str(family.id))
+        assert retained.version == family.version + 1 and retained.facts.source == source
+        original = get_patent_family(
+            verify, context=context, family_id=str(family.id), version_number=family.version
+        )
+        assert original.facts == family.facts
+        assert (
+            verify.scalar(
+                select(func.count())
+                .select_from(IpPatentFamilyVersion)
+                .where(IpPatentFamilyVersion.family_id == str(family.id))
             )
             == 2
         )

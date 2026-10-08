@@ -1,5 +1,17 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 8 Production Acceptance Follow-Up
+
+PR #523 is deployed as `b20f86bd` on both services after full Docker and green
+main CI. Production run `37716144183` exposed a real patent source-save
+deadlock (393px journey), not a locator timeout. Verdict: **Not fixed** on
+that serving revision. Worker autoflush and adjacent document link/state lock
+ordering are under repair. Evidence and gates:
+`docs/bugfix-patent-source-deadlock-2026-10-08.md`.
+Calendar BUG-003/004 remain **Inconclusive** pending actual Google consent and
+positive connection/reload acceptance. Earlier candidate checkpoints below
+are historical, not the current deployed identity.
+
 ## October 8 Calendar OAuth Workbook In Progress
 
 `CaseOps_Bugs(ll).xlsx` contains exactly two issues, BUG-003/004, both valid

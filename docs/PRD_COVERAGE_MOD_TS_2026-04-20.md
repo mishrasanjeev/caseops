@@ -2,6 +2,12 @@
 
 ## October 8 OAuth Acceptance In Progress
 
+Production follow-up: `b20f86bd` now serves the OAuth repair after full Docker
+and green main CI. Safe callback acceptance passed; real Google consent and
+positive connection/reload are still unverified. UJ-29/PAT-01 source-save
+acceptance exposed a document-worker lock-order deadlock. No module closure:
+`docs/bugfix-patent-source-deadlock-2026-10-08.md`.
+
 J08 / M08 / MOD-TS-006: Calendar UI and bounded Google/Outlook connector code
 exist; historical module entries below are not a current inventory. The two
 October 8 workbook rows expose initial-consent callback and failed-claim

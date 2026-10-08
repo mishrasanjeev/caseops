@@ -151,6 +151,11 @@ def _document_or_404(
     for_update: bool = False,
     allow_patent_history: bool = False,
 ) -> IpDocument:
+    if for_update:
+        from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+        # Source writers must match patent correction's tenant-before-source order.
+        lock_private_authority_writer(session, company_id=context.company.id)
     stmt = select(IpDocument).where(
         IpDocument.id == document_id,
         IpDocument.company_id == context.company.id,
