@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A Docker browser process exit cannot certify execution by itself. Retain
+  unique JSON/JUnit reports and a reconciled nonempty completion for every
+  serialized shard, then compare their identities and classified outcomes
+  with discovery. Missing or interrupted reports remain incomplete. Isolate
+  discovery from inherited reporter output variables and restore them even
+  after rejection so an inventory cannot overwrite prior execution evidence.
 - Upload admission must release database transactions before scanning/object
   storage, then recheck current tenant, actor, token cutoff, capability, quota,
   parent lifecycle and references before publishing. Keep the object transient

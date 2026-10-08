@@ -1,5 +1,15 @@
 # Strict Enterprise Gap Tasklist
 
+## October 8 Release Evidence Follow-Up
+
+The bounded docket-identity replacement in `888a2c92` passes all four hosted
+PostgreSQL shards; full CI and production acceptance are not yet complete.
+Independent review finds Docker browser execution lacked structured reports.
+Unique JSON/JUnit/completion retention and inherited discovery-output isolation
+are under regression before the final clean candidate. No test selection,
+deadline, retry, ACL or lifecycle fence is relaxed. PR #525 is not deployed.
+See `docs/bugfix-private-authority-followup-2026-10-08.md` for scoped evidence.
+
 ## October 8 Private Integrity And Actor Ordering
 
 The actor-FK risk below is now **confirmed**, not merely a source-audit

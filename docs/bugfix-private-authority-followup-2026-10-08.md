@@ -616,6 +616,42 @@ missing or duplicated. API coverage, web, Security and CodeQL pass; Playwright
 is prerequisite-skipped, not verified. Full retained audit:
 `.tmp/faraday-ci-37752245787-329175eb-20261008-r1/final-report-20261008T091558487246Z.json`.
 
+Candidate `888a2c92` subsequently passes all four hosted PostgreSQL shards and
+their aggregate, alongside web, static/security and CodeQL gates. Full CI is
+still running at this checkpoint; it is not deployed. Independent release
+review also finds that Docker's browser launcher forced the list reporter,
+leaving no structured execution artifact to reconcile with discovery. Repair
+that release-evidence gap before the final Docker run: preserve unique native
+JSON/JUnit reports and validated nonempty completion per invocation, reject
+missing/malformed/interrupted/disagreeing results, retain native failure exits,
+and restore reporter settings. Test discovery must clear inherited JSON output
+settings so it cannot overwrite earlier evidence. The selection, three serial
+browser invocations, retry policy and deadlines are unchanged.
+
+The initial Windows PowerShell guard replay rejects malformed JSON correctly
+but its assertion expects a word absent from PowerShell's native parse error;
+retain `docker-report-guard-ps5-r1.log` as failed harness evidence. Typed parse
+errors repair that assertion contract without accepting invalid reports.
+The 27-case replacement passes on Windows PowerShell and PowerShell 7. The
+adjacent discovery-output fix then passes all 28 guards on Windows PowerShell.
+A real Chromium smoke invokes the actual launcher twice with native reporters:
+two passed and two deliberately skipped smoke cases retain two distinct
+JSON/JUnit/completion sets, with environment restoration. These are reporter
+acceptance cases, not product browser coverage. The complete initial affected
+Python gate reconciles 191 ordered identities and 572 phases: 190 pass and one
+POSIX mount-policy case skips on Windows; its Linux file previously passes
+189/189. The discovery follow-up's complete replacement gate also passes 190
+tests with the same one POSIX-only skip in 237.68 seconds. Its 191
+collection/terminal/XML identities agree exactly, all 572 phases reconcile and
+completion exits zero. Independent hash-bound review reports no remaining
+finding in the wrapper or discovery fix. Both PowerShell versions pass the
+final 28-case guard; all eleven contract validators and scoped Ruff also pass.
+Evidence is under `.tmp/release-followup-20261008/`, including
+`docker-report-python-r2-reconciliation.json`,
+`docker-report-source-proof-r2.json` and `reporter-smoke-r1.log`.
+Require a newly committed candidate, new green CI, full Docker execution and
+serving-release replay; do not reuse `888a2c92` as acceptance for a dirty wrapper.
+
 The OAuth correction reproduces all four original failures against frozen
 `e9faae03`, then passes both complete Calendar/workspace files: **216 cases,
 648 phase reports, zero skips**, with independent ordered collection and XML

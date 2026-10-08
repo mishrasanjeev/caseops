@@ -1,5 +1,15 @@
 # CaseOps  - Work To Be Done
 
+## October 8 Final Release Evidence Gate
+
+`888a2c92` passes the four hosted PostgreSQL shards after the bounded docket
+lookup repair; full CI is still running. The Docker launcher now needs unique
+native browser execution reports, reconciled completion and discovery-output
+isolation before freezing the final candidate. Scoped guard/real-browser proof
+is not full Docker or production certification. PR #525 remains not deployed
+and production still serves `b20f86bd`; retain the earlier failed/incomplete
+evidence. Details: `docs/bugfix-private-authority-followup-2026-10-08.md`.
+
 ## October 8 Private Authority Follow-Up
 
 Production `b20f86bd` remains uncertified. Quiescent maintenance `kxm4s`
