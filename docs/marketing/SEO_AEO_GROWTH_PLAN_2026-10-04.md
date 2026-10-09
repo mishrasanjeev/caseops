@@ -1,6 +1,6 @@
 # CaseOps Organic Discovery Plan
 
-Date: 2026-10-04 IST. Updated: 2026-10-07 IST. Owner: CaseOps.
+Date: 2026-10-04 IST. Updated: 2026-10-09 IST. Owner: CaseOps.
 Scope: public `caseops.ai` pages only.
 
 ## Outcome and evidence bar
@@ -129,8 +129,13 @@ AI/provider claims from the solo page. These corrections are now live and
 verified by all 20 release-owned public-content tests on `82a6d932` on
 2026-10-07. They do not close the broader persona/pilot claims issue #515.
 The same audit found `/sign-in` indexed though blocked by robots.txt (#521):
-its noindex must be crawlable. The narrow correction has local proof only;
-do not call it deployed or deindexed until each separate gate is observed.
+its noindex must be crawlable. On 2026-10-09, existing PR #522 incorporates
+`b1d3fb23` and again passes a fresh production build, the complete 23-case
+public-content inventory and the 20 adjacent public/auth unit cases. The robots
+regression also has 100% covered lines. The narrow correction has local proof
+only; combined Docker/release gates belong to the main release task. Do not
+call it deployed or deindexed until each separate gate is observed. The October
+7 findings and failed first local locator run remain historical evidence.
 
 ## Next 90 days
 
@@ -181,8 +186,9 @@ and provider reality.
 
 ## Dependencies and release gates
 
-- The owner-authorized Search Console browser session is connected; the
-  workstation `gcloud` token remains insufficient for the Search Console API.
+- The owner-authorized Search Console browser session was connected on October
+  7; this sidecar did not recheck it on October 9. The workstation `gcloud`
+  token was insufficient for the Search Console API.
   The owner chose privacy-first server-side attribution on 2026-10-05; a GA4
   property is not a dependency. The reviewed notice, minimization, retention,
   durable admission and dormant-GA4 removal remain implementation gaps in
@@ -192,10 +198,13 @@ and provider reality.
   asynchronous; indexing and crawl requests do not guarantee ranking.
 - Run web typecheck/build, page tests, complete public-content Playwright
   inventory, and a production read-only replay on the exact serving SHA.
-- The release is live and its exact-release production verification and
-  projection-maintenance resume gates passed. Continue checking natural
-  scheduled cadences and Search Console indexing; neither is replaced by a
-  one-time release check.
+- The October 4 release above passed its exact-release production verification
+  and projection-maintenance resume gates. That historical success does not
+  certify the latest release: issue #527 records failed production acceptance
+  on `b1d3fb23` and a paused maintenance cadence. PR #522 is not deployed.
+  Do not launch a competing release or resume that cadence from this public
+  crawl-policy task. Deployment, live browser replay and Google's eventual
+  noindex exclusion are separate pending gates.
 
 References: [Google Search Essentials](https://developers.google.com/search/docs/essentials),
 [sitemap guidance](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap),

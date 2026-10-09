@@ -6,6 +6,83 @@ mark unavailable or processing fields rather than treating them as zero.
 Do not count an indexing request, directory prospect, or owned link as organic
 traffic, a backlink, or a conversion.
 
+## 2026-10-09 IST - Existing PR #522 Sidecar
+
+### Scope and source
+
+- Updated the existing `codex/seo-daily-20261007` branch in its own initially
+  clean worktree. Fetched canonical main
+  `b1d3fb23a73bf16ee2000ddc230d422085ba45e4` and merged it as
+  `713ceed711d430bde93990176b40dbd0d1b650ce`. The sole conflict was the
+  AGENTS.md insertion; both sets of learnings are retained. The diff against
+  main remains exactly the eight files already owned by PR #522. No parent
+  worktree, other PR, provider policy or authentication control was modified.
+- Scope remains `J19 / M21 / US-063 / FT-094..096 / NFT-023 / SEC-031`:
+  remove only the public sign-in robots exclusion, retain its noindex/nofollow,
+  set its own canonical, and preserve app/API exclusions and sitemap scope.
+  Google's [noindex guidance](https://developers.google.com/search/docs/crawling-indexing/block-indexing)
+  was rechecked: blocking crawling prevents Google from seeing the directive.
+- No Search Console session/report was rechecked, indexing/sitemap request
+  submitted, lead sent, authenticated production mutation or paid-provider
+  call made. October 7 observations below remain dated history, not today's
+  metrics. Issue #521 remains open until Google positively reports excluded
+  noindex, even after the eventual deployment and live crawl-policy replay.
+
+### Fresh local evidence
+
+Evidence root in this sidecar worktree: `.tmp/seo-pr522-20261009-r1/`.
+All paths are fresh; earlier failed and incomplete reports were not overwritten.
+
+- `scripts/run-public-content-e2e.mjs` built the current source with Next
+  16.3.8, including its TypeScript gate, then served that new production build
+  on loopback port 3101. The owned server stopped after completion. The API
+  build configuration pointed only to loopback; no production credentials or
+  demo submission were involved. This is not a Docker acceptance claim.
+- Complete public-content discovery and execution: **23 collected, 23 passed,
+  zero failed/skipped/retries**, covering every canonical public page,
+  robots/sign-in metadata, adjacent account/portal noindex, exact sitemap,
+  FAQ/source claims, internal links, desktop and 360px accessibility/navigation.
+  `public-content-inventory.json`, `public-content-results.json` and
+  `public-content-results.xml` retain discovery, execution and native completion.
+  The ignored config extends the release-owned public config only to place
+  JSON/JUnit and browser output in this evidence directory; selection, headers,
+  one worker, timeouts and zero retries are unchanged.
+- Robots unit coverage: **1/1 passed**, 100% statements/lines/functions (zero
+  conditional branches). Report `robots-results.json` and `robots-coverage/`.
+- Complete adjacent unit files: `app/robots.test.ts`, `lib/site.test.ts`,
+  `app/sign-in/SignInForm.test.tsx`, `app/sign-in/NewWorkspaceForm.test.tsx`,
+  `app/portal/sign-in/page.test.tsx`: **five files, 20/20 passed**, zero skipped.
+  `auth-public-adjacent-unit-results.json` retains each identity. The separate
+  coverage run repeats the same robots identity; it is not a 21st unique case.
+- `build-and-browser.log` retains the build, all browser outcomes and clean
+  completion. The inherited Edge Runtime deprecation and React controlled-input
+  unit warning are not represented as new failures or silently repaired here.
+- E2E TypeScript validation also passed. The first evidence reconciliation
+  correctly rejected a missing quiet-command log (Tee-Object had no output to
+  write), not a test failure. The command reran with native exit-code/start/end
+  retention in `e2e-typecheck-r2.json`; `reconciled-evidence.json` reconciles
+  all ordered browser identities, exact unit-file coverage and artifact hashes.
+
+### Release handoff and PR #520 review
+
+- Local crawl correction is implemented, but the deployed bug verdict remains
+  **Inconclusive** until exact-serving replay and Google's separate exclusion
+  evidence. Main owns combined Docker certification, green updated-head CI,
+  merge, guarded exact-SHA deployment and all 23 live read-only cases. No merge,
+  cloud operation or deployment was initiated by this sidecar. The separate
+  [#527 production acceptance failure](https://github.com/mishrasanjeev/caseops/issues/527)
+  remains a release blocker, not an SEO success or a reason to weaken gates.
+- Reviewed PR #520 exact head
+  `62d5bdf6be731dd2aeddad25b388f8ce81160a08`. Its fresh authenticated
+  `page.request.get` after reload avoids reading a Chromium-discarded navigation
+  body and keeps the no-paid marker, sync response and durable timestamp checks.
+  No new defect was identified in that narrow diff. Its historical green CI
+  (33 successful checks/two explicit skips) and older live proof do not replace
+  both complete Gmail/Drive journeys on the final serving revision. It verifies
+  existing-connector sync, not new Google consent, and the retained non-null
+  timestamp assertion alone does not prove a new consent round trip. PR #520
+  was neither edited nor merged here.
+
 ## 2026-10-07 IST
 
 ### Release and public acceptance
