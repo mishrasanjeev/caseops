@@ -641,9 +641,14 @@ def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(p
     _check_patent_family_scale(pg_engine)
 
 
-def _check_patent_family_scale(pg_engine, *, mixed_order=False, fresh_statistics=False):
+def _check_patent_family_scale(
+    pg_engine, *, mixed_order=False, fresh_statistics=False, family_uuid_base=None
+):
     company_id, actor_id, family_uuid_base = _seed_patent_family_scale(
-        pg_engine, mixed_order=mixed_order, key_stride=2 if mixed_order else 1
+        pg_engine,
+        mixed_order=mixed_order,
+        key_stride=2 if mixed_order else 1,
+        family_uuid_base=family_uuid_base,
     )
     if mixed_order:
         # Interleave another tenant's keys, not merely another tenant's heap rows.
@@ -898,6 +903,38 @@ def test_patent_family_list_retained_grants_bound_authorization_work(migration_p
     _seed_patent_family_scale(migration_pg_engine, count=10_000)
     _seed_patent_family_scale(migration_pg_engine, count=10_000)
     _check_patent_family_scale(migration_pg_engine)
+
+
+def test_patent_family_list_stale_low_id_histogram_bounds_cursor_work(migration_pg_engine):
+    # A known cursor above the stale histogram can make a global seek+sort look
+    # cheaper than an ordered tenant seek. Keep that pre-import state explicit.
+    with migration_pg_engine.begin() as connection:
+        for table in (
+            "ip_docket_records",
+            "ip_patent_families",
+            "matter_access_grants",
+            "ethical_walls",
+        ):
+            connection.execute(text(f"ALTER TABLE {table} SET (autovacuum_enabled = false)"))
+    _seed_patent_family_scale(
+        migration_pg_engine,
+        count=1000,
+        family_uuid_base=UUID("00000000-0000-0000-0000-000100000000").int,
+    )
+    imported_base = UUID("ffffffff-ffff-ffff-ffff-fffe00000000").int
+    with migration_pg_engine.begin() as connection:
+        for table in (
+            "ip_docket_records",
+            "ip_patent_families",
+            "matter_access_grants",
+            "ethical_walls",
+        ):
+            connection.execute(text(f"ANALYZE {table}"))
+        assert connection.scalar(text("SELECT count(*) FROM ip_patent_families")) == 1001
+        assert connection.scalar(text("SELECT max(id) FROM ip_patent_families")) < str(
+            UUID(int=imported_base)
+        )
+    _check_patent_family_scale(migration_pg_engine, family_uuid_base=imported_base)
 
 
 @pytest.mark.parametrize("change", ["retarget", "delete", "revoke"])

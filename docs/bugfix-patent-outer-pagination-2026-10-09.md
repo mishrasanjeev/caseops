@@ -180,3 +180,15 @@ executions, with zero rebuild on the second, before guarded cadence resume.
 Calendar BUG-003/004 remain **Inconclusive** pending actual Google consent and
 positive production connection/reload proof. No timeout, retry, privacy,
 paid-provider, lifecycle or private-projection fence is weakened.
+
+## Merged-Main Counterexample
+
+The complete `df6c971f` Docker and PR-CI gates passed and PR #525 merged as
+`47e3554c` with an identical tree. Merged-main CI `37889146392` then exposed
+a remaining custom cursor failure: the global `(id, company)` index scans
+9803 keys and sorts before returning the next page. First-page and generic
+cursor plans remain bounded, so their green outcomes cannot close this defect.
+The new deterministic pre-import ID-histogram regression reproduces the same
+10005-work bound failure before repair. Preserve every earlier result and
+follow `docs/bugfix-patent-cursor-plan-2026-10-09.md` for the separate narrow
+cursor repair and fresh acceptance. Production still serves `b20f86bd`.

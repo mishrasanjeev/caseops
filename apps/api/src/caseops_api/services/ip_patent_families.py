@@ -469,7 +469,10 @@ def list_patent_families(
         else IpPatentFamily.company_id == company_key
     )
     if cursor:
-        candidates = candidates.where(IpPatentFamily.id > cursor)
+        # A literal cursor beyond a stale ID histogram can make a global
+        # seek-and-sort look nearly empty. Keep ordered tenant planning stable.
+        cursor_key = select(literal(cursor)).scalar_subquery() if postgres else cursor
+        candidates = candidates.where(IpPatentFamily.id > cursor_key)
     # Keep the ordered scan covering: stale tenant statistics can otherwise
     # choose a wide-row scan and sort the entire tenant before checking ACLs.
     # An InitPlan NULL LIMIT is unbounded at execution but retains startup-aware

@@ -1,5 +1,15 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 9 Custom Cursor Counterexample
+
+**Not fixed in production.** PR #525 is merged as `47e3554c`, but main CI
+`37889146392` catches 9803-key cursor sorting that its exact-tree Docker and
+PR CI did not expose. The deterministic pre-import histogram regression fails
+at 10005 family work, then passes the narrow cursor InitPlan repair. No bound,
+ACL, timeout or candidate inventory is relaxed. Replacement full gates and
+exact-serving Playwright proof are required before closure. Details:
+`docs/bugfix-patent-cursor-plan-2026-10-09.md`. Calendar consent stays Inconclusive.
+
 ## October 9 Release Blocker
 
 PR #525 / `82ccf412` is not deployed. Its complete Docker PostgreSQL run has

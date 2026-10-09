@@ -1,5 +1,14 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 9 Custom Cursor Follow-Up
+
+UJ-29/PAT-01 (M02/M08/M13/M14) remains partial, not deployed. The complete
+`df6c971f` Docker/PR-CI checkpoint has the identical merged `47e3554c` tree,
+but merged-main CI exposes an unbounded custom cursor plan under a stale ID
+histogram. The deterministic counterexample and narrow cursor repair are in
+`docs/bugfix-patent-cursor-plan-2026-10-09.md`; fresh whole-release and deployed
+acceptance remain open. No module or actual Google-consent closure is implied.
+
 ## October 9 Retained-History Blocker
 
 UJ-29/PAT-01 remains partial. Docker `82ccf412` fails outer-family work, and
