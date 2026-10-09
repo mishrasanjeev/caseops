@@ -31,6 +31,25 @@ import {
 import { formatLimit, formatMoneyMinor } from "@/lib/billing-format";
 import { useCapability } from "@/lib/capabilities";
 
+const sourceLabels: Record<string, string> = {
+  homepage: "Homepage", pricing_page: "Pricing", solo_lawyers: "Solo lawyers",
+  law_firms: "Law firms", general_counsels: "General counsels", guide: "Guide",
+  resource: "Resource", demo: "Demo", legacy_api: "Legacy public API",
+};
+const roleLabels: Record<string, string> = {
+  solo_advocate: "Solo advocate", partner: "Partner", associate: "Associate",
+  general_counsel: "General counsel", legal_ops: "Legal operations", other: "Other",
+  not_specified: "Not specified",
+};
+const intentLabels: Record<string, string> = {
+  demo: "Demo discussion", pilot: "Pilot discussion", pricing: "Pricing discussion",
+  not_specified: "Not specified",
+};
+const notificationLabels: Record<string, string> = {
+  pending: "Pending", sending: "In progress", retry_pending: "Retry pending",
+  exhausted: "Attempts exhausted", sent: "Sent (transport accepted)",
+};
+
 function MetricCard({
   label,
   value,
@@ -99,7 +118,7 @@ export default function PlatformAdminPage() {
         title="Platform admin"
         description="Cross-tenant billing, revenue, costs, margins, enrollment, and provider reconciliation."
         actions={
-          <div className="flex gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             <Button href="/app/platform-admin/integrations" variant="outline">
               Integrations
             </Button>
@@ -227,39 +246,61 @@ export default function PlatformAdminPage() {
       <Card>
         <CardHeader>
           <CardTitle as="h2">Recent enrollments</CardTitle>
-          <CardDescription>Trial starts and demo requests from the pricing flow.</CardDescription>
+          <CardDescription>Trial starts and saved public demo, pilot and pricing requests.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+          <div className="relative min-w-0 overflow-x-auto">
+            <table aria-label="Recent enrollments" className="min-w-full text-left text-sm">
               <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
                 <tr>
                   <th className="py-2 pr-4">Company</th>
                   <th className="py-2 pr-4">Contact</th>
+                  <th className="py-2 pr-4">Request</th>
                   <th className="py-2 pr-4">Segment</th>
                   <th className="py-2 pr-4">Plan</th>
                   <th className="py-2 pr-4">Status</th>
+                  <th className="py-2 pr-4">Notification</th>
                 </tr>
               </thead>
               <tbody>
-                {(enrollmentsQuery.data?.enrollments ?? []).map((row) => (
-                  <tr key={row.id} className="border-b border-[var(--color-line-2)]">
+                {(enrollmentsQuery.data?.enrollments ?? []).map((row) => {
+                  const attribution = row.attribution;
+                  const notification = row.demo_notification;
+                  const source = attribution?.entry_point ?? row.source;
+                  const state = notification?.notification_status;
+                  const approvalPending = notification?.last_error_code === "sender_approval_pending";
+                  return <tr key={row.id} className="border-b border-[var(--color-line-2)] align-top">
                     <td className="py-3 pr-4">{row.company_name ?? row.company_id ?? "-"}</td>
-                    <td className="py-3 pr-4">
+                    <td className="min-w-[14rem] max-w-[20rem] break-words py-3 pr-4">
                       <div className="font-medium">{row.contact_name}</div>
                       <div className="text-xs text-[var(--color-mute)]">{row.contact_email}</div>
+                      {row.contact_mobile ? <div className="mt-1 text-xs">{row.contact_mobile}</div> : null}
+                      {row.notes ? <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed">{row.notes}</p> : null}
+                    </td>
+                    <td className="min-w-[12rem] max-w-[18rem] break-words py-3 pr-4">
+                      <div>{source ? sourceLabels[source] ?? source : "Not recorded"}</div>
+                      <div className="mt-1 text-xs">Role: {attribution?.role ? roleLabels[attribution.role] ?? attribution.role : "Not specified"}</div>
+                      <div className="text-xs">Intent: {attribution?.intent ? intentLabels[attribution.intent] ?? attribution.intent : "Not specified"}</div>
+                      <div className="mt-1 text-xs text-[var(--color-mute)]">{attribution?.attribution_qualified ? "First-party request" : "Unqualified attribution"}</div>
+                      <div className="mt-2 break-all text-xs text-[var(--color-mute)]">Reference: {row.id}</div>
                     </td>
                     <td className="py-3 pr-4">{row.segment}</td>
                     <td className="py-3 pr-4">{row.selected_plan ?? "-"}</td>
                     <td className="py-3 pr-4">
                       <Badge tone="brand">{row.status}</Badge>
                     </td>
-                  </tr>
-                ))}
-                {(enrollmentsQuery.data?.enrollments ?? []).length === 0 ? (
+                    <td className="min-w-[12rem] max-w-[18rem] break-words py-3 pr-4">
+                      <div>{approvalPending ? "Pending sender approval" : state ? notificationLabels[state] ?? state : "Not recorded"}</div>
+                      {notification?.attempts !== undefined ? <div className="mt-1 text-xs">{notification.attempts} attempts</div> : null}
+                      {notification?.last_error_code ? <div className="mt-1 text-xs text-[var(--color-mute)]">Error code: {notification.last_error_code}</div> : null}
+                      {approvalPending ? <div className="mt-1 text-xs text-[var(--color-mute)]">No delivery confirmed.</div> : null}
+                    </td>
+                  </tr>;
+                })}
+                {enrollmentsQuery.isPending || enrollmentsQuery.isError || (enrollmentsQuery.data?.enrollments ?? []).length === 0 ? (
                   <tr>
-                    <td className="py-4 text-[var(--color-mute)]" colSpan={5}>
-                      No enrollment activity yet.
+                    <td className="py-4 text-[var(--color-mute)]" colSpan={7}>
+                      {enrollmentsQuery.isPending ? "Loading enrollments..." : enrollmentsQuery.isError ? "Unable to load enrollments." : "No enrollment activity yet."}
                     </td>
                   </tr>
                 ) : null}

@@ -2281,6 +2281,7 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
         select(PrivateProjectionEvent)
         .where(PrivateProjectionEvent.id == event_id)
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if event is None:
         raise PrivateRetrievalInvariantError("Private projection event does not exist.")
@@ -2391,6 +2392,7 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
                 PrivateIndexGeneration.state.in_(("building", "ready")),
             )
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).all()
     )
     for generation in shadow_generations:

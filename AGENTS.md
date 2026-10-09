@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A row lock does not refresh an ORM identity already cached by the session.
+  Refresh the locked authoritative event/generation before status, replay or
+  readiness decisions; regress a committed competing application/readiness
+  transition, immutable counts/timestamps, manifest invalidation and old-writer
+  rejection through separate PostgreSQL sessions.
+
 - Auth/session minting must serialize current User and Membership changes
   without conflicting with historical FK key-share provenance. Prove both
   lock orders and deactivation/cutoff rejection on PostgreSQL; provenance

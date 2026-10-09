@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/prod-diagnostic-test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, repoRoot } from "./support/env";

@@ -109,19 +109,67 @@ J19/M21/US-063/FT-094/096/NFT-023/SEC-031.
   and runtime data-class projection are regenerated and validate; the dirty
   source gate inspected 69 changed/untracked paths, including 22 governed source
   files, without errors. Repeat the committed diff gate before release.
+- The nine-file replacement schema/governance/demo/billing/reminder inventory
+  passes 141 tests and 423 reconciled phases. The POSIX mount-policy case that
+  skipped on Windows separately passes on Linux with networking disabled,
+  read-only source and three retained phases. That focused supplement does not
+  certify the whole current Linux suite.
+- Independent review found a pre-existing cached-pending event replay that
+  overwrote a committed applied count and timestamp. The adjacent-path audit
+  then positively reproduced cached building state preserving a newer ready
+  shadow's verification manifest. Both authoritative locked reads now use
+  `populate_existing=True`; all Company/generation locks and epoch/SLO fences
+  remain unchanged. Failed seven-probe review and one-case shadow baseline are
+  retained. The standard, portable five-file replacement passes 57 tests and
+  171 phases, including scoped removal, permanent saved-child closure, replay,
+  readiness invalidation and stale-writer rejection.
+- Integration caught incomplete protected lead readback: the existing client
+  parser discarded the new fields and the admin table did not expose the new
+  attribution/notification state. The completed four-file follow-up passes
+  34 web units and 63 scoped browser cases, including all 24 SEO identities.
+  A real founder login sees the new request and its honest pending notification
+  state after reload at 360/1280 widths; an ordinary tenant receives 403.
+  Legacy metadata remains optional. Sender and retention remain default-off.
+- The actual Matter/IP document-finalizer overlap replacement passes nine
+  tests and 27 phases against the latest event and shadow refresh guards.
+  Four real login HTTP bodies complete with 200 before finalizer release;
+  reverse auth ordering, revocation/cutoff, disposal winners, permanent output
+  locking, other-tenant controls and completed-job replay also pass. Every
+  captured backend lock is absent at cleanup. The preserved strong-auth
+  baseline positively fails with HTTP 503/55P03 and a directed blocker graph.
+  This proves local susceptibility, not attribution of every production
+  failure or Cloud Run CPU/billing causality. Contract finalization has no
+  matching private event and is not claimed covered by this inventory.
+- Four dated failed-journey specs now collect bounded, sanitized browser-only
+  network evidence on failure: route category, timestamps, HTTP status,
+  validated request ID and allowlisted error type. No request bodies, raw URLs,
+  credentials, document bytes, HAR, screenshots or video are added. Page events
+  do not cover APIRequestContext calls. Three sanitizer units and root E2E
+  typecheck pass; the first fresh browser run passes all 21 selected public and
+  diagnostic identities. The subsequent five-second diagnostic drain bound
+  still requires the frozen replacement browser/Docker gate.
 - A proposed schema/governance run selected a nonexistent
   `test_platform_admin_billing.py`; no tests ran and exit 4 is incomplete
   evidence, not green coverage. The replacement verifies actual filenames and
   includes the existing billing and hearing-reminder suites.
 - PR #522's fresh head is `66dd8e48b75391f9ac0c8afe08027e8dc5cf0c93`.
   Its focused fresh build/typecheck, 23 public browser tests and 20 adjacent unit
-  tests pass. Required GitHub jobs remain queued without assigned runners;
-  queued timestamps are not execution proof. No CI bypass is authorized.
+  tests pass. By 15:10 UTC, web, security, CodeQL, review, the first ten API
+  shards and all four PostgreSQL shards pass; remaining API shards and the
+  PostgreSQL aggregate are still queued. Queued timestamps are not execution
+  proof. No CI bypass is authorized.
 - Native CodeQL setup is incomplete: a bounded official bundle transfer
   timed out, and partial downloads plus checksums are preserved. No local SARIF
   or actual-main alert closure is claimed. No suppressions or dismissals were
   introduced. Historical unassigned graph cycles are not silently relabelled
   as removed by the focused assigned-path test.
+  A second bounded official-asset attempt stopped at 4,436,992 of 567,240,125
+  bytes after 120 seconds; observed throughput projected more than four hours.
+  Its manifest and both earlier partial downloads remain retained. Hosted
+  exact-candidate/main analysis and actual alert reconciliation remain required.
+- Scheduled production run `37932036960` succeeded only for read-only statute
+  verification. Its mutating production matrix was skipped, so it does not
+  replace the failed complete dispatch `37909107955` or permit cadence resume.
 
 This checkpoint is not a production GO. The candidate has not completed the
 whole fresh Docker/CI inventory or been deployed.

@@ -1,6 +1,7 @@
 /** IPLF-058B dated production acceptance for post-registration recordals. */
 
-import { expect, request, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, request, test } from "./support/prod-diagnostic-test";
 
 import { createRecordalFixture, expectStatus, recordTransaction } from "./support/iplf058b";
 

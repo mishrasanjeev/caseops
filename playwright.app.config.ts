@@ -26,6 +26,7 @@ export default defineConfig({
     /marketing\.spec\.ts/,
     /public-content\.spec\.ts/,
     /seo_demo_\d{8}\.spec\.ts$/,
+    /prod-failure-diagnostics\.spec\.ts$/,
     /app-spine\.spec\.ts/,
     /functional-qa-regression\.spec\.ts/,
     /a11y\.spec\.ts/,
