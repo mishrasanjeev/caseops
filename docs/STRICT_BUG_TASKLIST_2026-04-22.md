@@ -1,5 +1,21 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 10 Frozen C7 Counterexamples
+
+**Not fixed in production; NO-GO.** `c7dfdc5c` has 1999 complete PostgreSQL
+passes, but first Docker browser partition completes 248 passes, one known
+unverified skip and two failures out of 251. The other 254 identities did not
+run. BUG-042's immediate court-order creation returns 503 from a real worker
+downstream compliance versus interactive parent deadlock, independently forced
+as native SQLSTATE `40P01`; green indexing-only races missed that later phase.
+The FAQ failure is a stale copy contract, not an absent panel. Hosted CI
+`37996598078` separately completes 489 passes, one FAQ failure and 15 unverified
+skips; its missing structured browser inventory is an evidence gap, not green
+coverage. Failed artifacts and the strict failed audit remain retained. Full
+participant/provenance ordering repair, corrected FAQ interaction and native
+CI evidence need fresh integrated replacement and exact-serving proof.
+See `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 10 Integrated Replacement Evidence
 
 **Not fixed in production.** Integrated `e0004687` completes scoped replacement

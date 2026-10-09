@@ -1678,3 +1678,15 @@ requirements when using the fallback.
   the actual bounded SQL mutation and assert that private rows are not hydrated.
   Keep disposal, concurrent cleanup, byte purge and event-count assertions;
   never restore expensive reads or raise a wait budget to satisfy an obsolete hook.
+- A document worker's indexing commit does not finish its lock-order surface.
+  Exercise the real downstream compliance/proceeding/notification/audit phase,
+  including implicit foreign-key locks for selected human provenance and
+  recipients, against interactive parent writers. Preserve elected actors and
+  historical creator nulls; a mock of the whole downstream extractor cannot
+  certify this boundary or justify a retry, longer timeout or system actor.
+- Read-only public acceptance must include changed historical FAQ journeys,
+  not just newly added copy checks. Assert the actual qualified safety content
+  and accessible expand/collapse state; retain the earlier narrower inventory
+  as incomplete for that interaction. CI browser success requires an independent
+  collected inventory, native per-test outcomes/skip reasons and completion
+  bound to its actual checkout, retained even when the browser gate fails.

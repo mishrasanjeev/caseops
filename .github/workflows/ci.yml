@@ -510,6 +510,7 @@ jobs:
         run: npm run build:web
 
       - name: Playwright (app config)
+        id: app-playwright
         # playwright.app.config.ts probes for Windows Edge/Chrome paths on
         # the developer's workstation. On the Ubuntu runner those paths
         # don't exist, so `launchOptions` stays empty and Playwright uses
@@ -520,7 +521,20 @@ jobs:
         # ERR_ABORTED and produces a misleading cascade of locator errors.
         env:
           CASEOPS_WEB_BASE_URL: http://127.0.0.1:3100
-        run: npm run test:e2e:app
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ github.sha }}
+          CASEOPS_RELEASE_SHA: ${{ github.sha }}
+        run: >-
+          uv run --project apps/api --python 3.13 python scripts/prod_playwright_evidence.py
+          run --invocation ci-app -- --config=playwright.app.config.ts
+          --workers=1 --retries=0 --reporter=list --output=test-results/app
+
+      - name: Reconcile app native Playwright evidence
+        if: always() && steps.app-playwright.outcome != 'skipped'
+        env:
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ github.sha }}
+        run: >-
+          uv run --project apps/api --python 3.13 python scripts/prod_playwright_evidence.py
+          validate --required ci-app
 
       # MUST be always(). A job killed by timeout-minutes IS cancelled, so both
       # `failure()` and `!cancelled()` skip this step - verified on run
@@ -537,6 +551,7 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            test-results/prod-native-evidence/ci-app/
           retention-days: 7
 
   # ---------------------------------------------------------------------------

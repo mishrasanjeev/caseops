@@ -694,10 +694,14 @@ remain open; no paid automated provider probe is authorized.
 ## October 10 Public-Claims Boundary
 
 J19/M21/US-063, FT-094..096/NFT-023/SEC-031: release-owned
-public-pages adds 23 public-content +16 nonmutating SEO identities with exact
+public-pages adds 23 public-content +16 nonmutating SEO identities +1 historical
+FAQ expansion/collapse case (40 total) with exact
 native reconciliation. Browser limitations cover solo, firm and guide safety
 copy. Fresh release and live evidence are pending, not complete coverage.
 
 Shared homepage/FAQ, GC and guide pack/recommendation claims are included in
 25 source checks. Existing read-only browser cases now open the actual drafting
-tab and safety FAQ, preserving the 39-case inventory. No live execution claimed.
+tab and safety FAQ. The earlier 39-case pass did not exercise the separate
+historical FAQ interaction. Frozen `c7dfdc5c` standard Docker/hosted CI catches
+its stale copy assertion; the updated qualified-text and accessible collapse
+checks need fresh local and live execution. No live execution claimed.

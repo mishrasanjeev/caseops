@@ -1,5 +1,20 @@
 # Strict Enterprise Gap Tasklist
 
+## October 10 C7 Downstream And Evidence Gaps
+
+**NO-GO / partially implemented.** Full frozen `c7dfdc5c` PostgreSQL acceptance
+passes, but real Docker BUG-042 court-order creation deadlocks against the
+document worker's later compliance audit phase. The indexing commit and its
+historical-member race tests do not certify later audit/recipient foreign-key
+locks. A forced independently migrated PostgreSQL counterexample retains
+SQLSTATE `40P01`. Hosted CI also lacks the complete structured App browser
+inventory despite retaining failure media; add exact-checkout privacy-safe
+collection/outcomes/skip/completion evidence and preserve failure exits.
+The stale FAQ assertion is separately corrected and added to nonmutating live
+acceptance. These repairs require fresh complete gates, not a broad actor-lock
+weakening, changed provenance or mutation retry. Details and retained failed
+receipts: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 10 Integrated Control Replacement
 
 **Partially implemented / NO-GO.** Integrated `e0004687` has complete scoped

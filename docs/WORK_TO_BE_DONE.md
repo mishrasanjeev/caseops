@@ -1,5 +1,17 @@
 # CaseOps  - Work To Be Done
 
+## October 10 Frozen C7 NO-GO
+
+PR #528 is not releasable: frozen `c7dfdc5c` completes PostgreSQL (1999 pass)
+but Docker has two browser failures and 254 unexecuted identities. Downstream
+document-compliance provenance creates a real `40P01` parent/actor deadlock;
+the historical FAQ expectation is stale. Hosted CI separately fails that FAQ
+and lacks full structured browser collection/outcomes. Repair the entire
+downstream participant fence, preserve actor/null semantics, reconcile the
+corrected 505-case standard browser inventory and 40-case read-only public
+gate, and require fresh CI/Docker/main/security/live acceptance. No failed
+evidence is overwritten and no production closure is claimed.
+
 ## October 10 Integrated Follow-Up, Final Gates Pending
 
 Integrated `e0004687` completes the scoped follow-ups: 257 edge/admin API

@@ -9,7 +9,7 @@ export default defineConfig({
   ...publicConfig,
   globalSetup: undefined,
   webServer: undefined,
-  testMatch: [/public-content\.spec\.ts$/, /seo_demo_20261009\.spec\.ts$/],
+  testMatch: [/public-content\.spec\.ts$/, /seo_demo_20261009\.spec\.ts$/, /marketing\.spec\.ts$/],
   retries: 0,
   use: {
     ...publicConfig.use,
@@ -26,8 +26,8 @@ export default defineConfig({
     },
     {
       name: "public-seo-readonly-chromium",
-      testMatch: /seo_demo_20261009\.spec\.ts$/,
-      grep: /public CTA and truthful copy|public read-only prototype source rejection/,
+      testMatch: [/seo_demo_20261009\.spec\.ts$/, /marketing\.spec\.ts$/],
+      grep: /public CTA and truthful copy|public read-only prototype source rejection|FAQ panels expand and collapse/,
       use: publicBrowser,
     },
   ],

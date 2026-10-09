@@ -254,13 +254,85 @@ def test_public_claims_attestation_requires_exact_release_nonmutating_browser_ev
     config = (REPO_ROOT / "playwright.public-seo.config.ts").read_text()
     assert "public-content\\.spec\\.ts" in config
     assert "seo_demo_20261009\\.spec\\.ts" in config
-    assert "public CTA and truthful copy|public read-only prototype source rejection" in config
+    assert "marketing\\.spec\\.ts" in config
+    assert (
+        "public CTA and truthful copy|public read-only prototype source rejection|"
+        "FAQ panels expand and collapse"
+    ) in config
     assert "globalSetup: undefined" in config and "webServer: undefined" in config
     for policy in ('trace: "off"', 'screenshot: "off"', 'video: "off"',
                    "extraHTTPHeaders: noPaidProviderHeaders"):
         assert policy in config
     assert "public-pages" not in steps.get("Run legacy QA production regressions", {}).get(
         "run", ""
+    )
+
+
+def test_app_ci_retains_the_complete_native_browser_inventory() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    steps = {step.get("name"): step for step in workflow["jobs"]["e2e"]["steps"]}
+    execute = steps["Playwright (app config)"]
+    assert execute["id"] == "app-playwright"
+    assert execute["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == "${{ github.sha }}"
+    assert execute["env"]["CASEOPS_RELEASE_SHA"] == "${{ github.sha }}"
+    assert execute["env"]["CASEOPS_WEB_BASE_URL"] == "http://127.0.0.1:3100"
+    assert execute["run"].strip() == (
+        "uv run --project apps/api --python 3.13 python "
+        "scripts/prod_playwright_evidence.py run --invocation ci-app -- "
+        "--config=playwright.app.config.ts --workers=1 --retries=0 "
+        "--reporter=list --output=test-results/app"
+    )
+    reconcile = steps["Reconcile app native Playwright evidence"]
+    assert reconcile["if"] == (
+        "always() && steps.app-playwright.outcome != 'skipped'"
+    )
+    assert reconcile["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == "${{ github.sha }}"
+    assert reconcile["run"].strip() == (
+        "uv run --project apps/api --python 3.13 python "
+        "scripts/prod_playwright_evidence.py validate --required ci-app"
+    )
+    upload = steps["Upload Playwright report"]
+    assert upload["if"] == "always()"
+    assert "test-results/" in upload["with"]["path"]
+    assert "test-results/prod-native-evidence/ci-app/" in upload["with"]["path"]
+
+
+@pytest.mark.parametrize("stage", ["execute", "reconcile"])
+@pytest.mark.parametrize("exit_code", [0, 7])
+def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_code):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    name = (
+        "Playwright (app config)" if stage == "execute"
+        else "Reconcile app native Playwright evidence"
+    )
+    step = next(step for step in workflow["jobs"]["e2e"]["steps"]
+                if step.get("name") == name)
+    assert step["run"].startswith("uv run --project apps/api --python 3.13 python ")
+    # A shell function cannot fall through to a real uv or external service.
+    script = (
+        'uv() { printf "%s\\n" "$@" > native-arguments; return "$OFFLINE_EXIT"; }\n'
+        + step["run"]
+    )
+    bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
+    assert bash and Path(bash).is_file()
+    result = subprocess.run(
+        [bash, "-e", "-c", script], cwd=tmp_path, capture_output=True, encoding="utf-8",
+        env={**os.environ, "OFFLINE_EXIT": str(exit_code)},
+    )
+    assert result.returncode == exit_code
+    arguments = (tmp_path / "native-arguments").read_text().splitlines()
+    assert arguments[:7] == [
+        "run", "--project", "apps/api", "--python", "3.13", "python",
+        "scripts/prod_playwright_evidence.py",
+    ]
+    assert arguments[7:] == (
+        ["run", "--invocation", "ci-app", "--", "--config=playwright.app.config.ts",
+         "--workers=1", "--retries=0", "--reporter=list", "--output=test-results/app"]
+        if stage == "execute" else ["validate", "--required", "ci-app"]
     )
 
 

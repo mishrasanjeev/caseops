@@ -88,14 +88,21 @@ test.describe("Marketing site", () => {
     });
     const secondPanel = page.locator("#faq-panel-1");
     await expect(secondPanel).toBeHidden();
+    await expect(secondBtn).toHaveAttribute("aria-expanded", "false");
 
     await secondBtn.scrollIntoViewIfNeeded();
     await secondBtn.click();
     await expect(secondPanel).toBeVisible();
-    await expect(secondPanel).toContainText(/retrieval and source systems/i);
+    await expect(secondBtn).toHaveAttribute("aria-expanded", "true");
+    await expect(secondPanel).toContainText("retrieval, source references and bounded checks");
+    await expect(secondPanel).toContainText("A citation or refusal is not a guarantee of correctness");
+    await expect(secondPanel).toContainText("verify each authority, quotation and fact");
 
     const firstPanel = page.locator("#faq-panel-0");
     await expect(firstPanel).toBeHidden();
+    await secondBtn.click();
+    await expect(secondBtn).toHaveAttribute("aria-expanded", "false");
+    await expect(secondPanel).toBeHidden();
   });
 
   test("robots and sitemap are served", async ({ request }) => {

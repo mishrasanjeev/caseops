@@ -677,6 +677,80 @@ its app browser job. Production is still `b1d3fb23`; no issue is closed here.
 
 ## Required Closure
 
+### Frozen C7 Complete Failed Readback
+
+Candidate `c7dfdc5cf9215b21d25511f8409e1fe81f9f6b94`, tree
+`34c9b758d1a2998c64bb214aa05b2263ef2624a2`, remains **NO-GO**. Its full fresh
+Docker PostgreSQL gate completes 1999 passes, no skips/failures, 5997 retained
+phases and identical JUnit/native identities. The populated 10,000-output
+private-event commit takes 0.460413 seconds under the unchanged budget. After
+migration rehearsals, the exact release-owned seed is restored (23 Acts/5028
+catalogued provisions, not a claim of complete selectable verified text).
+
+The first desktop partition completes 251 identities: 248 passes, one known
+unverified Pine Labs skip and two failures, zero retries/flaky. The second
+250-case desktop partition and four mobile identities do not execute. The
+strict frozen auditor retains **failed/incomplete**, not acceptance; source
+stays frozen through this readback and owned Compose resources are removed.
+Native evidence: `docker-c7dfdc5c-r12/`, `docker-pg-c7dfdc5c-reconciled-r1/`, and
+`docker-audit-857a5008/readback-20261009T230741405752Z-71bd950a/`. Failure media
+is copied byte-identically to `docker-r12-failure-attachments-r1/` before any
+future invocation can overwrite the normal `test-results/` directory.
+
+BUG-042 (`hari-2026-05-11-bugs.spec.ts:185`) fails on its immediate linked
+court-order POST with 503, request `21ec5e2ed2c741ca955da10c54608c78`; it never
+reaches the document-view assertion. PostgreSQL records the API waiting on
+Matter `FOR UPDATE` while the worker's downstream completion audit waits on
+the interactive actor's foreign-key row. The native database log hash is
+`a9feaf236656d1c0913fa6d153174d19987635a2a11277721cdaf62ee2d7a206`.
+An independently migrated deterministic two-writer probe reproduces actual
+`40P01`: one collected case, setup pass/call fail/teardown pass, completion,
+three retained phases and matching JUnit. Evidence:
+`compliance-deadlock-c7dfdc5c-baseline-r1/`. Individual RI-lock row attribution
+is corroborated by code and the forced overlap, not supplied as a nonexistent
+per-row lock trace. Preserve historical/null creators and elected human audit
+provenance, current actor/recipient authority and parent lifecycle. Complete
+participant fencing must precede every implicit FK write and earliest parent
+lock; indexing-only or whole-extractor-mocked races missed this later phase.
+
+The separate FAQ failure at `marketing.spec.ts:95` expects an obsolete phrase
+after the actual second panel successfully expands. The candidate asserts the
+qualified retrieval/source checks, explicit lack of correctness guarantee and
+required verification, plus accessible expanded state and actual collapse.
+The read-only public gate now includes that historical interaction: discovery
+is exactly 40 identities (23 public-content +16 SEO +1 FAQ), no synthetic lead
+admission; the earlier 39-case green run is incomplete for this interaction.
+Standard app/Docker selection remains 505 cases. Fresh execution is pending.
+
+Hosted CI `37996598078` completes and fails, independently of the Docker
+deadlock: all 13 API shards reconcile 524 files/7905 identities/5904 passes/
+2001 unverified skips/21714 phases, zero failures, with successful aggregate
+coverage. Skips are 1999 explicitly absent PostgreSQL DSN, one Windows-only
+gcloud `.CMD` test on Linux and one opt-in native fastembed case. Actual four
+PostgreSQL shards separately pass all 1999. Hosted browser results complete
+489 pass/one stale FAQ fail/15 unverified skips. Console/trace agreement is not
+a substitute for its missing complete structured results and independent
+collection manifest. Original 13 API artifacts, browser ZIP and aggregate
+coverage are hash-verified and preserved by the read-only audit in
+`ci-c7dfdc5c-api-native-sidecar-r1/report.md`.
+
+The CI replacement uses the existing before-disk privacy-safe native reporter,
+exact `github.sha` checkout binding, unchanged app config/one worker/zero
+retries and always-uploaded discovery/results/JUnit/skip/completion receipts.
+Independent validation runs even after a browser failure and cannot turn that
+failure green. Four offline shell controls prevent command failure from being
+hidden or falling through to a real provider. Complete scoped replacement:
+`ci-app-native-faq-fixed-r1.*` has 153 pass/zero skips, 459 phases, native
+completion and exact JUnit identity/totals agreement (26 workflow +92 native
+capture +19 PostgreSQL reconciliation +16 shard planning). E2E typecheck and
+Ruff pass. The initial 26-case attempted baseline retains six failures/20
+passes in log/JUnit but has no phase journal because the operator used the
+wrong environment variable. Its pre-repair shell fixture also reached the old
+`npm` command rather than the fake `uv`, failing in an empty local temporary
+directory; this is not a provider call or product reproduction. The replacement
+guards the command before launch. Do not upgrade that baseline to structured
+coverage or erase its artifacts.
+
 Review agent changes and complete inventories, retain every phase and each
 xdist worker collection, run fresh complete Docker/PostgreSQL/Playwright and
 required CI, merge validated PRs to canonical main, then use only the guarded
