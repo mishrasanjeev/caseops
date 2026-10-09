@@ -1672,3 +1672,8 @@ hearing updates or private-projection alerts.
 are corrected locally; final-head Docker/CI and exact live acceptance remain
 open. Public release selection is 23+16 read-only cases; sender/retention/consent
 and independent GSC exclusion remain open. See the dated production audit.
+
+Shared homepage/FAQ, GC and guide pack/recommendation claims are now also
+qualified locally. Source replacement passes 25 cases; existing browser cases
+open nondefault drafting/FAQ states. Complete final-head gates are still open,
+including PostgreSQL CI image acquisition; no cache or partial pass is a waiver.

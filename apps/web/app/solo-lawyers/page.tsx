@@ -209,15 +209,15 @@ export default function SoloLawyersPage() {
           index="05"
           tone="light"
           eyebrow="Drafting with citations"
-          title="A first draft before the second coffee."
-          description="Open a matter. Pick a template — bail, quashing, reply to summons, §34 petition. Add a focus note. Press Generate. Get a draft with inline citations to named judgments and fact placeholders for anything not in the record."
+          title="Prepare a first draft for review."
+          description="Open a matter, choose a template and add a focus note. Drafting uses available matter context and sources to propose text, citations and placeholders. Generated facts and citations can be wrong or incomplete; verify them before use."
         >
           <div className="grid gap-5 md:grid-cols-2">
             <div className="grid gap-3">
               <ReviewRow
                 icon={FileSignature}
                 title="Check each citation"
-                body="Inspect the named authorities and source links. Fact gaps render as placeholders for you to resolve before use."
+                body="Inspect proposed authorities and source links. Missing facts may be marked as placeholders, but the checks cannot identify every gap. Verify generated facts and citations before use."
               />
               <ReviewRow
                 icon={BookOpenText}

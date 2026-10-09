@@ -2,6 +2,46 @@
 
 ## October 10 Public-Claims Proof Boundary
 
+Further independent review of frozen `f2c6a411` found equivalent guide citation
+and invented-fact guarantees plus adjacent solo placeholder wording that escaped
+the narrow phrase blacklist. The complete expanded 20-case baseline retains
+18 passes/two failures; its replacement passes all 20. Guide and solo drafting
+copy now state that proposed facts/citations can be wrong or incomplete and
+that placeholders do not prove every gap was detected. An undocumented 30-90s
+generation promise is removed. Existing mobile/desktop cases require those
+specific visible limitations. This is still local correction, not live closure.
+
+The bounded adjacent audit also found equivalent claims in the homepage gallery,
+feature/security blocks, shared FAQ, firm fact-gap description, GC rollups and
+guide hearing-pack/recommendation text. Complete expanded source baseline:
+25 collected, 18 passes/seven actual claim failures. All details are retained.
+The first replacement has 24 passes/one literal source-whitespace mismatch;
+the warning already existed, so this is not another product-safety reproduction.
+The unchanged assertion passes after wrapping the source sentence consistently:
+25 passes/no skips. Read-only browser cases now select the homepage drafting
+tab and expand the safety FAQ, then require visible bounded limitations across
+homepage, solo, firm, GC and guide at both widths. The 39 public identities are
+unchanged; browser execution and final source build remain pending.
+
+Complete frontend `full-final-f2c6a411-r1` passed 1,229 cases/197 files, zero
+skips and exact discovery/JSON/JUnit multiplicities; all three CodeQL languages
+report zero findings on merge `6ef523e9880005f642345a03aa839464e7af2056`, whose
+tree matches f2c6a411 exactly. Neither is acceptance of subsequent source edits.
+Docker r10/r11 both failed before database/browser tests on Docker Hub token
+504/timeouts. Their original reports remain retained. CI 37994404077's four
+PostgreSQL service jobs failed before checkout: shards one/four first hit the
+anonymous limit then token timeouts; shards two/three hit token timeouts only.
+Missing artifacts are secondary and the aggregate correctly fails closed.
+
+The isolated anonymous local-client diagnostic also timed out. A one-off cached
+Python image was independently matched to Docker Hub's official index digest
+70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f and
+reports Python 3.13.16 offline. No user Docker settings, cloud IAM or registry
+were changed. An isolated public-upstream STANDARD registry is a proposed
+durable CI option, pending owner choice, image/license/cost verification and
+fresh native gates; existing private application registries must remain private.
+No cache availability guarantee or infrastructure waiver is claimed.
+
 Independent four-issue closure review on clean `213ef75d` found residual
 absolute legal-safety copy and an automatic public-claims attestation without
 selection of either public SEO spec. Main reproduced the missing graph gate

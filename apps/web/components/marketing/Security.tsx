@@ -67,13 +67,13 @@ export function Security() {
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div>
               <h3 className="text-lg font-semibold tracking-tight text-[var(--color-ink)]">
-                AI that refuses to guess.
+                AI with source-review checks.
               </h3>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-mute)]">
-                CaseOps keeps law in retrieval, not in weights. Substantive answers come with
-                citations, assumptions, and confidence. Weak-evidence prompts return an explicit
-                refusal instead of a confident guess. Court-order compliance extraction is
-                schema-validated, source-backed, reviewable, and audited before activation.
+                Retrieval, citation checks and refusal paths support review but
+                cannot detect every unsupported claim. Verify generated text against the
+                source and current law. Court-order compliance candidates retain review state and audit evidence;
+                schema validation alone does not establish legal or factual accuracy.
               </p>
             </div>
             <ul className="grid grid-cols-2 gap-3 text-xs text-[var(--color-ink-2)] md:grid-cols-1">

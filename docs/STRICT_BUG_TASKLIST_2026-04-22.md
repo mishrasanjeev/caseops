@@ -2146,3 +2146,9 @@ with no `test-results` and an unchanged `node_modules`.
 qualified and visible review limitations are added to dated mobile/desktop
 browser acceptance. Reproduced failures retained. Verdict remains Inconclusive
 for production until final release replay; see the dated production audit.
+
+Adjacent shared homepage/FAQ, GC rollup and guide pack/recommendation statements
+had the same unsupported guarantees. Seven expanded source failures are retained;
+the complete 25-case replacement passes. Homepage browser acceptance must open
+the drafting tab and safety FAQ, not inspect only default content. Live verdict
+remains Inconclusive; no backend legal-safety predicate is weakened.

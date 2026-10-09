@@ -42,14 +42,31 @@ describe("seo_demo_20261009 explicit admission allowlists", () => {
 
 describe("public legal-safety claims reflect bounded checks", () => {
   it.each([
-    ["solo-lawyers", /no cross-statute confusion/i, "not every attribution error"],
-    ["law-firms", /Every substantive output is grounded|not a polished hallucination/i,
+    ["solo-lawyers", /no cross-statute confusion|Fact gaps render as placeholders|fact placeholders for anything not in the record/i, "not every attribution error"],
+    ["law-firms", /Every substantive output is grounded|not a polished hallucination|Substantive output is grounded|catches BNS/i,
       "Generated output can contain legal or factual errors"],
-    ["guide", /is never confused|every inline citation has a source/i,
+    ["guide", /is never confused|every inline citation (?:has a source|resolves)|Every\s+fact gap|CaseOps will refuse to invent facts|Missing facts render as|first pass finishes in|every piece of content|grounded in named/i,
       "Review the Act and subsection before use"],
+    ["general-counsels", /Every line is traceable|Every duty becomes a task/i,
+      "Per-line provenance is not guaranteed"],
   ] as const)("qualifies the %s claim", (page, prohibited, limitation) => {
     const source = readFileSync(path.join(process.cwd(), "app", page, "page.tsx"), "utf8");
     expect(prohibited.test(source), "Unqualified legal-safety promise").toBe(false);
     expect(source.includes(limitation), "Missing explicit legal-review limitation").toBe(true);
+  });
+
+  it.each([
+    ["components/marketing/ProductGallery.tsx", /Every inline citation resolves|Fact gaps render as/i,
+      "Check proposed citations and facts before use"],
+    ["components/marketing/Features.tsx", /Every answer is grounded/i,
+      "source links do not guarantee correctness"],
+    ["lib/marketing-content.ts", /Every substantive answer is grounded|Weak-evidence prompts return/i,
+      "A citation or refusal is not a guarantee"],
+    ["components/marketing/Security.tsx", /AI that refuses to guess|Weak-evidence prompts return/i,
+      "cannot detect every unsupported claim"],
+  ] as const)("qualifies shared public claims in %s", (file, prohibited, limitation) => {
+    const source = readFileSync(path.join(process.cwd(), file), "utf8");
+    expect(prohibited.test(source), "Unqualified shared legal-safety promise").toBe(false);
+    expect(source.includes(limitation), "Missing shared legal-review limitation").toBe(true);
   });
 });

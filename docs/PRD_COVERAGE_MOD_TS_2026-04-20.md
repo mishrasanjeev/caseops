@@ -697,3 +697,7 @@ J19/M21/US-063, FT-094..096/NFT-023/SEC-031: release-owned
 public-pages adds 23 public-content +16 nonmutating SEO identities with exact
 native reconciliation. Browser limitations cover solo, firm and guide safety
 copy. Fresh release and live evidence are pending, not complete coverage.
+
+Shared homepage/FAQ, GC and guide pack/recommendation claims are included in
+25 source checks. Existing read-only browser cases now open the actual drafting
+tab and safety FAQ, preserving the 39-case inventory. No live execution claimed.

@@ -136,12 +136,12 @@ export default function GeneralCounselsPage() {
             <PitchCard
               icon={FileSearch}
               title="Contract → obligation — shipped"
-              body="LLM extracts parties, covenants, payment terms, consent clauses, audit rights today. Every duty becomes a task; due dates pulled where the contract states them, placeholders where it doesn't."
+              body="Review extracted parties, covenants, payment terms, consent clauses and audit rights, plus any derived tasks or dates, against the contract. Extraction may omit duties or misread terms; check missing and uncertain fields before relying on them."
             />
             <PitchCard
               icon={Activity}
               title="Portfolio rollups"
-              body="AI summarises 80 matter records into a board-ready extract. Every line is traceable to the underlying matter and audit event."
+              body="Review available matter summaries and portfolio records together. Per-line provenance is not guaranteed; verify generated statements against their matter records and supporting documents before board use."
             />
             <PitchCard
               icon={BadgeCheck}

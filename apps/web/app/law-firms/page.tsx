@@ -435,8 +435,8 @@ export default function LawFirmPitchPage() {
               </div>
               <PitchCard
                 icon={BookOpen}
-                title="Authorities attached"
-                body="Substantive output is grounded in statutes, judgments and internal precedents, not free-floating model guesses."
+                title="Review proposed authorities"
+                body="Inspect available statutes, judgments and internal precedents alongside generated text. Proposed citations can be wrong or incomplete; verify their support and current legal relevance."
               />
               <PitchCard
                 icon={BadgeCheck}
@@ -672,10 +672,10 @@ export default function LawFirmPitchPage() {
                 <p className="mt-3 text-[15.5px] leading-relaxed text-[var(--color-ink-2)]">
                   CaseOps assembles the matter record, draft structure and named sources
                   into one review path. The partner's review stays focused on the legal
-                  work instead of rebuilding context across tools. Citation discipline
-                  remains explicit because the reviewer-findings block catches BNS vs
-                  BNSS, uncited claims and fact gaps before the draft
-                  leaves chambers.
+                  work instead of rebuilding context across tools. Reviewer findings cover
+                  selected statute and citation checks, not every factual or legal error.
+                  Verify unsupported claims and remaining fact gaps before the draft leaves
+                  chambers.
                 </p>
               </div>
               <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] p-4 text-[13.5px] leading-relaxed text-[var(--color-mute)]">

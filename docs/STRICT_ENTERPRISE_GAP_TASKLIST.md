@@ -2504,3 +2504,9 @@ Public-review attestation now requires release-owned native
 23+16 public-page acceptance; missing config/native capture and wrapper failure
 fail closed. Local implementation only, not a production GO. Dated audit:
 bugfix-production-acceptance-and-security-2026-10-09.md.
+
+The same bounded-claims audit includes shared homepage components/FAQ, GC rollup
+and guide pack/recommendation statements. Twenty-five source cases pass after
+seven reproduced claim failures. The visible browser checks include nondefault
+drafting/FAQ states. Exact-release production proof and CI image-pull recovery
+remain required; no public registry or IAM change is authorized by these tests.

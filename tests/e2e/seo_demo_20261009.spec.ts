@@ -48,18 +48,42 @@ test.describe("seo_demo_20261009", () => {
       const response = await page.goto(path);
       expect(response?.status()).toBe(200);
       await expect(page.locator(`a[href="${target}"]`).first()).toBeVisible();
+      if (path === "/") {
+        const draftingTab = page.getByRole("tab", { name: "Drafting with citations", exact: true });
+        await expect(draftingTab).toBeVisible();
+        await draftingTab.click();
+        await expect(draftingTab).toHaveAttribute("aria-selected", "true");
+        await expect(page.getByRole("tabpanel", { name: "Drafting with citations", exact: true }))
+          .toContainText("Check proposed citations and facts before use.");
+        const safetyFaq = page.getByRole("button", { name: "How does CaseOps avoid hallucinated citations?", exact: true });
+        await safetyFaq.click();
+        await expect(safetyFaq).toHaveAttribute("aria-expanded", "true");
+        await expect(page.locator("#faq-panel-1")).toBeVisible();
+      }
       const content = await page.locator("main").innerText();
       expect(content).not.toMatch(/five (?:people|tools|logins)|half of the administration|within (?:a|one) working day|never guesses|We preload cause-list sync|We set up the sandbox|no surprise modals/i);
-      expect(content).not.toMatch(/no cross-statute confusion|Every substantive output is grounded|not a polished hallucination|is never confused|every inline citation has a source/i);
-      if (path === "/solo-lawyers") {
+      expect(content).not.toMatch(/no cross-statute confusion|Every substantive (?:output|answer) is grounded|Substantive output is grounded|not a polished hallucination|is never confused|every inline citation (?:has a source|resolves)|Every\s+fact gap|CaseOps will refuse to invent facts|AI that refuses to guess|Weak-evidence prompts return|Every answer is grounded|Every line is traceable|Every duty becomes a task|every piece of content in the pack|grounded in named authorities|Fact gaps render as placeholders|fact placeholders for anything not in the record|Missing facts render as|first pass finishes in/i);
+      if (path === "/") {
+        expect(content).toContain("source links do not guarantee correctness");
+        expect(content).toContain("cannot detect every unsupported claim.");
+        expect(content).toContain("A citation or refusal is not a guarantee of correctness");
+      } else if (path === "/solo-lawyers") {
         expect(content).toContain("not every attribution error");
         expect(content).toContain("Verify the Act, subsection and current law before use.");
+        expect(content).toContain("the checks cannot identify every gap.");
       } else if (path === "/law-firms") {
         expect(content).toContain("Generated output can contain legal or factual errors.");
         expect(content).toContain("Verify any proposed citations against the sources before use.");
+        expect(content).toContain("not every factual or legal error.");
+      } else if (path === "/general-counsels") {
+        expect(content).toContain("Per-line provenance is not guaranteed");
       } else if (path === "/guide") {
         expect(content).toContain("Review the Act and subsection before use.");
         expect(content).toContain("generated text may contain errors.");
+        expect(content).toContain("Proposed citations and factual statements can be wrong or incomplete.");
+        expect(content).toContain("does not prove that every unsupported fact was detected.");
+        expect(content).toContain("Some pack items may have no source reference");
+        expect(content).toContain("citations do not guarantee that the explanation is correct.");
       }
       await expect(page.locator('script[src*="googletagmanager"],script[src*="google-analytics"]')).toHaveCount(0);
       expect(analytics).toEqual([]);

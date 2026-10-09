@@ -6,6 +6,9 @@
   public CTA at mobile and desktop widths. A producer may attest public review
   only after its graph selects and reconciles the exact release's public
   inventory; an unrelated green authenticated suite is not that evidence.
+  Passing a phrase blacklist is not a complete copy audit: review adjacent
+  drafting paragraphs and callouts for equivalent guarantees, including fact
+  gaps and citation resolution, and assert their visible bounded limitations.
 
 - An evidence aggregate needs the same pinned interpreter as its test shards
   before dependency resolution. Installing uv alone can select a newly released

@@ -341,9 +341,9 @@ const surfaces: Surface[] = [
   {
     id: "drafting",
     tab: "Drafting with citations",
-    headline: "Drafts grounded in real authorities.",
+    headline: "Drafts with sources for review.",
     blurb:
-      "Every inline citation resolves to a named judgment. Fact gaps render as placeholders, not fabrication.",
+      "Check proposed citations and facts before use. Source references and placeholders support review; they do not guarantee that every error or missing fact was detected.",
     render: DraftingMock,
   },
   {
