@@ -246,6 +246,13 @@ def run_matter_court_sync_job(job_id: str) -> None:
         try:
             adapter = get_court_sync_adapter(job.source)
             result = adapter.fetch(matter=matter, source_reference=job.source_reference)
+            from caseops_api.services.compliance_participants import lock_compliance_participants
+
+            lock_compliance_participants(
+                session, company_id=matter.company_id, matter_id=job.matter_id,
+                actor_membership_id=job.requested_by_membership_id,
+                expected_lifecycle_version=matter.lifecycle_version,
+            )
             # Re-read and lock after the external call. Disposal may have won
             # while the adapter was fetching; populate_existing prevents the
             # session identity map from handing us the stale pre-fetch row.

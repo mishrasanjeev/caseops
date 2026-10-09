@@ -8,13 +8,11 @@ from datetime import UTC, date, datetime
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
-    Company,
-    CompanyMembership,
     DocumentProcessingStatus,
     Matter,
     MatterAttachment,
@@ -33,11 +31,8 @@ from caseops_api.db.models import (
     MatterTask,
     MatterTaskPriority,
     MatterTaskStatus,
-    MembershipRole,
     ModelRun,
     NotificationDeliveryChannel,
-    TeamMembership,
-    User,
     utcnow,
 )
 from caseops_api.schemas.compliance import (
@@ -45,6 +40,12 @@ from caseops_api.schemas.compliance import (
     ComplianceItemRecord,
 )
 from caseops_api.services.audit import record_audit, record_from_context
+from caseops_api.services.compliance_participants import (
+    ComplianceParticipantFenceError,
+    _notification_context,
+    _recipient_memberships,
+    lock_compliance_participants,
+)
 from caseops_api.services.llm import (
     LLMCallContext,
     LLMCompletion,
@@ -231,91 +232,6 @@ def _load_accessible_matter(
     return matter
 
 
-def _notification_context(
-    session: Session,
-    *,
-    company_id: str,
-    actor_membership_id: str | None,
-) -> SessionContext | None:
-    stmt = (
-        select(CompanyMembership)
-        .options(joinedload(CompanyMembership.company), joinedload(CompanyMembership.user))
-        .join(Company, Company.id == CompanyMembership.company_id)
-        .join(User, User.id == CompanyMembership.user_id)
-        .where(
-            CompanyMembership.company_id == company_id,
-            CompanyMembership.is_active.is_(True),
-            User.is_active.is_(True),
-            Company.is_active.is_(True),
-        )
-    )
-    if actor_membership_id:
-        actor = session.scalar(stmt.where(CompanyMembership.id == actor_membership_id))
-        if actor is not None:
-            return SessionContext(company=actor.company, user=actor.user, membership=actor)
-    fallback = session.scalar(
-        stmt.where(CompanyMembership.role.in_([MembershipRole.OWNER, MembershipRole.ADMIN]))
-        .order_by(CompanyMembership.created_at.asc())
-        .limit(1)
-    )
-    if fallback is None:
-        fallback = session.scalar(stmt.order_by(CompanyMembership.created_at.asc()).limit(1))
-    if fallback is None:
-        return None
-    return SessionContext(company=fallback.company, user=fallback.user, membership=fallback)
-
-
-def _recipient_memberships(
-    session: Session,
-    *,
-    matter: Matter,
-    include_admins: bool = False,
-) -> list[CompanyMembership]:
-    ids: list[str] = []
-    if matter.assignee_membership_id:
-        ids.append(matter.assignee_membership_id)
-    if matter.team_id:
-        ids.extend(
-            session.scalars(
-                select(TeamMembership.membership_id).where(
-                    TeamMembership.team_id == matter.team_id
-                )
-            )
-        )
-    if include_admins:
-        ids.extend(
-            session.scalars(
-                select(CompanyMembership.id).where(
-                    CompanyMembership.company_id == matter.company_id,
-                    CompanyMembership.role.in_([MembershipRole.OWNER, MembershipRole.ADMIN]),
-                )
-            )
-        )
-    if not ids:
-        ids.extend(
-            session.scalars(
-                select(CompanyMembership.id).where(
-                    CompanyMembership.company_id == matter.company_id,
-                    CompanyMembership.role.in_([MembershipRole.OWNER, MembershipRole.ADMIN]),
-                )
-            )
-        )
-    unique_ids = list(dict.fromkeys(ids))
-    if not unique_ids:
-        return []
-    return list(
-        session.scalars(
-            select(CompanyMembership)
-            .options(joinedload(CompanyMembership.user))
-            .where(
-                CompanyMembership.id.in_(unique_ids),
-                CompanyMembership.company_id == matter.company_id,
-                CompanyMembership.is_active.is_(True),
-            )
-        )
-    )
-
-
 def _notify_review_required(
     session: Session,
     *,
@@ -332,12 +248,16 @@ def _notify_review_required(
         return
     context = _notification_context(
         session,
-        company_id=matter.company_id,
+        matter=matter,
         actor_membership_id=actor_membership_id,
     )
     if context is None:
         return
-    for recipient in _recipient_memberships(session, matter=matter):
+    for recipient in _recipient_memberships(
+        session,
+        matter=matter,
+        actor_membership_id=actor_membership_id,
+    ):
         enqueue_notification_delivery_intent(
             session,
             context=context,
@@ -369,12 +289,17 @@ def _notify_extraction_failure(
         return
     context = _notification_context(
         session,
-        company_id=matter.company_id,
+        matter=matter,
         actor_membership_id=actor_membership_id,
     )
     if context is None:
         return
-    for recipient in _recipient_memberships(session, matter=matter, include_admins=True):
+    for recipient in _recipient_memberships(
+        session,
+        matter=matter,
+        actor_membership_id=actor_membership_id,
+        include_admins=True,
+    ):
         enqueue_notification_delivery_intent(
             session,
             context=context,
@@ -770,7 +695,7 @@ def _finish_run(
     }
     audit_context = _notification_context(
         session,
-        company_id=matter.company_id,
+        matter=matter,
         actor_membership_id=run.created_by_membership_id,
     )
     if audit_context is not None:
@@ -805,8 +730,28 @@ def run_compliance_extraction_for_order(
     actor_membership_id: str | None = None,
     context: SessionContext | None = None,
     provider: LLMProvider | None = None,
+    required_capability: str = "matters:edit",
 ) -> tuple[MatterComplianceExtractionRun, list[MatterComplianceItem]]:
+    previous = session.info.get("compliance_participants", {}).get(
+        (matter.company_id, matter.id, actor_membership_id),
+    )
+    standalone = previous is None or previous.transaction is not session.get_transaction()
+    source_identity = (order.order_date, order.order_text, order.source, order.sync_run_id)
+    lock_compliance_participants(
+        session,
+        company_id=matter.company_id,
+        matter_id=matter.id,
+        actor_membership_id=actor_membership_id,
+        context=context,
+        required_capability=required_capability if context else None,
+        expected_lifecycle_version=matter.lifecycle_version,
+    )
     assert_operational_matter(session, matter=matter, lock_for_write=False)
+    if standalone:
+        with session.no_autoflush:
+            session.refresh(order)
+        if (order.order_date, order.order_text, order.source, order.sync_run_id) != source_identity:
+            raise ComplianceParticipantFenceError(409, detail={"code": "compliance_source_changed"})
     try:
         extract_imported_order_proceeding_intelligence(
             session,
@@ -815,6 +760,8 @@ def run_compliance_extraction_for_order(
             actor_membership_id=actor_membership_id,
         )
     except MatterNotOperationalError:
+        raise
+    except ComplianceParticipantFenceError:
         raise
     except Exception as exc:  # noqa: BLE001
         safe_error = redact_provider_error(exc)
@@ -890,6 +837,8 @@ def run_compliance_extraction_for_order(
             status_value=MatterComplianceExtractionStatus.COMPLETED,
         )
         return run, created
+    except ComplianceParticipantFenceError:
+        raise
     except MatterNotOperationalError:
         _finish_run(
             session,
@@ -918,6 +867,37 @@ def run_compliance_extraction_for_order(
         return run, []
 
 
+def _attachment_source_identity(attachment: MatterAttachment) -> tuple[object, ...]:
+    linked = attachment.linked_court_order
+    return (
+        attachment.document_type,
+        attachment.processing_status,
+        attachment.extracted_text,
+        attachment.linked_court_order_id,
+        attachment.document_date,
+        attachment.sha256_hex,
+        (linked.order_date, linked.order_text, linked.source, linked.sync_run_id)
+        if linked else None,
+    )
+
+
+def _refresh_standalone_attachment_source(
+    session: Session,
+    *,
+    attachment: MatterAttachment,
+    standalone: bool,
+    source_identity: tuple[object, ...],
+) -> None:
+    if not standalone:
+        return
+    with session.no_autoflush:
+        session.refresh(attachment)
+        if attachment.linked_court_order is not None:
+            session.refresh(attachment.linked_court_order)
+    if _attachment_source_identity(attachment) != source_identity:
+        raise ComplianceParticipantFenceError(409, detail={"code": "compliance_source_changed"})
+
+
 def run_compliance_extraction_for_attachment(
     session: Session,
     *,
@@ -929,9 +909,30 @@ def run_compliance_extraction_for_attachment(
     provider: LLMProvider | None = None,
 ) -> tuple[MatterComplianceExtractionRun, list[MatterComplianceItem]]:
     assert_operational_matter(session, matter=matter, lock_for_write=False)
+    lifecycle_version = matter.lifecycle_version
+    source_identity = _attachment_source_identity(attachment)
+    previous = session.info.get("compliance_participants", {}).get(
+        (matter.company_id, matter.id, actor_membership_id),
+    )
+    standalone = previous is None or previous.transaction is not session.get_transaction()
     source_text, skip_reason = _safe_source_text(attachment=attachment)
     linked_order = attachment.linked_court_order
     if source_text is None:
+        lock_compliance_participants(
+            session,
+            company_id=matter.company_id,
+            matter_id=matter.id,
+            actor_membership_id=actor_membership_id,
+            context=context,
+            required_capability="documents:manage" if context else None,
+            expected_lifecycle_version=lifecycle_version,
+        )
+        _refresh_standalone_attachment_source(
+            session,
+            attachment=attachment,
+            standalone=standalone,
+            source_identity=source_identity,
+        )
         run = _create_run(
             session,
             matter=matter,
@@ -967,14 +968,29 @@ def run_compliance_extraction_for_attachment(
         if linked_order is not None
         else attachment.document_date or utcnow().date()
     )
-    # Complete provider-bound analysis before acquiring the lifecycle lock.
-    # Nothing from the prepared result is persisted until _create_run locks and
-    # revalidates the Matter below.
+    # Standalone workers prepare before the persistence fence. Nested callers
+    # already own their transaction; this must not commit or roll back it.
     prepared_ai = _prepare_ai_items(
         session,
         matter=matter,
         source_text=source_text,
         provider=provider,
+    )
+    lock_compliance_participants(
+        session,
+        company_id=matter.company_id,
+        matter_id=matter.id,
+        actor_membership_id=actor_membership_id,
+        context=context,
+        required_capability="documents:manage" if context else None,
+        expected_lifecycle_version=lifecycle_version,
+    )
+    assert_operational_matter(session, matter=matter, lock_for_write=False)
+    _refresh_standalone_attachment_source(
+        session,
+        attachment=attachment,
+        standalone=standalone,
+        source_identity=source_identity,
     )
     run = _create_run(
         session,
@@ -1014,6 +1030,8 @@ def run_compliance_extraction_for_attachment(
             status_value=MatterComplianceExtractionStatus.COMPLETED,
         )
         return run, created
+    except ComplianceParticipantFenceError:
+        raise
     except MatterNotOperationalError:
         _finish_run(
             session,
@@ -1105,6 +1123,14 @@ def update_compliance_item(
     action: str,
     updates: dict[str, object | None] | None = None,
 ) -> MatterComplianceItem:
+    lock_compliance_participants(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+        actor_membership_id=context.membership.id,
+        context=context,
+        required_capability="matters:write",
+    )
     matter = _load_accessible_matter(session, context=context, matter_id=matter_id)
     item = session.scalar(
         select(MatterComplianceItem).where(
@@ -1194,6 +1220,14 @@ def retry_order_compliance_extraction(
     matter_id: str,
     order_id: str,
 ) -> tuple[MatterComplianceExtractionRun, list[MatterComplianceItem]]:
+    lock_compliance_participants(
+        session,
+        company_id=context.company.id,
+        matter_id=matter_id,
+        actor_membership_id=context.membership.id,
+        context=context,
+        required_capability="matters:write",
+    )
     matter = _load_accessible_matter(session, context=context, matter_id=matter_id)
     matter = require_operational_matter(
         session,
@@ -1219,6 +1253,7 @@ def retry_order_compliance_extraction(
         trigger=MatterComplianceTrigger.MANUAL_RETRY,
         actor_membership_id=context.membership.id,
         context=context,
+        required_capability="matters:write",
     )
     session.commit()
     return run, items
