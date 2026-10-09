@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## October 9 Custom Cursor Release Blocker
+
+**NO-GO** for deployment of merged `47e3554c`: main CI catches a stale-ID
+histogram making a custom cursor scan/sort 9803 keys. Passing first-page and
+generic plans were insufficient. A deterministic baseline reproduces the same
+10005-work failure and the cursor InitPlan repair passes that case without
+changing admission or bounds. Fresh complete acceptance remains required.
+The separate Windows discovery console-codec defect also requires lossless
+native UTF-8 reporter-file coverage. Evidence and scope:
+`docs/bugfix-patent-cursor-plan-2026-10-09.md`.
+
 ## October 9 Outer Pagination Blocker
 
 The later retained-history replay supersedes the scoped 89-pass checkpoint:

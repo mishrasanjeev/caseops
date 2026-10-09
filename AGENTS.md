@@ -1,5 +1,14 @@
 # CaseOps agent instructions
 
+- Keyset performance must cover a validated cursor beyond the pre-import ID
+  histogram. A first page and a generic plan can be bounded while a custom
+  cursor plan scans/sorts thousands of keys. Train and assert the stale
+  histogram before importing deterministic higher IDs; retain first/cursor,
+  custom/generic and complete authorized pagination under the original bounds.
+- Windows native JSON discovery must be written by the reporter to an owned
+  fresh file and read explicitly as UTF-8, not round-tripped through console
+  strings. Preserve inherited reporter settings and prior evidence; prove
+  non-ASCII identities as well as nonempty ordered selection and completion.
 - A Docker browser process exit cannot certify execution by itself. Retain
   unique JSON/JUnit reports and a reconciled nonempty completion for every
   serialized shard, then compare their identities and classified outcomes

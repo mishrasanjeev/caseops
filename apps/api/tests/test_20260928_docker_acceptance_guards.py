@@ -24,7 +24,7 @@ GUARDS = {
         "[docker-acceptance] candidate-source guard: 4 regression cases passed"
     ),
     "tests/docker-acceptance-repo-root-guard.ps1": (
-        "[docker-acceptance] repository-root guard: 28 regression cases passed"
+        "[docker-acceptance] repository-root guard: 42 regression cases passed"
     ),
 }
 
@@ -44,7 +44,7 @@ def _required_tool(*names: str) -> str:
 def test_docker_acceptance_guard_passes_from_an_unrelated_directory(
     guard: str, tmp_path: Path
 ) -> None:
-    shell = _required_tool("pwsh", "powershell")
+    shell = _required_tool(*(("powershell", "pwsh") if os.name == "nt" else ("pwsh", "powershell")))
     _required_tool("node")
     result = subprocess.run(
         [
@@ -65,4 +65,6 @@ def test_docker_acceptance_guard_passes_from_an_unrelated_directory(
     output = f"{result.stdout}\n{result.stderr}"
     assert result.returncode == 0, output
     assert GUARDS[guard] in result.stdout, output
+    if guard == "tests/docker-acceptance-repo-root-guard.ps1":
+        assert "native Node UTF-8 titles survive code page 437" in result.stdout, output
     assert list(tmp_path.iterdir()) == [], "a guard wrote into the caller's directory"

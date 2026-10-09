@@ -185,6 +185,9 @@ function Test-PathWithinRoot {
 function Assert-CandidatePlaywrightSuite {
     param([string[]]$Arguments = @())
 
+    if (@($Arguments | Where-Object { $_ -match "^--reporter(?:=|$)" }).Count) {
+        throw "Docker acceptance owns its structured Playwright reporters."
+    }
     if (-not (Test-Path -LiteralPath $PlaywrightConfig -PathType Leaf)) {
         throw "Candidate Playwright config is missing: $PlaywrightConfig"
     }
@@ -199,16 +202,23 @@ function Assert-CandidatePlaywrightSuite {
         throw "Browser support helpers would run Python outside the candidate: '$HelperPython'."
     }
 
+    $InventoryPath = Join-Path $ResultsDirectory "playwright-inventory.json"
+    if (Test-Path -LiteralPath $InventoryPath) {
+        throw "Playwright inventory already exists; refusing to overwrite retained evidence: $InventoryPath."
+    }
     $SavedListingEnvironment = @{}
     foreach ($Name in @("PLAYWRIGHT_JSON_OUTPUT_FILE", "PLAYWRIGHT_JSON_OUTPUT_DIR", "PLAYWRIGHT_JSON_OUTPUT_NAME")) {
         $SavedListingEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name, "Process")
-        [Environment]::SetEnvironmentVariable($Name, $null, "Process")
     }
     $ListingLocationPushed = $false
     try {
+        # Native JSON bytes must not pass through Windows PowerShell's OEM stdout decoder.
+        [Environment]::SetEnvironmentVariable("PLAYWRIGHT_JSON_OUTPUT_FILE", $InventoryPath, "Process")
+        [Environment]::SetEnvironmentVariable("PLAYWRIGHT_JSON_OUTPUT_DIR", $null, "Process")
+        [Environment]::SetEnvironmentVariable("PLAYWRIGHT_JSON_OUTPUT_NAME", $null, "Process")
         Push-Location -LiteralPath $RepoRoot
         $ListingLocationPushed = $true
-        $Listing = @(& $NodePath $PlaywrightCli test --config $PlaywrightConfig --list --reporter=json @Arguments)
+        & $NodePath $PlaywrightCli test --config $PlaywrightConfig --list --reporter=json @Arguments
         $ListExitCode = $LASTEXITCODE
     }
     finally {
@@ -217,16 +227,26 @@ function Assert-CandidatePlaywrightSuite {
         }
         if ($ListingLocationPushed) { Pop-Location }
     }
-    $ListingText = $Listing -join "`n"
-    $InventoryPath = Join-Path $ResultsDirectory "playwright-inventory.json"
-    [IO.File]::WriteAllText($InventoryPath, $ListingText)
-    $JsonStart = $ListingText.IndexOf("{")
-    if ($ListExitCode -ne 0 -or $JsonStart -lt 0) {
+    if ($ListExitCode -ne 0 -or -not (Test-Path -LiteralPath $InventoryPath -PathType Leaf)) {
         throw "Could not list the candidate Playwright suite (exit $ListExitCode); see $InventoryPath."
     }
-    $Report = $ListingText.Substring($JsonStart) | ConvertFrom-Json
+    try {
+        $InventoryBytes = [IO.File]::ReadAllBytes($InventoryPath)
+        if ($InventoryBytes.Length -eq 0) { throw "Empty inventory file." }
+        $StrictUtf8 = New-Object Text.UTF8Encoding($false, $true)
+        $ListingText = $StrictUtf8.GetString($InventoryBytes).TrimStart([char]0xFEFF)
+        $Report = $ListingText | ConvertFrom-Json -ErrorAction Stop
+        if ($null -eq $Report -or $null -eq $Report.config -or $null -eq $Report.suites) {
+            throw "Missing inventory structure."
+        }
+    }
+    catch { throw "The candidate Playwright inventory is invalid UTF-8 JSON; see $InventoryPath." }
     if (@($Report.errors).Count -gt 0) {
         throw "The candidate Playwright suite has load errors; see $InventoryPath."
+    }
+    if ([int]$Report.stats.expected -ne 0 -or [int]$Report.stats.unexpected -ne 0 -or
+        [int]$Report.stats.flaky -ne 0) {
+        throw "Playwright discovery contains executed results; see $InventoryPath."
     }
     $ConfigFile = [string]$Report.config.configFile
     if (
@@ -245,6 +265,7 @@ function Assert-CandidatePlaywrightSuite {
     $Pending = New-Object 'System.Collections.Generic.Queue[object]'
     foreach ($Suite in @($Report.suites)) { if ($null -ne $Suite) { $Pending.Enqueue($Suite) } }
     $SpecCount = 0
+    $TestCount = 0
     while ($Pending.Count -gt 0) {
         $Suite = $Pending.Dequeue()
         if ($Suite.file) {
@@ -253,11 +274,23 @@ function Assert-CandidatePlaywrightSuite {
                 throw "Playwright listed spec '$SpecFile' outside the candidate $RepoRoot."
             }
         }
-        $SpecCount += @($Suite.specs | Where-Object { $null -ne $_ }).Count
+        foreach ($Spec in @($Suite.specs | Where-Object { $null -ne $_ })) {
+            $SpecCount++
+            foreach ($Test in @($Spec.tests | Where-Object { $null -ne $_ })) {
+                if (@($Test.results | Where-Object { $null -ne $_ }).Count -gt 0) {
+                    throw "Playwright discovery contains executed results; see $InventoryPath."
+                }
+                $TestCount++
+            }
+        }
         foreach ($Child in @($Suite.suites)) { if ($null -ne $Child) { $Pending.Enqueue($Child) } }
     }
-    if ($SpecCount -eq 0) {
+    if ($SpecCount -eq 0 -or $TestCount -eq 0) {
         throw "The candidate Playwright selection is empty; an empty browser run cannot certify."
+    }
+    # Native --list reports unexecuted tests as skipped, with empty result arrays.
+    if ([int]$Report.stats.skipped -ne $TestCount) {
+        throw "Playwright discovery test totals disagree; see $InventoryPath."
     }
     Write-Host "[docker-acceptance] candidate Playwright inventory: $SpecCount specs from $RootDir"
 }

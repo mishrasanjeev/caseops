@@ -1,5 +1,17 @@
 # CaseOps  - Work To Be Done
 
+## October 9 Merged-Main Cursor Blocker
+
+PR #525 merged as `47e3554c`, with the exact Docker-accepted `df6c971f` tree:
+1938 PostgreSQL passes and 467 browser passes / eight known skips. Merged-main
+CI `37889146392` nevertheless finds a real custom cursor-plan counterexample:
+9803 family keys are scanned/sorted before the next page. Deployment remains
+blocked; production still serves `b20f86bd`. A deterministic stale-histogram
+regression reproduces 10005 family-row work and passes the narrow InitPlan
+cursor repair. Complete replacement gates and production replay remain open.
+See `docs/bugfix-patent-cursor-plan-2026-10-09.md`; older checkpoints below
+remain historical. Calendar BUG-003/004 still require real Google consent.
+
 ## October 9 Docker Counterexample
 
 The later retained-history replay supersedes the scoped 89-pass checkpoint:
