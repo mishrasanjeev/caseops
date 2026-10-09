@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- Public claims must match the actual bounded safety mechanism, not promise
+  universal legal correctness or absence of hallucinations. Audit adjacent
+  persona and guide copy, assert visible review limitations, and replay every
+  public CTA at mobile and desktop widths. A producer may attest public review
+  only after its graph selects and reconciles the exact release's public
+  inventory; an unrelated green authenticated suite is not that evidence.
+
 - An evidence aggregate needs the same pinned interpreter as its test shards
   before dependency resolution. Installing uv alone can select a newly released
   unsupported Python. Audit every Python-consuming CI job, reproduce a missing

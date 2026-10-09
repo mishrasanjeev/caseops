@@ -105,6 +105,7 @@ jobs:
           - legacy
           - supporting
           - patent-statute
+          - public-pages
     steps:
       - name: Check out the exact serving production release
         uses: actions/checkout@v4
@@ -436,6 +437,15 @@ jobs:
         # Read-only batches use bounded parallelism after all mutation phases.
         run: bash "$RUNNER_TEMP/caseops-prod-playwright" statute-sources --config=playwright.prod-ram.config.ts --project=statute-source-prod-chromium --workers=4 --retries=0 --reporter=list --output=test-results/statute-sources
 
+      - name: Run exact-release public SEO read-only acceptance
+        if: always() && !cancelled() && matrix.suite == 'public-pages' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        env:
+          CASEOPS_WEB_BASE_URL: https://caseops.ai
+        run: |
+          test "${{ steps.native-evidence.outputs.mode }}" = native
+          test -f playwright.public-seo.config.ts
+          bash "$RUNNER_TEMP/caseops-prod-playwright" public-pages --config=playwright.public-seo.config.ts --workers=1 --retries=0 --reporter=list --output=test-results/public-pages
+
       - name: Reconcile required native Playwright evidence
         if: always() && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.native-evidence.outputs.mode == 'native'
         env:
@@ -454,6 +464,7 @@ jobs:
               if [[ "$COST_CONFIGURED" == true ]]; then required+=(ip-cost); fi
               ;;
             patent-statute) required=(patent statute-sources) ;;
+            public-pages) required=(public-pages) ;;
             *) exit 1 ;;
           esac
           python scripts/prod_playwright_evidence.py validate --required "${required[@]}"

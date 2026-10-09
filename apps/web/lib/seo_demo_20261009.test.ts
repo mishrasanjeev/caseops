@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { demoAdmissionSchema, demoSources } from "./demo-admission";
 
@@ -35,5 +37,19 @@ describe("seo_demo_20261009 explicit admission allowlists", () => {
 
   it.each(["url", "query", "referrer", "utm_json"])("rejects unreviewed attribution field %s", (field) => {
     expect(demoAdmissionSchema.safeParse({ ...payload, [field]: "private-do-not-retain" }).success).toBe(false);
+  });
+});
+
+describe("public legal-safety claims reflect bounded checks", () => {
+  it.each([
+    ["solo-lawyers", /no cross-statute confusion/i, "not every attribution error"],
+    ["law-firms", /Every substantive output is grounded|not a polished hallucination/i,
+      "Generated output can contain legal or factual errors"],
+    ["guide", /is never confused|every inline citation has a source/i,
+      "Review the Act and subsection before use"],
+  ] as const)("qualifies the %s claim", (page, prohibited, limitation) => {
+    const source = readFileSync(path.join(process.cwd(), "app", page, "page.tsx"), "utf8");
+    expect(prohibited.test(source), "Unqualified legal-safety promise").toBe(false);
+    expect(source.includes(limitation), "Missing explicit legal-review limitation").toBe(true);
   });
 });

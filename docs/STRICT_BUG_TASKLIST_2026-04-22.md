@@ -2140,3 +2140,9 @@ with no `test-results` and an unchanged `node_modules`.
   The corrected precedence and current-Matter-CNR read check passed five
   exact PostgreSQL repros and 136 local adjacent tests; this is not closure.
   Retained run: `.tmp/docker-acceptance/58e620899c764440a37ab558846b8f00/`.
+## October 10 Public-Claims Boundary
+
+#515: residual solo/firm/guide universal legal-safety copy is
+qualified and visible review limitations are added to dated mobile/desktop
+browser acceptance. Reproduced failures retained. Verdict remains Inconclusive
+for production until final release replay; see the dated production audit.

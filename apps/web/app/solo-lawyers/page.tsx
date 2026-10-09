@@ -221,8 +221,8 @@ export default function SoloLawyersPage() {
               />
               <ReviewRow
                 icon={BookOpenText}
-                title="Statute attribution kept clean"
-                body="BNSS vs BNS clamped; Arbitration Act sections attributed by the right subsection; no cross-statute confusion."
+                title="Review statute attribution"
+                body="Statute checks cover selected known mistakes, not every attribution error. Verify the Act, subsection and current law before use."
               />
               <ReviewRow
                 icon={Scale}

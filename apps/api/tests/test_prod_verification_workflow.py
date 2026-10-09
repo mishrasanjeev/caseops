@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -227,6 +232,73 @@ def test_exact_release_dispatch_records_only_the_claim_proven_by_the_suite() -> 
     assert "--pine" not in writer["run"]
 
 
+def test_public_claims_attestation_requires_exact_release_nonmutating_browser_evidence() -> None:
+    import yaml
+
+    parsed = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    job = parsed["jobs"]["prod-playwright-shards"]
+    assert "public-pages" in job["strategy"]["matrix"]["suite"]
+    steps = {step.get("name"): step for step in job["steps"]}
+    selected = steps["Run exact-release public SEO read-only acceptance"]
+    assert "matrix.suite == 'public-pages'" in selected["if"]
+    assert 'test "${{ steps.native-evidence.outputs.mode }}" = native' in selected["run"]
+    assert "test -f playwright.public-seo.config.ts" in selected["run"]
+    assert '--invocation' not in selected["run"]
+    assert 'caseops-prod-playwright" public-pages --config=playwright.public-seo.config.ts' in (
+        selected["run"]
+    )
+    assert "--workers=1 --retries=0 --reporter=list" in selected["run"]
+    assert selected["env"]["CASEOPS_WEB_BASE_URL"] == "https://caseops.ai"
+    reconcile = steps["Reconcile required native Playwright evidence"]["run"]
+    assert "public-pages) required=(public-pages)" in reconcile
+    config = (REPO_ROOT / "playwright.public-seo.config.ts").read_text()
+    assert "public-content\\.spec\\.ts" in config
+    assert "seo_demo_20261009\\.spec\\.ts" in config
+    assert "public CTA and truthful copy|public read-only prototype source rejection" in config
+    assert "globalSetup: undefined" in config and "webServer: undefined" in config
+    for policy in ('trace: "off"', 'screenshot: "off"', 'video: "off"',
+                   "extraHTTPHeaders: noPaidProviderHeaders"):
+        assert policy in config
+    assert "public-pages" not in steps.get("Run legacy QA production regressions", {}).get(
+        "run", ""
+    )
+
+
+@pytest.mark.parametrize("mode", ["missing-native", "missing-config", "ready", "failed-wrapper"])
+def test_public_claims_shell_cannot_run_unreleased_tests_or_hide_native_failure(tmp_path, mode):
+    import yaml
+
+    parsed = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    step = next(
+        step for step in parsed["jobs"]["prod-playwright-shards"]["steps"]
+        if step.get("name") == "Run exact-release public SEO read-only acceptance"
+    )
+    native_mode = "legacy" if mode == "missing-native" else "native"
+    script = step["run"].replace("${{ steps.native-evidence.outputs.mode }}", native_mode)
+    if mode != "missing-config":
+        (tmp_path / "playwright.public-seo.config.ts").write_text(
+            "// Offline shell fixture only.\n"
+        )
+    (tmp_path / "caseops-prod-playwright").write_text(
+        'printf "%s\\n" "$@" > wrapper-called\nexit "$OFFLINE_EXIT"\n'
+    )
+    bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
+    assert bash and Path(bash).is_file()
+    result = subprocess.run(
+        [bash, "-e", "-c", script], cwd=tmp_path, capture_output=True, encoding="utf-8",
+        env={**os.environ, "RUNNER_TEMP": tmp_path.as_posix(),
+             "OFFLINE_EXIT": "7" if mode == "failed-wrapper" else "0"},
+    )
+    called = tmp_path / "wrapper-called"
+    assert (result.returncode == 0) is (mode == "ready")
+    assert called.exists() is (mode in {"ready", "failed-wrapper"})
+    if called.exists():
+        assert called.read_text().splitlines() == [
+            "public-pages", "--config=playwright.public-seo.config.ts", "--workers=1",
+            "--retries=0", "--reporter=list", "--output=test-results/public-pages",
+        ]
+
+
 def test_exact_release_verification_is_serialized_into_bounded_jobs() -> None:
     import yaml
 
@@ -243,6 +315,7 @@ def test_exact_release_verification_is_serialized_into_bounded_jobs() -> None:
         "legacy",
         "supporting",
         "patent-statute",
+        "public-pages",
     ]
 
     by_name = {step.get("name"): step for step in shard_job["steps"]}

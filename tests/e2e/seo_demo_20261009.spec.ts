@@ -50,6 +50,17 @@ test.describe("seo_demo_20261009", () => {
       await expect(page.locator(`a[href="${target}"]`).first()).toBeVisible();
       const content = await page.locator("main").innerText();
       expect(content).not.toMatch(/five (?:people|tools|logins)|half of the administration|within (?:a|one) working day|never guesses|We preload cause-list sync|We set up the sandbox|no surprise modals/i);
+      expect(content).not.toMatch(/no cross-statute confusion|Every substantive output is grounded|not a polished hallucination|is never confused|every inline citation has a source/i);
+      if (path === "/solo-lawyers") {
+        expect(content).toContain("not every attribution error");
+        expect(content).toContain("Verify the Act, subsection and current law before use.");
+      } else if (path === "/law-firms") {
+        expect(content).toContain("Generated output can contain legal or factual errors.");
+        expect(content).toContain("Verify any proposed citations against the sources before use.");
+      } else if (path === "/guide") {
+        expect(content).toContain("Review the Act and subsection before use.");
+        expect(content).toContain("generated text may contain errors.");
+      }
       await expect(page.locator('script[src*="googletagmanager"],script[src*="google-analytics"]')).toHaveCount(0);
       expect(analytics).toEqual([]);
       expect((await context.cookies()).filter((cookie) => /^_ga|^_gid|^_gat/.test(cookie.name))).toEqual([]);

@@ -1764,10 +1764,9 @@ export default function GuidePage() {
                       <strong>quote verbatim</strong> instead of paraphrasing.
                     </li>
                     <li>
-                      <strong>BNSS vs BNS unambiguous.</strong> The structured
-                      reference makes the act explicit, so &quot;Section 483
-                      BNSS&quot; (bail) is never confused with &quot;Section 483
-                      BNS&quot;.
+                      <strong>Explicit Act identity.</strong> Structured references
+                      distinguish BNSS from BNS. Review the Act and subsection before use.
+                      This identity does not guarantee correct attribution in generated text.
                     </li>
                     <li>
                       <strong>Catalog visibility.</strong> An Act page lists every
@@ -2142,8 +2141,9 @@ export default function GuidePage() {
                     Citations in my draft look wrong
                   </h3>
                   <p>
-                    Use the grounding panel on the right side of the Drafting Studio —
-                    every inline citation has a source. If an authority is wrong for the
+                    Use the grounding panel on the right side of the Drafting Studio to
+                    inspect available source references. Check each citation against its
+                    source; generated text may contain errors. If an authority is wrong for the
                     point, open it, remove it from the shortlist, and regenerate. The
                     reviewer findings block at the foot of the draft also flags likely
                     mismatches.

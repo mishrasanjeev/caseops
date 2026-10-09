@@ -456,7 +456,7 @@ export default function LawFirmPitchPage() {
               <PitchCard
                 icon={Lock}
                 title="Refusal over fabrication"
-                body="Weak evidence and absent facts should produce a refusal or a placeholder, not a polished hallucination."
+                body="Insufficient source context may trigger a refusal or placeholders. Review remaining gaps, citations and potential errors before approval."
               />
             </div>
           </div>
@@ -638,13 +638,13 @@ export default function LawFirmPitchPage() {
           tone="light"
           eyebrow="The AI angle"
           title="AI as associate leverage, not as an autopilot."
-          description="AI is a feature of the system, not the product. Legal knowledge stays in retrieval and source systems — statutes, judgments, your own precedents — not baked into model weights. Every substantive output is grounded in a named source; uncertainty renders as a refusal or a placeholder, not a polished hallucination."
+          description="AI supports the matter workflow using available source context and review checks. Generated output can contain legal or factual errors. Check cited authorities, statute attribution and the current law before use; a refusal or placeholder is not a guarantee that all errors were detected."
         >
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <PitchCard
               icon={Sparkles}
               title="Drafting Studio"
-              body="Produces a first draft from the matter record with inline citations to named judgments. Refuses to cite what it cannot ground."
+              body="Prepare a first draft from the available matter record and proposed source references. Verify any proposed citations against the sources before use."
             />
             <PitchCard
               icon={Search}

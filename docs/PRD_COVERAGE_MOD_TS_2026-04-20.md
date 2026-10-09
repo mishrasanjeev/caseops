@@ -691,3 +691,9 @@ Matter dates and preserves existing history/source provenance (`BUG-017`,
 links, unverified multiple-candidate selection, `BUG-014` Court Sync Run Sync,
 full Calendar/Today/Cause List acceptance, and exact-release production proof
 remain open; no paid automated provider probe is authorized.
+## October 10 Public-Claims Boundary
+
+J19/M21/US-063, FT-094..096/NFT-023/SEC-031: release-owned
+public-pages adds 23 public-content +16 nonmutating SEO identities with exact
+native reconciliation. Browser limitations cover solo, firm and guide safety
+copy. Fresh release and live evidence are pending, not complete coverage.

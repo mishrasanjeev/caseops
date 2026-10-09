@@ -868,6 +868,7 @@ def test_all_production_invocations_have_native_capture_and_success_artifacts():
         "notice",
         "patent",
         "statute-sources",
+        "public-pages",
     ]
 
 

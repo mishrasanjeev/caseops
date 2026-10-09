@@ -2498,3 +2498,9 @@ job or scheduler was changed.
   harness withheld Playwright. The corrected code now passes those five
   selected PostgreSQL cases and 136 local hearing/provider tests. A full
   replacement Docker inventory and production proof are still pending.
+## October 10 Public-Claims Boundary
+
+Public-review attestation now requires release-owned native
+23+16 public-page acceptance; missing config/native capture and wrapper failure
+fail closed. Local implementation only, not a production GO. Dated audit:
+bugfix-production-acceptance-and-security-2026-10-09.md.

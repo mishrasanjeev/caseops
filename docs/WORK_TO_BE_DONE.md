@@ -1666,3 +1666,9 @@ data gap, distinct from a Matter lifecycle reopen. Backfill and repeatable
 same-record production UI proof remain required. Diagnose any alleged Matter
 reopening from persisted lifecycle version and ordered audit events, not from
 hearing updates or private-projection alerts.
+## October 10 Public-Claims Boundary
+
+#515 residual legal-safety copy and public-review proof scope
+are corrected locally; final-head Docker/CI and exact live acceptance remain
+open. Public release selection is 23+16 read-only cases; sender/retention/consent
+and independent GSC exclusion remain open. See the dated production audit.

@@ -1,5 +1,53 @@
 # Production Acceptance And Security Follow-Up - 2026-10-09
 
+## October 10 Public-Claims Proof Boundary
+
+Independent four-issue closure review on clean `213ef75d` found residual
+absolute legal-safety copy and an automatic public-claims attestation without
+selection of either public SEO spec. Main reproduced the missing graph gate
+with a complete 17-case native baseline (16 passes/one failure, 51 phases).
+The three copy contracts reproduce unsafe claims with 17 passes/three failures;
+an earlier jsdom source-path fixture error is retained and is not a product
+reproduction. A replacement also caught adjacent law-firm wording; its complete
+failure is retained. Solo, firm and guide copy now state bounded checks and
+required citation/Act/current-law review. Browser assertions require the actual
+visible limitations at both widths, not only absence of old phrases.
+
+The release graph adds required `public-pages` acceptance. Its release-owned
+config selects exactly 23 public-content and 16 read-only SEO cases across two
+explicit projects; all ten synthetic-admission cases are excluded, never
+claimed as live coverage. Nonempty real discovery proves that split. Missing
+release-owned config or native capture and a failing wrapper fail closed before
+the producer can attest. Existing authenticated selections, no-paid markers,
+zero retries, serialization, timeout budgets, success/failure native uploads
+and exact-serving checks remain unchanged. The added public gate proves bounded
+published-page assertions, not Google exclusion, legal accuracy, conversion
+rates, notification delivery, provider coverage or user-kept consent gaps.
+
+Complete four-file replacement `public-claims-native-workflow-fixed-r3` passes
+148 identities with all 444 setup/call/teardown phases, completion exit zero,
+exact JUnit identity/outcome agreement and no skips. Counts are 21 workflow,
+92 native-evidence, 19 PostgreSQL-sharding and 16 shard-plan tests. All 18
+native reporter privacy controls also execute. Four offline Bash controls prove
+missing native mode, missing release config, successful invocation arguments
+and a nonzero wrapper result, without production or provider calls. The complete
+copy replacement passes all 20 identities; real public-seo discovery selects
+23+16 identities, but discovery is not execution. Ruff and E2E typecheck pass.
+Retained reports are in `.tmp/issues-security-20261009/`, including every failed
+baseline and incomplete prior Docker run. Full frozen-head gates remain open.
+
+Docker r9 was deliberately interrupted before these source edits. Its 1,999-case
+database journal has no completion; no full browser partition ran. Separate
+23+16 public gates completed on `213ef75d` but lack the new limitation assertions
+and are not acceptance of this correction. Only label/parent-chain-verified
+owned resources were stopped and cleaned up; original reports are retained.
+CI `37989743523` completed all API/Web gates successfully, but PostgreSQL shards
+one/four failed before checkout on Docker Hub anonymous pull limits. Its strict
+aggregate rejected the missing evidence. This external setup failure is not a
+product-test failure or a waived gate. All three exact-tree PR CodeQL analyses
+are zero; production remains b1, and fresh corrected-head full gates, canonical
+merge, guarded deployment and exact live replay are required.
+
 ## October 10 Aggregate Interpreter Boundary
 
 Complete retained CI evidence from `37985225111` shows all four PostgreSQL
