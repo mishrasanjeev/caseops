@@ -101,7 +101,9 @@ def _hidden_notice_link_exists(
                 CompanyNoticeMatterLink.company_id != CompanyNotice.company_id,
                 Matter.id.is_(None),
                 Matter.company_id != CompanyNotice.company_id,
-                ~visible_matters_filter(session, context=context),
+                # A missing assignee can make the permission expression NULL;
+                # only explicit TRUE establishes access to every linked matter.
+                visible_matters_filter(session, context=context).is_not(True),
             ),
         )
     )
@@ -1219,51 +1221,94 @@ def upload_notice_file(
     expected_updated_at: datetime,
     stream: BinaryIO,
 ) -> NoticeRecord:
-    notice, visible_ids = _standalone_for_write(
-        session,
-        context=context,
-        notice_id=notice_id,
+    from caseops_api.services.assignment_memberships import (
+        lock_company_memberships_for_assignment,
+        require_locked_membership_capability,
     )
-    # Validate OCC under the row lock before upload validation, quota checks,
-    # storage writes, or virus scanning can cause side effects.
-    _assert_expected_notice_version(notice, expected_updated_at)
-    replacing = bool(notice.storage_key)
-    if replacing and not membership_has_capability(
-        session,
-        context.membership,
-        "documents:manage",
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Replacing an existing notice file requires documents:manage.",
-        )
+    from caseops_api.services.identity import get_session_context
+    from caseops_api.services.matter_write_fence import require_read_only_upload_session
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
 
+    require_read_only_upload_session(
+        session, detail="Notice upload requires a read-only session before its I/O boundary.",
+    )
+    company_id, actor_id = context.company.id, context.membership.id
+    token_issued_at = context.token_issued_at
+
+    def admit() -> tuple[SessionContext, CompanyNotice, set[str]]:
+        with session.no_autoflush:
+            lock_private_authority_writer(session, company_id=company_id)
+            # Ordinary notice edits hold the notice while adding actor audit
+            # FKs. NO KEY UPDATE still excludes revocation, but permits those FKs.
+            actors = lock_company_memberships_for_assignment(
+                session, company_id=company_id, membership_ids=(actor_id,),
+                no_key_update=True,
+            )
+        actor = actors.get(actor_id)
+        if actor is None:
+            raise HTTPException(status_code=403, detail="An active membership is required.")
+        require_locked_membership_capability(session, actor, "documents:upload")
+        current = get_session_context(session, actor_id, token_issued_at=token_issued_at)
+        row, visible = _standalone_for_write(
+            session, context=current, notice_id=notice_id,
+        )
+        _assert_expected_notice_version(row, expected_updated_at)
+        if row.storage_key and not membership_has_capability(
+            session, actor, "documents:manage",
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Replacing an existing notice file requires documents:manage.",
+            )
+        return current, row, visible
+
+    context, notice, visible_ids = admit()
     verify_upload(filename=filename, content_type=content_type, stream=stream)
     old_storage_key = notice.storage_key
     old_size_bytes = int(notice.size_bytes or 0)
     stored = None
+    commit_attempted = False
     matter_id = _audit_matter_id(notice)
+    replacing = bool(old_storage_key)
+    session.rollback()
+
+    def discard_unpublished_object() -> None:
+        if stored is not None:
+            try:
+                delete_stored_document(stored.storage_key)
+            except Exception:
+                logger.warning(
+                    "Failed to clean up rejected notice upload", exc_info=True,
+                )
+
+    def preflight_quota(size_bytes: int) -> None:
+        try:
+            assert_storage_quota_allows_upload(
+                session, company_id=company_id, matter_id=matter_id,
+                incoming_size_bytes=size_bytes, replaced_size_bytes=old_size_bytes,
+            )
+        finally:
+            session.rollback()
+
     try:
         stored = persist_workspace_attachment(
-            company_id=context.company.id,
+            company_id=company_id,
             namespace="notices",
             workspace_id="standalone",
-            attachment_id=f"{notice.id}-{uuid4().hex[:12]}",
+            attachment_id=f"{notice_id}-{uuid4().hex}",
             filename=filename,
             stream=stream,
-            before_store=lambda size_bytes: assert_storage_quota_allows_upload(
-                session,
-                company_id=context.company.id,
-                matter_id=matter_id,
-                incoming_size_bytes=size_bytes,
-                replaced_size_bytes=old_size_bytes,
-            ),
+            before_store=preflight_quota,
             validate_temp_file=lambda path: reject_if_infected(
                 path,
                 filename=filename,
             ),
         )
-
+        context, notice, visible_ids = admit()
+        assert_storage_quota_allows_upload(
+            session, company_id=company_id, matter_id=matter_id,
+            incoming_size_bytes=stored.size_bytes, replaced_size_bytes=old_size_bytes,
+        )
         notice.original_filename = sanitize_filename(filename)
         notice.storage_key = stored.storage_key
         notice.content_type = content_type
@@ -1286,9 +1331,11 @@ def upload_notice_file(
                 "matter_ids": [link.matter_id for link in notice.matter_links],
             },
         )
+        commit_attempted = True
         session.commit()
     except StorageQuotaExceeded as exc:
         session.rollback()
+        discard_unpublished_object()
         record_from_context(
             session,
             context,
@@ -1303,18 +1350,13 @@ def upload_notice_file(
         raise exc.to_http_exception() from exc
     except Exception:
         session.rollback()
-        if stored is not None:
-            try:
-                delete_stored_document(stored.storage_key)
-            except Exception:  # noqa: BLE001 - preserve the original failure
-                logger.warning(
-                    "Failed to clean up rejected notice upload storage_key=%s",
-                    stored.storage_key,
-                    exc_info=True,
-                )
+        if not commit_attempted:
+            discard_unpublished_object()
+        else:
+            logger.warning("Notice upload commit outcome is uncertain")
         raise
 
-    if old_storage_key and old_storage_key != notice.storage_key:
+    if old_storage_key and old_storage_key != stored.storage_key:
         try:
             delete_stored_document(old_storage_key)
         except Exception:  # noqa: BLE001 - replacement has already committed
@@ -1323,7 +1365,7 @@ def upload_notice_file(
                 old_storage_key,
                 exc_info=True,
             )
-    refreshed = _reload_notice(session, notice.id)
+    refreshed = _reload_notice(session, notice_id)
     return _standalone_record(refreshed, visible_ids=visible_ids)
 
 

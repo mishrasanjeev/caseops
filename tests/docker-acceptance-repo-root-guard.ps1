@@ -63,7 +63,9 @@ const path = require("path");
 const args = process.argv.slice(2);
 fs.appendFileSync(
   process.env.CASEOPS_GUARD_LOG,
-  JSON.stringify({ cli: __filename, cwd: process.cwd(), args }) + "\n",
+  JSON.stringify({ cli: __filename, cwd: process.cwd(), args,
+    json: process.env.PLAYWRIGHT_JSON_OUTPUT_FILE,
+    junit: process.env.PLAYWRIGHT_JUNIT_OUTPUT_FILE }) + "\n",
 );
 if (args.includes("--list")) {
   const mode = process.env.CASEOPS_GUARD_MODE || "candidate";
@@ -73,7 +75,7 @@ if (args.includes("--list")) {
   const slash = (value) => value.split(path.sep).join("/");
   const rootDir = slash(path.join(mode === "foreign-root" ? foreign : candidate, "tests", "e2e"));
   const specFile = mode === "foreign-spec" ? "../../../foreign/tests/e2e/decoy.spec.ts" : "candidate.spec.ts";
-  process.stdout.write(JSON.stringify({
+  const listing = JSON.stringify({
     config: {
       configFile: mode === "foreign-config" ? path.join(foreign, "playwright.docker.config.ts") : config,
       rootDir,
@@ -86,7 +88,39 @@ if (args.includes("--list")) {
       suites: [],
     }],
     errors: mode === "load-error" ? [{ message: "spec failed to load" }] : [],
-  }));
+  });
+  const output = process.env.PLAYWRIGHT_JSON_OUTPUT_FILE ||
+    (process.env.PLAYWRIGHT_JSON_OUTPUT_NAME && path.resolve(
+      process.env.PLAYWRIGHT_JSON_OUTPUT_DIR || process.cwd(), process.env.PLAYWRIGHT_JSON_OUTPUT_NAME));
+  if (output) fs.writeFileSync(output, listing);
+  else process.stdout.write(listing);
+} else {
+  const mode = process.env.CASEOPS_GUARD_MODE || "candidate";
+  const report = {
+    suites: mode === "empty-execution" ? [] : [{ specs: [{ tests: [{
+      results: mode === "missing-result" ? [] : [{ status: "passed" }],
+    }] }] }],
+    errors: [],
+    stats: { expected: mode === "empty-execution" ? 0 : 1, unexpected: 0, skipped: 0, flaky: 0 },
+  };
+  if (mode === "unexpected-pass") {
+    report.stats.expected = 0;
+    report.stats.unexpected = 1;
+  }
+  if (mode === "interrupted-result" || mode === "invalid-result") {
+    report.suites[0].specs[0].tests[0].results[0].status =
+      mode === "interrupted-result" ? "interrupted" : "unknown";
+  }
+  if (mode !== "missing-json") {
+    fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE,
+      mode === "malformed-json" ? "{" : JSON.stringify(report));
+  }
+  if (mode !== "missing-xml") {
+    const cases = mode === "empty-execution" || mode === "inconsistent-count"
+      ? "" : '<testcase classname="candidate.spec.ts" name="candidate"/>';
+    fs.writeFileSync(process.env.PLAYWRIGHT_JUNIT_OUTPUT_FILE,
+      mode === "malformed-xml" ? "<testsuites>" : `<testsuites><testsuite>${cases}</testsuite></testsuites>`);
+  }
 }
 process.exit(Number(process.env.CASEOPS_GUARD_EXIT || 0));
 '@
@@ -97,7 +131,8 @@ process.exit(1);
 
 $GuardVariables = @(
     "CASEOPS_E2E_PYTHON", "CASEOPS_GUARD_LOG", "CASEOPS_GUARD_MODE",
-    "CASEOPS_GUARD_EXIT", "CASEOPS_GUARD_DECOY"
+    "CASEOPS_GUARD_EXIT", "CASEOPS_GUARD_DECOY", "PLAYWRIGHT_JSON_OUTPUT_FILE",
+    "PLAYWRIGHT_JUNIT_OUTPUT_FILE", "PLAYWRIGHT_JSON_OUTPUT_DIR", "PLAYWRIGHT_JSON_OUTPUT_NAME"
 )
 $SavedEnvironment = @{}
 foreach ($Name in $GuardVariables) {
@@ -139,6 +174,9 @@ try {
     [Environment]::SetEnvironmentVariable("CASEOPS_GUARD_LOG", $InvocationLog, "Process")
     [Environment]::SetEnvironmentVariable("CASEOPS_GUARD_DECOY", $DecoyMarker, "Process")
     [Environment]::SetEnvironmentVariable("CASEOPS_E2E_PYTHON", $CandidatePython, "Process")
+    foreach ($Name in @("PLAYWRIGHT_JSON_OUTPUT_FILE", "PLAYWRIGHT_JSON_OUTPUT_DIR", "PLAYWRIGHT_JSON_OUTPUT_NAME")) {
+        [Environment]::SetEnvironmentVariable($Name, $null, "Process")
+    }
 
     # Launch from the foreign checkout, as the 2026-09-28 run did.
     Push-Location -LiteralPath $Foreign
@@ -174,6 +212,77 @@ try {
         if (Test-Path -LiteralPath $DecoyMarker) { throw "The foreign Playwright CLI was executed." }
         $Cases++
 
+        [Environment]::SetEnvironmentVariable("PLAYWRIGHT_JSON_OUTPUT_FILE", "caller-json", "Process")
+        [Environment]::SetEnvironmentVariable("PLAYWRIGHT_JUNIT_OUTPUT_FILE", "caller-xml", "Process")
+        Invoke-CandidatePlaywright -Arguments @("--project=app-chromium", "--shard=2/2")
+        $BrowserInvocations = @(Get-Content -LiteralPath $InvocationLog |
+            ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.args -notcontains "--list" })
+        if ($BrowserInvocations.Count -ne 2 -or $BrowserInvocations[0].json -eq $BrowserInvocations[1].json) {
+            throw "Browser invocations did not retain unique report files."
+        }
+        foreach ($Invocation in $BrowserInvocations) {
+            if ($Invocation.args -notcontains "--reporter=list,json,junit") {
+                throw "The launcher omitted required structured reporters."
+            }
+            $Completion = Get-Content -LiteralPath ($Invocation.json -replace '\.json$', '.completion.json') -Raw |
+                ConvertFrom-Json
+            if ($Completion.event -ne "execution_finished" -or $Completion.tests -ne 1 -or $Completion.exit_code -ne 0) {
+                throw "The launcher did not retain successful nonempty completion."
+            }
+        }
+        if ($env:PLAYWRIGHT_JSON_OUTPUT_FILE -ne "caller-json" -or $env:PLAYWRIGHT_JUNIT_OUTPUT_FILE -ne "caller-xml") {
+            throw "The launcher did not restore the caller's reporter environment."
+        }
+        $Cases++
+        foreach ($Case in @(
+            @{ Mode = "missing-json"; Fragment = "missing report" },
+            @{ Mode = "missing-xml"; Fragment = "missing report" },
+            @{ Mode = "malformed-json"; Fragment = "JSON" },
+            @{ Mode = "malformed-xml"; Fragment = "invalid XML report" },
+            @{ Mode = "empty-execution"; Fragment = "empty or disagreeing" },
+            @{ Mode = "missing-result"; Fragment = "selected test has no result" },
+            @{ Mode = "interrupted-result"; Fragment = "invalid or interrupted" },
+            @{ Mode = "invalid-result"; Fragment = "invalid or interrupted" },
+            @{ Mode = "inconsistent-count"; Fragment = "empty or disagreeing" },
+            @{ Mode = "unexpected-pass"; Fragment = "exit zero disagrees" }
+        )) {
+            [Environment]::SetEnvironmentVariable("CASEOPS_GUARD_MODE", $Case.Mode, "Process")
+            Assert-Refused $Case.Fragment { Invoke-CandidatePlaywright -Arguments @("--project=app-mobile") }
+            $LastInvocation = Get-Content -LiteralPath $InvocationLog -Tail 1 | ConvertFrom-Json
+            if (Test-Path -LiteralPath ($LastInvocation.json -replace '\.json$', '.completion.json')) {
+                throw "An incomplete/invalid browser run was given a completion record."
+            }
+            if ($env:PLAYWRIGHT_JSON_OUTPUT_FILE -ne "caller-json" -or $env:PLAYWRIGHT_JUNIT_OUTPUT_FILE -ne "caller-xml") {
+                throw "A rejected invocation did not restore the reporter environment."
+            }
+        }
+        [Environment]::SetEnvironmentVariable("CASEOPS_GUARD_MODE", $null, "Process")
+        Assert-Refused "owns its structured" { Invoke-CandidatePlaywright -Arguments @("--reporter=list") }
+        [Environment]::SetEnvironmentVariable("CASEOPS_GUARD_EXIT", "7", "Process")
+        Invoke-CandidatePlaywright -Arguments @("--project=app-mobile")
+        if ($LASTEXITCODE -ne 7) { throw "The launcher discarded the browser process failure." }
+        $LastInvocation = Get-Content -LiteralPath $InvocationLog -Tail 1 | ConvertFrom-Json
+        $FailedCompletion = Get-Content -LiteralPath ($LastInvocation.json -replace '\.json$', '.completion.json') -Raw |
+            ConvertFrom-Json
+        if ($FailedCompletion.exit_code -ne 7) { throw "The failed process was recorded as successful." }
+        [Environment]::SetEnvironmentVariable("CASEOPS_GUARD_EXIT", $null, "Process")
+        $Cases++
+
+        $CallerReport = Join-Path $Work "caller-report.json"
+        [IO.File]::WriteAllText($CallerReport, "preserve caller evidence")
+        [Environment]::SetEnvironmentVariable("PLAYWRIGHT_JSON_OUTPUT_FILE", $CallerReport, "Process")
+        [Environment]::SetEnvironmentVariable("PLAYWRIGHT_JSON_OUTPUT_DIR", $Work, "Process")
+        [Environment]::SetEnvironmentVariable("PLAYWRIGHT_JSON_OUTPUT_NAME", "caller-name.json", "Process")
+        Assert-CandidatePlaywrightSuite -Arguments @()
+        if ([IO.File]::ReadAllText($CallerReport) -ne "preserve caller evidence" -or
+            (Test-Path -LiteralPath (Join-Path $Work "caller-name.json")) -or
+            $env:PLAYWRIGHT_JSON_OUTPUT_FILE -ne $CallerReport -or
+            $env:PLAYWRIGHT_JSON_OUTPUT_DIR -ne $Work -or
+            $env:PLAYWRIGHT_JSON_OUTPUT_NAME -ne "caller-name.json") {
+            throw "Discovery overwrote caller evidence or failed to restore report settings."
+        }
+        $Cases++
+
         foreach ($Case in @(
             @{ Mode = "foreign-config"; Fragment = "Playwright resolved config" },
             @{ Mode = "foreign-root"; Fragment = "test directory" },
@@ -183,6 +292,11 @@ try {
         )) {
             [Environment]::SetEnvironmentVariable("CASEOPS_GUARD_MODE", $Case.Mode, "Process")
             Assert-Refused $Case.Fragment { Assert-CandidatePlaywrightSuite -Arguments @() }
+            if ($env:PLAYWRIGHT_JSON_OUTPUT_FILE -ne $CallerReport -or
+                $env:PLAYWRIGHT_JSON_OUTPUT_DIR -ne $Work -or
+                $env:PLAYWRIGHT_JSON_OUTPUT_NAME -ne "caller-name.json") {
+                throw "Rejected discovery leaked reporter settings."
+            }
         }
         [Environment]::SetEnvironmentVariable("CASEOPS_GUARD_MODE", $null, "Process")
         [Environment]::SetEnvironmentVariable("CASEOPS_GUARD_EXIT", "1", "Process")
@@ -196,6 +310,9 @@ try {
         [Environment]::SetEnvironmentVariable("CASEOPS_E2E_PYTHON", $CandidatePython, "Process")
 
         # Without the candidate's own Playwright nothing may fall back to the decoy.
+        if (-not (Test-PathWithinRoot -Path $PlaywrightCli -Root $Work)) {
+            throw "The isolated CLI move escaped its test root."
+        }
         Move-Item -LiteralPath $PlaywrightCli -Destination "$PlaywrightCli.missing"
         Assert-Refused "not installed" { Assert-CandidatePlaywrightSuite -Arguments @() }
         Move-Item -LiteralPath "$PlaywrightCli.missing" -Destination $PlaywrightCli
@@ -221,6 +338,13 @@ finally {
     foreach ($Name in $GuardVariables) {
         [Environment]::SetEnvironmentVariable($Name, $SavedEnvironment[$Name], "Process")
     }
-    if (Test-Path -LiteralPath $Work) { Remove-Item -LiteralPath $Work -Recurse -Force }
+    if (Test-Path -LiteralPath $Work) {
+        $ResolvedWork = (Resolve-Path -LiteralPath $Work).Path
+        if (-not (Test-SamePath ([IO.Path]::GetDirectoryName($ResolvedWork)) ([IO.Path]::GetTempPath())) -or
+            [IO.Path]::GetFileName($ResolvedWork) -notmatch '^caseops-repo-root-guard-[a-f0-9]{32}$') {
+            throw "Refusing cleanup outside the isolated guard directory."
+        }
+        Remove-Item -LiteralPath $ResolvedWork -Recurse -Force
+    }
 }
 Write-Host "[docker-acceptance] repository-root guard: $Cases regression cases passed"

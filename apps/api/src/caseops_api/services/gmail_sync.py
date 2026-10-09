@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -33,6 +34,8 @@ from caseops_api.db.models import (
     CommunicationDirection,
     CommunicationStatus,
     CompanyMembership,
+    DocumentProcessingAction,
+    DocumentProcessingTargetType,
     MailboxAttachmentCandidate,
     MailboxAttachmentCandidateStatus,
     MailboxConnectionStatus,
@@ -42,6 +45,8 @@ from caseops_api.db.models import (
     MailboxWebhookEvent,
     MailboxWebhookStatus,
     Matter,
+    MatterActivity,
+    MatterAttachment,
     MatterNote,
     MatterTask,
     MatterTaskPriority,
@@ -70,6 +75,7 @@ from caseops_api.schemas.mailbox import (
     OutlookMailCandidateCreateRequest,
 )
 from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
     lock_company_memberships_for_oauth,
     require_locked_membership_capability,
 )
@@ -94,7 +100,17 @@ from caseops_api.services.idempotency import (
 from caseops_api.services.identity import get_session_context
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import require_operational_matter
+from caseops_api.services.matter_write_fence import (
+    lock_matter_private_authority,
+    require_read_only_upload_session,
+)
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.storage_governance import (
+    StorageQuotaExceeded,
+    assert_storage_quota_allows_upload,
+)
+
+logger = logging.getLogger(__name__)
 
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 _STATE_KIND = "gmail_mailbox_oauth"
@@ -1753,6 +1769,247 @@ def list_attachment_candidates(
     )
 
 
+def _attachment_review_snapshot(*rows: Any) -> tuple[Any, ...]:
+    # Include every persisted field: a relink, reject, reconnect or credential
+    # rotation must win over bytes fetched using an earlier review snapshot.
+    return tuple(
+        tuple(getattr(row, column.key) for column in row.__table__.columns) for row in rows
+    )
+
+
+def _admit_attachment_review(
+    session: Session,
+    *,
+    company_id: str,
+    actor_id: str,
+    token_issued_at: float | None,
+    candidate_id: str,
+    operational: bool,
+) -> tuple[
+    SessionContext,
+    Matter,
+    MailboxAttachmentCandidate,
+    UserMailboxConnection,
+    GmailRuntimeConfig,
+    tuple[Any, ...],
+]:
+    with session.no_autoflush:
+        lock_matter_private_authority(session, company_id=company_id)
+        candidate = session.scalar(
+            select(MailboxAttachmentCandidate)
+            .where(
+                MailboxAttachmentCandidate.id == candidate_id,
+                MailboxAttachmentCandidate.company_id == company_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        message = (
+            session.get(MailboxMessageImport, candidate.message_import_id, populate_existing=True)
+            if candidate is not None
+            else None
+        )
+        connection = (
+            session.get(
+                UserMailboxConnection, message.mailbox_connection_id, populate_existing=True
+            )
+            if message is not None
+            else None
+        )
+        if (
+            candidate is None
+            or message is None
+            or connection is None
+            or message.company_id != company_id
+            or connection.company_id != company_id
+            or connection.provider != MailboxProvider.GMAIL
+        ):
+            raise HTTPException(status_code=404, detail="Mailbox attachment candidate not found.")
+        owner_id, matter_id = connection.membership_id, candidate.matter_id
+        actors = lock_company_memberships_for_assignment(
+            session,
+            company_id=company_id,
+            membership_ids={actor_id, owner_id},
+            no_key_update=True,
+        )
+        if actor_id not in actors or owner_id not in actors:
+            raise HTTPException(status_code=403, detail="The current session is no longer active.")
+        context = get_session_context(session, actor_id, token_issued_at=token_issued_at)
+        require_locked_membership_capability(session, actors[actor_id], "calendar:sync")
+        get_session_context(session, owner_id)
+        if matter_id is None:
+            raise HTTPException(status_code=409, detail="Candidate is not linked to a matter.")
+        matter = session.scalar(
+            select(Matter)
+            .where(Matter.id == matter_id, Matter.company_id == company_id)
+            .with_for_update(of=Matter)
+            .execution_options(populate_existing=True)
+        )
+        if matter is None:
+            raise HTTPException(status_code=404, detail="Matter not found.")
+        assert_access(session, context=context, matter=matter, commit_denial=False)
+        if operational:
+            matter = require_operational_matter(
+                session,
+                matter=matter,
+                operation="import a Gmail attachment",
+            )
+        configuration = session.scalar(
+            select(TenantGoogleWorkspaceConfiguration)
+            .where(TenantGoogleWorkspaceConfiguration.company_id == company_id)
+            .with_for_update(of=TenantGoogleWorkspaceConfiguration)
+            .execution_options(populate_existing=True)
+        )
+        runtime = _gmail_runtime_config(session, context=context)
+        config_snapshot = (
+            runtime,
+            configuration.id if configuration else None,
+            configuration.updated_at if configuration else None,
+        )
+        connection = session.scalar(
+            select(UserMailboxConnection)
+            .where(UserMailboxConnection.id == connection.id)
+            .with_for_update(of=UserMailboxConnection)
+            .execution_options(populate_existing=True)
+        )
+        message = session.scalar(
+            select(MailboxMessageImport)
+            .where(MailboxMessageImport.id == message.id)
+            .with_for_update(of=MailboxMessageImport)
+            .execution_options(populate_existing=True)
+        )
+        candidate = session.scalar(
+            select(MailboxAttachmentCandidate)
+            .where(MailboxAttachmentCandidate.id == candidate_id)
+            .with_for_update(of=MailboxAttachmentCandidate)
+            .execution_options(populate_existing=True)
+        )
+        if (
+            connection is None
+            or message is None
+            or candidate is None
+            or connection.company_id != company_id
+            or connection.membership_id != owner_id
+            or connection.provider != MailboxProvider.GMAIL
+            or message.company_id != company_id
+            or candidate.company_id != company_id
+            or message.mailbox_connection_id != connection.id
+            or candidate.message_import_id != message.id
+            or candidate.matter_id != matter_id
+            or message.matter_id != matter_id
+        ):
+            raise HTTPException(status_code=409, detail="Mailbox attachment review changed.")
+        if operational and (
+            connection.status != MailboxConnectionStatus.CONNECTED
+            or not connection.encrypted_token_ref
+            or not set(GMAIL_SCOPES).issubset(connection.scopes_json or [])
+        ):
+            raise HTTPException(
+                status_code=409, detail="Gmail is not connected. Reconnect this account."
+            )
+        snapshot = (
+            matter.lifecycle_version,
+            config_snapshot,
+            _attachment_review_snapshot(candidate, message, connection),
+        )
+        return context, matter, candidate, connection, runtime, snapshot
+
+
+def _refresh_attachment_access_token(
+    *,
+    runtime: GmailRuntimeConfig,
+    token_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Refresh from the captured tenant configuration without a database session."""
+    import httpx
+
+    if not runtime.configured:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google Workspace OAuth configuration is incomplete."
+        )
+    refresh_token = token_payload.get("refresh_token")
+    if not isinstance(refresh_token, str) or not refresh_token:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google authorization must be renewed. Reconnect this account.",
+            reauthorization_required=True,
+        )
+    try:
+        response = httpx.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": runtime.client_id,
+                "client_secret": runtime.client_secret,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            },
+            timeout=15,
+        )
+    except httpx.HTTPError as exc:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google token refresh is temporarily unavailable. Try again shortly."
+        ) from exc
+    if response.status_code in {400, 401}:
+        try:
+            returned = response.json()
+        except ValueError:
+            returned = None
+        if isinstance(returned, dict) and returned.get("error") == "invalid_grant":
+            raise GoogleWorkspaceTokenRefreshError(
+                "Google authorization expired or was revoked. Reconnect this account.",
+                reauthorization_required=True,
+            )
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google rejected token refresh. Check the tenant's Google Workspace setup."
+        )
+    if response.status_code == 429 or response.status_code >= 500:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google token refresh is temporarily unavailable. Try again shortly."
+        )
+    if response.is_error:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google token refresh could not be completed. "
+            "Check the tenant's Google Workspace setup."
+        )
+    try:
+        returned = response.json()
+    except ValueError as exc:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google returned an invalid token refresh response."
+        ) from exc
+    if (
+        not isinstance(returned, dict)
+        or not isinstance(returned.get("access_token"), str)
+        or not returned["access_token"]
+    ):
+        raise GoogleWorkspaceTokenRefreshError("Google did not return a refreshed access token.")
+    refreshed = {**token_payload, **returned}
+    if not returned.get("refresh_token"):
+        refreshed["refresh_token"] = refresh_token
+    try:
+        _oauth_token_scopes(refreshed)
+    except GmailProviderError as exc:
+        raise GoogleWorkspaceTokenRefreshError(
+            "Google returned an invalid token refresh response."
+        ) from exc
+    return refreshed
+
+
+def _imported_attachment_review_response(
+    session: Session,
+    candidate: MailboxAttachmentCandidate,
+) -> MailboxAttachmentCandidateReviewResponse:
+    attachment = (
+        session.get(MatterAttachment, candidate.imported_attachment_id)
+        if candidate.imported_attachment_id
+        else None
+    )
+    if attachment is None or attachment.matter_id != candidate.matter_id:
+        raise HTTPException(status_code=409, detail="The imported Gmail attachment is unavailable.")
+    return MailboxAttachmentCandidateReviewResponse(
+        candidate=_attachment_record(candidate),
+        imported_attachment_id=attachment.id,
+    )
+
+
 def review_attachment_candidate(
     session: Session,
     *,
@@ -1760,27 +2017,36 @@ def review_attachment_candidate(
     candidate_id: str,
     payload: MailboxAttachmentCandidateReviewRequest,
 ) -> MailboxAttachmentCandidateReviewResponse:
-    candidate = session.scalar(
-        select(MailboxAttachmentCandidate)
-        .options(
-            joinedload(MailboxAttachmentCandidate.message_import).joinedload(
-                MailboxMessageImport.connection
-            )
-        )
-        .where(
-            MailboxAttachmentCandidate.id == candidate_id,
-            MailboxAttachmentCandidate.company_id == context.company.id,
-        )
+    from caseops_api.services.communications import _persist_inbound_attachment
+    from caseops_api.services.document_jobs import enqueue_processing_job
+    from caseops_api.services.document_storage import delete_stored_document
+
+    require_read_only_upload_session(
+        session,
+        detail="Gmail attachment review requires a read-only session before upload.",
     )
-    if candidate is None:
-        raise HTTPException(status_code=404, detail="Mailbox attachment candidate not found.")
-    if candidate.matter_id is None:
-        raise HTTPException(status_code=409, detail="Candidate is not linked to a matter.")
-    matter = session.get(Matter, candidate.matter_id)
-    if matter is None:
-        raise HTTPException(status_code=404, detail="Matter not found.")
-    assert_access(session, context=context, matter=matter)
+    company_id, actor_id, token_issued_at = (
+        context.company.id,
+        context.membership.id,
+        context.token_issued_at,
+    )
+
+    def admit():
+        return _admit_attachment_review(
+            session,
+            company_id=company_id,
+            actor_id=actor_id,
+            token_issued_at=token_issued_at,
+            candidate_id=candidate_id,
+            operational=payload.action != "reject",
+        )
+
+    context, matter, candidate, connection, runtime, snapshot = admit()
     if payload.action == "reject":
+        if candidate.status == MailboxAttachmentCandidateStatus.APPROVED_IMPORTED:
+            raise HTTPException(
+                status_code=409, detail="This Gmail attachment was already imported."
+            )
         candidate.status = MailboxAttachmentCandidateStatus.REJECTED
         session.add(candidate)
         record_from_context(
@@ -1792,171 +2058,192 @@ def review_attachment_candidate(
             matter_id=matter.id,
             metadata={"provider": MailboxProvider.GMAIL},
         )
+        session.flush()
+        result = MailboxAttachmentCandidateReviewResponse(candidate=_attachment_record(candidate))
         session.commit()
-        return MailboxAttachmentCandidateReviewResponse(
-            candidate=_attachment_record(candidate),
-        )
+        return result
     if candidate.status == MailboxAttachmentCandidateStatus.APPROVED_IMPORTED:
-        return MailboxAttachmentCandidateReviewResponse(
-            candidate=_attachment_record(candidate),
-            imported_attachment_id=candidate.imported_attachment_id,
-        )
-    matter = require_operational_matter(
-        session,
-        matter=matter,
-        operation="import a Gmail attachment",
-        lock_for_write=False,
-    )
-    connection = candidate.message_import.connection
+        result = _imported_attachment_review_response(session, candidate)
+        session.rollback()
+        return result
     provider_attachment_id = _decrypt_secret_safe(candidate.encrypted_provider_attachment_ref)
     if not provider_attachment_id:
         raise HTTPException(status_code=409, detail="Provider attachment reference is missing.")
+    matter_id = matter.id
+    message_id = candidate.message_import.provider_message_id
+    filename, content_type = candidate.filename or "gmail-attachment", candidate.content_type
+    token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+    original_token = dict(token_payload)
+    provider = _gmail_provider_override or GoogleGmailProvider(runtime)
+    if not runtime.configured or not provider.configured:
+        raise HTTPException(status_code=503, detail="Gmail OAuth is not configured.")
+    session.rollback()
+    attachment = None
+    commit_attempted = False
+
+    def discard_staged():
+        if attachment is not None:
+            try:
+                delete_stored_document(attachment.storage_key)
+            except Exception:
+                logger.exception("gmail_attachment.staged_cleanup_failed")
+
     try:
-        _token_payload, content = _gmail_call_with_refresh(
-            session,
-            context=context,
-            connection=connection,
-            operation=lambda provider, token: provider.fetch_attachment(
-                token_payload=token,
-                message_id=candidate.message_import.provider_message_id,
+        try:
+            content = provider.fetch_attachment(
+                token_payload=token_payload,
+                message_id=message_id,
                 attachment_id=provider_attachment_id,
-            ),
+            )
+        except GmailProviderError as exc:
+            if exc.status_code != 401:
+                raise
+            refreshed = _refresh_attachment_access_token(
+                runtime=runtime, token_payload=token_payload
+            )
+            token_payload.update(refreshed)
+            try:
+                content = provider.fetch_attachment(
+                    token_payload=token_payload,
+                    message_id=message_id,
+                    attachment_id=provider_attachment_id,
+                )
+            except GmailProviderError as retry_error:
+                if retry_error.status_code == 401:
+                    raise GoogleWorkspaceTokenRefreshError(
+                        "Gmail authorization could not be renewed. Reconnect this account.",
+                        reauthorization_required=True,
+                    ) from retry_error
+                raise
+        attachment = _persist_inbound_attachment(
+            session,
+            company_id=company_id,
+            matter_id=matter_id,
+            actor_id=actor_id,
+            staged_size_bytes=0,
+            filename=filename,
+            content_type=content_type,
+            stream=BytesIO(content),
         )
-    except GoogleWorkspaceTokenRefreshError as exc:
-        if exc.reauthorization_required:
+        context, matter, candidate, connection, _, current = admit()
+        if candidate.status == MailboxAttachmentCandidateStatus.APPROVED_IMPORTED:
+            result = _imported_attachment_review_response(session, candidate)
+            session.rollback()
+            discard_staged()
+            return result
+        if current != snapshot:
+            raise HTTPException(
+                status_code=409,
+                detail="Mailbox attachment review changed. Reload it.",
+            )
+        assert_storage_quota_allows_upload(
+            session,
+            company_id=company_id,
+            matter_id=matter_id,
+            incoming_size_bytes=attachment.size_bytes,
+        )
+        if token_payload != original_token:
+            connection.encrypted_token_ref = _encrypt_token_payload(token_payload)
+        session.add(attachment)
+        session.flush()
+        enqueue_processing_job(
+            session,
+            company_id=company_id,
+            requested_by_membership_id=actor_id,
+            target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
+            attachment_id=attachment.id,
+            action=DocumentProcessingAction.INITIAL_INDEX,
+        )
+        session.add(
+            MatterActivity(
+                matter_id=matter_id,
+                actor_membership_id=actor_id,
+                event_type="inbound_email_attachment_added",
+                title="Gmail attachment imported",
+                detail=f"{attachment.original_filename} queued for document processing.",
+            )
+        )
+        candidate.status = MailboxAttachmentCandidateStatus.APPROVED_IMPORTED
+        candidate.imported_attachment_id = attachment.id
+        candidate.last_error_redacted = None
+        record_from_context(
+            session,
+            context,
+            action="mailbox.gmail_attachment.imported",
+            target_type="mailbox_attachment_candidate",
+            target_id=candidate_id,
+            matter_id=matter_id,
+            metadata={
+                "provider": MailboxProvider.GMAIL,
+                "attachment_id": redact_identifier(attachment.id),
+            },
+        )
+        session.flush()
+        result = MailboxAttachmentCandidateReviewResponse(
+            candidate=_attachment_record(candidate),
+            imported_attachment_id=attachment.id,
+        )
+        commit_attempted = True
+        session.commit()
+        return result
+    except Exception as exc:
+        session.rollback()
+        # An acknowledgement failure is not proof that the database rolled back.
+        if commit_attempted:
+            raise
+        discard_staged()
+        if isinstance(exc, StorageQuotaExceeded):
+            raise exc.to_http_exception() from exc
+        if isinstance(exc, HTTPException):
+            raise
+        try:
+            context, matter, candidate, connection, _, current = admit()
+        except Exception:
+            session.rollback()
+            raise
+        if current != snapshot:
+            session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Mailbox attachment review changed. Reload it.",
+            ) from exc
+        reconnect = (
+            isinstance(exc, GoogleWorkspaceTokenRefreshError) and exc.reauthorization_required
+        )
+        if reconnect:
             connection.status = MailboxConnectionStatus.ERROR
-        candidate.last_error_redacted = str(exc)
-        session.add_all([connection, candidate])
+        if token_payload != original_token:
+            connection.encrypted_token_ref = _encrypt_token_payload(token_payload)
+        failure_detail = (
+            str(exc)
+            if isinstance(exc, GoogleWorkspaceTokenRefreshError)
+            else "Gmail attachment is temporarily unavailable. Try again."
+        )
+        candidate.last_error_redacted = failure_detail
         record_from_context(
             session,
             context,
             action="mailbox.gmail_attachment.import_failed",
             target_type="mailbox_attachment_candidate",
-            target_id=candidate.id,
-            matter_id=matter.id,
+            target_id=candidate_id,
+            matter_id=matter_id,
             result="failed",
             metadata={
                 "provider": MailboxProvider.GMAIL,
-                "reason": (
-                    "reauthorization_required"
-                    if exc.reauthorization_required
-                    else "token_refresh_unavailable"
-                ),
+                "reason": "reauthorization_required" if reconnect else "provider_unavailable",
             },
         )
         session.commit()
         raise HTTPException(
             status_code=(
-                status.HTTP_409_CONFLICT
-                if exc.reauthorization_required
-                else status.HTTP_503_SERVICE_UNAVAILABLE
+                409
+                if reconnect
+                else 503
+                if isinstance(exc, GoogleWorkspaceTokenRefreshError)
+                else 502
             ),
-            detail=str(exc),
+            detail=failure_detail,
         ) from exc
-    except GmailProviderError as exc:
-        candidate.last_error_redacted = "Gmail attachment is temporarily unavailable. Try again."
-        session.add(candidate)
-        record_from_context(
-            session,
-            context,
-            action="mailbox.gmail_attachment.import_failed",
-            target_type="mailbox_attachment_candidate",
-            target_id=candidate.id,
-            matter_id=matter.id,
-            result="failed",
-            metadata={
-                "provider": MailboxProvider.GMAIL,
-                "reason": "provider_unavailable",
-                "status_code": exc.status_code,
-            },
-        )
-        session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Gmail attachment import could not complete. Try again shortly.",
-        ) from exc
-    except Exception as exc:
-        candidate.last_error_redacted = _safe_error(exc)
-        session.add(candidate)
-        record_from_context(
-            session,
-            context,
-            action="mailbox.gmail_attachment.import_failed",
-            target_type="mailbox_attachment_candidate",
-            target_id=candidate.id,
-            matter_id=matter.id,
-            result="failed",
-            metadata={
-                "provider": MailboxProvider.GMAIL,
-                "error": candidate.last_error_redacted,
-            },
-        )
-        session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Gmail attachment import failed.",
-        ) from exc
-
-    # A provider fetch can outlive a concurrent lifecycle transition. Reload
-    # and lock before any attachment bytes, jobs, or audit rows are persisted.
-    matter = require_operational_matter(
-        session,
-        matter=matter,
-        operation="import a Gmail attachment",
-    )
-    try:
-        from caseops_api.services.communications import _persist_inbound_attachment
-
-        attachment, _job_id, _storage_key = _persist_inbound_attachment(
-            session,
-            context=context,
-            matter=matter,
-            filename=candidate.filename or "gmail-attachment",
-            content_type=candidate.content_type,
-            stream=BytesIO(content),
-        )
-    except Exception as exc:
-        candidate.last_error_redacted = _safe_error(exc)
-        session.add(candidate)
-        record_from_context(
-            session,
-            context,
-            action="mailbox.gmail_attachment.import_failed",
-            target_type="mailbox_attachment_candidate",
-            target_id=candidate.id,
-            matter_id=matter.id,
-            result="failed",
-            metadata={
-                "provider": MailboxProvider.GMAIL,
-                "error": candidate.last_error_redacted,
-            },
-        )
-        session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Gmail attachment import failed.",
-        ) from exc
-    candidate.status = MailboxAttachmentCandidateStatus.APPROVED_IMPORTED
-    candidate.imported_attachment_id = attachment.id
-    candidate.last_error_redacted = None
-    session.add(candidate)
-    record_from_context(
-        session,
-        context,
-        action="mailbox.gmail_attachment.imported",
-        target_type="mailbox_attachment_candidate",
-        target_id=candidate.id,
-        matter_id=matter.id,
-        metadata={
-            "provider": MailboxProvider.GMAIL,
-            "attachment_id": redact_identifier(attachment.id),
-        },
-    )
-    session.commit()
-    return MailboxAttachmentCandidateReviewResponse(
-        candidate=_attachment_record(candidate),
-        imported_attachment_id=attachment.id,
-    )
 
 
 def start_gmail_watch(

@@ -1,5 +1,58 @@
 # CaseOps agent instructions
 
+- A Docker browser process exit cannot certify execution by itself. Retain
+  unique JSON/JUnit reports and a reconciled nonempty completion for every
+  serialized shard, then compare their identities and classified outcomes
+  with discovery. Missing or interrupted reports remain incomplete. Isolate
+  discovery from inherited reporter output variables and restore them even
+  after rejection so an inventory cannot overwrite prior execution evidence.
+- Upload admission must release database transactions before scanning/object
+  storage, then recheck current tenant, actor, token cutoff, capability, quota,
+  parent lifecycle and references before publishing. Keep the object transient
+  until admission and compensate rejected storage only after rollback. Company
+  quota serialization must allow unrelated audit FK KEY SHARE while excluding
+  concurrent quota writers; prove the real employee/upload overlap and exact
+  one-winner quota admission on PostgreSQL, not only generated lock SQL.
+  Compare the captured lifecycle version after I/O, not only current status:
+  a dispose/reopen cycle must reject the old request while a fresh upload into
+  the explicitly reopened engagement remains allowed.
+- A permission predicate can evaluate to SQL NULL when an optional assignee
+  is absent. Hidden-child checks must require explicit TRUE for visibility,
+  not negate a nullable predicate. Regress restricted unassigned records on
+  list/detail/download/update/upload alongside authorized owner controls.
+- Upload cleanup must distinguish rejected pre-commit admission from an
+  uncertain commit response. After commit is attempted, retain object bytes
+  unless authoritative evidence proves no durable record references them;
+  never delete a committed document or automatically retry its mutation.
+- A service releasing its request transaction for upload I/O must not discard
+  caller-owned writes. ORM new/dirty/deleted checks miss already-flushed and
+  Core SQL writes. Verify read-only ownership without assigning a transaction
+  ID, reject before transport and preserve the caller's transaction. Regress
+  both direct read-only HTTP admission and pending/flushed/Core-write rejection.
+- Shared storage quota must count every retained IP document version once,
+  including superseded and terminal history. Links do not allocate extra
+  bytes; lifecycle or visibility filters must not erase physical storage.
+  Prove exact historical accounting and concurrent one-winner admission.
+- A destructive migration regression must use the independently fresh
+  migration fixture, not require its file to run first on a shared database.
+  Prove both orders beside real preceding fixtures, retain the exact expected
+  preservation guard and downgrade/recovery assertions, and leave the source
+  database untouched. Reordering a green run is not test isolation.
+- A Git change gate comparing base...HEAD must run after the candidate is
+  committed. A pre-commit green result does not cover dirty or untracked
+  changes. Re-run governance and migration diff gates on the exact candidate
+  before publication; preserve a superseded interrupted acceptance as incomplete.
+
+- Projection currentness must hash exactly the same canonical text as the
+  writer. Regress repeated spaces, CRLF, tabs and Unicode whitespace across
+  all metadata source types through two rebuilds and retrieval. A valid
+  generation manifest alone does not prove canonical-source equivalence;
+  preserve exact source-version, access and tombstone fences for saved output.
+- A Company-first source fix is not a complete lock-order proof when a later
+  event FK or actor check can wait on Membership. Force same-actor overlap
+  between background and interactive writers in both acquisition orders;
+  retain non-null provenance, authorization locks and post-I/O lifecycle checks.
+
 - An immediate post-upload source save must survive background extraction.
   ORM autoflush before a SELECT can lock the source before tenant authority.
   Acquire the shared tenant fence with autoflush suppressed after extraction
@@ -55,6 +108,8 @@
   characters as diagnoses. An interrupted run without a completion event is
   incomplete, and prior failures remain open until their full details and the
   complete replacement inventory are reconciled. Never overwrite failed evidence.
+  API coverage shards are not exempt: archive each shard's unique selected-file
+  inventory, incremental journal and JUnit report alongside its coverage data.
 
 - Isolated PostgreSQL HTTP fixtures may clone only a separately migrated,
   connection-disabled test template, never the shared application database or
@@ -1415,6 +1470,66 @@ requirements when using the fallback.
   committed branch history, so uncommitted map edits cannot satisfy it. A
   governance-note edit must render and validate both the Markdown map and
   generated data-class projection before freezing a Docker candidate.
+- Race diagnostics must live outside the upload/storage root whose contents a
+  test asserts. Exercise the harness with its evidence-directory override unset
+  as well as configured; never ignore unexpected files or weaken atomic cleanup
+  assertions to accommodate a journal created by the test itself.
+- A lock-order regression must identify the actual PostgreSQL lock owner.
+  Tenant-first lifecycle admission legitimately holds Company while OAuth backs
+  off; prove the callback has rolled back with independent backend/activity and
+  lock observations, then prove disposal and callback complete. An observer must
+  not borrow the callback's named pooled connection and misattribute its own
+  transaction to OAuth.
+- Finish static, governance, security and complete affected-file gates before
+  freezing a full Docker candidate. Preserve interrupted runs as incomplete.
+  A retained-fixture browser branch must repeat every new revocation assertion
+  from the fresh branch, and its release-contract inventory must change with it.
+- Changing a private upload helper's signature, return value or transaction
+  ownership is a caller contract change. Inventory every production caller and
+  rerun its complete workflow tests, including Gmail reviewed attachments; a
+  passing inbound-email suite cannot certify a caller omitted from that suite.
+  Every upload that rolls back before I/O must first reject new, dirty, deleted,
+  flushed/Core-written or nested caller transactions without discarding them.
+  Prove the caller can still commit its original work after the rejection.
+  Maintain a fast complete caller-contract inventory beside workflow tests:
+  reviewed Drive imports share this helper too. A known broken adjacent caller
+  cannot be deferred as out of scope while releasing that helper change.
+- Connector review actions must serialize against the same freshly locked
+  candidate as content admission. A completed import cannot be reset by a
+  stale ignore, retry or metadata-link writer. Prove both overlap orders and
+  keep metadata review available without live provider consent where allowed.
+  Provider downloads must enforce the smaller tenant and server byte limits
+  while streaming, plus one total deadline across refresh and replay; a later
+  storage-size rejection cannot protect an earlier unbounded allocation.
+- A page LIMIT does not bound correlated authorization work when the planner
+  filters a whole tenant before sorting. Preserve ACL-before-pagination and
+  selective matches beyond the first page; prove actual row/loop and buffer work
+  under stale statistics and custom/generic plans beside the unchanged deadline.
+  A passing elapsed-time sample or bounded SQL statement count is insufficient.
+  Bound inner identity lookups too: an ordered outer barrier can still repeat
+  a company-only scan thousands of times. Retain the hosted counterexample and
+  prove examined rows, not merely outer loops or one favorable local plan.
+- Bound the outer ordered parent scan as well as each inner identity lookup.
+  A wide family subquery can scan and sort 10,001 tenant rows under generic
+  stale statistics even when docket probes are bounded. Keep ordered keys
+  narrow, hydrate only the authorized page, and regress mixed-tenant fresh
+  imports with actual family/docket work and buffers for custom/generic plans.
+  Preserve late selective matches and all ACL predicates; do not cap raw
+  candidates, add a duplicate index, or relax a budget to hide the plan.
+- A unique authorization result does not bound its executor work. Retained
+  grants and stale statistics can choose a global active-grant bitmap or scan
+  thousands of one member's grants for each docket. Regress the full shared
+  IP policy against retained foreign imports, preserve member/team windows
+  and wall precedence, and bound all plan nodes, not only family/docket rows.
+  A scoped green replay is superseded by a later retained-data counterexample.
+  A unique active-key seek must reject a nonmatching successor before applying
+  its window; prove present wrong-subject/target successors for grants and
+  walls, both membership and team, beside exact-pair positive controls.
+- A clean or fresh SQLAlchemy Session can still be bound to a Connection whose
+  transaction belongs to its caller. Reject that boundary before querying or
+  rolling back, including savepoint and control-fully join modes. Prove the
+  external transaction and Session state remain unchanged and caller work can
+  commit; a nonassigning PostgreSQL xid probe alone cannot identify ownership.
 - A Cloud Run request timestamp plus its latency can identify a request that
   waited for a new scanner-gated API instance. Correlate the instance startup
   logs before calling a missing browser row a data or permission defect. Keep

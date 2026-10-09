@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import BinaryIO, Literal
+from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_, select
@@ -20,6 +22,7 @@ from caseops_api.db.models import (
     IpDocumentTaxonomyAlias,
     IpDocumentTaxonomyEntry,
     IpDocumentVersion,
+    Matter,
     utcnow,
 )
 from caseops_api.schemas.ip_documents import (
@@ -55,6 +58,7 @@ from caseops_api.services.document_jobs import (
     load_latest_processing_jobs,
 )
 from caseops_api.services.document_storage import (
+    StoredDocument,
     delete_stored_document,
     persist_workspace_attachment,
 )
@@ -68,11 +72,21 @@ from caseops_api.services.ip_domain_policy import (
     IP_DOCUMENT_CHILD_TARGET_MODELS,
     disclosable_ip_document_ids,
 )
-from caseops_api.services.ip_operations import _docket_or_404
+from caseops_api.services.ip_operations import (
+    _docket_or_404,
+    _lock_ip_dockets_in_stable_order,
+    _lock_ip_writer_context,
+)
 from caseops_api.services.matter_access import visible_ip_dockets_filter
+from caseops_api.services.matter_write_fence import require_read_only_upload_session
 from caseops_api.services.session_context import SessionContext
-from caseops_api.services.storage_governance import assert_storage_quota_allows_upload
+from caseops_api.services.storage_governance import (
+    StorageQuotaExceeded,
+    assert_storage_quota_allows_upload,
+)
 from caseops_api.services.virus_scan import reject_if_infected
+
+logger = logging.getLogger(__name__)
 
 
 def _propagate_private_document_change(
@@ -692,6 +706,7 @@ def _preview_persisted_document_name(
     company_id: str,
     payload: IpDocumentNamingPreviewRequest,
     conflict_seed: str,
+    allocator_locked: bool = False,
     excluded_version_id: str | None = None,
     reserved_names: tuple[str, ...] = (),
 ) -> IpDocumentNamingPreviewResponse:
@@ -704,7 +719,8 @@ def _preview_persisted_document_name(
     naming service; unrelated document history is never loaded.
     """
 
-    _lock_document_name_allocator(session, company_id=company_id)
+    if not allocator_locked:
+        _lock_document_name_allocator(session, company_id=company_id)
     reserved = {name.casefold() for name in reserved_names}
 
     def name_is_taken(candidate: str) -> bool:
@@ -766,6 +782,168 @@ def _create_link(
     return row
 
 
+def _require_clean_upload_session(session: Session) -> None:
+    # Both HTTP callers enter from read-only authentication/metadata parsing.
+    # Never commit or silently discard a caller's pending work to release I/O.
+    error = "IP upload requires a request-owned read-only transaction without pending writes."
+    try:
+        require_read_only_upload_session(session, detail=error)
+    except HTTPException as exc:
+        raise RuntimeError(error) from exc
+
+
+def _discard_ip_upload(storage_key: str) -> None:
+    try:
+        delete_stored_document(storage_key)
+    except Exception:
+        logger.exception("Could not remove unpublished IP upload %s", storage_key)
+
+
+def _store_ip_upload(
+    session: Session,
+    *,
+    company_id: str,
+    document_id: str,
+    version_id: str,
+    filename: str,
+    stream: BinaryIO,
+) -> StoredDocument:
+    session.rollback()
+
+    def preflight_quota(size: int) -> None:
+        try:
+            assert_storage_quota_allows_upload(
+                session, company_id=company_id, matter_id=None, incoming_size_bytes=size
+            )
+        except StorageQuotaExceeded as exc:
+            raise exc.to_http_exception() from exc
+        finally:
+            # Advisory only: final quota admission repeats after external I/O.
+            session.rollback()
+
+    return persist_workspace_attachment(
+        company_id=company_id,
+        workspace_id=document_id,
+        attachment_id=version_id,
+        filename=filename,
+        stream=stream,
+        namespace="ip-documents",
+        before_store=preflight_quota,
+        validate_temp_file=lambda path: reject_if_infected(path, filename=filename),
+    )
+
+
+def _admit_ip_upload(
+    session: Session, *, context: SessionContext, company_id: str, size_bytes: int
+) -> SessionContext:
+    from caseops_api.services.identity import get_session_context
+
+    with session.no_autoflush:
+        # This Company NO KEY UPDATE lock also serializes tenant naming. Do not
+        # upgrade it after actors: unrelated Company FK checks must stay compatible.
+        try:
+            assert_storage_quota_allows_upload(
+                session, company_id=company_id, matter_id=None, incoming_size_bytes=size_bytes
+            )
+        except StorageQuotaExceeded as exc:
+            raise exc.to_http_exception() from exc
+        token_issued_at = context.token_issued_at
+        context = _lock_ip_writer_context(
+            session, context=context, required_capability="documents:upload"
+        )
+        context = get_session_context(
+            session, context.membership.id, token_issued_at=token_issued_at
+        )
+        _require_document_capability(session, context=context, capability="ip:write")
+    return context
+
+
+def _upload_target_lifecycles(
+    session: Session, *, company_id: str, targets: list[IpDocumentLinkTarget]
+) -> dict[tuple[str, str], tuple[str, int, str | None, int | None]]:
+    discovered = {
+        (target.target_type, target.target_id): _target_docket_id(
+            session, company_id=company_id, target=target
+        )
+        for target in targets
+    }
+    states = {
+        row.id: (row.id, row.lifecycle_version, row.matter_id, row.matter_lifecycle_version)
+        for row in session.execute(
+            select(
+                IpDocketRecord.id,
+                IpDocketRecord.lifecycle_version,
+                IpDocketRecord.matter_id,
+                Matter.lifecycle_version.label("matter_lifecycle_version"),
+            )
+            .outerjoin(
+                Matter, (Matter.id == IpDocketRecord.matter_id) & (Matter.company_id == company_id)
+            )
+            .where(
+                IpDocketRecord.company_id == company_id,
+                IpDocketRecord.id.in_(set(discovered.values())),
+            )
+        )
+    }
+    if set(states) != set(discovered.values()):
+        raise HTTPException(status_code=404, detail="IP docket record not found.")
+    return {target: states[docket_id] for target, docket_id in discovered.items()}
+
+
+def _upload_document_targets(
+    session: Session, *, company_id: str, document_id: str
+) -> list[IpDocumentLinkTarget]:
+    return [
+        IpDocumentLinkTarget(target_type=row.target_type, target_id=row.target_id)
+        for row in session.scalars(
+            select(IpDocumentLink).where(
+                IpDocumentLink.company_id == company_id,
+                IpDocumentLink.document_id == document_id,
+            )
+        )
+    ]
+
+
+def _lock_upload_targets(
+    session: Session,
+    *,
+    context: SessionContext,
+    targets: list[IpDocumentLinkTarget],
+    expected_lifecycles: dict[tuple[str, str], tuple[str, int, str | None, int | None]],
+) -> None:
+    discovered = {
+        (target.target_type, target.target_id): _target_docket_id(
+            session, company_id=context.company.id, target=target
+        )
+        for target in targets
+    }
+    _lock_ip_dockets_in_stable_order(
+        session,
+        context=context,
+        docket_ids=set(discovered.values()),
+        required_capability="documents:upload",
+    )
+    for (target_type, target_id), docket_id in sorted(discovered.items()):
+        if target_type == "docket":
+            continue
+        model = _TARGET_MODELS[target_type]
+        row = session.scalar(
+            select(model)
+            .where(model.id == target_id, model.company_id == context.company.id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        )
+        if row is None or row.docket_id != docket_id:
+            raise HTTPException(status_code=409, detail="IP document link target changed.")
+    if (
+        _upload_target_lifecycles(session, company_id=context.company.id, targets=targets)
+        != expected_lifecycles
+    ):
+        raise HTTPException(
+            status_code=409, detail="IP document target lifecycle changed during upload."
+        )
+
+
 def upload_ip_document(
     session: Session,
     *,
@@ -775,64 +953,74 @@ def upload_ip_document(
     content_type: str | None,
     stream: BinaryIO,
 ) -> tuple[IpDocumentUploadResponse, str | None]:
+    _require_clean_upload_session(session)
     _require_document_capability(session, context=context, capability="documents:upload")
     verify_upload(filename=filename, content_type=content_type, stream=stream)
-    _lock_document_name_allocator(session, company_id=context.company.id)
-    taxonomy = _taxonomy_or_404(session, company_id=context.company.id, key=metadata.taxonomy_key)
-    document = IpDocument(
-        company_id=context.company.id,
-        taxonomy_entry_id=taxonomy.id,
-        title=(metadata.title or Path(filename).stem or "Document").strip(),
-        confidentiality=metadata.confidentiality,
-        is_privileged=metadata.is_privileged,
-        current_version=1,
-        created_by_membership_id=context.membership.id,
+    company_id = context.company.id
+    _taxonomy_or_404(session, company_id=company_id, key=metadata.taxonomy_key)
+    for target in metadata.links:
+        _validate_target(session, context=context, target=target)
+    expected_lifecycles = _upload_target_lifecycles(
+        session, company_id=company_id, targets=metadata.links
     )
-    session.add(document)
-    session.flush()
-    naming = _preview_persisted_document_name(
-        session,
-        company_id=context.company.id,
-        conflict_seed=document.id,
-        payload=metadata_to_naming_request(
-            metadata,
-            version=1,
-            filename=filename,
-            existing_names=[],
-        ),
-    )
-    version = IpDocumentVersion(
-        company_id=context.company.id,
-        document_id=document.id,
-        version=1,
-        original_filename=Path(filename).name,
-        display_name=naming.resolved_name,
-        storage_key="pending",
-        content_type=content_type,
-        size_bytes=0,
-        sha256_hex="0" * 64,
-        uploaded_by_membership_id=context.membership.id,
-    )
-    session.add(version)
-    session.flush()
+    document_id, version_id = str(uuid4()), str(uuid4())
     stored_key: str | None = None
+    commit_attempted = False
     try:
-        stored = persist_workspace_attachment(
-            company_id=context.company.id,
-            workspace_id=document.id,
-            attachment_id=version.id,
+        stored = _store_ip_upload(
+            session,
+            company_id=company_id,
+            document_id=document_id,
+            version_id=version_id,
             filename=filename,
             stream=stream,
-            namespace="ip-documents",
-            before_store=lambda size: assert_storage_quota_allows_upload(
-                session,
-                company_id=context.company.id,
-                matter_id=None,
-                incoming_size_bytes=size,
-            ),
-            validate_temp_file=lambda path: reject_if_infected(path, filename=filename),
         )
         stored_key = stored.storage_key
+        context = _admit_ip_upload(
+            session, context=context, company_id=company_id, size_bytes=stored.size_bytes
+        )
+        _lock_upload_targets(
+            session,
+            context=context,
+            targets=metadata.links,
+            expected_lifecycles=expected_lifecycles,
+        )
+        taxonomy = _taxonomy_or_404(session, company_id=company_id, key=metadata.taxonomy_key)
+        naming = _preview_persisted_document_name(
+            session,
+            company_id=company_id,
+            conflict_seed=document_id,
+            allocator_locked=True,
+            payload=metadata_to_naming_request(
+                metadata,
+                version=1,
+                filename=filename,
+                existing_names=[],
+            ),
+        )
+        document = IpDocument(
+            id=document_id,
+            company_id=company_id,
+            taxonomy_entry_id=taxonomy.id,
+            title=(metadata.title or Path(filename).stem or "Document").strip(),
+            confidentiality=metadata.confidentiality,
+            is_privileged=metadata.is_privileged,
+            current_version=1,
+            created_by_membership_id=context.membership.id,
+        )
+        version = IpDocumentVersion(
+            id=version_id,
+            company_id=company_id,
+            document_id=document_id,
+            version=1,
+            original_filename=Path(filename).name,
+            display_name=naming.resolved_name,
+            storage_key=stored.storage_key,
+            content_type=content_type,
+            size_bytes=stored.size_bytes,
+            sha256_hex=stored.sha256_hex,
+            uploaded_by_membership_id=context.membership.id,
+        )
         duplicate_rows = list(
             session.execute(
                 select(IpDocumentVersion, IpDocument)
@@ -866,9 +1054,6 @@ def upload_ip_document(
                 )
             )
         if visible_duplicates:
-            delete_stored_document(stored.storage_key)
-            stored_key = None
-            session.rollback()
             record_from_context(
                 session,
                 context,
@@ -882,15 +1067,18 @@ def upload_ip_document(
                 },
             )
             session.commit()
+            _discard_ip_upload(stored.storage_key)
+            stored_key = None
             return (
                 IpDocumentUploadResponse(
                     outcome="duplicate_found", duplicate_candidates=visible_duplicates
                 ),
                 None,
             )
-        version.storage_key = stored.storage_key
-        version.size_bytes = stored.size_bytes
-        version.sha256_hex = stored.sha256_hex
+        session.add(document)
+        session.flush()
+        session.add(version)
+        session.flush()
         for target in metadata.links:
             _create_link(
                 session,
@@ -923,7 +1111,9 @@ def upload_ip_document(
                 "processing_job_id": job.id,
             },
         )
+        commit_attempted = True
         session.commit()
+        stored_key = None
         return (
             IpDocumentUploadResponse(
                 outcome="created",
@@ -938,8 +1128,8 @@ def upload_ip_document(
         )
     except Exception:
         session.rollback()
-        if stored_key:
-            delete_stored_document(stored_key)
+        if stored_key and not commit_attempted:
+            _discard_ip_upload(stored_key)
         raise
 
 
@@ -953,10 +1143,11 @@ def upload_ip_document_version(
     content_type: str | None,
     stream: BinaryIO,
 ) -> tuple[IpDocumentUploadResponse, str | None]:
+    _require_clean_upload_session(session)
     _require_document_capability(session, context=context, capability="documents:upload")
     verify_upload(filename=filename, content_type=content_type, stream=stream)
-    _lock_document_name_allocator(session, company_id=context.company.id)
-    document = _document_or_404(session, context=context, document_id=document_id, for_update=True)
+    company_id = context.company.id
+    document = _document_or_404(session, context=context, document_id=document_id)
     if document.current_version != metadata.expected_current_version:
         raise HTTPException(
             status_code=409,
@@ -965,64 +1156,82 @@ def upload_ip_document_version(
                 "current_version": document.current_version,
             },
         )
-    previous = _version_or_404(
-        session, document=document, version=document.current_version, for_update=True
-    )
-    next_version = document.current_version + 1
-    taxonomy = session.get(IpDocumentTaxonomyEntry, document.taxonomy_entry_id)
-    if taxonomy is None or taxonomy.company_id != context.company.id:
-        raise HTTPException(status_code=500, detail="Document taxonomy integrity failure.")
-    naming = _preview_persisted_document_name(
+    expected_lifecycles = _upload_target_lifecycles(
         session,
-        company_id=context.company.id,
-        conflict_seed=f"{document.id}:{next_version}",
-        payload=IpDocumentNamingPreviewRequest(
-            client_code=metadata.client_code,
-            asset_type=metadata.asset_type,
-            mark=metadata.mark,
-            jurisdiction=metadata.jurisdiction,
-            application_no=metadata.application_no,
-            proceeding_type=metadata.proceeding_type,
-            proceeding_no=metadata.proceeding_no,
-            document_type=taxonomy.key,
-            document_date=metadata.document_date,
-            version=next_version,
-            extension=Path(filename).suffix,
-            existing_names=[],
-        ),
+        company_id=company_id,
+        targets=_upload_document_targets(session, company_id=company_id, document_id=document_id),
     )
-    version = IpDocumentVersion(
-        company_id=context.company.id,
-        document_id=document.id,
-        version=next_version,
-        original_filename=Path(filename).name,
-        display_name=naming.resolved_name,
-        storage_key="pending",
-        content_type=content_type,
-        size_bytes=0,
-        sha256_hex="0" * 64,
-        uploaded_by_membership_id=context.membership.id,
-    )
-    session.add(version)
-    session.flush()
+    version_id = str(uuid4())
     stored_key: str | None = None
+    commit_attempted = False
     try:
-        stored = persist_workspace_attachment(
-            company_id=context.company.id,
-            workspace_id=document.id,
-            attachment_id=version.id,
+        stored = _store_ip_upload(
+            session,
+            company_id=company_id,
+            document_id=document_id,
+            version_id=version_id,
             filename=filename,
             stream=stream,
-            namespace="ip-documents",
-            before_store=lambda size: assert_storage_quota_allows_upload(
-                session,
-                company_id=context.company.id,
-                matter_id=None,
-                incoming_size_bytes=size,
-            ),
-            validate_temp_file=lambda path: reject_if_infected(path, filename=filename),
         )
         stored_key = stored.storage_key
+        context = _admit_ip_upload(
+            session, context=context, company_id=company_id, size_bytes=stored.size_bytes
+        )
+        targets = _upload_document_targets(session, company_id=company_id, document_id=document_id)
+        _lock_upload_targets(
+            session, context=context, targets=targets, expected_lifecycles=expected_lifecycles
+        )
+        document = _document_or_404(
+            session, context=context, document_id=document_id, for_update=True
+        )
+        if document.current_version != metadata.expected_current_version:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ip_document_version_conflict",
+                    "current_version": document.current_version,
+                },
+            )
+        previous = _version_or_404(
+            session, document=document, version=document.current_version, for_update=True
+        )
+        next_version = document.current_version + 1
+        taxonomy = session.get(IpDocumentTaxonomyEntry, document.taxonomy_entry_id)
+        if taxonomy is None or taxonomy.company_id != company_id:
+            raise HTTPException(status_code=500, detail="Document taxonomy integrity failure.")
+        naming = _preview_persisted_document_name(
+            session,
+            company_id=company_id,
+            conflict_seed=f"{document.id}:{next_version}",
+            allocator_locked=True,
+            payload=IpDocumentNamingPreviewRequest(
+                client_code=metadata.client_code,
+                asset_type=metadata.asset_type,
+                mark=metadata.mark,
+                jurisdiction=metadata.jurisdiction,
+                application_no=metadata.application_no,
+                proceeding_type=metadata.proceeding_type,
+                proceeding_no=metadata.proceeding_no,
+                document_type=taxonomy.key,
+                document_date=metadata.document_date,
+                version=next_version,
+                extension=Path(filename).suffix,
+                existing_names=[],
+            ),
+        )
+        version = IpDocumentVersion(
+            id=version_id,
+            company_id=company_id,
+            document_id=document_id,
+            version=next_version,
+            original_filename=Path(filename).name,
+            display_name=naming.resolved_name,
+            storage_key=stored.storage_key,
+            content_type=content_type,
+            size_bytes=stored.size_bytes,
+            sha256_hex=stored.sha256_hex,
+            uploaded_by_membership_id=context.membership.id,
+        )
         duplicate_rows = list(
             session.execute(
                 select(IpDocumentVersion, IpDocument)
@@ -1056,9 +1265,6 @@ def upload_ip_document_version(
                 )
             )
         if visible_duplicates:
-            delete_stored_document(stored.storage_key)
-            stored_key = None
-            session.rollback()
             record_from_context(
                 session,
                 context,
@@ -1073,15 +1279,16 @@ def upload_ip_document_version(
                 },
             )
             session.commit()
+            _discard_ip_upload(stored.storage_key)
+            stored_key = None
             return (
                 IpDocumentUploadResponse(
                     outcome="duplicate_found", duplicate_candidates=visible_duplicates
                 ),
                 None,
             )
-        version.storage_key = stored.storage_key
-        version.size_bytes = stored.size_bytes
-        version.sha256_hex = stored.sha256_hex
+        session.add(version)
+        session.flush()
         previous.state = "superseded"
         document.current_version = next_version
         _propagate_private_document_change(
@@ -1114,7 +1321,9 @@ def upload_ip_document_version(
                 "processing_job_id": job.id,
             },
         )
+        commit_attempted = True
         session.commit()
+        stored_key = None
         return (
             IpDocumentUploadResponse(
                 outcome="created",
@@ -1129,8 +1338,8 @@ def upload_ip_document_version(
         )
     except Exception:
         session.rollback()
-        if stored_key:
-            delete_stored_document(stored_key)
+        if stored_key and not commit_attempted:
+            _discard_ip_upload(stored_key)
         raise
 
 

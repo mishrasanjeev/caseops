@@ -34,9 +34,11 @@ from caseops_api.db.models import (
     MatterHearingStatus,
     MatterPortalGrant,
     PortalUser,
+    PrivateIndexGeneration,
 )
 from caseops_api.schemas.clients import KycDocumentRecord
 from caseops_api.services.audit import record_audit
+from caseops_api.services.clients import lock_client_provenance_references
 from caseops_api.services.matter_operational_guard import require_operational_matter
 
 
@@ -343,45 +345,62 @@ def submit_matter_kyc(
     client_id (foreign matter, foreign tenant, unlinked) returns
     404 — same shape as missing-grant so a probe cannot enumerate.
     """
-    matter, _ = _assert_grant(
-        session,
-        portal_user=portal_user,
-        matter_id=matter_id,
-        role="client",
-    )
-    # Lock the Matter before reading or mutating client-side child state.  This
-    # serialises KYC submission with lifecycle disposal and preserves the
-    # repository-wide parent-first lock order.
-    matter = require_operational_matter(
-        session,
-        matter=matter,
-        operation="submit KYC",
-    )
     from caseops_api.db.models import MatterClientAssignment
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
 
-    target = (
-        session.execute(
+    # No discovery read may autoflush a source before Company and its FK actors.
+    with session.no_autoflush:
+        lock_private_authority_writer(session, company_id=portal_user.company_id)
+        matter, _ = _assert_grant(
+            session, portal_user=portal_user, matter_id=matter_id, role="client",
+        )
+        # Preserve lifecycle error precedence; the authoritative write lock follows actors.
+        require_operational_matter(
+            session, matter=matter, operation="submit KYC", lock_for_write=False,
+        )
+        target = session.scalar(
             select(Client)
-            .join(
-                MatterClientAssignment,
-                MatterClientAssignment.client_id == Client.id,
-            )
+            .join(MatterClientAssignment, MatterClientAssignment.client_id == Client.id)
             .where(
                 MatterClientAssignment.matter_id == matter_id,
                 Client.id == client_id,
                 Client.company_id == portal_user.company_id,
             )
         )
-        .scalars()
-        .first()
-    )
-    if target is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "Client not found for this matter, or you are not "
-                "authorised to submit KYC for them."
-            ),
+        if target is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    "Client not found for this matter, or you are not "
+                    "authorised to submit KYC for them."
+                ),
+            )
+        # Company fences generation activation. Default-off KYC needs no event actor.
+        private_event_required = session.scalar(
+            select(PrivateIndexGeneration.id).where(
+                PrivateIndexGeneration.company_id == portal_user.company_id,
+                PrivateIndexGeneration.state == "active",
+            )
+        ) is not None
+        event_actor_membership_id = (
+            portal_user.invited_by_membership_id or target.created_by_membership_id
+        )
+        locked_actor_ids = lock_client_provenance_references(
+            session, company_id=portal_user.company_id, client_id=target.id,
+            actor_membership_id=event_actor_membership_id if private_event_required else None,
+        )
+        # Retained inactive memberships are provenance, not portal authorization.
+        if private_event_required and event_actor_membership_id not in locked_actor_ids:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Client verification provenance is unavailable.",
+            )
+        # An actor wait must not preserve an expired/revoked portal grant.
+        matter, _ = _assert_grant(
+            session, portal_user=portal_user, matter_id=matter_id, role="client",
+        )
+        matter = require_operational_matter(
+            session, matter=matter, operation="submit KYC",
         )
     now = datetime.now(UTC)
     safe_documents: list[dict] = []
@@ -411,12 +430,8 @@ def submit_matter_kyc(
         propagate_private_source_change_if_indexed,
     )
 
-    event_actor_membership_id = (
-        portal_user.invited_by_membership_id
-        or target.created_by_membership_id
-        or matter.created_by_membership_id
-    )
-    if event_actor_membership_id is not None:
+    if private_event_required:
+        assert event_actor_membership_id is not None
         source_version = private_source_version(target)
         propagate_private_source_change_if_indexed(
             session,

@@ -31,10 +31,14 @@ Invoices land in ``InvoiceStatus.NEEDS_REVIEW`` — a new value on the
 StrEnum that a firm-side reviewer must explicitly transition to
 ISSUED before any payment side-effects fire.
 """
+
 from __future__ import annotations
 
+import logging
+from datetime import UTC, datetime
 from datetime import date as date_cls
 from typing import BinaryIO
+from uuid import uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -43,6 +47,7 @@ from sqlalchemy.orm import Session
 from caseops_api.db.models import (
     AuditActorType,
     AuditResult,
+    Company,
     InvoiceStatus,
     Matter,
     MatterAttachment,
@@ -54,16 +59,23 @@ from caseops_api.db.models import (
 )
 from caseops_api.services.audit import record_audit
 from caseops_api.services.document_storage import (
+    delete_stored_document,
     persist_matter_attachment,
     sanitize_filename,
 )
 from caseops_api.services.file_security import verify_upload
 from caseops_api.services.matter_operational_guard import require_operational_matter
+from caseops_api.services.matter_write_fence import (
+    lock_matter_private_authority,
+    require_read_only_upload_session,
+)
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
     assert_storage_quota_allows_upload,
 )
 from caseops_api.services.virus_scan import reject_if_infected
+
+logger = logging.getLogger(__name__)
 
 
 class PortalOcPermissionDenied(HTTPException):
@@ -145,6 +157,79 @@ def get_oc_assigned_matter(
 # ---------- work product (file upload) ----------
 
 
+def _upload_utc(value: datetime | None) -> datetime | None:
+    return value.replace(tzinfo=UTC) if value is not None and value.tzinfo is None else value
+
+
+def _admit_oc_upload(
+    session: Session,
+    *,
+    company_id: str,
+    portal_user_id: str,
+    matter_id: str,
+    session_cutoff: datetime | None,
+) -> tuple[PortalUser, Matter]:
+    with session.no_autoflush:
+        lock_matter_private_authority(session, company_id=company_id)
+        company = session.get(Company, company_id)
+        if company is None or not company.is_active:
+            raise HTTPException(status_code=403, detail="The workspace is no longer active.")
+        # Grant administration locks its grant before invalidating PortalUser.
+        grant = session.scalar(
+            select(MatterPortalGrant)
+            .where(
+                MatterPortalGrant.company_id == company_id,
+                MatterPortalGrant.portal_user_id == portal_user_id,
+                MatterPortalGrant.matter_id == matter_id,
+                MatterPortalGrant.role == "outside_counsel",
+                MatterPortalGrant.revoked_at.is_(None),
+            )
+            .with_for_update(of=MatterPortalGrant, key_share=True)
+            .execution_options(populate_existing=True)
+        )
+        if grant is None:
+            raise HTTPException(status_code=404, detail="Matter not found.")
+        user = session.scalar(
+            select(PortalUser)
+            .where(
+                PortalUser.id == portal_user_id,
+                PortalUser.company_id == company_id,
+            )
+            # Ordinary invoice/time writers hold Matter before their PortalUser
+            # FK. Keep revocation exclusive without blocking that KEY SHARE.
+            .with_for_update(of=PortalUser, key_share=True)
+            .execution_options(populate_existing=True)
+        )
+        if user is None or not user.is_active:
+            raise HTTPException(status_code=401, detail="Portal user is no longer active.")
+        # The route authenticated this request against the captured cutoff.
+        # Reject any subsequent invalidation without inventing a token timestamp.
+        if _upload_utc(user.sessions_valid_after) != _upload_utc(session_cutoff):
+            raise HTTPException(
+                status_code=401, detail="Portal session was revoked. Sign in again."
+            )
+        if user.role != "outside_counsel":
+            raise HTTPException(status_code=404, detail="Matter not found.")
+        _require_grant_permission(grant, "can_upload")
+        matter, _ = _assert_oc_grant(session, portal_user=user, matter_id=matter_id)
+        matter = require_operational_matter(
+            session,
+            matter=matter,
+            operation="upload outside-counsel work product",
+        )
+        if grant.expires_at is not None and _upload_utc(grant.expires_at) <= datetime.now(UTC):
+            raise HTTPException(status_code=404, detail="Matter not found.")
+    return user, matter
+
+
+def _require_read_only_upload_session(session: Session) -> None:
+    """Do not release a caller's pending, flushed or Core-written transaction."""
+    require_read_only_upload_session(
+        session,
+        detail="Outside-counsel upload requires a read-only session before its I/O boundary.",
+    )
+
+
 def upload_oc_work_product(
     session: Session,
     *,
@@ -160,54 +245,90 @@ def upload_oc_work_product(
     pipeline as the internal upload path. Quarantines the file on
     infection.
     """
-    matter, _grant = _assert_oc_grant(
-        session, portal_user=portal_user, matter_id=matter_id,
+    _require_read_only_upload_session(session)
+    company_id, portal_user_id, session_cutoff = (
+        portal_user.company_id,
+        portal_user.id,
+        portal_user.sessions_valid_after,
     )
-    _require_grant_permission(_grant, "can_upload")
-    matter = require_operational_matter(
+    portal_user, matter = _admit_oc_upload(
         session,
-        matter=matter,
-        operation="upload outside-counsel work product",
+        company_id=company_id,
+        portal_user_id=portal_user_id,
+        matter_id=matter_id,
+        session_cutoff=session_cutoff,
     )
     verify_upload(filename=filename, content_type=content_type, stream=stream)
     audit_matter_id = matter.id
+    lifecycle_version = matter.lifecycle_version
 
     attachment = MatterAttachment(
-        matter_id=matter.id,
+        id=str(uuid4()),
+        matter_id=audit_matter_id,
         uploaded_by_membership_id=None,
-        submitted_by_portal_user_id=portal_user.id,
+        submitted_by_portal_user_id=portal_user_id,
         original_filename=sanitize_filename(filename),
         storage_key="pending",
         content_type=content_type,
         size_bytes=0,
         sha256_hex="0" * 64,
     )
-    session.add(attachment)
-    session.flush()
+    session.rollback()
+    stored_key: str | None = None
+    commit_attempted = False
+
+    def discard_staged() -> None:
+        if stored_key is not None:
+            try:
+                delete_stored_document(stored_key)
+            except Exception:
+                logger.exception("Could not remove unpublished OC attachment %s", attachment.id)
+
+    def preflight_quota(size_bytes: int) -> None:
+        try:
+            assert_storage_quota_allows_upload(
+                session,
+                company_id=company_id,
+                matter_id=audit_matter_id,
+                incoming_size_bytes=size_bytes,
+            )
+        finally:
+            session.rollback()
 
     try:
         stored = persist_matter_attachment(
-            company_id=portal_user.company_id,
-            matter_id=matter.id,
+            company_id=company_id,
+            matter_id=audit_matter_id,
             attachment_id=attachment.id,
             filename=filename,
             stream=stream,
-            before_store=lambda size_bytes: assert_storage_quota_allows_upload(
-                session,
-                company_id=portal_user.company_id,
-                matter_id=matter.id,
-                incoming_size_bytes=size_bytes,
-            ),
+            before_store=preflight_quota,
             validate_temp_file=lambda path: reject_if_infected(
                 path,
                 filename=filename,
             ),
         )
+        stored_key = stored.storage_key
+        assert_storage_quota_allows_upload(
+            session,
+            company_id=company_id,
+            matter_id=audit_matter_id,
+            incoming_size_bytes=stored.size_bytes,
+        )
+        portal_user, matter = _admit_oc_upload(
+            session,
+            company_id=company_id,
+            portal_user_id=portal_user_id,
+            matter_id=audit_matter_id,
+            session_cutoff=session_cutoff,
+        )
+        if matter.lifecycle_version != lifecycle_version:
+            raise HTTPException(status_code=409, detail="Matter lifecycle changed during upload.")
         attachment.storage_key = stored.storage_key
         attachment.size_bytes = stored.size_bytes
         attachment.sha256_hex = stored.sha256_hex
         session.add(attachment)
-        session.commit()
+        session.flush()
         record_audit(
             session,
             company_id=portal_user.company_id,
@@ -223,10 +344,13 @@ def upload_oc_work_product(
                 "filename": attachment.original_filename,
             },
             ip=request_ip,
-            commit=True,
+            commit=False,
         )
+        commit_attempted = True
+        session.commit()
     except StorageQuotaExceeded as exc:
         session.rollback()
+        discard_staged()
         record_audit(
             session,
             company_id=portal_user.company_id,
@@ -247,6 +371,8 @@ def upload_oc_work_product(
         raise exc.to_http_exception() from exc
     except Exception:
         session.rollback()
+        if not commit_attempted:
+            discard_staged()
         raise
 
     return attachment

@@ -792,6 +792,11 @@ def create_ip_docket(
     source_provenance: tuple[str, str] | None = None,
     commit: bool = True,
 ) -> IpDocketRecordResponse:
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+    # Private events must enter tenant authority before participant/parent writes.
+    with session.no_autoflush:
+        lock_private_authority_writer(session, company_id=context.company.id)
     linked_matter = _matter_for_docket(
         session,
         context=context,
@@ -1034,6 +1039,10 @@ def append_ip_docket_version(
     docket_id: str,
     payload: IpDocketVersionCreateRequest,
 ) -> IpDocketRecordResponse:
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+    with session.no_autoflush:
+        lock_private_authority_writer(session, company_id=context.company.id)
     docket = _docket_or_404(
         session,
         context=context,

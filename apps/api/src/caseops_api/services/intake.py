@@ -29,6 +29,7 @@ from caseops_api.schemas.intake import (
     IntakeRequestUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.matter_write_fence import lock_matter_private_authority
 from caseops_api.services.session_context import SessionContext
 
 
@@ -211,6 +212,7 @@ def promote_intake_request(
     request_id: str,
     payload: IntakeRequestPromoteRequest,
 ) -> IntakeRequestRecord:
+    lock_matter_private_authority(session, company_id=context.company.id)
     row = _load_request(session, context=context, request_id=request_id)
     if row.linked_matter_id:
         raise HTTPException(

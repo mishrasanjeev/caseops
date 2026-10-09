@@ -705,8 +705,9 @@ def _project_canonical(session, context, record, docket, workflow, facts):
 
 
 def save_workflow(session, *, context, record_id, payload, idempotency_key, workflow_id=None):
-    record = _header(session, context, record_id)
-    context = _writer(session, context, record.domain)
+    with session.no_autoflush:
+        record = _header(session, context, record_id)
+        context = _writer(session, context, record.domain)
     docket = _docket(session, context, record, write=True)
     if docket.lifecycle_version != payload.expected_lifecycle_version:
         raise _error("specialist_stale", "The parent lifecycle changed. Reload before saving.")

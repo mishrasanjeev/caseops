@@ -824,8 +824,8 @@ def ensure_ip_production_qa_private_retrieval_fixture(
             forum_level="tribunal",
             court_name="Trade Marks Registry Synthetic QA",
             description=(
-                "Synthetic QA Matter used only to prove tenant-private retrieval "
-                "revocation on one exact production release."
+                "Synthetic QA Matter used only to prove  tenant-private retrieval\n"
+                "revocation\ton one exact production release."
             ),
             is_active=True,
             restricted_access=False,

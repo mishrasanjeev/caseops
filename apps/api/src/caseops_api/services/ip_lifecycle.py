@@ -224,7 +224,7 @@ def _fence_reopen_linked_matter_roles(
     locked_memberships = lock_company_memberships_for_assignment(
         session,
         company_id=context.company.id,
-        membership_ids=roles.values(),
+        membership_ids={context.membership.id, *roles.values()},
     )
     return matter_id, roles, locked_memberships
 
@@ -1936,20 +1936,37 @@ def transition_ip_docket_lifecycle(
 ) -> tuple[IpDocketRecord, IpDocketEvent]:
     """Apply only the legal parent transition; IPLF-022B owns child-impact UI/routes."""
 
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+    # The event actor and linked parent family follow Company, including autoflush.
+    with session.no_autoflush:
+        lock_private_authority_writer(session, company_id=context.company.id)
     requested_terminal = payload.to_status in TERMINAL_IP_DOCKET_STATUSES
     discovered_matter_id: str | None = None
     discovered_matter_roles: dict[str, str | None] = {}
     locked_matter_role_memberships: dict[str, CompanyMembership] = {}
     if not requested_terminal:
-        (
-            discovered_matter_id,
-            discovered_matter_roles,
-            locked_matter_role_memberships,
-        ) = _fence_reopen_linked_matter_roles(
-            session,
-            context=context,
-            docket_id=docket_id,
-        )
+        with session.no_autoflush:
+            (
+                discovered_matter_id,
+                discovered_matter_roles,
+                locked_matter_role_memberships,
+            ) = _fence_reopen_linked_matter_roles(
+                session,
+                context=context,
+                docket_id=docket_id,
+            )
+    else:
+        # Pre-acquire the event's actor FK before Matter; authorization is unchanged.
+        with session.no_autoflush:
+            session.scalar(
+                select(CompanyMembership.id)
+                .where(
+                    CompanyMembership.company_id == context.company.id,
+                    CompanyMembership.id == context.membership.id,
+                )
+                .with_for_update(of=CompanyMembership, read=True, key_share=True)
+            )
     docket = _authorized_lifecycle_docket(
         session,
         context=context,

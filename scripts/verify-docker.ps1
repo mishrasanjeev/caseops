@@ -199,13 +199,23 @@ function Assert-CandidatePlaywrightSuite {
         throw "Browser support helpers would run Python outside the candidate: '$HelperPython'."
     }
 
-    Push-Location -LiteralPath $RepoRoot
+    $SavedListingEnvironment = @{}
+    foreach ($Name in @("PLAYWRIGHT_JSON_OUTPUT_FILE", "PLAYWRIGHT_JSON_OUTPUT_DIR", "PLAYWRIGHT_JSON_OUTPUT_NAME")) {
+        $SavedListingEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name, "Process")
+        [Environment]::SetEnvironmentVariable($Name, $null, "Process")
+    }
+    $ListingLocationPushed = $false
     try {
+        Push-Location -LiteralPath $RepoRoot
+        $ListingLocationPushed = $true
         $Listing = @(& $NodePath $PlaywrightCli test --config $PlaywrightConfig --list --reporter=json @Arguments)
         $ListExitCode = $LASTEXITCODE
     }
     finally {
-        Pop-Location
+        foreach ($Name in $SavedListingEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($Name, $SavedListingEnvironment[$Name], "Process")
+        }
+        if ($ListingLocationPushed) { Pop-Location }
     }
     $ListingText = $Listing -join "`n"
     $InventoryPath = Join-Path $ResultsDirectory "playwright-inventory.json"
@@ -255,12 +265,97 @@ function Assert-CandidatePlaywrightSuite {
 function Invoke-CandidatePlaywright {
     param([string[]]$Arguments = @())
 
-    Push-Location -LiteralPath $RepoRoot
+    if (@($Arguments | Where-Object { $_ -match "^--reporter(?:=|$)" }).Count) {
+        throw "Docker acceptance owns its structured Playwright reporters."
+    }
+    $ReportStem = Join-Path $ResultsDirectory ("playwright-" + [Guid]::NewGuid().ToString("N"))
+    $ReportEnvironment = @{
+        PLAYWRIGHT_JSON_OUTPUT_FILE = "$ReportStem.json"
+        PLAYWRIGHT_JUNIT_OUTPUT_FILE = "$ReportStem.xml"
+    }
+    $SavedReportEnvironment = @{}
+    foreach ($Name in $ReportEnvironment.Keys) {
+        $SavedReportEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name, "Process")
+        [Environment]::SetEnvironmentVariable($Name, $ReportEnvironment[$Name], "Process")
+    }
+    $PlaywrightExitCode = 1
+    $StartedAt = [DateTime]::UtcNow.ToString("o")
+    $LocationPushed = $false
     try {
-        & $NodePath $PlaywrightCli test --config $PlaywrightConfig --reporter=list @Arguments
+        Push-Location -LiteralPath $RepoRoot
+        $LocationPushed = $true
+        & $NodePath $PlaywrightCli test --config $PlaywrightConfig --reporter=list,json,junit @Arguments
+        $PlaywrightExitCode = $LASTEXITCODE
+        foreach ($ReportPath in $ReportEnvironment.Values) {
+            if (-not (Test-Path -LiteralPath $ReportPath -PathType Leaf)) {
+                throw "Playwright execution is incomplete: missing report $ReportPath."
+            }
+        }
+        try {
+            $Report = Get-Content -LiteralPath "$ReportStem.json" -Raw | ConvertFrom-Json
+        }
+        catch { throw "Playwright execution is incomplete: invalid JSON report $ReportStem.json." }
+        try { [xml]$JUnit = Get-Content -LiteralPath "$ReportStem.xml" -Raw }
+        catch { throw "Playwright execution is incomplete: invalid XML report $ReportStem.xml." }
+        $Pending = New-Object 'System.Collections.Generic.Queue[object]'
+        foreach ($Suite in @($Report.suites)) {
+            if ($null -ne $Suite) { $Pending.Enqueue($Suite) }
+        }
+        $BrowserTests = 0
+        while ($Pending.Count -gt 0) {
+            $Suite = $Pending.Dequeue()
+            foreach ($Spec in @($Suite.specs)) {
+                foreach ($Test in @($Spec.tests)) {
+                    if ($null -eq $Test) { continue }
+                    if (@($Test.results | Where-Object { $null -ne $_ }).Count -eq 0) {
+                        throw "Playwright execution is incomplete: a selected test has no result."
+                    }
+                    if (@($Test.results | Where-Object {
+                        $_.status -notin @("passed", "failed", "timedOut", "skipped")
+                    }).Count) {
+                        throw "Playwright execution is incomplete: invalid or interrupted test result."
+                    }
+                    $BrowserTests++
+                }
+            }
+            foreach ($Child in @($Suite.suites)) {
+                if ($null -ne $Child) { $Pending.Enqueue($Child) }
+            }
+        }
+        $XmlTests = $JUnit.SelectNodes("/testsuites/testsuite/testcase").Count
+        $StatsTests = [int]$Report.stats.expected + [int]$Report.stats.unexpected +
+            [int]$Report.stats.skipped + [int]$Report.stats.flaky
+        if ($BrowserTests -eq 0 -or $XmlTests -ne $BrowserTests -or $StatsTests -ne $BrowserTests) {
+            throw "Playwright execution is incomplete: empty or disagreeing JSON/XML test totals."
+        }
+        if ($PlaywrightExitCode -eq 0 -and (
+            [int]$Report.stats.unexpected -ne 0 -or [int]$Report.stats.flaky -ne 0 -or
+            @($Report.errors | Where-Object { $null -ne $_ }).Count -ne 0
+        )) {
+            throw "Playwright exit zero disagrees with its failed structured results."
+        }
+        # Write completion only after both final reports reconcile; a nonzero
+        # process exit still fails the caller's gate. Preserve every invocation.
+        [ordered]@{
+            event = "execution_finished"
+            release_sha = $ReleaseSha
+            arguments = @($Arguments)
+            started_at = $StartedAt
+            completed_at = [DateTime]::UtcNow.ToString("o")
+            exit_code = $PlaywrightExitCode
+            tests = $BrowserTests
+            stats = $Report.stats
+            json = "$ReportStem.json"
+            junit = "$ReportStem.xml"
+        } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath "$ReportStem.completion.json" -Encoding UTF8
+        Write-Host "[docker-acceptance] browser execution reports: $ReportStem ($BrowserTests tests)"
     }
     finally {
-        Pop-Location
+        foreach ($Name in $ReportEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($Name, $SavedReportEnvironment[$Name], "Process")
+        }
+        if ($LocationPushed) { Pop-Location }
+        $global:LASTEXITCODE = $PlaywrightExitCode
     }
 }
 

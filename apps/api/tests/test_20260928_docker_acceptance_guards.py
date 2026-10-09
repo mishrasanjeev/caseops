@@ -24,7 +24,7 @@ GUARDS = {
         "[docker-acceptance] candidate-source guard: 4 regression cases passed"
     ),
     "tests/docker-acceptance-repo-root-guard.ps1": (
-        "[docker-acceptance] repository-root guard: 14 regression cases passed"
+        "[docker-acceptance] repository-root guard: 28 regression cases passed"
     ),
 }
 

@@ -141,14 +141,18 @@ jobs:
             --isolated-file test_litigation_strategy.py \
             --isolated-file test_matter_file_qa.py \
             --output .pytest-shard-files
+          cp .pytest-shard-files "api-shard-${{ matrix.shard }}-files.txt"
 
       - name: Pytest with coverage shard (P1-001 per-area gates)
         id: pytest
         working-directory: apps/api
+        env:
+          CASEOPS_TEST_RESULT_JOURNAL: api-shard-${{ matrix.shard }}.jsonl
         run: |
           xargs -a .pytest-shard-files -d '\n' -r uv run pytest -q \
             --durations=25 \
             --durations-min=1.0 \
+            --junitxml=api-shard-${{ matrix.shard }}.xml \
             --cov=caseops_api \
             --cov-report=
 
@@ -170,7 +174,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: api-coverage-shard-${{ matrix.shard }}
-          path: apps/api/coverage-shard-${{ matrix.shard }}
+          path: |
+            apps/api/coverage-shard-${{ matrix.shard }}
+            apps/api/api-shard-${{ matrix.shard }}.jsonl
+            apps/api/api-shard-${{ matrix.shard }}.xml
+            apps/api/api-shard-${{ matrix.shard }}-files.txt
           retention-days: 1
           if-no-files-found: warn
 
