@@ -2722,7 +2722,7 @@ async def download_current_company_matter_invoice_pdf(
     response_model=MatterAttachmentRecord,
     summary="Upload an attachment into a matter workspace",
 )
-async def post_current_company_matter_attachment(
+def post_current_company_matter_attachment(
     matter_id: str,
     file: Annotated[UploadFile, File(...)],
     background_tasks: BackgroundTasks,

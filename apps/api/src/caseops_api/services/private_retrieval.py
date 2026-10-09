@@ -51,12 +51,12 @@ from caseops_api.services.ip_capability_catalog import (
     IPFeatureDecision,
     evaluate_ip_feature,
 )
-from caseops_api.services.ip_document_workflow import get_ip_document_policies
+from caseops_api.services.ip_document_policy import get_ip_document_policies
 from caseops_api.services.ip_domain_policy import (
     IP_DOCUMENT_CHILD_TARGET_MODELS,
     general_ip_disclosure_filter,
 )
-from caseops_api.services.matter_access import (
+from caseops_api.services.record_access_policy import (
     visible_ip_dockets_filter,
     visible_matters_filter,
 )
@@ -2313,24 +2313,34 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
             )
             .execution_options(synchronize_session="fetch")
         )
-        affected: list[PrivateIndexProjection] = []
         affected_sources: set[tuple[str, str]] = set()
         affected_projection_count = max(int(result.rowcount or 0), 0)
     else:
-        affected = list(session.scalars(_affected_projection_statement(event)).all())
-        affected_sources = {(row.source_type, row.source_id) for row in affected}
+        # Strip private bytes in the database while retaining only source
+        # identities for saved-output closure. Lifecycle writes must not hydrate
+        # every chunk's text and embedding while holding the tenant fence.
+        affected = session.execute(
+            update(PrivateIndexProjection)
+            .where(_affected_projection_statement(event).whereclause)
+            .values(
+                content_text="",
+                embedding_json=None,
+                embedding_dimensions=None,
+                is_tombstoned=True,
+                tombstoned_at=now,
+                tombstone_reason=event.reason_code,
+                tombstone_generation=event.tombstone_generation,
+                updated_at=now,
+            )
+            .returning(PrivateIndexProjection.source_type, PrivateIndexProjection.source_id)
+            .execution_options(synchronize_session="fetch")
+        ).all()
+        affected_sources = set(affected)
         affected_projection_count = len(affected)
-        for row in affected:
-            row.content_text = ""
-            row.embedding_json = None
-            row.embedding_dimensions = None
-            row.is_tombstoned = True
-            row.tombstoned_at = now
-            row.tombstone_reason = event.reason_code
-            row.tombstone_generation = event.tombstone_generation
-            row.updated_at = now
 
-    if event.event_type in {"source_changed", "reindex"} and not affected:
+    if event.event_type in {"source_changed", "reindex"} and (
+        event.target_type == "tenant" or affected_projection_count == 0
+    ):
         # A newly created source has no old projection to tombstone. Explicitly
         # invalidate the active manifest so bounded maintenance rebuilds the
         # tenant instead of treating the still internally consistent old

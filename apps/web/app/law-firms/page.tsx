@@ -257,7 +257,7 @@ export default function LawFirmPitchPage() {
                 outside counsel and billing, with control surfaces that legal teams can trust.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Button href={`mailto:${siteConfig.contact.founder}`} size="lg">
+                <Button href="/demo/law-firms" size="lg">
                   Contact Sanjeev
                 </Button>
                 <Button
@@ -706,17 +706,17 @@ export default function LawFirmPitchPage() {
                 Direct contact
               </div>
               <a
-                href={`mailto:${siteConfig.contact.founder}`}
+                href="/demo/law-firms"
                 className="mt-4 inline-block font-display text-[2.6rem] font-normal leading-none tracking-tight text-white hover:text-white/85 md:text-[3.5rem]"
               >
-                {siteConfig.contact.founder}
+                Request a conversation
               </a>
               <p className="mt-4 max-w-xl text-base leading-relaxed text-white/75">
-                Write directly for a live walkthrough of the platform, law-firm pilot discussions
-                or a founder-level conversation about how the operating model fits your practice.
+                Request a walkthrough or discuss a law-firm pilot. Scheduling, supported
+                workflows and commercial terms require separate confirmation.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Button href={`mailto:${siteConfig.contact.founder}`} size="lg">
+                <Button href="/demo/law-firms" size="lg">
                   Contact us
                 </Button>
                 <Button
@@ -786,7 +786,7 @@ function PitchHeader() {
           <Button href="/" variant="ghost" size="sm">
             Home
           </Button>
-          <Button href={`mailto:${siteConfig.contact.founder}`} size="sm">
+          <Button href="/demo/law-firms" size="sm">
             Contact us
           </Button>
         </div>

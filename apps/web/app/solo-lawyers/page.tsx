@@ -78,7 +78,7 @@ export default function SoloLawyersPage() {
             <div className="flex flex-col gap-3 lg:items-end">
               <PersonaSwitch active="solos" />
               <a
-                href={`mailto:${siteConfig.contact.founder}?subject=Solo%20advocate%20pilot`}
+                href="/demo/solo-lawyers"
                 className="inline-flex items-center rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-[var(--color-ink)] transition-colors hover:bg-white/85"
               >
                 Start a pilot
@@ -92,8 +92,8 @@ export default function SoloLawyersPage() {
           index="02"
           tone="light"
           eyebrow="What a solo is running today"
-          title="Five tools. Five logins. One paper diary the clerk cannot read."
-          description="The work is the lawyer's. The infrastructure is no one's. Something is always lost."
+          title="Bring a scattered practice into one matter record."
+          description="A practice may use separate records for dates, documents and fees. Review which workflows CaseOps can support for your courts and working style."
         >
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <PitchCard
@@ -109,7 +109,7 @@ export default function SoloLawyersPage() {
             <PitchCard
               icon={Calendar}
               title="Case diary"
-              body="Paper. Sometimes a shared Google Sheet. Never in sync with the court cause list."
+              body="A diary or shared sheet may need manual reconciliation with the current court source."
             />
             <PitchCard
               icon={CircleDollarSign}
@@ -119,8 +119,8 @@ export default function SoloLawyersPage() {
           </div>
           <div className="mt-8 rounded-2xl border border-[var(--color-line)] bg-[var(--color-bg-2)] p-6 text-[14px] leading-relaxed text-[var(--color-ink-2)]">
             <span className="font-semibold text-[var(--color-ink)]">Real cost:</span>{" "}
-            the lawyer does the work of five people before 10 am — and the work is
-            administrative, not legal. CaseOps removes the administrative half.
+            administrative work can interrupt legal preparation. CaseOps brings supported
+            matter workflows together; it does not replace the advocate or guarantee time savings.
           </div>
         </Slide>
 
@@ -189,7 +189,7 @@ export default function SoloLawyersPage() {
             <PitchCard
               icon={Gavel}
               title="Cause-list import — manual today, automated incrementally"
-              body="Today: cause-list entries are imported per matter (paste / API / nightly job for courts with a lawful adapter). The bench resolver normalises 'Justice X & Justice Y' rosters into clickable judge profiles with the high-quality confidence floor. New court adapters ship only after source-readiness proof."
+              body="Review imported cause-list entries against their current court source. Bench names can resolve to mapped judge profiles where identities and coverage are available. Automated court adapters remain subject to lawful source access and readiness evidence."
             />
             <PitchCard
               icon={Layers}
@@ -199,7 +199,7 @@ export default function SoloLawyersPage() {
             <PitchCard
               icon={Smartphone}
               title="iPad-ready in court"
-              body="The UI stays legible on a 9-inch screen. No hover-only actions. No surprise modals."
+              body="Responsive work areas support smaller screens. Check the workflows and controls you need during a pilot; confirm destructive actions before proceeding."
             />
           </div>
         </Slide>
@@ -359,7 +359,7 @@ export default function SoloLawyersPage() {
           tone="light"
           eyebrow="Pricing"
           title="Priced for a practice of one."
-          description="Early access means pilot pricing. The full rate card firms up after we understand how a solo actually uses the product. Lock in pilot terms now."
+          description="Review the current plan catalog and discuss a pilot. Scope, duration, support and any pilot pricing require separate confirmation."
         >
           <div className="grid gap-5 md:grid-cols-3">
             <div className="rounded-2xl border-2 border-[var(--color-ink)] bg-white p-7 shadow-[var(--shadow-soft)]">
@@ -370,7 +370,7 @@ export default function SoloLawyersPage() {
                 Early access
               </div>
               <p className="mt-2 text-[13px] text-[var(--color-mute-2)]">
-                per lawyer / month
+                Review current plans; pilot terms confirmed separately
               </p>
               <ul className="mt-5 space-y-2 text-[13.5px] text-[var(--color-ink-2)]">
                 <li className="flex gap-2">
@@ -379,7 +379,7 @@ export default function SoloLawyersPage() {
                 </li>
                 <li className="flex gap-2">
                   <span aria-hidden className="mt-[8px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-brand-500)]" />
-                  Case diary and cause-list sync
+                  Case diary; source-dependent cause-list coverage
                 </li>
                 <li className="flex gap-2">
                   <span aria-hidden className="mt-[8px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-brand-500)]" />
@@ -400,19 +400,19 @@ export default function SoloLawyersPage() {
                   <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-ink)] font-mono text-[11px] font-semibold text-white">
                     1
                   </span>
-                  30-minute sign-up call. You tell us which court(s) you appear in most often.
+                  Request a conversation about your practice and court coverage. Scheduling is confirmed separately.
                 </li>
                 <li className="flex gap-3">
                   <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-ink)] font-mono text-[11px] font-semibold text-white">
                     2
                   </span>
-                  We preload cause-list sync and a template pack (bail, quashing, §34, reply to summons).
+                  Confirm court-source coverage, available templates and any setup before agreeing a pilot.
                 </li>
                 <li className="flex gap-3">
                   <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-ink)] font-mono text-[11px] font-semibold text-white">
                     3
                   </span>
-                  You use it for two weeks on real matters. Pilot price is locked in if you stay.
+                  Agree any pilot duration and commercial terms before using real matters. No pilot price is locked by submitting a request.
                 </li>
               </ol>
             </div>
@@ -425,7 +425,7 @@ export default function SoloLawyersPage() {
           tone="ink"
           eyebrow="Contact"
           title="Write to the founder."
-          description="Solo pilots are handled directly by the founder until we are larger. Expect a human reply within a working day."
+          description="Request a founder conversation about a possible solo pilot. Availability and response timing are confirmed separately."
           className="border-b-0"
         >
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
@@ -434,15 +434,15 @@ export default function SoloLawyersPage() {
                 Direct contact
               </div>
               <a
-                href={`mailto:${siteConfig.contact.founder}?subject=Solo%20advocate%20pilot`}
+                href="/demo/solo-lawyers"
                 className="mt-4 inline-block font-display text-[2.25rem] font-normal leading-none tracking-tight text-white hover:text-white/85 md:text-[3rem]"
               >
-                {siteConfig.contact.founder}
+                Request a conversation
               </a>
               <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/75">
-                Tell us the forum you appear in most and the two case types that take up
-                the most of your week. We set up the sandbox, send a login, and jump on
-                a 30-minute call to run through it with you.
+                Tell us about your practice without sharing client or case details.
+                Any walkthrough, workspace setup, court coverage and pilot terms
+                require separate confirmation.
               </p>
             </div>
             <PersonaSwitch active="solos" />

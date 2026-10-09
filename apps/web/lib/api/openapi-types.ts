@@ -11856,6 +11856,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-admin/enrollments/{enrollment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Demo Enrollment */
+        delete: operations["delete_demo_enrollment_api_platform_admin_enrollments__enrollment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/enrollments/{enrollment_id}/retry-notification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Enrollment Notification */
+        post: operations["retry_enrollment_notification_api_platform_admin_enrollments__enrollment_id__retry_notification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform-admin/finance/{report}": {
         parameters: {
             query?: never;
@@ -20224,8 +20258,24 @@ export interface components {
             contact_mobile?: string | null;
             /** Contact Name */
             contact_name: string;
+            /** Idempotency Key */
+            idempotency_key?: string | null;
+            /**
+             * Intent
+             * @default demo
+             * @enum {string}
+             */
+            intent: "demo" | "pilot" | "pricing";
             /** Notes */
             notes?: string | null;
+            /** Privacy Notice Version */
+            privacy_notice_version?: "2026-10-09" | null;
+            /**
+             * Role
+             * @default not_specified
+             * @enum {string}
+             */
+            role: "solo_advocate" | "partner" | "associate" | "general_counsel" | "legal_ops" | "other" | "not_specified";
             /**
              * Segment
              * @enum {string}
@@ -72096,6 +72146,80 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    delete_demo_enrollment_api_platform_admin_enrollments__enrollment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_enrollment_notification_api_platform_admin_enrollments__enrollment_id__retry_notification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

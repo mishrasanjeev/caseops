@@ -2120,11 +2120,11 @@ export default function GuidePage() {
                   </ul>
                   <Callout title="Request a security review">
                     Enterprise prospects can request the security one-pager and a live
-                    review from{" "}
-                    <a className="underline" href={`mailto:${siteConfig.contact.sales}`}>
-                      {siteConfig.contact.sales}
+                    review through{" "}
+                    <a className="underline" href="/demo/guide">
+                      a saved conversation request
                     </a>
-                    . DPAs and sub-processor lists are available on signature.
+                    . Availability, documentation and any agreement are confirmed separately.
                   </Callout>
                 </Section>
 
@@ -2387,9 +2387,9 @@ export default function GuidePage() {
                     <a className="underline" href="mailto:support@caseops.ai">
                       support@caseops.ai
                     </a>
-                    . For security reviews and enterprise trials, write to{" "}
-                    <a className="underline" href={`mailto:${siteConfig.contact.sales}`}>
-                      {siteConfig.contact.sales}
+                    . Email contact is not a saved demo request. For security reviews and possible pilots, use{" "}
+                    <a className="underline" href="/demo/guide">
+                      the conversation request form
                     </a>
                     . This guide is versioned; the top of the page shows when it was last
                     updated.

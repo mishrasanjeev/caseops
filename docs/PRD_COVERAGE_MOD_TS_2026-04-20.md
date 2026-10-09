@@ -1,5 +1,14 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 9 Exact-Serving Acceptance Follow-Up
+
+PRs #525/#526 serve as `b1d3fb23`; the five failed production journeys in
+`37909107955` keep US-001, M02/M03/M08/M13/M14 and UJ36/UJ61 partial.
+J19/M21/US-063 includes existing #513/#515/#521 and PR #522, not completed
+conversion or Google indexing claims. Storage and dependency repairs require
+fresh main CodeQL findings plus full runtime/Docker acceptance. Evidence:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 9 Custom Cursor Follow-Up
 
 UJ-29/PAT-01 (M02/M08/M13/M14) remains partial, not deployed. The complete

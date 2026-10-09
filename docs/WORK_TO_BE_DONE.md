@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 9 Serving-Release Acceptance And Security
+
+PRs #525/#526 are deployed as `b1d3fb23` on API/web, superseding older
+not-deployed checkpoints below. Production run `37909107955` fails five
+complete journeys (276/299 pass, 18 skips); the product is not certified green.
+Issue #527 and 28 main scan alerts remain open while auth/provenance, private
+invalidation, storage and dependency repairs are validated. PRs #520/#522 and
+SEO issues #513/#515 are included; Google exclusion and Calendar consent stay
+separately unverified. Evidence and gates:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 9 Merged-Main Cursor Blocker
 
 PR #525 merged as `47e3554c`, with the exact Docker-accepted `df6c971f` tree:

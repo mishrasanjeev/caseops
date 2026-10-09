@@ -1,5 +1,14 @@
 # Strict Enterprise Gap Tasklist
 
+## October 9 Acceptance And Security NO-GO
+
+PRs #525/#526 are deployed as `b1d3fb23`, but production run `37909107955`
+has five failures. Certification is **NO-GO**; private cadence stays paused
+until replacement QA and two clean quiescent runs. Six high path alerts,
+eighteen cycles and four test-quality findings require fresh main analysis,
+not a green job or dismissals. Evidence:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 9 Custom Cursor Release Blocker
 
 **NO-GO** for deployment of merged `47e3554c`: main CI catches a stale-ID

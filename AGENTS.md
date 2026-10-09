@@ -1,5 +1,16 @@
 # CaseOps agent instructions
 
+- Auth/session minting must serialize current User and Membership changes
+  without conflicting with historical FK key-share provenance. Prove both
+  lock orders and deactivation/cutoff rejection on PostgreSQL; provenance
+  compatibility must not weaken live mutation authorization.
+- Synchronous database, scanner and password work must not run on the HTTP
+  event loop. Prove an unrelated real socket request stays responsive while
+  the actual handler's service is blocked, and preserve its error/commit contract.
+- A green CodeQL job is not a zero-alert security inventory. Reconcile fresh
+  main alert states and original taint/dependency paths; suppressions and
+  moving imports inside functions do not establish a permanent fix.
+
 - Keyset performance must cover a validated cursor beyond the pre-import ID
   histogram. A first page and a generic plan can be bounded while a custom
   cursor plan scans/sorts thousands of keys. Train and assert the stale

@@ -397,8 +397,10 @@ def test_private_retrieval_production_acceptance_is_exact_and_release_owned() ->
         "source_types: [source.sourceType]",
         "scope_ids: { matter: [matter.id] }",
         "{ headers, data: filters }",
-        "await expectStatus(response, 200, "
-        "`retained ${source.sourceType} revocation ${endpoint}`);",
+        (
+            "await expectStatus(response, 200, "
+            + "`retained ${source.sourceType} revocation ${endpoint}`);"
+        ),
         "visible_match_count: 0",
         "count_is_capped: false",
         "else expect(body.items).toEqual([]);",
@@ -406,10 +408,14 @@ def test_private_retrieval_production_acceptance_is_exact_and_release_owned() ->
         'expect(matter.status).toBe("disposed");',
         'is_active: false',
         "updated_at: matter.updated_at",
-        'expect(answers.length, "retained evidence must contain an actual prior answer")'
-        ".toBeGreaterThan(0);",
-        'expect(matches.length, "a retired fixture needs retained answer evidence")'
-        ".toBeGreaterThan(0);",
+        (
+            'expect(answers.length, "retained evidence must contain an actual prior answer")'
+            + ".toBeGreaterThan(0);"
+        ),
+        (
+            'expect(matches.length, "a retired fixture needs retained answer evidence")'
+            + ".toBeGreaterThan(0);"
+        ),
         'params: { title: `Ask \\u00b7 ${filename}`, limit: 100, offset: 0 },',
         'expect(body.has_more, "exact retained-session lookup must remain bounded").toBe(false);',
         'expect(body.has_more, "QA conversation must remain bounded").toBe(false);',

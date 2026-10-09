@@ -335,7 +335,7 @@ const surfaces: Surface[] = [
     tab: "Matter cockpit",
     headline: "Every matter as one system of record.",
     blurb:
-      "Parties, timeline, tasks, documents, notices, drafts, hearings, intelligence, communications, billing and audit - in one workspace, always in sync.",
+      "Parties, timeline, tasks, documents, notices, drafts, hearings, intelligence, communications, billing and audit - in one workspace, with source and refresh state available for review.",
     render: CockpitMock,
   },
   {

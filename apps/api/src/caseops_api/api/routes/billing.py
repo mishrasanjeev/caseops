@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
 from caseops_api.api.dependencies import DbSession, get_current_context, require_capability
+from caseops_api.core.rate_limit import limiter
 from caseops_api.db.models import BillingEnrollment, Company
 from caseops_api.schemas.companies import BootstrapCompanyRequest
 from caseops_api.schemas.saas_billing import (
@@ -23,6 +24,7 @@ from caseops_api.schemas.saas_billing import (
     TrialStartRequest,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.billing_demo import deliver_demo_notification
 from caseops_api.services.identity import register_company_owner
 from caseops_api.services.saas_billing import (
     assert_trial_start_allowed,
@@ -335,5 +337,10 @@ def start_trial(payload: TrialStartRequest, session: DbSession) -> dict[str, obj
 
 
 @router.post("/enrollments/demo-request", response_model=DemoRequestResponse)
-def create_enrollment_demo_request(payload: DemoRequest, session: DbSession) -> DemoRequestResponse:
-    return create_demo_request(session, payload)
+@limiter.limit("5/hour")
+def create_enrollment_demo_request(
+    request: Request, payload: DemoRequest, session: DbSession, background_tasks: BackgroundTasks
+) -> DemoRequestResponse:
+    response = create_demo_request(session, payload)
+    background_tasks.add_task(deliver_demo_notification, response.id)
+    return response

@@ -1,5 +1,14 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 9 Exact-B1 Acceptance Follow-Up
+
+Serving API/web are `b1d3fb23` (PRs #525/#526), not older candidates below.
+Issue #527 remains **Not fixed in production**: run `37909107955` fails
+recordal, bulk update, two sign-in journeys and notice upload. Reproduced
+auth/provenance and populated invalidation contributors have scoped candidate
+repairs, not production closure. All 28 scan findings, pending PRs and external
+boundaries: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 9 Custom Cursor Counterexample
 
 **Not fixed in production.** PR #525 is merged as `47e3554c`, but main CI

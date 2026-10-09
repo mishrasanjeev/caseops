@@ -8426,6 +8426,10 @@ export async function createBillingDemoRequest(input: {
   selectedPlan?: string | null;
   notes?: string | null;
   source?: string;
+  role?: "solo_advocate" | "partner" | "associate" | "general_counsel" | "legal_ops" | "other";
+  intent?: "demo" | "pilot" | "pricing";
+  idempotencyKey?: string;
+  privacyNoticeVersion?: "2026-10-09";
 }): Promise<DemoRequestResponse> {
   const data = await apiRequest<unknown>("/api/billing/enrollments/demo-request", {
     method: "POST",
@@ -8438,6 +8442,10 @@ export async function createBillingDemoRequest(input: {
       selected_plan: input.selectedPlan ?? null,
       notes: input.notes ?? null,
       source: input.source ?? "pricing_page",
+      role: input.role,
+      intent: input.intent,
+      idempotency_key: input.idempotencyKey,
+      privacy_notice_version: input.privacyNoticeVersion,
     },
   });
   return demoRequestResponse.parse(data);
