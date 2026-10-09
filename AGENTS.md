@@ -1620,3 +1620,8 @@ requirements when using the fallback.
   signing keys per fixture. Historical false-positive exceptions must name
   only the reviewed commit/file/rule/line fingerprint, and a positive new-
   credential canary must still fail. Never exclude a rule or test directory.
+- Replacing ORM hydration with set-based DML also changes race-test barriers.
+  Inventory existing ORM-load hooks before freezing acceptance; synchronize on
+  the actual bounded SQL mutation and assert that private rows are not hydrated.
+  Keep disposal, concurrent cleanup, byte purge and event-count assertions;
+  never restore expensive reads or raise a wait budget to satisfy an obsolete hook.

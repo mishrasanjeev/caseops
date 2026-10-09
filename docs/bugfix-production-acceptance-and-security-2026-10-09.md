@@ -304,6 +304,35 @@ root. These are candidate-local scan proofs, not final-head hosted CI.
 
 Current-head hosted CI, all-language scans and live acceptance remain NO-GO.
 
+### Complete Docker Historical Race Finding
+
+Frozen `857a5008` Docker PostgreSQL acceptance finishes with 1,992 collected,
+1,991 passed, one failed and zero skipped. All 5,976 phases, native completion
+and JUnit identities reconcile. The positive 10,001-projection/10,000-output
+propagation-through-commit duration is 0.436 seconds under the unchanged budget.
+No browser execution is claimed: the failed PostgreSQL gate stops before it.
+Owned profile-aware cleanup removes all of this invocation's resources.
+
+The sole failure is
+`test_matter_disposal_survives_concurrent_failed_shadow_cleanup_on_postgres`.
+Its old barrier waits for a projection ORM load that set-based invalidation
+deliberately removed. This is missed historical test-contract propagation,
+not evidence that the lifecycle operation failed. The complete repository
+ORM-load-hook inventory finds no other such barrier. The updated test pauses
+after the actual bulk projection UPDATE, asserts exactly one affected active
+projection and zero hydrated projections, and retains the original disposal,
+applied-event count and concurrent shadow-deletion assertions. Explicit empty
+text/embedding checks strengthen byte-purge proof; all wait budgets remain.
+The complete one-case replacement passes with three phases and completion on
+the isolated PostgreSQL sidecar. This focused pass does not certify the whole
+123-case historical file or replace the required fresh final-head Docker run.
+
+Failed full evidence remains in `docker-857a5008-r5/`, and the focused
+replacement is `shadow-cleanup-hook-fixed-r2.*`, under the evidence root.
+The first focused attempt stops at Ruff E501 before collection and is not
+pytest coverage. Fresh complete Docker, current-head hosted CI/security,
+actual CodeQL results, main merge, deployment and live replay remain required.
+
 - Smoke, local and CI success sounded like full product acceptance while the
   exact-serving gate remained failed. Deployment and certification must differ.
 - Actor-order races omitted sign-in versus historical FK provenance. Identity
