@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -108,6 +109,7 @@ def _inventory(document, env):
                         "file": _safe(spec["file"], env),
                         "line": spec["line"],
                         "column": spec.get("column", 0),
+                        "tags": spec["tags"],
                         "title_path": [
                             _safe(title, env) for title in [*titles, spec["title"]]
                         ],
@@ -116,11 +118,13 @@ def _inventory(document, env):
                         "expected_status": test.get("expectedStatus"),
                         "status": test.get("status"),
                         "timeout": test["timeout"],
+                        "retries": test["retries"],
+                        "repeat_each_index": test["repeatEachIndex"],
                         "annotations": _annotations(test.get("annotations", []), env),
                         "results": [
                             {
                                 "status": result["status"],
-                                "retry": result.get("retry", 0),
+                                "retry": result["retry"],
                                 "duration": result.get("duration", 0),
                                 "worker_index": result.get("workerIndex"),
                                 "parallel_index": result.get("parallelIndex"),
@@ -164,9 +168,31 @@ def _native(path, binding, env, phase):
         if not Path(directory).resolve().is_relative_to(root):
             raise EvidenceError("native_test_directory_outside_checkout")
     projects = [
-        {key: p[key] for key in ("id", "name", "retries", "repeatEach", "timeout")}
+        {
+            **{
+                key: p[key]
+                for key in ("id", "name", "retries", "repeatEach", "timeout")
+            },
+            "test_directory": Path(p["testDir"]).resolve().relative_to(root).as_posix(),
+        }
         for p in config["projects"]
     ]
+    options = dict(argument[2:].split("=", 1) for argument in binding["arguments"])
+    if (
+        type(config["workers"]) is not int
+        or config["workers"] <= 0
+        or ("workers" in options and config["workers"] != int(options["workers"]))
+        or ("retries" in options and options["retries"] != "0")
+        or len({(p["id"], p["name"]) for p in projects}) != len(projects)
+        or any(
+            type(p["retries"]) is not int
+            or p["retries"] != 0
+            or type(p["repeatEach"]) is not int
+            or p["repeatEach"] != 1
+            for p in projects
+        )
+    ):
+        raise EvidenceError("native_zero_retry_configuration_mismatch")
     rows = _inventory(document, env)
     for row in rows:
         source = (Path(config["rootDir"]) / row["file"]).resolve()
@@ -181,6 +207,21 @@ def _native(path, binding, env, phase):
         for row in rows
     ):
         raise EvidenceError("undeclared_native_project")
+    for row in rows:
+        if (
+            type(row["retries"]) is not int
+            or row["retries"] != 0
+            or type(row["repeat_each_index"]) is not int
+            or row["repeat_each_index"] != 0
+            or type(row["line"]) is not int
+            or row["line"] < 1
+            or type(row["column"]) is not int
+            or row["column"] < 1
+            or not all(isinstance(title, str) for title in row["title_path"])
+            or not isinstance(row["tags"], list)
+            or not all(isinstance(tag, str) for tag in row["tags"])
+        ):
+            raise EvidenceError("native_case_metadata_mismatch")
     stats = {
         key: document["stats"][key]
         for key in (
@@ -196,9 +237,20 @@ def _native(path, binding, env, phase):
         rows
     ):
         raise EvidenceError("native_stats_inventory_mismatch")
+    if Counter(row["status"] for row in rows) != Counter(
+        {key: stats[key] for key in ("expected", "skipped", "unexpected", "flaky")}
+    ):
+        raise EvidenceError("native_stats_outcome_mismatch")
     return {
         "binding": binding,
         "projects": projects,
+        "configuration": {
+            "workers": config["workers"],
+            "root_directory": Path(config["rootDir"])
+            .resolve()
+            .relative_to(root)
+            .as_posix(),
+        },
         "tests": rows,
         "stats": stats,
         "global_error_count": len(document.get("errors", [])),
@@ -206,7 +258,53 @@ def _native(path, binding, env, phase):
     }
 
 
-def _junit(raw: Path, output: Path, env, result):
+def _identity(row):
+    return (
+        row["native_spec_id"],
+        row["project_id"],
+        row["project_name"],
+        row["file"],
+        row["line"],
+        row["column"],
+        tuple(row["title_path"]),
+    )
+
+
+def _reconcile(discovery, result):
+    if (
+        discovery["projects"] != result["projects"]
+        or discovery["configuration"] != result["configuration"]
+        or [
+            (r["id"], _identity(r), r["tags"], r["retries"], r["repeat_each_index"])
+            for r in discovery["tests"]
+        ]
+        != [
+            (r["id"], _identity(r), r["tags"], r["retries"], r["repeat_each_index"])
+            for r in result["tests"]
+        ]
+    ):
+        raise EvidenceError("runtime_inventory_mismatch")
+    for row in result["tests"]:
+        attempts = row["results"]
+        if (
+            len(attempts) != 1
+            or type(attempts[0]["retry"]) is not int
+            or attempts[0]["retry"] != 0
+        ):
+            raise EvidenceError("native_zero_retry_attempt_mismatch")
+        actual = attempts[0]["status"]
+        if row["expected_status"] not in {"passed", "failed", "timedOut", "skipped"}:
+            raise EvidenceError("native_expected_status_mismatch")
+        outcome = (
+            "skipped"
+            if actual == "skipped"
+            else ("expected" if actual == row["expected_status"] else "unexpected")
+        )
+        if actual != "interrupted" and row["status"] != outcome:
+            raise EvidenceError("native_case_outcome_mismatch")
+
+
+def _junit(raw: Path, output: Path | None, env, result):
     if not raw.is_file() or raw.stat().st_size > LIMIT:
         raise EvidenceError("missing_or_oversized_junit")
     try:
@@ -223,10 +321,67 @@ def _junit(raw: Path, output: Path, env, result):
         != result["stats"]["unexpected"]
     ):
         raise EvidenceError("junit_failed_mismatch")
+    actual = []
+    root = tree.getroot()
+    if root.tag != "testsuites" or any(s.tag != "testsuite" for s in root):
+        raise EvidenceError("junit_structure_mismatch")
+    for suite in root:
+        native_cases = suite.findall("testcase")
+        if len(native_cases) != 1:
+            raise EvidenceError("junit_structure_mismatch")
+        case = native_cases[0]
+        try:
+            titles = json.loads(case.attrib["caseops-title-path"])
+            if (
+                not isinstance(titles, list)
+                or len(titles) < 2
+                or not all(isinstance(title, str) for title in titles)
+            ):
+                raise ValueError
+            line, column = int(case.attrib["line"]), int(case.attrib["column"])
+            identity = (
+                case.attrib["caseops-id"],
+                case.attrib["caseops-project-id"],
+                case.attrib["caseops-project-name"],
+                case.attrib["file"],
+                line,
+                column,
+                tuple(titles),
+            )
+            outcome = case.attrib["caseops-outcome"]
+        except (KeyError, ValueError, TypeError):
+            raise EvidenceError("junit_identity_mismatch") from None
+        if (
+            case.get("line") != str(line)
+            or case.get("column") != str(column)
+            or case.get("name") != " \u203a ".join(titles[1:])
+            or case.get("classname") != titles[0]
+            or suite.get("name") != titles[0]
+            or suite.get("hostname") != identity[2]
+            or suite.get("tests") != "1"
+            or suite.get("errors") != "0"
+            or suite.get("failures") != str(int(outcome == "unexpected"))
+            or suite.get("skipped") != str(int(outcome == "skipped"))
+            or len(case.findall("failure")) != int(outcome == "unexpected")
+            or len(case.findall("skipped")) != int(outcome == "skipped")
+            or case.findall("error")
+            or outcome not in {"expected", "skipped", "unexpected", "flaky"}
+        ):
+            raise EvidenceError("junit_case_outcome_or_display_mismatch")
+        actual.append((identity, outcome))
+    # Multiplicity is part of the proof: never deduplicate or match joined titles.
+    if Counter(actual) != Counter(
+        (_identity(row), row["status"]) for row in result["tests"]
+    ):
+        raise EvidenceError("junit_identity_outcome_mismatch")
+    if output is None:
+        return
     # Native XML structure/outcomes survive; body/error/output/attachment data do not.
     for element in tree.iter():
         element.attrib = {
-            key: _safe(value, env)
+            key: value
+            if element.tag == "testcase" and key == "caseops-title-path"
+            else _safe(value, env)
             for key, value in element.attrib.items()
             if key
             in {
@@ -242,6 +397,13 @@ def _junit(raw: Path, output: Path, env, result):
                 "type",
                 "value",
                 "hostname",
+                "line",
+                "column",
+                "caseops-id",
+                "caseops-project-id",
+                "caseops-project-name",
+                "caseops-title-path",
+                "caseops-outcome",
             }
             or (element.tag == "skipped" and key == "message")
         }
@@ -404,10 +566,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         result = _native(destination / "native-results.json", binding, env, "execution")
         result["binding"] = public_binding
         _write(destination / "results.json", result)
-        if [row["id"] for row in result["tests"]] != [
-            r["id"] for r in discovery["tests"]
-        ]:
-            raise EvidenceError("runtime_inventory_mismatch")
+        _reconcile(discovery, result)
         if (
             process.returncode < 0
             or result["report_status"] == "interrupted"
@@ -549,6 +708,9 @@ def validate(root: Path, required, expected: str) -> None:
             != [r["id"] for r in result["tests"]]
         ):
             raise EvidenceError("completion_inventory_mismatch")
+        _reconcile(discovery, result)
+        _junit(directory / "native-results.xml", None, {}, result)
+        _junit(directory / "results.xml", None, {}, result)
 
 
 def main() -> int:

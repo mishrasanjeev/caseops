@@ -93,6 +93,7 @@ def capture(tmp_path, monkeypatch):
         "config": {
             "configFile": str(config),
             "rootDir": str(tmp_path),
+            "workers": 1,
             "projects": [
                 {
                     "id": "offline",
@@ -113,12 +114,15 @@ def capture(tmp_path, monkeypatch):
                         "file": "offline.spec.ts",
                         "line": 5,
                         "column": 1,
+                        "tags": [],
                         "title": "Unicode \u00a7 \u0939\u093f\u0902\u0926\u0940",
                         "tests": [
                             {
                                 "projectId": "offline",
                                 "projectName": "offline",
                                 "timeout": 30000,
+                                "retries": 0,
+                                "repeatEachIndex": 0,
                                 "annotations": [],
                                 "expectedStatus": "passed",
                                 "status": "skipped",
@@ -163,6 +167,7 @@ def capture(tmp_path, monkeypatch):
         execution_exit=0,
         missing=None,
         junit_count=1,
+        mutate_xml=None,
     )
 
     def launch(command, **kwargs):
@@ -192,26 +197,50 @@ def capture(tmp_path, monkeypatch):
             )
         if not listing and state.missing != "junit":
             xml = ET.Element("testsuites")
-            suite = ET.SubElement(xml, "testsuite", name="offline.spec.ts")
-            for _ in range(state.junit_count):
-                case = ET.SubElement(
-                    suite, "testcase", name="Unicode \u00a7 \u0939\u093f\u0902\u0926\u0940"
+            rows = evidence._inventory(doc, env)
+            for row in rows[: state.junit_count]:
+                suite = ET.SubElement(
+                    xml,
+                    "testsuite",
+                    name=row["title_path"][0],
+                    hostname=row["project_name"],
+                    tests="1",
+                    errors="0",
+                    failures=str(int(row["status"] == "unexpected")),
+                    skipped=str(int(row["status"] == "skipped")),
                 )
-                native_test = doc["suites"][0]["specs"][0]["tests"][0]
+                case = ET.SubElement(
+                    suite,
+                    "testcase",
+                    {
+                        "name": " \u203a ".join(row["title_path"][1:]),
+                        "classname": row["title_path"][0],
+                        "file": row["file"],
+                        "line": str(row["line"]),
+                        "column": str(row["column"]),
+                        "caseops-id": row["native_spec_id"],
+                        "caseops-project-id": row["project_id"],
+                        "caseops-project-name": row["project_name"],
+                        "caseops-title-path": json.dumps(row["title_path"], ensure_ascii=False),
+                        "caseops-outcome": row["status"],
+                    },
+                )
                 properties = ET.SubElement(case, "properties")
-                for annotation in native_test["annotations"]:
+                for annotation in row["annotations"]:
                     ET.SubElement(
                         properties,
                         "property",
                         name=annotation["type"],
                         value=annotation.get("description", ""),
                     )
-                if native_test["status"] == "skipped":
+                if row["status"] == "skipped":
                     ET.SubElement(case, "skipped")
-                if native_test["status"] == "unexpected":
+                if row["status"] == "unexpected":
                     ET.SubElement(
                         case, "failure", message="Redacted native test error"
                     ).text = "Native test failure; private detail omitted."
+            if state.mutate_xml:
+                state.mutate_xml(xml)
             ET.ElementTree(xml).write(
                 kwargs["env"]["CASEOPS_PW_EVIDENCE_JUNIT_FILE"], encoding="utf-8"
             )
@@ -438,6 +467,252 @@ def test_duplicate_invocation_cannot_overwrite_failed_or_successful_evidence(cap
     assert {p.name: p.read_bytes() for p in capture.path.iterdir()} == before
 
 
+def _two_cases(capture, outcomes=("expected", "expected")):
+    for document in (capture.discovery, capture.runtime):
+        spec = document["suites"][0]["specs"][0]
+        second = copy.deepcopy(spec)
+        second.update(id="native-second", line=9, title="Second identity")
+        document["suites"][0]["specs"].append(second)
+    for spec, outcome in zip(capture.runtime["suites"][0]["specs"], outcomes, strict=True):
+        test = spec["tests"][0]
+        test.update(status=outcome, expectedStatus="skipped" if outcome == "skipped" else "passed")
+        test["results"][0]["status"] = {
+            "expected": "passed",
+            "skipped": "skipped",
+            "unexpected": "failed",
+        }[outcome]
+    capture.discovery["stats"]["skipped"] = 2
+    for key in ("expected", "skipped", "unexpected", "flaky"):
+        capture.runtime["stats"][key] = outcomes.count(key)
+    capture.junit_count = 2
+
+
+@pytest.mark.parametrize(
+    "problem",
+    [
+        "replacement",
+        "duplicate",
+        "outcome-permutation",
+        "failure-permutation",
+        "name",
+        "title-path",
+        "location",
+        "project",
+        "outcome-tag",
+    ],
+)
+def test_equal_count_junit_identity_or_per_case_outcome_drift_is_incomplete(capture, problem):
+    _two_cases(
+        capture,
+        ("expected", "skipped")
+        if problem == "outcome-permutation"
+        else ("expected", "unexpected")
+        if problem == "failure-permutation"
+        else ("expected", "expected"),
+    )
+
+    def mutate(xml):
+        suites = list(xml)
+        first, second = [suite.find("testcase") for suite in suites]
+        if problem == "replacement":
+            first.set("caseops-id", "different-native-id")
+        elif problem == "duplicate":
+            xml.remove(suites[1])
+            xml.append(copy.deepcopy(suites[0]))
+        elif problem == "outcome-permutation":
+            second.remove(second.find("skipped"))
+            ET.SubElement(first, "skipped")
+            first.set("caseops-outcome", "skipped")
+            second.set("caseops-outcome", "expected")
+            suites[0].set("skipped", "1")
+            suites[1].set("skipped", "0")
+        elif problem == "failure-permutation":
+            failure = second.find("failure")
+            second.remove(failure)
+            first.append(failure)
+            first.set("caseops-outcome", "unexpected")
+            second.set("caseops-outcome", "expected")
+            suites[0].set("failures", "1")
+            suites[1].set("failures", "0")
+        elif problem == "name":
+            first.set("name", "Wrong human title")
+        elif problem == "title-path":
+            first.set("caseops-title-path", json.dumps(["offline.spec.ts", "Wrong identity"]))
+        elif problem == "location":
+            first.set("line", "6")
+        elif problem == "project":
+            first.set("caseops-project-name", "another")
+        else:
+            first.set("caseops-outcome", "skipped")
+
+    capture.mutate_xml = mutate
+    assert capture.run() != 0
+    assert not (capture.path / "completion.json").exists()
+    assert (capture.path / "native-results.xml").is_file()
+    assert (capture.path / "native-results.json").is_file()
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "file",
+        "line",
+        "column",
+        "title",
+        "suite-title",
+        "project",
+        "tags",
+        "repeatEachIndex",
+        "retries",
+        "workers",
+        "project-timeout",
+    ],
+)
+def test_same_native_id_cannot_hide_execution_metadata_or_configuration_drift(capture, field):
+    spec = capture.runtime["suites"][0]["specs"][0]
+    test = spec["tests"][0]
+    if field == "file":
+        (capture.root / "other.spec.ts").touch()
+        spec["file"] = "other.spec.ts"
+    elif field in {"line", "column"}:
+        spec[field] += 1
+    elif field == "title":
+        spec["title"] = "Different native title"
+    elif field == "suite-title":
+        capture.runtime["suites"][0]["title"] = "Different suite"
+    elif field == "project":
+        test["projectName"] = "another"
+    elif field == "tags":
+        spec["tags"] = ["@different"]
+    elif field in {"repeatEachIndex", "retries"}:
+        test[field] = 1
+    elif field == "workers":
+        capture.runtime["config"]["workers"] = 2
+    else:
+        capture.runtime["config"]["projects"][0]["timeout"] += 1
+    assert capture.run() != 0
+    assert not (capture.path / "completion.json").exists()
+
+
+@pytest.mark.parametrize(
+    "problem",
+    [
+        "retry-one",
+        "missing-retry",
+        "duplicate-attempt",
+        "missing-case-retries",
+        "project-retries",
+        "repeat-each",
+        "wrong-outcome",
+        "wrong-expected-status",
+    ],
+)
+def test_zero_retry_release_evidence_requires_exact_native_attempt_and_outcome(capture, problem):
+    test = capture.runtime["suites"][0]["specs"][0]["tests"][0]
+    if problem == "retry-one":
+        test["results"][0]["retry"] = 1
+    elif problem == "missing-retry":
+        del test["results"][0]["retry"]
+    elif problem == "duplicate-attempt":
+        test["results"].append(copy.deepcopy(test["results"][0]))
+    elif problem == "missing-case-retries":
+        del test["retries"]
+    elif problem == "project-retries":
+        capture.runtime["config"]["projects"][0]["retries"] = 1
+    elif problem == "repeat-each":
+        capture.runtime["config"]["projects"][0]["repeatEach"] = 2
+    elif problem == "wrong-outcome":
+        test["status"] = "unexpected"
+        capture.runtime["stats"].update(expected=0, unexpected=1)
+    else:
+        test["expectedStatus"] = "failed"
+    assert capture.run() != 0
+    assert not (capture.path / "completion.json").exists()
+
+
+@pytest.mark.parametrize(
+    "title_path",
+    [
+        ["offline.spec.ts", "Root title"],
+        ["offline.spec.ts", "Outer", "Inner", "Nested title"],
+        ["offline.spec.ts", "", "Whitespace\t\r\n \u00a7 \u0939\u093f\u0902\u0926\u0940"],
+        ["offline.spec.ts", "Joined \u203a title", "Leaf"],
+        ["offline.spec.ts", "Joined", "title \u203a Leaf"],
+    ],
+)
+def test_canonical_title_shapes_and_xml_whitespace_are_preserved_without_normalization(
+    capture, title_path
+):
+    for document in (capture.discovery, capture.runtime):
+        spec = document["suites"][0]["specs"][0]
+        spec["title"] = title_path[-1]
+        node = {"title": title_path[0], "specs": []}
+        document["suites"] = [node]
+        for title in title_path[1:-1]:
+            child = {"title": title, "specs": []}
+            node["suites"] = [child]
+            node = child
+        node["specs"].append(spec)
+    assert capture.run() == 0
+    evidence.validate(capture.root, ["offline"], BASE)
+    row = json.loads((capture.path / "results.json").read_text(encoding="utf-8"))["tests"][0]
+    case = next(ET.parse(capture.path / "results.xml").iter("testcase"))
+    assert row["title_path"] == title_path
+    assert json.loads(case.get("caseops-title-path")) == title_path
+    assert case.get("name") == " \u203a ".join(title_path[1:])
+
+
+def test_junit_order_is_not_identity_and_colliding_display_names_remain_distinct(capture):
+    _two_cases(capture)
+    for document in (capture.discovery, capture.runtime):
+        specs = document["suites"][0]["specs"]
+        specs[1]["title"] = specs[0]["title"]
+    capture.mutate_xml = lambda xml: xml.append(xml[0]) or xml.remove(xml[0])
+    assert capture.run() == 0
+    evidence.validate(capture.root, ["offline"], BASE)
+
+
+def test_legitimate_runtime_expected_failure_skip_and_timeout_changes_are_not_identity_drift(
+    capture,
+):
+    test = capture.runtime["suites"][0]["specs"][0]["tests"][0]
+    test.update(expectedStatus="failed", timeout=60000)
+    test["results"][0]["status"] = "failed"
+    assert capture.run() == 0
+    evidence.validate(capture.root, ["offline"], BASE)
+
+
+@pytest.mark.parametrize("arguments", list(BASE_COMMANDS.values()), ids=list(BASE_COMMANDS))
+def test_every_original_config_project_binding_has_exact_json_xml_identity(capture, arguments):
+    capture.args[:] = arguments.split()
+    options = dict(argument[2:].split("=", 1) for argument in capture.args)
+    config = capture.root / options["config"]
+    config.write_text("// deterministic original invocation binding\n", encoding="utf-8")
+    project = options.get(
+        "project",
+        {
+            "playwright.ip-a0-prod.config.ts": "ip-a0-prod-chromium",
+            "playwright.ip-renewal-prod.config.ts": "ip-renewal-prod-chromium",
+            "playwright.ip-cost-prod.config.ts": "",
+            "playwright.notice-prod.config.ts": "notice-prod-chromium",
+        }.get(options["config"], ""),
+    )
+    for document in (capture.discovery, capture.runtime):
+        document["config"].update(configFile=str(config), workers=int(options.get("workers", "1")))
+        document["config"]["projects"][0].update(id=project, name=project)
+        document["suites"][0]["specs"][0]["tests"][0].update(projectId=project, projectName=project)
+    assert capture.run() == 0
+    evidence.validate(capture.root, ["offline"], BASE)
+    row = json.loads((capture.path / "results.json").read_text(encoding="utf-8"))["tests"][0]
+    case = next(ET.parse(capture.path / "results.xml").iter("testcase"))
+    assert (
+        case.get("caseops-project-id")
+        == case.get("caseops-project-name")
+        == row["project_id"]
+        == project
+    )
+
+
 @pytest.mark.parametrize("status", ["failed", "timedout"])
 def test_failed_full_native_status_cannot_be_hidden_by_green_case_or_exit(capture, status):
     capture.runtime["status"] = status
@@ -508,10 +783,10 @@ def test_complete_native_reporter_pre_disk_privacy_contracts(tmp_path, record_pr
     path = tmp_path / "native-reporter.tap"
     path.write_text(result.stdout + result.stderr, encoding="utf-8")
     record_property("native_reporter_inventory", str(path))
-    record_property("native_reporter_test_count", "17")
+    record_property("native_reporter_test_count", "18")
     assert result.returncode == 0, result.stdout + result.stderr
     assert (
-        "# tests 17" in result.stdout
+        "# tests 18" in result.stdout
         and "# fail 0" in result.stdout
         and "# skipped 0" in result.stdout
     )

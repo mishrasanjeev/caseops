@@ -167,8 +167,10 @@ class ProductionEvidenceReporter {
       stats[outcome]++;
       const relativeFile = path.relative(config.rootDir, test.location.file).replaceAll("\\", "/");
       const titles = test.titlePath().slice(2);
+      const titlePath = titles.map(safe);
       const nativeTest = {
         timeout: test.timeout, annotations: annotations(test.annotations),
+        retries: test.retries, repeatEachIndex: test.repeatEachIndex,
         expectedStatus: test.expectedStatus, projectId: project.name, projectName: project.name,
         results: test.results.map((run) => ({
           workerIndex: run.workerIndex, parallelIndex: run.parallelIndex,
@@ -183,10 +185,10 @@ class ProductionEvidenceReporter {
         tags: (test.tags ?? []).map(safe), tests: [nativeTest] };
       // One canonical native spec per case keeps public TestCase.id intact,
       // including repeated/project variants, without internal Playwright APIs.
-      let node = { title: safe(titles[0]), file: relativeFile, specs: [] };
+      let node = { title: titlePath[0], file: relativeFile, specs: [] };
       suites.push(node);
-      for (const title of titles.slice(1, -1)) {
-        const child = { title: safe(title), specs: [] };
+      for (const title of titlePath.slice(1, -1)) {
+        const child = { title, specs: [] };
         node.suites = [child];
         node = child;
       }
@@ -198,8 +200,13 @@ class ProductionEvidenceReporter {
         '<failure message="Redacted native test error" type="FAILURE">Native failure; private detail omitted.</failure>' : "";
       const skipped = outcome === "skipped" ? "<skipped/>" : "";
       const duration = test.results.reduce((total, run) => total + run.duration, 0) / 1000;
-      junit.push(`<testsuite name="${xml(safe(titles[0]))}" hostname="${xml(project.name)}" tests="1" failures="${failure ? 1 : 0}" errors="0" skipped="${skipped ? 1 : 0}" time="${duration}">`
-        + `<testcase classname="${xml(safe(titles[0]))}" name="${xml(titles.slice(1).map(safe).join(" \u203a "))}" time="${duration}">`
+      // The title-path array disambiguates nested/display-separator collisions.
+      // Escape XML attribute whitespace rather than normalizing native titles.
+      junit.push(`<testsuite name="${xml(titlePath[0])}" hostname="${xml(project.name)}" tests="1" failures="${failure ? 1 : 0}" errors="0" skipped="${skipped ? 1 : 0}" time="${duration}">`
+        + `<testcase classname="${xml(titlePath[0])}" name="${xml(titlePath.slice(1).join(" \u203a "))}" time="${duration}"`
+        + ` file="${xml(relativeFile)}" line="${xml(test.location.line)}" column="${xml(test.location.column)}"`
+        + ` caseops-id="${xml(test.id)}" caseops-project-id="${xml(project.name)}" caseops-project-name="${xml(project.name)}"`
+        + ` caseops-title-path="${xml(JSON.stringify(titlePath))}" caseops-outcome="${xml(outcome)}">`
         + `<properties>${properties}</properties>${failure}${skipped}</testcase></testsuite>`);
     }
     const report = {

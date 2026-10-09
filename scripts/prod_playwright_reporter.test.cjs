@@ -21,6 +21,7 @@ function fixture(options = {}) {
   const outcome = options.outcome ?? "expected";
   const runStatus = options.runStatus ?? (outcome === "skipped" ? "skipped" : outcome === "unexpected" ? "failed" : "passed");
   const testCase = { id: "canonical-native-id", title: "Native \u00a7 identity", timeout: 30000,
+    retries: 0, repeatEachIndex: 0,
     location: { file: path.join(root, "tests/e2e/offline.spec.ts"), line: 11, column: 3 },
     expectedStatus: outcome === "skipped" ? "skipped" : "passed", tags: ["@proof"],
     parent: { project: () => project }, titlePath: () => ["", "offline", "offline.spec.ts", "Journey", "Native \u00a7 identity"],
@@ -172,6 +173,35 @@ test("native unnamed default project identity is preserved for the production co
   } });
   assert.equal(json.config.projects[0].id, "");
   assert.equal(json.suites[0].suites[0].specs[0].tests[0].projectId, "");
+});
+
+test("canonical XML title path distinguishes display collisions and preserves UTF8 whitespace", async () => {
+  const shapes = [
+    ["offline.spec.ts", "Root title"],
+    ["offline.spec.ts", "Outer", "Inner", "Nested title"],
+    ["offline.spec.ts", "", "Whitespace\t\r\n \u00a7 \u0939\u093f\u0902\u0926\u0940"],
+    ["offline.spec.ts", "Joined \u203a title", "Leaf"],
+    ["offline.spec.ts", "Joined", "title \u203a Leaf"],
+  ];
+  for (const titles of shapes) {
+    const { json, xml } = await capture({ mutate: ({ testCase }) => {
+      testCase.title = titles.at(-1);
+      testCase.titlePath = () => ["", "offline", ...titles];
+    } });
+    let node = json.suites[0];
+    const retained = [node.title];
+    while (node.suites) { node = node.suites[0]; retained.push(node.title); }
+    retained.push(node.specs[0].title);
+    assert.deepEqual(retained, titles);
+    assert.equal(node.specs[0].tests[0].retries, 0);
+    assert.equal(node.specs[0].tests[0].repeatEachIndex, 0);
+    const escaped = JSON.stringify(titles).replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+    assert.ok(xml.includes(`caseops-title-path="${escaped}"`));
+    assert.match(xml, /caseops-id="canonical-native-id"/);
+    assert.match(xml, /file="tests\/e2e\/offline.spec.ts" line="11" column="3"/);
+    assert.match(xml, /caseops-outcome="expected"/);
+    if (titles.at(-1).includes("\n")) assert.match(xml, /&#9;&#13;&#10;/);
+  }
 });
 
 test("empty native inventory is retained as empty, never fabricated", async () => {
