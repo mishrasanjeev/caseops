@@ -1563,3 +1563,10 @@ requirements when using the fallback.
   against the exact deployed SHA. Do not blindly replay calendar mutations:
   only retry a write after proving its operation-specific idempotency and
   unknown-outcome contract.
+- A production Playwright assertion made after `page.reload()` must not parse a
+  response object captured from the navigation: Chromium may discard that
+  response body even when the HTTP status was observed successfully. After the
+  reload, issue a fresh authenticated, no-paid-provider API read (or assert the
+  rendered persisted value) and verify the durable state there. Distinguish
+  browser-protocol response-body loss from a product persistence failure, and
+  preserve both sync-success and post-reload persistence assertions.

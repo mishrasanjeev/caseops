@@ -49,13 +49,11 @@ test.describe("Google Workspace token recovery on production", () => {
     expect(importResult.summary.failed).toBe(0);
     await expect(page.getByText("Gmail metadata synced")).toBeVisible();
 
-    const statusResponsePromise = page.waitForResponse(
-      (response) =>
-        response.url().includes("/api/mailbox/gmail/status") &&
-        response.request().method() === "GET",
-    );
     await page.reload();
-    const statusResponse = await statusResponsePromise;
+    const statusResponse = await page.request.get(
+      `${process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai"}/api/mailbox/gmail/status`,
+      { headers: { "X-CaseOps-Automated-Test": "no-paid-providers" } },
+    );
     expect(statusResponse.status()).toBe(200);
     const status = await statusResponse.json();
     expect(status.connections.some(
@@ -83,13 +81,11 @@ test.describe("Google Workspace token recovery on production", () => {
     );
     await expect(page.getByText("Drive metadata synced")).toBeVisible();
 
-    const statusResponsePromise = page.waitForResponse(
-      (response) =>
-        response.url().includes("/api/drive/google/status") &&
-        response.request().method() === "GET",
-    );
     await page.reload();
-    const statusResponse = await statusResponsePromise;
+    const statusResponse = await page.request.get(
+      `${process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai"}/api/drive/google/status`,
+      { headers: { "X-CaseOps-Automated-Test": "no-paid-providers" } },
+    );
     expect(statusResponse.status()).toBe(200);
     const status = await statusResponse.json();
     expect(status.connections.some(
