@@ -14,12 +14,12 @@ from caseops_api.services import document_storage as storage
 
 KEY = "company-1/matters/workspace-1/attachment-1.pdf"
 UNSAFE_KEYS = (
-    "", ".", "..", "../secret", "/secret", "company/../secret",
-    "company/./secret", "company//secret", "company/secret/",
-    "C:/secret", "C:secret", "\\secret", "\\\\server\\share\\secret",
-    "company\\..\\secret", "company/file:stream", "company/file\x00.pdf",
-    "company/%2e%2e/secret", "company/%252e%252e/secret",
-    "company/%2fsecret", "company/%5csecret", "company/file.",
+    "", ".", "..", "../file", "/file", "company/../file",
+    "company/./file", "company//file", "company/file/",
+    "C:/file", "C:file", "\\file", "\\\\server\\share\\file",
+    "company\\..\\file", "company/file:stream", "company/file\x00.pdf",
+    "company/%2e%2e/file", "company/%252e%252e/file",
+    "company/%2ffile", "company/%5cfile", "company/file.",
     "company/file ", "company/CON", "company/nul.pdf", "company/LPT1.txt",
     "company/COM9", "company/CONIN$", "company/CONOUT$",
 )

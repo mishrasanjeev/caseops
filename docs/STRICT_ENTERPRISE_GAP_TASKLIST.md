@@ -9,6 +9,13 @@ eighteen cycles and four test-quality findings require fresh main analysis,
 not a green job or dismissals. Evidence:
 `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
 
+Fresh PR analysis clears the original assigned findings but introduces five
+unused-import findings; actual main closure is still unproved. Hosted CI also
+catches an older aggregate-condition assertion missed by focused coverage.
+Exact historical non-secret fixture fingerprints require strict native replay
+and a positive secret-scan canary. Full final-head Docker, CI and deployment
+remain required; interrupted inventories are not acceptance.
+
 ## October 9 Custom Cursor Release Blocker
 
 **NO-GO** for deployment of merged `47e3554c`: main CI catches a stale-ID

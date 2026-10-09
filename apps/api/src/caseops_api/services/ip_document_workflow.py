@@ -1596,3 +1596,24 @@ def import_ip_document_aliases(
         unchanged_count=unchanged,
         conflicts=conflicts,
     )
+
+
+__all__ = [
+    "add_ip_document_links",
+    "apply_ip_document_bulk_update",
+    "assert_ip_document_access",
+    "authorize_ip_document_action",
+    "get_accessible_ip_document_ids",
+    "get_ip_document",
+    "get_ip_document_policies",
+    "get_ip_document_policy",
+    "get_ip_document_version_for_download",
+    "import_ip_document_aliases",
+    "list_ip_documents",
+    "list_linked_ip_documents",
+    "metadata_to_naming_request",
+    "preview_ip_document_bulk_update",
+    "transition_ip_document_state",
+    "upload_ip_document",
+    "upload_ip_document_version",
+]

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import socket
 from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import contextmanager
@@ -344,7 +345,7 @@ def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
         "CASEOPS_DATABASE_URL", pg_engine.url.render_as_string(hide_password=False),
     )
     monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
-    monkeypatch.setenv("CASEOPS_AUTH_SECRET", "finalizer-test-secret-at-least-32-bytes")
+    monkeypatch.setenv("CASEOPS_AUTH_SECRET", secrets.token_urlsafe(32))
     monkeypatch.setenv("CASEOPS_AUTH_RATE_LIMIT_ENABLED", "false")
     monkeypatch.setenv("CASEOPS_EMBEDDING_PROVIDER", "mock")
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")

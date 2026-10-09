@@ -52,14 +52,12 @@ from caseops_api.services.ip_patent_families import (
     get_patent_family,
     list_patent_families,
 )
-from caseops_api.services.matter_access import (
-    _active_ip_subject_match,
-    visible_ip_dockets_filter,
-)
+from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.private_retrieval import (
     ensure_active_private_generation,
     lock_private_authority_writer,
 )
+from caseops_api.services.record_access_policy import _active_ip_subject_match
 from tests.test_postgres_validation import (
     _ensure_migrations,  # noqa: F401
     _ip_race_context,

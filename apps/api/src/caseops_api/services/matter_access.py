@@ -69,15 +69,6 @@ from caseops_api.services.assignment_memberships import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_operational_guard import matter_is_operational
 from caseops_api.services.record_access_policy import (
-    _active_grant_window as _active_grant_window,
-)
-from caseops_api.services.record_access_policy import (
-    _active_ip_subject_match as _active_ip_subject_match,
-)
-from caseops_api.services.record_access_policy import (
-    _active_wall_window as _active_wall_window,
-)
-from caseops_api.services.record_access_policy import (
     _grant_subject_filter,
     _is_owner,
     _team_scoping_enabled,

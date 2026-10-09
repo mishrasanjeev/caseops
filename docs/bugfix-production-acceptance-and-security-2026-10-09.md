@@ -247,6 +247,63 @@ baselines must positively run before implementation claims.
 
 ## Where Earlier Work Was Insufficient
 
+### Fresh Hosted Security And CI Findings
+
+Hosted candidate `97c11aee` Python analysis `1924545564` completes successfully
+but reports five new `py/unused-import` findings (#529-533). The original 28
+assigned findings are absent from this PR analysis, not yet closed on main.
+Public document-policy compatibility exports need an explicit public contract;
+unused private access helpers belong in their leaf policy module. Preserve
+real callers and import-order tests rather than suppressing the query.
+
+Security run `37955418566` fails on two reviewed non-secret test lookalikes:
+a traversal-path fixture in historical `c0f9775f` and a local-only HTTP signing
+placeholder in `21bf8411`. Current attack patterns retain their negative
+coverage with a neutral filename; each local fixture now generates its signing
+key. Only those exact historical commit/file/rule/line fingerprints are added
+to the existing false-positive ledger. No rule, test-directory or CodeQL
+exclusion is added. A matched-version native history replay and positive new-
+credential canary remain required before secret-scan closure.
+
+The complete storage/finalizer replacement passes 230 tests and 690 reconciled
+phases with native completion. Docker `97c11aee` proves image identity, schema,
+index health and the in-web internal API-origin preflight, but its 1,992-case
+PostgreSQL gate is interrupted for the newly discovered repairs. Its journal
+has no completion event and is incomplete; all owned profile-aware resources
+are removed. A complete fresh final-head Docker replacement is still required.
+
+CI `37955418568` API shard 4 retains one failed historical assertion expecting
+aggregate `always()` instead of the repaired `always() && !cancelled()`.
+This is contract propagation missed by the narrower new cancellation tests,
+not a reason to undo the repair or waive the failed shard. Reconcile the whole
+shard, preserve artifact-upload `always()` and prerequisite failure guards,
+then replay the complete old contract file and deployment-hardening inventory.
+The complete hosted failed shard contains 573 tests in 49 files and exactly
+one failure; all identities and phases reconcile. The three-file replacement
+contains the whole historical shard-plan file, all deployment hardening and
+production-workflow contracts: 227 collected, 226 passed and one Windows
+POSIX-only skip, with 680 phases and native completion. The unchanged POSIX
+case has the earlier network-disabled Linux supplement.
+
+The import repair keeps all 17 public document-workflow functions explicitly
+exported and removes three private facade imports. The two new regressions
+positively fail before repair; all 31 boundary tests then pass with 93 phases.
+The actual PostgreSQL successor/subject caller passes unchanged assertions.
+Runtime function ASTs and the complete original policy test remain unchanged.
+Full API Ruff passes. Fresh hosted analysis is still required.
+
+Matched native Gitleaks `v8.24.3`, image digest
+`e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055`,
+reproduces exactly the two hosted fingerprints. Replacement history and both
+current fixture files have zero findings. A separate offline Git repository
+introduces a fake credential at the same file/rule/line in a new commit and
+positively fails with one finding. Default rules and all 28 ordered attack
+shapes remain intact; no shared Git history is rewritten. Native reports and
+hashed manifest are in `gitleaks-independent-97c11aee-r3/` under the evidence
+root. These are candidate-local scan proofs, not final-head hosted CI.
+
+Current-head hosted CI, all-language scans and live acceptance remain NO-GO.
+
 - Smoke, local and CI success sounded like full product acceptance while the
   exact-serving gate remained failed. Deployment and certification must differ.
 - Actor-order races omitted sign-in versus historical FK provenance. Identity

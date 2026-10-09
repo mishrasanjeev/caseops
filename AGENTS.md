@@ -1606,3 +1606,17 @@ requirements when using the fallback.
   rendered persisted value) and verify the durable state there. Distinguish
   browser-protocol response-body loss from a product persistence failure, and
   preserve both sync-success and post-reload persistence assertions.
+- A workflow-condition repair must update every existing manifest assertion,
+  not only add a new focused test. Preserve failure and coverage guards plus
+  always-uploaded native results, while cancelled aggregates must not retain
+  the concurrency group. Replay the complete historical contract file before
+  freezing Docker acceptance; new green assertions do not cover old drift.
+- A dependency extraction must inventory real compatibility exports and
+  private helper callers. Declare a literal public export contract for retained
+  APIs and move test-only private imports to their owner; a green CodeQL job
+  can still introduce unused-import findings. Reconcile its actual results.
+- A secret scanner may flag a non-secret attack path or local fixture value.
+  Inspect the exact native finding, preserve attack coverage and generate local
+  signing keys per fixture. Historical false-positive exceptions must name
+  only the reviewed commit/file/rule/line fingerprint, and a positive new-
+  credential canary must still fail. Never exclude a rule or test directory.

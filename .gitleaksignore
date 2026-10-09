@@ -128,3 +128,11 @@ ba38bf5e5cb5adb08136b6b284851c7a99927405:docs/ip-implementation/evidence/provide
 # 2026-09-14: exact false positive on the low-entropy fixture HMAC key in the
 # EH-SGR-06 inbound-webhook signature regression (renamed in the next commit).
 9d1023bc9eef0064f60749b736ca28a77d50daaa:apps/api/tests/test_inbound_email_webhook_signature.py:generic-api-key:21
+
+# 2026-10-09: exact historical false positives on a traversal-path fixture
+# and the local-only finalizer HTTP fixture's signing placeholder. The current
+# paths retain the same attack patterns with a neutral filename, and the local
+# signing key is generated per fixture. No rule or test-file exclusion is added;
+# new credential findings remain blocking.
+c0f9775f437d8deaeabc84eaec928cc1359ebd02:apps/api/tests/test_document_storage_path_security_20261009.py:generic-api-key:18
+21bf841164256feaba308dc29fa067343158b975:apps/api/tests/test_document_finalizer_overlap_20261009_postgres.py:generic-api-key:347

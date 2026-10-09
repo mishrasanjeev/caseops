@@ -1,4 +1,5 @@
 """Regression boundaries for the production CodeQL circular dependencies."""
+
 from __future__ import annotations
 
 import ast
@@ -66,9 +67,7 @@ def dependency_graph() -> dict[str, set[str]]:
     return graph
 
 
-def _route(
-    graph: dict[str, set[str]], source: str, target: str
-) -> list[str] | None:
+def _route(graph: dict[str, set[str]], source: str, target: str) -> list[str] | None:
     remaining = [(source, [source])]
     visited: set[str] = set()
     while remaining:
@@ -125,12 +124,15 @@ coverage = importlib.import_module(prefix + 'ip_coverage_projection')
 private = importlib.import_module(prefix + 'private_retrieval')
 assert access.visible_matters_filter is policy.visible_matters_filter
 assert access.visible_ip_dockets_filter is policy.visible_ip_dockets_filter
-assert access._active_ip_subject_match is policy._active_ip_subject_match
+for name in ('_active_grant_window', '_active_ip_subject_match', '_active_wall_window'):
+    assert getattr(policy, name).__module__ == prefix + 'record_access_policy'
+    assert name not in vars(access)
 assert private.visible_matters_filter is policy.visible_matters_filter
 assert private.visible_ip_dockets_filter is policy.visible_ip_dockets_filter
 assert workflow.get_ip_document_policies is documents.get_ip_document_policies
 assert workflow.get_accessible_ip_document_ids is documents.get_accessible_ip_document_ids
 assert workflow._policy is documents._policy
+assert all(callable(getattr(workflow, name)) for name in workflow.__all__)
 assert private.get_ip_document_policies is documents.get_ip_document_policies
 assert coverage.CalendarProjectionTombstoneResult is tombstones.CalendarProjectionTombstoneResult
 assert (coverage.tombstone_membership_calendar_projections
@@ -179,3 +181,54 @@ def test_extracted_document_policy_retains_fail_closed_threshold() -> None:
     assert not denied.portal_share_allowed
     assert not denied.export_allowed
     assert not denied.notification_content_allowed
+
+
+def test_document_workflow_has_explicit_complete_public_exports() -> None:
+    module = SERVICE_PREFIX + "ip_document_workflow"
+    tree = ast.parse((SRC / "caseops_api/services/ip_document_workflow.py").read_text())
+    declarations = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets)
+    ]
+    assert len(declarations) == 1, "Declare the workflow's real public API explicitly"
+    assert isinstance(declarations[0].value, ast.List), "Exports must be a literal, nonopaque list"
+    exports = ast.literal_eval(declarations[0].value)
+    assert all(isinstance(name, str) for name in exports)
+    assert len(exports) == len(set(exports))
+    expected = {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and not node.name.startswith("_")
+    } | {"get_accessible_ip_document_ids", "get_ip_document_policies"}
+    assert set(exports) == expected
+    for path in (SRC / "caseops_api").rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8-sig"))):
+            if isinstance(node, ast.ImportFrom) and node.module == module:
+                assert not any(alias.name == "*" for alias in node.names), path
+                assert {
+                    alias.name for alias in node.names if not alias.name.startswith("_")
+                } <= expected, path
+
+
+def test_private_access_helpers_have_leaf_ownership() -> None:
+    helpers = {"_active_grant_window", "_active_ip_subject_match", "_active_wall_window"}
+    facade = ast.parse((SRC / "caseops_api/services/matter_access.py").read_text())
+    facade_imports = {
+        alias.name
+        for node in ast.walk(facade)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    assert helpers.isdisjoint(facade_imports), "Private helpers belong to record_access_policy"
+    caller = ast.parse(Path(__file__).with_name("test_ip_patent_postgres.py").read_text())
+    origins = {
+        node.module
+        for node in ast.walk(caller)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+        if alias.name == "_active_ip_subject_match"
+    }
+    assert origins == {SERVICE_PREFIX + "record_access_policy"}
