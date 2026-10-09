@@ -145,8 +145,8 @@ export default defineConfig({
       // bucket scripts) holds a lock on a .venv/Scripts/*.exe.
       command:
         process.platform === "win32"
-          ? `apps\\api\\.venv\\Scripts\\python.exe -m uvicorn oauth_emulator_api:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`
-          : `apps/api/.venv/bin/uvicorn oauth_emulator_api:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`,
+          ? `apps\\api\\.venv\\Scripts\\python.exe -m uvicorn oauth_emulator_api:app --no-proxy-headers --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`
+          : `apps/api/.venv/bin/uvicorn oauth_emulator_api:app --no-proxy-headers --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`,
       cwd: repoRoot,
       env: {
         ...e2eEnv,

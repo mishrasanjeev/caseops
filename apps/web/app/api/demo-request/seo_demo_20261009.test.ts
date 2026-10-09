@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
+vi.mock("server-only", () => ({}));
 
 const id = "94112f70-d234-4dbd-8d09-e97a0b49c6a4";
 const payload = { contact_name: "Demo Advocate", contact_email: "demo@example.com", company_name: null,

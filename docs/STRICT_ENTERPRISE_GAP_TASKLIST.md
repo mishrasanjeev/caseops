@@ -13,6 +13,18 @@ runs lack complete retained runtime skip evidence. Independent repairs retain
 privacy/security fences and require full final-head and deployed acceptance.
 Evidence: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
 
+## October 10 Purpose-Only Edge Rate Identity
+
+**Partially implemented**; production bug verdict **Inconclusive**. Raw XFF
+trust has three deterministic local failed calls. The independent repair
+uses dedicated verified edge claims, narrowly signed Web-to-API rate identity,
+verified HTTPS scheme authority and guarded canonical reconciliation. It does
+not grant auth/capability authority or certify global rate limits. Compute
+configuration readers are privileged purpose-key principals. Production
+installation, exact-serving readiness and fresh full acceptance remain open;
+no cloud mutation or release closure occurred here. Scoped evidence and tests:
+`docs/bugfix-edge-rate-identity-2026-10-10.md`.
+
 ## October 9 Acceptance And Security NO-GO
 
 PRs #525/#526 are deployed as `b1d3fb23`, but production run `37909107955`

@@ -84,4 +84,4 @@ LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA
 # Cloud Run injects PORT (default 8080); local uses the ENV default
 # above. Bind to all interfaces so the container is reachable from
 # the proxy.
-CMD ["sh", "-c", "uvicorn caseops_api.main:app --host 0.0.0.0 --port ${PORT} --app-dir src"]
+CMD ["sh", "-c", "uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 --port ${PORT} --app-dir src"]

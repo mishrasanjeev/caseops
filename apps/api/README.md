@@ -15,7 +15,7 @@ docker compose up postgres valkey
 
 cd apps\api
 uv sync
-uv run uvicorn caseops_api.main:app --reload --app-dir src
+uv run uvicorn caseops_api.main:app --no-proxy-headers --reload --app-dir src
 ```
 
 CaseOps local API runtime is Postgres-first. Use `CASEOPS_DATABASE_URL` to point at a Postgres 17 + `pgvector` instance, not SQLite, for normal local development and seeded data work.

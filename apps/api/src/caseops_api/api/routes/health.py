@@ -2,11 +2,13 @@ import os
 import re
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 
 from caseops_api.api.dependencies import DbSession
 from caseops_api.db.models import AuthorityDocument, AuthorityDocumentChunk
+from caseops_api.schemas.rate_identity import RateIdentityReadinessResponse
 
 router = APIRouter()
 _RELEASE_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -15,6 +17,26 @@ _RELEASE_SHA = re.compile(r"^[0-9a-f]{40}$")
 @router.get("/health", summary="Service health probe")
 async def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get(
+    "/health/rate-identity",
+    summary="Nonidentifying rate identity readiness",
+    response_model=RateIdentityReadinessResponse,
+    responses={403: {"model": RateIdentityReadinessResponse}},
+)
+async def rate_identity_readiness(request: Request) -> JSONResponse:
+    from caseops_api.core.rate_identity import request_rate_identity
+    from caseops_api.core.settings import get_settings
+
+    identity = request_rate_identity(request)
+    sha = get_settings().release_sha or ""
+    body = RateIdentityReadinessResponse(
+        ready=identity.provenance != "socket" and get_settings().rate_identity_edge_https,
+        provenance=identity.provenance,
+        release_sha=sha if _RELEASE_SHA.fullmatch(sha) else "unavailable",
+    )
+    return JSONResponse(body.model_dump(), headers={"Cache-Control": "no-store"})
 
 
 @router.get("/build", summary="Public exact release identity")

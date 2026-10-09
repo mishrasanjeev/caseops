@@ -3,6 +3,7 @@ import { z } from "zod";
 import { demoAdmissionSchema } from "@/lib/demo-admission";
 import { fetchJsonWithTimeout } from "@/lib/api/client";
 import { API_BASE_URL } from "@/lib/api/config";
+import { DEMO_TARGET, forwardedRateHeaders } from "@/lib/server/rate-identity";
 
 export async function POST(request: Request) {
   let input: unknown;
@@ -14,11 +15,11 @@ export async function POST(request: Request) {
   if (request.headers.get("x-caseops-automated-test") === "no-paid-providers") {
     headers["X-CaseOps-Automated-Test"] = "no-paid-providers";
   }
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) headers["x-forwarded-for"] = forwarded;
+  try { Object.assign(headers, forwardedRateHeaders(request.headers, "POST", DEMO_TARGET)); }
+  catch { return NextResponse.json({ error: "Verified rate identity is unavailable." }, { status: 403 }); }
   try {
     const response = await fetchJsonWithTimeout(
-      `${process.env.CASEOPS_API_BASE_URL ?? API_BASE_URL}/api/billing/enrollments/demo-request`,
+      `${process.env.CASEOPS_API_BASE_URL ?? API_BASE_URL}${DEMO_TARGET}`,
       { method: "POST", headers, body: JSON.stringify(parsed.data), cache: "no-store", credentials: "omit", redirect: "error" }, 15_000,
     );
     if (!response.ok) {
