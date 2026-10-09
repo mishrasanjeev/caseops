@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import secrets
+import shutil
 import subprocess
 import time
 import urllib.error
@@ -218,7 +219,9 @@ class Cloud:
     def run(self, *args, raw=False, input_bytes=None, mutate=False):
         if mutate:
             self.guard()
-        argv = ["gcloud", *args, f"--project={PROJECT}", "--quiet"]
+        executable = shutil.which("gcloud")
+        check(executable is not None, "gcloud CLI is required.")
+        argv = [executable, *args, f"--project={PROJECT}", "--quiet"]
         if not raw:
             argv.append("--format=json")
         result = subprocess.run(

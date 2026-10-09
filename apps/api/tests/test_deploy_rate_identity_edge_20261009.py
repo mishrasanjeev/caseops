@@ -6,6 +6,7 @@ import copy
 import importlib.util
 import json
 import secrets
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -239,6 +240,34 @@ def test_failed_cloud_output_never_appears_in_exception_or_stdout(monkeypatch, c
         edge.Cloud("9" * 40).run("secrets", "list")
     assert private not in str(error.value) and private not in repr(error.value)
     assert private not in str(capsys.readouterr())
+
+
+def test_native_cloud_transport_resolves_installed_executable(monkeypatch):
+    executable = "C:/Program Files/Google Cloud SDK/bin/gcloud.cmd"
+    monkeypatch.setattr(shutil, "which", lambda name: executable if name == "gcloud" else None)
+    calls = []
+
+    def native(argv, **kwargs):
+        calls.append(argv)
+        assert argv == [executable, "secrets", "list", f"--project={edge.PROJECT}",
+                        "--quiet", "--format=json"]
+        assert kwargs == {"input": None, "capture_output": True, "timeout": 90}
+        return subprocess.CompletedProcess(argv, 0, b"[]", b"")
+
+    monkeypatch.setattr(edge.subprocess, "run", native)
+    assert edge.Cloud("9" * 40).run("secrets", "list") == []
+    assert len(calls) == 1
+
+
+def test_missing_cloud_executable_fails_before_native_launch(monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Missing gcloud must never launch an unresolved native command")
+
+    monkeypatch.setattr(edge.subprocess, "run", forbidden)
+    with pytest.raises(edge.EdgeError, match="gcloud CLI is required"):
+        edge.Cloud("9" * 40).run("secrets", "list")
 
 
 class FakeCloud:
