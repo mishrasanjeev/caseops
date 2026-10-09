@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- An evidence aggregate needs the same pinned interpreter as its test shards
+  before dependency resolution. Installing uv alone can select a newly released
+  unsupported Python. Audit every Python-consuming CI job, reproduce a missing
+  pin, replay actual retained shard artifacts and require fresh hosted closure;
+  do not blame successful PostgreSQL tests for a resolver/setup failure.
+
 - Use low-entropy valid IDs for offline public idempotency fixtures, not
   credential-looking random literals. A historical false positive needs an
   exact reviewed commit/path/rule/line fingerprint and a native future-commit

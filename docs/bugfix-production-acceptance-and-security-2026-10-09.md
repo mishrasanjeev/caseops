@@ -1,5 +1,35 @@
 # Production Acceptance And Security Follow-Up - 2026-10-09
 
+## October 10 Aggregate Interpreter Boundary
+
+Complete retained CI evidence from `37985225111` shows all four PostgreSQL
+shards successful, but their aggregate fails before reconciliation: uv selected
+CPython 3.15 and the pinned ONNX dependency has no compatible wheel. This is
+an unpinned aggregate setup defect, not a PostgreSQL product-test failure.
+The new five-job runtime-selection regression collects all 19 sharding tests;
+its baseline has 18 passes and the exact missing aggregate pin fails, with all
+57 phases and JUnit inventory retained. The aggregate now explicitly selects
+Python 3.13 before project resolution. The complete three-file replacement
+passes 51 cases, all 153 phases, with exact native/JUnit inventory agreement.
+All four actual hosted shard journals reconcile individually: 1,999 passes,
+5,997 phases, no skips. The unchanged aggregate command with its new interpreter
+selector passes against byte-identical downloaded inputs on Python 3.13.14.
+Retained evidence is in `.tmp/issues-security-20261009/ci-python-selection-fixed-r1*`
+and `ci-015f4b16-postgres-aggregate-r1/` (`native-input-r2`, replay/version logs
+and per-shard reconciliation). A replay pointed at a diagnostics-enriched
+directory correctly rejected extra JSON artifacts; that failed operator attempt
+is preserved separately. Fresh hosted acceptance is still required. Neither
+wheel pins nor application interpreter/dependency contracts were changed.
+
+Clean `5900bd77` frontend acceptance passes all 1,226 cases/197 files with exact
+native multiplicities. Pinned native Gitleaks 8.24.3 proof completes offline:
+one historical baseline nonce, zero corrected history/current-fixture findings
+and one detected future-commit credential at the same path/line. Failed version
+format and upstream-stopword canary attempts remain preserved. Docker r8 was
+intentionally interrupted early; its owned resources were label-verified and
+cleaned up, and no completion or browser acceptance is claimed. Fresh corrected
+head gates and exact production replay are still required; live remains b1.
+
 ## October 10 Frozen-Candidate Scan Follow-Up
 
 Frozen `015f4b16` frontend replacement completes 1,225 cases/197 files with

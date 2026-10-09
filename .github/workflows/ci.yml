@@ -376,7 +376,7 @@ jobs:
           merge-multiple: true
       - name: Reconcile complete PostgreSQL acceptance
         working-directory: apps/api
-        run: uv run python -m tests.postgres_sharding postgres-evidence --total 4
+        run: uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence --total 4
 
   web:
     name: Web (typecheck + vitest + build)
