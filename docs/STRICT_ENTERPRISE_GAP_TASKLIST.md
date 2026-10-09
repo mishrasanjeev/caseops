@@ -25,6 +25,11 @@ installation, exact-serving readiness and fresh full acceptance remain open;
 no cloud mutation or release closure occurred here. Scoped evidence and tests:
 `docs/bugfix-edge-rate-identity-2026-10-10.md`.
 
+Primary contract: [Google Cloud custom backend headers](https://docs.cloud.google.com/load-balancing/docs/https/custom-headers-global),
+last updated **2026-10-06 UTC**, rechecked 2026-10-10: `client_ip_address`,
+case-insensitive overwrite, URL-map precedence and 8 KB/16-header limits.
+Actual controlled GET overwrite/readiness proof remains pending deployment.
+
 ## October 9 Acceptance And Security NO-GO
 
 PRs #525/#526 are deployed as `b1d3fb23`, but production run `37909107955`

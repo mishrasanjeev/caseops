@@ -31,6 +31,14 @@ header transformations can take precedence. Primary references:
 - https://docs.cloud.google.com/load-balancing/docs/https/custom-headers-global
 - https://docs.cloud.google.com/compute/docs/reference/rest/v1/backendServices/patch
 
+The official **Create custom headers in backend services** page above was
+last updated **2026-10-06 UTC**, independently rechecked on 2026-10-10.
+Its variable table defines `client_ip_address`; its header behavior specifies
+case-insensitive same-name overwrite; its URL-map section gives URL-map
+transformations precedence; its limitations cap each backend's custom request
+headers at 8 KB/16 headers before expansion. These documented contracts do not
+replace the pending controlled GET overwrite and exact-serving readiness proof.
+
 The reviewed metadata shows an `EXTERNAL_MANAGED`, HTTPS-only frontend and
 exact serverless API/Web backend/NEG bindings. This is not proof of an
 already installed dedicated edge contract. No production requests, leads,
