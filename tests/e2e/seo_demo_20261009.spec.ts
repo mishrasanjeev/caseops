@@ -41,7 +41,9 @@ test.describe("seo_demo_20261009", () => {
   for (const width of [360, 1280]) for (const [path, target] of publicPages) {
     test(`public CTA and truthful copy ${path} at ${width}`, async ({ page, context }, info) => {
       const analytics: string[] = [];
+      const admissions: string[] = [];
       page.on("request", (request) => { if (/googletagmanager|google-analytics|gtag\/js|\/g\/collect/.test(request.url())) analytics.push(request.url()); });
+      page.on("request", (request) => { if (request.method() === "POST" && /\/api\/(?:demo-request|billing\/enrollments\/demo-request)(?:[/?]|$)/.test(request.url())) admissions.push(request.url()); });
       await page.setViewportSize({ width, height: 850 });
       const response = await page.goto(path);
       expect(response?.status()).toBe(200);
@@ -57,8 +59,50 @@ test.describe("seo_demo_20261009", () => {
       const box = await link.boundingBox();
       expect(box && box.width > 20 && box.x >= 0 && box.x + box.width <= width + 1).toBeTruthy();
       await page.screenshot({ path: info.outputPath(`public-${width}.png`) });
+      if (target.startsWith("/demo/")) {
+        const demoEntry = entries.find(([entryPath]) => entryPath === target);
+        expect(demoEntry).toBeDefined();
+        const demoResponse = await page.goto(target);
+        expect(demoResponse?.status()).toBe(200);
+        await expect(page.getByRole("heading", { level: 1, name: "Request a CaseOps conversation" })).toBeVisible();
+        const form = page.getByRole("form", { name: "Request a demo" });
+        await expect(form).toBeVisible();
+        await expect(form.getByLabel("Practice / team")).toHaveValue(demoEntry![2]);
+        await expect(form.getByLabel("Full name")).toBeEditable();
+        await expect(form.getByLabel("Work email")).toBeEditable();
+        await expect(form.getByLabel("Role", { exact: true })).toBeEnabled();
+        await expect(form.getByRole("button", { name: "Request a conversation" })).toBeEnabled();
+        await expect(form.getByRole("link", { name: "Request privacy notice" })).toHaveAttribute("href", "/demo/privacy");
+        await expect(form.getByRole("status")).toHaveCount(0);
+        await expect(page.locator('script[src*="googletagmanager"],script[src*="google-analytics"]')).toHaveCount(0);
+        expect(analytics).toEqual([]);
+        expect((await context.cookies()).filter((cookie) => /^_ga|^_gid|^_gat/.test(cookie.name))).toEqual([]);
+      }
+      expect(admissions, "Public read-only coverage must never submit a lead.").toEqual([]);
     });
   }
+
+  test.describe("public read-only prototype source rejection", () => {
+    for (const source of ["constructor", "__proto__"]) {
+      test(`unsupported prototype source ${source} returns 404 without an actionable demo form`, async ({ page, context }) => {
+        const admissions: string[] = [];
+        const analytics: string[] = [];
+        page.on("request", (request) => {
+          if (request.method() === "POST" && /\/api\/(?:demo-request|billing\/enrollments\/demo-request)(?:[/?]|$)/.test(request.url())) admissions.push(request.url());
+          if (/googletagmanager|google-analytics|gtag\/js|\/g\/collect/.test(request.url())) analytics.push(request.url());
+        });
+        const response = await page.goto(`/demo/${source}`);
+        expect(response?.status()).toBe(404);
+        await expect(page.getByRole("form", { name: "Request a demo" })).toHaveCount(0);
+        await expect(page.locator('form[action*="demo"],input[name="contact_email"]')).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Request a conversation" })).toHaveCount(0);
+        await expect(page.locator('script[src*="googletagmanager"],script[src*="google-analytics"]')).toHaveCount(0);
+        expect(admissions).toEqual([]);
+        expect(analytics).toEqual([]);
+        expect((await context.cookies()).filter((cookie) => /^_ga|^_gid|^_gat/.test(cookie.name))).toEqual([]);
+      });
+    }
+  });
 
   for (const [path, source, segment] of entries) {
     test(`durable admission ${source}, replay and no tracking`, async ({ page, request, context, baseURL }, info) => {

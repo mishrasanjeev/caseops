@@ -1,5 +1,10 @@
 # CaseOps agent instructions
 
+- Public route allowlists must check own properties; inherited JavaScript keys
+  such as `constructor` and `__proto__` are not admitted routes. Preserve 404/no-form
+  browser regressions and reconcile each new page's sibling unit inventory before
+  freezing Docker acceptance; a green component test does not cover its page.
+
 - CI aggregate jobs must run after genuine prerequisite failures but stop
   on workflow cancellation. An unconditional `always()` can retain queued
   aggregates after every test job is cancelled and hold the next exact-head

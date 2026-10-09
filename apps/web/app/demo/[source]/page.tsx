@@ -15,7 +15,7 @@ export const metadata = { title: "Request a CaseOps conversation", robots: { ind
 
 export default async function DemoPage({ params }: { params: Promise<{ source: string }> }) {
   const { source } = await params;
-  const entry = entries[source];
+  const entry = Object.hasOwn(entries, source) ? entries[source] : undefined;
   if (!entry) notFound();
   return <main className="mx-auto max-w-2xl px-5 py-10">
     <Logo />

@@ -43,7 +43,7 @@ describe("seo_demo_20261009 durable proxy", () => {
     expect(await response.text()).not.toContain("demo@example.com");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
-  it.each([{ id: "wrong", status: "demo_requested" }, { id: crypto.randomUUID(), status: "demo_requested" }, { id, status: "queued" }])("rejects unproven acknowledgment %j", async (body) => {
+  it.each([{ id: "wrong", status: "demo_requested" }, { id: "94112f70-d234-4dbd-8d09-e97a0b49c6a5", status: "demo_requested" }, { id, status: "queued" }])("rejects unproven acknowledgment %j", async (body) => {
     fetchMock.mockResolvedValue(Response.json(body));
     expect((await POST(request())).status).toBe(503);
   });
@@ -52,7 +52,16 @@ describe("seo_demo_20261009 durable proxy", () => {
     expect((await POST(request())).status).toBe(503);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
-  it.each([{ role: "owner" }, { source: "https://example.com?secret=redact" }, { idempotency_key: undefined }, { privacy_notice_version: undefined }, { referrer: "secret" }, { utm_json: { query: "secret" } }])("rejects invalid or tracking payload %j before transport", async (change) => {
+  it.each([
+    ["unsupported role", { role: "owner" }],
+    ["sensitive URL source", { source: "https://example.com?secret=redact" }],
+    ["inherited constructor source", { source: "constructor" }],
+    ["inherited prototype source", { source: "__proto__" }],
+    ["missing idempotency key", { idempotency_key: undefined }],
+    ["missing privacy notice", { privacy_notice_version: undefined }],
+    ["unreviewed referrer", { referrer: "secret" }],
+    ["unreviewed UTM payload", { utm_json: { query: "secret" } }],
+  ] as const)("rejects %s before transport", async (_label, change) => {
     expect((await POST(request({ ...payload, ...change }))).status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
   });

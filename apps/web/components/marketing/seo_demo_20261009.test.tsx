@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DemoRequestForm } from "./DemoRequestForm";
+import type { DemoSource } from "@/lib/demo-admission";
 
 async function fill() {
   const user = userEvent.setup();
@@ -52,6 +53,15 @@ describe("seo_demo_20261009 public form", () => {
     const user = await fill();
     await user.click(screen.getByRole("button", { name: "Request a conversation" }));
     await screen.findByRole("alert");
+    expect(screen.getByLabelText("Full name")).not.toBeDisabled();
+  });
+  it.each(["constructor", "__proto__"])("rejects untrusted source prop %s before any transport", async (source) => {
+    render(<DemoRequestForm source={source as DemoSource} />);
+    const user = await fill();
+    await user.click(screen.getByRole("button", { name: "Request a conversation" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Review the request fields and try again.");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Full name")).not.toBeDisabled();
   });
   it("updates pricing audience without attributing an incompatible plan", async () => {
