@@ -1,5 +1,26 @@
 # Production Acceptance And Security Follow-Up - 2026-10-09
 
+## October 10 Frozen-Candidate Scan Follow-Up
+
+Frozen `015f4b16` frontend replacement completes 1,225 cases/197 files with
+zero failures or skips and exact discovery/JSON/XML reconciliation. Its first
+attempt overlapped Docker's pinned dependency reinstall and found no Vitest
+CLI; that zero-discovery setup failure remains incomplete and retained.
+
+Hosted security `37985225286` passes dependency audits, license, secret-ref and
+OpenAPI gates but finds one synthetic UUID at commit `7189ed16`, demo schema
+fixture line 11. It is a public admission idempotency identity, not an auth or
+provider credential. The current fixture uses a low-entropy valid UUID and a
+positive/negative UUID-contract regression. Only that exact historical
+commit/path/rule/line fingerprint is admitted; no rule/path/value exclusion is
+introduced. Native current/history scans and a new-commit same-path credential
+canary remain required before release. Docker attempt
+`.tmp/issues-security-20261009/docker-015f4b16-r7` was intentionally stopped
+early, with no completion; it is not accepted. Its owned processes and seven
+label-verified Compose services were cleaned up without touching the separate
+PostgreSQL sidecar or unrelated projects. Fresh full corrected-head acceptance
+is still mandatory; production is unchanged at `b1d3fb23`.
+
 ## October 10 Integrated Follow-Up Proof
 
 The integrated runtime checkpoint is `e0004687`, not a serving revision.

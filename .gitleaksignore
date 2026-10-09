@@ -136,3 +136,8 @@ ba38bf5e5cb5adb08136b6b284851c7a99927405:docs/ip-implementation/evidence/provide
 # new credential findings remain blocking.
 c0f9775f437d8deaeabc84eaec928cc1359ebd02:apps/api/tests/test_document_storage_path_security_20261009.py:generic-api-key:18
 21bf841164256feaba308dc29fa067343158b975:apps/api/tests/test_document_finalizer_overlap_20261009_postgres.py:generic-api-key:347
+
+# 2026-10-10: exact historical offline demo admission UUID, not an auth key.
+# The current schema fixture uses a low-entropy valid UUID; no value, path or
+# rule-wide exemption is added. Future credentials at this path remain blocking.
+7189ed1661a18a45639f9cd42ddba6b2472f9b55:apps/web/lib/seo_demo_20261009.test.ts:generic-api-key:11

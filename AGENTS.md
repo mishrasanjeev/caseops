@@ -1,5 +1,13 @@
 # CaseOps agent instructions
 
+- Use low-entropy valid IDs for offline public idempotency fixtures, not
+  credential-looking random literals. A historical false positive needs an
+  exact reviewed commit/path/rule/line fingerprint and a native future-commit
+  credential canary; never exclude a file, rule or nonce-shaped values broadly.
+- Do not start a second gate while a release wrapper replaces its shared
+  dependencies. Wait for the pinned installation to complete, retain any
+  zero-discovery failure as incomplete, then replay the entire inventory.
+
 - A throttle identity must come from a verified, purpose-specific edge claim,
   not raw XFF, x-real-ip or forwarded scheme headers. Disable Uvicorn's implicit
   proxy rewriting on every entry point, validate the complete signed Web/API

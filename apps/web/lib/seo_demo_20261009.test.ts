@@ -8,11 +8,16 @@ const payload = {
   role: "solo_advocate",
   intent: "demo",
   source: "homepage",
-  idempotency_key: "94112f70-d234-4dbd-8d09-e97a0b49c6a4",
+  idempotency_key: "00000000-0000-4000-8000-000000000001",
   privacy_notice_version: "2026-10-09",
 };
 
 describe("seo_demo_20261009 explicit admission allowlists", () => {
+  it("requires a UUID admission nonce, not an arbitrary credential string", () => {
+    expect(demoAdmissionSchema.safeParse(payload).success).toBe(true);
+    expect(demoAdmissionSchema.safeParse({ ...payload, idempotency_key: "not-a-uuid" }).success).toBe(false);
+  });
+
   it.each(demoSources)("admits canonical source %s without changing attribution", (source) => {
     expect(demoAdmissionSchema.parse({ ...payload, source })).toEqual({ ...payload, source });
   });
