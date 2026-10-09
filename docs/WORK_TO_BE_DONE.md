@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 10 Integrated Follow-Up, Final Gates Pending
+
+Integrated `e0004687` completes the scoped follow-ups: 257 edge/admin API
+passes, 1,225 frontend passes and 335 report/deploy passes plus one explicit
+POSIX-only Windows skip. Native forwarding, Windows CLI resolution, strict
+readiness and exact report identity/outcome proof are implemented. PR #528
+remains draft/NO-GO until fresh final-head Docker and current hosted gates,
+canonical merge, guarded deployment and complete live replay. Production
+remains `b1d3fb23`; old frozen Docker proof does not cover the later source.
+Evidence: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 10 Frozen Docker And Follow-Up Repairs
 
 Frozen `99297e17` completes fresh Docker acceptance: 1992 PostgreSQL passes,

@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 10 Integrated Replacement Evidence
+
+**Not fixed in production.** Integrated `e0004687` completes scoped replacement
+coverage: 257 edge/admin API passes, 1,225 frontend passes and 335 native-report/
+deploy passes with one explicit POSIX-only Windows skip. Failed baselines are
+retained; native cloud topology inspection made no cloud mutation. PR #528
+still needs fresh final-head Docker/CI/security, canonical merge, guarded
+deployment and every complete formerly failed journey on the serving release.
+Current production is `b1d3fb23`. Proof and separate external gaps:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 10 Acceptance Follow-Up
 
 **Not fixed in production.** Frozen `99297e17` has complete positive local

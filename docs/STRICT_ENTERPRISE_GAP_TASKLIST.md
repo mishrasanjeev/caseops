@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## October 10 Integrated Control Replacement
+
+**Partially implemented / NO-GO.** Integrated `e0004687` has complete scoped
+edge/admin (257), frontend (1,225) and native-report/deploy (335 plus one
+POSIX-only Windows skip) replacement proof. The guarded purpose-only edge
+chain, strict readiness, native executable resolution and exact per-case
+evidence address reproduced controls without expanding auth authority or
+relaxing privacy. Default-main security closure and final Docker/CI/deployed
+acceptance remain open on serving `b1d3fb23`. See the preserved baselines and
+remaining external boundaries in `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 10 Positive Docker, Remaining Control Gaps
 
 **Partially implemented / NO-GO.** Frozen `99297e17` passes complete Docker

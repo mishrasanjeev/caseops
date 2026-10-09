@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 10 Integrated Follow-Up Coverage
+
+US-001/M02/M03/M08/M13/M14/UJ36/UJ61 and J19/M21/US-063/SEC-031 remain
+partial on serving `b1d3fb23`. Integrated `e0004687` adds complete scoped
+257-case API, 1,225-case frontend and 336-case report/deploy proof (335 passed,
+one explicit POSIX-only Windows skip). This is not final Docker or production
+acceptance. Purpose-only edge identity and exact privacy-safe native evidence
+retain no-paid/auth/lifecycle fences; all required canonical release and live
+gates remain open. Evidence: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 10 Complete Local Candidate, No Production Closure
 
 Frozen `99297e17` passes 1992 PostgreSQL tests plus 495 browser cases, with

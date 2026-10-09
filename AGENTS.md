@@ -1,5 +1,23 @@
 # CaseOps agent instructions
 
+- A throttle identity must come from a verified, purpose-specific edge claim,
+  not raw XFF, x-real-ip or forwarded scheme headers. Disable Uvicorn's implicit
+  proxy rewriting on every entry point, validate the complete signed Web/API
+  hop and preserve the no-paid marker. The key grants rate/scheme authority,
+  never authentication or capabilities; process-local limits are not global.
+- Native cloud helpers must resolve the installed executable on Windows as
+  well as Linux, without shell interpolation or secret-bearing arguments.
+  Run canonical-main mutation guards before launch. A mock transport cannot
+  substitute for a read-only native CLI probe of the actual deployment tree.
+- Readiness booleans require strict types: Python equality admits 1 as True
+  and 0 as False. Reject extra fields, numeric/string/null readiness and wrong
+  provenance or release identity before certification.
+- Production test evidence must match exact discovery/configuration metadata
+  and JSON/XML identity-and-outcome multisets, including multiplicity and
+  zero-retry attempts. Equal totals or unchanged IDs alone are insufficient.
+  Select safe evidence before disk writes, retain full sanitized skip reasons
+  and bounded approved diagnostics, and fail incomplete/interrupted evidence.
+
 - Administrative mutations must declare the existing platform capability
   dependency before handler entry; an inline check cannot satisfy the route
   guard contract. Anonymous denial tests must pass the legitimate CSRF pair

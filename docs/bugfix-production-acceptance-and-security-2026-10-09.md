@@ -1,5 +1,70 @@
 # Production Acceptance And Security Follow-Up - 2026-10-09
 
+## October 10 Integrated Follow-Up Proof
+
+The integrated runtime checkpoint is `e0004687`, not a serving revision.
+Production still serves `b1d3fb23`; #527 remains **Not fixed in production**.
+Final repaired-head Docker, complete CI/security/actual CodeQL, main merge,
+guarded deployment and full native live acceptance remain mandatory. The
+earlier accepted `99297e17` tree is not acceptance of these later changes.
+
+- Complete edge/admin/billing/health replacement on clean `7b4f9925`: 257
+  passed, zero skipped, 771 reconciled phases across all 11 requested files.
+  Evidence: `.tmp/issues-security-20261009/edge-admin-api-integrated-r1`.
+  Purpose-only edge identity replaces raw forwarded-header trust; all eight
+  Uvicorn entry variants disable implicit proxy rewriting. Native TS-to-ASGI
+  loopback controls, duplicate/forged/expired claim rejection, HTTPS scheme
+  and same-origin slash behavior retain the authentication and no-paid fences.
+  Guarded preparation and post-routing verification are deploy prerequisites.
+  The actual HTTPS topology was validated through native read-only GCP CLI
+  calls; no production cloud configuration was changed. Compute metadata/key
+  readers remain privileged rate/scheme-authority principals. See the separate
+  dated edge audit; these are process-local, not global, rate limits.
+- Integration found two additional control-plane defects: bare `gcloud` could
+  not launch natively on Windows, and dictionary equality admitted numeric
+  readiness booleans. Failed 44-case (42/2) and 50-case (46/4) native baselines
+  are retained. Resolving the installed executable without a shell and strict
+  boolean/exact-key validation pass the complete 50-case replacement. Secret
+  values never enter argv/logs and current-main guards precede mutations.
+- Historical deployment harness integration initially had seven failures in
+  its complete 197-case run (189 passed, one POSIX-only skip). Full details
+  show outdated secret ordering, snippet boundaries, command argument position
+  and main-fetch boundary expectations, not seven production reproductions.
+  The repaired 201-case run passes 200 with that same explicit Windows skip;
+  all eight current-main boundaries and prepare/verify failure paths remain
+  fail-closed. Linux execution-policy proof is still required in final gates.
+- Complete frontend replacement on clean `bb307e1b`: 1,225 tests in 197 files
+  passed, with exact discovery/JSON/JUnit multiplicities reconciled. Coverage
+  remains 62.01% lines, 58.48% statements and 53.35% branches under unchanged
+  thresholds. The two exact historical XML title-format transformations are
+  recorded, not broad normalization. A fresh Next build and root E2E typecheck
+  also pass on `7b4f9925`. The canonical generated client now includes the
+  strict readiness contract among 793 paths/906 operations; governance checks
+  pass without a schema or classification change.
+- Production evidence review reproduced 31 false-completion cases in a full
+  82-case baseline (51 passed/31 failed): equal XML totals, replaced/duplicated
+  identities, permuted outcomes and same-ID metadata/config/attempt drift.
+  The exact multiset and configuration repair is integrated from `66d01295`.
+  Native safe fields are selected before disk I/O; private bodies, auth state,
+  generic attachments, stdout and raw errors are never serialized. Complete
+  sanitized skip reasons and approved bounded failure diagnostics survive.
+  Agent controls reconcile all 302 actual configured identities offline and
+  preserve intentional failed reports; this is not production execution.
+- The complete combined report/deployment replacement on clean `e0004687`
+  collects all 336 identities across five files: 335 passed, one POSIX-only
+  skip, 1,007 phases, native completion and exact JUnit inventory reconciled.
+  All 18 reporter privacy/identity controls pass. Evidence:
+  `.tmp/issues-security-20261009/native-prod-deploy-integrated-e0004687-r1`.
+  No suite flags, retries, production mutation serialization, no-paid marker
+  or legacy release-owned test boundaries were weakened. The old 18 runtime
+  skip reasons remain unavailable until fresh deployed execution records them.
+
+PR #528 remains draft/NO-GO. Default-main alert reconciliation, two later
+exact-image clean private-maintenance executions and guarded scheduler resume
+follow certification. Google deindexing/Calendar consent and the user-kept
+provider/sender/retention gaps remain separately open; no fabricated metric,
+synthetic production lead or automated billable provider probe is admitted.
+
 ## Release Truth
 
 PRs #525/#526 are merged and serving as
