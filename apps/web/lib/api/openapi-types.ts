@@ -4375,6 +4375,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/health/rate-identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Nonidentifying rate identity readiness */
+        get: operations["rate_identity_readiness_api_health_rate_identity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/imports/{domain}/{job_id}": {
         parameters: {
             query?: never;
@@ -43729,6 +43746,18 @@ export interface components {
              */
             state: "blocked_missing_config" | "blocked_pending_admin_approval" | "foundation_available" | "ready";
         };
+        /** RateIdentityReadinessResponse */
+        RateIdentityReadinessResponse: {
+            /**
+             * Provenance
+             * @enum {string}
+             */
+            provenance: "socket" | "edge" | "web-forward" | "unavailable";
+            /** Ready */
+            ready: boolean;
+            /** Release Sha */
+            release_sha: string | "unavailable";
+        };
         /** RecommendationAnalysisRecord */
         RecommendationAnalysisRecord: {
             /** Confidence Explanation */
@@ -56042,6 +56071,35 @@ export interface operations {
                     "application/json": {
                         [key: string]: number | string | null;
                     };
+                };
+            };
+        };
+    };
+    rate_identity_readiness_api_health_rate_identity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RateIdentityReadinessResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RateIdentityReadinessResponse"];
                 };
             };
         };

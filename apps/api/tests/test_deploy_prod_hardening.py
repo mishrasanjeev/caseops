@@ -1041,7 +1041,7 @@ def test_deploy_prod_fences_rule_governance_and_verifies_exact_traffic() -> None
     assert "CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false" in script
     assert ("MACHINE_READINESS_EVIDENCE_SECRET=caseops-machine-readiness-evidence-secret") in script
     assert (
-        '--update-secrets "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET='
+        'CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET='
         "${MACHINE_READINESS_EVIDENCE_SECRET}:latest,"
     ) in script
     assert "LIVE_API_SERVICE_JSON=$(gcloud run services describe caseops-api" in script
@@ -1236,7 +1236,7 @@ def test_api_startup_dependency_removal_is_rerunnable(
 ) -> None:
     script = _read_repo_text("scripts/deploy-prod.sh")
     snippet = script.split("API_DEPENDENCY_FLAGS=()", 1)[1].split(
-        "gcloud run deploy caseops-api", 1
+        "# Prepare only on canonical main", 1
     )[0]
     fake = tmp_path / "gcloud"
     _write_fake_executable(
@@ -1260,7 +1260,7 @@ def test_api_startup_dependency_rejects_invalid_runtime_metadata(
 ) -> None:
     script = _read_repo_text("scripts/deploy-prod.sh")
     snippet = script.split("API_DEPENDENCY_FLAGS=()", 1)[1].split(
-        "gcloud run deploy caseops-api", 1
+        "# Prepare only on canonical main", 1
     )[0]
     _write_fake_executable(
         tmp_path / "gcloud", "#!/bin/sh\nprintf '%s' \"$TEST_DEPENDENCIES\"\n"
@@ -1733,6 +1733,7 @@ def _run_deploy_with_fakes(
     private_projection_scheduler_hold: str | None = None,
     active_prod_verify_runs: str = "",
     artifact_describe_failures: int = 0,
+    rate_identity_mode: str = "ok",
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -2103,6 +2104,24 @@ if [[ "${1:-}" == "scripts/scheduler_inventory.py" || \
   printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
   exit 0
 fi
+if [[ "${1:-}" == "scripts/reconcile_rate_identity_edge.py" ]]; then
+  printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+  if [[ "${FAKE_RATE_IDENTITY_MODE}" == "${2:-}" ]]; then
+    printf '%s\n' 'Purpose edge verification failed closed.' >&2
+    exit 58
+  fi
+  exec "${FAKE_REAL_PYTHON}" - "$@" <<'PY'
+import json
+import sys
+
+args = sys.argv[1:]
+sha = args[args.index("--expected-sha") + 1]
+output = args[args.index("--output") + 1]
+payload = {"expected_sha": sha, "secret_version": "1", "edge_tree_verified": True}
+with open(output, "x", encoding="utf-8") as stream:
+    json.dump(payload, stream)
+PY
+fi
 if [[ "${FAKE_PYTHON_CRLF}" == "true" ]]; then
   set +e
   "${FAKE_REAL_PYTHON}" "$@" | sed $'s/$/\\r/'
@@ -2195,6 +2214,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
                 tmp_path / "artifact-describe-count"
             ),
             "FAKE_ARTIFACT_DESCRIBE_FAILURES": str(artifact_describe_failures),
+            "FAKE_RATE_IDENTITY_MODE": rate_identity_mode,
             "FAKE_QA_AFTER_JSON": _a0_qa_job_json(
                 immutable_image,
                 5,
@@ -2379,6 +2399,18 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
     assert call_index("run deploy caseops-web") < call_index(
         "run jobs execute caseops-ip-qa-bootstrap"
     )
+    assert call_index("reconcile_rate_identity_edge.py prepare") < call_index(
+        "run deploy caseops-api"
+    )
+    assert call_index("run deploy caseops-web") < call_index(
+        "reconcile_rate_identity_edge.py verify"
+    ) < call_index("run jobs execute caseops-ip-qa-bootstrap")
+    for name in ("api", "web"):
+        deploy = next(call for call in calls if call.startswith(f"run deploy caseops-{name} "))
+        assert "--update-secrets " in deploy
+        assert "CASEOPS_RATE_IDENTITY_EDGE_SECRET=caseops-rate-identity-edge-token:1" in deploy
+        assert "CASEOPS_RATE_IDENTITY_REQUIRED=true" in deploy
+        assert "CASEOPS_RATE_IDENTITY_EDGE_HTTPS=true" in deploy
     assert call_index("run jobs execute caseops-ip-qa-bootstrap") < call_index(
         "gh workflow run prod-verify.yml"
     )
@@ -2391,8 +2423,7 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
     )
     assert any(
         "run deploy caseops-api" in call
-        and "--update-secrets "
-        "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET="
+        and "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET="
         "caseops-machine-readiness-evidence-secret:latest"
         in call
         for call in calls
@@ -2488,9 +2519,30 @@ def test_deploy_prod_executes_the_complete_two_container_api_contract(tmp_path: 
     ):
         assert replacing_flag not in arguments
     assert (
-        'CMD ["sh", "-c", "uvicorn caseops_api.main:app --host 0.0.0.0 '
+        'CMD ["sh", "-c", "uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 '
         '--port ${PORT} --app-dir src"]'
     ) in _read_repo_text("apps/api/Dockerfile")
+
+
+@pytest.mark.parametrize("mode", ["prepare", "verify"])
+def test_deploy_prod_withholds_qa_and_certification_after_rate_identity_failure(
+    tmp_path: Path, mode: str,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", rate_identity_mode=mode)
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "Purpose edge verification failed closed." in result.stderr
+    assert "DONE abcdef1" not in result.stdout
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert any(f"reconcile_rate_identity_edge.py {mode} " in call for call in calls)
+    assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
+    assert not any("gh workflow run prod-verify.yml" in call for call in calls)
+    assert not any("scheduler_inventory.py resume" in call for call in calls)
+    if mode == "prepare":
+        assert not any(call.startswith("run deploy caseops-") for call in calls)
+        assert not any("services update-traffic" in call for call in calls)
+    else:
+        assert sum(call.startswith("run deploy caseops-") for call in calls) == 2
 
 
 def test_deploy_prod_refuses_a_single_container_api_before_routing(tmp_path: Path) -> None:
@@ -2709,9 +2761,33 @@ def test_deploy_prod_rejects_invalid_private_projection_scheduler_hold(
         ),
         (
             4,
+            "run jobs update caseops-ip-qa-bootstrap",
+            "reconcile_rate_identity_edge.py prepare",
+            "before-purpose-edge-reconciliation",
+        ),
+        (
+            5,
+            "reconcile_rate_identity_edge.py prepare",
+            "run deploy caseops-api",
+            "after-purpose-edge-reconciliation",
+        ),
+        (
+            6,
+            "run deploy caseops-web",
+            "reconcile_rate_identity_edge.py verify",
+            "before-effective-purpose-edge-proof",
+        ),
+        (
+            7,
             "run deploy caseops-web",
             "run jobs execute caseops-ip-qa-bootstrap",
             "post-route pre-certification gate",
+        ),
+        (
+            8,
+            "run jobs execute caseops-ip-qa-bootstrap",
+            "scheduler_inventory.py resume",
+            "pre-provider-scheduler-resume gate",
         ),
     ],
 )
