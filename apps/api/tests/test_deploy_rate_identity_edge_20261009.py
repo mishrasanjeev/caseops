@@ -388,6 +388,38 @@ def test_verify_effective_chain_and_direct_entry_offline(monkeypatch):
     assert cloud.key not in json.dumps(result)
 
 
+@pytest.mark.parametrize("ready", [True, False, 1, 0, "true", None])
+def test_readiness_transport_requires_a_native_boolean(monkeypatch, ready):
+    payload = {"ready": ready, "provenance": "edge", "release_sha": "9" * 40}
+
+    class Response:
+        headers = {"Cache-Control": "no-store"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, limit):
+            assert limit == 2048
+            return json.dumps(payload).encode()
+
+    class Opener:
+        def open(self, request, *, timeout):
+            assert timeout == 20
+            assert request.get_method() == "GET"
+            assert request.get_header("X-caseops-automated-test") == "no-paid-providers"
+            return Response()
+
+    monkeypatch.setattr(edge.urllib.request, "build_opener", lambda *args: Opener())
+    if type(ready) is bool:
+        assert edge.readiness("https://api.caseops.ai/api/health/rate-identity") == payload
+    else:
+        with pytest.raises(edge.EdgeError):
+            edge.readiness("https://api.caseops.ai/api/health/rate-identity")
+
+
 @pytest.mark.parametrize("change", ["revision", "command", "key", "origin", "https"])
 def test_runtime_wiring_failure_prevents_any_public_probe(monkeypatch, change):
     cloud = FakeCloud()

@@ -429,7 +429,8 @@ def readiness(url, *, edge_probe=True):
     with response:
         check(response.headers.get("Cache-Control") == "no-store")
         body = json.loads(response.read(2048))
-    check(set(body) == {"ready", "provenance", "release_sha"})
+    check(isinstance(body, dict) and set(body) == {"ready", "provenance", "release_sha"})
+    check(type(body["ready"]) is bool, "Readiness requires a native boolean.")
     return body
 
 
