@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 10 Acceptance Follow-Up
+
+**Not fixed in production.** Frozen `99297e17` has complete positive local
+Docker proof (1992 PostgreSQL passes; 495 browser passes/eight known skips),
+but CI and adjacent audit expose missing demo page coverage, inherited source
+names bypassing 404 and required dependency-guard drift. Forwarded throttle
+identity and production native-results retention are separate control repairs.
+No source-tree result closes #527 or the five actual-serving failed journeys.
+PR #528 remains draft until the repaired head completes fresh acceptance.
+See `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 9 Exact-B1 Acceptance Follow-Up
 
 Serving API/web are `b1d3fb23` (PRs #525/#526), not older candidates below.

@@ -1,5 +1,19 @@
 # CaseOps  - Work To Be Done
 
+## October 10 Frozen Docker And Follow-Up Repairs
+
+Frozen `99297e17` completes fresh Docker acceptance: 1992 PostgreSQL passes,
+5976 reconciled phases and 503 browser identities (495 passes, eight unchanged
+known skips). This supersedes the earlier incomplete local gate, not failed
+production certification. Current-head CI still fails two missing page tests
+and the authorization-dependency sweep. New tests reproduce inherited demo
+source names bypassing 404; actual edge configuration does not authenticate raw
+forwarded throttle identities. Native success/skip production evidence also
+needs always-retained privacy-safe capture. Scoped repairs are in progress.
+PR #528 remains draft/NO-GO; production is still `b1d3fb23`. Final repaired-head
+Docker/CI/security, guarded main deployment and full live replay remain required.
+See `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 9 Serving-Release Acceptance And Security
 
 PRs #525/#526 are deployed as `b1d3fb23` on API/web, superseding older

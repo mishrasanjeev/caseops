@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 10 Complete Local Candidate, No Production Closure
+
+Frozen `99297e17` passes 1992 PostgreSQL tests plus 495 browser cases, with
+eight unchanged explicit skips. Exact production replay is still missing;
+US-001/M02/M03/M08/M13/M14/UJ36/UJ61 remain partial on serving `b1d3fb23`.
+J19/M21/US-063/SEC-031 follow-up contracts include prototype-name rejection,
+trusted throttle provenance, recognized admin guards and full privacy-safe
+native runtime evidence. PR #528 is draft/NO-GO until final repaired-head gates.
+See `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 9 Exact-Serving Acceptance Follow-Up
 
 PRs #525/#526 serve as `b1d3fb23`; the five failed production journeys in

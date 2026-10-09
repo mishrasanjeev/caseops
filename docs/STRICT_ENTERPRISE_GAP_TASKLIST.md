@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## October 10 Positive Docker, Remaining Control Gaps
+
+**Partially implemented / NO-GO.** Frozen `99297e17` passes complete Docker
+PostgreSQL and browser acceptance (1992/495 passes, eight explicit known skips).
+All three actual PR CodeQL analyses now have zero findings on the exact accepted
+tree, including the follow-up unused imports; default-main closure is unproved.
+Current CI catches missing page contracts and two inline admin mutation guards.
+New page tests reproduce prototype-name admission, and read-only deployed edge
+configuration confirms unauthenticated forwarded-IP trust. Successful production
+runs lack complete retained runtime skip evidence. Independent repairs retain
+privacy/security fences and require full final-head and deployed acceptance.
+Evidence: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 9 Acceptance And Security NO-GO
 
 PRs #525/#526 are deployed as `b1d3fb23`, but production run `37909107955`

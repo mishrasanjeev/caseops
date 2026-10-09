@@ -345,6 +345,74 @@ actual CodeQL results, main merge, deployment and live replay remain required.
 - Google consent, provider readiness and Google-reported indexing outcomes are
   independent boundaries. Do not weaken tests or manufacture acceptance.
 
+## October 10 Complete Frozen Acceptance And New Boundaries
+
+Frozen candidate `99297e17b00dd51178e21baf596ba2ebfd92c5f7`, tree
+`1d6e6ba9b79447fb550352243e322b8c708befe0`, completes the full fresh Docker
+wrapper with exit zero. The separately pinned strict auditor reports no issues:
+1992 PostgreSQL passes, zero skips, 5976 phases with native completion and JUnit
+agreement; all 503 browser identities occur exactly once across three serial
+partitions, with 495 passes and eight unchanged native known skips. Reconciled
+source-before/after is clean and identical. All invocation-owned Compose
+resources are removed. The positive populated private-event critical section
+through commit is 0.3802828 seconds under the unchanged five-second budget.
+
+Retained reports: `docker-99297e17-r6/`. Independent readback:
+`docker-audit-857a5008/readback-20261009T185518691499Z-aaadf931/audit.json`,
+SHA256 `b02ef602d59cc89a4a663c56d2b3caee4c416da329a80a3835c4ced763e36fc1`.
+Known skips are seven production-specific identity/retained-record checks and
+the unchanged unfunded Pine Labs acceptance; none are described as verified.
+Production identity and retained records still require actual live replay.
+
+Current security run `37966395623` passes all six jobs. Actual CodeQL analyses
+1925147868 (Python), 1925142380 (Actions), and 1925137184 (JavaScript/TypeScript)
+each report zero findings on merge `54285804aa438007e6eb82e77b514ffd0a1e5b5d`.
+Its parents identify canonical main and the candidate, and its tree exactly
+matches the accepted candidate. This clears the previous PR unused-import
+follow-up, not default-main alerts or future-head scans.
+
+CI `37966395594` is complete and failed. Web's existing matrix finds two new
+pages without sibling tests. Independently added complete page contracts collect
+22 cases: 20 pass, while `constructor` and `__proto__` wrongly resolve inherited
+object properties instead of 404. A green narrower 38-case web selection did
+not cover these pages; that earlier claim is explicitly incomplete.
+
+API shard 10's native 606-case inventory reconciles 543 passes, 62 PostgreSQL
+skips on its non-PostgreSQL runner, and one failed route-guard sweep. The actual
+PostgreSQL cases have separate full Docker evidence. Two new admin mutations
+authorize inline rather than through the established dependency before handler
+entry. The repair uses `platform:billing_manage`, retains row locks/audits, and
+adds explicit anonymous/ordinary-user durable lead/outbox denial checks on both
+SQLite and PostgreSQL. No public exemption or guard-detector relaxation is used.
+Its first complete 102-case follow-up has eight fixture setup failures because
+it expected 202 rather than the established 200 admission contract; those
+native reports remain preserved and are not product-bypass reproductions.
+
+Read-only production edge audit confirms both actual serverless backends have
+no custom request-header attestation and public direct Cloud Run ingress remains
+available. Existing raw X-Forwarded-For/X-Real-IP input is not authenticated
+rate-limit identity. Google's documented load balancer appends client/LB values
+but does not verify caller-supplied prefixes:
+[official header contract](https://docs.cloud.google.com/load-balancing/docs/https#x-forwarded-for_header).
+Source/config exposure is confirmed; exploitation at the final production
+handler is Inconclusive, with no abuse or synthetic lead attempted. A scoped
+purpose-specific edge-to-web-to-API identity repair is being verified offline;
+no cloud configuration write is claimed.
+
+The current production workflow uses list reporting and failure-only artifacts,
+so successful runtime skip reasons cannot be fully certified. Privacy-safe
+native evidence must be sanitized before disk, retain actual identity/outcome/
+skip/completion, and upload on success as well as failure. An independent repair
+must preserve old-release checkout compatibility and all historical workflow
+assertions. It cannot persist raw config, authorization, private bodies or media.
+
+The completed frozen gate is positive evidence for that exact head only. The
+three independent repairs plus the main-owned admin dependency repair require
+review, integrated regression inventory, fresh final-head Docker, green current
+CI/security and actual all-language scans before merge/deployment. PR #528
+remains draft/NO-GO. PR #522's complete CI `37938252022` is now green, including
+its app browser job. Production is still `b1d3fb23`; no issue is closed here.
+
 ## Required Closure
 
 Review agent changes and complete inventories, retain every phase and each
