@@ -17,6 +17,12 @@
   main alert states and original taint/dependency paths; suppressions and
   moving imports inside functions do not establish a permanent fix.
 
+- A public authentication entry page that must disappear from search needs a
+  crawler-readable noindex, not a robots.txt block that hides that directive.
+  Keep authenticated app/API exclusions and real access control unchanged;
+  regress the rendered metadata, crawl policy and sitemap together. A local
+  correction or recrawl request is not proof of Google deindexing the URL.
+
 - Keyset performance must cover a validated cursor beyond the pre-import ID
   histogram. A first page and a generic plan can be bounded while a custom
   cursor plan scans/sorts thousands of keys. Train and assert the stale
