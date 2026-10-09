@@ -440,6 +440,30 @@ anonymous authentication denial, rather than weakening the expected 401 to
 accept a middleware 403. Runtime CSRF behavior and assertions are not weakened.
 These complete scoped passes still require integrated final-head acceptance.
 
+### Whole Frontend Intermediate Checkpoint
+
+Clean integrated `2b1819d52c1ebea7ebf53a83aeb1c8cc25cdadcd` passes the complete
+frontend coverage run: 1201 tests in 196 files, zero failed/skipped, native
+completion exit zero and identical before/after source hashes. Full ordered
+discovery and JSON identities agree exactly; JUnit agrees with the same
+1201-case multiset. There are zero duplicate full native titles. Coverage is
+61.78% lines, 58.23% statements and 53.08% branches, above unchanged thresholds.
+Fresh Next production build and complete `typecheck:e2e` also exit zero.
+
+Two adversarial titles contain a NUL and a newline. The installed Vitest JUnit
+serializer removes the NUL, and XML attribute parsing normalizes the newline
+to a space. The initial strict readback failure is retained, along with all
+unchanged native reports. A separately recorded exact two-title mapping proves
+both transformations occur once and create no collision; no broad normalization,
+missing identity or product assertion is waived. Authoritative UTF-8 JSON and
+discovery preserve the original full titles. Evidence:
+`web-whole-2b1819d5/full-r1/`, reconciliation SHA256
+`5eed6edbf797aeb994bc52de9be2421e076f79ba6e1f772312d96a739ba95d05`.
+
+This intermediate complete frontend checkpoint predates the separate edge and
+native-production-workflow repairs. Their final integrated whole frontend,
+backend/Docker, CI/security and exact-serving replay remain mandatory.
+
 The completed frozen gate is positive evidence for that exact head only. The
 three independent repairs plus the main-owned admin dependency repair require
 review, integrated regression inventory, fresh final-head Docker, green current
