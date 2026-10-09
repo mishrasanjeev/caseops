@@ -519,7 +519,7 @@ try {
     Assert-CandidatePlaywrightSuite -Arguments $PlaywrightArgs
 
     Write-Host "[docker-acceptance] resetting isolated project $ComposeProject"
-    & docker compose --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
+    & docker compose --profile acceptance --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
     if ($LASTEXITCODE -ne 0) { throw "Could not reset the isolated Compose project." }
 
     # Retained acceptance projects can exhaust Docker's default address pools.
@@ -722,7 +722,7 @@ finally {
         }
     }
     if (-not $KeepRunning) {
-        & docker compose --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
+        & docker compose --profile acceptance --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
     }
     foreach ($Name in $AcceptanceEnvironment.Keys) {
         [Environment]::SetEnvironmentVariable($Name, $PreviousEnvironment[$Name], "Process")

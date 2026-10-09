@@ -1,5 +1,14 @@
 # CaseOps agent instructions
 
+- CI aggregate jobs must run after genuine prerequisite failures but stop
+  on workflow cancellation. An unconditional `always()` can retain queued
+  aggregates after every test job is cancelled and hold the next exact-head
+  run's concurrency group. Preserve fail-closed parent checks and artifact
+  evidence; only obsolete unresponsive runs may be force-cancelled.
+- Explicitly starting a Compose profile service does not enable its profile
+  for later cleanup. Include the owned acceptance profile on reset/down and
+  verify no owned emulator or network remains; never prune unrelated projects.
+
 - A row lock does not refresh an ORM identity already cached by the session.
   Refresh the locked authoritative event/generation before status, replay or
   readiness decisions; regress a committed competing application/readiness

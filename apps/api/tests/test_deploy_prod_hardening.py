@@ -1110,6 +1110,30 @@ def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str)
     assert helper not in runner and "/app/tests" not in runner
 
 
+@pytest.mark.parametrize("job_id", ["api", "postgres-validation"])
+def test_ci_aggregate_fails_closed_without_retaining_cancelled_runs(job_id: str) -> None:
+    aggregate = yaml.safe_load(_read_repo_text(".github/workflows/ci.yml"))["jobs"][job_id]
+    assert aggregate["if"] == "always() && !cancelled()"
+    expected_needs = ["api-ruff", "api-test-shards"] if job_id == "api" else [
+        "postgres-validation-shards",
+    ]
+    assert aggregate["needs"] == expected_needs
+    failure_guard = aggregate["steps"][0]
+    for prerequisite in expected_needs:
+        assert prerequisite in failure_guard["if"]
+    assert "!= 'success'" in failure_guard["if"]
+    assert "exit 1" in failure_guard["run"]
+
+
+def test_docker_acceptance_cleanup_includes_owned_profile_emulator() -> None:
+    script = _read_repo_text("scripts/verify-docker.ps1")
+    cleanup = [line.strip() for line in script.splitlines() if " down --volumes" in line]
+    assert len(cleanup) == 2
+    assert all("--profile acceptance --project-name $ComposeProject" in line for line in cleanup)
+    assert all("--file $ComposeFile down --volumes --remove-orphans" in line for line in cleanup)
+    assert "docker system prune" not in script
+
+
 @pytest.mark.parametrize("ignore_path", ["apps/api/.gcloudignore", "apps/api/.dockerignore"])
 def test_api_build_context_excludes_secret_and_cache_canaries(ignore_path: str) -> None:
     ignore_text = _read_repo_text(ignore_path)

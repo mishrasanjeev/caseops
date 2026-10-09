@@ -186,7 +186,7 @@ jobs:
     name: API (ruff + pytest)
     runs-on: ubuntu-latest
     needs: [api-ruff, api-test-shards]
-    if: always()
+    if: always() && !cancelled()
     timeout-minutes: 15
     steps:
       - name: Fail if API prerequisites failed
@@ -359,7 +359,7 @@ jobs:
     name: Postgres + pgvector validation
     runs-on: ubuntu-latest
     needs: [postgres-validation-shards]
-    if: always()
+    if: always() && !cancelled()
     timeout-minutes: 5
     steps:
       - name: Require every PostgreSQL shard

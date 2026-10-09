@@ -1,7 +1,8 @@
 """Projection invalidation strips private bytes without loading them into Python."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from time import monotonic
 from uuid import uuid4
 
 import pytest
@@ -9,9 +10,12 @@ from sqlalchemy import event, func, insert, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    AssistantSession,
+    AssistantTurn,
     PrivateIndexGeneration,
     PrivateIndexProjection,
     PrivateIndexProjectionScope,
+    PrivateSavedOutputAccess,
 )
 from caseops_api.services.private_retrieval import (
     create_shadow_private_generation,
@@ -52,7 +56,9 @@ def _projection(company_id, generation_id, source_id, ordinal=0, source_type="ma
     }
 
 
-def test_large_event_uses_one_set_update_without_private_byte_hydration(pg_engine):
+def test_large_event_uses_one_set_update_without_private_byte_hydration(
+    pg_engine, record_testsuite_property,
+):
     with Session(pg_engine) as seed:
         company_id = _seed_company(seed)
         actor_id = _seed_membership(seed, company_id, role="admin")
@@ -88,6 +94,36 @@ def test_large_event_uses_one_set_update_without_private_byte_hydration(pg_engin
                 matter_id=matter_id,
             )
         )
+        assistant = AssistantSession(
+            company_id=company_id, created_by_membership_id=actor_id,
+            title="Retained output history", policy_version=1,
+            retention_expires_at=datetime.now(UTC) + timedelta(days=1),
+        )
+        seed.add(assistant)
+        seed.flush()
+        turns = [
+            {"id": str(uuid4()), "company_id": company_id, "session_id": assistant.id,
+             "sequence": n + 1, "role": "assistant", "status": "completed",
+             "created_by_membership_id": actor_id}
+            for n in range(10_002)
+        ]
+        seed.execute(insert(AssistantTurn), turns)
+        outputs = [
+            {"id": str(uuid4()), "company_id": company_id, "assistant_turn_id": turn["id"],
+             "generation_id": generation.id if n % 2 == 0 else retired.id,
+             "source_type": "matter", "source_id": matter_id, "source_version": "1",
+             "access_policy_generation": 1, "tombstone_generation": 0, "state": "accessible"}
+            for n, turn in enumerate(turns[:10_000])
+        ]
+        untouched_output = {**outputs[0], "id": str(uuid4()),
+                            "assistant_turn_id": turns[-2]["id"], "source_id": untouched_id}
+        prior_locked_at = datetime.now(UTC)
+        prior_locked_output = {**outputs[1], "id": str(uuid4()),
+                               "assistant_turn_id": turns[-1]["id"], "state": "locked",
+                               "locked_at": prior_locked_at, "locked_reason": "prior_closure"}
+        seed.execute(insert(PrivateSavedOutputAccess), outputs)
+        seed.execute(insert(PrivateSavedOutputAccess), [untouched_output])
+        seed.execute(insert(PrivateSavedOutputAccess), [prior_locked_output])
         seed.commit()
         generation_id, shadow_id = generation.id, shadow.id
         initial_shadow_epoch = shadow.tombstone_generation
@@ -102,6 +138,7 @@ def test_large_event_uses_one_set_update_without_private_byte_hydration(pg_engin
         cached = session.get(PrivateIndexProjection, rows[0]["id"])
         event.listen(pg_engine, "before_cursor_execute", capture)
         try:
+            started = monotonic()
             result = propagate_private_projection_change(
                 session,
                 company_id=company_id,
@@ -114,10 +151,15 @@ def test_large_event_uses_one_set_update_without_private_byte_hydration(pg_engin
                 reason_code="source_revoked",
             )
             assert result.affected_projection_count == 10_001
+            assert result.affected_saved_output_count == 10_000
             assert result.status == "applied"
             assert cached.is_tombstoned and cached.content_text == ""
             assert cached.embedding_json is None
             session.commit()
+            critical_seconds = monotonic() - started
+            record_testsuite_property("private_event_commit_seconds", critical_seconds)
+            record_testsuite_property("retained_saved_output_count", len(outputs))
+            assert critical_seconds < 5, "Positive invalidation must finish inside the lock budget."
             result_id = result.id
         finally:
             event.remove(pg_engine, "before_cursor_execute", capture)
@@ -150,6 +192,17 @@ def test_large_event_uses_one_set_update_without_private_byte_hydration(pg_engin
             )
         )
         assert invalidated == 10_001
+        assert check.scalar(
+            select(func.count()).select_from(PrivateSavedOutputAccess).where(
+                PrivateSavedOutputAccess.company_id == company_id,
+                PrivateSavedOutputAccess.state == "locked",
+                PrivateSavedOutputAccess.locked_reason == "source_revoked",
+            )
+        ) == 10_000
+        assert check.get(PrivateSavedOutputAccess, untouched_output["id"]).state == "accessible"
+        retained_lock = check.get(PrivateSavedOutputAccess, prior_locked_output["id"])
+        assert retained_lock.locked_reason == "prior_closure"
+        assert retained_lock.locked_at == prior_locked_at
         assert all(
             not check.get(PrivateIndexProjection, row["id"]).is_tombstoned for row in untouched
         )
@@ -169,3 +222,4 @@ def test_large_event_uses_one_set_update_without_private_byte_hydration(pg_engin
         )
         assert replay.id == result_id
         assert replay.affected_projection_count == 10_001
+        assert replay.affected_saved_output_count == 10_000

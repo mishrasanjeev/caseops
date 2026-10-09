@@ -183,6 +183,40 @@ directory is copied to the runtime. A two-case build-context regression and a
 fresh complete Docker replacement are required. The failed log remains in
 `.tmp/issues-security-20261009/docker-a369f791-r1.log`.
 
+The replacement `d50b9231` image build, schema/index health and 512 MiB job
+check pass, but its complete PostgreSQL run is deliberately interrupted to
+repair a newly confirmed CI cancellation boundary. Retained partial phase
+results lack completion and are incomplete evidence. The owned process tree
+and Compose project are cleaned up; a fresh final-head full run is required.
+
+Superseded CI run `37944906741` retains queued `always()` API/PostgreSQL
+aggregates after all its prerequisite jobs are cancelled. Current `d50b9231`
+CI is pending in that same PR concurrency group. A normal cancel at 15:17 UTC
+does not finish the stale run; the documented force-cancel endpoint at 15:27
+completes it and the current run moves from pending to queued. Both aggregate
+job conditions now include `!cancelled()` without altering prerequisite
+failure checks, coverage thresholds, evidence reconciliation or E2E needs.
+Two exact-manifest regressions positively fail before that change. Hosted
+current-head execution is still required; this does not establish an account-
+wide runner outage or explain PR #522's independent queued jobs.
+
+The final cancellation/context/profile selection passes eight tests with 24
+phases and completion. Cleanup's default profile omission left the explicitly
+started owned provider emulator attached to both owned networks; enabling the
+acceptance profile removes it and the networks. Reset/final cleanup now include
+that profile, with no global prune or unrelated resource removal.
+
+The strengthened positive invalidation case now includes 10,001 projections
+and 10,000 saved-output rows spanning active/retired history. All are invalidated
+with bounded SQL, no retained private-byte hydration, exact counts and replay;
+already locked history and unrelated controls stay unchanged. The final four-
+file critical PostgreSQL gate passes 24 tests and 72 reconciled phases. Its
+whole propagation-through-commit duration is 0.718 seconds under the unchanged
+five-second budget, recorded in compatible JUnit suite properties. The initial
+0.698-second pass and its testcase-property compatibility warning are retained;
+the final suite-level property report removes that recording defect without
+suppressing warnings or weakening the performance assertion.
+
 Incremental journals/JUnit are in `.tmp/issues-security-20261009/`. Preserve the
 first projection attempt with an unrecognized PostgreSQL environment key and
 the adjacent dispatch import-collection error as incomplete evidence. Corrected
