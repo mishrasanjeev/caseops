@@ -8,6 +8,10 @@
 - Explicitly starting a Compose profile service does not enable its profile
   for later cleanup. Include the owned acceptance profile on reset/down and
   verify no owned emulator or network remains; never prune unrelated projects.
+- A browser's loopback API address is not a server address inside a container.
+  Give server-side proxy routes the internal API origin, preserve the explicit
+  no-paid marker, and prove admission plus protected readback through the real
+  Docker network before treating same-host browser acceptance as release proof.
 
 - A row lock does not refresh an ORM identity already cached by the session.
   Refresh the locked authoritative event/generation before status, replay or

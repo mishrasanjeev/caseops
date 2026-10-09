@@ -13,7 +13,18 @@ const request = (body: unknown = payload) => new Request("http://localhost/api/d
 describe("seo_demo_20261009 durable proxy", () => {
   const fetchMock = vi.fn();
   beforeEach(() => vi.stubGlobal("fetch", fetchMock.mockReset()));
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+  it("uses the server-owned origin and preserves only the no-paid marker across the proxy", async () => {
+    vi.stubEnv("CASEOPS_API_BASE_URL", "http://api:8000");
+    fetchMock.mockResolvedValue(Response.json({ id, status: "demo_requested" }));
+    const incoming = request();
+    incoming.headers.set("X-CaseOps-Automated-Test", "no-paid-providers");
+    incoming.headers.set("Authorization", "Bearer never-forward");
+    expect((await POST(incoming)).status).toBe(202);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://api:8000/api/billing/enrollments/demo-request");
+    expect(init.headers).toEqual({ "Content-Type": "application/json", "X-CaseOps-Automated-Test": "no-paid-providers" });
+  });
   it("acknowledges only a matching saved enrollment and forwards minimal fields", async () => {
     fetchMock.mockResolvedValue(Response.json({ id, status: "demo_requested" }));
     const response = await POST(request());

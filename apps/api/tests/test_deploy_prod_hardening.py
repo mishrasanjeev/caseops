@@ -1134,6 +1134,22 @@ def test_docker_acceptance_cleanup_includes_owned_profile_emulator() -> None:
     assert "docker system prune" not in script
 
 
+def test_docker_web_server_origin_is_not_the_browser_loopback_origin() -> None:
+    web = yaml.safe_load(_read_repo_text("docker-compose.yml"))["services"]["web"]
+    assert web["environment"]["CASEOPS_API_BASE_URL"] == "http://api:8000"
+    assert web["environment"]["NEXT_PUBLIC_API_BASE_URL"] == (
+        "${CASEOPS_DOCKER_PUBLIC_API_URL:-http://localhost:8000}"
+    )
+    script = _read_repo_text("scripts/verify-docker.ps1")
+    assert "base!=='http://api:8000'" in script
+    assert "exec --no-TTY web node -e $ServerOriginProbe" in script
+    assert "AbortSignal.timeout(5000)" in script
+    assert "Internal API identity mismatch" in script
+    assert script.index("server-to-server API origin/identity preflight failed") < script.index(
+        "running the complete PostgreSQL + pgvector validation suite",
+    )
+
+
 @pytest.mark.parametrize("ignore_path", ["apps/api/.gcloudignore", "apps/api/.dockerignore"])
 def test_api_build_context_excludes_secret_and_cache_canaries(ignore_path: str) -> None:
     ignore_text = _read_repo_text(ignore_path)

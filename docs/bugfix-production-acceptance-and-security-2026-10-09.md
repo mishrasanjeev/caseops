@@ -217,6 +217,29 @@ five-second budget, recorded in compatible JUnit suite properties. The initial
 the final suite-level property report removes that recording defect without
 suppressing warnings or weakening the performance assertion.
 
+Pre-browser integration audit finds the new server-side admission proxy missing
+its internal Docker API origin. The frozen `43836619` web container has only
+the browser's loopback URL; a guarded local-only valid request positively
+returns 503, and no production lead or provider call is made. Its running
+1992-case PostgreSQL inventory is interrupted rather than misclassified as
+complete; partial journals and the safe 503 baseline remain retained. Owned
+profile-aware cleanup removes every container, volume and network.
+
+Compose now gives the web server `http://api:8000` separately from the browser
+origin. The proxy preserves only the recognized no-paid marker, not auth,
+cookies or referrers. A source-manifest contract and native proxy unit cover
+this boundary. The API runtime is unchanged; all release acceptance must still
+run fresh on the final combined commit. Earlier same-host browser success
+missed the separate Docker network namespace and was insufficient setup proof.
+
+The complete current five-file web selection passes 38 units, and the selected
+pipeline/context/profile/origin contracts pass nine tests and 27 phases. E2E
+typecheck passes. Acceptance now checks the server-to-server health and exact
+release identity from inside the web container before expensive PostgreSQL
+work, with a five-second deadline and no unsafe external fallback. The final
+Docker browser gate must still prove durable admission/readback over this
+actual internal network, not only mocked proxy transport.
+
 Incremental journals/JUnit are in `.tmp/issues-security-20261009/`. Preserve the
 first projection attempt with an unrecognized PostgreSQL environment key and
 the adjacent dispatch import-collection error as incomplete evidence. Corrected

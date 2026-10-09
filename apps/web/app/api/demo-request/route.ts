@@ -11,6 +11,9 @@ export async function POST(request: Request) {
   const parsed = demoAdmissionSchema.safeParse(input);
   if (!parsed.success) return NextResponse.json({ error: "Review the request fields and try again." }, { status: 400 });
   const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (request.headers.get("x-caseops-automated-test") === "no-paid-providers") {
+    headers["X-CaseOps-Automated-Test"] = "no-paid-providers";
+  }
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) headers["x-forwarded-for"] = forwarded;
   try {
