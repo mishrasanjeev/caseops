@@ -245,6 +245,33 @@ def test_guard_detection_recognises_platform_admin_dependency():
     assert "platform_capability" in guard.__code__.co_freevars
 
 
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("POST", "/api/platform-admin/enrollments/{enrollment_id}/retry-notification"),
+        ("DELETE", "/api/platform-admin/enrollments/{enrollment_id}"),
+    ],
+)
+def test_demo_admin_mutations_require_billing_dependency(_app, method, path):
+    route = next(
+        route
+        for route in _app.routes
+        if isinstance(route, APIRoute) and route.path == path and method in route.methods
+    )
+    assert not _route_is_public(method, path)
+    assert _is_guarded(route)
+    guards = [
+        dep.call
+        for dep in route.dependant.dependencies
+        if getattr(dep.call, "__name__", "") == "_dep"
+        and "platform_capability" in dep.call.__code__.co_freevars
+    ]
+    assert len(guards) == 1
+    assert inspect.getclosurevars(guards[0]).nonlocals == {
+        "platform_capability": "platform:billing_manage"
+    }
+
+
 def test_guard_detection_recognises_machine_evidence_auth_dependency(_app):
     route = next(
         route

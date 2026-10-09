@@ -395,11 +395,10 @@ def list_platform_enrollments(context: PlatformContext, session: DbSession) -> d
 def retry_enrollment_notification(
     enrollment_id: str,
     payload: PlatformReasonRequest,
-    context: PlatformContext,
+    route_context: PlatformBillingManager,
     session: DbSession,
     background_tasks: BackgroundTasks,
 ) -> dict[str, str]:
-    platform_admin = require_platform_admin(session, context, capability="platform:billing_manage")
     row = session.scalar(
         select(BillingEnrollment).where(BillingEnrollment.id == enrollment_id).with_for_update()
     )
@@ -414,8 +413,8 @@ def retry_enrollment_notification(
     row.status_timestamps_json = {**row.status_timestamps_json, "demo_admission": state}
     record_platform_audit(
         session,
-        context=context,
-        platform_admin=platform_admin,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
         action="platform.demo_notification.retry_requested",
         target_type="billing_enrollment",
         target_id=enrollment_id,
@@ -428,9 +427,11 @@ def retry_enrollment_notification(
 
 @router.delete("/enrollments/{enrollment_id}")
 def delete_demo_enrollment(
-    enrollment_id: str, payload: PlatformReasonRequest, context: PlatformContext, session: DbSession
+    enrollment_id: str,
+    payload: PlatformReasonRequest,
+    route_context: PlatformBillingManager,
+    session: DbSession,
 ) -> dict[str, str]:
-    platform_admin = require_platform_admin(session, context, capability="platform:billing_manage")
     row = session.scalar(
         select(BillingEnrollment).where(BillingEnrollment.id == enrollment_id).with_for_update()
     )
@@ -450,8 +451,8 @@ def delete_demo_enrollment(
     session.delete(row)
     record_platform_audit(
         session,
-        context=context,
-        platform_admin=platform_admin,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
         action="platform.demo_enrollment.deleted",
         target_type="billing_enrollment",
         target_id=enrollment_id,
