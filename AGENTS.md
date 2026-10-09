@@ -1509,6 +1509,22 @@ requirements when using the fallback.
   Bound inner identity lookups too: an ordered outer barrier can still repeat
   a company-only scan thousands of times. Retain the hosted counterexample and
   prove examined rows, not merely outer loops or one favorable local plan.
+- Bound the outer ordered parent scan as well as each inner identity lookup.
+  A wide family subquery can scan and sort 10,001 tenant rows under generic
+  stale statistics even when docket probes are bounded. Keep ordered keys
+  narrow, hydrate only the authorized page, and regress mixed-tenant fresh
+  imports with actual family/docket work and buffers for custom/generic plans.
+  Preserve late selective matches and all ACL predicates; do not cap raw
+  candidates, add a duplicate index, or relax a budget to hide the plan.
+- A unique authorization result does not bound its executor work. Retained
+  grants and stale statistics can choose a global active-grant bitmap or scan
+  thousands of one member's grants for each docket. Regress the full shared
+  IP policy against retained foreign imports, preserve member/team windows
+  and wall precedence, and bound all plan nodes, not only family/docket rows.
+  A scoped green replay is superseded by a later retained-data counterexample.
+  A unique active-key seek must reject a nonmatching successor before applying
+  its window; prove present wrong-subject/target successors for grants and
+  walls, both membership and team, beside exact-pair positive controls.
 - A clean or fresh SQLAlchemy Session can still be bound to a Connection whose
   transaction belongs to its caller. Reject that boundary before querying or
   rolling back, including savepoint and control-fully join modes. Prove the

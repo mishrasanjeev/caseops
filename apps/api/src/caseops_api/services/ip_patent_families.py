@@ -8,7 +8,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select, tuple_
+from sqlalchemy import BigInteger, cast, literal, null, select, tuple_
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.util import ClauseAdapter
 
@@ -453,12 +453,53 @@ def list_patent_families(
             | (~IpDocketRecord.is_active & IpDocketRecord.status.in_(TERMINAL_IP_DOCKET_STATUSES))
         )
     )
-    candidates = select(IpPatentFamily).where(IpPatentFamily.company_id == context.company.id)
+    postgres = session.get_bind().dialect.name == "postgresql"
+    # A runtime tenant parameter prevents custom plans from replacing the
+    # tenant-covering seek with a global primary-key walk for a dominant tenant.
+    company_key = (
+        select(literal(context.company.id)).scalar_subquery() if postgres else context.company.id
+    )
+    candidates = select(
+        IpPatentFamily.id, IpPatentFamily.company_id, IpPatentFamily.docket_id
+    ).where(
+        # Equal range endpoints retain the tenant prefix in ordered planning;
+        # equality alone can choose a global primary-key walk under stale stats.
+        IpPatentFamily.company_id.between(company_key, company_key)
+        if postgres
+        else IpPatentFamily.company_id == company_key
+    )
     if cursor:
         candidates = candidates.where(IpPatentFamily.id > cursor)
-    # OFFSET 0 preserves ordered, lazy ACL evaluation before the page LIMIT even
-    # with stale import statistics. Do not cap candidates before authorization.
-    family = aliased(IpPatentFamily, candidates.order_by(IpPatentFamily.id).offset(0).subquery())
+    # Keep the ordered scan covering: stale tenant statistics can otherwise
+    # choose a wide-row scan and sort the entire tenant before checking ACLs.
+    # An InitPlan NULL LIMIT is unbounded at execution but retains startup-aware
+    # ordered planning even when stale statistics predict fewer rows than a page.
+    # The correlated unique-row LIMIT bounds identity lookup, never candidate count.
+    if postgres:
+        keys = (
+            candidates.with_only_columns(IpPatentFamily.id, IpPatentFamily.company_id)
+            .order_by(IpPatentFamily.company_id, IpPatentFamily.id)
+            .limit(select(cast(null(), BigInteger)).scalar_subquery())
+            .subquery()
+        )
+        family_row = (
+            select(IpPatentFamily.id, IpPatentFamily.company_id, IpPatentFamily.docket_id)
+            .where(
+                IpPatentFamily.id == keys.c.id,
+                IpPatentFamily.company_id == keys.c.company_id,
+            )
+            .correlate(keys)
+            .limit(1)
+            .subquery()
+        )
+        family = aliased(IpPatentFamily, family_row)
+    else:
+        # Retain SQLite's ordered, uncapped authorization path.
+        family = aliased(
+            IpPatentFamily, candidates.order_by(IpPatentFamily.id).offset(0).subquery()
+        )
+        page_from = family
+        family_order = family.id
     # Resolve the unique ID before policy filters, which can otherwise make a
     # stale tenant/status index look cheaper than the docket key. This LIMIT
     # bounds one unique record, never the family candidates or authorized page.
@@ -497,9 +538,60 @@ def list_patent_families(
         if len(query) > 200:
             raise _error("patent_query_limit", "Search text is too long.", 422)
         visible_docket = visible_docket.where(docket.title.icontains(query, autoescape=True))
-    statement = select(family).where(visible_docket.scalar_subquery().is_not(None))
-    rows = list(session.scalars(statement.order_by(family.id).limit(limit + 1)))
-    families = rows[:limit]
+    if postgres:
+        visible_family = (
+            select(family.docket_id)
+            .where(visible_docket.scalar_subquery().is_not(None))
+            .correlate(keys)
+            .limit(1)
+        )
+        # Keep policy work in one scalar per ordered key, not a reorderable FROM
+        # join. OFFSET 0 prevents duplicating that scalar in projection and filter.
+        authorized = (
+            select(
+                keys.c.company_id,
+                keys.c.id,
+                visible_family.scalar_subquery().label("docket_id"),
+            )
+            .order_by(keys.c.company_id, keys.c.id)
+            .offset(0)
+            .subquery()
+        )
+        statement = (
+            select(authorized.c.id, authorized.c.docket_id)
+            .where(authorized.c.docket_id.is_not(None))
+            .order_by(authorized.c.company_id)
+        )
+        family_order = authorized.c.id
+    else:
+        statement = (
+            select(family.id, family.docket_id)
+            .select_from(page_from)
+            .where(visible_docket.scalar_subquery().is_not(None))
+        )
+    rows = list(session.execute(statement.order_by(family_order).limit(limit + 1)))
+    admitted_ids = rows[:limit]
+    # Hydrate full families only after authorization and pagination, in one tenant batch.
+    family_rows = (
+        {
+            family.id: family
+            for family in session.scalars(
+                select(IpPatentFamily)
+                .where(
+                    IpPatentFamily.company_id == context.company.id,
+                    IpPatentFamily.id.in_([row.id for row in admitted_ids]),
+                )
+                .execution_options(populate_existing=True)
+            )
+        }
+        if admitted_ids
+        else {}
+    )
+    if len(family_rows) != len(admitted_ids) or any(
+        family_rows[row.id].docket_id != row.docket_id for row in admitted_ids
+    ):
+        raise _error("patent_family_access_changed", "Family access changed. Reload the list.")
+    families = [family_rows[row.id] for row in admitted_ids]
     dockets = (
         {
             docket.id: docket

@@ -23,7 +23,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select, tuple_
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql import Select
 
@@ -300,6 +300,48 @@ def visible_matters_filter(
     return and_(base, team_gate)
 
 
+def _active_ip_subject_match(
+    record: type[MatterAccessGrant] | type[EthicalWall],
+    subject_column: Any,
+    subject_id: Any,
+    now: datetime,
+    *correlated: Any,
+) -> Any:
+    # Seek one unique unrevoked pair, then reject a nonmatching successor.
+    # An equality filter can choose a stale global/member index instead.
+    candidate = (
+        select(
+            record.id,
+            record.ip_docket_id.label("target_id"),
+            subject_column.label("subject_id"),
+            record.effective_from,
+            record.expires_at,
+        )
+        .where(
+            record.revoked_at.is_(None),
+            record.ip_docket_id.is_not(None),
+            subject_column.is_not(None),
+            tuple_(record.ip_docket_id, subject_column)
+            >= tuple_(IpDocketRecord.id, subject_id),
+        )
+        .order_by(record.ip_docket_id, subject_column)
+        .correlate(IpDocketRecord, *correlated)
+        .limit(1)
+        .subquery()
+    )
+    return (
+        select(candidate.c.id)
+        .where(
+            candidate.c.target_id == IpDocketRecord.id,
+            candidate.c.subject_id == subject_id,
+            or_(candidate.c.effective_from.is_(None), candidate.c.effective_from <= now),
+            or_(candidate.c.expires_at.is_(None), candidate.c.expires_at > now),
+        )
+        .correlate(IpDocketRecord, *correlated)
+        .scalar_subquery()
+    )
+
+
 def visible_ip_dockets_filter(
     session: Session,
     *,
@@ -312,22 +354,38 @@ def visible_ip_dockets_filter(
     grant. Company owners follow the same rule as every other membership.
     """
 
-    del session  # kept for parity with the Matter filter and future policy inputs
+    del session
     membership_id = context.membership.id
     now = datetime.now(UTC)
-    wall = select(EthicalWall.id).where(
-        EthicalWall.ip_docket_id == IpDocketRecord.id,
-        _wall_subject_filter(membership_id),
-        _active_wall_window(now),
+    active_teams = (
+        select(TeamMembership.team_id)
+        .join(Team, Team.id == TeamMembership.team_id)
+        .where(
+            TeamMembership.membership_id == membership_id,
+            Team.is_active.is_(True),
+        )
+        .subquery()
     )
-    grant = select(MatterAccessGrant.id).where(
-        MatterAccessGrant.ip_docket_id == IpDocketRecord.id,
-        _grant_subject_filter(membership_id),
-        _active_grant_window(now),
+    member_wall = _active_ip_subject_match(
+        EthicalWall, EthicalWall.excluded_membership_id, membership_id, now
+    )
+    team_wall = _active_ip_subject_match(
+        EthicalWall, EthicalWall.excluded_team_id, active_teams.c.team_id, now, active_teams
+    )
+    member_grant = _active_ip_subject_match(
+        MatterAccessGrant, MatterAccessGrant.membership_id, membership_id, now
+    )
+    team_grant = _active_ip_subject_match(
+        MatterAccessGrant, MatterAccessGrant.team_id, active_teams.c.team_id, now, active_teams
     )
     return and_(
-        ~exists(wall),
-        or_(IpDocketRecord.restricted.is_(False), exists(grant)),
+        member_wall.is_(None),
+        ~exists(select(active_teams.c.team_id).where(team_wall.is_not(None))),
+        or_(
+            IpDocketRecord.restricted.is_(False),
+            member_grant.is_not(None),
+            exists(select(active_teams.c.team_id).where(team_grant.is_not(None))),
+        ),
     )
 
 

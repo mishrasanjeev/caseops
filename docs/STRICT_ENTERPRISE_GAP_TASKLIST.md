@@ -1,5 +1,24 @@
 # Strict Enterprise Gap Tasklist
 
+## October 9 Outer Pagination Blocker
+
+The later retained-history replay supersedes the scoped 89-pass checkpoint:
+canonical IP ACL work scans global active grants repeatedly, and an isolated
+fresh regression exposes global family-PK traversal. Shared ACL/tenant-seek
+repair now passes 112 affected-file cases plus a deterministic successor case
+and 60 bounded plans. Complete replacement release acceptance remains open.
+
+PR #525 candidate `82ccf412` remains **NO-GO**, not deployed, despite green CI.
+Complete Docker PostgreSQL acceptance has 1,930 passes and one scale failure:
+generic outer-family scanning/sorting consumes 11,437 buffers for a 101-row
+page. The inner docket repair alone is insufficient. Preserve the original
+limits and require actual outer/inner work bounds under mixed-tenant stale
+statistics, fresh full Docker/browser execution, new CI and deployed replay.
+Evidence: `docs/bugfix-patent-outer-pagination-2026-10-09.md`.
+The byte-bound local replacement passes 89 complete affected-file cases and
+48 bounded page/hydration plans (maximum page buffers 2,330). This is scoped
+implementation evidence, not full committed-candidate or deployed acceptance.
+
 ## October 8 Release Evidence Follow-Up
 
 The bounded docket-identity replacement in `888a2c92` passes all four hosted

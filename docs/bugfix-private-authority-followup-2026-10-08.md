@@ -2,6 +2,13 @@
 
 ## Current Verdict
 
+October 9 continuation: `82ccf412` CI is green, but complete Docker r3 fails
+the outer-family generic-plan work bound (1,930 passed / one failed). It is
+not deployed. Earlier interrupted and sleep-affected attempts remain retained;
+see `bugfix-patent-outer-pagination-2026-10-09.md` for the exact counterexample
+and required replacement/release gates. This does not supersede the serving
+release or consent verdict below.
+
 **Not fixed** on serving API/web release
 `b20f86bddeecf985fc961012bb93fa2c41889c49`. This record supplements the
 two Calendar workbook rows; it does not invent additional workbook issues.

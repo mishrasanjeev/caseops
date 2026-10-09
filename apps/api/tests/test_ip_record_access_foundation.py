@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 
 from caseops_api.db.models import (
@@ -368,3 +369,106 @@ def test_restricted_ip_policy_is_shared_across_list_document_source_and_audit(
     assert client.get(
         f"/api/ip/dockets/{docket_id}", headers=owner_headers
     ).status_code == 404
+
+
+@pytest.mark.parametrize("subject", ["membership", "team"])
+def test_ip_unique_subject_seek_preserves_windows_and_team_eligibility(client, subject):
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    company_id = str(bootstrap["company"]["id"])
+    owner_id = str(bootstrap["membership"]["id"])
+    member_id, headers = _invite_member(client, owner_token)
+    docket_id = str(_create_restricted_docket(client, owner_headers)["id"])
+    now = datetime.now(UTC)
+
+    def assert_visible(expected):
+        detail = client.get(f"/api/ip/dockets/{docket_id}", headers=headers)
+        assert detail.status_code == (200 if expected else 404), detail.text
+        listed = client.get("/api/ip/dockets", headers=headers)
+        assert listed.status_code == 200, listed.text
+        assert (docket_id in {str(row["id"]) for row in listed.json()["dockets"]}) == expected
+
+    # A neighboring creator grant must never satisfy this membership's seek.
+    assert_visible(False)
+    with get_session_factory()() as session:
+        team = Team(company_id=company_id, name="Window team", slug="window-team")
+        session.add(team)
+        session.flush()
+        team_id = team.id
+        team_member = TeamMembership(team_id=team_id, membership_id=member_id)
+        session.add(team_member)
+        session.flush()
+        team_member_id = team_member.id
+        grant = MatterAccessGrant(
+            company_id=company_id,
+            ip_docket_id=docket_id,
+            membership_id=member_id if subject == "membership" else None,
+            team_id=team_id if subject == "team" else None,
+            granted_by_membership_id=owner_id,
+            effective_from=now - timedelta(days=2),
+        )
+        session.add(grant)
+        session.flush()
+        grant_id = grant.id
+        session.commit()
+
+    for effective, expiry, revoked, expected in (
+        (None, None, None, True),
+        (now + timedelta(days=1), None, None, False),
+        (now - timedelta(days=2), now - timedelta(days=1), None, False),
+        (now - timedelta(days=2), now + timedelta(days=1), now, False),
+        (now - timedelta(days=2), now + timedelta(days=1), None, True),
+    ):
+        with get_session_factory()() as session:
+            grant = session.get(MatterAccessGrant, grant_id)
+            grant.effective_from, grant.expires_at, grant.revoked_at = effective, expiry, revoked
+            session.commit()
+        assert_visible(expected)
+
+    if subject == "team":
+        with get_session_factory()() as session:
+            session.get(Team, team_id).is_active = False
+            session.commit()
+        assert_visible(False)
+        with get_session_factory()() as session:
+            session.get(Team, team_id).is_active = True
+            session.delete(session.get(TeamMembership, team_member_id))
+            session.commit()
+        assert_visible(False)
+        with get_session_factory()() as session:
+            session.add(TeamMembership(team_id=team_id, membership_id=member_id))
+            session.commit()
+        assert_visible(True)
+
+    with get_session_factory()() as session:
+        wall = EthicalWall(
+            company_id=company_id,
+            ip_docket_id=docket_id,
+            excluded_membership_id=member_id if subject == "membership" else None,
+            excluded_team_id=team_id if subject == "team" else None,
+            created_by_membership_id=owner_id,
+            effective_from=now - timedelta(days=2),
+        )
+        session.add(wall)
+        session.flush()
+        wall_id = wall.id
+        session.commit()
+    for effective, expiry, revoked, expected in (
+        (None, None, None, False),
+        (now + timedelta(days=1), None, None, True),
+        (now - timedelta(days=2), now - timedelta(days=1), None, True),
+        (now - timedelta(days=2), None, now, True),
+        (now - timedelta(days=2), now + timedelta(days=1), None, False),
+    ):
+        with get_session_factory()() as session:
+            wall = session.get(EthicalWall, wall_id)
+            wall.effective_from, wall.expires_at, wall.revoked_at = effective, expiry, revoked
+            session.commit()
+        assert_visible(expected)
+    if subject == "team":
+        with get_session_factory()() as session:
+            session.get(Team, team_id).is_active = False
+            session.commit()
+        # Disabling the team removes both its wall and its grant; no owner bypass.
+        assert_visible(False)

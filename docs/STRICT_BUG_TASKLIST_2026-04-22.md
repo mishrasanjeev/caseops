@@ -1,5 +1,24 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 9 Release Blocker
+
+PR #525 / `82ccf412` is not deployed. Its complete Docker PostgreSQL run has
+1,930 passes and one patent-list scale failure: the generic plan scans and
+sorts 10,001 wide family rows, using 11,437 buffers despite bounded docket
+identity work. The replacement now passes 89 complete affected-file cases,
+including 48 bounded page/hydration plans, full pagination and warm-identity
+races. Fresh full Docker/CI and serving-release proof remain open; green
+historical CI cannot close this counterexample. Calendar BUG-003/004 stay
+**Inconclusive**, not additional workbook rows or confirmed reopen defects.
+See `docs/bugfix-patent-outer-pagination-2026-10-09.md` for retained evidence,
+the incomplete earlier Docker runs, required regression and production gates.
+The later retained-history replay supersedes that 89-pass checkpoint: global
+grant work exceeds the unchanged bound, and a new independently migrated
+regression also exposes global family-PK traversal. The canonical IP ACL and
+tenant seek repair now passes 112 complete affected-file cases and a separate
+deterministic successor case, with 60 bounded page/hydration plans. Fresh
+committed-candidate Docker/CI and production replay are still required.
+
 ## October 8 Confirmed Follow-Up Causes
 
 **Not fixed** on serving `b20f86bd`: canonical source/projection whitespace

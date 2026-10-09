@@ -1,5 +1,25 @@
 # CaseOps  - Work To Be Done
 
+## October 9 Docker Counterexample
+
+The later retained-history replay supersedes the scoped 89-pass checkpoint:
+canonical IP ACL work scans global active grants repeatedly, and an isolated
+fresh regression exposes global family-PK traversal. Shared ACL/tenant-seek
+repair now passes 112 affected-file cases plus a deterministic successor case
+and 60 bounded plans. Complete replacement release acceptance remains open.
+
+PR #525 / `82ccf412` has green CI but is **not deployed**. Complete Docker r3
+reconciles 1,931 PostgreSQL identities: 1,930 pass and the patent-family scale
+test fails on 11,437 buffer accesses. Its generic plan scans/sorts all 10,001
+wide family rows despite bounded unique docket probes. Preserve earlier
+failed/incomplete Docker attempts; browser execution in r3 never starts.
+The narrow outer-key replacement now passes its complete 89-case affected-file
+gate, including 32 bounded page plans, 16 bounded hydration plans, complete
+5,001-ID pagination per scale and warm-identity races. Fresh committed-candidate
+CI, full Docker/browser and production gates remain open. Production API/web
+still serve `b20f86bd`; Calendar consent
+remains unverified. See `docs/bugfix-patent-outer-pagination-2026-10-09.md`.
+
 ## October 8 Final Release Evidence Gate
 
 `888a2c92` passes the four hosted PostgreSQL shards after the bounded docket

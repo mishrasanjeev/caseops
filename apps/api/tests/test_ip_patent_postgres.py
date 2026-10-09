@@ -12,10 +12,10 @@ import pytest
 from fastapi import HTTPException
 from psycopg import sql
 from psycopg.pq import TransactionStatus
-from sqlalchemy import event, func, insert, select, text
+from sqlalchemy import delete, event, func, insert, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql.psycopg import dialect
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, aliased, sessionmaker
 
 from caseops_api.db.models import (
     Client,
@@ -52,7 +52,10 @@ from caseops_api.services.ip_patent_families import (
     get_patent_family,
     list_patent_families,
 )
-from caseops_api.services.matter_access import visible_ip_dockets_filter
+from caseops_api.services.matter_access import (
+    _active_ip_subject_match,
+    visible_ip_dockets_filter,
+)
 from caseops_api.services.private_retrieval import (
     ensure_active_private_generation,
     lock_private_authority_writer,
@@ -493,7 +496,7 @@ def test_patent_source_correction_and_index_worker_take_company_before_version_o
         )
 
 
-def _assert_patent_family_page_work(session, statement, *, limit, generic):
+def _patent_family_page_plan(session, statement, *, limit, generic, kind="page"):
     compiled = statement.limit(limit).compile(
         dialect=dialect(paramstyle="numeric_dollar"),
         compile_kwargs={"render_postcompile": True},
@@ -520,35 +523,61 @@ def _assert_patent_family_page_work(session, statement, *, limit, generic):
         finally:
             if cursor.connection.info.transaction_status != TransactionStatus.INERROR:
                 cursor.execute(sql.SQL("DEALLOCATE {}").format(sql.Identifier(name)))
+    # Retain all four plans before checking bounds, including failing counterexamples.
+    print(json.dumps({"kind": kind, "generic": generic, "limit": limit, "plan": plan}))
+    return plan
 
-    def nodes(node):
-        yield node
-        for child in node.get("Plans", []):
-            yield from nodes(child)
 
-    def work(node):
-        return node.get("Actual Loops", 0) * sum(
-            node.get(key, 0)
-            for key in (
-                "Actual Rows",
-                "Rows Removed by Filter",
-                "Rows Removed by Join Filter",
-                "Rows Removed by Index Recheck",
-            )
+def _plan_nodes(node):
+    yield node
+    for child in node.get("Plans", []):
+        yield from _plan_nodes(child)
+
+
+def _plan_work(node):
+    return node.get("Actual Loops", 0) * sum(
+        node.get(key, 0)
+        for key in (
+            "Actual Rows",
+            "Rows Removed by Filter",
+            "Rows Removed by Join Filter",
+            "Rows Removed by Index Recheck",
         )
+    )
 
-    all_nodes = list(nodes(plan["Plan"]))
+
+def _assert_patent_family_page_work(plan, *, limit):
+    all_nodes = list(_plan_nodes(plan["Plan"]))
+    family_nodes = [node for node in all_nodes if node.get("Relation Name") == "ip_patent_families"]
     docket_nodes = [node for node in all_nodes if node.get("Relation Name") == "ip_docket_records"]
-    # Retained pytest phase output includes the actual plan, even on assertion failure.
-    print(json.dumps({"generic": generic, "limit": limit, "plan": plan}))
+    assert family_nodes
+    # Alternating ACLs examine at most two keys and two unique family rows per result.
+    assert sum(_plan_work(node) for node in family_nodes) <= 4 * limit + 4
     assert docket_nodes
     assert sum(node["Actual Loops"] for node in docket_nodes) <= 2 * limit + 2
-    assert sum(work(node) for node in docket_nodes) <= 2 * limit + 2
-    assert sum(work(node) for node in all_nodes) < 50_000
+    assert sum(_plan_work(node) for node in docket_nodes) <= 2 * limit + 2
+    assert sum(_plan_work(node) for node in all_nodes) < 50_000
     assert plan["Plan"]["Shared Hit Blocks"] + plan["Plan"]["Shared Read Blocks"] < 10_000
 
 
-def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(pg_engine):
+def _assert_patent_family_hydration_work(plan, *, limit):
+    all_nodes = list(_plan_nodes(plan["Plan"]))
+    family_nodes = [node for node in all_nodes if node.get("Relation Name") == "ip_patent_families"]
+    assert family_nodes
+    assert sum(_plan_work(node) for node in family_nodes) <= limit
+    assert sum(_plan_work(node) for node in all_nodes) < 50_000
+    assert plan["Plan"]["Shared Hit Blocks"] + plan["Plan"]["Shared Read Blocks"] < 10_000
+
+
+def _seed_patent_family_scale(
+    pg_engine,
+    *,
+    count=10_000,
+    mixed_order=False,
+    family_uuid_base=None,
+    key_stride=1,
+    key_start=0,
+):
     company_id, actor_id, family = _seed(pg_engine)
     with Session(pg_engine) as session:
         docket = session.get(IpDocketRecord, str(family.docket_id))
@@ -571,13 +600,21 @@ def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(p
                 **changes,
             }
 
-        family_uuid_base = uuid4().int & ~((1 << 32) - 1)
-        for batch in range(20):
+        if family_uuid_base is None:
+            family_uuid_base = uuid4().int & ~((1 << 32) - 1)
+        asset_uuid_base = uuid4().int & ~((1 << 32) - 1)
+        for batch in range((count + 499) // 500):
             dockets, assets, families, versions, grants = [], [], [], [], []
-            for offset in range(500):
+            for offset in range(min(500, count - batch * 500)):
                 docket_id, asset_id = (str(uuid4()) for _ in range(2))
+                ordinal = batch * 500 + offset
+                key_offset = ordinal
+                if mixed_order:
+                    # Independent import identities: ordered assets, scattered family keys.
+                    asset_id = str(UUID(int=asset_uuid_base + ordinal))
+                    key_offset = ordinal * 7919 % count
                 # Stable ordering alternates granted/denied rows without changing cardinality.
-                family_id = str(UUID(int=family_uuid_base + batch * 500 + offset))
+                family_id = str(UUID(int=family_uuid_base + key_start + key_stride * key_offset))
                 dockets.append(
                     clone(docket, id=docket_id, title=f"Scale disclosure {batch}-{offset}")
                 )
@@ -597,6 +634,50 @@ def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(p
             ):
                 session.execute(insert(model.__table__), rows)
             session.commit()
+    return company_id, actor_id, family_uuid_base
+
+
+def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(pg_engine):
+    _check_patent_family_scale(pg_engine)
+
+
+def _check_patent_family_scale(pg_engine, *, mixed_order=False, fresh_statistics=False):
+    company_id, actor_id, family_uuid_base = _seed_patent_family_scale(
+        pg_engine, mixed_order=mixed_order, key_stride=2 if mixed_order else 1
+    )
+    if mixed_order:
+        # Interleave another tenant's keys, not merely another tenant's heap rows.
+        other_company_id, _, _ = _seed_patent_family_scale(
+            pg_engine,
+            mixed_order=True,
+            family_uuid_base=family_uuid_base,
+            key_stride=2,
+            key_start=1,
+        )
+        with Session(pg_engine) as session:
+            interleaved = list(
+                session.execute(
+                    select(IpPatentFamily.id, IpPatentFamily.company_id)
+                    .where(
+                        IpPatentFamily.id >= str(UUID(int=family_uuid_base)),
+                        IpPatentFamily.id < str(UUID(int=family_uuid_base + 20_000)),
+                    )
+                    .order_by(IpPatentFamily.id)
+                )
+            )
+            assert len(interleaved) == 20_000
+            assert [row.company_id for row in interleaved] == [
+                tenant for _ in range(10_000) for tenant in (company_id, other_company_id)
+            ]
+    with Session(pg_engine) as session:
+        if fresh_statistics:
+            for table in (
+                "ip_docket_records",
+                "ip_patent_families",
+                "matter_access_grants",
+                "ethical_walls",
+            ):
+                session.execute(text(f"ANALYZE {table}"))
         context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
         statements = []
         page_statements = []
@@ -616,11 +697,57 @@ def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(p
             event.remove(pg_engine, "before_cursor_execute", capture)
         assert len(result.families) == 100 and result.next_cursor is not None
         assert len(statements) <= 12
-        for generic in (False, True):
-            for plan_limit in (101, 1):
-                _assert_patent_family_page_work(
+        assert [col.key for col in page_statements[0].selected_columns] == ["id", "docket_id"]
+        plans = [
+            (
+                plan_limit,
+                _patent_family_page_plan(
                     session, page_statements[0], limit=plan_limit, generic=generic
+                ),
+            )
+            for generic in (False, True)
+            for plan_limit in (101, 1)
+        ]
+        hydration_plans = [
+            _patent_family_page_plan(
+                session, page_statements[1], limit=None, generic=generic, kind="hydration"
+            )
+            for generic in (False, True)
+        ]
+        if mixed_order and not fresh_statistics:
+            # Pre-fix outer shape only, not the full old ACL query: wide rows before ordering.
+            wide = aliased(
+                IpPatentFamily,
+                select(IpPatentFamily)
+                .where(IpPatentFamily.company_id == company_id)
+                .order_by(IpPatentFamily.id)
+                .offset(0)
+                .subquery(),
+            )
+            old_plan = _patent_family_page_plan(
+                session,
+                select(wide).order_by(wide.id),
+                limit=101,
+                generic=True,
+                kind="pre_feature_outer_shape",
+            )
+            old_nodes = list(_plan_nodes(old_plan["Plan"]))
+            print(
+                json.dumps(
+                    {
+                        "kind": "pre_feature_outer_shape_diagnostic",
+                        "wide_sort": any(
+                            node["Node Type"] == "Sort" and node["Plan Width"] > 100
+                            for node in old_nodes
+                        ),
+                        "family_work": sum(
+                            _plan_work(node)
+                            for node in old_nodes
+                            if node.get("Relation Name") == "ip_patent_families"
+                        ),
+                    }
                 )
+            )
         allowed = set(
             session.scalars(
                 select(MatterAccessGrant.ip_docket_id).where(
@@ -641,18 +768,61 @@ def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(p
         assert len(expected) == 5001
         assert [str(row.id) for row in result.families] == expected[:100]
         assert result.next_cursor == expected[99]
-        second = list_patent_families(
-            session, context=context, limit=100, cursor=result.next_cursor
+        statements.clear()
+        page_statements.clear()
+        event.listen(pg_engine, "before_cursor_execute", capture)
+        try:
+            second = list_patent_families(
+                session, context=context, limit=100, cursor=result.next_cursor
+            )
+        finally:
+            event.remove(pg_engine, "before_cursor_execute", capture)
+        assert len(statements) <= 12
+        hydration_plans.extend(
+            _patent_family_page_plan(
+                session, page_statements[1], limit=None, generic=generic, kind="cursor_hydration"
+            )
+            for generic in (False, True)
         )
+        cursor_plans = []
+        for generic in (False, True):
+            for plan_limit in (101, 1):
+                cursor_plan = _patent_family_page_plan(
+                    session, page_statements[0], limit=plan_limit, generic=generic
+                )
+                cursor_plans.append(cursor_plan)
+                plans.append((plan_limit, cursor_plan))
         assert [str(row.id) for row in second.families] == expected[100:200]
+        seen = [str(row.id) for row in result.families + second.families]
+        next_cursor = second.next_cursor
+        while next_cursor is not None:
+            page = list_patent_families(session, context=context, limit=100, cursor=next_cursor)
+            assert page.families
+            assert page.next_cursor is None or page.next_cursor > next_cursor
+            seen.extend(str(row.id) for row in page.families)
+            assert len(seen) <= len(expected)
+            next_cursor = page.next_cursor
+        assert seen == expected
         # A selective match beyond thousands of denied/nonmatching candidates must not be capped.
         found = list_patent_families(
             session, context=context, limit=1, query="Scale disclosure 19-498"
         )
         assert [str(row.id) for row in found.families] == [
-            str(UUID(int=family_uuid_base + 19 * 500 + 498))
+            str(UUID(int=family_uuid_base + (2 * (9998 * 7919 % 10_000) if mixed_order else 9998)))
         ]
         assert found.next_cursor is None
+        print(json.dumps({"authorized_ids": seen, "late_match_id": str(found.families[0].id)}))
+        for cursor_plan in cursor_plans:
+            assert any(
+                node.get("Relation Name") == "ip_patent_families"
+                and "id" in node.get("Index Cond", "") + node.get("Filter", "")
+                and ">" in node.get("Index Cond", "") + node.get("Filter", "")
+                for node in _plan_nodes(cursor_plan["Plan"])
+            )
+        for plan_limit, plan in plans:
+            _assert_patent_family_page_work(plan, limit=plan_limit)
+        for plan in hydration_plans:
+            _assert_patent_family_hydration_work(plan, limit=100)
 
 
 def test_patent_family_list_stale_unique_tenant_statistics_bound_docket_work(
@@ -667,6 +837,174 @@ def test_patent_family_list_stale_unique_tenant_statistics_bound_docket_work(
         connection.execute(text("ANALYZE matter_access_grants"))
         connection.execute(text("ANALYZE ethical_walls"))
     test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(migration_pg_engine)
+
+
+def _train_patent_family_mixed_statistics(migration_pg_engine):
+    # Disable background analysis only in this independently fresh, disposable fixture.
+    with migration_pg_engine.begin() as connection:
+        for table in (
+            "ip_docket_records",
+            "ip_patent_families",
+            "matter_access_grants",
+            "ethical_walls",
+        ):
+            connection.execute(text(f"ALTER TABLE {table} SET (autovacuum_enabled = false)"))
+    for _ in range(64):
+        _seed(migration_pg_engine)
+    _seed_patent_family_scale(migration_pg_engine, count=1000, mixed_order=True)
+    with migration_pg_engine.begin() as connection:
+        for table in (
+            "ip_docket_records",
+            "ip_patent_families",
+            "matter_access_grants",
+            "ethical_walls",
+        ):
+            connection.execute(text(f"ANALYZE {table}"))
+        assert connection.scalar(text("SELECT count(*) FROM ip_patent_families")) == 1065
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT n_distinct FROM pg_stats WHERE tablename = 'ip_patent_families' "
+                    "AND attname = 'company_id'"
+                )
+            )
+            == 65
+        )
+
+
+def test_patent_family_list_stale_mixed_tenant_statistics_bound_outer_family_work(
+    migration_pg_engine,
+):
+    _train_patent_family_mixed_statistics(migration_pg_engine)
+    _check_patent_family_scale(migration_pg_engine, mixed_order=True)
+
+
+def test_patent_family_list_fresh_mixed_tenant_statistics_bound_outer_family_work(
+    migration_pg_engine,
+):
+    _train_patent_family_mixed_statistics(migration_pg_engine)
+    _check_patent_family_scale(migration_pg_engine, mixed_order=True, fresh_statistics=True)
+
+
+def test_patent_family_list_retained_grants_bound_authorization_work(migration_pg_engine):
+    # Train the active-grant index before a foreign import, as retained suites
+    # and ordinary bulk imports can leave its global statistics stale.
+    _seed(migration_pg_engine)
+    with migration_pg_engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE matter_access_grants SET (autovacuum_enabled = false)")
+        )
+        connection.execute(text("ANALYZE matter_access_grants"))
+    _seed_patent_family_scale(migration_pg_engine, count=10_000)
+    _seed_patent_family_scale(migration_pg_engine, count=10_000)
+    _check_patent_family_scale(migration_pg_engine)
+
+
+@pytest.mark.parametrize("change", ["retarget", "delete", "revoke"])
+def test_patent_family_page_rechecks_warm_identity_after_selection(pg_engine, change):
+    company_id, actor_id, original = _seed(pg_engine)
+    with Session(pg_engine) as session:
+        context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
+        original_family = session.get(IpPatentFamily, str(original.id))
+        original_docket = session.get(IpDocketRecord, str(original.docket_id))
+        original_asset = session.get(IpAsset, str(original.asset_id))
+        original_version = session.scalars(
+            select(IpPatentFamilyVersion).where(IpPatentFamilyVersion.family_id == str(original.id))
+        ).one()
+        original_grant = session.scalars(
+            select(MatterAccessGrant).where(
+                MatterAccessGrant.ip_docket_id == str(original.docket_id)
+            )
+        ).one()
+
+        def clone(row, **changes):
+            return {
+                **{col.name: getattr(row, col.name) for col in row.__table__.columns},
+                **changes,
+            }
+
+        family_id, docket_id, asset_id, replacement_id, grant_id = (str(uuid4()) for _ in range(5))
+        title = f"Warm family page {family_id}"
+        for new_docket_id in (docket_id, replacement_id):
+            session.execute(
+                insert(IpDocketRecord.__table__),
+                clone(original_docket, id=new_docket_id, title=title),
+            )
+        session.execute(
+            insert(IpAsset.__table__), clone(original_asset, id=asset_id, docket_id=docket_id)
+        )
+        session.execute(
+            insert(IpPatentFamily.__table__),
+            clone(original_family, id=family_id, docket_id=docket_id, asset_id=asset_id),
+        )
+        if change != "delete":
+            session.execute(
+                insert(IpPatentFamilyVersion.__table__),
+                clone(original_version, id=str(uuid4()), family_id=family_id, title=title),
+            )
+        for new_docket_id, new_grant_id in ((docket_id, grant_id), (replacement_id, str(uuid4()))):
+            session.execute(
+                insert(MatterAccessGrant.__table__),
+                clone(original_grant, id=new_grant_id, ip_docket_id=new_docket_id),
+            )
+        session.commit()
+        warm_family = session.get(IpPatentFamily, family_id)
+        assert warm_family.docket_id == docket_id
+        changed = False
+
+        def interleave(_conn, _cursor, _statement, _params, execution_context, _many):
+            nonlocal changed
+            compiled = execution_context.compiled
+            if changed or compiled is None or not compiled.statement.is_select:
+                return
+            if list(compiled.statement.selected_columns) != list(IpPatentFamily.__table__.columns):
+                return
+            changed = True
+            with Session(pg_engine) as writer:
+                if change == "retarget":
+                    writer.execute(
+                        update(IpPatentFamily)
+                        .where(IpPatentFamily.id == family_id)
+                        .values(docket_id=replacement_id)
+                    )
+                elif change == "delete":
+                    writer.execute(delete(IpPatentFamily).where(IpPatentFamily.id == family_id))
+                else:
+                    writer.execute(
+                        update(MatterAccessGrant)
+                        .where(MatterAccessGrant.id == grant_id)
+                        .values(revoked_at=datetime.now(UTC))
+                    )
+                writer.commit()
+
+        event.listen(pg_engine, "before_cursor_execute", interleave)
+        try:
+            with pytest.raises(HTTPException) as rejected:
+                list_patent_families(session, context=context, query=title, limit=1)
+        finally:
+            event.remove(pg_engine, "before_cursor_execute", interleave)
+        assert changed
+        assert rejected.value.status_code == 409
+        assert rejected.value.detail["code"] == "patent_family_access_changed"
+        assert session.get(IpPatentFamily, family_id) is warm_family
+
+    with Session(pg_engine) as verify:
+        context = _ip_race_context(verify, company_id=company_id, membership_id=actor_id)
+        visible = set(
+            verify.scalars(
+                select(IpDocketRecord.id).where(
+                    IpDocketRecord.company_id == company_id,
+                    visible_ip_dockets_filter(verify, context=context),
+                )
+            )
+        )
+        assert replacement_id in visible
+        assert (docket_id in visible) is (change != "revoke")
+        retained = verify.get(IpPatentFamily, family_id)
+        if change == "delete":
+            assert retained is None
+        else:
+            assert retained.docket_id == (replacement_id if change == "retarget" else docket_id)
 
 
 def test_patent_family_key_barrier_preserves_canonical_effective_acl(pg_engine):
@@ -737,3 +1075,76 @@ def test_patent_family_key_barrier_preserves_canonical_effective_acl(pg_engine):
         wall.excluded_team_id = None
         wall.excluded_membership_id = actor_id
         assert_visible(False)
+
+
+def test_ip_subject_seek_rejects_present_wrong_subject_and_target_successors(pg_engine):
+    company_id, actor_id, family = _seed(pg_engine)
+    now = datetime.now(UTC)
+    base = uuid4().int & ~((1 << 32) - 1)
+    first_id, gap_id, last_id = [str(UUID(int=base + offset)) for offset in (1, 2, 3)]
+    absent_subject = str(UUID(int=0))
+    with Session(pg_engine) as session:
+        source = session.get(IpDocketRecord, str(family.docket_id))
+        for docket_id in (first_id, gap_id, last_id):
+            session.add(
+                IpDocketRecord(
+                    **{
+                        column.name: (
+                            docket_id if column.name == "id" else getattr(source, column.name)
+                        )
+                        for column in source.__table__.columns
+                    }
+                )
+            )
+        team = Team(company_id=company_id, name="Seek successor", slug=f"seek-{uuid4().hex}")
+        session.add(team)
+        session.flush()
+        assert absent_subject < actor_id and absent_subject < team.id
+        for model, membership_column, team_column, creator_column in (
+            (MatterAccessGrant, "membership_id", "team_id", "granted_by_membership_id"),
+            (EthicalWall, "excluded_membership_id", "excluded_team_id", "created_by_membership_id"),
+        ):
+            for column_name, subject_id in ((membership_column, actor_id), (team_column, team.id)):
+                column = getattr(model, column_name)
+                records = {}
+                for target_id in (first_id, last_id):
+                    row = model(
+                        company_id=company_id,
+                        ip_docket_id=target_id,
+                        effective_from=now - timedelta(days=1),
+                        **{column_name: subject_id, creator_column: actor_id},
+                    )
+                    session.add(row)
+                    session.flush()
+                    records[target_id] = row.id
+
+                def lookup(target_id, subject, model=model, column=column):
+                    return session.scalar(
+                        select(_active_ip_subject_match(model, column, subject, now))
+                        .select_from(IpDocketRecord)
+                        .where(IpDocketRecord.id == target_id)
+                    )
+
+                for target_id, subject, successor_target in (
+                    (first_id, absent_subject, first_id),
+                    (gap_id, subject_id, last_id),
+                ):
+                    # Prove this is a present successor, not an empty negative lookup.
+                    successor = session.execute(
+                        select(model.id, model.ip_docket_id, column)
+                        .where(
+                            model.revoked_at.is_(None),
+                            model.ip_docket_id.is_not(None),
+                            column.is_not(None),
+                            tuple_(model.ip_docket_id, column) >= tuple_(target_id, subject),
+                        )
+                        .order_by(model.ip_docket_id, column)
+                        .limit(1)
+                    ).one()
+                    assert tuple(successor) == (
+                        records[successor_target], successor_target, subject_id
+                    )
+                    assert lookup(target_id, subject) is None
+                for target_id in (first_id, last_id):
+                    assert lookup(target_id, subject_id) == records[target_id]
+        session.rollback()

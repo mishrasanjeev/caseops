@@ -1,5 +1,17 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 9 Retained-History Blocker
+
+UJ-29/PAT-01 remains partial. Docker `82ccf412` fails outer-family work, and
+the later scoped replacement's retained-history replay fails shared IP grant
+work. A fresh migrated regression also exposes global family-PK traversal.
+The 89-case checkpoint is not complete acceptance; canonical IP policy and
+tenant-seek repairs must pass full Docker/CI and exact-release production
+replay. See `docs/bugfix-patent-outer-pagination-2026-10-09.md`.
+The shared active-key seek/tenant-range replacement passes 112 complete
+affected-file cases plus a deterministic successor regression and 60 bounded
+PostgreSQL plans. This is local scope evidence, not a release certification.
+
 ## October 8 Private Authority Acceptance
 
 Existing private retrieval/IPLF-066 and UJ-29/PAT-01 source-writer acceptance
