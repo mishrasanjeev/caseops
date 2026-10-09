@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import yaml
+
 from tests.retained_results import JOURNAL_ENV, OWNER_ENV, RetainedResults
 
 
@@ -121,3 +123,35 @@ def test_divergent_worker_inventory_is_retained_without_overwriting_collection(t
     assert workers[1]["matches_collection"] is False
     assert workers[1]["nodeids"] == ["a", "c"]
     assert not any(row["event"] == "session_finished" for row in rows)
+
+
+def test_long_api_coverage_shards_retain_unique_structured_evidence():
+    workflow = yaml.safe_load(
+        (Path(__file__).resolve().parents[3] / ".github/workflows/ci.yml").read_text()
+    )
+    job = workflow["jobs"]["api-test-shards"]
+    assert job["strategy"]["matrix"]["shard"] == list(range(1, 14))
+    steps = job["steps"]
+    selection = next(
+        step for step in steps if step.get("name") == "Select deterministic test shard"
+    )
+    execution = next(step for step in steps if step.get("id") == "pytest")
+    upload = next(step for step in steps if step.get("name") == "Upload coverage shard data")
+    shard = "${{ matrix.shard }}"
+    journal = f"api-shard-{shard}.jsonl"
+    xml = f"api-shard-{shard}.xml"
+    files = f"api-shard-{shard}-files.txt"
+
+    assert execution["env"][JOURNAL_ENV] == journal
+    assert f"--junitxml={xml}" in execution["run"]
+    assert f'cp .pytest-shard-files "{files}"' in selection["run"]
+    assert steps.index(selection) < steps.index(execution) < steps.index(upload)
+    assert upload["if"] == "always()"
+    assert upload["uses"] == "actions/upload-artifact@v4"
+    assert upload["with"]["name"] == f"api-coverage-shard-{shard}"
+    assert set(upload["with"]["path"].splitlines()) == {
+        f"apps/api/coverage-shard-{shard}",
+        f"apps/api/{journal}",
+        f"apps/api/{xml}",
+        f"apps/api/{files}",
+    }

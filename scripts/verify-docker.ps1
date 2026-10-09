@@ -145,7 +145,7 @@ $WebPort = ($PortBase + 2).ToString()
 $PostgresPort = ($PortBase + 3).ToString()
 $ValkeyPort = ($PortBase + 4).ToString()
 
-$DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .nvmrc .dockerignore .gcloudignore playwright.docker.config.ts scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
+$DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .nvmrc .dockerignore .gcloudignore playwright.app.config.ts playwright.docker.config.ts tests/e2e/support/oauth scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
 if ($DirtyContext -and -not $PreCommit) {
     throw "Docker acceptance requires a committed, clean build context. Commit the candidate first.`n$DirtyContext"
 }
@@ -185,6 +185,9 @@ function Test-PathWithinRoot {
 function Assert-CandidatePlaywrightSuite {
     param([string[]]$Arguments = @())
 
+    if (@($Arguments | Where-Object { $_ -match "^--reporter(?:=|$)" }).Count) {
+        throw "Docker acceptance owns its structured Playwright reporters."
+    }
     if (-not (Test-Path -LiteralPath $PlaywrightConfig -PathType Leaf)) {
         throw "Candidate Playwright config is missing: $PlaywrightConfig"
     }
@@ -199,24 +202,51 @@ function Assert-CandidatePlaywrightSuite {
         throw "Browser support helpers would run Python outside the candidate: '$HelperPython'."
     }
 
-    Push-Location -LiteralPath $RepoRoot
+    $InventoryPath = Join-Path $ResultsDirectory "playwright-inventory.json"
+    if (Test-Path -LiteralPath $InventoryPath) {
+        throw "Playwright inventory already exists; refusing to overwrite retained evidence: $InventoryPath."
+    }
+    $SavedListingEnvironment = @{}
+    foreach ($Name in @("PLAYWRIGHT_JSON_OUTPUT_FILE", "PLAYWRIGHT_JSON_OUTPUT_DIR", "PLAYWRIGHT_JSON_OUTPUT_NAME")) {
+        $SavedListingEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name, "Process")
+    }
+    $ListingLocationPushed = $false
     try {
-        $Listing = @(& $NodePath $PlaywrightCli test --config $PlaywrightConfig --list --reporter=json @Arguments)
+        # Native JSON bytes must not pass through Windows PowerShell's OEM stdout decoder.
+        [Environment]::SetEnvironmentVariable("PLAYWRIGHT_JSON_OUTPUT_FILE", $InventoryPath, "Process")
+        [Environment]::SetEnvironmentVariable("PLAYWRIGHT_JSON_OUTPUT_DIR", $null, "Process")
+        [Environment]::SetEnvironmentVariable("PLAYWRIGHT_JSON_OUTPUT_NAME", $null, "Process")
+        Push-Location -LiteralPath $RepoRoot
+        $ListingLocationPushed = $true
+        & $NodePath $PlaywrightCli test --config $PlaywrightConfig --list --reporter=json @Arguments
         $ListExitCode = $LASTEXITCODE
     }
     finally {
-        Pop-Location
+        foreach ($Name in $SavedListingEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($Name, $SavedListingEnvironment[$Name], "Process")
+        }
+        if ($ListingLocationPushed) { Pop-Location }
     }
-    $ListingText = $Listing -join "`n"
-    $InventoryPath = Join-Path $ResultsDirectory "playwright-inventory.json"
-    [IO.File]::WriteAllText($InventoryPath, $ListingText)
-    $JsonStart = $ListingText.IndexOf("{")
-    if ($ListExitCode -ne 0 -or $JsonStart -lt 0) {
+    if ($ListExitCode -ne 0 -or -not (Test-Path -LiteralPath $InventoryPath -PathType Leaf)) {
         throw "Could not list the candidate Playwright suite (exit $ListExitCode); see $InventoryPath."
     }
-    $Report = $ListingText.Substring($JsonStart) | ConvertFrom-Json
+    try {
+        $InventoryBytes = [IO.File]::ReadAllBytes($InventoryPath)
+        if ($InventoryBytes.Length -eq 0) { throw "Empty inventory file." }
+        $StrictUtf8 = New-Object Text.UTF8Encoding($false, $true)
+        $ListingText = $StrictUtf8.GetString($InventoryBytes).TrimStart([char]0xFEFF)
+        $Report = $ListingText | ConvertFrom-Json -ErrorAction Stop
+        if ($null -eq $Report -or $null -eq $Report.config -or $null -eq $Report.suites) {
+            throw "Missing inventory structure."
+        }
+    }
+    catch { throw "The candidate Playwright inventory is invalid UTF-8 JSON; see $InventoryPath." }
     if (@($Report.errors).Count -gt 0) {
         throw "The candidate Playwright suite has load errors; see $InventoryPath."
+    }
+    if ([int]$Report.stats.expected -ne 0 -or [int]$Report.stats.unexpected -ne 0 -or
+        [int]$Report.stats.flaky -ne 0) {
+        throw "Playwright discovery contains executed results; see $InventoryPath."
     }
     $ConfigFile = [string]$Report.config.configFile
     if (
@@ -235,6 +265,7 @@ function Assert-CandidatePlaywrightSuite {
     $Pending = New-Object 'System.Collections.Generic.Queue[object]'
     foreach ($Suite in @($Report.suites)) { if ($null -ne $Suite) { $Pending.Enqueue($Suite) } }
     $SpecCount = 0
+    $TestCount = 0
     while ($Pending.Count -gt 0) {
         $Suite = $Pending.Dequeue()
         if ($Suite.file) {
@@ -243,11 +274,23 @@ function Assert-CandidatePlaywrightSuite {
                 throw "Playwright listed spec '$SpecFile' outside the candidate $RepoRoot."
             }
         }
-        $SpecCount += @($Suite.specs | Where-Object { $null -ne $_ }).Count
+        foreach ($Spec in @($Suite.specs | Where-Object { $null -ne $_ })) {
+            $SpecCount++
+            foreach ($Test in @($Spec.tests | Where-Object { $null -ne $_ })) {
+                if (@($Test.results | Where-Object { $null -ne $_ }).Count -gt 0) {
+                    throw "Playwright discovery contains executed results; see $InventoryPath."
+                }
+                $TestCount++
+            }
+        }
         foreach ($Child in @($Suite.suites)) { if ($null -ne $Child) { $Pending.Enqueue($Child) } }
     }
-    if ($SpecCount -eq 0) {
+    if ($SpecCount -eq 0 -or $TestCount -eq 0) {
         throw "The candidate Playwright selection is empty; an empty browser run cannot certify."
+    }
+    # Native --list reports unexecuted tests as skipped, with empty result arrays.
+    if ([int]$Report.stats.skipped -ne $TestCount) {
+        throw "Playwright discovery test totals disagree; see $InventoryPath."
     }
     Write-Host "[docker-acceptance] candidate Playwright inventory: $SpecCount specs from $RootDir"
 }
@@ -255,12 +298,97 @@ function Assert-CandidatePlaywrightSuite {
 function Invoke-CandidatePlaywright {
     param([string[]]$Arguments = @())
 
-    Push-Location -LiteralPath $RepoRoot
+    if (@($Arguments | Where-Object { $_ -match "^--reporter(?:=|$)" }).Count) {
+        throw "Docker acceptance owns its structured Playwright reporters."
+    }
+    $ReportStem = Join-Path $ResultsDirectory ("playwright-" + [Guid]::NewGuid().ToString("N"))
+    $ReportEnvironment = @{
+        PLAYWRIGHT_JSON_OUTPUT_FILE = "$ReportStem.json"
+        PLAYWRIGHT_JUNIT_OUTPUT_FILE = "$ReportStem.xml"
+    }
+    $SavedReportEnvironment = @{}
+    foreach ($Name in $ReportEnvironment.Keys) {
+        $SavedReportEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name, "Process")
+        [Environment]::SetEnvironmentVariable($Name, $ReportEnvironment[$Name], "Process")
+    }
+    $PlaywrightExitCode = 1
+    $StartedAt = [DateTime]::UtcNow.ToString("o")
+    $LocationPushed = $false
     try {
-        & $NodePath $PlaywrightCli test --config $PlaywrightConfig --reporter=list @Arguments
+        Push-Location -LiteralPath $RepoRoot
+        $LocationPushed = $true
+        & $NodePath $PlaywrightCli test --config $PlaywrightConfig --reporter=list,json,junit @Arguments
+        $PlaywrightExitCode = $LASTEXITCODE
+        foreach ($ReportPath in $ReportEnvironment.Values) {
+            if (-not (Test-Path -LiteralPath $ReportPath -PathType Leaf)) {
+                throw "Playwright execution is incomplete: missing report $ReportPath."
+            }
+        }
+        try {
+            $Report = Get-Content -LiteralPath "$ReportStem.json" -Raw | ConvertFrom-Json
+        }
+        catch { throw "Playwright execution is incomplete: invalid JSON report $ReportStem.json." }
+        try { [xml]$JUnit = Get-Content -LiteralPath "$ReportStem.xml" -Raw }
+        catch { throw "Playwright execution is incomplete: invalid XML report $ReportStem.xml." }
+        $Pending = New-Object 'System.Collections.Generic.Queue[object]'
+        foreach ($Suite in @($Report.suites)) {
+            if ($null -ne $Suite) { $Pending.Enqueue($Suite) }
+        }
+        $BrowserTests = 0
+        while ($Pending.Count -gt 0) {
+            $Suite = $Pending.Dequeue()
+            foreach ($Spec in @($Suite.specs)) {
+                foreach ($Test in @($Spec.tests)) {
+                    if ($null -eq $Test) { continue }
+                    if (@($Test.results | Where-Object { $null -ne $_ }).Count -eq 0) {
+                        throw "Playwright execution is incomplete: a selected test has no result."
+                    }
+                    if (@($Test.results | Where-Object {
+                        $_.status -notin @("passed", "failed", "timedOut", "skipped")
+                    }).Count) {
+                        throw "Playwright execution is incomplete: invalid or interrupted test result."
+                    }
+                    $BrowserTests++
+                }
+            }
+            foreach ($Child in @($Suite.suites)) {
+                if ($null -ne $Child) { $Pending.Enqueue($Child) }
+            }
+        }
+        $XmlTests = $JUnit.SelectNodes("/testsuites/testsuite/testcase").Count
+        $StatsTests = [int]$Report.stats.expected + [int]$Report.stats.unexpected +
+            [int]$Report.stats.skipped + [int]$Report.stats.flaky
+        if ($BrowserTests -eq 0 -or $XmlTests -ne $BrowserTests -or $StatsTests -ne $BrowserTests) {
+            throw "Playwright execution is incomplete: empty or disagreeing JSON/XML test totals."
+        }
+        if ($PlaywrightExitCode -eq 0 -and (
+            [int]$Report.stats.unexpected -ne 0 -or [int]$Report.stats.flaky -ne 0 -or
+            @($Report.errors | Where-Object { $null -ne $_ }).Count -ne 0
+        )) {
+            throw "Playwright exit zero disagrees with its failed structured results."
+        }
+        # Write completion only after both final reports reconcile; a nonzero
+        # process exit still fails the caller's gate. Preserve every invocation.
+        [ordered]@{
+            event = "execution_finished"
+            release_sha = $ReleaseSha
+            arguments = @($Arguments)
+            started_at = $StartedAt
+            completed_at = [DateTime]::UtcNow.ToString("o")
+            exit_code = $PlaywrightExitCode
+            tests = $BrowserTests
+            stats = $Report.stats
+            json = "$ReportStem.json"
+            junit = "$ReportStem.xml"
+        } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath "$ReportStem.completion.json" -Encoding UTF8
+        Write-Host "[docker-acceptance] browser execution reports: $ReportStem ($BrowserTests tests)"
     }
     finally {
-        Pop-Location
+        foreach ($Name in $ReportEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($Name, $SavedReportEnvironment[$Name], "Process")
+        }
+        if ($LocationPushed) { Pop-Location }
+        $global:LASTEXITCODE = $PlaywrightExitCode
     }
 }
 
@@ -313,6 +441,9 @@ $AcceptanceEnvironment = @{
     COMPOSE_PROFILES = "acceptance"
     CASEOPS_RELEASE_SHA = $ReleaseSha
     CASEOPS_DOCKER_ENV = "e2e"
+    CASEOPS_DOCKER_API_APP = "oauth_emulator_api:app"
+    CASEOPS_DOCKER_API_APP_DIR = "/oauth-harness"
+    CASEOPS_E2E_OAUTH_EMULATOR = "calendar-20261008"
     CASEOPS_DOCKER_INTERNAL_WORKER_NETWORK = "true"
     CASEOPS_DOCKER_API_PORT = $ApiPort
     CASEOPS_DOCKER_WEB_PORT = $WebPort

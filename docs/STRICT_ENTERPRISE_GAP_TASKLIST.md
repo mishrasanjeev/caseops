@@ -1,5 +1,115 @@
 # Strict Enterprise Gap Tasklist
 
+## October 9 Custom Cursor Release Blocker
+
+**NO-GO** for deployment of merged `47e3554c`: main CI catches a stale-ID
+histogram making a custom cursor scan/sort 9803 keys. Passing first-page and
+generic plans were insufficient. A deterministic baseline reproduces the same
+10005-work failure and the cursor InitPlan repair passes that case without
+changing admission or bounds. Fresh complete acceptance remains required.
+The separate Windows discovery console-codec defect also requires lossless
+native UTF-8 reporter-file coverage. Evidence and scope:
+`docs/bugfix-patent-cursor-plan-2026-10-09.md`.
+
+## October 9 Outer Pagination Blocker
+
+The later retained-history replay supersedes the scoped 89-pass checkpoint:
+canonical IP ACL work scans global active grants repeatedly, and an isolated
+fresh regression exposes global family-PK traversal. Shared ACL/tenant-seek
+repair now passes 112 affected-file cases plus a deterministic successor case
+and 60 bounded plans. Complete replacement release acceptance remains open.
+
+PR #525 candidate `82ccf412` remains **NO-GO**, not deployed, despite green CI.
+Complete Docker PostgreSQL acceptance has 1,930 passes and one scale failure:
+generic outer-family scanning/sorting consumes 11,437 buffers for a 101-row
+page. The inner docket repair alone is insufficient. Preserve the original
+limits and require actual outer/inner work bounds under mixed-tenant stale
+statistics, fresh full Docker/browser execution, new CI and deployed replay.
+Evidence: `docs/bugfix-patent-outer-pagination-2026-10-09.md`.
+The byte-bound local replacement passes 89 complete affected-file cases and
+48 bounded page/hydration plans (maximum page buffers 2,330). This is scoped
+implementation evidence, not full committed-candidate or deployed acceptance.
+
+## October 8 Release Evidence Follow-Up
+
+The bounded docket-identity replacement in `888a2c92` passes all four hosted
+PostgreSQL shards; full CI and production acceptance are not yet complete.
+Independent review finds Docker browser execution lacked structured reports.
+Unique JSON/JUnit/completion retention and inherited discovery-output isolation
+are under regression before the final clean candidate. No test selection,
+deadline, retry, ACL or lifecycle fence is relaxed. PR #525 is not deployed.
+See `docs/bugfix-private-authority-followup-2026-10-08.md` for scoped evidence.
+
+## October 8 Private Integrity And Actor Ordering
+
+The actor-FK risk below is now **confirmed**, not merely a source-audit
+suspicion: real PostgreSQL same-actor races deadlock on both prior and current
+candidate code. Private-source text/hash normalization also disagrees between
+writer and verifier; read-only production evidence confirms the immediate
+post-rebuild failure. Both remain **Not fixed** on serving `b20f86bd` while
+repairs and regression/release gates run. Keep older epoch/manifest blockers
+distinct. `docs/bugfix-private-authority-followup-2026-10-08.md` records proof.
+Upload authority and byte-retention hardening is **Partially implemented**:
+local complete-file PostgreSQL/HTTP gates and the notice browser journey pass
+in their recorded scopes, while combined Docker, CI and serving-release proof
+remain outstanding. Runtime repairs retain scanner, current-actor, lifecycle,
+quota and uncertain-commit safety boundaries; failed historical evidence remains.
+PR #525's combined CI also found the Gmail reviewed-attachment caller still
+using the prior helper contract (HTTP 502). Its complete outer admission and
+post-I/O authority repair is **Partially implemented**: 425 complete affected-file
+tests pass, including 138 Gmail PostgreSQL cases and thirteen existing Gmail
+tests, with independent source review. Passing the inbound-email helper alone
+did not establish caller compatibility. The 531-case replacement upload/authority
+gate and separate 120-case external-transaction ownership proof also pass, but
+these overlapping scopes are not full committed-candidate release proof.
+Drive content import is also confirmed broken by the staging-helper contract
+change. Its existing metadata-only tests did not exercise content admission.
+Keep the caller repair, source/control checks and import/reload/download browser
+proof open; do not classify that known regression as out of scope.
+The complete corrected Drive local gate subsequently passes 369 tests and its
+five browser cases pass at desktop/mobile widths. Production closure remains
+open. Candidate `2d52545f` CI independently exposes a patent-list scale failure:
+the five-second deadline expires, and a deterministic plan-work regression
+rejects 10,001 docket checks for a 101-row page. Preserve the deadline and current
+ACL/lifecycle gates while repairing query work. API coverage shards previously
+omitted structured phase evidence; the existing journal is now enabled with
+unique XML/file inventories in committed candidate `329175eb`; complete hosted
+artifact reconciliation verifies all thirteen API sessions and their 7,289
+identities (5,358 passed, 1,931 classified skips) without missing phases or XML
+disagreements. That candidate's PostgreSQL shard 2
+also rejects 1,010,427 docket rows examined for the same 101-row page: the
+ordered outer barrier leaves a repeated company-only inner scan. The 252-case
+local pass does not close this counterexample. Keep the query repair and full
+Docker/CI/deployed acceptance open, with no budget or assertion relaxation.
+
+## October 8 Document Worker Lock-Order Gap
+
+Production `b20f86bd` passed local Docker and main CI but its exact-release
+patent acceptance found a background indexing/source-correction deadlock.
+The worker flushed a source-version update before tenant authority (the earlier
+SELECT also triggers it when autoflush is enabled).
+Adjacent link/state writers require the same audit. **Not fixed** on the
+serving release; no green certification or private-cadence resume is claimed.
+See `docs/bugfix-patent-source-deadlock-2026-10-08.md` for Cloud SQL evidence,
+forced-overlap regression requirements and release gates. OAuth is now
+deployed, but its real Google consent acceptance remains **Inconclusive**.
+
+Independent review separately leaves the existing Company/event actor-FK
+versus Matter Membership/Company ordering risk **open and unverified by a
+forced-overlap regression**. The source-version repair does not certify that
+actor cycle or authorize dropping provenance or weakening lifecycle fencing.
+
+## October 8 OAuth Finalization Audit
+
+**Partially implemented**: Google Calendar/Outlook durable exchange claims
+lack complete failure, expiry and replay handling; Gmail/Drive finalization
+can ignore a concurrent disconnect and retains provider-I/O transactions.
+These are active control gaps under repair, not closures from the October 7
+safe-read refresh tests. Browser callbacks also omit the return journey.
+Exact production evidence, isolated regressions and outstanding release proof:
+`docs/bugfix-ram08oct-2026.md`. This candidate remains **NO-GO** until its gates
+complete; unrelated provider/legal-data programme gaps remain unchanged.
+
 ## September 14 Release Engineering Checkpoint
 
 Recorded 2026-09-14 by the release-engineering handover session; the

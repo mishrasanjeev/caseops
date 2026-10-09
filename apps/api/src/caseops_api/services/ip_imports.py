@@ -847,6 +847,11 @@ def _materialize_import_row(
     row_id: str,
     normalized: dict[str, Any],
 ) -> IpDocketRecord:
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+    # Each canonical writer may commit; every next row needs fresh admission.
+    with session.no_autoflush:
+        lock_private_authority_writer(session, company_id=context.company.id)
     docket = _recover_materialized_docket(
         session,
         context=context,
@@ -949,6 +954,11 @@ def _commit_ip_import_job_locked(
 ) -> IpImportCommitResponse:
     """Commit while the job and tenant/idempotency-key locks are held."""
 
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+    # The outer advisory claims precede Company; the resumable job follows it.
+    with session.no_autoflush:
+        lock_private_authority_writer(session, company_id=context.company.id)
     job = _job_or_404(session, context=context, job_id=job_id, for_update=True)
 
     if job.status in {"committed", "committed_with_errors"}:

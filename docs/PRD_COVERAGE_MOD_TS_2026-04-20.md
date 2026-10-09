@@ -1,5 +1,64 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 9 Custom Cursor Follow-Up
+
+UJ-29/PAT-01 (M02/M08/M13/M14) remains partial, not deployed. The complete
+`df6c971f` Docker/PR-CI checkpoint has the identical merged `47e3554c` tree,
+but merged-main CI exposes an unbounded custom cursor plan under a stale ID
+histogram. The deterministic counterexample and narrow cursor repair are in
+`docs/bugfix-patent-cursor-plan-2026-10-09.md`; fresh whole-release and deployed
+acceptance remain open. No module or actual Google-consent closure is implied.
+
+## October 9 Retained-History Blocker
+
+UJ-29/PAT-01 remains partial. Docker `82ccf412` fails outer-family work, and
+the later scoped replacement's retained-history replay fails shared IP grant
+work. A fresh migrated regression also exposes global family-PK traversal.
+The 89-case checkpoint is not complete acceptance; canonical IP policy and
+tenant-seek repairs must pass full Docker/CI and exact-release production
+replay. See `docs/bugfix-patent-outer-pagination-2026-10-09.md`.
+The shared active-key seek/tenant-range replacement passes 112 complete
+affected-file cases plus a deterministic successor regression and 60 bounded
+PostgreSQL plans. This is local scope evidence, not a release certification.
+
+## October 8 Private Authority Acceptance
+
+Existing private retrieval/IPLF-066 and UJ-29/PAT-01 source-writer acceptance
+remain partial. Production `b20f86bd` has a confirmed canonical hash mismatch;
+PostgreSQL proves a separate actor/Company inversion. No new feature or module
+closure is claimed. Follow-up scope, evidence and required gates:
+`docs/bugfix-private-authority-followup-2026-10-08.md`.
+J03/J04, M02/M03 and US-007/008/036/051 additionally cover the confirmed
+upload transaction, notice visibility and retained-storage accounting findings.
+Local authority/byte-retention regressions and the two-width notice journey
+pass in their recorded scopes; exact-tree Docker and production replay remain
+required. No live Google consent or product-wide completion is implied.
+Reviewed Gmail/Drive content admission is part of these existing document
+journeys, not a new integration claim. The upload-helper caller inventory found
+both obsolete contracts; complete content import, reload and stored-byte proof
+must replace metadata-sync-only evidence before release certification.
+UJ-29/PAT-01 family-list scale acceptance remains blocked by a five-second
+query timeout and reproduced tenant-wide correlated authorization work before
+sorting. Actual plan-work bounds complement, not replace, existing query-count,
+ACL/lifecycle, cursor, selective-search and deployed browser regressions.
+
+## October 8 OAuth Acceptance In Progress
+
+Production follow-up: `b20f86bd` now serves the OAuth repair after full Docker
+and green main CI. Safe callback acceptance passed; real Google consent and
+positive connection/reload are still unverified. UJ-29/PAT-01 source-save
+acceptance exposed a document-worker lock-order deadlock. No module closure:
+`docs/bugfix-patent-source-deadlock-2026-10-08.md`.
+
+J08 / M08 / MOD-TS-006: Calendar UI and bounded Google/Outlook connector code
+exist; historical module entries below are not a current inventory. The two
+October 8 workbook rows expose initial-consent callback and failed-claim
+recovery defects on production `82a6d932`. Candidate repairs cover all four
+Workspace callbacks and real-backend browser acceptance. Both rows remain
+**Inconclusive** until Docker, CI and exact-release production proof, including
+the owner-authorized Google account consent. See `docs/bugfix-ram08oct-2026.md`.
+This does not close always-on calendar automation or unrelated programme gaps.
+
 ## September 10 Workbook In Progress
 
 BUG-013 and BUG-014 remain **Inconclusive** pending complete local Docker and

@@ -45,8 +45,10 @@ Durable Drive sync/commit remains a separate product slice.
 Required OAuth scopes for UAT:
 
 ```text
+openid
+email
 https://www.googleapis.com/auth/calendar.events
-https://www.googleapis.com/auth/gmail.metadata
+https://www.googleapis.com/auth/gmail.readonly
 https://www.googleapis.com/auth/drive.readonly
 ```
 

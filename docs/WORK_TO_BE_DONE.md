@@ -1,5 +1,108 @@
 # CaseOps  - Work To Be Done
 
+## October 9 Merged-Main Cursor Blocker
+
+PR #525 merged as `47e3554c`, with the exact Docker-accepted `df6c971f` tree:
+1938 PostgreSQL passes and 467 browser passes / eight known skips. Merged-main
+CI `37889146392` nevertheless finds a real custom cursor-plan counterexample:
+9803 family keys are scanned/sorted before the next page. Deployment remains
+blocked; production still serves `b20f86bd`. A deterministic stale-histogram
+regression reproduces 10005 family-row work and passes the narrow InitPlan
+cursor repair. Complete replacement gates and production replay remain open.
+See `docs/bugfix-patent-cursor-plan-2026-10-09.md`; older checkpoints below
+remain historical. Calendar BUG-003/004 still require real Google consent.
+
+## October 9 Docker Counterexample
+
+The later retained-history replay supersedes the scoped 89-pass checkpoint:
+canonical IP ACL work scans global active grants repeatedly, and an isolated
+fresh regression exposes global family-PK traversal. Shared ACL/tenant-seek
+repair now passes 112 affected-file cases plus a deterministic successor case
+and 60 bounded plans. Complete replacement release acceptance remains open.
+
+PR #525 / `82ccf412` has green CI but is **not deployed**. Complete Docker r3
+reconciles 1,931 PostgreSQL identities: 1,930 pass and the patent-family scale
+test fails on 11,437 buffer accesses. Its generic plan scans/sorts all 10,001
+wide family rows despite bounded unique docket probes. Preserve earlier
+failed/incomplete Docker attempts; browser execution in r3 never starts.
+The narrow outer-key replacement now passes its complete 89-case affected-file
+gate, including 32 bounded page plans, 16 bounded hydration plans, complete
+5,001-ID pagination per scale and warm-identity races. Fresh committed-candidate
+CI, full Docker/browser and production gates remain open. Production API/web
+still serve `b20f86bd`; Calendar consent
+remains unverified. See `docs/bugfix-patent-outer-pagination-2026-10-09.md`.
+
+## October 8 Final Release Evidence Gate
+
+`888a2c92` passes the four hosted PostgreSQL shards after the bounded docket
+lookup repair; full CI is still running. The Docker launcher now needs unique
+native browser execution reports, reconciled completion and discovery-output
+isolation before freezing the final candidate. Scoped guard/real-browser proof
+is not full Docker or production certification. PR #525 remains not deployed
+and production still serves `b20f86bd`; retain the earlier failed/incomplete
+evidence. Details: `docs/bugfix-private-authority-followup-2026-10-08.md`.
+
+## October 8 Private Authority Follow-Up
+
+Production `b20f86bd` remains uncertified. Quiescent maintenance `kxm4s`
+rebuilt two tenants that immediately failed canonical-source integrity;
+read-only persisted evidence confirms whitespace-normalization disagreement
+on eight current Matter sources. Separate real PostgreSQL races confirm
+pre-existing Company/actor cycles beyond PR #524's document-version fix.
+Repairs and full regression/release gates are in progress, not deployed or
+closed. Details and retained failed evidence:
+`docs/bugfix-private-authority-followup-2026-10-08.md`.
+PR #524 is merged as `f146ad8c` and its main CI is green, but has not been
+deployed. Follow-up local evidence includes the 302-case Matter/notice gate,
+173-case inbound/outside-counsel gate, 229-case client/portal gate and two
+desktop/mobile notice browser journeys. These are overlapping scoped gates,
+not combined Docker or production certification. The isolated migration-order
+proof also passes both orders and the complete eight-case patent file; IP final
+acceptance now passes 599 tests across 18 complete files with exact phase/XML
+reconciliation. One frozen candidate still requires full Docker and new PR CI.
+PR #525 is still open and not deployed. Candidate `e9faae03` exposed CI-default
+race evidence stored inside the upload root, stale OAuth lock-owner expectations,
+dated browser inventory drift and a real Gmail attachment caller-contract 502.
+The harness/static-analysis correction passes its complete 531-case gate;
+OAuth replacement passes 216, caller-ownership/upload coverage 470 and the
+Gmail affected-file gate 425. External-Connection ownership has another 120-case
+PostgreSQL proof. These inventories overlap and must not be summed. Independent
+reviews found no remaining actionable blocker in the repaired shared ownership
+guard or Gmail admission. Full committed-candidate CI, Docker and serving-release
+verification remain open; current collection selects 1,743 PostgreSQL cases.
+The final helper-caller inventory additionally found Drive content import still
+using the obsolete contract. It is a known release blocker, under repair with
+PostgreSQL and emulator-backed browser coverage, not deferred adjacent work.
+The later `2d52545f` inventory supersedes that count with 1,929 PostgreSQL
+cases and 475 app/Docker browser cases. Drive's complete corrected local gate
+passes 369 cases and all five desktop/mobile browser cases; it is not production
+closure. Hosted CI completes with two failing tests: a selector-contract mismatch
+(replacement whole-file 16/16 passes) and a patent 10,000-row query timeout.
+Real plans plus a failing work-bound regression confirm tenant-wide authorization
+before sorting; optimization and final committed-candidate acceptance remain open.
+API CI shards now also need unique incremental journals, XML and selected-file
+inventories retained with coverage; that workflow correction passes 38 local
+tests and is committed in `329175eb`; hosted evidence reconciliation confirms
+all thirteen API sessions, 510 files exactly once and 7,289 identities, with
+5,358 passes and 1,931 classified skips. That candidate's PostgreSQL shard 2
+fails the strengthened work bound:
+an ordered outer barrier still permits 1,010,427 docket rows examined through
+a company-only inner scan. The complete 252-case local pass is limited evidence,
+not a permanent repair. Its Docker attempt is interrupted during image builds
+before PostgreSQL/browser execution; preserve it as incomplete and replace only
+after the bounded-identity lookup is proven. PR #525 is still not deployed.
+
+## October 8 Production Acceptance Follow-Up
+
+Calendar repair PR #523 is deployed as `b20f86bd`; both services route 100%
+to that revision and main CI was green. Exact-release verification
+`37716144183` failed the 393px patent source correction with a Cloud SQL
+deadlock. Repair worker/autoflush and adjacent document-writer ordering, then
+repeat fresh Docker, CI, canonical release and complete production acceptance.
+Private cadence stays under its guarded hold. Actual Google consent for the
+owner-authorized account remains outstanding; both workbook bugs remain
+**Inconclusive**. Evidence: `docs/bugfix-patent-source-deadlock-2026-10-08.md`.
+
 ## September 14 Release Engineering Checkpoint
 
 Recorded 2026-09-14 by the release-engineering handover session; the
@@ -1175,6 +1278,10 @@ This item is split for ledger accuracy:
 #### 12.3a Calendar sync -- **DONE for bounded manual sync**
 
 - **Landed:** bounded manual Outlook bulk sync for hearing dates.
+- **October 8 exception:** initial Google consent and callback recovery are
+  **Inconclusive**, not covered by the bounded-sync completion above. Workbook
+  BUG-003/004 reproduce on serving `82a6d932`; candidate acceptance and the
+  exact-release deployment remain pending in `docs/bugfix-ram08oct-2026.md`.
 - **Still open elsewhere:** durable always-on calendar automation remains gated
   on Temporal and the notification service.
 

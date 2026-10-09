@@ -1,5 +1,84 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 9 Custom Cursor Counterexample
+
+**Not fixed in production.** PR #525 is merged as `47e3554c`, but main CI
+`37889146392` catches 9803-key cursor sorting that its exact-tree Docker and
+PR CI did not expose. The deterministic pre-import histogram regression fails
+at 10005 family work, then passes the narrow cursor InitPlan repair. No bound,
+ACL, timeout or candidate inventory is relaxed. Replacement full gates and
+exact-serving Playwright proof are required before closure. Details:
+`docs/bugfix-patent-cursor-plan-2026-10-09.md`. Calendar consent stays Inconclusive.
+
+## October 9 Release Blocker
+
+PR #525 / `82ccf412` is not deployed. Its complete Docker PostgreSQL run has
+1,930 passes and one patent-list scale failure: the generic plan scans and
+sorts 10,001 wide family rows, using 11,437 buffers despite bounded docket
+identity work. The replacement now passes 89 complete affected-file cases,
+including 48 bounded page/hydration plans, full pagination and warm-identity
+races. Fresh full Docker/CI and serving-release proof remain open; green
+historical CI cannot close this counterexample. Calendar BUG-003/004 stay
+**Inconclusive**, not additional workbook rows or confirmed reopen defects.
+See `docs/bugfix-patent-outer-pagination-2026-10-09.md` for retained evidence,
+the incomplete earlier Docker runs, required regression and production gates.
+The later retained-history replay supersedes that 89-pass checkpoint: global
+grant work exceeds the unchanged bound, and a new independently migrated
+regression also exposes global family-PK traversal. The canonical IP ACL and
+tenant seek repair now passes 112 complete affected-file cases and a separate
+deterministic successor case, with 60 bounded page/hydration plans. Fresh
+committed-candidate Docker/CI and production replay are still required.
+
+## October 8 Confirmed Follow-Up Causes
+
+**Not fixed** on serving `b20f86bd`: canonical source/projection whitespace
+hash disagreement is reproduced and confirmed against bounded read-only
+production data. Separate same-actor Company/Membership deadlocks are proven
+on real PostgreSQL for both worker and interactive patent producers versus
+Matter metadata/disposal. Do not conflate these with benign concurrency or
+PR #524's source-version cycle. Evidence, dependency closure and open gates:
+`docs/bugfix-private-authority-followup-2026-10-08.md`.
+Adjacent confirmed causes include nullable notice visibility, file deletion
+after an uncertain commit response, and omitted retained IP bytes in quota.
+Local replacements retain their failed baselines and full inventories. A
+candidate-only old-upload admission across an explicit dispose/reopen cycle
+was reproduced and repaired; this is not proof of automatic case resurrection.
+PR #524 and its main CI are green; this follow-up is not yet deployed.
+
+PR #525's shared inbound-helper change also exposed obsolete Gmail and Drive
+production callers. Both require outer-owned atomic admission and fresh current
+authority, not only a signature adjustment. Gmail's complete six-file 425-case
+gate passes; Drive's complete 369-case corrected database replay and five
+desktop/mobile browser cases pass locally. Final committed-candidate Docker/CI
+and serving-release acceptance remain pending. Candidate `329175eb` additionally
+fails patent scale acceptance on 1,010,427 docket rows examined despite a
+252-case local pass; keep its unique-identity lookup repair open. These
+overlapping scoped results do not certify production. Evidence
+and retained failed fixtures are in the follow-up document above.
+
+## October 8 Production Acceptance Follow-Up
+
+PR #523 is deployed as `b20f86bd` on both services after full Docker and green
+main CI. Production run `37716144183` exposed a real patent source-save
+deadlock (393px journey), not a locator timeout. Verdict: **Not fixed** on
+that serving revision. Worker autoflush and adjacent document link/state lock
+ordering are under repair. Evidence and gates:
+`docs/bugfix-patent-source-deadlock-2026-10-08.md`.
+Calendar BUG-003/004 remain **Inconclusive** pending actual Google consent and
+positive connection/reload acceptance. Earlier candidate checkpoints below
+are historical, not the current deployed identity.
+
+## October 8 Calendar OAuth Workbook In Progress
+
+`CaseOps_Bugs(ll).xlsx` contains exactly two issues, BUG-003/004, both valid
+Calendar OAuth bugs. Current production `82a6d932` reproduces the missing
+identity scopes and uncaught userinfo failure; the related committed claim
+causes bounded in-flight conflicts. Adjacent Outlook, Gmail and Drive paths
+are included in the repair. Both verdicts remain **Inconclusive** pending
+Docker and exact-release browser proof; this candidate is not yet deployed.
+Root causes, prior coverage attribution errors, original failed evidence and
+live Google consent boundary: `docs/bugfix-ram08oct-2026.md`.
+
 ## September 14 Release Engineering Checkpoint
 
 Recorded 2026-09-14 by the release-engineering handover session; the

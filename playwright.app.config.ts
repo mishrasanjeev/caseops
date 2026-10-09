@@ -56,6 +56,8 @@ export default defineConfig({
     /google-workspace-oauth-reauthorization-2026-10-07\.spec\.ts/,
     /ram-2026-09-21-bugfixes\.spec\.ts/,
     /ram-2026-09-24-prod\.spec\.ts/,
+    /ram-2026-10-08-notices\.spec\.ts$/,
+    /ram-2026-10-08-drive\.spec\.ts$/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,
     /hari-2026-05-09-bugs\.spec\.ts/,
     /hari-2026-05-09-bug-033\.spec\.ts/,
@@ -141,10 +143,15 @@ export default defineConfig({
       // bucket scripts) holds a lock on a .venv/Scripts/*.exe.
       command:
         process.platform === "win32"
-          ? `apps\\api\\.venv\\Scripts\\python.exe -m uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir apps/api/src`
-          : `apps/api/.venv/bin/uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir apps/api/src`,
+          ? `apps\\api\\.venv\\Scripts\\python.exe -m uvicorn oauth_emulator_api:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`
+          : `apps/api/.venv/bin/uvicorn oauth_emulator_api:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`,
       cwd: repoRoot,
-      env: e2eEnv,
+      env: {
+        ...e2eEnv,
+        CASEOPS_PUBLIC_APP_URL: webBaseUrl,
+        CASEOPS_E2E_OAUTH_EMULATOR: "calendar-20261008",
+        PYTHONPATH: path.join(repoRoot, "apps", "api", "src"),
+      },
       url: `${apiBaseUrl}/api/health`,
       timeout: 120_000,
       // Playwright creates and disposes many APIRequestContexts. Uvicorn's

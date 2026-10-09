@@ -7857,11 +7857,11 @@ def test_notice_reply_upload_shares_worker_lifecycle_fence_on_postgres(
     pg_engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An immediate reply must not time out behind initial Notice processing.
+    """A reply waits tenant-first for bounded indexing, then persists safely.
 
-    Both transactions are operational child writers, so their shared parent
-    fences are compatible. Disposal remains an exclusive parent update and
-    must wait until the worker commits before it neutralizes child work.
+    Private-source publication now serializes on Company. The quota waiter may
+    not retain an actor lock that the worker needs. Both real operations finish
+    successfully, and later disposal still neutralizes their child work.
     """
 
     from hashlib import sha256
@@ -7984,44 +7984,64 @@ def test_notice_reply_upload_shares_worker_lifecycle_fence_on_postgres(
                 ),
             )
 
+    reply_application_name = f"pg-notice-reply-{uuid4()}"
+
+    def upload_reply():
+        with Session(pg_engine) as reply_session:
+            def label_transaction(_session, _transaction, connection):
+                connection.execute(text("SET LOCAL lock_timeout = '5s'"))
+                connection.execute(
+                    text("SELECT set_config('application_name', :name, true)"),
+                    {"name": reply_application_name},
+                )
+
+            event.listen(reply_session, "after_begin", label_transaction)
+            context = _ip_race_context(
+                reply_session, company_id=company_id, membership_id=membership_id,
+            )
+            reply, _reply_job_id = matter_service.create_matter_attachment(
+                reply_session,
+                context=context,
+                matter_id=matter_id,
+                filename="reply.txt",
+                content_type="text/plain",
+                stream=BytesIO(b"Immediate reply to received Notice"),
+                document_type="notice",
+                notice_direction="sent",
+                notice_document_role="reply",
+                notice_parent_attachment_id=primary_id,
+                notice_reply_sent=True,
+                notice_reply_sent_on=date.today(),
+            )
+            return reply.id
+
     with ThreadPoolExecutor(max_workers=2) as executor:
         worker = executor.submit(document_jobs.run_document_processing_job, job_id)
-        disposal = None
+        reply = None
         try:
             assert worker_fence_held.wait(timeout=15)
-            with Session(pg_engine) as reply_session:
-                reply_session.execute(text("SET LOCAL lock_timeout = '1000ms'"))
-                context = _ip_race_context(
-                    reply_session,
-                    company_id=company_id,
-                    membership_id=membership_id,
-                )
-                reply, _reply_job_id = matter_service.create_matter_attachment(
-                    reply_session,
-                    context=context,
-                    matter_id=matter_id,
-                    filename="reply.txt",
-                    content_type="text/plain",
-                    stream=BytesIO(b"Immediate reply to received Notice"),
-                    document_type="notice",
-                    notice_direction="sent",
-                    notice_document_role="reply",
-                    notice_parent_attachment_id=primary_id,
-                    notice_reply_sent=True,
-                    notice_reply_sent_on=date.today(),
-                )
-                reply_id = reply.id
-
-            disposal = executor.submit(dispose_after_reply)
+            reply = executor.submit(upload_reply)
             _wait_for_postgres_lock_wait(
-                pg_engine,
-                application_name=disposal_application_name,
+                pg_engine, application_name=reply_application_name,
             )
+            with pg_engine.begin() as observer:
+                query = observer.scalar(
+                    text("SELECT query FROM pg_stat_activity WHERE application_name=:name"),
+                    {"name": reply_application_name},
+                )
+                assert "FROM companies" in query
+                observer.execute(
+                    # Compatible with the worker's retained FK, but not a
+                    # prematurely held interactive actor FOR UPDATE fence.
+                    text("SELECT id FROM company_memberships WHERE id=:id FOR KEY SHARE NOWAIT"),
+                    {"id": membership_id},
+                )
         finally:
             release_worker.set()
         worker.result(timeout=15)
-        assert disposal is not None
-        disposed = disposal.result(timeout=15)
+        assert reply is not None
+        reply_id = reply.result(timeout=15)
+        disposed = dispose_after_reply()
         assert disposed.status == "disposed"
 
     with Session(pg_engine) as verify:
@@ -8041,18 +8061,13 @@ def test_notice_reply_upload_shares_worker_lifecycle_fence_on_postgres(
         assert completed_job.status == DocumentProcessingJobStatus.COMPLETED
 
 
-def test_document_worker_does_not_contend_with_interactive_actor_fence_on_postgres(
+def test_document_worker_releases_historical_fks_before_compliance_on_postgres(
     pg_engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A document worker must not block the next interactive matter write.
+    """Historical FKs serialize before parent; all fences end before compliance."""
 
-    Interactive attachment writes fence Membership/User for role-revocation
-    safety. Processing is system work and its activity has a nullable actor FK,
-    so it must not acquire that global interactive fence. The parent lifecycle
-    lock must also be released after indexing and before downstream compliance
-    work, which can be provider-bound.
-    """
+    from sqlalchemy import event
 
     from caseops_api.db.models import (
         DocumentProcessingAction,
@@ -8098,7 +8113,21 @@ def test_document_worker_does_not_contend_with_interactive_actor_fence_on_postgr
         job_id = job.id
         attachment_id = attachment.id
 
-    worker_session_factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    worker_application_name = f"pg-worker-historical-{uuid4()}"
+
+    def worker_session_factory():
+        session = Session(pg_engine, expire_on_commit=False)
+
+        def label_transaction(_session, _transaction, connection):
+            connection.execute(text("SET LOCAL lock_timeout = '10s'"))
+            connection.execute(
+                text("SELECT set_config('application_name', :name, true)"),
+                {"name": worker_application_name},
+            )
+
+        event.listen(session, "after_begin", label_transaction)
+        return session
+
     monkeypatch.setattr(document_jobs, "get_session_factory", lambda: worker_session_factory)
 
     def index_without_storage(target: MatterAttachment) -> None:
@@ -8144,8 +8173,32 @@ def test_document_worker_does_not_contend_with_interactive_actor_fence_on_postgr
         with ThreadPoolExecutor(max_workers=1) as executor:
             worker = executor.submit(document_jobs.run_document_processing_job, job_id)
             try:
+                _wait_for_postgres_lock_wait(
+                    pg_engine, application_name=worker_application_name
+                )
+                with pg_engine.begin() as observer:
+                    query = observer.scalar(
+                        text("SELECT query FROM pg_stat_activity WHERE application_name=:name"),
+                        {"name": worker_application_name},
+                    )
+                    assert "FROM company_memberships" in query and "FOR KEY SHARE" in query
+                    observer.execute(
+                        text("SELECT id FROM matters WHERE id=:id FOR UPDATE NOWAIT"),
+                        {"id": matter_id},
+                    )
+                assert not compliance_started.is_set()
+                upload_session.rollback()
                 assert compliance_started.wait(timeout=15)
                 upload_session.execute(text("SET LOCAL lock_timeout = '1000ms'"))
+                upload_session.execute(
+                    text("SELECT id FROM companies WHERE id=:id FOR UPDATE NOWAIT"),
+                    {"id": company_id},
+                )
+                lock_company_memberships_for_assignment(
+                    upload_session,
+                    company_id=company_id,
+                    membership_ids={membership_id},
+                )
                 locked_matter_id = upload_session.scalar(
                     select(Matter.id).where(Matter.id == matter_id).with_for_update()
                 )

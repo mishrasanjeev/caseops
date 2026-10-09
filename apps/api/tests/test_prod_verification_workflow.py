@@ -281,6 +281,36 @@ def test_patent_and_statute_production_phases_are_release_owned_and_bounded() ->
     assert steps.index(check) < steps.index(patent) < steps.index(statutes)
 
 
+def test_notice_acceptance_is_in_the_exact_release_tester_inventory() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
+    tester = next(
+        step for step in steps
+        if step.get("name") == "Run canonical tester production regressions"
+    )
+    assert tester["env"]["CASEOPS_NOTICE_QA_SLUG"] == "test-legal"
+    assert tester["env"]["CASEOPS_NOTICE_OWNER_EMAIL"] == "ram@testfirm.com"
+    assert (
+        "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD"
+        in tester["env"]["CASEOPS_NOTICE_OWNER_PASSWORD"]
+    )
+    assert tester["env"]["CASEOPS_NOTICE_CREATE_TEST_LEGAL_MEMBER"] == "true"
+    assert (
+        "needs.resolve-release.outputs.release_sha"
+        in tester["env"]["CASEOPS_EXPECTED_RELEASE_SHA"]
+    )
+    assert "--project=tester-prod-chromium --workers=1 --retries=0" in tester["run"]
+    for name in ("playwright.app.config.ts", "playwright.prod-ram.config.ts"):
+        config = (REPO_ROOT / name).read_text()
+        assert r"/ram-2026-10-08-notices\.spec\.ts$/" in config
+    spec = (REPO_ROOT / "tests/e2e/ram-2026-10-08-notices.spec.ts").read_text()
+    assert "noPaidProviderHeaders" in spec
+    assert "for (const width of [1280, 393])" in spec
+    assert "test.skip" not in spec
+
+
 def test_existing_patent_qa_helper_does_not_rewrite_live_configuration() -> None:
     helper = (REPO_ROOT / "tests/e2e/support/patent-acceptance.ts").read_text()
     assert 'required("CASEOPS_EXPECTED_RELEASE_SHA")' in helper

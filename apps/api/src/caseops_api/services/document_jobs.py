@@ -34,6 +34,10 @@ from caseops_api.services.matter_operational_guard import (
     assert_operational_matter,
     matter_is_operational,
 )
+from caseops_api.services.matter_write_fence import (
+    lock_document_private_provenance,
+    lock_matter_private_authority,
+)
 
 
 def _job_record(job: DocumentProcessingJob) -> DocumentProcessingJobRecord:
@@ -327,9 +331,7 @@ def run_document_processing_job(job_id: str) -> None:
                 select(DocumentProcessingJob).where(DocumentProcessingJob.id == job.id)
             )
             if failed_job is not None:
-                _mark_job_failed(
-                        session, failed_job, error_message=redact_provider_error(exc)
-                    )
+                _mark_job_failed(session, failed_job, error_message=redact_provider_error(exc))
     finally:
         session.close()
 
@@ -474,6 +476,9 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
     # parse/embed work has finished and the parent lifecycle row is locked.
     index_matter_attachment(attachment)
 
+    event_actor_membership_id = (
+        job.requested_by_membership_id or attachment.uploaded_by_membership_id
+    )
     parent_locked_for_persist = False
 
     def lock_operational_parent_for_persist() -> None:
@@ -481,13 +486,20 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
         if parent_locked_for_persist:
             return
         # The attachment and replacement chunks are dirty at this point.
-        # Suppress autoflush while acquiring the lifecycle lock. The worker is
-        # a system actor, so its processing activity deliberately has no human
-        # actor FK and never contends with an unrelated interactive membership
-        # fence. The upload activity already preserves human provenance. A
-        # shared parent fence lets an immediate reply upload proceed while
-        # still excluding disposal/reopening until this persistence commits.
+        # Private events retain the historical human actor FK even though the
+        # processing activity is a system event. Enter tenant authority before
+        # the retained job/source FKs and parent locks, with chunks unflushed.
+        # The shared parent fence still excludes disposal and reopening.
         with session.no_autoflush:
+            lock_matter_private_authority(session, company_id=job.company_id)
+            lock_document_private_provenance(
+                session,
+                company_id=job.company_id,
+                actor_membership_id=event_actor_membership_id,
+                requested_by_membership_id=job.requested_by_membership_id,
+                uploaded_by_membership_id=attachment.uploaded_by_membership_id,
+                locked_by_membership_id=None,
+            )
             assert_operational_matter(
                 session,
                 matter=attachment.matter,
@@ -541,11 +553,6 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
                 else f"{attachment.original_filename}: {attachment.extraction_error}"
             ),
         )
-    )
-    event_actor_membership_id = (
-        job.requested_by_membership_id
-        or attachment.uploaded_by_membership_id
-        or attachment.matter.created_by_membership_id
     )
     if event_actor_membership_id is not None:
         from caseops_api.services.private_retrieval import (
@@ -663,6 +670,21 @@ def _process_ip_document_version_job(session: Session, job: DocumentProcessingJo
         _mark_job_failed(session, job, error_message="IP document version could not be found.")
         return
     index_ip_document_version(version)
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+    # Extraction dirties the version. Fence authority before even a SELECT can
+    # autoflush it; patent source writers already lock Company before versions.
+    # Keep extraction outside the tenant lock.
+    with session.no_autoflush:
+        lock_private_authority_writer(session, company_id=job.company_id)
+        lock_document_private_provenance(
+            session,
+            company_id=job.company_id,
+            actor_membership_id=version.uploaded_by_membership_id,
+            requested_by_membership_id=job.requested_by_membership_id,
+            uploaded_by_membership_id=version.uploaded_by_membership_id,
+            locked_by_membership_id=version.locked_by_membership_id,
+        )
     job.processed_char_count = version.extracted_char_count
     job.error_message = version.extraction_error
     job.completed_at = utcnow()

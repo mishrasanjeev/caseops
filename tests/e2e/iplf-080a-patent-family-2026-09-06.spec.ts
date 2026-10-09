@@ -91,7 +91,15 @@ for (const width of [393, 768, 1280]) {
     await page.getByRole("button", { name: "Edit disclosure" }).click();
     await page.getByLabel("Source document version").selectOption(document.versions[0].id);
     await page.getByLabel("Correction reason").fill("Pin the original inventor document.");
+    const sourceCorrection = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === `/api/ip/patents/families/${familyId}/corrections`
+      && response.request().method() === "POST");
     await page.getByRole("button", { name: "Save correction" }).click();
+    const sourceCorrectionResponse = await sourceCorrection;
+    expect(sourceCorrectionResponse.status(), await sourceCorrectionResponse.text()).toBe(200);
+    const pinnedFamily = await sourceCorrectionResponse.json();
+    expect(pinnedFamily.facts.source.document_version_id).toBe(document.versions[0].id);
+    expect(pinnedFamily.facts.source.content_sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
     await expect(page.getByRole("button", { name: "Download source version" })).toBeVisible();
     await page.reload();
     const downloaded = page.waitForEvent("download");

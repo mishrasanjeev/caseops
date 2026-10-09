@@ -10,10 +10,11 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import Response
 
 from caseops_api.api.dependencies import DbSession, require_capability
+from caseops_api.api.oauth_browser import OAuthCallbackRoute, complete_browser_oauth, oauth_callback
 from caseops_api.schemas.calendar import (
     CalendarConnectionCallbackResponse,
     CalendarConnectionListResponse,
@@ -85,7 +86,7 @@ class ICalendarResponse(Response):
     media_type = "text/calendar; charset=utf-8"
 
 
-router = APIRouter()
+router = APIRouter(route_class=OAuthCallbackRoute)
 CalendarViewer = Annotated[SessionContext, Depends(require_capability("calendar:view"))]
 CalendarSyncer = Annotated[SessionContext, Depends(require_capability("calendar:sync"))]
 
@@ -235,19 +236,27 @@ async def start_calendar_outlook_connection(
     response_model=CalendarConnectionCallbackResponse,
     summary="Complete Outlook calendar OAuth callback.",
 )
-async def complete_calendar_outlook_connection(
+@oauth_callback("outlook")
+def complete_calendar_outlook_connection(
+    request: Request,
     context: CalendarSyncer,
     session: DbSession,
     code: Annotated[str, Query(min_length=1)],
     state: Annotated[str, Query(min_length=1)],
-) -> CalendarConnectionCallbackResponse:
-    connection = complete_outlook_connection(
-        session,
-        context=context,
-        code=code,
-        state=state,
+) -> CalendarConnectionCallbackResponse | Response:
+    return complete_browser_oauth(
+        request,
+        provider="outlook",
+        complete=lambda: CalendarConnectionCallbackResponse(
+            connected=True,
+            connection=complete_outlook_connection(
+                session,
+                context=context,
+                code=code,
+                state=state,
+            ),
+        ),
     )
-    return CalendarConnectionCallbackResponse(connected=True, connection=connection)
 
 
 @router.post(
@@ -267,22 +276,27 @@ async def start_calendar_google_connection(
     response_model=CalendarConnectionCallbackResponse,
     summary="Complete Google Calendar OAuth callback.",
 )
-async def complete_calendar_google_connection(
+@oauth_callback("google_calendar")
+def complete_calendar_google_connection(
+    request: Request,
     context: CalendarSyncer,
     session: DbSession,
     code: Annotated[str, Query(min_length=1)],
     state: Annotated[str, Query(min_length=1)],
-) -> CalendarConnectionCallbackResponse:
-    connection = complete_google_calendar_connection(
-        session,
-        context=context,
-        code=code,
-        state=state,
-    )
-    return CalendarConnectionCallbackResponse(
+) -> CalendarConnectionCallbackResponse | Response:
+    return complete_browser_oauth(
+        request,
         provider="google_calendar",
-        connected=True,
-        connection=connection,
+        complete=lambda: CalendarConnectionCallbackResponse(
+            provider="google_calendar",
+            connected=True,
+            connection=complete_google_calendar_connection(
+                session,
+                context=context,
+                code=code,
+                state=state,
+            ),
+        ),
     )
 
 
@@ -291,7 +305,7 @@ async def complete_calendar_google_connection(
     response_model=CalendarConnectionRecord,
     summary="Revoke one calendar connection for the caller.",
 )
-async def revoke_calendar_connection(
+def revoke_calendar_connection(
     context: CalendarSyncer,
     session: DbSession,
     connection_id: str,

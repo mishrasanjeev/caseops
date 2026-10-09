@@ -11,6 +11,7 @@ from caseops_api.db.models import (
     AuditResult,
     Company,
     CompanyNotice,
+    IpDocumentVersion,
     Matter,
     MatterAttachment,
 )
@@ -95,7 +96,9 @@ def _company_or_404(
 ) -> Company:
     statement = select(Company).where(Company.id == company_id)
     if for_update:
-        statement = statement.with_for_update()
+        # Quota admission/edits serialize without blocking unrelated Company
+        # FK checks while a directory writer owns the uploading actor.
+        statement = statement.with_for_update(of=Company, key_share=True)
     company = session.scalar(statement.execution_options(populate_existing=True))
     if company is None:
         raise HTTPException(
@@ -116,7 +119,18 @@ def _used_bytes(session: Session, *, company_id: str) -> int:
             CompanyNotice.company_id == company_id
         )
     )
-    return int(matter_attachment_bytes or 0) + int(standalone_notice_bytes or 0)
+    # Retained historical versions still own distinct stored objects. Count
+    # each binary once, without multiplying links or filtering lifecycle/ACLs.
+    ip_document_bytes = session.scalar(
+        select(func.coalesce(func.sum(IpDocumentVersion.size_bytes), 0)).where(
+            IpDocumentVersion.company_id == company_id
+        )
+    )
+    return (
+        int(matter_attachment_bytes or 0)
+        + int(standalone_notice_bytes or 0)
+        + int(ip_document_bytes or 0)
+    )
 
 
 def _base_policy(session: Session, *, company: Company) -> StorageUploadPolicy:
