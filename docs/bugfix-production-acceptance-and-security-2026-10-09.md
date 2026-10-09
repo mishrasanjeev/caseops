@@ -406,6 +406,40 @@ skip/completion, and upload on success as well as failure. An independent repair
 must preserve old-release checkout compatibility and all historical workflow
 assertions. It cannot persist raw config, authorization, private bodies or media.
 
+### Integrated Page And Administrative Repairs
+
+The own-property correction is integrated from clean commit `79671909` as
+`7189ed16`: one runtime expression uses `Object.hasOwn`, without changing the
+five valid source mappings. Six complete unit files pass all 67 stable native
+identities (zero skips), including both page siblings and the page matrix.
+Original 22-case/20-pass/two-failure page evidence remains unchanged. Standard
+Docker discovery now contains 505 browser identities, including two additional
+public prototype negatives, and the SEO file has 26 cases: 16 read-only public
+and ten loopback-only mutation checks. Discovery is not browser execution.
+Production selection must include both public groups, never the old CTA-only
+filter. Public cases inspect valid forms at 360/1280 without submitting leads.
+
+The admin dependency repair is committed as `a73c5588` in the independent
+`demo-admin-guard-20261010` tree and integrated into the combined candidate.
+Complete four-file replacement passes all 102 tests, zero skips, with 306 native
+phases, completion exit zero and exact JUnit identity/totals reconciliation.
+Inventory: ten route guards, eight new denial cases, 59 full demo/outbox cases
+and 25 complete SaaS-billing cases. Both SQLite and isolated PostgreSQL denial
+variants pass, with persisted lead/outbox state unchanged and no transport or
+success-audit side effect. Existing founder positive retry/delete audits pass.
+The repository public-route allowlist and dependency recognizer are unchanged.
+
+Retained main-owned evidence is in the independent worktree's
+`.tmp/demo-admin-guard-20261010/`: the original eight-case sweep has seven
+passes/one dependency failure, bootstrap and Ruff-only stops are not tests,
+`admin-complete-fixed-r2` has 94 passes/eight admission-status setup failures,
+and `r3` has 98 passes/four anonymous CSRF-before-auth expectation failures.
+All full phases and details were inspected and reconciled. `r4` uses the actual
+200 admission contract and a legitimate double-submit CSRF pair to reach
+anonymous authentication denial, rather than weakening the expected 401 to
+accept a middleware 403. Runtime CSRF behavior and assertions are not weakened.
+These complete scoped passes still require integrated final-head acceptance.
+
 The completed frozen gate is positive evidence for that exact head only. The
 three independent repairs plus the main-owned admin dependency repair require
 review, integrated regression inventory, fresh final-head Docker, green current

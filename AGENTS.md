@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Administrative mutations must declare the existing platform capability
+  dependency before handler entry; an inline check cannot satisfy the route
+  guard contract. Anonymous denial tests must pass the legitimate CSRF pair
+  so they prove authentication, then assert retained lead/outbox state and
+  zero delivery/audit side effects. Preserve separate CSRF rejection coverage.
+
 - Public route allowlists must check own properties; inherited JavaScript keys
   such as `constructor` and `__proto__` are not admitted routes. Preserve 404/no-form
   browser regressions and reconcile each new page's sibling unit inventory before
