@@ -8,6 +8,9 @@
 !tests/fixtures/
 !tests/fixtures/statutes/
 !tests/fixtures/statutes/structured-schedule-api.json
+!tests/e2e/
+!tests/e2e/support/
+!tests/e2e/support/prod-failure-diagnostics.ts
 
 apps/web/node_modules/
 apps/web/.next/

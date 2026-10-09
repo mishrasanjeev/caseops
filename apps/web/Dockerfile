@@ -41,6 +41,8 @@ COPY apps/web ./
 # One colocated page test imports this canonical fixture during Next's type
 # check. Keep it in the builder context only; the runner copies no test files.
 COPY tests/fixtures/statutes/structured-schedule-api.json /app/tests/fixtures/statutes/structured-schedule-api.json
+# Colocated sanitizer units use this pure helper during builder type checking.
+COPY tests/e2e/support/prod-failure-diagnostics.ts /app/tests/e2e/support/prod-failure-diagnostics.ts
 
 RUN npm run build
 

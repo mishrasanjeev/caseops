@@ -1096,6 +1096,20 @@ def _ignore_matches(ignore_text: str, relative_path: str) -> bool:
     return ignored
 
 
+@pytest.mark.parametrize("ignore_path", [".gcloudignore", ".dockerignore"])
+def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str) -> None:
+    patterns = set(_read_repo_text(ignore_path).splitlines())
+    helper = "tests/e2e/support/prod-failure-diagnostics.ts"
+    assert {"!tests/e2e/", "!tests/e2e/support/", f"!{helper}"} <= patterns
+    assert not {"!tests/**", "!tests/e2e/**", "!tests/e2e/support/**"} & patterns
+    builder, runner = _read_repo_text("apps/web/Dockerfile").split(
+        "FROM node:22.14.0-alpine AS runner", 1,
+    )
+    assert f"COPY {helper} /app/{helper}" in builder
+    assert "COPY tests/ " not in builder
+    assert helper not in runner and "/app/tests" not in runner
+
+
 @pytest.mark.parametrize("ignore_path", ["apps/api/.gcloudignore", "apps/api/.dockerignore"])
 def test_api_build_context_excludes_secret_and_cache_canaries(ignore_path: str) -> None:
     ignore_text = _read_repo_text(ignore_path)

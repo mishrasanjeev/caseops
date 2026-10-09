@@ -174,6 +174,15 @@ J19/M21/US-063/FT-094/096/NFT-023/SEC-031.
 This checkpoint is not a production GO. The candidate has not completed the
 whole fresh Docker/CI inventory or been deployed.
 
+The first complete Docker attempt on `a369f791` fails during web image build:
+the new colocated diagnostic unit imports a helper absent from the narrow
+builder context (TS2307). No PostgreSQL or browser execution is claimed for
+that run. Both root upload/context allowlists now admit only the pure sanitizer
+helper, copied into the builder alone; no browser fixture, credential or test
+directory is copied to the runtime. A two-case build-context regression and a
+fresh complete Docker replacement are required. The failed log remains in
+`.tmp/issues-security-20261009/docker-a369f791-r1.log`.
+
 Incremental journals/JUnit are in `.tmp/issues-security-20261009/`. Preserve the
 first projection attempt with an unrecognized PostgreSQL environment key and
 the adjacent dispatch import-collection error as incomplete evidence. Corrected
