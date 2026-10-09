@@ -105,7 +105,9 @@ def test_scheduled_prod_verification_is_read_only() -> None:
     steps_digest = hashlib.sha256(
         json.dumps(scheduled["steps"], sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-    assert steps_digest == "0eb6062e19bf61ada88a35ce91ba6698b378ca4b6070062626d4777c6abcf28c"
+    # Reviewed 10 October: capture requires the before-disk safe native reporter.
+    # The exact statute project, source-spec bytes and four read-only workers remain.
+    assert steps_digest == "3475f5a0418cc20b4f95c721b62c642f44263a5bbe6bb366c2febdc5daee4dd4"
     config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
     assert (
         'name: "statute-source-prod-chromium",\n'
@@ -123,7 +125,7 @@ def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:
 
     workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(encoding="utf-8")
     notice_step = workflow.split("- name: Run prod-Playwright suite (notice module)", 1)[1]
-    next_step = notice_step.split("- name: Upload Playwright report on failure", 1)[0]
+    next_step = notice_step.split("- name: Check release-owned patent and statute acceptance", 1)[0]
 
     assert "if: always()" in next_step
     assert "playwright.notice-prod.config.ts" in next_step
@@ -136,6 +138,7 @@ def test_prod_verification_preserves_each_suite_failure_artifact() -> None:
     for output_directory in (
         "tester",
         "legacy",
+        "test-legal-readonly",
         "ip-a0",
         "ip-renewal",
         "ip-cost",
@@ -144,9 +147,15 @@ def test_prod_verification_preserves_each_suite_failure_artifact() -> None:
         "statute-sources",
     ):
         assert f"--output=test-results/{output_directory}" in workflow
-    upload_step = workflow.split("- name: Upload Playwright report on failure", 1)[1]
-    assert "test-results/" in upload_step
-    assert "if-no-files-found: error" in upload_step
+    upload_step = workflow.split("- name: Upload native Playwright evidence", 1)[1].split(
+        "  scheduled-statute-verification:", 1
+    )[0]
+    assert "if: always()" in upload_step
+    assert "test-results/prod-native-evidence/" in upload_step
+    assert (
+        "steps.prod-playwright-prerequisites.outputs.ready == 'true' && 'error' || 'warn'"
+        in upload_step
+    )
     assert "prod-playwright-report-${{ matrix.suite }}" in upload_step
 
 
