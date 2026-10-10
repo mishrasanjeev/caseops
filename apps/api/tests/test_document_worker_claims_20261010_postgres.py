@@ -58,6 +58,21 @@ def _parsed(value="Prepared content"):
     return document_processing.ParsedDocument("indexed", value, [value], None)
 
 
+def _legacy_receipt_fixture(session, job_id, **state):
+    # Insert the legacy initial state explicitly; head's execution trigger is
+    # never disabled or supplied an invented authorization for fixture UPDATEs.
+    old = session.get(DocumentProcessingJob, job_id)
+    assert old is not None and old.status == "queued" and old.attempt_count == 0
+    values = {column.key: getattr(old, column.key)
+              for column in DocumentProcessingJob.__table__.columns}
+    session.delete(old)
+    session.flush()
+    job = DocumentProcessingJob(**(values | state))
+    session.add(job)
+    session.flush()
+    return job
+
+
 def _assert_success(engine, fixture, attempts, content="Prepared content"):
     with Session(engine) as check:
         job = check.get(DocumentProcessingJob, fixture.job)
@@ -88,7 +103,7 @@ def _activity_source(engine, target, *, active=True):
     fixture = _fixture(engine, "ip" if target == "ip-targetless" else "matter", active=active)
     if target == "contract":
         with Session(engine) as seed:
-            seed.get(DocumentProcessingJob, fixture.job).status = "completed"
+            seed.delete(seed.get(DocumentProcessingJob, fixture.job))
             contract = Contract(company_id=fixture.company, title="Company activity worker",
                 contract_code=uuid4().hex, contract_type="commercial")
             seed.add(contract)
@@ -323,7 +338,7 @@ def test_paused_claim_commit_cannot_adopt_reclaimed_attempt(pg_engine, monkeypat
     fixture = _fixture(pg_engine)
     committed, release_old = Event(), Event()
     parsing_new, release_new = Event(), Event()
-    clock = [datetime.now(UTC)]
+    clock = [datetime.now(UTC) - timedelta(minutes=16)]
     monkeypatch.setattr(document_jobs, "utcnow", lambda: clock[0])
     calls = []
 
@@ -374,7 +389,7 @@ def test_paused_claim_commit_cannot_adopt_reclaimed_attempt(pg_engine, monkeypat
 def test_reclaimed_attempt_cannot_flush_or_fail_new_attempt(pg_engine, monkeypatch, old_fails):
     fixture = _fixture(pg_engine)
     entered, release = Event(), Event()
-    clock = [datetime.now(UTC)]
+    clock = [datetime.now(UTC) - timedelta(minutes=16)]
     calls = []
     monkeypatch.setattr(document_jobs, "utcnow", lambda: clock[0])
 
@@ -416,10 +431,8 @@ def test_recovery_is_bounded_and_skips_locked_rows(pg_engine, monkeypatch):
     before = utcnow() - timedelta(minutes=16)
     with Session(pg_engine) as seed:
         for index, fixture in enumerate(fixtures):
-            job = seed.get(DocumentProcessingJob, fixture.job)
-            job.status = "processing"
-            job.attempt_count = 1
-            job.started_at = before + timedelta(seconds=index)
+            _legacy_receipt_fixture(seed, fixture.job, status="processing", attempt_count=1,
+                                    started_at=before + timedelta(seconds=index))
         seed.commit()
     _worker(monkeypatch, pg_engine, lambda *_: _parsed())
     with Session(pg_engine) as holder:
@@ -434,13 +447,13 @@ def test_recovery_is_bounded_and_skips_locked_rows(pg_engine, monkeypatch):
         holder.rollback()
     with Session(pg_engine) as cleanup:
         for fixture in fixtures:
-            cleanup.get(DocumentProcessingJob, fixture.job).status = "failed"
+            cleanup.delete(cleanup.get(DocumentProcessingJob, fixture.job))
         cleanup.commit()
 
 
 def test_expired_claim_cannot_finish_even_before_recovery(pg_engine, monkeypatch):
     fixture = _fixture(pg_engine)
-    clock = [datetime.now(UTC)]
+    clock = [datetime.now(UTC) - timedelta(minutes=15)]
     monkeypatch.setattr(document_jobs, "utcnow", lambda: clock[0])
 
     def parse(*_):
@@ -458,17 +471,15 @@ def test_expired_claim_cannot_finish_even_before_recovery(pg_engine, monkeypatch
     with Session(pg_engine) as cleanup:
         job = cleanup.get(DocumentProcessingJob, fixture.job)
         assert job.no_paid_providers is True
-        job.status = "failed"
+        cleanup.delete(job)
         cleanup.commit()
 
 
 def test_legacy_missing_start_time_is_recovered_but_marker_is_retained(pg_engine, monkeypatch):
     fixture = _fixture(pg_engine, active=False)
     with Session(pg_engine) as seed:
-        job = seed.get(DocumentProcessingJob, fixture.job)
-        job.status = "processing"
-        job.started_at = None
-        job.updated_at = utcnow() - timedelta(days=154)
+        _legacy_receipt_fixture(seed, fixture.job, status="processing", started_at=None,
+                                updated_at=utcnow() - timedelta(days=154))
         seed.commit()
     _worker(monkeypatch, pg_engine, lambda *_: _parsed())
     assert document_jobs.recover_stale_document_processing_jobs(limit=5) == 1
@@ -489,7 +500,8 @@ def test_enqueue_marker_and_worker_context_are_durable_for_real_tenant(
     try:
         with Session(pg_engine) as enqueue:
             old = enqueue.get(DocumentProcessingJob, fixture.job)
-            old.status = "completed"
+            enqueue.delete(old)
+            enqueue.flush()
             new = document_jobs.enqueue_processing_job(
                 enqueue, company_id=fixture.company,
                 requested_by_membership_id=fixture.actor, target_type=old.target_type,
@@ -501,7 +513,7 @@ def test_enqueue_marker_and_worker_context_are_durable_for_real_tenant(
     finally:
         reset_automated_test_request(token)
     observed = []
-    clock = [datetime.now(UTC)]
+    clock = [datetime.now(UTC) - timedelta(minutes=15)]
     monkeypatch.setattr(document_jobs, "utcnow", lambda: clock[0])
 
     def parse(*_):
@@ -554,7 +566,7 @@ def test_terminal_matter_wins_during_parser_without_result_persistence(pg_engine
 def test_failed_jobs_are_not_implicitly_claimed(pg_engine, monkeypatch):
     fixture = _fixture(pg_engine, active=False)
     with Session(pg_engine) as seed:
-        seed.get(DocumentProcessingJob, fixture.job).status = "failed"
+        _legacy_receipt_fixture(seed, fixture.job, status="failed")
         seed.commit()
     calls = []
     _worker(monkeypatch, pg_engine, lambda *_: calls.append(True))
@@ -570,7 +582,7 @@ def test_failed_jobs_are_not_implicitly_claimed(pg_engine, monkeypatch):
         assert check.get(DocumentProcessingJob, fixture.job).attempt_count == 0
         assert all(check.get(DocumentProcessingJob, job_id).status == "queued"
                    for job_id in selected)
-        check.get(DocumentProcessingJob, positive.job).status = "failed"
+        check.delete(check.get(DocumentProcessingJob, positive.job))
         check.commit()
     assert calls == []
 
@@ -610,7 +622,7 @@ def test_contract_parser_releases_transaction_and_rechecks_linked_matter(
 ):
     fixture = _fixture(pg_engine, active=False)
     with Session(pg_engine) as seed:
-        seed.get(DocumentProcessingJob, fixture.job).status = "completed"
+        seed.delete(seed.get(DocumentProcessingJob, fixture.job))
         contract = Contract(company_id=fixture.company, linked_matter_id=fixture.matter,
                             title="Worker contract", contract_code=uuid4().hex,
                             contract_type="commercial")

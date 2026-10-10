@@ -194,7 +194,7 @@ def test_first_release_requires_legacy_quiescence_before_recovery(
             old = pool.submit(old_run, old_id)
             try:
                 assert old_entered.wait(10)
-                command.upgrade(cfg, "head")
+                command.upgrade(cfg, "20261010_0002")
                 with Session(engine) as check:
                     assert check.get(DocumentProcessingJob, old_id).no_paid_providers is True
                     assert check.get(DocumentProcessingJob, queued_id).status == "queued"
