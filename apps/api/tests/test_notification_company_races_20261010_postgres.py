@@ -183,7 +183,8 @@ def test_company_disable_and_external_claim_have_native_winner_order(
                 context=None,
             )
             session.commit()
-            audit.record("worker_returned", delivered=result.delivered)
+            audit.record("worker_returned", status=result.status, attempts=result.attempts,
+                         external_calls=result.external_calls, delivered=result.delivered)
             return result
 
     def disable():
@@ -239,7 +240,11 @@ def test_company_disable_and_external_claim_have_native_winner_order(
                                      attempts=claimed.attempts, status=claimed.status,
                                      company_active=False)
                     provider_release.set()
-                    assert first.result(timeout=4).delivered
+                    result = first.result(timeout=4)
+                    assert result.status == "sent" and result.attempts == 1
+                    assert result.external_calls == 1 and not result.delivered
+                    assert not result.blocked and not result.retry_scheduled
+                    assert not result.dead_lettered
             finally:
                 audit.release.set()
                 provider_release.set()
