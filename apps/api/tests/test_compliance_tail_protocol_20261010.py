@@ -8,7 +8,7 @@ import importlib.util
 import inspect
 import json
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from caseops_api.db.models import MatterComplianceExtractionRun
 from caseops_api.services import compliance_participants
 from caseops_api.services import compliance_tail_protocol as protocol
-from tests.test_compliance_tail_protocol_20261010_postgres import _legacy
+from tests.test_compliance_tail_protocol_20261010_postgres import _DATED_TEXT, _TEXT, _legacy
 
 LEGACY_SHA256 = "15b0353be9ea24f376aac63d6a1b6e71ba1eb0bd6b93201d5e29a43299971a87"
 ROOT = Path(__file__).resolve().parents[1]
@@ -301,6 +301,37 @@ def test_frozen_notifications_ignore_current_bindings_but_still_require_admissio
         with pytest.raises(RuntimeError, match="Compliance participant fence must precede"):
             helper(session, matter=matter, actor_membership_id=None)
     assert not session.info
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_due"),
+    [(_TEXT, None), (_DATED_TEXT, date(2026, 10, 24))],
+    ids=["ambiguous-source-stays-undated", "dated-tail-source-has-exact-due-date"],
+)
+def test_frozen_tail_source_uses_actual_parser_without_provider(monkeypatch, source, expected_due):
+    legacy = _legacy(SimpleNamespace(legacy_run=type("LegacyRun", (), {})))
+
+    def record_item(_session, **values):
+        return SimpleNamespace(**values)
+
+    def provider_was_used(*_args, **_kwargs):
+        raise AssertionError("Deterministic tail source must not invoke a provider")
+
+    monkeypatch.setattr(legacy, "_create_item", record_item)
+    monkeypatch.setattr(legacy, "build_provider", provider_was_used)
+    items = legacy._deterministic_items(
+        SimpleNamespace(),
+        run=SimpleNamespace(source_hash=hashlib.sha256(source.encode()).hexdigest()),
+        matter=SimpleNamespace(),
+        court_order=SimpleNamespace(),
+        attachment=None,
+        source_text=source,
+        order_date=date(2026, 10, 10),
+    )
+    assert items
+    assert all(item.due_on == expected_due for item in items)
+    assert all(item.source_snippet in source for item in items)
+    assert bool(legacy._AMBIGUOUS_TIMELINE_RE.search(source)) is (expected_due is None)
 
 
 def test_current_create_and_finish_bind_before_any_flush_or_run_mutation():

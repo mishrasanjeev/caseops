@@ -60,6 +60,7 @@ from tests.test_postgres_validation import _ip_race_context
 
 pytestmark = pytest.mark.postgres
 _TEXT = "The parties shall comply within two weeks from today."
+_DATED_TEXT = "The parties shall comply by 24 October 2026."
 _TAIL_TABLES = (
     "matter_compliance_extraction_runs",
     "matter_compliance_items",
@@ -477,7 +478,12 @@ def test_full_frozen_existing_run_tail_rolls_back_already_created_items(
     tail_database, monkeypatch, status
 ):
     database = tail_database
-    run_id = _historical_run(database)
+    with Session(database.engine) as session:
+        session.get(MatterCourtOrder, database.fixture.order).order_text = _DATED_TEXT
+        session.commit()
+    run_id = _historical_run(
+        database, source_hash=hashlib.sha256(_DATED_TEXT.encode()).hexdigest(),
+    )
     _install(database)
 
     def current_helper_was_used(*_args, **_kwargs):
@@ -486,7 +492,7 @@ def test_full_frozen_existing_run_tail_rolls_back_already_created_items(
     for name in ("lock_compliance_participants", "_notification_context", "_recipient_memberships"):
         monkeypatch.setattr(compliance_participants, name, current_helper_was_used)
     legacy = _legacy(database)
-    _provider(legacy, monkeypatch)
+    provider_calls = _provider(legacy, monkeypatch)
     before = _snapshot(database)
     with Session(database.engine) as session:
         # The actual 3dbf pipeline admits participants before parent/child persistence too.
@@ -505,15 +511,27 @@ def test_full_frozen_existing_run_tail_rolls_back_already_created_items(
             matter=matter,
             court_order=order,
             attachment=None,
-            source_text=_TEXT,
+            source_text=order.order_text,
             order_date=order.order_date,
         )
         assert items, "The frozen pre-finalization path must really create child rows"
+        assert order.order_text == _DATED_TEXT
+        assert run.source_hash == hashlib.sha256(order.order_text.encode()).hexdigest()
+        assert all(item.due_on == date(2026, 10, 24) for item in items)
+        assert not provider_calls
         session.flush()
         assert list(session.scalars(select(MatterComplianceItem)))
         staged = _snapshot(database, connection=session.connection())
         assert staged["matter_compliance_items"] and staged["matter_tasks"]
         assert staged["matter_deadlines"] and staged["notification_delivery_intents"]
+        tasks = {row["id"]: row for row in staged["matter_tasks"]}
+        deadlines = {row["id"]: row for row in staged["matter_deadlines"]}
+        for item in staged["matter_compliance_items"]:
+            assert item["extraction_run_id"] == run.id and item["source_hash"] == run.source_hash
+            assert tasks[item["generated_task_id"]]["due_on"] == date(2026, 10, 24)
+            deadline = deadlines[item["generated_deadline_id"]]
+            assert deadline["due_on"] == date(2026, 10, 24)
+            assert deadline["source_ref_id"] == item["id"]
         assert (
             staged["matter_compliance_extraction_runs"]
             == before["matter_compliance_extraction_runs"]
@@ -529,6 +547,7 @@ def test_full_frozen_existing_run_tail_rolls_back_already_created_items(
             )
             session.commit()
         assert rejected.value.orig.sqlstate == "55000"
+        assert not provider_calls
         session.rollback()
     assert _snapshot(database) == before
 
