@@ -7,6 +7,10 @@ run completes 320 passes, 18 unverified skips and three failures. All three
 actual mutation responses are 503 with corroborating Company lock timeouts;
 historical holder attribution is unknown. Fresh Notice 2/2 is diagnostic only.
 Queue/execution repair is in progress; no production closure or cadence resume.
+Clean candidate `e0fc0044` passes the complete scoped actor/compliance/governance
+r18 inventory (120 cases, 360 phases, zero skips) and all 12 control-plane
+commands. Retained-chunk API reindex replacement passes 19 cases; PostgreSQL
+interleavings, full Docker, hosted CI/SARIF and live browser proof remain open.
 Full evidence, current verdict and required replacement:
 [document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
 

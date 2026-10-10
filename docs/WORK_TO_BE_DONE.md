@@ -14,6 +14,9 @@ barrier. The replacement license inventory has 19 policy rejections among
 and its file-read-race alert is fixed, but the draft remains held by unchanged
 license policy. License/external consent and
 Google exclusion remain open. Private cadence stays paused until certification.
+Candidate `e0fc0044` now passes complete scoped 120-case actor/compliance/
+governance replay and 12 control-plane commands. These are not full Docker,
+PostgreSQL interleaving, hosted CI/SARIF or serving-release browser proof.
 Full evidence, current verdict and required replacement:
 [document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
 

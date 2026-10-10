@@ -23,8 +23,11 @@ Complete first-checkpoint native CI readback retains 80 API failures and 15
 PostgreSQL failures; cancelled job metadata on two PG shards still contains
 complete failing native results. Local whole-module r16 on `fa300d36` passes
 222/223, with one confirmed Contract retained-chunk reindex collision. Its
-Matter sibling and atomic replacement regressions are under repair. New
-desktop/mobile browser collection is not browser execution or production proof.
+Matter sibling and atomic replacement regressions are under repair. Complete
+scoped retained-chunk API replacement passes 19 cases; clean `e0fc0044` r18
+passes 120 actor/compliance/governance cases, and all 12 control-plane commands
+pass. New desktop/mobile browser collection is not execution or production
+proof; native PostgreSQL, full Docker and hosted CI/SARIF remain open.
 Full evidence, current verdict and required replacement:
 [document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
 

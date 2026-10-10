@@ -114,15 +114,31 @@ restore-forward refusal is proved; historical moving-head descent callers and
 a fresh empty full-head rehearsal still require separate integration work.
 No production mutation or provider entitlement is inferred from this slice.
 
-The locked court-import actor correction `1e82ef95` is integrated as `42a34cb4`;
-its historical and new complete Main replacements remain pending. Compliance
-tail commit `f48f4774` is integrated as `b89cd0db`; its 58 unit passes are scoped
-evidence only, while the complete 69-case native PostgreSQL gate is in progress.
+The locked court-import actor correction `1e82ef95` is integrated as `42a34cb4`.
+Compliance tail commit `f48f4774` is integrated as `b89cd0db`. Main r18 on clean
+`e0fc0044` completes **120 passes / 360 phases**, zero skips/errors: all 34
+historical Matter-team cases, five new actor-order cases, 58 compliance-protocol
+unit cases, 15 data-class projection cases and eight IP projection-gate cases.
+The initial estimated total of 121 is not the actual inventory. Exact ordered
+collection, execution, JUnit and full before/after source pins reconcile;
+receipt SHA256:
+`da704cbbf27e12a36e3dae3741fbf90e3769baa4959e3d5a9bf981866932e59d`.
+The 69-case agent PostgreSQL gate is still running. Three historical-tail
+fixture failures currently mix a pinned old module with a current imported
+helper; they are retained failures, not successful database-fence reproductions.
+Require complete original results, exact dependency correction and complete
+replacement. No assertion, lock budget or production fence is relaxed.
 The governance map and compiled runtime projection are regenerated together
 for **335 tables / 5,332 columns**, with the nullable execution marker reviewed
 as configuration/state metadata. No retention, legal approval or general
-disposition authority is added. The complete control-plane gate, fresh image,
-current hosted CI/SARIF and exact production proof are not yet complete.
+disposition authority is added. Complete control-plane r2 passes **12/12**
+commands during the r18 source-frozen window: program, ownership, architecture,
+data-class/governance registries, governance-map validation/change review,
+compiled projection, product guide, migration validation/change review and M2
+ownership. All four changed migrations pass the canonical-base preflight.
+The individually hashed command logs remain under `.tmp/control-plane-r2`;
+the earlier 10-pass/two-failure r1 is retained. These scoped results are not a
+fresh image, current hosted CI/SARIF or exact production proof.
 
 ## Exact Failed Evidence
 
