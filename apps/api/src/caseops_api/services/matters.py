@@ -3209,10 +3209,10 @@ def _neutralize_disposed_matter_operations(
             )
         )
     )
+    from caseops_api.services.document_jobs import cancel_document_processing_job_for_disposal
+
     for job in document_processing_jobs:
-        job.status = DocumentProcessingJobStatus.FAILED.value
-        job.error_message = "Cancelled because the matter was disposed."
-        job.completed_at = now
+        cancel_document_processing_job_for_disposal(session, job, completed_at=now)
 
     reminders = list(
         session.scalars(
@@ -5122,6 +5122,63 @@ def create_matter_hearing(
     return _hearing_record(hearing)
 
 
+def _prepare_court_sync_import(
+    session: Session, *, matter: Matter, source: str, cause_list_entries, orders,
+):
+    from caseops_api.db.models import Company
+    from caseops_api.services.compliance_extraction import prepare_court_sync_compliance
+
+    require_read_only_upload_session(
+        session, detail="Court sync import cannot release caller-owned writes."
+    )
+    company = session.get(Company, matter.company_id, populate_existing=True)
+    if company is None or not company.is_active:
+        raise HTTPException(403, detail="The current workspace is no longer active.")
+    _assert_matter_not_disposed(matter, operation="import court-sync data")
+    if not cause_list_entries and not orders:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at least one cause list entry or court order to import.",
+        )
+    for item in orders:
+        _validated_order_attachment_id(
+            session, matter_id=matter.id, attachment_id=item.order_attachment_id,
+        )
+    # Repeated equivalent inputs reuse a row and extraction sees its final text.
+    # Model the same lookup, including the legacy empty-reference NULL lookup.
+    created: dict[tuple, int] = {}
+    selections, groups, final_text = [], [], {}
+    for index, item in enumerate(orders):
+        order_text = item.order_text.strip() if item.order_text else None
+        reference = item.source_reference.strip() if item.source_reference else None
+        existing = _find_existing_imported_order(
+            session, matter_id=matter.id, source=source, source_reference=reference,
+            order_date=item.order_date, title=item.title.strip(), order_text=order_text,
+        )
+        prior = None
+        if existing is not None:
+            group = ("existing", existing.id)
+        else:
+            text_hash = _order_text_hash(order_text)
+            identity = (
+                item.order_date, (_normalize_order_identity_text(item.title) or "").casefold(),
+                text_hash,
+            )
+            if text_hash is not None:
+                prior = created.get((*identity, reference or None))
+                if prior is None:
+                    created[(*identity, reference)] = index
+            group = ("new", prior if prior is not None else index)
+        selections.append((existing.id if existing is not None else None, prior))
+        groups.append(group)
+        final_text[group] = order_text
+    return prepare_court_sync_compliance(
+        session, matter=matter, source=source, orders=orders,
+        order_sources=[(*selection, final_text[group])
+                       for selection, group in zip(selections, groups, strict=True)],
+    )
+
+
 def _persist_court_sync_import(
     session: Session,
     *,
@@ -5131,8 +5188,12 @@ def _persist_court_sync_import(
     summary: str | None,
     cause_list_entries,
     orders,
+    prepared_compliance,
 ) -> MatterCourtSyncRun:
-    from caseops_api.services.compliance_participants import lock_compliance_participants
+    from caseops_api.services.compliance_participants import (
+        ComplianceParticipantFenceError,
+        lock_compliance_participants,
+    )
 
     lock_compliance_participants(
         session, company_id=matter.company_id, matter_id=matter.id,
@@ -5140,6 +5201,11 @@ def _persist_court_sync_import(
         expected_lifecycle_version=matter.lifecycle_version,
     )
     _assert_matter_not_disposed(matter, operation="import court-sync data")
+    from caseops_api.services.compliance_extraction import validate_court_sync_compliance
+
+    validate_court_sync_compliance(
+        session, matter=matter, source=source, orders=orders, prepared=prepared_compliance,
+    )
     if not cause_list_entries and not orders:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -5177,7 +5243,7 @@ def _persist_court_sync_import(
         new_listing_ids.append(new_entry.id)
 
     new_orders: list[MatterCourtOrder] = []
-    for item in orders:
+    for item, prepared_order in zip(orders, prepared_compliance.orders, strict=True):
         order_attachment_id = _validated_order_attachment_id(
             session,
             matter_id=matter.id,
@@ -5195,6 +5261,13 @@ def _persist_court_sync_import(
             title=title,
             order_text=order_text,
         )
+        expected_id = prepared_order.existing_order_id
+        if prepared_order.prior_order_index is not None:
+            expected_id = new_orders[prepared_order.prior_order_index].id
+        if (order.id if order is not None else None) != expected_id:
+            raise ComplianceParticipantFenceError(
+                409, detail={"code": "compliance_source_changed"},
+            )
         if order is None:
             order = MatterCourtOrder(
                 matter_id=matter.id,
@@ -5228,6 +5301,12 @@ def _persist_court_sync_import(
         session.add(order)
         session.flush()
         new_orders.append(order)
+
+    for order, prepared_order in zip(new_orders, prepared_compliance.orders, strict=True):
+        if order.order_text != prepared_order.order_text:
+            raise ComplianceParticipantFenceError(
+                409, detail={"code": "compliance_source_changed"},
+            )
 
     if cause_list_entries:
         next_listing = min(cause_list_entries, key=lambda entry: entry.listing_date)
@@ -5272,7 +5351,9 @@ def _persist_court_sync_import(
 
         for listing_id in new_listing_ids:
             try:
-                resolve_listing_bench(session, listing_id=listing_id)
+                # Tolerate resolver failure without committing or poisoning the import.
+                with session.begin_nested():
+                    resolve_listing_bench(session, listing_id=listing_id, commit=False)
             except Exception:  # noqa: BLE001
                 logger.warning(
                     "bench_resolver: failed for listing_id=%s; "
@@ -5289,7 +5370,7 @@ def _persist_court_sync_import(
             extract_imported_order_proceeding_intelligence,
         )
 
-        for order in new_orders:
+        for order, prepared_order in zip(new_orders, prepared_compliance.orders, strict=True):
             try:
                 extract_imported_order_proceeding_intelligence(
                     session,
@@ -5312,6 +5393,7 @@ def _persist_court_sync_import(
                     order=order,
                     trigger="court_sync",
                     actor_membership_id=actor_membership_id,
+                    prepared_ai=prepared_order.ai,
                 )
             except ComplianceParticipantFenceError:
                 raise
@@ -5332,12 +5414,47 @@ def create_matter_court_sync_import(
     matter_id: str,
     payload: MatterCourtSyncImportRequest,
 ) -> MatterCourtSyncRunRecord:
+    from caseops_api.services.capabilities import membership_has_capability
     from caseops_api.services.compliance_participants import lock_compliance_participants
+    from caseops_api.services.identity import get_session_context
+
+    require_read_only_upload_session(
+        session, detail="Court sync import cannot release caller-owned writes."
+    )
+    actor_id, company_id, token_issued_at = (
+        context.membership.id, context.company.id, context.token_issued_at,
+    )
+    session.expire_all()
+    fresh = get_session_context(session, actor_id, token_issued_at=token_issued_at)
+    if fresh.company.id != company_id or not membership_has_capability(
+        session, fresh.membership,
+        MATTER_MUTATION_CAPABILITIES["create_matter_court_sync_import"],
+    ):
+        raise HTTPException(403, detail="The current membership cannot import court-sync data.")
+    context.company, context.membership, context.user = fresh.company, fresh.membership, fresh.user
+    lock_matter_private_authority(session, company_id=company_id)
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_court_sync_import"],
+    )
+    # Actor denial precedes Matter/input validation. Release this read-only fence
+    # before preparation; the complete participant fence is reacquired after I/O.
+    session.rollback()
+    matter = _get_matter_model(
+        session, context=context, matter_id=matter_id, commit_access_denial=False,
+    )
+    prepared_compliance = _prepare_court_sync_import(
+        session, matter=matter, source=payload.source.strip(),
+        cause_list_entries=payload.cause_list_entries,
+        orders=payload.orders,
+    )
 
     lock_compliance_participants(
-        session, company_id=context.company.id, matter_id=matter_id,
-        actor_membership_id=context.membership.id, context=context,
+        session, company_id=company_id, matter_id=matter_id,
+        actor_membership_id=actor_id, context=context,
         required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_court_sync_import"],
+        expected_lifecycle_version=prepared_compliance.matter.lifecycle_version,
     )
     _lock_matter_mutation_actor(
         session,
@@ -5359,6 +5476,7 @@ def create_matter_court_sync_import(
         summary=payload.summary.strip() if payload.summary else None,
         cause_list_entries=payload.cause_list_entries,
         orders=payload.orders,
+        prepared_compliance=prepared_compliance,
     )
     session.commit()
 

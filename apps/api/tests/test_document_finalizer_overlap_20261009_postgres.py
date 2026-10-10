@@ -246,6 +246,8 @@ class _FinalizerAudit:
             self.record("transaction_started", role=role, pid=pid, instance=self.instance)
 
         event.listen(session, "after_begin", label)
+        event.listen(session, "after_commit", lambda _session: self.record(
+            "transaction_committed", role=role, pid=self.pids.get(role)))
         return session
 
     def before(self, connection, _cursor, sql, _parameters, _context, _many):
@@ -272,7 +274,11 @@ class _FinalizerAudit:
         ):
             self.record("actual_private_event_applied_sql", pid=self.pids[role], sql=sql)
             self.entered.set()
-            assert self.release.wait(8), "Actual finalizer SQL boundary was not released"
+            started = monotonic()
+            released = self.release.wait(8)
+            self.record("finalizer_pause_returned", role=role, released=released,
+                        held_seconds=monotonic() - started)
+            assert released, "Actual finalizer SQL boundary was not released"
 
     def error(self, context):
         original = context.original_exception
@@ -280,7 +286,8 @@ class _FinalizerAudit:
                "native_message": getattr(getattr(original, "diag", None), "message_primary", None),
                "sql": context.statement}
         self.errors.append(row)
-        self.record("native_database_error", **row)
+        role = context.connection.info.get("finalizer_role")
+        self.record("native_database_error", role=role, pid=self.pids.get(role), **row)
 
     def snapshot(self):
         with self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as observer:
@@ -492,14 +499,11 @@ def _real_login_server(audit):
         assert not thread.is_alive(), "Owned socket server did not stop"
 
 
-def _login(origin, fixture, audit):
+def _login(client, origin, fixture, audit):
     started = monotonic()
-    with httpx.Client(
-        headers={"X-CaseOps-Automated-Test": "no-paid-providers"}, timeout=5,
-    ) as client:
-        response = client.post(origin + "/api/auth/login", json={
-            "company_slug": fixture["slug"], "email": fixture["email"], "password": _PASSWORD,
-        })
+    response = client.post(origin + "/api/auth/login", json={
+        "company_slug": fixture["slug"], "email": fixture["email"], "password": _PASSWORD,
+    })
     # Body consumed before returning. Never persist body/cookies/password/token.
     audit.record("http_body_complete", status=response.status_code,
                  request_id=response.headers.get("x-request-id"),
@@ -554,17 +558,26 @@ def test_actual_finalizer_allows_same_uploader_login_and_releases_company_writer
 ):
     audit = finalizer_audit
     fixture = _seed_finalizer(audit.engine, target)
-    with _real_login_server(audit) as origin, audit.pool() as (pool, futures):
+    started = monotonic()
+    with (
+        _real_login_server(audit) as origin,
+        httpx.Client(
+            headers={"X-CaseOps-Automated-Test": "no-paid-providers"}, timeout=5,
+        ) as client,
+        audit.pool() as (pool, futures),
+    ):
+        audit.record("http_client_preflight_complete", duration=monotonic() - started,
+                     worker_started=False)
+        preflight = _login(client, origin, fixture, audit)
+        assert preflight.status_code == 200
+        assert preflight.json()["membership"]["id"] == fixture["actor_id"]
         worker = pool.submit(audit.worker, fixture)
         futures.append(worker)
         assert audit.entered.wait(5), "Actual applied-event SQL was not reached"
         assert any("FOR KEY SHARE" in sql and "company_memberships" in sql
                    for sql in audit.statements["worker"])
-        login = pool.submit(_login, origin, fixture, audit)
+        login = pool.submit(_login, client, origin, fixture, audit)
         futures.append(login)
-        writer = pool.submit(audit.mutate, fixture, mutation)
-        futures.append(writer)
-        audit.await_blocker("mutation", "worker")
         if os.environ.get("CASEOPS_FINALIZER_AUTH_BASELINE") == "strong":
             audit.await_blocker("login", "worker")
         response = login.result(timeout=5)
@@ -575,6 +588,11 @@ def test_actual_finalizer_allows_same_uploader_login_and_releases_company_writer
         assert not worker.done(), "Auth completed only after finalization released its locks"
         assert any("FOR NO KEY UPDATE" in sql and "company_memberships" in sql
                    for sql in audit.statements["login"])
+        # Start the 2s-budget Company contender only after the paused-worker
+        # login proof; password hashing must not consume its lock-wait budget.
+        writer = pool.submit(audit.mutate, fixture, mutation)
+        futures.append(writer)
+        audit.await_blocker("mutation", "worker")
         assert not writer.done()
         audit.record("release_finalizer_after_response", activity=audit.snapshot())
         audit.release.set()

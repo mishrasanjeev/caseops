@@ -1,5 +1,70 @@
 # CaseOps  - Work To Be Done
 
+## October 11 Browser Contract Repair
+
+Finish full fresh Docker/CI/SARIF and exact-production replay after reviewed
+two-spec correction `91486e85`. Earlier5f browser completes490 pass/17
+unverified skip/five contract failures, not green. Docker307 R3 is retained
+as incomplete at623 passed calls, no finished event/JUnit. Do not relabel
+those results or the unexecuted two-reindex/download journeys as accepted.
+Production remains3db; license policy, Google exclusion and owner-kept
+dependencies remain open. [Evidence](bugfix-document-worker-production-2026-10-10.md).
+
+## October 11 Container Input Regression
+
+Reviewed packaging fix and twenty regression controls are integrated at
+`19f12ec8`; independently owned frozen-runtime local replay has557 passes,
+one known POSIX-only skip, stable source and dependency hashes. Earlier5f
+native backend replacement reconciles9,074 unique passes/two opt-in or
+platform skips and all six original PG failures corrected. Finish the new
+actual-builder CI gate, clean final-image Docker and exact production replay.
+This checkpoint is not a new merge/deployment or production-green claim.
+
+NO-GO: finish the actual web container's missing shared-helper dependency
+closure, both ignore policies and a real web-builder CI gate. `5f4e70a8` has
+528 local passes/one unverified POSIX skip and clean actual SARIF, not complete
+frozen-runtime/full-image/live proof. Its first Docker build fails before
+PG or Playwright; preserve that failed evidence. Finish complete fresh native
+CI/Docker, merge to canonical main and guarded exact-release production replay.
+Serving `3dbf364d`, paused private cadence, missing independent Docs/Court
+resources, unchanged license-policy rejections and owner-kept dependencies
+remain open. [Details](bugfix-document-worker-production-2026-10-10.md).
+
+## October 10 Live Certification Failure
+
+NO-GO: PR528/522 are deployed as exact main `3dbf364d`, but the complete live
+341-case inventory has 320 passes, 18 unverified skips and three failures.
+Finish atomic document claims, no-transaction I/O, crash recovery, no-paid
+propagation and final-source full release gates. The old zero-byte secret
+scan replacement is merged in PR529 onto main `dfda0eb3`, with nonempty hosted
+proof, while API/web still serve `3dbf364d`. Complete the worker handoff and
+final-image gates, including the separate post-index compliance persistence
+barrier. The replacement license inventory has 19 policy rejections among
+200 runtime locations after SPDX OR repair; 140 native/hosted controls pass
+and its file-read-race alert is fixed, but the draft remains held by unchanged
+license policy. License/external consent and
+Google exclusion remain open. Private cadence stays paused until certification.
+Candidate `e0fc0044` now passes complete scoped 120-case actor/compliance/
+governance replay and 12 control-plane commands. These are not full Docker,
+PostgreSQL interleaving, hosted CI/SARIF or serving-release browser proof.
+Full evidence, current verdict and required replacement:
+[document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
+
+Draft `1d5eb65b` still has seven complete API failures and an interrupted
+2,511-identity PostgreSQL gate (449 not started). Required-runtime dependency
+selection, unchanged-deadline eight-shard partition controls and downgrade
+units complete local 76/76. Finish dated pre-feature migration fixtures,
+native rolling-reader/recovery and retained-root fence coverage, worker
+replacements, CodeQL 540, then complete Docker/CI and exact production replay.
+
+Checkpoint `9b524ab6` integrates the reviewed test corrections and completes
+109 changed unit/SQLite cases/327 phases with no skips/errors. Its actual
+three-language SARIF is clean; CodeQL540 is fixed, not dismissed. Refreshed
+control-plane commands pass. Finish every native PostgreSQL failure in
+CI38071812851, including the legacy positive child-row fixture that currently
+stops before the execution guard, then full Docker and exact live replay.
+Serving production is still `3dbf364d`; no new deployment is certified.
+
 ## October 10 Summary Gate Repair
 
 NO-GO: integrated `a8979a41` completes 66 Python passes/198 phases and 42

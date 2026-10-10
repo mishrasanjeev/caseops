@@ -1,5 +1,66 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 11 Browser Contract Repair
+
+NO-GO. Full5f hosted browser evidence is490 pass/17 unverified skip/five fail,
+all512 identities retained. `91486e85` corrects only two specs' exact badge
+text and explicit nullable no-body diagnostics; no assertion weakening or
+product-logic change. Both reindex sequences still need complete replay.
+Docker307 R3's623 passed calls are an interrupted prefix without completion
+or JUnit, not full PG acceptance. Fresh corrected-source Docker/CI and exact
+production proof remain required; serving3db and open dependencies are
+unchanged. [Evidence](bugfix-document-worker-production-2026-10-10.md).
+
+## October 11 Container Input Regression
+
+Candidate `19f12ec8` integrates the reviewed builder/context fix and twenty
+regressions. Fresh owned-runtime Main replay completes557 passes/one known
+POSIX-only skip, with stable source/dependency hashes. Earlier5f API/PG native
+replacement has9,074 unique passes, two opt-in/platform skips and all six
+previous PG failures passing. Do not upgrade #527: new-source full Docker/CI
+and exact serving-production replay still have not completed.
+
+#527 remains Not fixed on serving `3dbf364d`. `5f4e70a8` completes 528 local
+passes/one unverified POSIX skip and fresh zero-result SARIF, but the real
+Docker web build fails before PG/browser tests: two new shared helpers and
+their import closure are absent from its narrow builder context. Preserve
+that failure, repair builder/context admission without suppressing types,
+and gate the actual web builder in CI. Require independent frozen-runtime
+local replay, complete final-image Docker and exact production acceptance;
+source-tree build success is not a deployed fix. See
+[evidence and limits](bugfix-document-worker-production-2026-10-10.md).
+
+## October 10 Live Certification Failure
+
+#527 is Not fixed on deployed main `3dbf364d`: the full 341-identity production
+run completes 320 passes, 18 unverified skips and three failures. All three
+actual mutation responses are 503 with corroborating Company lock timeouts;
+historical holder attribution is unknown. Fresh Notice 2/2 is diagnostic only.
+Queue/execution repair is in progress; no production closure or cadence resume.
+Clean candidate `e0fc0044` passes the complete scoped actor/compliance/governance
+r18 inventory (120 cases, 360 phases, zero skips) and all 12 control-plane
+commands. Retained-chunk API reindex replacement passes 19 cases; PostgreSQL
+interleavings, full Docker, hosted CI/SARIF and live browser proof remain open.
+Full evidence, current verdict and required replacement:
+[document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
+
+Later draft `1d5eb65b` remains NO-GO: complete hosted API has 6,468 passes,
+2,513 unverified skips and seven failures across 8,988 identities. All four
+PostgreSQL shards are genuinely interrupted at the unchanged deadline, with
+449 identities not started and no final XML/completion. Portable conditional
+dependency selection, eight-shard controls and restore-forward downgrade
+units pass complete local r20 (76/76); new native rollback/race fixtures,
+full Docker, fresh CodeQL note 540 and exact production replay remain open at
+that historical checkpoint.
+
+Integrated checkpoint `9b524ab6` completes all 109 changed unit/SQLite cases
+and 327 phases without skips/errors; refreshed control-plane commands pass.
+Its actual three-language SARIF has zero findings and alert540 is fixed,
+not dismissed. Fresh CI38071812851 still has PostgreSQL failures under full
+native review; two legacy fixtures stop before the database guard because
+their positive deadline precondition is absent. No Docker/live closure follows
+unit or static proof. #527 remains Not fixed on serving `3dbf364d`.
+
 ## October 10 Summary Gate Repair
 
 Summary browser acceptance remains Inconclusive; #527 remains not fixed in

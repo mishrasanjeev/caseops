@@ -1,5 +1,16 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 10 Live Certification Failure
+
+Existing document/Matter/IP and release coverage remains partial on deployed
+`3dbf364d`: 341 live identities reconcile as 320 pass/18 unverified skip/3 fail.
+All three mutations are actual 503s; a one-off passing Notice diagnostic is
+not replacement acceptance. Complete worker claims/migration/Docker/CI/live
+proof remains pending. Public 40/40 passes do not invent Google exclusion,
+Calendar consent, privacy approval, licensed identity or license coverage.
+Full evidence, current verdict and required replacement:
+[document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
+
 ## October 10 Summary Gate Repair
 
 The summary gate repair on `a8979a41` has complete scoped local proof:

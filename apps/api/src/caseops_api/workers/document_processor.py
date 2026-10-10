@@ -4,7 +4,7 @@ import argparse
 import time
 from dataclasses import dataclass
 
-from caseops_api.core.settings import get_settings
+from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.db.migrations import run_migrations
 from caseops_api.services.case_tracking_summary import drain_update_summaries
 from caseops_api.services.court_sync_jobs import (
@@ -16,6 +16,8 @@ from caseops_api.services.document_jobs import (
     enqueue_scheduled_document_reprocessing,
     recover_stale_document_processing_jobs,
 )
+
+DOCUMENT_WORKER_ADMISSION_PROTOCOL_VERSION = 1
 
 
 @dataclass(slots=True)
@@ -80,11 +82,20 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Drain CaseOps document processing jobs and schedule maintenance reprocessing.",
     )
     parser.add_argument("--once", action="store_true", help="Run one iteration and exit.")
+    parser.add_argument(
+        "--documents-only", action="store_true",
+        help="Recover bounded expired document claims and drain documents only; requires --once.",
+    )
+    parser.add_argument(
+        "--admission-disabled", action="store_true",
+        help="Exit without database work; requires --documents-only.",
+    )
     parser.add_argument("--summary-batch-size", type=int, choices=range(1, 26), default=5,
                         help="Maximum case update summaries per iteration.")
     parser.add_argument(
         "--batch-size",
         type=int,
+        choices=range(1, 101),
         default=settings.document_worker_batch_size,
         help="Maximum queued jobs to process per iteration.",
     )
@@ -147,12 +158,47 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     settings = get_settings()
+    if args.documents_only and not args.once:
+        parser.error("--documents-only requires --once")
+    if args.admission_disabled and not args.documents_only:
+        parser.error("--admission-disabled requires --documents-only")
 
-    if settings.auto_migrate and not args.skip_migrations:
+    if args.documents_only:
+        protocol = getattr(settings, "document_worker_admission_protocol_version", 0)
+        admission = getattr(settings, "document_worker_admission_enabled", None)
+        if protocol not in (0, DOCUMENT_WORKER_ADMISSION_PROTOCOL_VERSION):
+            parser.error("unsupported document worker admission protocol")
+        # Old binaries ignore the gate; deployment must retire them before enabling claims.
+        if is_non_local_env(settings.env) and (
+            protocol != DOCUMENT_WORKER_ADMISSION_PROTOCOL_VERSION or admission is None
+        ):
+            parser.error("non-local document worker requires explicit admission and protocol 1")
+        if args.admission_disabled or admission is False:
+            print(
+                "CaseOps document worker: admission_protocol=1 admission=disabled "
+                "recovered=0 queued=0 attempted=0 completed=0 failed=0 unfinalized=0 "
+                "court_sync_recovered=0 court_sync_processed=0 case_summaries_processed=0",
+                flush=True,
+            )
+            return 0
+
+    if settings.auto_migrate and not args.skip_migrations and not args.documents_only:
         run_migrations()
 
     while True:
-        if args.skip_maintenance:
+        document_outcomes: dict[str, int] = {}
+        if args.documents_only:
+            summary = WorkerRunSummary(
+                recovered_stale_jobs=recover_stale_document_processing_jobs(
+                    stale_after_minutes=15, limit=args.batch_size,
+                ),
+                queued_reprocessing_jobs=0,
+                processed_jobs=drain_document_processing_jobs(
+                    limit=args.batch_size, outcomes=document_outcomes,
+                ),
+                recovered_stale_court_sync_jobs=0, processed_court_sync_jobs=0,
+            )
+        elif args.skip_maintenance:
             summary = WorkerRunSummary(
                 recovered_stale_jobs=0,
                 queued_reprocessing_jobs=0,
@@ -175,11 +221,22 @@ def main(argv: list[str] | None = None) -> int:
                 summary_batch_size=args.summary_batch_size,
             )
 
+        document_counts = (
+            f"attempted={summary.processed_jobs} "
+            f"completed={document_outcomes.get('completed', 0)} "
+            f"failed={document_outcomes.get('failed', 0)} "
+            f"unfinalized={document_outcomes.get('unfinalized', 0)} "
+            if args.documents_only else f"processed={summary.processed_jobs} "
+        )
+        admission_receipt = (
+            "admission_protocol=1 admission=enabled " if args.documents_only else ""
+        )
         print(
             "CaseOps document worker: "
+            f"{admission_receipt}"
             f"recovered={summary.recovered_stale_jobs} "
             f"queued={summary.queued_reprocessing_jobs} "
-            f"processed={summary.processed_jobs} "
+            f"{document_counts}"
             f"court_sync_recovered={summary.recovered_stale_court_sync_jobs} "
             f"court_sync_processed={summary.processed_court_sync_jobs} "
             f"case_summaries_processed={summary.processed_case_summaries}",

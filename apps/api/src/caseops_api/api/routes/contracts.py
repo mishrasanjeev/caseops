@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -64,7 +65,7 @@ from caseops_api.services.contracts import (
     update_contract_legal_reference,
     update_contract_metadata,
 )
-from caseops_api.services.document_jobs import run_document_processing_job
+from caseops_api.services.document_dispatch import dispatch_document_processing_job
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_contract_playbooks import (
     compare_contract_to_tenant_playbook,
@@ -488,7 +489,12 @@ async def post_current_company_contract_attachment(
         document_date=document_date,
         notes=notes,
     )
-    background_tasks.add_task(run_document_processing_job, job_id)
+    await run_in_threadpool(
+        dispatch_document_processing_job,
+        session=session,
+        background_tasks=background_tasks,
+        job_id=job_id,
+    )
     return attachment
 
 
@@ -532,7 +538,12 @@ async def retry_current_company_contract_attachment_processing(
         attachment_id=attachment_id,
         action="retry",
     )
-    background_tasks.add_task(run_document_processing_job, job_id)
+    await run_in_threadpool(
+        dispatch_document_processing_job,
+        session=session,
+        background_tasks=background_tasks,
+        job_id=job_id,
+    )
     return attachment
 
 
@@ -555,7 +566,12 @@ async def reindex_current_company_contract_attachment(
         attachment_id=attachment_id,
         action="reindex",
     )
-    background_tasks.add_task(run_document_processing_job, job_id)
+    await run_in_threadpool(
+        dispatch_document_processing_job,
+        session=session,
+        background_tasks=background_tasks,
+        job_id=job_id,
+    )
     return attachment
 
 

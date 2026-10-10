@@ -276,66 +276,59 @@ def _index_inventory(engine) -> list[tuple]:
         ).all()
 
 
-def test_refused_downgrade_keeps_every_index_including_the_citation_index(
-    migration_pg_engine,
-):
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-
+def test_refused_downgrade_keeps_every_index_including_the_citation_index(pg_engine):
     from alembic import command
+    from tests.fixtures_historical_migrations import historical_database
 
-    engine = migration_pg_engine
-    root = Path(__file__).resolve().parents[1]
-    config = Config(str(root / "alembic.ini"))
-    config.set_main_option("script_location", str(root / "alembic"))
-    config.set_main_option("sqlalchemy.url", engine.url.render_as_string(hide_password=False))
-    head = ScriptDirectory.from_config(config).get_current_head()
-    company_id = str(uuid4())
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO companies "
-                "(id, name, slug, company_type, tenant_key, is_active, timezone, created_at) "
-                "VALUES (:id, 'Citation index fixture', :slug, 'law_firm', :id, true, "
-                "'Asia/Kolkata', now())"
-            ),
-            {"id": company_id, "slug": f"citation-index-{company_id[:8]}"},
-        )
-        connection.execute(
-            text(
-                "INSERT INTO matter_bulk_update_operations "
-                "(id, company_id, filename, format, status, total_rows, changed_rows, "
-                "invalid_rows, applied_rows, failed_rows, row_results_json, created_at) "
-                "VALUES (:id, :company_id, 'retained.xlsx', 'xlsx', 'applied', "
-                "1, 1, 0, 1, 0, '[]', now())"
-            ),
-            {"id": str(uuid4()), "company_id": company_id},
-        )
-    before = _index_inventory(engine)
-    assert ("authority_documents", "ix_authority_documents_neutral_citation") in {
-        (row[0], row[1]) for row in before
-    }
-
-    for _attempt in range(2):
-        # 20260924_0001 refuses while bulk-update history is retained. Every
-        # removal above it, including this index, rolls back with the refusal.
-        with pytest.raises(RuntimeError, match="retained bulk-update history"):
-            command.downgrade(config, "20260920_0001")
-        with engine.connect() as connection:
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == head
-            assert (
-                connection.scalar(text("SELECT count(*) FROM matter_bulk_update_operations")) == 1
+    with historical_database(pg_engine, "20260928_0001") as (engine, config):
+        head = "20260928_0001"
+        company_id = str(uuid4())
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO companies "
+                    "(id, name, slug, company_type, tenant_key, is_active, timezone, created_at) "
+                    "VALUES (:id, 'Citation index fixture', :slug, 'law_firm', :id, true, "
+                    "'Asia/Kolkata', now())"
+                ),
+                {"id": company_id, "slug": f"citation-index-{company_id[:8]}"},
             )
-        assert _index_inventory(engine) == before
+            connection.execute(
+                text(
+                    "INSERT INTO matter_bulk_update_operations "
+                    "(id, company_id, filename, format, status, total_rows, changed_rows, "
+                    "invalid_rows, applied_rows, failed_rows, row_results_json, created_at) "
+                    "VALUES (:id, :company_id, 'retained.xlsx', 'xlsx', 'applied', "
+                    "1, 1, 0, 1, 0, '[]', now())"
+                ),
+                {"id": str(uuid4()), "company_id": company_id},
+            )
+        before = _index_inventory(engine)
+        assert ("authority_documents", "ix_authority_documents_neutral_citation") in {
+            (row[0], row[1]) for row in before
+        }
 
-    # Without a refusal the same path removes the index, and a second upgrade
-    # rebuilds it concurrently to the identical inventory.
-    command.downgrade(config, "20260925_0001")
-    assert "ix_authority_documents_neutral_citation" not in {
-        row[1] for row in _index_inventory(engine)
-    }
-    command.upgrade(config, "head")
-    assert _index_inventory(engine) == before
+        for _attempt in range(2):
+            # 20260924_0001 refuses while bulk-update history is retained. Every
+            # removal above it, including this index, rolls back with the refusal.
+            with pytest.raises(RuntimeError, match="retained bulk-update history"):
+                command.downgrade(config, "20260920_0001")
+            with engine.connect() as connection:
+                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == head
+                assert (
+                    connection.scalar(text("SELECT count(*) FROM matter_bulk_update_operations"))
+                    == 1
+                )
+            assert _index_inventory(engine) == before
+
+        # Without a refusal the same path removes the index, and a second upgrade
+        # rebuilds it concurrently to the identical inventory.
+        command.downgrade(config, "20260925_0001")
+        assert "ix_authority_documents_neutral_citation" not in {
+            row[1] for row in _index_inventory(engine)
+        }
+        command.upgrade(config, "20260928_0001")
+        assert _index_inventory(engine) == before
 
 
 def test_neutral_citation_index_is_valid_after_head_on_postgres(isolated_postgres_client):

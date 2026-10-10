@@ -11,6 +11,9 @@
 !tests/e2e/
 !tests/e2e/support/
 !tests/e2e/support/prod-failure-diagnostics.ts
+!tests/e2e/support/bounded-network-evidence.ts
+!tests/e2e/support/prod-api-response-evidence.ts
+!tests/e2e/support/cost-controls.ts
 
 apps/web/node_modules/
 apps/web/.next/

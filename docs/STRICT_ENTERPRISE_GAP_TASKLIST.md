@@ -1,5 +1,87 @@
 # Strict Enterprise Gap Tasklist
 
+## October 11 Browser Contract Repair
+
+Partially implemented / NO-GO: native5f browser completion reconciles490
+passes,17 unverified skips and five contract-drift failures across512 IDs.
+Reviewed `91486e85` changes only the exact badge and nullable no-body
+diagnostic expectations. Unexecuted two-reindex/download tails are not
+certified. Docker307 R3 is explicitly superseded/incomplete at623 calls;
+owned cleanup is verified. Require fresh full corrected-image Docker/CI and
+serving-release browser/cadence proof before upgrading #527 or readiness.
+[Evidence and limits](bugfix-document-worker-production-2026-10-10.md).
+
+## October 11 Container Input Regression
+
+Reviewed implementation is now integrated at `19f12ec8`, with all twenty
+packaging controls and independent review. Main's independently owned frozen
+Python replay passes557/558, with one known unverified POSIX-only skip and
+stable source/dependency hashes. The earlier5f backend replacement reconciles
+9,074 unique native API/PG passes, two remaining opt-in/platform skips and all
+six prior PG failures corrected. These are not final-image or serving-release
+acceptance. Require the new real builder/full CI and fresh Docker/production
+gates; keep NO-GO until actual completion. Evidence is linked below.
+
+Partially implemented / NO-GO: reviewed test corrections at `5f4e70a8` pass
+528/529 local cases with one unverified POSIX-only skip, and actual fresh
+three-language SARIF is clean. That local source-stable run shares an
+environment modified by Docker dependency setup and is not frozen-runtime
+final certification. The actual Docker web build fails on missing external
+test-helper inputs before any PG/browser execution, despite a green CI
+source-tree web build. Repair the narrow builder dependency closure and both
+ignore policies; add the actual web builder to CI. Complete new-source Docker,
+native CI and serving-release browser proof. Production is unchanged at
+`3dbf364d`; license and owner-kept dependencies remain open. See the
+[retained evidence](bugfix-document-worker-production-2026-10-10.md).
+
+## October 10 Live Certification Failure
+
+Partially implemented / NO-GO: main `3dbf364d` is deployed, yet three complete
+production journeys fail with corroborating Company lock timeouts. A fresh
+read-only observer finds post-response idle finalization and months-old queue
+claims. Durable worker execution, attempt fences and nonempty CI secret scans
+need complete final-source and exact-production proof. PR529's nonempty secret
+scan is merged onto main `dfda0eb3` with green actual hosted proof; the serving
+release remains `3dbf364d`. Fresh license enumeration covers 200 runtime
+locations and fails 19 under the unchanged policy; it is not merged or approved.
+Zero open main-ref code-scanning alerts does not close the inherited license
+or external-consent gaps. PR531 corrects SPDX OR and descriptor-bound file
+reading; 140 native/hosted controls and three zero-result SARIF reports pass.
+Alert 534 is fixed, not dismissed; actual policy rejections keep that PR draft.
+Complete scoped worker controls reconcile 415 passes/one unverified POSIX
+skip; later runtime controls pass 221 cases/663 phases. The separate post-index
+compliance tail still needs its root-run persistence fence. Historical autoscale
+retirement is operational inference, not native zeros or physical-stop proof.
+These are not full-image/live proof.
+Complete first-checkpoint native CI readback retains 80 API failures and 15
+PostgreSQL failures; cancelled job metadata on two PG shards still contains
+complete failing native results. Local whole-module r16 on `fa300d36` passes
+222/223, with one confirmed Contract retained-chunk reindex collision. Its
+Matter sibling and atomic replacement regressions are under repair. Complete
+scoped retained-chunk API replacement passes 19 cases; clean `e0fc0044` r18
+passes 120 actor/compliance/governance cases, and all 12 control-plane commands
+pass. New desktop/mobile browser collection is not execution or production
+proof; native PostgreSQL, full Docker and hosted CI/SARIF remain open.
+Full evidence, current verdict and required replacement:
+[document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
+
+Integrated checkpoint `9b524ab6`: complete changed unit/SQLite replay passes
+109 cases/327 phases, with exact native inventory and unchanged source pins.
+Refreshed control-plane commands pass, and all three actual SARIF analyses
+contain zero findings/errors/warnings; alert540 is fixed without dismissal.
+This closes the static PR-ref finding only. CI38071812851 has native PostgreSQL
+failures, including incomplete positive legacy fixture setup, and is not a
+release pass. Full Docker, exact deployed browser replay, 19 actual license
+policy rejections and owner-kept external dependencies remain open.
+
+The later draft `1d5eb65b` is not release-ready: seven actual API failures,
+an interrupted complete PostgreSQL plan and fresh CodeQL note 540 remain open.
+Local r20 proves 76 portable dependency, eight-shard and downgrade controls,
+not full native migration or final-image acceptance. Preserve restore-forward
+guards and the existing job/lock budgets; require root-only retained receipts,
+concurrent-index interruption recovery, independent dated migration fixtures
+and complete final-source replacement before production certification.
+
 ## October 10 Summary Gate Repair
 
 Partially implemented / NO-GO: bounded fresh-session fixture batching and

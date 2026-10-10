@@ -6,6 +6,7 @@ import { apiBaseUrl, patentRunId, patentScreenshot } from "./support/patent-acce
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { assertPatentControlsFit } from "./support/patent-layout";
 import { bootstrapPatentTenant, enablePatentWorkspace, signInPatentTenant } from "./support/patent-acceptance";
+import { createPatentApplicationWithEvidence } from "./support/prod-api-response-evidence";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
@@ -47,14 +48,13 @@ for (const width of [393, 768, 1280]) {
     const source = { kind: "document_version", document_id: document.id,
       document_version_id: document.versions[0].id, content_sha256: document.versions[0].sha256_hex };
     async function application(title: string, kind: string, targetFamily = family): Promise<PatentApplication> {
-      const response = await page.request.post(`${apiBaseUrl}/api/ip/patents/applications`, {
+      const response = await createPatentApplicationWithEvidence(page.request, testInfo, apiBaseUrl, {
         headers: { ...headers, "Idempotency-Key": crypto.randomUUID() }, data: {
           family_id: targetFamily.id, expected_family_version: targetFamily.version, expected_family_lifecycle_version: 0,
           facts: { title: `${title} ${run}`, application_kind: kind, jurisdiction: "IN", office: "IP India", filing_date: "2026-09-05",
             source, identifiers: [], source_pending_identifier_allocation: true },
         },
       });
-      expect(response.status(), await response.text()).toBe(201);
       return response.json();
     }
     const parent = await application("Cross-family complete parent", "complete", parentFamily);

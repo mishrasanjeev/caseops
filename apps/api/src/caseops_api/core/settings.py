@@ -1,6 +1,7 @@
 import hmac
 from datetime import datetime
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -102,16 +103,32 @@ class Settings(BaseSettings):
     document_storage_gcs_bucket: str | None = Field(default=None)
     document_storage_gcs_prefix: str = Field(default="documents")
     gcp_project_id: str | None = Field(default=None)
+    document_processing_dispatch_mode: Literal["local_background", "cloud_run_job"] = (
+        "local_background"
+    )
+    document_processing_run_region: str = Field(
+        default="asia-south1", pattern=r"^[a-z]+-[a-z]+[0-9]$"
+    )
+    document_processing_run_job: str = Field(
+        default="caseops-document-processing", pattern=r"^[a-z][a-z0-9-]{0,62}$"
+    )
     max_attachment_size_bytes: int = Field(default=25 * 1024 * 1024)
     tesseract_command: str | None = Field(default=None)
     document_worker_poll_interval_seconds: int = Field(default=10, ge=1)
     document_worker_batch_size: int = Field(default=5, ge=1)
-    document_processing_stale_after_minutes: int = Field(default=15, ge=1)
+    document_worker_admission_protocol_version: Literal[0, 1] = 0
+    document_worker_admission_enabled: bool | None = None
+    document_processing_stale_after_minutes: int = Field(default=15, ge=15)
     document_retry_after_hours: int = Field(default=6, ge=0)
     document_reindex_after_hours: int = Field(default=168, ge=0)
     document_reprocessing_batch_size: int = Field(default=10, ge=1)
     court_sync_worker_batch_size: int = Field(default=3, ge=1)
     court_sync_stale_after_minutes: int = Field(default=15, ge=1)
+    court_sync_dispatch_mode: Literal["local_background", "cloud_run_job"] = "local_background"
+    court_sync_run_region: str = Field(default="asia-south1", pattern=r"^[a-z]+-[a-z]+[0-9]$")
+    court_sync_run_job: str = Field(default="caseops-court-sync", pattern=r"^[a-z][a-z0-9-]{0,62}$")
+    court_sync_worker_admission_protocol_version: Literal[0, 1] = 0
+    court_sync_worker_admission_enabled: bool | None = None
     pine_labs_env: str = Field(default="disabled")
     pine_labs_api_base_url: str | None = Field(default=None)
     pine_labs_client_id: str | None = Field(default=None)

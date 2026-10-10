@@ -1,5 +1,71 @@
 # CaseOps agent instructions
 
+- CSS capitalization is not DOM text. Assert the shared StatusBadge's exact
+  canonical lowercase text inside the reported record, retaining persisted
+  status, source hashes, distinct jobs, both reindexes and responsive proof.
+  A failure before reindex does not verify the unexecuted retention journey.
+- A bounded browser/API diagnostic collector intentionally avoids decoded
+  response-body allocation. Keep its explicit nullable problem-type contract,
+  validated request identity, status, timestamps and transport evidence. A
+  sanitizer's typed-problem unit test is not runtime collector-body coverage;
+  do not reintroduce unbounded reads to satisfy an obsolete browser assertion.
+- Retained Docker acceptance networks can overlap the next explicit subnet.
+  Inventory pools before allocating a fresh isolated pair; preserve setup
+  failures and incomplete phase journals, never prune unrelated workloads or
+  certify database/browser execution that the attempt did not reach.
+
+- A CI dependency-selector replacement must audit every workflow-contract test,
+  not just the planner tests. Update obsolete command-shape assertions to the
+  required runtime, preserving exact selected-inventory, dependency ordering
+  and actual native CLI proof. A targeted green control does not waive a later
+  complete-suite failure in another owner of the same workflow contract.
+- Historical migration acceptance must name its actual pre-feature and target
+  revisions, including computed `head` and helper-return callers in the audit.
+  A literal-only search is not an exhaustive caller inventory. Keep separately
+  fresh current-head health and retained-row restore-forward refusals; do not
+  roll an old feature test through a newer execution fence to reach its setup.
+- Historical fixture replay must preserve semantic trigger dependencies and
+  legal transition order, not just declared foreign keys. Seed the actual
+  patent application parents, admit access-review decisions while their campaign
+  is open, and distinguish a valid initial self-root from a multi-row cycle.
+  Preserve all production guards and prove that retained downgrade refusal is
+  reached only after the positive reconstructed fixture is complete.
+- Global stale-claim recovery intentionally sees every eligible tenant. An
+  exact-one recovery assertion must use an isolated migrated test database,
+  while a separate retained two-tenant counterexample proves both recoveries
+  survive. Do not delete sibling receipts or narrow production recovery scope
+  to make a shared-fixture count pass.
+- A legacy rollback counterproof must prove its positive staged children
+  before attempting the guarded final write. A missing deadline or notification
+  means setup never reached the guard; preserve that failure and correct the
+  original legacy input/dependency fixture without weakening child assertions.
+- Detached retry/reindex preparation must keep the retained index untouched
+  through external work. After fresh claim, source and parent authority checks,
+  delete old chunks before inserting replacements in the same transaction;
+  ORM delete-orphan ordering alone can collide with retained chunk identities.
+  Prove two reindexes, parser/persistence failure rollback and a competing
+  source writer on both Matter and Contract, then replay the visible workflow.
+- Reconcile test identities case-sensitively, including parameter IDs and
+  nested test classes. PowerShell's default unique sorting can collapse valid
+  distinct cases. Cancelled job metadata does not override a complete retained
+  native collection, phase journal and finished result; retain both truths.
+- Request-based Cloud Run cannot certify database work scheduled after the
+  response. Durable document admission must retain bounded atomic claims,
+  crash recovery, stale-attempt rejection and the original no-paid marker
+  across its execution boundary. Recheck current lifecycle/access/provenance
+  under Company-first authority before final persistence; a single successful
+  diagnostic does not waive a failed complete production inventory.
+- A green secret scan with zero commits or bytes is incomplete coverage.
+  Prove immutable tracked-tree and all-parent history input, including merge-
+  only secrets, without broadening reviewed exceptions. Bounded failure
+  diagnostics must prioritize failed writes over navigation floods and retain
+  safe response identity before assertions, without private payloads.
+- An empty license report is incomplete coverage even when CI succeeds.
+  Reconcile the workspace runtime closure and installed/optional lock entries;
+  preserve actual policy rejections without expanding the allowlist to make
+  the gate green. Expired monitoring series are not zero instances, and a
+  release handoff must not depend on an unbounded historical polling loop.
+
 - Multi-tenant Docker fixture preparation and inspection must amortize process
   startup without reusing tenant authorization or database sessions. Preserve
   real worker executions, raw persisted snapshots, responsive/source/replay
@@ -1766,9 +1832,64 @@ requirements when using the fallback.
   recipients, against interactive parent writers. Preserve elected actors and
   historical creator nulls; a mock of the whole downstream extractor cannot
   certify this boundary or justify a retry, longer timeout or system actor.
+- A fenced job receipt cannot reject a legacy worker's separate post-index
+  transaction. Inventory every downstream commit and require explicit current
+  execution context at its persistence root, including failure and replay paths.
+  Keep actual pinned old-code counterproof and authorized current callers.
+- HTTP deadlines and historical autoscale retirement are not physical process
+  termination proof. Missing expired metrics must not become fabricated zeros;
+  preserve operational-inference limits and require native stop measurements for
+  the captured serving predecessor. Persistence fences cannot cancel issued
+  provider work or release locks held before their installation.
 - Read-only public acceptance must include changed historical FAQ journeys,
   not just newly added copy checks. Assert the actual qualified safety content
   and accessible expand/collapse state; retain the earlier narrower inventory
   as incomplete for that interaction. CI browser success requires an independent
   collected inventory, native per-test outcomes/skip reasons and completion
   bound to its actual checkout, retained even when the browser gate fails.
+- An ORM change must refresh both the reviewed governance map and its compiled
+  runtime projection. Run the complete CI control-plane command inventory,
+  including canonical-base `check-change` gates; a map-only validation cannot
+  prove runtime fingerprint agreement or migration readiness. Preserve the
+  fail-closed stale-projection response rather than bypassing it.
+- Test fixtures must not form cyclic imports or hide mutations inside assertions.
+  Move a genuinely shared pre-feature fixture to a test-owned helper, keep its
+  operations and assertions unchanged, reconcile every consumer, and require
+  fresh native coverage and actual CodeQL results before scanner closure.
+- Conditional CI dependencies must be decided by a required runtime from the
+  actual selected inventory. A missing optional executable inside a shell `if`
+  can silently skip installation. Reject empty/invalid inventories, test the
+  real selection CLI without optional binaries, and verify installation precedes
+  the dependent native suite. Preserve job deadlines when partitioning work.
+- A restore-forward execution fence must survive attempted downgrade with
+  retained receipts, including roots whose document job is gone. Default refusal
+  precedes DDL; an explicit empty rehearsal must lock every relevant table and
+  prove emptiness under the unchanged migration lock budget. Preserve captured
+  human FALSE and automated TRUE policy across all legacy job states.
+- Concurrent index creation still waits for preexisting reader snapshots.
+  Prove bounded interruption, committed column/invalid-index recovery and a
+  second upgrade after quiescence. Separately prove that additive DDL installed
+  before an old worker starts is not a stale-writer fence; never remove the
+  concurrent build or raise its timeout to satisfy a race fixture.
+- A pinned legacy module does not pin its imported helper dependency closure.
+  Freeze and verify the relevant old helper bodies and bindings as well, so a
+  legacy counterproof reaches the intended database boundary rather than a new
+  application fence. Keep the earlier fixture failure as failed evidence.
+- A source-tree Next build does not prove the container's type-check inputs.
+  Reconcile colocated tests' external imports and their transitive helpers with
+  explicit builder COPY paths and both Docker/Cloud Build ignore policies. Keep
+  those inputs out of the runner, retain type checking, and build the actual web
+  builder in standard CI; never hide a missing input with ignored build errors.
+- A test's frozen source does not freeze its borrowed Python environment.
+  Dependency synchronization in another acceptance run can remove packages
+  during execution. Give concurrent runs independently owned environments,
+  retain failed setup evidence, and rerun the final candidate after frozen
+  dependency setup; never describe executable hashes alone as a frozen runtime.
+- Historical fixture replay has one cumulative admission bound across parent,
+  campaign and decision stages. Reserve capacity before each insert, prove the
+  old helper's excess writes and keep the real transition guards, source rows,
+  depth cap and below-bound positive finalization unchanged.
+- After code or documentation changes, run the actual pinned tracked-tree and
+  changed-history secret preflight before costly acceptance. Independently
+  verify reported artifact checksums against immutable bytes; allow only an
+  exact reviewed historical fingerprint, never path, rule or all-hash suppression.

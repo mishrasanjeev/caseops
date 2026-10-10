@@ -60,9 +60,7 @@ def _health_failures(health: dict[str, object]) -> dict[str, object]:
         ):
             continue
         if key == "missing_declared_indexes":
-            failures[key] = [
-                f"{item['table_name']}.{item['index_name']}" for item in value
-            ]
+            failures[key] = [f"{item['table_name']}.{item['index_name']}" for item in value]
         else:
             failures[key] = {"count": len(value), "sample": value[:10]}
     return failures
@@ -78,8 +76,6 @@ def test_intelligent_review_migration_round_trip_and_index_coverage(
     get_settings.cache_clear()
     clear_engine_cache()
     config = _config()
-    current_head = _current_head(config)
-
     command.upgrade(config, PREVIOUS_HEAD)
     command.upgrade(config, MIGRATION_HEAD)
     engine = create_engine(database_url, future=True)
@@ -120,9 +116,7 @@ def test_intelligent_review_migration_round_trip_and_index_coverage(
         assert "uq_draft_source_recommendation" in _constraint_names(
             inspector.get_unique_constraints("drafts")
         )
-        recommendation_indexes = _constraint_names(
-            inspector.get_indexes("recommendations")
-        )
+        recommendation_indexes = _constraint_names(inspector.get_indexes("recommendations"))
         assert {
             "ix_recommendations_company_review_state_created",
             "ix_recommendations_company_ip_docket_created",
@@ -132,25 +126,16 @@ def test_intelligent_review_migration_round_trip_and_index_coverage(
             "ix_fk_recommendations_source_research_ae8b70ed",
             "ix_fk_recommendations_matter_id_compa_edcf1c7f",
         } <= recommendation_indexes
-        assert database_foreign_key_gaps(
-            inspector,
-            table_names={"recommendations", "drafts"},
-        ) == ()
+        assert (
+            database_foreign_key_gaps(
+                inspector,
+                table_names={"recommendations", "drafts"},
+            )
+            == ()
+        )
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
                 MIGRATION_HEAD
-            )
-    finally:
-        engine.dispose()
-
-    command.upgrade(config, current_head)
-    engine = create_engine(database_url, future=True)
-    try:
-        with engine.connect() as connection:
-            health = build_index_health_report(connection)
-            assert health["status"] == "ok", _health_failures(health)
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                current_head
             )
     finally:
         engine.dispose()
@@ -160,8 +145,7 @@ def test_intelligent_review_migration_round_trip_and_index_coverage(
     try:
         inspector = inspect(engine)
         assert "ip_docket_id" not in {
-            str(column["name"])
-            for column in inspector.get_columns("recommendations")
+            str(column["name"]) for column in inspector.get_columns("recommendations")
         }
         assert "source_recommendation_id" not in {
             str(column["name"]) for column in inspector.get_columns("drafts")
@@ -169,7 +153,45 @@ def test_intelligent_review_migration_round_trip_and_index_coverage(
     finally:
         engine.dispose()
 
+    command.upgrade(config, MIGRATION_HEAD)
+    engine = create_engine(database_url, future=True)
+    try:
+        assert "ip_docket_id" in {
+            str(column["name"]) for column in inspect(engine).get_columns("recommendations")
+        }
+        assert "source_recommendation_id" in {
+            str(column["name"]) for column in inspect(engine).get_columns("drafts")
+        }
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(text("SELECT version_num FROM alembic_version")) == MIGRATION_HEAD
+            )
+    finally:
+        engine.dispose()
+
+
+def test_intelligent_review_full_head_fresh_index_health(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = f"sqlite+pysqlite:///{(tmp_path / 'intelligent-review-head.db').as_posix()}"
+    monkeypatch.setenv("CASEOPS_ENV", "e2e")
+    monkeypatch.setenv("CASEOPS_DATABASE_URL", database_url)
+    get_settings.cache_clear()
+    clear_engine_cache()
+    config = _config()
+    current_head = _current_head(config)
     command.upgrade(config, current_head)
+    engine = create_engine(database_url, future=True)
+    try:
+        with engine.connect() as connection:
+            health = build_index_health_report(connection)
+            assert health["status"] == "ok", _health_failures(health)
+            assert (
+                connection.scalar(text("SELECT version_num FROM alembic_version")) == current_head
+            )
+    finally:
+        engine.dispose()
 
 
 def test_intelligent_review_downgrade_refuses_retained_work_product(

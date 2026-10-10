@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
 from io import BytesIO
 from threading import Event
+from time import monotonic
 from types import SimpleNamespace
 
 import pytest
@@ -272,7 +273,11 @@ def test_real_downstream_compliance_completes_in_both_lock_orders(
         if boundary and not audit.entered.is_set():
             audit.record("actual_compliance_boundary", role=role, sql=sql)
             audit.entered.set()
-            assert audit.release.wait(8)
+            started = monotonic()
+            released = audit.release.wait(8)
+            audit.record("compliance_pause_returned", role=role, released=released,
+                         held_seconds=monotonic() - started)
+            assert released
 
     event.listen(audit.engine, "after_cursor_execute", pause)
     try:
@@ -289,6 +294,7 @@ def test_real_downstream_compliance_completes_in_both_lock_orders(
                 assert audit.entered.wait(8)
                 proceed.set()
             audit.await_blocker("mutation" if first == "worker" else "worker", first)
+            audit.record("release_compliance_after_blocker", first=first)
             audit.release.set()
             worker.result(10)
             mutation.result(10)

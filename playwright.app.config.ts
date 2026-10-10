@@ -59,6 +59,7 @@ export default defineConfig({
     /ram-2026-09-21-bugfixes\.spec\.ts/,
     /ram-2026-09-24-prod\.spec\.ts/,
     /ram-2026-10-08-prod\.spec\.ts$/,
+    /ram-2026-10-10-prod\.spec\.ts$/,
     /ram-2026-10-08-notices\.spec\.ts$/,
     /ram-2026-10-08-drive\.spec\.ts$/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,

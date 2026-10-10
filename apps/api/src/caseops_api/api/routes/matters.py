@@ -173,7 +173,6 @@ from caseops_api.services.compliance_extraction import (
 )
 from caseops_api.services.court_sync_jobs import (
     create_matter_court_sync_job,
-    run_matter_court_sync_job,
 )
 from caseops_api.services.csv_security import csv_safe_mapping
 from caseops_api.services.deadlines import (
@@ -182,7 +181,7 @@ from caseops_api.services.deadlines import (
     list_deadline_records,
     update_deadline,
 )
-from caseops_api.services.document_jobs import run_document_processing_job
+from caseops_api.services.document_dispatch import dispatch_document_processing_job
 from caseops_api.services.draft_compare import DraftCompareResult
 from caseops_api.services.draft_pdf_export import render_version_pdf
 from caseops_api.services.drafting import (
@@ -2673,7 +2672,12 @@ async def pull_current_company_matter_court_sync(
         source=payload.source,
         source_reference=payload.source_reference,
     )
-    background_tasks.add_task(run_matter_court_sync_job, job.id)
+    from caseops_api.services.document_dispatch import dispatch_court_sync_processing_job
+
+    await run_in_threadpool(
+        dispatch_court_sync_processing_job,
+        session=session, background_tasks=background_tasks, job_id=job.id,
+    )
     return job
 
 
@@ -2803,8 +2807,9 @@ def post_current_company_matter_attachment(
         linked_court_order_id=linked_court_order_id,
         hearing_id=hearing_id,
     )
-    session.rollback()
-    background_tasks.add_task(run_document_processing_job, job_id)
+    dispatch_document_processing_job(
+        session=session, background_tasks=background_tasks, job_id=job_id
+    )
     return attachment
 
 
@@ -2848,8 +2853,12 @@ async def retry_current_company_matter_attachment_processing(
         attachment_id=attachment_id,
         action="retry",
     )
-    session.rollback()
-    background_tasks.add_task(run_document_processing_job, job_id)
+    await run_in_threadpool(
+        dispatch_document_processing_job,
+        session=session,
+        background_tasks=background_tasks,
+        job_id=job_id,
+    )
     return attachment
 
 
@@ -2872,8 +2881,12 @@ async def reindex_current_company_matter_attachment(
         attachment_id=attachment_id,
         action="reindex",
     )
-    session.rollback()
-    background_tasks.add_task(run_document_processing_job, job_id)
+    await run_in_threadpool(
+        dispatch_document_processing_job,
+        session=session,
+        background_tasks=background_tasks,
+        job_id=job_id,
+    )
     return attachment
 
 

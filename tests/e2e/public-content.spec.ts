@@ -417,6 +417,30 @@ test.describe("Public landing page and user guide", () => {
       await testInfo.attach("licensed-provider-claims", {
         body: await sourceControls.screenshot(), contentType: "image/png",
       });
+      await page.goto("/solo-lawyers", { waitUntil: "domcontentloaded" });
+      const soloCopy = await page.locator("main").innerText();
+      expect(soloCopy).not.toMatch(
+        /Five tools\. Five logins|work of five people before 10|removes the administrative half|No surprise modals|one working day|one-working-day/i,
+      );
+      const soloTerms = page.getByText("No pilot price is locked by submitting a request.", { exact: false });
+      await soloTerms.scrollIntoViewIfNeeded();
+      await expect(soloTerms).toBeVisible();
+      await expect(soloTerms).toContainText("Agree any pilot duration and commercial terms");
+      const soloContact = page.getByText("Availability and response timing are confirmed separately.", { exact: false });
+      await soloContact.scrollIntoViewIfNeeded();
+      await expect(soloContact).toBeVisible();
+      await testInfo.attach("solo-pilot-qualifications", {
+        body: await soloContact.screenshot(), contentType: "image/png",
+      });
+      await page.goto("/general-counsels", { waitUntil: "domcontentloaded" });
+      const gcTerms = page.getByText("Any walkthrough, sample workspace, security review and pilot terms require separate confirmation.", { exact: false });
+      await gcTerms.scrollIntoViewIfNeeded();
+      await expect(gcTerms).toBeVisible();
+      await page.goto("/law-firms", { waitUntil: "domcontentloaded" });
+      const firmTerms = page.getByText("Request a walkthrough or discuss a law-firm pilot.", { exact: false });
+      await firmTerms.scrollIntoViewIfNeeded();
+      await expect(firmTerms).toBeVisible();
+      await expect(firmTerms).toContainText("Scheduling, supported");
     });
 
     test(`${viewport.name} public pages have no overflow or serious accessibility issues`, async ({
