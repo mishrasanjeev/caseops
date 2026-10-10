@@ -31,6 +31,15 @@ proof; native PostgreSQL, full Docker and hosted CI/SARIF remain open.
 Full evidence, current verdict and required replacement:
 [document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
 
+Integrated checkpoint `9b524ab6`: complete changed unit/SQLite replay passes
+109 cases/327 phases, with exact native inventory and unchanged source pins.
+Refreshed control-plane commands pass, and all three actual SARIF analyses
+contain zero findings/errors/warnings; alert540 is fixed without dismissal.
+This closes the static PR-ref finding only. CI38071812851 has native PostgreSQL
+failures, including incomplete positive legacy fixture setup, and is not a
+release pass. Full Docker, exact deployed browser replay, 19 actual license
+policy rejections and owner-kept external dependencies remain open.
+
 The later draft `1d5eb65b` is not release-ready: seven actual API failures,
 an interrupted complete PostgreSQL plan and fresh CodeQL note 540 remain open.
 Local r20 proves 76 portable dependency, eight-shard and downgrade controls,

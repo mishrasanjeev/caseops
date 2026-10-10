@@ -1,5 +1,30 @@
 # CaseOps agent instructions
 
+- A CI dependency-selector replacement must audit every workflow-contract test,
+  not just the planner tests. Update obsolete command-shape assertions to the
+  required runtime, preserving exact selected-inventory, dependency ordering
+  and actual native CLI proof. A targeted green control does not waive a later
+  complete-suite failure in another owner of the same workflow contract.
+- Historical migration acceptance must name its actual pre-feature and target
+  revisions, including computed `head` and helper-return callers in the audit.
+  A literal-only search is not an exhaustive caller inventory. Keep separately
+  fresh current-head health and retained-row restore-forward refusals; do not
+  roll an old feature test through a newer execution fence to reach its setup.
+- Historical fixture replay must preserve semantic trigger dependencies and
+  legal transition order, not just declared foreign keys. Seed the actual
+  patent application parents, admit access-review decisions while their campaign
+  is open, and distinguish a valid initial self-root from a multi-row cycle.
+  Preserve all production guards and prove that retained downgrade refusal is
+  reached only after the positive reconstructed fixture is complete.
+- Global stale-claim recovery intentionally sees every eligible tenant. An
+  exact-one recovery assertion must use an isolated migrated test database,
+  while a separate retained two-tenant counterexample proves both recoveries
+  survive. Do not delete sibling receipts or narrow production recovery scope
+  to make a shared-fixture count pass.
+- A legacy rollback counterproof must prove its positive staged children
+  before attempting the guarded final write. A missing deadline or notification
+  means setup never reached the guard; preserve that failure and correct the
+  original legacy input/dependency fixture without weakening child assertions.
 - Detached retry/reindex preparation must keep the retained index untouched
   through external work. After fresh claim, source and parent authority checks,
   delete old chunks before inserting replacements in the same transaction;

@@ -20,7 +20,16 @@ PostgreSQL shards are genuinely interrupted at the unchanged deadline, with
 449 identities not started and no final XML/completion. Portable conditional
 dependency selection, eight-shard controls and restore-forward downgrade
 units pass complete local r20 (76/76); new native rollback/race fixtures,
-full Docker, fresh CodeQL note 540 and exact production replay remain open.
+full Docker, fresh CodeQL note 540 and exact production replay remain open at
+that historical checkpoint.
+
+Integrated checkpoint `9b524ab6` completes all 109 changed unit/SQLite cases
+and 327 phases without skips/errors; refreshed control-plane commands pass.
+Its actual three-language SARIF has zero findings and alert540 is fixed,
+not dismissed. Fresh CI38071812851 still has PostgreSQL failures under full
+native review; two legacy fixtures stop before the database guard because
+their positive deadline precondition is absent. No Docker/live closure follows
+unit or static proof. #527 remains Not fixed on serving `3dbf364d`.
 
 ## October 10 Summary Gate Repair
 

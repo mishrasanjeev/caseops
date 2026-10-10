@@ -27,6 +27,14 @@ units complete local 76/76. Finish dated pre-feature migration fixtures,
 native rolling-reader/recovery and retained-root fence coverage, worker
 replacements, CodeQL 540, then complete Docker/CI and exact production replay.
 
+Checkpoint `9b524ab6` integrates the reviewed test corrections and completes
+109 changed unit/SQLite cases/327 phases with no skips/errors. Its actual
+three-language SARIF is clean; CodeQL540 is fixed, not dismissed. Refreshed
+control-plane commands pass. Finish every native PostgreSQL failure in
+CI38071812851, including the legacy positive child-row fixture that currently
+stops before the execution guard, then full Docker and exact live replay.
+Serving production is still `3dbf364d`; no new deployment is certified.
+
 ## October 10 Summary Gate Repair
 
 NO-GO: integrated `a8979a41` completes 66 Python passes/198 phases and 42

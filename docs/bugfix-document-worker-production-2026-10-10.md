@@ -218,7 +218,63 @@ phases); the original complete PG69 is retained as **65 pass/four failures**,
 not a successful counterproof. Main independently rehashes **71** sealed files
 across these follow-ups, zero mismatches, receipt
 `34be7db0bcf5a6e7beb7a7c912a6f4acb5fa33a78c1971840e98a9b5b6dc74eb`.
-Current integrated native and fresh CodeQL results remain required.
+Those test-only commits are now integrated into clean checkpoint `9b524ab6`.
+Main r22 replays all ten complete changed unit/SQLite modules: **109 passes /
+327 phases**, zero skips/errors. Independent ordered collection, native JUnit,
+incremental phase journal and full before/after source pins agree. PostgreSQL
+selections are excluded from this unit verdict, not certified or silently
+counted as skips. Receipt SHA256:
+`75f5bb080c435499ece39199780339a567eb04bd011c43764f60988e8c0e5e6e`.
+All twelve refreshed control-plane commands and scoped Ruff pass on that
+checkpoint; these are not full-image or serving-release evidence.
+
+Fresh [CodeQL 38071812898](https://github.com/mishrasanjeev/caseops/actions/runs/38071812898)
+completes all three actual SARIF analyses with **zero findings, errors or
+warnings**. Python analysis 1929235691, JavaScript/TypeScript 1929229642 and
+Actions 1929225736 belong to hosted merge `2dee84bd`; its exact tree matches
+`9b524ab6`. PR-ref open alerts are zero and alert540 is fixed without
+dismissal. Receipt SHA256:
+`6ff4344ef18dada3f7f309243a354ef621c0cfc22fd0d7c68a83abbefdb5a36b`.
+This resolves that static finding, not the inherited license-policy decisions
+or production certification.
+
+[CI 38071812851](https://github.com/mishrasanjeev/caseops/actions/runs/38071812851)
+still has an incomplete API readback. Web typecheck/unit/build passes.
+All eight PostgreSQL shards have complete native evidence: **2,514 identities /
+7,542 phases: 2,508 pass, six call failures**, zero skips/partial/not-started.
+All eight full canonical collections and exact partitions agree; native JUnit
+and completion events agree. Main independently rehashes 91 sealed evidence
+files with zero mismatches, receipt SHA256:
+`050ab575961c973518ef20a10bd41034bbddab2222f304959f9bd65484581916`.
+All 55 document-protocol cases, both real rolling overlap variants and four
+retained/empty/root-only rollback controls pass. Those scoped positives do
+not waive the complete failing run.
+
+All six failures stop before their intended guarded operation: three positive
+legacy tails lack a staged deadline, and three historical replay fixtures
+violate access-review insertion order, omit semantic patent application
+parents, or misclassify an initial `root_id=id` as a cycle. Full original
+tracebacks and native sections are retained. Keep the production guards;
+these are not successful guard or migration reproductions.
+
+Legacy parser correction `8ead8e2a`, integrated as `82f382e1`, uses an explicit
+dated source and matching retained hash. It asserts exact item/task/deadline
+dates and links before expecting SQLSTATE55000, and separately keeps the
+actual old parser's ambiguous-source undated behavior under regression.
+No production parser or execution fence changes; complete native replacement
+remains required.
+
+API shard eight has a separate complete failing workflow-contract assertion
+that still expects the removed optional `rg` selector. The correction requires
+the actual Python CLI, exact selected-files/output arguments and unchanged
+Node/install ordering. All seven complete result-journal module cases then
+pass in Main r23: **21 phases**, zero skips/errors, independent discovery,
+JUnit and unchanged source pins. Receipt SHA256:
+`356f7196e8b473e7d9089b2f19f774c855e85c5160bf2c3ac8f4cad9762d7890`.
+This is a scoped correction, not full API or Docker/live acceptance. The fresh
+hosted shard eleven actually selects the offline evidence file, installs Node
+and Playwright, and passes; the unrelated singleton shard thirteen correctly
+does not select those dependencies.
 
 The complete Court/participant replacement r5 independently reaches
 **263 identities / 789 phases: 262 pass/one failure**, zero skips/errors.
@@ -228,6 +284,22 @@ passed with unchanged budgets, and the five-case isolated recovery/counterproof
 passed, but neither closes this broader failed run. Exact retry-holder timing
 and a complete replacement are required; do not assert CPU contention or
 raise budgets. No new deployment or production closure follows these results.
+
+The complete measured r6 replacement on owned `f1c91fff` and schema
+`20261010_0002` then passes **263 identities /789 phases**, zero skips/errors.
+All original ordered identities and 186 native journals reconcile, and all
+fourteen owned databases are verified absent. Main independently verifies
+its 199-file seal with zero mismatches, receipt SHA256:
+`8fd63382cfa09e88d758e978866133b6b801081e0b95f749cfb97d14e3e16bab`.
+The 20/500-recipient all-SQL budgets remain 394/400 and 7114/7600 with no
+diagnostic observer SQL in those performance cases. The exact retry's measured
+release-to-holder-commit is 0.548915 seconds under unchanged two-second lock
+and ten-second statement budgets. Five other cases have incomplete sampler
+coverage because the diagnostic observer rejects their valid owned clone
+names; retain the full warnings. Functional results are complete, but this
+instrumented older-schema slice is not Main0004 or serving-release proof.
+R5's uninstrumented 2.170158-second interval remains causally Inconclusive;
+do not infer CPU causality or relabel its genuine 55P03 as fixture drift.
 
 ## Exact Failed Evidence
 
