@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -31,8 +32,6 @@ from caseops_api.db.models import (
     TrackedCaseUpdate,
 )
 from caseops_api.db.session import get_session_factory
-from caseops_api.services.case_tracking import _tracked_case_identity_key, apply_snapshot
-from caseops_api.services.case_tracking_providers import ProviderCaseEvent, ProviderCaseSnapshot
 from caseops_api.services.case_tracking_summary import CONSUMER, EVENT_TYPE, PURPOSE, _messages
 from caseops_api.services.identity import get_session_context
 from caseops_api.services.llm_cassette import cassette_key
@@ -46,6 +45,10 @@ FALLBACK = "Provider fixture: review the order and prepare the witness list."
 GENERATED = "The order directs filing of a witness list before the next hearing."
 MODEL = "caseops-mock-1"
 FROZEN_CASSETTE_KEY = "fb977e47e7dde573278d134ae98d89580cb2b6dbbcb847ac406d13d6600e20db"
+BATCH_MAX_ITEMS = 3
+BATCH_MAX_BYTES = 16_384
+SEED_FIELDS = frozenset({"company_id", "actor_id", "matter_id", "scenario"})
+INSPECT_FIELDS = SEED_FIELDS | {"bookmark_id", "update_id"}
 COMPLETION = {
     "text": json.dumps(
         {
@@ -110,6 +113,9 @@ def cassette_row() -> dict:
 
 
 def seed(session, *, actor_id: str, matter_id: str, scenario: str) -> dict:
+    from caseops_api.services.case_tracking import _tracked_case_identity_key, apply_snapshot
+    from caseops_api.services.case_tracking_providers import ProviderCaseEvent, ProviderCaseSnapshot
+
     if scenario not in {"positive", "marked", "persistent_qa"}:
         raise ValueError("Unknown summary fixture scenario.")
     context = get_session_context(session, actor_id)
@@ -191,7 +197,9 @@ def seed(session, *, actor_id: str, matter_id: str, scenario: str) -> dict:
     }
 
 
-def inspect_fixture(session, *, actor_id: str, update_id: str) -> dict:
+def inspect_fixture(
+    session, *, actor_id: str, update_id: str, identity: dict | None = None,
+) -> dict:
     context = get_session_context(session, actor_id)
     if not context.company.slug.startswith(("summaryacceptance-", "summarypersistent-")):
         raise ValueError("Inspection is restricted to owned summary fixture tenants.")
@@ -201,6 +209,8 @@ def inspect_fixture(session, *, actor_id: str, update_id: str) -> dict:
             TrackedCaseUpdate.company_id == context.company.id,
         )
     )
+    if identity is not None:
+        validate_inspection_identity(session, context=context, update=update, identity=identity)
     if update is None:
         raise ValueError("Fixture update not found in the current tenant.")
     event = session.scalars(
@@ -272,9 +282,101 @@ def inspect_fixture(session, *, actor_id: str, update_id: str) -> dict:
     }
 
 
+def validate_inspection_identity(session, *, context, update, identity: dict) -> None:
+    bookmark = session.get(TrackedCaseBookmark, identity["bookmark_id"])
+    matter = session.get(Matter, identity["matter_id"])
+    if (
+        update is None
+        or identity["company_id"] != context.company.id
+        or update.id != identity["update_id"]
+        or bookmark is None
+        or bookmark.company_id != context.company.id
+        or bookmark.created_by_membership_id != identity["actor_id"]
+        or bookmark.matter_id != identity["matter_id"]
+        or bookmark.tracked_case_id != update.tracked_case_id
+        or matter is None
+        or matter.company_id != context.company.id
+        or not context.company.slug.startswith(
+            "summarypersistent-" if identity["scenario"] == "persistent_qa"
+            else "summaryacceptance-"
+        )
+    ):
+        raise ValueError("Inspection identity does not match the current actor's fixture scope.")
+
+
+def read_batch(stream, *, command: str) -> list[dict]:
+    payload = stream.read(BATCH_MAX_BYTES + 1)
+    if len(payload) > BATCH_MAX_BYTES:
+        raise ValueError("Summary batch exceeds its input byte bound.")
+
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate JSON field in summary batch.")
+            result[key] = value
+        return result
+
+    request = json.loads(payload, object_pairs_hook=unique_object)
+    if not isinstance(request, dict) or set(request) != {"items"}:
+        raise ValueError("Summary batch requires exactly an items envelope.")
+    items = request["items"]
+    if not isinstance(items, list) or not 1 <= len(items) <= BATCH_MAX_ITEMS:
+        raise ValueError("Summary batch requires one to three identities.")
+    fields = SEED_FIELDS if command == "seed-inspect-many" else INSPECT_FIELDS
+    for item in items:
+        if not isinstance(item, dict) or set(item) != fields:
+            raise ValueError("Summary batch identity has missing or unexpected fields.")
+        if any(not isinstance(value, str) or not 1 <= len(value) <= 36
+               for value in item.values()):
+            raise ValueError("Summary batch identity values must be bounded strings.")
+        if item["scenario"] not in {"positive", "marked", "persistent_qa"}:
+            raise ValueError("Unknown summary fixture scenario.")
+    for field in fields:
+        if len({item[field] for item in items}) != len(items):
+            raise ValueError(f"Duplicate summary batch {field}.")
+    return items
+
+
+def run_batch(items: list[dict], *, command: str) -> dict:
+    result = {"ok": False, "items": [], "failure": None}
+    factory = get_session_factory()
+    for identity in items:
+        row = {"identity": identity}
+        result["items"].append(row)
+        try:
+            if command == "seed-inspect-many":
+                with factory() as session:
+                    context = get_session_context(session, identity["actor_id"])
+                    if context.company.id != identity["company_id"]:
+                        raise ValueError("Seed company does not match the current actor.")
+                    seeded = seed(session, actor_id=identity["actor_id"],
+                                  matter_id=identity["matter_id"], scenario=identity["scenario"])
+                    row["seed"] = seeded
+                    if any(seeded.get(key) != value for key, value in identity.items()):
+                        raise ValueError("Seed returned a different fixture identity.")
+                inspection_identity = {key: seeded[key] for key in INSPECT_FIELDS}
+            else:
+                inspection_identity = identity
+            # Never share a seed transaction or an actor's ORM identity map with an inspection.
+            with factory() as session:
+                row["inspection"] = inspect_fixture(
+                    session, actor_id=identity["actor_id"],
+                    update_id=inspection_identity["update_id"], identity=inspection_identity,
+                )
+        except Exception as exc:
+            result["failure"] = {"identity": identity, "error_type": type(exc).__name__,
+                                 "message": str(exc)}
+            return result
+    result["ok"] = True
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("seed", "inspect", "worker", "contract"))
+    parser.add_argument("command", choices=(
+        "seed", "inspect", "worker", "contract", "seed-inspect-many", "inspect-many",
+    ))
     parser.add_argument("--actor-id")
     parser.add_argument("--matter-id")
     parser.add_argument("--update-id")
@@ -325,6 +427,14 @@ def main() -> None:
                 }
             )
         )
+    elif args.command in {"seed-inspect-many", "inspect-many"}:
+        if any((args.actor_id, args.matter_id, args.update_id, args.scenario)):
+            parser.error("Batch identities must be supplied only through structured stdin JSON.")
+        items = read_batch(sys.stdin.buffer, command=args.command)
+        result = run_batch(items, command=args.command)
+        print(json.dumps(result), flush=True)
+        if not result["ok"]:
+            raise SystemExit(1)
     else:
         with get_session_factory()() as session:
             if args.command == "seed":

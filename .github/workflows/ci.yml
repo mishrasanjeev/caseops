@@ -396,6 +396,9 @@ jobs:
       - name: Functional QA runner security tests
         run: npm run test:functional-qa-runner
 
+      - name: Docker summary fixture and cleanup unit regressions
+        run: node --experimental-strip-types --test scripts/summary-fixture-support.test.mjs
+
       - name: Web typecheck
         run: npm run typecheck:web
 

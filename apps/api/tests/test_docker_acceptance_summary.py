@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
+import os
+import subprocess
 import sys
 import threading
 from http.server import ThreadingHTTPServer
@@ -10,6 +13,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import pytest
+import yaml
 from sqlalchemy import select
 
 from caseops_api.db.models import Company, Matter, ModelRun
@@ -293,3 +297,342 @@ def test_offline_emulator_serves_exact_authorized_source(monkeypatch):
         server.shutdown()
         server.server_close()
         thread.join(timeout=3)
+
+
+def _batch_identities(*, seeded=False):
+    items = []
+    for index, scenario in enumerate(("positive", "marked", "persistent_qa")):
+        item = {"company_id": f"company-{index}", "actor_id": f"actor-{index}",
+                "matter_id": f"matter-{index}", "scenario": scenario}
+        if seeded:
+            item.update(bookmark_id=f"bookmark-{index}", update_id=f"update-{index}")
+        items.append(item)
+    return items
+
+
+def test_cleanup_regression_is_required_by_standard_ci():
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    job = workflow["jobs"]["web"]
+    selected = [step for step in job["steps"]
+                if step.get("name") == "Docker summary fixture and cleanup unit regressions"]
+    assert len(selected) == 1
+    assert selected[0]["run"] == (
+        "node --experimental-strip-types --test scripts/summary-fixture-support.test.mjs"
+    )
+    assert "if" not in selected[0] and not selected[0].get("continue-on-error", False)
+    assert "if" not in job and not job.get("continue-on-error", False)
+    assert (root / "scripts/summary-fixture-support.test.mjs").is_file()
+
+
+def _read_batch(items, command="seed-inspect-many"):
+    return fixture.read_batch(io.BytesIO(json.dumps({"items": items}).encode()), command=command)
+
+
+@pytest.mark.parametrize("command", ["seed-inspect-many", "inspect-many"])
+def test_batch_input_accepts_exact_bounded_identities(command):
+    identities = _batch_identities(seeded=command == "inspect-many")
+    assert _read_batch(identities, command) == identities
+
+
+@pytest.mark.parametrize("field", sorted(fixture.INSPECT_FIELDS))
+def test_batch_input_rejects_duplicate_identities(field):
+    identities = _batch_identities(seeded=True)
+    identities[1][field] = identities[0][field]
+    with pytest.raises(ValueError, match="Duplicate summary batch"):
+        _read_batch(identities, "inspect-many")
+
+
+@pytest.mark.parametrize("field", sorted(fixture.INSPECT_FIELDS))
+def test_batch_input_rejects_missing_fields(field):
+    identities = _batch_identities(seeded=True)
+    del identities[1][field]
+    with pytest.raises(ValueError, match="missing or unexpected"):
+        _read_batch(identities, "inspect-many")
+
+
+@pytest.mark.parametrize("items", [[], [None], "not-a-list", _batch_identities() + [{}]])
+def test_batch_input_rejects_invalid_or_oversize_inventory(items):
+    with pytest.raises(ValueError):
+        _read_batch(items)
+
+
+@pytest.mark.parametrize("value", [None, True, 1, "", "x" * 37, ["actor"]])
+def test_batch_input_rejects_unbounded_or_nonstring_values(value):
+    identities = _batch_identities()
+    identities[0]["actor_id"] = value
+    with pytest.raises(ValueError, match="bounded strings"):
+        _read_batch(identities)
+
+
+@pytest.mark.parametrize("payload", [
+    b" " * (fixture.BATCH_MAX_BYTES + 1),
+    b'{"items": [], "items": []}', b'{"items": [], "secret": "forbidden"}',
+    b"[]", b'{"items": [',
+], ids=["oversize", "duplicate-field", "extra-field", "not-object", "invalid-json"])
+def test_batch_input_rejects_oversize_duplicate_or_invalid_json(payload):
+    with pytest.raises(ValueError):
+        fixture.read_batch(io.BytesIO(payload), command="seed-inspect-many")
+
+
+def _fake_batch_sessions(monkeypatch):
+    identities = _batch_identities(seeded=True)
+    contexts = {item["actor_id"]: SimpleNamespace(company=SimpleNamespace(
+        id=item["company_id"], slug=("summarypersistent-" if item["scenario"] == "persistent_qa"
+                                   else "summaryacceptance-") + "fixture",
+    )) for item in identities}
+    updates = {item["update_id"]: SimpleNamespace(
+        id=item["update_id"], company_id=item["company_id"], tracked_case_id=f"tracked-{index}",
+        summary=fixture.FALLBACK, ai_summary_json={"summary_source": "provider"},
+        model_run_id=None, source_text_sha256="original-source-hash",
+    ) for index, item in enumerate(identities)}
+    bookmarks = {item["bookmark_id"]: SimpleNamespace(
+        company_id=item["company_id"], created_by_membership_id=item["actor_id"],
+        matter_id=item["matter_id"], tracked_case_id=f"tracked-{index}",
+    ) for index, item in enumerate(identities)}
+    matters = {item["matter_id"]: SimpleNamespace(company_id=item["company_id"])
+               for item in identities}
+    sessions, resolutions = [], []
+    active = set()
+
+    class Rows(list):
+        def one(self):
+            assert len(self) == 1
+            return self[0]
+
+    class Session:
+        def __init__(self):
+            self.actor = None
+            sessions.append(self)
+
+        def __enter__(self):
+            assert not active, "A previous actor's session is still open."
+            active.add(self)
+            return self
+
+        def __exit__(self, *args):
+            active.remove(self)
+
+        def get(self, model, identity):
+            return (bookmarks if model is fixture.TrackedCaseBookmark else matters).get(identity)
+
+        def scalar(self, statement):
+            if statement.column_descriptions[0].get("entity") is fixture.TrackedCaseUpdate:
+                parameters = statement.compile().params
+                update = updates.get(parameters["id_1"])
+                return (
+                    update if update and update.company_id == parameters["company_id_1"] else None
+                )
+            return 0
+
+        def scalars(self, statement):
+            if statement.column_descriptions[0].get("entity") is fixture.DomainOutboxEvent:
+                item = next(item for item in identities if item["actor_id"] == self.actor)
+                return Rows([SimpleNamespace(
+                    id="event-" + self.actor, state="queued", attempts=0,
+                    payload_json={"no_paid_providers": item["scenario"] == "marked"},
+                )])
+            return Rows()
+
+    def context(session, actor):
+        assert session in active
+        assert session.actor in (None, actor), "An actor context was reused across identities."
+        session.actor = actor
+        resolutions.append((session, actor))
+        return contexts[actor]
+
+    def seed(session, **kwargs):
+        assert session.actor == kwargs["actor_id"]
+        return next(item.copy() for item in identities if item["actor_id"] == session.actor)
+
+    monkeypatch.setattr(fixture, "get_session_factory", lambda: Session)
+    monkeypatch.setattr(fixture, "get_session_context", context)
+    monkeypatch.setattr(fixture, "seed", seed)
+    return identities, Session, sessions, resolutions, contexts, updates, bookmarks, matters
+
+
+@pytest.mark.parametrize("command", ["seed-inspect-many", "inspect-many"])
+def test_batch_matches_scalar_raw_snapshots_with_fresh_actor_sessions(monkeypatch, command):
+    identities, factory, sessions, resolutions, *_ = _fake_batch_sessions(monkeypatch)
+    scalar = []
+    for identity in identities:
+        with factory() as session:
+            scalar.append(fixture.inspect_fixture(session, actor_id=identity["actor_id"],
+                                                   update_id=identity["update_id"]))
+    sessions.clear()
+    resolutions.clear()
+    inputs = identities if command == "inspect-many" else _batch_identities()
+    result = fixture.run_batch(_read_batch(inputs, command), command=command)
+    assert result["ok"] is True
+    assert result["failure"] is None
+    assert [row["identity"] for row in result["items"]] == inputs
+    assert [row["inspection"] for row in result["items"]] == scalar
+    assert len(sessions) == (6 if command == "seed-inspect-many" else 3)
+    assert len(set(sessions)) == len(sessions)
+    assert [actor for _, actor in resolutions] == [
+        item["actor_id"] for item in identities
+        for _ in range(2 if command == "seed-inspect-many" else 1)
+    ]
+    if command == "seed-inspect-many":
+        assert [row["seed"] for row in result["items"]] == identities
+
+
+@pytest.mark.parametrize("boundary", [
+    "company", "update", "bookmark", "creator", "matter", "tracked", "scenario",
+])
+def test_batch_rejects_cross_tenant_and_actor_child_scope(monkeypatch, boundary):
+    identities, _, _, _, _, updates, bookmarks, matters = _fake_batch_sessions(monkeypatch)
+    if boundary == "company":
+        identities[0]["company_id"] = "different-company"
+    elif boundary == "update":
+        updates["update-0"].company_id = "company-1"
+    elif boundary == "bookmark":
+        bookmarks["bookmark-0"].company_id = "company-1"
+    elif boundary == "creator":
+        bookmarks["bookmark-0"].created_by_membership_id = "actor-1"
+    elif boundary == "matter":
+        matters["matter-0"].company_id = "company-1"
+    elif boundary == "tracked":
+        bookmarks["bookmark-0"].tracked_case_id = "tracked-1"
+    else:
+        identities[0]["scenario"] = "persistent_qa"
+    result = fixture.run_batch(identities, command="inspect-many")
+    assert result["ok"] is False
+    assert result["failure"]["identity"] == identities[0]
+    assert result["failure"]["error_type"] == "ValueError"
+    assert "inspection" not in result["items"][0]
+
+
+def test_batch_seed_rejects_cross_tenant_before_mutation(monkeypatch):
+    identities, *_ = _fake_batch_sessions(monkeypatch)
+    identities[0]["company_id"] = "different-company"
+    monkeypatch.setattr(fixture, "seed", lambda *args, **kwargs: pytest.fail("cross-tenant seed"))
+    result = fixture.run_batch(identities, command="seed-inspect-many")
+    assert not result["ok"]
+    assert result["failure"]["error_type"] == "ValueError"
+
+
+def test_batch_rechecks_actor_scope_after_the_previous_inspection(monkeypatch):
+    identities, _, sessions, _, contexts, *_ = _fake_batch_sessions(monkeypatch)
+    original = fixture.inspect_fixture
+
+    def inspect(session, **kwargs):
+        snapshot = original(session, **kwargs)
+        if kwargs["actor_id"] == "actor-0":
+            contexts["actor-1"].company.id = "changed-company"
+        return snapshot
+
+    monkeypatch.setattr(fixture, "inspect_fixture", inspect)
+    result = fixture.run_batch(identities, command="inspect-many")
+    assert not result["ok"]
+    assert result["items"][0]["inspection"]["summary"] == fixture.FALLBACK
+    assert result["failure"]["identity"] == identities[1]
+    assert len(sessions) == 2
+
+
+def test_batch_retains_mismatched_committed_seed_and_refuses_inspection(monkeypatch):
+    identities, *_ = _fake_batch_sessions(monkeypatch)
+    changed = {**identities[0], "matter_id": "different-matter"}
+    monkeypatch.setattr(fixture, "seed", lambda *args, **kwargs: changed)
+    monkeypatch.setattr(fixture, "inspect_fixture", lambda *args, **kwargs: pytest.fail("inspect"))
+    result = fixture.run_batch(_batch_identities(), command="seed-inspect-many")
+    assert not result["ok"]
+    assert result["items"][0]["seed"] == changed
+    assert result["failure"]["message"] == "Seed returned a different fixture identity."
+
+
+@pytest.mark.parametrize("command", ["seed-inspect-many", "inspect-many"])
+def test_batch_partial_failure_retains_raw_prefix_and_failing_identity(monkeypatch, command):
+    identities, _, sessions, *_ = _fake_batch_sessions(monkeypatch)
+    original = fixture.inspect_fixture
+
+    def inspect(session, **kwargs):
+        if kwargs["actor_id"] == "actor-1":
+            raise RuntimeError("injected inspection failure")
+        return original(session, **kwargs)
+
+    monkeypatch.setattr(fixture, "inspect_fixture", inspect)
+    inputs = identities if command == "inspect-many" else _batch_identities()
+    result = fixture.run_batch(inputs, command=command)
+    assert not result["ok"]
+    assert len(result["items"]) == 2
+    assert result["items"][0]["inspection"]["summary"] == fixture.FALLBACK
+    assert result["failure"] == {"identity": inputs[1], "error_type": "RuntimeError",
+                                  "message": "injected inspection failure"}
+    assert all(session.actor != "actor-2" for session in sessions)
+    if command == "seed-inspect-many":
+        assert result["items"][1]["seed"] == identities[1]
+
+
+def test_batch_cli_retains_failure_json_and_nonzero_exit(monkeypatch, capsys):
+    _fake_batch_sessions(monkeypatch)
+    monkeypatch.setenv("CASEOPS_SUMMARY_ACCEPTANCE", "1")
+    monkeypatch.setattr(fixture, "get_settings", _local_settings)
+    monkeypatch.setattr(sys, "argv", ["fixture", "inspect-many"])
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(
+        json.dumps({"items": _batch_identities(seeded=True)}).encode(),
+    )))
+    monkeypatch.setattr(fixture, "inspect_fixture", lambda *args, **kwargs: (_ for _ in ()).throw(
+        ValueError("injected"),
+    ))
+    with pytest.raises(SystemExit) as failed:
+        fixture.main()
+    assert failed.value.code == 1
+    output = json.loads(capsys.readouterr().out)
+    assert output["failure"]["identity"] == _batch_identities(seeded=True)[0]
+    assert output["ok"] is False
+
+
+def test_batch_cli_rejects_identity_argv_before_reading_or_mutating(monkeypatch):
+    monkeypatch.setattr(fixture, "guard_local_runtime", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["fixture", "inspect-many", "--actor-id", "actor-0"])
+    monkeypatch.setattr(fixture, "read_batch", lambda *args, **kwargs: pytest.fail("read stdin"))
+    with pytest.raises(SystemExit) as rejected:
+        fixture.main()
+    assert rejected.value.code == 2
+
+
+def test_worker_launcher_defers_seed_imports_but_checks_actual_frozen_prompt(tmp_path):
+    code = '''
+import importlib.abc, sys
+from pathlib import Path
+class NoSeedImports(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname in {
+            "caseops_api.services.case_tracking", "caseops_api.services.case_tracking_providers",
+        }:
+            raise AssertionError("seed-only dependency imported before execve: " + fullname)
+sys.meta_path.insert(0, NoSeedImports())
+from caseops_api.scripts import docker_acceptance_summary as fixture
+assert Path(fixture.__file__).resolve() == Path(sys.argv[1]).resolve()
+assert fixture.frozen_call_key() == fixture.FROZEN_CASSETTE_KEY
+fixture.guard_local_runtime = lambda: None
+fixture.shutil.which = lambda name: "/installed/bin/" + name
+fixture.tempfile.tempdir = sys.argv[2]
+class Launched(Exception): pass
+def launch(executable, argv, environment):
+    assert executable == "/installed/bin/caseops-document-worker"
+    assert argv == [executable, "--once", "--skip-migrations", "--skip-maintenance",
+                    "--summary-batch-size", "25"]
+    assert environment["CASEOPS_LLM_CASSETTE_MODE"] == "replay"
+    raise Launched()
+fixture.os.execve = launch
+sys.argv = ["fixture", "worker"]
+try: fixture.main()
+except Launched: pass
+else: raise AssertionError("real execve contract not reached")
+fixture.SOURCE_TEXT = "drift"
+try: fixture.main()
+except RuntimeError as error: assert "prompt changed" in str(error)
+else: raise AssertionError("prompt drift reached execve")
+print("seed import tripwire and actual frozen prompt passed")
+'''
+    environment = {**os.environ, "PYTHONPATH": str(Path(fixture.__file__).parents[2]),
+                   "CASEOPS_LLM_PROVIDER": "mock", "CASEOPS_LLM_API_KEY": "",
+                   "CASEOPS_EMBEDDING_PROVIDER": "mock", "CASEOPS_EMBEDDING_API_KEY": ""}
+    result = subprocess.run(
+        [sys.executable, "-B", "-c", code, fixture.__file__, str(tmp_path)],
+        env=environment, capture_output=True, text=True, timeout=45, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "actual frozen prompt passed" in result.stdout
