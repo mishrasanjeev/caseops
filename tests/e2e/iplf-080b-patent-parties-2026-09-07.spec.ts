@@ -6,6 +6,7 @@ import { apiBaseUrl, patentRunId, patentScreenshot } from "./support/patent-acce
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { assertPatentControlsFit } from "./support/patent-layout";
 import { bootstrapPatentTenant, enablePatentWorkspace, signInPatentTenant } from "./support/patent-acceptance";
+import { createPatentApplicationWithEvidence } from "./support/prod-api-response-evidence";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
@@ -49,14 +50,13 @@ for (const kind of ["family", "application"] as const) {
         document_version_id: document.versions[0].id, content_sha256: document.versions[0].sha256_hex };
       let record = family;
       if (kind === "application") {
-        const created = await page.request.post(`${apiBaseUrl}/api/ip/patents/applications`, {
+        const created = await createPatentApplicationWithEvidence(page.request, testInfo, apiBaseUrl, {
           headers: { ...headers, "Idempotency-Key": crypto.randomUUID() }, data: {
             family_id: family.id, expected_family_version: family.version, expected_family_lifecycle_version: family.lifecycle_version,
             facts: { title: "Sourced party application", application_kind: "complete", jurisdiction: "IN", office: "IP India",
               filing_date: "2026-09-05", source, identifiers: [], source_pending_identifier_allocation: true },
           },
         });
-        expect(created.status(), await created.text()).toBe(201);
         record = await created.json();
       }
       const endpoint = `${apiBaseUrl}/api/ip/patents/dockets/${record.docket_id}/parties`;
