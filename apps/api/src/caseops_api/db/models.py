@@ -10050,6 +10050,10 @@ class ContractAttachmentChunk(Base):
 
 class DocumentProcessingJob(Base):
     __tablename__ = "document_processing_jobs"
+    __table_args__ = (
+        Index("ix_document_processing_jobs_queue", "status", "queued_at", "id"),
+        Index("ix_document_processing_jobs_recovery", "status", "started_at", "id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -10071,6 +10075,9 @@ class DocumentProcessingJob(Base):
         default=DocumentProcessingJobStatus.QUEUED,
     )
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    no_paid_providers: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true(),
+    )
     processed_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     queued_at: Mapped[datetime] = mapped_column(

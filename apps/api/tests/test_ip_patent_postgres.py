@@ -378,10 +378,18 @@ def test_patent_source_correction_and_index_worker_take_company_before_version_o
 
     def worker_session():
         session = factory()
-        session.execute(text("SET lock_timeout = '10s'"))
-        session.execute(
-            text("SELECT set_config('application_name', :name, false)"), {"name": worker_name}
-        )
+
+        def identify_transaction(_session, _transaction, connection):
+            # A released provider/preparation transaction can return a different
+            # pooled connection. Identify every new transaction, not just the first.
+            connection.execute(text("SET LOCAL lock_timeout = '10s'"))
+            connection.execute(
+                text("SELECT set_config('application_name', :name, true)"), {"name": worker_name}
+            )
+
+        from sqlalchemy import event
+
+        event.listen(session, "after_begin", identify_transaction)
         return session
 
     def paused_parse(key, content_type):

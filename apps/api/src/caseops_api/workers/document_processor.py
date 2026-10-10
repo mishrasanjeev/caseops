@@ -80,11 +80,16 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Drain CaseOps document processing jobs and schedule maintenance reprocessing.",
     )
     parser.add_argument("--once", action="store_true", help="Run one iteration and exit.")
+    parser.add_argument(
+        "--documents-only", action="store_true",
+        help="Recover bounded expired document claims and drain documents only; requires --once.",
+    )
     parser.add_argument("--summary-batch-size", type=int, choices=range(1, 26), default=5,
                         help="Maximum case update summaries per iteration.")
     parser.add_argument(
         "--batch-size",
         type=int,
+        choices=range(1, 101),
         default=settings.document_worker_batch_size,
         help="Maximum queued jobs to process per iteration.",
     )
@@ -147,12 +152,26 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     settings = get_settings()
+    if args.documents_only and not args.once:
+        parser.error("--documents-only requires --once")
 
-    if settings.auto_migrate and not args.skip_migrations:
+    if settings.auto_migrate and not args.skip_migrations and not args.documents_only:
         run_migrations()
 
     while True:
-        if args.skip_maintenance:
+        document_outcomes: dict[str, int] = {}
+        if args.documents_only:
+            summary = WorkerRunSummary(
+                recovered_stale_jobs=recover_stale_document_processing_jobs(
+                    stale_after_minutes=15, limit=args.batch_size,
+                ),
+                queued_reprocessing_jobs=0,
+                processed_jobs=drain_document_processing_jobs(
+                    limit=args.batch_size, outcomes=document_outcomes,
+                ),
+                recovered_stale_court_sync_jobs=0, processed_court_sync_jobs=0,
+            )
+        elif args.skip_maintenance:
             summary = WorkerRunSummary(
                 recovered_stale_jobs=0,
                 queued_reprocessing_jobs=0,
@@ -175,11 +194,18 @@ def main(argv: list[str] | None = None) -> int:
                 summary_batch_size=args.summary_batch_size,
             )
 
+        document_counts = (
+            f"attempted={summary.processed_jobs} "
+            f"completed={document_outcomes.get('completed', 0)} "
+            f"failed={document_outcomes.get('failed', 0)} "
+            f"unfinalized={document_outcomes.get('unfinalized', 0)} "
+            if args.documents_only else f"processed={summary.processed_jobs} "
+        )
         print(
             "CaseOps document worker: "
             f"recovered={summary.recovered_stale_jobs} "
             f"queued={summary.queued_reprocessing_jobs} "
-            f"processed={summary.processed_jobs} "
+            f"{document_counts}"
             f"court_sync_recovered={summary.recovered_stale_court_sync_jobs} "
             f"court_sync_processed={summary.processed_court_sync_jobs} "
             f"case_summaries_processed={summary.processed_case_summaries}",
