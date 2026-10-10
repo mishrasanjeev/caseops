@@ -1573,9 +1573,10 @@ def process_notification_delivery_intent(
     active_company = select(Company.id).where(
         Company.id == intent.company_id, Company.is_active.is_(True),
     ).exists()
-    if intent.matter is not None and context is not None and intent.recipient_membership:
-        recipient_context = _recipient_context(
-            actor_context=context,
+    if intent.matter is not None and intent.recipient_membership:
+        recipient_context = SessionContext(
+            company=intent_row[1],
+            user=intent.recipient_membership.user,
             membership=intent.recipient_membership,
         )
         row = session.execute(

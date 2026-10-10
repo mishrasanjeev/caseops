@@ -34,7 +34,7 @@ def local_sender(monkeypatch):
     monkeypatch.setattr(delivery, "get_settings", lambda: SimpleNamespace(
         notification_external_delivery_enabled=True,
         notification_external_delivery_provider="sendgrid",
-        sendgrid_api_key="deterministic-local-provider",
+        sendgrid_api_key="local",
         sendgrid_sender_email="local@example.test",
     ))
 
