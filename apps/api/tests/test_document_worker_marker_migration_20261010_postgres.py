@@ -37,8 +37,8 @@ def test_fresh_upgrade_downgrade_legacy_receipts_default_no_paid(pg_engine, monk
                     ":status, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
                 ), {"id": job_id, "company": company, "attachment": str(uuid4()), "status": status})
             seed.commit()
-        command.upgrade(cfg, "head")
-        command.upgrade(cfg, "head")
+        command.upgrade(cfg, "20261010_0001")
+        command.upgrade(cfg, "20261010_0001")
         with engine.connect() as check:
             assert check.execute(text(
                 "SELECT id, no_paid_providers FROM document_processing_jobs ORDER BY id"
@@ -52,19 +52,42 @@ def test_fresh_upgrade_downgrade_legacy_receipts_default_no_paid(pg_engine, monk
             assert indexes["ix_document_processing_jobs_recovery"] == [
                 "status", "started_at", "id",
             ]
-        command.downgrade(cfg, "20260928_0001")
+        human_id, marked_id = str(uuid4()), str(uuid4())
+        with engine.begin() as seed:
+            for job_id, marker in [(human_id, False), (marked_id, True)]:
+                seed.execute(text(
+                    "INSERT INTO document_processing_jobs "
+                    "(id, company_id, target_type, attachment_id, action, status, attempt_count, "
+                    "processed_char_count, queued_at, updated_at, no_paid_providers) "
+                    "VALUES (:id, :company, 'matter_attachment', :attachment, 'initial_index', "
+                    "'queued', 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, :marker)"
+                ), {"id": job_id, "company": company, "attachment": str(uuid4()), "marker": marker})
         with engine.connect() as check:
-            assert "no_paid_providers" not in {
+            receipts = check.execute(text(
+                "SELECT * FROM document_processing_jobs ORDER BY id"
+            )).all()
+            indexes_before = inspect(check).get_indexes("document_processing_jobs")
+        with pytest.raises(RuntimeError, match="restore-forward"):
+            command.downgrade(cfg, "20260928_0001")
+        with engine.connect() as check:
+            assert "no_paid_providers" in {
                 row["name"] for row in inspect(check).get_columns("document_processing_jobs")
             }
             assert check.execute(text(
-                "SELECT id FROM document_processing_jobs ORDER BY id"
-            )).scalars().all() == sorted(legacy_ids)
-        command.upgrade(cfg, "head")
+                "SELECT * FROM document_processing_jobs ORDER BY id"
+            )).all() == receipts
+            assert inspect(check).get_indexes("document_processing_jobs") == indexes_before
+            assert check.scalar(text("SELECT version_num FROM alembic_version")) == "20261010_0001"
+        command.upgrade(cfg, "20261010_0001")
         with engine.connect() as check:
+            markers = dict(check.execute(text(
+                "SELECT id, no_paid_providers FROM document_processing_jobs"
+            )).all())
+            assert all(markers[job_id] is True for job_id in legacy_ids)
+            assert markers[human_id] is False and markers[marked_id] is True
             assert check.execute(text(
-                "SELECT no_paid_providers FROM document_processing_jobs"
-            )).scalars().all() == [True, True]
+                "SELECT * FROM document_processing_jobs ORDER BY id"
+            )).all() == receipts
     finally:
         engine.dispose()
         get_settings.cache_clear()

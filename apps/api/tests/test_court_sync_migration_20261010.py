@@ -50,7 +50,7 @@ def _rehearse(engine, monkeypatch, record):
             {"id": job_id, "company": company, "matter": matter, "actor": actor},
         )
         session.commit()
-    command.upgrade(config, "head")
+    command.upgrade(config, "20261010_0002")
     column = next(
         column
         for column in inspect(engine).get_columns("matter_court_sync_jobs")
@@ -78,10 +78,22 @@ def _rehearse(engine, monkeypatch, record):
             {"id": job_id},
         ).one()
         assert bool(row[0]) is True and tuple(row[1:]) == (actor, "legacy-source")
+        human_job_id = str(uuid4())
         connection.execute(
-            text("UPDATE matter_court_sync_jobs SET no_paid_providers = false WHERE id = :id"),
-            {"id": job_id},
+            text(
+                "INSERT INTO matter_court_sync_jobs "
+                "(id, company_id, matter_id, requested_by_membership_id, source, source_reference, "
+                "status, imported_cause_list_count, imported_order_count, queued_at, updated_at, "
+                "no_paid_providers) VALUES (:id, :company, :matter, :actor, 'local-emulator', "
+                "'human-source', 'queued', 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false)"
+            ),
+            {"id": human_job_id, "company": company, "matter": matter, "actor": actor},
         )
+    with engine.connect() as connection:
+        receipts = connection.execute(
+            text("SELECT * FROM matter_court_sync_jobs ORDER BY id")
+        ).all()
+    indexes_before = inspect(engine).get_indexes("matter_court_sync_jobs")
     record(
         "court_migration_upgrade",
         column_nullable=column["nullable"],
@@ -90,12 +102,14 @@ def _rehearse(engine, monkeypatch, record):
         retained_source="legacy-source",
         legacy_marker=True,
     )
-    command.downgrade(config, "20261010_0001")
-    assert "no_paid_providers" not in {
+    with pytest.raises(RuntimeError, match="restore-forward"):
+        command.downgrade(config, "20261010_0001")
+    assert "no_paid_providers" in {
         column["name"] for column in inspect(engine).get_columns("matter_court_sync_jobs")
     }
     assert documents == document_columns()
-    command.upgrade(config, "head")
+    assert inspect(engine).get_indexes("matter_court_sync_jobs") == indexes_before
+    command.upgrade(config, "20261010_0002")
     with engine.connect() as connection:
         assert (
             bool(
@@ -107,9 +121,18 @@ def _rehearse(engine, monkeypatch, record):
             is True
         )
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261010_0002"
+        assert connection.execute(
+            text("SELECT * FROM matter_court_sync_jobs ORDER BY id")
+        ).all() == receipts
+        assert connection.scalar(
+            text("SELECT no_paid_providers FROM matter_court_sync_jobs WHERE id = :id"),
+            {"id": human_job_id},
+        ) in (False, 0)
     record(
-        "court_migration_downgrade_reupgrade",
+        "court_migration_restore_forward_refusal",
         default_blocked=True,
+        explicit_human_false_retained=True,
+        receipts_and_indexes_retained=True,
         document_schema_unchanged=True,
         head="20261010_0002",
     )
