@@ -221,6 +221,7 @@ class _FinalizerAudit:
         self.entered, self.release = Event(), Event()
         self.boundary = "applied"
         self.pids, self.errors, self.statements = {}, [], {}
+        self.statement_counts = {}
         self.all_pids = set()
         self.instance = f"finalizer-{uuid4().hex[:12]}"
         self.names = {role: f"{self.instance}-{role}"
@@ -249,6 +250,8 @@ class _FinalizerAudit:
 
     def before(self, connection, _cursor, sql, _parameters, _context, _many):
         role = connection.info.get("finalizer_role")
+        if role in self.names:
+            self.statement_counts[role] = self.statement_counts.get(role, 0) + 1
         election = (
             sql.startswith("SELECT ")
             and "ORDER BY company_memberships.created_at ASC" in sql
@@ -380,6 +383,9 @@ def test_finalizer_election_receipt_keeps_sql_template_not_parameters():
     assert audit.statements["worker"] == [statement]
     assert receipts == [{"event": "sql_before", "role": "worker", "pid": 123, "sql": statement}]
     assert private_parameter not in json.dumps(receipts)
+    audit.before(connection, None, "SELECT %(value)s", {"value": private_parameter}, None, False)
+    assert audit.statement_counts["worker"] == 2
+    assert audit.statements["worker"] == [statement] and len(receipts) == 1
 
 
 @pytest.fixture

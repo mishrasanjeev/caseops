@@ -306,7 +306,9 @@ def test_rule_discovery_and_total_recipient_work_fail_bounded_before_parent(fina
 
 
 @pytest.mark.parametrize("count", [20, 500])
-def test_rule_delivery_total_queries_and_lock_inventory_are_bounded(finalizer_audit, count):
+def test_rule_delivery_total_queries_and_lock_inventory_are_bounded(
+    finalizer_audit, count, monkeypatch
+):
     audit = finalizer_audit
     fixture = _seed(audit)
     with Session(audit.engine) as session:
@@ -314,6 +316,26 @@ def test_rule_delivery_total_queries_and_lock_inventory_are_bounded(finalizer_au
             _seed_membership(session, fixture["company_id"], role="member")
         _rule(session, fixture, "company")
         session.commit()
+    stage_counts = {}
+
+    def measure(original, stage):
+        def measured(*args, **kwargs):
+            before = audit.statement_counts.get("mutation", 0)
+            try:
+                return original(*args, **kwargs)
+            finally:
+                stage_counts[stage] = stage_counts.get(stage, 0) + (
+                    audit.statement_counts.get("mutation", 0) - before
+                )
+
+        return measured
+
+    for owner, name, stage in (
+        (compliance_participants, "_select_order_notifications", "capture_revalidation"),
+        (notification_rules, "enqueue_notification_delivery_intent", "enqueue"),
+        (notification_rules, "process_notification_delivery_intent", "delivery"),
+    ):
+        monkeypatch.setattr(owner, name, measure(getattr(owner, name), stage))
     _create(audit, fixture)
     sql = audit.statements["mutation"]
     parent_index = next(
@@ -323,26 +345,27 @@ def test_rule_delivery_total_queries_and_lock_inventory_are_bounded(finalizer_au
     assert sum("FOR NO KEY UPDATE OF companies" in statement for statement in before) == 1
     assert sum("FOR UPDATE OF company_memberships" in statement for statement in before) == 1
     assert sum("FOR UPDATE OF users" in statement for statement in before) == 1
-    # Includes discovery/revalidation, audit, intent, in-app processing and commit reads.
-    assert len(sql) <= 100 + 15 * count, len(sql)
+    total_sql = audit.statement_counts["mutation"]
+    with Session(audit.engine) as session:
+        delivered = session.scalar(
+            select(func.count())
+            .select_from(InAppNotification)
+            .where(InAppNotification.matter_id == fixture["matter_id"])
+        )
+        assert delivered == count
     audit.record(
         "bounded_delivery_work",
         candidates=count,
         rules=1,
-        sql_count=len(sql),
+        sql_count=total_sql,
+        filtered_sql_receipts=len(sql),
         query_cap=100 + 15 * count,
+        pre_parent_lock_batches={"company": 1, "membership": 1, "user": 1},
+        delivered_in_app=delivered,
+        stage_sql_counts=stage_counts,
     )
-    with Session(audit.engine) as session:
-        assert (
-            session.scalar(
-                select(func.count())
-                .select_from(InAppNotification)
-                .where(
-                    InAppNotification.matter_id == fixture["matter_id"],
-                )
-            )
-            == count
-        )
+    # All discovery/ACL/delivery SELECTs, writes and transaction-label statements.
+    assert total_sql <= 100 + 15 * count, total_sql
 
 
 @pytest.mark.parametrize("winner", ["membership", "user", "acl", "role"])
