@@ -366,7 +366,6 @@ def test_actual_full_3db_extraction_cannot_create_tail_outputs(
             session.get(MatterCourtOrder, database.fixture.order).order_text = None
             session.get(MatterAttachment, database.fixture.attachment).extracted_text = None
             session.commit()
-    _snapshot(database)
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(_invoke, legacy, database, source)
         try:
