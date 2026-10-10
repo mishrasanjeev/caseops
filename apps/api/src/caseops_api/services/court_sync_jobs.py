@@ -32,7 +32,11 @@ from caseops_api.services.court_sync_sources import (
     resolve_source_for_court,
 )
 from caseops_api.services.matter_write_fence import require_read_only_upload_session
-from caseops_api.services.matters import _get_matter_model, _persist_court_sync_import
+from caseops_api.services.matters import (
+    _get_matter_model,
+    _persist_court_sync_import,
+    _prepare_court_sync_import,
+)
 from caseops_api.services.session_context import SessionContext
 
 _MAX_COURT_SYNC_BATCH = 25
@@ -382,6 +386,18 @@ def run_matter_court_sync_job(job_id: str) -> bool:
             result = adapter.fetch(matter=matter, source_reference=claim.source_reference)
             if _load_claim(session, claim, lock=False) is None:
                 return True
+            matter = session.get(Matter, claim.matter_id, populate_existing=True)
+            if matter is None or matter.company_id != claim.company_id:
+                raise ValueError("Matter not found for court sync job.")
+            if matter.lifecycle_version != claim.lifecycle_version:
+                raise ValueError("Court sync cancelled because the matter lifecycle changed.")
+            prepared_compliance = _prepare_court_sync_import(
+                session, matter=matter, source=claim.source,
+                cause_list_entries=result.cause_list_entries,
+                orders=result.orders,
+            )
+            if _load_claim(session, claim, lock=False) is None:
+                return True
             from caseops_api.services.compliance_participants import lock_compliance_participants
 
             lock_compliance_participants(
@@ -415,6 +431,7 @@ def run_matter_court_sync_job(job_id: str) -> bool:
                 summary=result.summary,
                 cause_list_entries=result.cause_list_entries,
                 orders=result.orders,
+                prepared_compliance=prepared_compliance,
             )
             if not _claim_is_current(job, claim):
                 session.rollback()
