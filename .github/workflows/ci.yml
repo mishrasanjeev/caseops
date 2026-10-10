@@ -444,6 +444,10 @@ jobs:
         timeout-minutes: 12
         run: npm run build:web
 
+      - name: Web Docker builder
+        timeout-minutes: 12
+        run: docker build --pull --target builder --file apps/web/Dockerfile --tag "caseops-web-builder:${{ github.sha }}" .
+
   e2e:
     name: Playwright app suite
     runs-on: ubuntu-latest

@@ -4,6 +4,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import socket
@@ -1102,16 +1103,178 @@ def _ignore_matches(ignore_text: str, relative_path: str) -> bool:
 
 @pytest.mark.parametrize("ignore_path", [".gcloudignore", ".dockerignore"])
 def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str) -> None:
-    patterns = set(_read_repo_text(ignore_path).splitlines())
-    helper = "tests/e2e/support/prod-failure-diagnostics.ts"
-    assert {"!tests/e2e/", "!tests/e2e/support/", f"!{helper}"} <= patterns
-    assert not {"!tests/**", "!tests/e2e/**", "!tests/e2e/support/**"} & patterns
-    builder, runner = _read_repo_text("apps/web/Dockerfile").split(
-        "FROM node:22.14.0-alpine AS runner", 1,
+    required = _web_external_unit_dependencies(REPO_ROOT)
+    assert {
+        "tests/fixtures/statutes/structured-schedule-api.json",
+        "tests/e2e/support/prod-failure-diagnostics.ts",
+        "tests/e2e/support/bounded-network-evidence.ts",
+        "tests/e2e/support/prod-api-response-evidence.ts",
+        "tests/e2e/support/cost-controls.ts",
+    } <= required
+    _assert_web_builder_inputs(
+        _read_repo_text("apps/web/Dockerfile"), _read_repo_text(ignore_path), required,
     )
-    assert f"COPY {helper} /app/{helper}" in builder
-    assert "COPY tests/ " not in builder
-    assert helper not in runner and "/app/tests" not in runner
+
+
+def _web_external_unit_dependencies(root: Path) -> set[str]:
+    """Inventory literal fixture imports; the CI Docker compiler checks full TS semantics."""
+    web = root / "apps/web"
+    pending = []
+    for directory, children, files in os.walk(web):
+        children[:] = [name for name in children if not name.startswith(".") and name not in {
+            "node_modules", "coverage", "test-results", "playwright-report",
+        }]
+        pending.extend(Path(directory) / name for name in sorted(files)
+                       if name.endswith((".test.ts", ".test.tsx")))
+    assert pending, "Colocated web unit inventory must not be empty"
+    required = set()
+    visited = set()
+    references = re.compile(
+        r"\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)[\"'](\.[^\"']+)[\"']",
+    )
+    while pending:
+        importer = pending.pop()
+        if importer in visited:
+            continue
+        visited.add(importer)
+        for reference in references.findall(importer.read_text(encoding="utf-8")):
+            base = (importer.parent / reference).resolve()
+            assert base.is_relative_to(root.resolve()), "Fixture import escapes repository"
+            candidates = [base, *(Path(str(base) + suffix) for suffix in (".ts", ".tsx", ".json")),
+                          base / "index.ts", base / "index.tsx"]
+            dependency = next((path for path in candidates if path.is_file()), None)
+            assert dependency is not None, f"Unresolved fixture import: {importer}: {reference}"
+            if dependency.is_relative_to(web.resolve()):
+                continue
+            required.add(dependency.relative_to(root.resolve()).as_posix())
+            if dependency.suffix in {".ts", ".tsx", ".js", ".mjs"}:
+                pending.append(dependency)
+    return required
+
+
+def _assert_web_builder_inputs(dockerfile: str, ignore: str, required: set[str]) -> None:
+    builder, runner = dockerfile.split("FROM node:22.14.0-alpine AS runner", 1)
+    builder = builder.split("FROM deps AS builder", 1)[1]
+    lines = set(builder.splitlines())
+    patterns = set(ignore.splitlines())
+    assert ignore.splitlines()[0] == "**"
+    parents = {str(parent).replace("\\", "/") + "/" for path in required
+               for parent in Path(path).parents if parent != Path(".")}
+    for path in sorted(required):
+        assert f"COPY {path} /app/{path}" in lines, f"Missing builder input: {path}"
+        assert f"!{path}" in patterns, f"Missing context input: {path}"
+    assert {f"!{parent}" for parent in parents} <= patterns, "Missing context ancestor"
+    assert {line[1:] for line in patterns if line.startswith("!tests/")} == (
+        {path for path in required | parents if path.startswith("tests/")}
+    ), "Test build context must admit only its explicit dependency closure"
+    assert all(not line.startswith("COPY tests/") or line in {
+        f"COPY {path} /app/{path}" for path in required
+    } for line in lines), "Do not copy the whole test tree"
+    assert "/app/tests" not in runner and "COPY tests/" not in runner
+
+
+def test_web_fixture_dependency_inventory_follows_transitive_literal_forms(tmp_path: Path) -> None:
+    files = {
+        "apps/web/lib/fixture.test.ts": 'import { value } from "../../../tests/e2e/support/first";',
+        "tests/e2e/support/first.ts": 'export { value } from "./second";',
+        "tests/e2e/support/second.ts": 'import("./third"); require("./fourth");',
+        "tests/e2e/support/third.ts": 'import "./leaf.json";',
+        "tests/e2e/support/fourth.ts": 'import { value } from "./first";',
+        "tests/e2e/support/leaf.json": '{}',
+    }
+    for name, content in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    assert _web_external_unit_dependencies(tmp_path) == set(files) - {
+        "apps/web/lib/fixture.test.ts",
+    }
+
+
+@pytest.mark.parametrize("helper", [
+    "bounded-network-evidence.ts", "prod-api-response-evidence.ts", "cost-controls.ts",
+])
+def test_web_fixture_closure_rejects_omitted_direct_or_transitive_copy(helper: str) -> None:
+    path = f"tests/e2e/support/{helper}"
+    dockerfile = _read_repo_text("apps/web/Dockerfile").replace(f"COPY {path} /app/{path}", "")
+    with pytest.raises(AssertionError, match=f"Missing builder input: {re.escape(path)}"):
+        _assert_web_builder_inputs(
+            dockerfile, _read_repo_text(".dockerignore"),
+            _web_external_unit_dependencies(REPO_ROOT),
+        )
+
+
+@pytest.mark.parametrize("ignore_path", [".dockerignore", ".gcloudignore"])
+@pytest.mark.parametrize("helper", [
+    "bounded-network-evidence.ts", "prod-api-response-evidence.ts", "cost-controls.ts",
+])
+def test_web_fixture_closure_rejects_omitted_context_input(ignore_path: str, helper: str) -> None:
+    path = f"tests/e2e/support/{helper}"
+    ignore = _read_repo_text(ignore_path).replace(f"!{path}", "")
+    with pytest.raises(AssertionError, match=f"Missing context input: {re.escape(path)}"):
+        _assert_web_builder_inputs(
+            _read_repo_text("apps/web/Dockerfile"), ignore,
+            _web_external_unit_dependencies(REPO_ROOT),
+        )
+
+
+@pytest.mark.parametrize("ignore_path", [".dockerignore", ".gcloudignore"])
+def test_web_fixture_closure_rejects_broad_test_admission(ignore_path: str) -> None:
+    ignore = _read_repo_text(ignore_path) + "\n!tests/e2e/support/**\n"
+    with pytest.raises(AssertionError, match="only its explicit dependency closure"):
+        _assert_web_builder_inputs(
+            _read_repo_text("apps/web/Dockerfile"), ignore,
+            _web_external_unit_dependencies(REPO_ROOT),
+        )
+
+
+def test_web_builder_preserves_strict_colocated_unit_typechecking() -> None:
+    config = json.loads(_read_repo_text("apps/web/tsconfig.json"))
+    assert config["compilerOptions"]["strict"] is True
+    assert {"**/*.ts", "**/*.tsx"} <= set(config["include"])
+    assert config["exclude"] == ["node_modules"]
+    assert "ignoreBuildErrors" not in _read_repo_text("apps/web/next.config.ts")
+    assert "RUN npm run build" in _read_repo_text("apps/web/Dockerfile")
+
+
+def _assert_ci_web_builder_gate(workflow: dict) -> None:
+    web = workflow["jobs"]["web"]
+    assert "if" not in web and not web.get("continue-on-error", False)
+    steps = web["steps"]
+    builders = [step for step in steps if step.get("name") == "Web Docker builder"]
+    assert len(builders) == 1, "CI must build the actual web Docker builder"
+    builder = builders[0]
+    assert shlex.split(builder["run"]) == [
+        "docker", "build", "--pull", "--target", "builder", "--file", "apps/web/Dockerfile",
+        "--tag", "caseops-web-builder:${{ github.sha }}", ".",
+    ]
+    assert "if" not in builder and not builder.get("continue-on-error", False)
+    assert builder.get("working-directory", ".") == "."
+    assert workflow.get("defaults", {}).get("run", {}).get("working-directory", ".") == "."
+    assert web.get("defaults", {}).get("run", {}).get("working-directory", ".") == "."
+    assert builder["timeout-minutes"] == 12
+    assert steps.index(builder) > next(index for index, step in enumerate(steps)
+                                      if step.get("run") == "npm run build:web")
+
+
+def test_ci_web_builds_actual_root_context_builder_after_next_build() -> None:
+    _assert_ci_web_builder_gate(yaml.safe_load(_read_repo_text(".github/workflows/ci.yml")))
+
+
+@pytest.mark.parametrize("old,new", [
+    ("--target builder", "--target runner"),
+    ("--file apps/web/Dockerfile", "--file apps/api/Dockerfile"),
+    (' }}" .', ' }}" apps/web'),
+    ("--pull ", ""),
+])
+def test_ci_web_builder_contract_rejects_context_or_target_drift(old: str, new: str) -> None:
+    workflow = yaml.safe_load(_read_repo_text(".github/workflows/ci.yml"))
+    builder = next(step for step in workflow["jobs"]["web"]["steps"]
+                   if step.get("name") == "Web Docker builder")
+    assert old in builder["run"]
+    builder["run"] = builder["run"].replace(old, new)
+    with pytest.raises(AssertionError):
+        _assert_ci_web_builder_gate(workflow)
 
 
 @pytest.mark.parametrize("job_id", ["api", "postgres-validation"])
