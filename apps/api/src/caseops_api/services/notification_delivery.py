@@ -340,6 +340,9 @@ def _recipient_still_permitted(
     session: Session,
     intent: NotificationDeliveryIntent,
 ) -> bool:
+    company = session.get(Company, intent.company_id)
+    if company is None or not company.is_active:
+        return False
     membership = (
         session.get(CompanyMembership, intent.recipient_membership_id)
         if intent.recipient_membership_id is not None
@@ -365,9 +368,6 @@ def _recipient_still_permitted(
             and membership.user.is_active
         )
         if not membership_active or membership is None:
-            return False
-        company = session.get(Company, intent.company_id)
-        if company is None:
             return False
         recipient_context = SessionContext(
             company=company,
@@ -715,6 +715,9 @@ def enqueue_notification_delivery_intent(
         NotificationDeliveryIntent.company_id == context.company.id,
         NotificationDeliveryIntent.idempotency_key == key,
     )
+    active_company = select(Company.id).where(
+        Company.id == context.company.id, Company.is_active.is_(True),
+    ).exists()
     if matter is not None and recipient_membership is not None:
         recipient_context = _recipient_context(
             actor_context=context, membership=recipient_membership,
@@ -728,6 +731,7 @@ def enqueue_notification_delivery_intent(
             .where(
                 Matter.id == matter.id,
                 Matter.company_id == context.company.id,
+                active_company,
                 visible_matters_filter(session, context=recipient_context),
             )
         ).first()
@@ -735,7 +739,15 @@ def enqueue_notification_delivery_intent(
             return None
         existing = row[1]
     else:
-        existing = session.scalar(select(NotificationDeliveryIntent).where(*intent_identity))
+        row = session.execute(
+            select(Company.id, NotificationDeliveryIntent)
+            .select_from(Company)
+            .outerjoin(NotificationDeliveryIntent, and_(*intent_identity))
+            .where(Company.id == context.company.id, Company.is_active.is_(True))
+        ).first()
+        if row is None:
+            return None
+        existing = row[1]
     if existing is not None:
         return existing
 
@@ -1137,7 +1149,13 @@ def process_notification_delivery_intent(
     }
     if intent.channel != NotificationDeliveryChannel.IN_APP:
         # External delivery is an irreversible disclosure boundary. Fence it
-        # with employee deactivation before any Matter/docket/intent lock.
+        # tenant-first, before employee, Matter/docket and intent locks. The
+        # claim commit decides the winner and releases locks before transport.
+        session.scalar(
+            select(Company).where(Company.id == expected_company_id)
+            .with_for_update(of=Company, key_share=True)
+            .execution_options(populate_existing=True)
+        )
         locked_memberships = lock_company_memberships_for_assignment(
             session,
             company_id=expected_company_id,
@@ -1233,15 +1251,17 @@ def process_notification_delivery_intent(
         else None
     )
 
-    intent = session.scalar(
-        select(NotificationDeliveryIntent)
+    intent_row = session.execute(
+        select(NotificationDeliveryIntent, Company)
+        .join(Company, Company.id == NotificationDeliveryIntent.company_id)
         .where(
             NotificationDeliveryIntent.id == intent_id,
             NotificationDeliveryIntent.company_id == expected_company_id,
         )
         .with_for_update(of=NotificationDeliveryIntent)
         .execution_options(populate_existing=True)
-    )
+    ).first()
+    intent = intent_row[0] if intent_row is not None else None
     if intent is None:
         raise ValueError("Notification delivery intent not found.")
     if intent.status in _terminal_statuses():
@@ -1550,6 +1570,9 @@ def process_notification_delivery_intent(
         InAppNotification.source_type == intent.source_type,
         InAppNotification.source_id == intent.source_id,
     )
+    active_company = select(Company.id).where(
+        Company.id == intent.company_id, Company.is_active.is_(True),
+    ).exists()
     if intent.matter is not None and context is not None and intent.recipient_membership:
         recipient_context = _recipient_context(
             actor_context=context,
@@ -1563,6 +1586,7 @@ def process_notification_delivery_intent(
                 Matter.id == intent.matter_id,
                 Matter.company_id == intent.company_id,
                 Matter.company_id == recipient_context.company.id,
+                active_company,
                 visible_matters_filter(session, context=recipient_context),
             )
         ).first()
@@ -1575,7 +1599,17 @@ def process_notification_delivery_intent(
 
         existing = row[1]
     else:
-        existing = session.scalar(select(InAppNotification).where(*notification_identity))
+        row = session.execute(
+            select(Company.id, InAppNotification)
+            .select_from(Company)
+            .outerjoin(InAppNotification, and_(*notification_identity))
+            .where(Company.id == intent.company_id, Company.is_active.is_(True))
+        ).first()
+        if row is None:
+            return record_notification_delivery_failure(
+                session, intent=intent, raw_error="notification access denied",
+            )
+        existing = row[1]
     current_time = _now()
     if existing is None:
         if intent.recipient_membership_id is None:
