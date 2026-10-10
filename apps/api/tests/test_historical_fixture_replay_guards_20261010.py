@@ -53,17 +53,26 @@ def _rows(engine, name):
         return [dict(row) for row in connection.execute(sa.select(table)).mappings()]
 
 
-def _review_schema(engine):
+def _review_schema(engine, extra_parent_count=0):
     metadata = sa.MetaData()
     sa.Table("companies", metadata, sa.Column("id", sa.String, primary_key=True))
     sa.Table("users", metadata, sa.Column("id", sa.String, primary_key=True))
     for name in ("matters", "ip_docket_records"):
+        extra_columns = (
+            [
+                sa.Column(f"parent_{index}", sa.String, sa.ForeignKey("users.id"))
+                for index in range(extra_parent_count)
+            ]
+            if name == "matters"
+            else []
+        )
         sa.Table(
             name,
             metadata,
             sa.Column("id", sa.String, primary_key=True),
             sa.Column("company_id", sa.String, sa.ForeignKey("companies.id"), nullable=False),
             sa.UniqueConstraint("id", "company_id"),
+            *extra_columns,
         )
     sa.Table(
         "company_memberships",
@@ -80,16 +89,23 @@ def _review_schema(engine):
             _migration("20260910_0001_access_review_campaigns.py").upgrade()
 
 
-def _finalized_review(source):
+def _finalized_review(source, decision_count=1, extra_parent_count=0):
     metadata = sa.MetaData()
     metadata.reflect(source)
     with source.begin() as connection:
         connection.execute(metadata.tables["companies"].insert(), {"id": "company"})
         connection.execute(
-            metadata.tables["users"].insert(), [{"id": "creator"}, {"id": "reviewer"}]
+            metadata.tables["users"].insert(),
+            [{"id": "creator"}, {"id": "reviewer"}]
+            + [{"id": f"parent-{index}"} for index in range(extra_parent_count)],
         )
         connection.execute(
-            metadata.tables["matters"].insert(), {"id": "matter", "company_id": "company"}
+            metadata.tables["matters"].insert(),
+            {
+                "id": "matter",
+                "company_id": "company",
+                **{f"parent_{index}": f"parent-{index}" for index in range(extra_parent_count)},
+            },
         )
         connection.execute(
             metadata.tables["company_memberships"].insert(),
@@ -107,10 +123,17 @@ def _finalized_review(source):
                 "reason": "Current independent reviewer",
                 "trigger": "periodic",
                 "creator_user_id": "creator",
-                "snapshot_json": {"scope": {"grants": [{"id": "grant"}]}},
+                "snapshot_json": {
+                    "scope": {
+                        "grants": [
+                            {"id": "grant" if decision_count == 1 else f"grant-{index:02}"}
+                            for index in range(decision_count)
+                        ]
+                    }
+                },
                 "snapshot_hash": "a" * 64,
                 "status": "open",
-                "version": 2,
+                "version": decision_count + 1,
                 "created_at": datetime(2026, 9, 10),
                 "finalized_at": None,
             },
@@ -118,21 +141,26 @@ def _finalized_review(source):
         reviewed = dict(connection.execute(sa.select(campaigns)).mappings().one())
         connection.execute(
             metadata.tables["access_review_decisions"].insert(),
-            {
-                "id": "decision",
-                "company_id": "company",
-                "campaign_id": "campaign",
-                "grant_id": "grant",
-                "decision": "keep",
-                "reason": "Explicit reviewed scope",
-                "reviewer_user_id": "reviewer",
-                "reviewer_membership_id": "membership",
-                "created_at": datetime(2026, 9, 10, 1),
-            },
+            [
+                {
+                    "id": "decision" if decision_count == 1 else f"decision-{index:02}",
+                    "company_id": "company",
+                    "campaign_id": "campaign",
+                    "grant_id": "grant" if decision_count == 1 else f"grant-{index:02}",
+                    "decision": "keep",
+                    "reason": "Explicit reviewed scope",
+                    "reviewer_user_id": "reviewer",
+                    "reviewer_membership_id": "membership",
+                    "created_at": datetime(2026, 9, 10, 1),
+                }
+                for index in range(decision_count)
+            ],
         )
         connection.execute(
             campaigns.update().values(
-                status="finalized", version=3, finalized_at=datetime(2026, 9, 10, 2)
+                status="finalized",
+                version=decision_count + 2,
+                finalized_at=datetime(2026, 9, 10, 2),
             )
         )
     return reviewed
@@ -194,6 +222,62 @@ def test_review_reconstruction_rejects_invented_pre_finalization_snapshot(engine
         replay_finalized_access_review(source, destination, {**reviewed, **change})
     assert _rows(destination, "access_review_campaigns") == []
     assert _rows(destination, "access_review_decisions") == []
+
+
+@pytest.mark.parametrize(
+    "decision_count,extra_parent_count,blocked_stage",
+    [(63, 0, "decision"), (1, 61, "campaign")],
+)
+def test_review_shared_row_budget_rejects_before_excess_insert_and_finalization(
+    engines, decision_count, extra_parent_count, blocked_stage
+):
+    source, destination = engines
+    for engine in engines:
+        _review_schema(engine, extra_parent_count)
+    reviewed = _finalized_review(source, decision_count, extra_parent_count)
+    originals = {
+        name: _rows(source, name) for name in ("access_review_campaigns", "access_review_decisions")
+    }
+    writes = []
+
+    def capture(_connection, _cursor, sql, parameters, *_args):
+        if sql.startswith(("INSERT", "UPDATE")):
+            writes.append((sql, parameters))
+
+    sa.event.listen(destination, "before_cursor_execute", capture)
+    try:
+        with pytest.raises(AssertionError, match="Fixture lineage is unbounded"):
+            replay_finalized_access_review(source, destination, reviewed)
+    finally:
+        sa.event.remove(destination, "before_cursor_execute", capture)
+    assert len(writes) == 64
+    assert all(sql.startswith("INSERT") for sql, _parameters in writes)
+    assert _rows(destination, "access_review_decisions") == []
+    if blocked_stage == "campaign":
+        assert not any(sql.startswith("INSERT INTO access_review_campaigns") for sql, _ in writes)
+        assert _rows(destination, "access_review_campaigns") == []
+    else:
+        decisions = [
+            parameters[0]
+            for sql, parameters in writes
+            if sql.startswith("INSERT INTO access_review_decisions")
+        ]
+        assert decisions == [f"decision-{index:02}" for index in range(58)]
+        assert "decision-58" not in decisions
+        assert _rows(destination, "access_review_campaigns") == [reviewed]
+    for name, original in originals.items():
+        assert _rows(source, name) == original
+
+
+def test_review_shared_row_budget_allows_below_bound_real_guarded_finalization(engines):
+    source, destination = engines
+    for engine in engines:
+        _review_schema(engine)
+    reviewed = _finalized_review(source, decision_count=57)
+    copied = replay_finalized_access_review(source, destination, reviewed)
+    assert len(copied) == 63
+    for name in ("access_review_campaigns", "access_review_decisions"):
+        assert _rows(destination, name) == _rows(source, name)
 
 
 def _priority_schema(engine):

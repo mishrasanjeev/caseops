@@ -63,12 +63,23 @@ def historical_database(source_engine, revision: str):
         admin.dispose()
 
 
-def replay_fixture_rows(source_engine, destination_engine, roots):
+class _FixtureRowBudget:
+    def __init__(self):
+        self.remaining = 64
+
+    def reserve_row(self):
+        assert 0 < self.remaining <= 64, "Fixture lineage is unbounded"
+        self.remaining -= 1
+
+
+def replay_fixture_rows(source_engine, destination_engine, roots, *, row_budget=None):
     """Copy only explicit test rows and their dated FK parents, bounded to 64."""
     assert re.fullmatch(
         r"caseops_(?:http|migration)_[0-9a-f]{32}", source_engine.url.database or ""
     ), "Only independently isolated test fixtures may supply migration evidence"
     assert source_engine.url != destination_engine.url
+    if row_budget is None:
+        row_budget = _FixtureRowBudget()
     tables = {}
     inspector = inspect(destination_engine)
     copied = []
@@ -122,6 +133,7 @@ def replay_fixture_rows(source_engine, destination_engine, roots):
                     if _initial_evidence_self_root(name, foreign_key, values):
                         continue
                     copy(foreign_key["referred_table"], parent, depth + 1)
+            row_budget.reserve_row()
             destination.execute(target.insert().values(values))
             assert (
                 dict(destination.execute(select(target).where(predicate)).mappings().one())
@@ -152,6 +164,7 @@ def _initial_evidence_self_root(name, foreign_key, values):
 
 def replay_finalized_access_review(source_engine, destination_engine, reviewed):
     """Replay the captured open row, decisions, then its real guarded finalization."""
+    row_budget = _FixtureRowBudget()
     campaign_id = reviewed["id"]
     target = "matters" if reviewed["matter_id"] is not None else "ip_docket_records"
     target_id = reviewed["matter_id"] or reviewed["ip_docket_id"]
@@ -159,6 +172,7 @@ def replay_finalized_access_review(source_engine, destination_engine, reviewed):
         source_engine,
         destination_engine,
         [(target, {"id": target_id}), ("users", {"id": reviewed["creator_user_id"]})],
+        row_budget=row_budget,
     )
     with source_engine.connect() as source:
         campaigns = Table(
@@ -190,6 +204,7 @@ def replay_finalized_access_review(source_engine, destination_engine, reviewed):
         campaigns = Table(
             "access_review_campaigns", MetaData(), autoload_with=destination, resolve_fks=False
         )
+        row_budget.reserve_row()
         destination.execute(campaigns.insert().values(reviewed))
     copied.append(("access_review_campaigns", {"id": campaign_id}))
     copied.extend(
@@ -197,6 +212,7 @@ def replay_finalized_access_review(source_engine, destination_engine, reviewed):
             source_engine,
             destination_engine,
             [("access_review_decisions", {"id": identifier}) for identifier in decision_ids],
+            row_budget=row_budget,
         )
     )
     assert len(copied) < 64, "Fixture lineage is unbounded"
