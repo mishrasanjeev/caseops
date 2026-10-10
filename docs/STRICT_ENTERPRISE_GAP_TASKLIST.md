@@ -1,5 +1,27 @@
 # Strict Enterprise Gap Tasklist
 
+## October 10 Live Certification Failure
+
+Partially implemented / NO-GO: main `3dbf364d` is deployed, yet three complete
+production journeys fail with corroborating Company lock timeouts. A fresh
+read-only observer finds post-response idle finalization and months-old queue
+claims. Durable worker execution, attempt fences and nonempty CI secret scans
+need complete final-source and exact-production proof. PR529's nonempty secret
+scan is merged onto main `dfda0eb3` with green actual hosted proof; the serving
+release remains `3dbf364d`. Fresh license enumeration covers 200 runtime
+locations and fails 19 under the unchanged policy; it is not merged or approved.
+Zero open main-ref code-scanning alerts does not close the inherited license
+or external-consent gaps. PR531 corrects SPDX OR and descriptor-bound file
+reading; 140 native/hosted controls and three zero-result SARIF reports pass.
+Alert 534 is fixed, not dismissed; actual policy rejections keep that PR draft.
+Complete scoped worker controls reconcile 415 passes/one unverified POSIX
+skip; later runtime controls pass 221 cases/663 phases. The separate post-index
+compliance tail still needs its root-run persistence fence. Historical autoscale
+retirement is operational inference, not native zeros or physical-stop proof.
+These are not full-image/live proof.
+Full evidence, current verdict and required replacement:
+[document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
+
 ## October 10 Summary Gate Repair
 
 Partially implemented / NO-GO: bounded fresh-session fixture batching and

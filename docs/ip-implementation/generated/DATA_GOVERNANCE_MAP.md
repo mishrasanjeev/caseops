@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `50eb582a30b2da45c59df5bb678a21b275c9cd95b9a2030057054ba07a19822e`
+- Canonical map SHA-256: `e4f6e9f14f1f6a6f055b42e5dc6a5dcd8e19ca72530a83725ed204d003a624ce`
 - SQL tables: `335`
-- SQL columns: `5329`
-- ORM indexes: `1761`
-- Alembic/raw index declarations: `1545`
+- SQL columns: `5331`
+- ORM indexes: `1765`
+- Alembic/raw index declarations: `1549`
 - Non-SQL data classes: `12`
 
 ## Boundary
@@ -110,7 +110,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `custom_roles` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `data_retention_policies` | `tenant_operational_record` | 9 | `registry_fail_closed` |
 | `data_retention_versions` | `tenant_operational_record` | 27 | `registry_fail_closed` |
-| `document_processing_jobs` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
+| `document_processing_jobs` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `domain_consumer_effects` | `tenant_operational_record` | 21 | `registry_fail_closed` |
 | `domain_outbox_events` | `tenant_operational_record` | 36 | `registry_fail_closed` |
 | `draft_reviews` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
@@ -255,7 +255,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_compliance_items` | `tenant_restricted_legal_content` | 30 | `registry_fail_closed` |
 | `matter_conflict_checks` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `matter_court_orders` | `public_or_licensed_legal_reference` | 18 | `registry_fail_closed` |
-| `matter_court_sync_jobs` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
+| `matter_court_sync_jobs` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
 | `matter_court_sync_runs` | `public_or_licensed_legal_reference` | 10 | `registry_fail_closed` |
 | `matter_deadlines` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
 | `matter_file_qa_entries` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |

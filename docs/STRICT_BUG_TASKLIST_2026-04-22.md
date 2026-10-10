@@ -1,5 +1,15 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 10 Live Certification Failure
+
+#527 is Not fixed on deployed main `3dbf364d`: the full 341-identity production
+run completes 320 passes, 18 unverified skips and three failures. All three
+actual mutation responses are 503 with corroborating Company lock timeouts;
+historical holder attribution is unknown. Fresh Notice 2/2 is diagnostic only.
+Queue/execution repair is in progress; no production closure or cadence resume.
+Full evidence, current verdict and required replacement:
+[document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
+
 ## October 10 Summary Gate Repair
 
 Summary browser acceptance remains Inconclusive; #527 remains not fixed in

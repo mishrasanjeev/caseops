@@ -160,6 +160,12 @@
     "private_index_projections": "private_retrieval_disposition"
   },
   "column_category_overrides": {
+    "document_processing_jobs": {
+      "no_paid_providers": "configuration_or_state_metadata"
+    },
+    "matter_court_sync_jobs": {
+      "no_paid_providers": "configuration_or_state_metadata"
+    },
     "ip_patent_applications": {
       "work_sequence": "temporal_or_version_metadata"
     },
@@ -311,7 +317,9 @@
     }
   },
   "table_purpose_overrides": {
-    "matter_bulk_update_operations": "Tenant-scoped bulk-update operation history. Forward revision 20260925_0001 adds row_results_json to databases that applied 20260924_0001 before that column was introduced; historical rows receive an empty result list rather than invented row evidence."
+    "matter_bulk_update_operations": "Tenant-scoped bulk-update operation history. Forward revision 20260925_0001 adds row_results_json to databases that applied 20260924_0001 before that column was introduced; historical rows receive an empty result list rather than invented row evidence.",
+    "document_processing_jobs": "Existing tenant-scoped document execution receipts. Revision 20261010_0001 persists the no-paid request policy, conservatively true for unknown legacy jobs. Revision 20261010_0003 requires an explicit transaction-local execution identity for claim, stale recovery, finalization and lifecycle cancellation, with immutable provenance. Independent exact-image workers replace production after-response execution; this changes execution authority, not retention, export, source ownership or provider consent.",
+    "matter_court_sync_jobs": "Existing tenant-scoped official-court synchronization receipts. Revision 20261010_0002 persists the no-paid request policy, conservatively true for unknown legacy jobs. Bounded independent workers use atomic claims, expiry and fresh source, access and lifecycle revalidation; provider preparation owns no database transaction. No new court-source license, paid-provider activation, retention, disposition or export authority is introduced."
   },
   "change_controls": {
     "migration_marker": "DATA-GOVERNANCE-MAP: updated",
@@ -8107,7 +8115,7 @@
     {
       "id": "document_processing_jobs",
       "table_name": "document_processing_jobs",
-      "purpose": "Repository SQL persistence class `document_processing_jobs`; its exact column inventory is intentionally versioned below.",
+      "purpose": "Existing tenant-scoped document execution receipts. Revision 20261010_0001 persists the no-paid request policy, conservatively true for unknown legacy jobs. Revision 20261010_0003 requires an explicit transaction-local execution identity for claim, stale recovery, finalization and lifecycle cancellation, with immutable provenance. Independent exact-image workers replace production after-response execution; this changes execution authority, not retention, export, source ownership or provider consent.",
       "policy_profile_id": "tenant_restricted_legal_content",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
@@ -8144,6 +8152,11 @@
         "id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "no_paid_providers": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "BOOLEAN",
           "nullable": false
         },
         "processed_char_count": {
@@ -21177,7 +21190,7 @@
     {
       "id": "matter_court_sync_jobs",
       "table_name": "matter_court_sync_jobs",
-      "purpose": "Repository SQL persistence class `matter_court_sync_jobs`; its exact column inventory is intentionally versioned below.",
+      "purpose": "Existing tenant-scoped official-court synchronization receipts. Revision 20261010_0002 persists the no-paid request policy, conservatively true for unknown legacy jobs. Bounded independent workers use atomic claims, expiry and fresh source, access and lifecycle revalidation; provider preparation owns no database transaction. No new court-source license, paid-provider activation, retention, disposition or export authority is introduced.",
       "policy_profile_id": "tenant_restricted_legal_content",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
@@ -21219,6 +21232,11 @@
         "matter_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "no_paid_providers": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "BOOLEAN",
           "nullable": false
         },
         "queued_at": {
@@ -30254,12 +30272,12 @@
       }
     }
   ],
-  "schema_fingerprint": "9798689e42f224681f522a7eb4a82f59ead4c6e081cd49605daf31c939dfd4c9",
+  "schema_fingerprint": "58da3a4c72c0e9bf90ce001f83ab0c9b60fec00ac9f63f86147c1ea2f9d6e12a",
   "index_inventory": {
-    "orm_index_count": 1761,
-    "orm_index_fingerprint": "62f658a66bcef515fb879d3a64c082553464cfc53e776687066febfecd1e812c",
-    "migration_index_count": 1545,
-    "migration_index_fingerprint": "6032391a177272d10dd00821a8292cbf12d8e7b4e3c6b3d2829e57c7430162f6",
+    "orm_index_count": 1765,
+    "orm_index_fingerprint": "1a3ced0b13779a097d937967f346ad757b3d7a278db213d2baa051cc883cca7e",
+    "migration_index_count": 1549,
+    "migration_index_fingerprint": "a9f11a1dcd8c06f3a3976171673c2386d76a1b18dca06074693c7b459b02bdc7",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

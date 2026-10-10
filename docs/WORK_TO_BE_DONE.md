@@ -1,5 +1,22 @@
 # CaseOps  - Work To Be Done
 
+## October 10 Live Certification Failure
+
+NO-GO: PR528/522 are deployed as exact main `3dbf364d`, but the complete live
+341-case inventory has 320 passes, 18 unverified skips and three failures.
+Finish atomic document claims, no-transaction I/O, crash recovery, no-paid
+propagation and final-source full release gates. The old zero-byte secret
+scan replacement is merged in PR529 onto main `dfda0eb3`, with nonempty hosted
+proof, while API/web still serve `3dbf364d`. Complete the worker handoff and
+final-image gates, including the separate post-index compliance persistence
+barrier. The replacement license inventory has 19 policy rejections among
+200 runtime locations after SPDX OR repair; 140 native/hosted controls pass
+and its file-read-race alert is fixed, but the draft remains held by unchanged
+license policy. License/external consent and
+Google exclusion remain open. Private cadence stays paused until certification.
+Full evidence, current verdict and required replacement:
+[document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
+
 ## October 10 Summary Gate Repair
 
 NO-GO: integrated `a8979a41` completes 66 Python passes/198 phases and 42

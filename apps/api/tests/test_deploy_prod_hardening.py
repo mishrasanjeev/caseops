@@ -1734,6 +1734,7 @@ def _run_deploy_with_fakes(
     active_prod_verify_runs: str = "",
     artifact_describe_failures: int = 0,
     rate_identity_mode: str = "ok",
+    document_worker_mode: str = "ok",
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -1885,6 +1886,14 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_BILLING_ANNOTATION=''
   FAKE_CPU_BOOST_ANNOTATION='"run.googleapis.com/startup-cpu-boost":"true",'
   FAKE_API_OVERRIDE=''
+  FAKE_API_SERVICE_ACCOUNT='caseops-runtime@perfect-period-305406.iam.gserviceaccount.com'
+  FAKE_DOCUMENT_PROJECT='perfect-period-305406'
+  FAKE_DOCUMENT_MODE='cloud_run_job'
+  FAKE_DOCUMENT_REGION='asia-south1'
+  FAKE_DOCUMENT_JOB='caseops-document-processing'
+  FAKE_COURT_MODE='cloud_run_job'
+  FAKE_COURT_REGION='asia-south1'
+  FAKE_COURT_JOB='caseops-court-sync'
   FAKE_SCANNER_REQUIRED='true'
   FAKE_API_PROBE_PERIOD='2'
   FAKE_STARTUP_DEPENDENCIES='{}'
@@ -1935,6 +1944,22 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     FAKE_API_OVERRIDE='"command":["uv","run","uvicorn"],'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "api-args-override" ]]; then
     FAKE_API_OVERRIDE='"args":["--workers","4"],'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "api-service-account-drift" ]]; then
+    FAKE_API_SERVICE_ACCOUNT='other@perfect-period-305406.iam.gserviceaccount.com'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "document-project-drift" ]]; then
+    FAKE_DOCUMENT_PROJECT='other-project'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "document-mode-drift" ]]; then
+    FAKE_DOCUMENT_MODE='local_background'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "document-region-drift" ]]; then
+    FAKE_DOCUMENT_REGION='other-region'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "document-job-drift" ]]; then
+    FAKE_DOCUMENT_JOB='other-job'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "court-mode-drift" ]]; then
+    FAKE_COURT_MODE='local_background'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "court-region-drift" ]]; then
+    FAKE_COURT_REGION='other-region'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "court-job-drift" ]]; then
+    FAKE_COURT_JOB='other-job'
   fi
   printf '%s' \
     '{"metadata":{"generation":2,"annotations":{' \
@@ -1947,10 +1972,18 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '"run.googleapis.com/container-dependencies":"' "${FAKE_STARTUP_DEPENDENCIES}" \
     '"}},"spec":{"containerConcurrency":' "${FAKE_CONCURRENCY}" ',' \
     '"timeoutSeconds":' "${FAKE_TIMEOUT}" ',' \
+    '"serviceAccountName":"' "${FAKE_API_SERVICE_ACCOUNT}" '",' \
     '"containers":[{"name":"api",' "${FAKE_API_OVERRIDE}" \
     '"startupProbe":{"tcpSocket":{"port":8080},"periodSeconds":' \
     "${FAKE_API_PROBE_PERIOD}" ',"timeoutSeconds":1,"failureThreshold":120},"env":[' \
     '{"name":"CASEOPS_CLAMAV_REQUIRED","value":"' "${FAKE_SCANNER_REQUIRED}" '"},' \
+    '{"name":"CASEOPS_GCP_PROJECT_ID","value":"' "${FAKE_DOCUMENT_PROJECT}" '"},' \
+    '{"name":"CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE","value":"' "${FAKE_DOCUMENT_MODE}" '"},' \
+    '{"name":"CASEOPS_DOCUMENT_PROCESSING_RUN_REGION","value":"' "${FAKE_DOCUMENT_REGION}" '"},' \
+    '{"name":"CASEOPS_DOCUMENT_PROCESSING_RUN_JOB","value":"' "${FAKE_DOCUMENT_JOB}" '"},' \
+    '{"name":"CASEOPS_COURT_SYNC_DISPATCH_MODE","value":"' "${FAKE_COURT_MODE}" '"},' \
+    '{"name":"CASEOPS_COURT_SYNC_RUN_REGION","value":"' "${FAKE_COURT_REGION}" '"},' \
+    '{"name":"CASEOPS_COURT_SYNC_RUN_JOB","value":"' "${FAKE_COURT_JOB}" '"},' \
     '{"name":"CASEOPS_RELEASE_SHA",' \
     '"value":"abcdef1234567890abcdef1234567890abcdef12"},' \
     '{"name":"CASEOPS_IP_RULE_GOVERNANCE_ENABLED","value":"' \
@@ -2104,6 +2137,15 @@ if [[ "${1:-}" == "scripts/scheduler_inventory.py" || \
   printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
   exit 0
 fi
+if [[ "${1:-}" == "scripts/document_worker_release.py" ]]; then
+  printf '%s\\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+  if [[ "${FAKE_DOCUMENT_WORKER_MODE}" == "${2:-}" ]]; then
+    printf '%s\\n' 'Document worker release failed closed.' >&2
+    exit 59
+  fi
+  printf '%s\\n' '{"schema_version":1,"admission_disabled":true}'
+  exit 0
+fi
 if [[ "${1:-}" == "scripts/reconcile_rate_identity_edge.py" ]]; then
   printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
   if [[ "${FAKE_RATE_IDENTITY_MODE}" == "${2:-}" ]]; then
@@ -2210,9 +2252,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_GH_ACTIVE_RUNS": active_prod_verify_runs,
             "FAKE_GH_RUNS_CLEARED": _bash_path(tmp_path / "gh-runs-cleared"),
             "FAKE_INDEX_HEALTH_MODE": index_health_mode,
-            "FAKE_ARTIFACT_DESCRIBE_COUNT": _bash_path(
-                tmp_path / "artifact-describe-count"
-            ),
+            "FAKE_ARTIFACT_DESCRIBE_COUNT": _bash_path(tmp_path / "artifact-describe-count"),
             "FAKE_ARTIFACT_DESCRIBE_FAILURES": str(artifact_describe_failures),
             "FAKE_RATE_IDENTITY_MODE": rate_identity_mode,
             "FAKE_QA_AFTER_JSON": _a0_qa_job_json(
@@ -2262,6 +2302,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_QA_UPDATED": _bash_path(tmp_path / "qa-updated"),
             "FAKE_PENDING_EXECUTION_JSON": _a0_pending_execution_json(immutable_image),
             "FAKE_PYTHON_CRLF": "true" if python_crlf else "false",
+            "FAKE_DOCUMENT_WORKER_MODE": document_worker_mode,
             "FAKE_REAL_PYTHON": _bash_path(Path(sys.executable)),
             "FAKE_TAG": expected_tag,
             "FAKE_TRAFFIC_MODE": traffic_mode,
@@ -2571,6 +2612,14 @@ def test_deploy_prod_withholds_certification_when_the_sidecar_disappears(
 
 
 _API_RUNTIME_CONTRACT_ERRORS = {
+    "api-service-account-drift": "API service identity does not match the document-job invoker",
+    "document-project-drift": "CASEOPS_GCP_PROJECT_ID is missing or stale",
+    "document-mode-drift": "CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE is missing or stale",
+    "document-region-drift": "CASEOPS_DOCUMENT_PROCESSING_RUN_REGION is missing or stale",
+    "document-job-drift": "CASEOPS_DOCUMENT_PROCESSING_RUN_JOB is missing or stale",
+    "court-mode-drift": "CASEOPS_COURT_SYNC_DISPATCH_MODE is missing or stale",
+    "court-region-drift": "CASEOPS_COURT_SYNC_RUN_REGION is missing or stale",
+    "court-job-drift": "CASEOPS_COURT_SYNC_RUN_JOB is missing or stale",
     "billing-drift": "request-based billing is not in effect (cpu-throttling is not true)",
     "cpu-boost-drift": "startup CPU boost is not enabled",
     "cpu-boost-missing": "startup CPU boost is not enabled",
@@ -2715,6 +2764,47 @@ def test_deploy_prod_retries_scheduler_reconciliation_with_a_finite_bound() -> N
     )[0]
     assert "for reconcile_attempt in 1 2 3" in reconcile
     assert "failed after three bounded attempts" in reconcile
+
+
+def test_document_worker_bridge_precedes_migration_and_activation_follows_exact_routing(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1")
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+
+    def index(value: str) -> int:
+        return next(offset for offset, call in enumerate(calls) if value in call)
+
+    assert index("document_worker_release.py prepare") < index("scheduler_inventory.py quiesce")
+    assert index("document_worker_release.py preflight") < index("builds submit")
+    assert index("document_worker_release.py prepare --worker court") < index(
+        "run jobs execute caseops-migrate-job"
+    )
+    assert index("document_worker_release.py prepare") < index(
+        "run jobs execute caseops-migrate-job"
+    )
+    assert index("run deploy caseops-api") < index("document_worker_release.py activate")
+    assert index("document_worker_release.py activate") < index("scheduler_inventory.py resume")
+    assert index("document_worker_release.py activate") < index("workflow run prod-verify.yml")
+    assert index("document_worker_release.py activate --worker court") < index(
+        "scheduler_inventory.py resume"
+    )
+
+
+@pytest.mark.parametrize("stage", ["preflight", "prepare", "activate"])
+def test_document_worker_bridge_failure_never_resumes_or_certifies(
+    tmp_path: Path, stage: str
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", document_worker_mode=stage)
+    assert result.returncode != 0 and "Document worker release failed closed" in result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert not any("scheduler_inventory.py resume" in call for call in calls)
+    assert not any("workflow run prod-verify.yml" in call for call in calls)
+    if stage in {"preflight", "prepare"}:
+        assert not any("run jobs execute caseops-migrate-job" in call for call in calls)
+    if stage == "preflight":
+        assert not any("builds submit" in call for call in calls)
 
 
 def test_deploy_prod_retries_transient_artifact_digest_lookup(tmp_path: Path) -> None:

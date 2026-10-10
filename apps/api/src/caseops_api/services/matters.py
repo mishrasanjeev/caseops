@@ -3209,10 +3209,10 @@ def _neutralize_disposed_matter_operations(
             )
         )
     )
+    from caseops_api.services.document_jobs import cancel_document_processing_job_for_disposal
+
     for job in document_processing_jobs:
-        job.status = DocumentProcessingJobStatus.FAILED.value
-        job.error_message = "Cancelled because the matter was disposed."
-        job.completed_at = now
+        cancel_document_processing_job_for_disposal(session, job, completed_at=now)
 
     reminders = list(
         session.scalars(

@@ -17,6 +17,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -270,7 +271,7 @@ from caseops_api.schemas.shared_work import (
     SharedWorkFoundationContract,
     SharedWorkReconciliationReport,
 )
-from caseops_api.services.document_jobs import run_document_processing_job
+from caseops_api.services.document_dispatch import dispatch_document_processing_job
 from caseops_api.services.document_storage import resolve_storage_path
 from caseops_api.services.drafting import (
     compare_ip_draft_versions,
@@ -976,7 +977,12 @@ async def post_ip_document_upload(
         stream=upload.file,
     )
     if job_id is not None:
-        background_tasks.add_task(run_document_processing_job, job_id)
+        await run_in_threadpool(
+            dispatch_document_processing_job,
+            session=session,
+            background_tasks=background_tasks,
+            job_id=job_id,
+        )
     return response
 
 
@@ -1095,7 +1101,12 @@ async def post_ip_document_version_upload(
         stream=upload.file,
     )
     if job_id is not None:
-        background_tasks.add_task(run_document_processing_job, job_id)
+        await run_in_threadpool(
+            dispatch_document_processing_job,
+            session=session,
+            background_tasks=background_tasks,
+            job_id=job_id,
+        )
     return response
 
 

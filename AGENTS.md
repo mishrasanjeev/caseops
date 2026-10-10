@@ -1,5 +1,22 @@
 # CaseOps agent instructions
 
+- Request-based Cloud Run cannot certify database work scheduled after the
+  response. Durable document admission must retain bounded atomic claims,
+  crash recovery, stale-attempt rejection and the original no-paid marker
+  across its execution boundary. Recheck current lifecycle/access/provenance
+  under Company-first authority before final persistence; a single successful
+  diagnostic does not waive a failed complete production inventory.
+- A green secret scan with zero commits or bytes is incomplete coverage.
+  Prove immutable tracked-tree and all-parent history input, including merge-
+  only secrets, without broadening reviewed exceptions. Bounded failure
+  diagnostics must prioritize failed writes over navigation floods and retain
+  safe response identity before assertions, without private payloads.
+- An empty license report is incomplete coverage even when CI succeeds.
+  Reconcile the workspace runtime closure and installed/optional lock entries;
+  preserve actual policy rejections without expanding the allowlist to make
+  the gate green. Expired monitoring series are not zero instances, and a
+  release handoff must not depend on an unbounded historical polling loop.
+
 - Multi-tenant Docker fixture preparation and inspection must amortize process
   startup without reusing tenant authorization or database sessions. Preserve
   real worker executions, raw persisted snapshots, responsive/source/replay
@@ -1766,6 +1783,15 @@ requirements when using the fallback.
   recipients, against interactive parent writers. Preserve elected actors and
   historical creator nulls; a mock of the whole downstream extractor cannot
   certify this boundary or justify a retry, longer timeout or system actor.
+- A fenced job receipt cannot reject a legacy worker's separate post-index
+  transaction. Inventory every downstream commit and require explicit current
+  execution context at its persistence root, including failure and replay paths.
+  Keep actual pinned old-code counterproof and authorized current callers.
+- HTTP deadlines and historical autoscale retirement are not physical process
+  termination proof. Missing expired metrics must not become fabricated zeros;
+  preserve operational-inference limits and require native stop measurements for
+  the captured serving predecessor. Persistence fences cannot cancel issued
+  provider work or release locks held before their installation.
 - Read-only public acceptance must include changed historical FAQ journeys,
   not just newly added copy checks. Assert the actual qualified safety content
   and accessible expand/collapse state; retain the earlier narrower inventory

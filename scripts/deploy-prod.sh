@@ -279,6 +279,9 @@ cancel_active_prod_verification() {
   return 1
 }
 
+echo "--- read-only legacy worker stop preflight ---"
+python scripts/document_worker_release.py preflight \
+  --project "${PROJECT}" --region "${REGION}" --release-sha "${HEAD_SHA}"
 cancel_active_prod_verification
 
 TAG=$(git rev-parse --short=7 "${HEAD_SHA}")
@@ -326,6 +329,22 @@ assert_current_main "post-build pre-migration gate"
 # An image repin does not stop executions already using the previous protocol.
 # Keep this paid scheduler paused on failure; never launch a paid release canary.
 echo "--- drain tracked-case provider workers before migration ---"
+DOCUMENT_WORKER_RELEASE_STATE=$(mktemp)
+python scripts/document_worker_release.py prepare \
+  --project "${PROJECT}" --region "${REGION}" --release-sha "${HEAD_SHA}" \
+  > "${DOCUMENT_WORKER_RELEASE_STATE}"
+cat "${DOCUMENT_WORKER_RELEASE_STATE}"
+COURT_WORKER_RELEASE_STATE=$(mktemp)
+python scripts/document_worker_release.py prepare --worker court \
+  --project "${PROJECT}" --region "${REGION}" --release-sha "${HEAD_SHA}" \
+  > "${COURT_WORKER_RELEASE_STATE}"
+cat "${COURT_WORKER_RELEASE_STATE}"
+python scripts/scheduler_inventory.py quiesce \
+  --scheduler caseops-document-processing-cadence --allow-missing \
+  --project "${PROJECT}" --region "${REGION}" --wait-seconds 600
+python scripts/scheduler_inventory.py quiesce \
+  --scheduler caseops-court-sync-cadence --allow-missing \
+  --project "${PROJECT}" --region "${REGION}" --wait-seconds 600
 python scripts/scheduler_inventory.py quiesce \
   --scheduler caseops-case-tracking-poll-1800-ist \
   --project "${PROJECT}" --region "${REGION}" --wait-seconds 300
@@ -579,7 +598,9 @@ echo "  verified Indian Kanoon prices seeded from ${API_IMMUTABLE_IMAGE}."
 # source, verifies the canonical configuration, and only then pauses
 # superseded scheduler names.
 echo "--- 3/6 reconcile recurring-job inventory ---"
-SCHEDULER_HOLD_ARGS=(--hold-scheduler-paused caseops-case-tracking-poll-1800-ist)
+SCHEDULER_HOLD_ARGS=(--hold-scheduler-paused caseops-case-tracking-poll-1800-ist
+  --hold-scheduler-paused caseops-document-processing-cadence
+  --hold-scheduler-paused caseops-court-sync-cadence)
 if [[ "${PRIVATE_PROJECTION_SCHEDULER_HOLD}" == "true" ]]; then
   SCHEDULER_HOLD_ARGS+=(
     --hold-scheduler-paused
@@ -860,7 +881,7 @@ gcloud run deploy caseops-api \
   "${API_DEPENDENCY_FLAGS[@]}" \
   --startup-probe "tcpSocket.port=8080,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120" \
   --update-secrets "CASEOPS_RATE_IDENTITY_EDGE_SECRET=${RATE_IDENTITY_EDGE_SECRET}:${RATE_IDENTITY_SECRET_VERSION},CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest,CASEOPS_LLM_API_KEY=${LLM_API_KEY_SECRET}:latest,CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest" \
-  --update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|CASEOPS_RATE_IDENTITY_REQUIRED=true|CASEOPS_RATE_IDENTITY_EDGE_HTTPS=true|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|CASEOPS_CLAMAV_REQUIRED=true|CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}|CASEOPS_LLM_MODEL=${LLM_MODEL}|CASEOPS_LLM_MODEL_RECOMMENDATIONS=${LLM_RECOMMENDATIONS_MODEL}|CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000|CASEOPS_DB_LOCK_TIMEOUT_MS=5000|CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000|CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}|CASEOPS_INDIAN_KANOON_ENABLED=true|CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org|CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER}|CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT}|CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT}|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS}|CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE}|CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}" \
+  --update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|CASEOPS_GCP_PROJECT_ID=${PROJECT}|CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE=cloud_run_job|CASEOPS_DOCUMENT_PROCESSING_RUN_REGION=${REGION}|CASEOPS_DOCUMENT_PROCESSING_RUN_JOB=caseops-document-processing|CASEOPS_COURT_SYNC_DISPATCH_MODE=cloud_run_job|CASEOPS_COURT_SYNC_RUN_REGION=${REGION}|CASEOPS_COURT_SYNC_RUN_JOB=caseops-court-sync|CASEOPS_RATE_IDENTITY_REQUIRED=true|CASEOPS_RATE_IDENTITY_EDGE_HTTPS=true|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|CASEOPS_CLAMAV_REQUIRED=true|CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}|CASEOPS_LLM_MODEL=${LLM_MODEL}|CASEOPS_LLM_MODEL_RECOMMENDATIONS=${LLM_RECOMMENDATIONS_MODEL}|CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000|CASEOPS_DB_LOCK_TIMEOUT_MS=5000|CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000|CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}|CASEOPS_INDIAN_KANOON_ENABLED=true|CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org|CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER}|CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT}|CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT}|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS}|CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE}|CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}" \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}" \
   --container clamav \
@@ -1014,6 +1035,10 @@ if str(template_spec.get("containerConcurrency")) != expected_concurrency:
     errors.append("containerConcurrency does not match API_CONCURRENCY")
 if str(template_spec.get("timeoutSeconds")) != expected_timeout_seconds:
     errors.append("request timeout does not match API_TIMEOUT_SECONDS")
+if template_spec.get("serviceAccountName") != (
+    "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com"
+):
+    errors.append("API service identity does not match the document-job invoker")
 # gcloud writes both declared flags as "True"; the live service reports
 # "true". Request-based billing is also Cloud Run's default, which the service
 # reported as no cpu-throttling annotation before the release declared it.
@@ -1061,6 +1086,17 @@ else:
     ):
         errors.append("paid-provider test-tenant boundary is missing or stale")
     for name, expected_value in expected_indian_kanoon_env.items():
+        if str((env.get(name) or {}).get("value")) != expected_value:
+            errors.append(f"{name} is missing or stale")
+    for name, expected_value in {
+        "CASEOPS_GCP_PROJECT_ID": "perfect-period-305406",
+        "CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE": "cloud_run_job",
+        "CASEOPS_DOCUMENT_PROCESSING_RUN_REGION": "asia-south1",
+        "CASEOPS_DOCUMENT_PROCESSING_RUN_JOB": "caseops-document-processing",
+        "CASEOPS_COURT_SYNC_DISPATCH_MODE": "cloud_run_job",
+        "CASEOPS_COURT_SYNC_RUN_REGION": "asia-south1",
+        "CASEOPS_COURT_SYNC_RUN_JOB": "caseops-court-sync",
+    }.items():
         if str((env.get(name) or {}).get("value")) != expected_value:
             errors.append(f"{name} is missing or stale")
     machine_secret_ref = (
@@ -1318,6 +1354,20 @@ A0_QA_EXECUTION=""
 # A push to main is not proof that a release started. Dispatch the exact-SHA
 # browser gate only after both services pass every synchronous deploy gate.
 assert_current_main "pre-provider-scheduler-resume gate"
+python scripts/document_worker_release.py activate \
+  --project "${PROJECT}" --region "${REGION}" --release-sha "${HEAD_SHA}" \
+  --state "${DOCUMENT_WORKER_RELEASE_STATE}" --image "${API_IMMUTABLE_IMAGE}"
+rm -f -- "${DOCUMENT_WORKER_RELEASE_STATE}"
+python scripts/document_worker_release.py activate --worker court \
+  --project "${PROJECT}" --region "${REGION}" --release-sha "${HEAD_SHA}" \
+  --state "${COURT_WORKER_RELEASE_STATE}" --image "${API_IMMUTABLE_IMAGE}"
+rm -f -- "${COURT_WORKER_RELEASE_STATE}"
+python scripts/scheduler_inventory.py resume \
+  --scheduler caseops-document-processing-cadence \
+  --project "${PROJECT}" --region "${REGION}" --image "${API_IMMUTABLE_IMAGE}"
+python scripts/scheduler_inventory.py resume \
+  --scheduler caseops-court-sync-cadence \
+  --project "${PROJECT}" --region "${REGION}" --image "${API_IMMUTABLE_IMAGE}"
 python scripts/scheduler_inventory.py resume \
   --scheduler caseops-case-tracking-poll-1800-ist \
   --project "${PROJECT}" --region "${REGION}" --image "${API_IMMUTABLE_IMAGE}"
