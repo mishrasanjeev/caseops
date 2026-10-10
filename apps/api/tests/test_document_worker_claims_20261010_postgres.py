@@ -17,14 +17,18 @@ from caseops_api.core.automated_test_context import (
     set_automated_test_request,
 )
 from caseops_api.db.models import (
+    Company,
+    CompanyMembership,
     Contract,
     ContractAttachment,
     DocumentProcessingJob,
     IpDocketRecord,
     IpDocumentVersion,
     Matter,
+    MatterAccessGrant,
     MatterActivity,
     MatterAttachment,
+    PrivateProjectionEvent,
     utcnow,
 )
 from caseops_api.services import document_jobs, document_processing
@@ -65,6 +69,220 @@ def _assert_success(engine, fixture, attempts, content="Prepared content"):
             MatterActivity.matter_id == fixture.matter,
             MatterActivity.event_type == "attachment_processed",
         )) == 1
+
+
+def _activity_source(engine, target, *, active=True):
+    if target == "ip-targeted":
+        from tests.test_ip_document_workflow_postgres import _seed_document_source
+
+        fixture = _seed_document_source(engine)
+        with Session(engine) as seed:
+            job = DocumentProcessingJob(company_id=fixture["company_id"],
+                requested_by_membership_id=fixture["actor_id"], target_type="ip_document_version",
+                attachment_id=fixture["version_id"], action="initial_index")
+            seed.add(job)
+            seed.commit()
+            return SimpleNamespace(company=fixture["company_id"], actor=fixture["actor_id"],
+                job=job.id, source=fixture["version_id"], model=IpDocumentVersion,
+                docket=str(fixture["family"].docket_id))
+    fixture = _fixture(engine, "ip" if target == "ip-targetless" else "matter", active=active)
+    if target == "contract":
+        with Session(engine) as seed:
+            seed.get(DocumentProcessingJob, fixture.job).status = "completed"
+            contract = Contract(company_id=fixture.company, title="Company activity worker",
+                contract_code=uuid4().hex, contract_type="commercial")
+            seed.add(contract)
+            seed.flush()
+            attachment = ContractAttachment(contract_id=contract.id,
+                uploaded_by_membership_id=fixture.actor, original_filename="activity.txt",
+                storage_key=uuid4().hex + ".txt", content_type="text/plain",
+                size_bytes=20, sha256_hex="a" * 64)
+            seed.add(attachment)
+            seed.flush()
+            job = DocumentProcessingJob(company_id=fixture.company,
+                requested_by_membership_id=fixture.actor, target_type="contract_attachment",
+                attachment_id=attachment.id, action="initial_index")
+            seed.add(job)
+            seed.commit()
+            return SimpleNamespace(company=fixture.company, actor=fixture.actor,
+                job=job.id, source=attachment.id, model=ContractAttachment)
+    return SimpleNamespace(company=fixture.company, actor=fixture.actor, job=fixture.job,
+        source=fixture.target_id, model=(
+            IpDocumentVersion if target == "ip-targetless" else MatterAttachment
+        ))
+
+
+def _assert_no_output(engine, fixture, events_before):
+    with Session(engine) as check:
+        job = check.get(DocumentProcessingJob, fixture.job)
+        assert job.status == "failed", job.error_message
+        assert job.processed_char_count == 0
+        source = check.get(fixture.model, fixture.source)
+        assert source.extracted_text is None
+        assert source.processed_at is None
+        assert source.extracted_char_count == 0
+        if hasattr(source, "chunks"):
+            assert source.chunks == []
+        assert check.scalar(select(func.count()).select_from(PrivateProjectionEvent).where(
+            PrivateProjectionEvent.company_id == fixture.company,
+        )) == events_before
+
+
+@pytest.mark.parametrize("target", ["matter", "contract", "ip-targetless", "ip-targeted"])
+@pytest.mark.parametrize("disable_before_parser", [False, True])
+def test_company_disable_wins_without_parser_results_or_private_events(
+    pg_engine, monkeypatch, target, disable_before_parser,
+):
+    fixture = _activity_source(pg_engine, target)
+    with Session(pg_engine) as seed:
+        events_before = seed.scalar(select(func.count()).select_from(PrivateProjectionEvent).where(
+            PrivateProjectionEvent.company_id == fixture.company,
+        ))
+        if disable_before_parser:
+            seed.get(Company, fixture.company).is_active = False
+            seed.commit()
+    calls = []
+
+    def parse(*_):
+        calls.append("parse")
+        assert all(not session.in_transaction() for session in sessions)
+        with Session(pg_engine) as disable:
+            assert disable.scalar(select(Company.id).where(Company.id == fixture.company)
+                                  .with_for_update(nowait=True)) == fixture.company
+            disable.get(Company, fixture.company).is_active = False
+            disable.commit()
+        return _parsed("Inactive company output must never persist")
+
+    sessions = _worker(monkeypatch, pg_engine, parse)
+    monkeypatch.setattr(document_jobs, "embed_matter_attachment_chunks", lambda *_a, **_kw: (
+        calls.append("embed") or 0
+    ))
+    assert document_jobs.run_document_processing_job(fixture.job) is True
+    assert calls == ([] if disable_before_parser else ["parse"])
+    _assert_no_output(pg_engine, fixture, events_before)
+    with Session(pg_engine) as check:
+        assert check.get(Company, fixture.company).is_active is False
+        assert "Company inactive" in check.get(DocumentProcessingJob, fixture.job).error_message
+
+
+@pytest.mark.parametrize("revocation", ["membership", "user", "role", "acl", "permitted-role"])
+def test_targeted_ip_current_access_is_rechecked_during_parse(
+    pg_engine, monkeypatch, revocation,
+):
+    fixture = _activity_source(pg_engine, "ip-targeted")
+    with Session(pg_engine) as seed:
+        events_before = seed.scalar(select(func.count()).select_from(PrivateProjectionEvent).where(
+            PrivateProjectionEvent.company_id == fixture.company,
+        ))
+
+    def parse(*_):
+        assert all(not session.in_transaction() for session in sessions)
+        with Session(pg_engine) as revoke:
+            actor = revoke.get(CompanyMembership, fixture.actor)
+            if revocation == "membership":
+                actor.is_active = False
+            elif revocation == "user":
+                actor.user.is_active = False
+            elif revocation == "role":
+                from caseops_api.services.capabilities import static_capabilities_for_role
+
+                assert "documents:upload" not in static_capabilities_for_role("viewer")
+                actor.role = "viewer"
+            elif revocation == "permitted-role":
+                from caseops_api.services.capabilities import static_capabilities_for_role
+
+                assert "documents:upload" in static_capabilities_for_role("member")
+                actor.role = "member"
+            else:
+                grant = revoke.scalars(select(MatterAccessGrant).where(
+                    MatterAccessGrant.company_id == fixture.company,
+                    MatterAccessGrant.ip_docket_id == fixture.docket,
+                    MatterAccessGrant.membership_id == fixture.actor,
+                )).one()
+                grant.revoked_at = datetime.now(UTC)
+            revoke.commit()
+        return _parsed("Revoked IP writer output must never persist")
+
+    sessions = _worker(monkeypatch, pg_engine, parse)
+    assert document_jobs.run_document_processing_job(fixture.job) is True
+    if revocation == "permitted-role":
+        with Session(pg_engine) as check:
+            job = check.get(DocumentProcessingJob, fixture.job)
+            assert job.status == "completed", job.error_message
+            assert check.get(fixture.model, fixture.source).extracted_text == (
+                "Revoked IP writer output must never persist"
+            )
+    else:
+        _assert_no_output(pg_engine, fixture, events_before)
+
+
+@pytest.mark.parametrize("target", ["matter", "contract", "ip-targetless"])
+@pytest.mark.parametrize("retained", ["inactive", "null"])
+def test_system_processing_preserves_retained_actor_not_live_user_authorization(
+    pg_engine, monkeypatch, target, retained,
+):
+    # Null historical provenance is legal only without an active private event generation.
+    fixture = _activity_source(pg_engine, target, active=retained != "null")
+    with Session(pg_engine) as seed:
+        job = seed.get(DocumentProcessingJob, fixture.job)
+        source = seed.get(fixture.model, fixture.source)
+        job.requested_by_membership_id = None
+        if retained == "inactive":
+            actor = seed.get(CompanyMembership, fixture.actor)
+            actor.is_active = False
+            actor.user.is_active = False
+            actor.role = "viewer"
+        else:
+            # IP's uploader is required provenance; only its requester may be absent.
+            if target != "ip-targetless":
+                source.uploaded_by_membership_id = None
+        seed.commit()
+    calls = []
+
+    def parse(*_):
+        calls.append(True)
+        assert all(not session.in_transaction() for session in sessions)
+        return _parsed("Legitimate historical system processing")
+
+    sessions = _worker(monkeypatch, pg_engine, parse)
+    assert document_jobs.run_document_processing_job(fixture.job) is True
+    assert calls == [True]
+    with Session(pg_engine) as check:
+        job = check.get(DocumentProcessingJob, fixture.job)
+        assert job.status == "completed", job.error_message
+        assert check.get(fixture.model, fixture.source).extracted_text == (
+            "Legitimate historical system processing"
+        )
+
+
+def test_company_disable_during_embedding_wins_before_vector_or_chunk_flush(pg_engine, monkeypatch):
+    fixture = _activity_source(pg_engine, "matter")
+    with Session(pg_engine) as seed:
+        events_before = seed.scalar(select(func.count()).select_from(PrivateProjectionEvent).where(
+            PrivateProjectionEvent.company_id == fixture.company,
+        ))
+    sessions = _worker(monkeypatch, pg_engine, lambda *_: _parsed())
+    from caseops_api.services import embeddings
+
+    calls = []
+
+    def embed(texts):
+        calls.append(True)
+        assert all(not session.in_transaction() for session in sessions)
+        with Session(pg_engine) as disable:
+            assert disable.scalar(select(Company.id).where(Company.id == fixture.company)
+                                  .with_for_update(nowait=True)) == fixture.company
+            disable.get(Company, fixture.company).is_active = False
+            disable.commit()
+        return SimpleNamespace(vectors=[[0.001] * 1024 for _ in texts],
+                               model="document-worker-local-proof", dimensions=1024)
+
+    monkeypatch.setattr(embeddings, "build_provider", lambda: SimpleNamespace(embed=embed))
+    monkeypatch.setattr(document_jobs, "embed_matter_attachment_chunks",
+                        document_processing.embed_matter_attachment_chunks)
+    assert document_jobs.run_document_processing_job(fixture.job) is True
+    assert calls == [True]
+    _assert_no_output(pg_engine, fixture, events_before)
 
 
 def test_two_workers_claim_once_and_parser_has_no_transaction(pg_engine, monkeypatch):

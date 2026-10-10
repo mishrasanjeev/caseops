@@ -15,6 +15,7 @@ from caseops_api.core.automated_test_context import (
 )
 from caseops_api.core.redaction import redact_provider_error
 from caseops_api.db.models import (
+    Company,
     CompanyMembership,
     Contract,
     ContractActivity,
@@ -145,6 +146,19 @@ def _release_preparation_transaction(session: Session, source) -> None:
         session.info["document_source_chunks"] = sorted(chunk.id for chunk in source.chunks)
     session.expunge_all()
     session.rollback()
+
+
+def _assert_company_active(session: Session, *, company_id: str) -> None:
+    with session.no_autoflush:
+        active = session.scalar(select(Company.is_active).where(Company.id == company_id))
+    if active is not True:
+        raise ValueError("Company inactive; document processing skipped.")
+
+
+def _lock_active_company_authority(session: Session, *, company_id: str) -> None:
+    lock_matter_private_authority(session, company_id=company_id)
+    # Scalar read cannot reuse an activity value captured before external I/O.
+    _assert_company_active(session, company_id=company_id)
 
 
 def _assert_same_source(session: Session, source) -> None:
@@ -446,6 +460,7 @@ def run_document_processing_job(job_id: str) -> bool:
             if job.no_paid_providers or paid_providers_blocked_for_request() else None
         )
         try:
+            _assert_company_active(session, company_id=job.company_id)
             if job.target_type == DocumentProcessingTargetType.MATTER_ATTACHMENT:
                 _process_matter_attachment_job(session, job)
             elif job.target_type == DocumentProcessingTargetType.CONTRACT_ATTACHMENT:
@@ -636,7 +651,7 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
         # the retained job/source FKs and parent locks, with chunks unflushed.
         # The shared parent fence still excludes disposal and reopening.
         with session.no_autoflush:
-            lock_matter_private_authority(session, company_id=job.company_id)
+            _lock_active_company_authority(session, company_id=job.company_id)
             _fence_attempt(session)
             lock_document_private_provenance(
                 session,
@@ -668,6 +683,8 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
     # so the hook acquires/rechecks the lifecycle lock immediately beforehand.
     # Best-effort provider failure still leaves lexical chunks, protected by
     # the explicit lock immediately below.
+    _assert_company_active(session, company_id=job.company_id)
+    session.rollback()
     embed_matter_attachment_chunks(
         session,
         attachment,
@@ -785,7 +802,7 @@ def _process_contract_attachment_job(session: Session, job: DocumentProcessingJo
     _release_preparation_transaction(session, attachment)
     index_contract_attachment(attachment)
     with session.no_autoflush:
-        lock_matter_private_authority(session, company_id=job.company_id)
+        _lock_active_company_authority(session, company_id=job.company_id)
         _fence_attempt(session)
         lock_document_private_provenance(
             session, company_id=job.company_id,
@@ -879,13 +896,11 @@ def _process_ip_document_version_job(session: Session, job: DocumentProcessingJo
     )
     _release_preparation_transaction(session, version)
     index_ip_document_version(version)
-    from caseops_api.services.private_retrieval import lock_private_authority_writer
-
     # Extraction dirties the version. Fence authority before even a SELECT can
     # autoflush it; patent source writers already lock Company before versions.
     # Keep extraction outside the tenant lock.
     with session.no_autoflush:
-        lock_private_authority_writer(session, company_id=job.company_id)
+        _lock_active_company_authority(session, company_id=job.company_id)
         _fence_attempt(session)
         lock_document_private_provenance(
             session,
