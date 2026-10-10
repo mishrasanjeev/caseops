@@ -246,6 +246,8 @@ class _FinalizerAudit:
             self.record("transaction_started", role=role, pid=pid, instance=self.instance)
 
         event.listen(session, "after_begin", label)
+        event.listen(session, "after_commit", lambda _session: self.record(
+            "transaction_committed", role=role, pid=self.pids.get(role)))
         return session
 
     def before(self, connection, _cursor, sql, _parameters, _context, _many):
@@ -284,7 +286,8 @@ class _FinalizerAudit:
                "native_message": getattr(getattr(original, "diag", None), "message_primary", None),
                "sql": context.statement}
         self.errors.append(row)
-        self.record("native_database_error", **row)
+        role = context.connection.info.get("finalizer_role")
+        self.record("native_database_error", role=role, pid=self.pids.get(role), **row)
 
     def snapshot(self):
         with self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as observer:
