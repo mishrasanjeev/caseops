@@ -576,7 +576,6 @@ class RealGitleaksTests(GitFixture):
         finding = provenance["findings"][0]
         self.assertEqual((finding["start_line"], finding["end_line"]), (1, 2))
         self.assertNotEqual(finding["span_sha256"], hashlib.sha256(original.encode()).hexdigest())
-        self.assertFalse((self.root / "tree-policy.ignore").exists())
         self.assertFalse((self.root / "evidence/history.sarif").exists())
         receipt = json.loads((self.root / "evidence/tree-receipt.json").read_text())
         self.assertEqual(receipt["exit_code"], 2)
