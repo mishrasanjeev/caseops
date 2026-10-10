@@ -48,6 +48,9 @@ def _seed_intent(audit, target):
             session.flush()
         intent = _enqueue(session, context, kwargs)
         assert intent is not None and company.is_active
+        assert intent.status == "queued" and intent.attempts == 0
+        assert intent.dead_letter_reason is None and intent.provider_event_id is None
+        assert intent.scheduled_for is None
         session.commit()
         fixture = {
             "company_id": company.id, "matter_id": matter.id, "intent_id": intent.id,
@@ -56,6 +59,7 @@ def _seed_intent(audit, target):
         }
     audit.record(
         "notification_race_source", target=target, fixture=fixture,
+        admitted_status="queued", initial_attempts=0,
         delivery_origin=str(Path(delivery.__file__).resolve()),
         delivery_sha256=sha256(Path(delivery.__file__).read_bytes()).hexdigest(),
         test_origin=str(Path(__file__).resolve()),
@@ -135,7 +139,6 @@ def test_company_disable_and_external_claim_have_native_winner_order(
     finalizer_audit, monkeypatch, target, winner,
 ):
     audit = finalizer_audit
-    fixture = _seed_intent(audit, target)
     company_locked, provider_entered, provider_release, disabled = (Event() for _ in range(4))
     calls, worker_session = [], {}
     monkeypatch.setattr(delivery, "get_settings", lambda: SimpleNamespace(
@@ -144,6 +147,7 @@ def test_company_disable_and_external_claim_have_native_winner_order(
         sendgrid_api_key="deterministic-local-provider",
         sendgrid_sender_email="local@example.test",
     ))
+    fixture = _seed_intent(audit, target)
 
     def send(**_kwargs):
         session = worker_session["session"]
