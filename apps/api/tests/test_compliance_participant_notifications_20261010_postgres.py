@@ -394,6 +394,94 @@ def test_rule_delivery_total_queries_and_lock_inventory_are_bounded(
     assert total_sql <= 100 + 15 * count, total_sql
 
 
+@pytest.mark.parametrize(
+    "selection", ["assigned", "empty_fallback", "inactive_assignee", "inactive_user", "team"]
+)
+def test_review_and_failure_selection_share_fresh_bounded_membership_read(
+    finalizer_audit, selection
+):
+    audit = finalizer_audit
+    fixture = _seed(audit)
+    review_ids = {fixture["recipient_id"]}
+    failure_ids = {fixture["actor_id"], fixture["recipient_id"]}
+    with Session(audit.engine) as session:
+        parent = session.get(Matter, fixture["matter_id"])
+        session.get(CompanyMembership, fixture["actor_id"]).role = "admin"
+        inactive_admin = _seed_membership(session, fixture["company_id"], role="admin")
+        session.get(CompanyMembership, inactive_admin).is_active = False
+        recipient = session.get(CompanyMembership, fixture["recipient_id"])
+        if selection == "empty_fallback":
+            parent.assignee_membership_id = None
+            review_ids = failure_ids = {fixture["actor_id"]}
+        elif selection == "inactive_assignee":
+            recipient.is_active = False
+            review_ids, failure_ids = set(), {fixture["actor_id"]}
+        elif selection == "inactive_user":
+            session.get(User, recipient.user_id).is_active = False
+        elif selection == "team":
+            team = Team(
+                company_id=fixture["company_id"], name="Retained recipient team",
+                slug="retained-recipient-team", is_active=False,
+            )
+            session.add(team)
+            session.flush()
+            parent.team_id = team.id
+            teammate = _seed_membership(session, fixture["company_id"], role="viewer")
+            session.add_all([
+                TeamMembership(team_id=team.id, membership_id=teammate),
+                TeamMembership(team_id=team.id, membership_id=inactive_admin),
+                TeamMembership(team_id=team.id, membership_id=recipient.id),
+            ])
+            review_ids.add(teammate)
+            failure_ids.add(teammate)
+        session.commit()
+    with audit.session("mutation") as session:
+        parent = session.get(Matter, fixture["matter_id"])
+        cached_admin = session.get(CompanyMembership, fixture["actor_id"])
+        before = audit.statement_counts["mutation"]
+        assert compliance_participants._select_recipient_ids(session, matter=parent) == (
+            tuple(sorted(review_ids)), tuple(sorted(failure_ids)),
+        )
+        first_count = audit.statement_counts["mutation"] - before
+        with Session(audit.engine) as writer:
+            writer.get(CompanyMembership, fixture["actor_id"]).is_active = False
+            writer.commit()
+        assert cached_admin.is_active is True
+        before = audit.statement_counts["mutation"]
+        assert compliance_participants._select_recipient_ids(session, matter=parent) == (
+            tuple(sorted(review_ids - {fixture["actor_id"]})),
+            tuple(sorted(failure_ids - {fixture["actor_id"]})),
+        )
+        second_count = audit.statement_counts["mutation"] - before
+        assert first_count == second_count == (3 if selection == "team" else 2)
+        audit.record(
+            "recipient_selection_work", selection=selection,
+            first_sql_count=first_count, fresh_sql_count=second_count,
+        )
+    assert audit.errors == []
+
+
+def test_inactive_raw_admin_inventory_still_fails_before_participant_locks(finalizer_audit):
+    audit = finalizer_audit
+    fixture = _seed(audit)
+    with Session(audit.engine) as session:
+        session.get(CompanyMembership, fixture["actor_id"]).role = "admin"
+        for _ in range(500):
+            member_id = _seed_membership(session, fixture["company_id"], role="admin")
+            session.get(CompanyMembership, member_id).is_active = False
+        session.commit()
+    with audit.session("worker") as session:
+        with pytest.raises(compliance_participants.ComplianceParticipantFenceError) as rejected:
+            compliance_participants.lock_compliance_participants(
+                session, company_id=fixture["company_id"], matter_id=fixture["matter_id"],
+                actor_membership_id=None,
+            )
+        assert rejected.value.detail["code"] == "compliance_participant_limit"
+        assert not any("FOR UPDATE" in sql for sql in audit.statements["worker"])
+        session.rollback()
+    assert audit.errors == []
+
+
 @pytest.mark.parametrize("winner", ["membership", "user", "acl", "role"])
 def test_delivery_revalidates_warmed_recipient_objects(finalizer_audit, winner):
     audit = finalizer_audit

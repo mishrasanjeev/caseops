@@ -72,12 +72,11 @@ def _select_notification_context(
     return SessionContext(company=fallback.company, user=fallback.user, membership=fallback)
 
 
-def _select_recipient_memberships(
+def _select_recipient_ids(
     session: Session,
     *,
     matter: Matter,
-    include_admins: bool = False,
-) -> list[CompanyMembership]:
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
     ids: list[str] = []
     if matter.assignee_membership_id:
         ids.append(matter.assignee_membership_id)
@@ -89,44 +88,34 @@ def _select_recipient_memberships(
                 .limit(_MAX_PARTICIPANTS + 1)
             )
         )
-    if include_admins:
-        ids.extend(
-            session.scalars(
-                select(CompanyMembership.id)
-                .where(
-                    CompanyMembership.company_id == matter.company_id,
-                    CompanyMembership.role.in_([MembershipRole.OWNER, MembershipRole.ADMIN]),
-                )
-                .limit(_MAX_PARTICIPANTS + 1)
-            )
-        )
-    if not ids:
-        ids.extend(
-            session.scalars(
-                select(CompanyMembership.id)
-                .where(
-                    CompanyMembership.company_id == matter.company_id,
-                    CompanyMembership.role.in_([MembershipRole.OWNER, MembershipRole.ADMIN]),
-                )
-                .limit(_MAX_PARTICIPANTS + 1)
-            )
-        )
-    unique_ids = list(dict.fromkeys(ids))
-    _check_participant_bound(unique_ids)
-    if not unique_ids:
-        return []
-    return list(
+    assigned_ids = set(ids)
+    _check_participant_bound(assigned_ids)
+    admin_ids = set(
         session.scalars(
-            select(CompanyMembership)
-            .options(joinedload(CompanyMembership.user))
+            select(CompanyMembership.id)
             .where(
-                CompanyMembership.id.in_(unique_ids),
+                CompanyMembership.company_id == matter.company_id,
+                CompanyMembership.role.in_([MembershipRole.OWNER, MembershipRole.ADMIN]),
+            )
+            .limit(_MAX_PARTICIPANTS + 1)
+        )
+    )
+    review_ids = assigned_ids or admin_ids
+    failure_ids = assigned_ids | admin_ids
+    _check_participant_bound(failure_ids)
+    if not failure_ids:
+        return (), ()
+    active_ids = set(
+        session.scalars(
+            select(CompanyMembership.id)
+            .where(
+                CompanyMembership.id.in_(sorted(failure_ids)),
                 CompanyMembership.company_id == matter.company_id,
                 CompanyMembership.is_active.is_(True),
             )
-            .execution_options(populate_existing=True)
         )
     )
+    return tuple(sorted(review_ids & active_ids)), tuple(sorted(failure_ids & active_ids))
 
 
 def _check_participant_bound(ids: list[str] | set[str]) -> None:
@@ -270,24 +259,14 @@ def _select_participants(
         company_id=company_id,
         actor_membership_id=actor_membership_id,
     )
+    review_ids, failure_ids = _select_recipient_ids(session, matter=parent)
     return _ParticipantSelection(
         row[0],
         row[1],
         row[2],
         context.membership.id if context else None,
-        tuple(
-            sorted(member.id for member in _select_recipient_memberships(session, matter=parent))
-        ),
-        tuple(
-            sorted(
-                member.id
-                for member in _select_recipient_memberships(
-                    session,
-                    matter=parent,
-                    include_admins=True,
-                )
-            )
-        ),
+        review_ids,
+        failure_ids,
         _select_order_notifications(session, matter=parent) if include_order_notifications else (),
     ), context
 
