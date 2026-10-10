@@ -7,6 +7,14 @@ from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from caseops_api.core.automated_test_context import (
+    NO_PAID_PROVIDERS_VALUE,
+    paid_providers_blocked_for_request,
+    reset_automated_test_request,
+    reset_provider_replay_request,
+    set_automated_test_request,
+    set_provider_replay_request,
+)
 from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.db.models import (
@@ -38,6 +46,7 @@ class _CourtSyncClaim:
     actor_membership_id: str | None
     source: str
     source_reference: str | None
+    no_paid_providers: bool
     started_at: datetime
     expires_at: datetime
     lifecycle_version: int
@@ -156,6 +165,7 @@ def create_matter_court_sync_job(
         source=source.strip(),
         source_reference=source_reference.strip() if source_reference else None,
         status=MatterCourtSyncJobStatus.QUEUED,
+        no_paid_providers=paid_providers_blocked_for_request(),
     )
     session.add(job)
     session.commit()
@@ -191,7 +201,7 @@ def load_court_sync_job(job_id: str) -> MatterCourtSyncJobRecord | None:
         session.close()
 
 
-def drain_matter_court_sync_jobs(*, limit: int) -> int:
+def drain_matter_court_sync_jobs(*, limit: int, outcomes: dict[str, int] | None = None) -> int:
     _require_batch_limit(limit)
     session_factory = get_session_factory()
     session = session_factory()
@@ -211,11 +221,25 @@ def drain_matter_court_sync_jobs(*, limit: int) -> int:
     finally:
         session.close()
 
-    processed = 0
+    attempted_ids = []
     for job_id in job_ids:
         if run_matter_court_sync_job(job_id):
-            processed += 1
-    return processed
+            attempted_ids.append(job_id)
+    if outcomes is not None and attempted_ids:
+        with session_factory() as check:
+            statuses = dict(
+                check.execute(
+                    select(MatterCourtSyncJob.id, MatterCourtSyncJob.status).where(
+                        MatterCourtSyncJob.id.in_(attempted_ids)
+                    ),
+                ).all()
+            )
+        # These are current job outcomes, not a claim that this attempt finalized them.
+        for job_id in attempted_ids:
+            job_status = statuses.get(job_id)
+            key = job_status if job_status in {"completed", "failed"} else "unfinalized"
+            outcomes[key] = outcomes.get(key, 0) + 1
+    return len(attempted_ids)
 
 
 def recover_stale_matter_court_sync_jobs(
@@ -276,6 +300,7 @@ def _claim_is_current(job: MatterCourtSyncJob | None, claim: _CourtSyncClaim) ->
         and job.requested_by_membership_id == claim.actor_membership_id
         and job.source == claim.source
         and job.source_reference == claim.source_reference
+        and job.no_paid_providers is claim.no_paid_providers
     )
 
 
@@ -333,6 +358,7 @@ def run_matter_court_sync_job(job_id: str) -> bool:
             actor_membership_id=job.requested_by_membership_id,
             source=job.source,
             source_reference=job.source_reference,
+            no_paid_providers=job.no_paid_providers is not False,
             started_at=_utc(job.started_at),
             expires_at=_utc(job.started_at)
             + timedelta(
@@ -344,6 +370,13 @@ def run_matter_court_sync_job(job_id: str) -> bool:
         # Adapters consume only loaded scalar Matter fields, never this session.
         session.expunge_all()
 
+        marker = set_automated_test_request(
+            NO_PAID_PROVIDERS_VALUE
+            if claim.no_paid_providers or paid_providers_blocked_for_request()
+            else None,
+        )
+        # Replay permission was request-local and is not recorded by this queue.
+        replay_marker = set_provider_replay_request(None)
         try:
             adapter = get_court_sync_adapter(claim.source)
             result = adapter.fetch(matter=matter, source_reference=claim.source_reference)
@@ -383,6 +416,9 @@ def run_matter_court_sync_job(job_id: str) -> bool:
                 cause_list_entries=result.cause_list_entries,
                 orders=result.orders,
             )
+            if not _claim_is_current(job, claim):
+                session.rollback()
+                return True
             job.adapter_name = result.adapter_name
             job.sync_run_id = sync_run.id
             job.imported_cause_list_count = len(result.cause_list_entries)
@@ -400,6 +436,9 @@ def run_matter_court_sync_job(job_id: str) -> bool:
                 failed_job.completed_at = utcnow()
                 session.add(failed_job)
                 session.commit()
+        finally:
+            reset_provider_replay_request(replay_marker)
+            reset_automated_test_request(marker)
         return True
     finally:
         session.close()

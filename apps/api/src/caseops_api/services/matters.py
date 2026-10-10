@@ -5272,7 +5272,9 @@ def _persist_court_sync_import(
 
         for listing_id in new_listing_ids:
             try:
-                resolve_listing_bench(session, listing_id=listing_id)
+                # Tolerate resolver failure without committing or poisoning the import.
+                with session.begin_nested():
+                    resolve_listing_bench(session, listing_id=listing_id, commit=False)
             except Exception:  # noqa: BLE001
                 logger.warning(
                     "bench_resolver: failed for listing_id=%s; "

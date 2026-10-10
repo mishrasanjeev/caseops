@@ -64,7 +64,7 @@ class BenchMember:
 
 
 def resolve_listing_bench(
-    session: Session, *, listing_id: str,
+    session: Session, *, listing_id: str, commit: bool = True,
 ) -> tuple[list[BenchMember], list[str]]:
     """Resolve one MatterCauseListEntry's bench. Returns
     (matched, unmatched) and persists the matched list as JSON.
@@ -73,7 +73,7 @@ def resolve_listing_bench(
     looking up an active Court whose name matches the entry's
     forum_name. When neither is available the function returns
     ([], [original_bench_name]) and writes "[]" to mark the row
-    processed.
+    processed. Pass commit=False when the enclosing import owns the transaction.
     """
     entry = session.scalar(
         select(MatterCauseListEntry).where(MatterCauseListEntry.id == listing_id)
@@ -85,7 +85,10 @@ def resolve_listing_bench(
         # Nothing to resolve — mark processed so the backfill job
         # doesn't keep retrying.
         entry.judges_json = "[]"
-        session.commit()
+        if commit:
+            session.commit()
+        else:
+            session.flush()
         return [], []
 
     matter = session.scalar(
@@ -149,7 +152,10 @@ def resolve_listing_bench(
         ensure_ascii=False,
     )
     entry.judges_json = payload
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     return matched, unmatched
 
 

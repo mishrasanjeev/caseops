@@ -5721,6 +5721,10 @@ class MatterNextHearingSuggestion(Base):
 
 class MatterCourtSyncJob(Base):
     __tablename__ = "matter_court_sync_jobs"
+    __table_args__ = (
+        Index("ix_matter_court_sync_jobs_queue", "status", "queued_at", "updated_at", "id"),
+        Index("ix_matter_court_sync_jobs_recovery", "status", "started_at", "id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -5750,6 +5754,9 @@ class MatterCourtSyncJob(Base):
         String(24),
         nullable=False,
         default=MatterCourtSyncJobStatus.QUEUED,
+    )
+    no_paid_providers: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true(),
     )
     imported_cause_list_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     imported_order_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
