@@ -1,5 +1,13 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 10 Summary Gate Repair
+
+The summary gate repair on `a8979a41` has complete scoped local proof:
+66 Python passes/198 phases and 42 Node 22 cleanup passes, exact native
+inventories and mandatory CI selection. Original assertions/workers/budgets
+remain intact. Full fresh Docker/browser and live coverage remain uncertified.
+[Evidence](bugfix-production-acceptance-and-security-2026-10-09.md).
+
 ## October 10 E489 Release Checkpoint
 
 Existing document/authentication, Matter/IP, Calendar and public-acquisition

@@ -1,5 +1,14 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 10 Summary Gate Repair
+
+Summary browser acceptance remains Inconclusive; #527 remains not fixed in
+production. Integrated `a8979a41` passes complete scoped 66-case Python/198-
+phase and 42-case Node 22 regressions with exact inventories. Startup batching
+and independent cleanup preserve the original workers/assertions/budgets.
+Require the complete fresh Docker/browser gate and exact live replay before
+closure. [Evidence](bugfix-production-acceptance-and-security-2026-10-09.md).
+
 ## October 10 E489 Release Checkpoint
 
 #527 remains **Not fixed in production**; summary acceptance is **Inconclusive**.

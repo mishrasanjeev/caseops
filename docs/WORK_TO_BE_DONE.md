@@ -1,5 +1,14 @@
 # CaseOps  - Work To Be Done
 
+## October 10 Summary Gate Repair
+
+NO-GO: integrated `a8979a41` completes 66 Python passes/198 phases and 42
+Node 22 cleanup passes with exact native inventories, unchanged assertions
+and budgets. Bounded startup and failure-safe cleanup are implemented locally;
+full fresh Docker/CI and guarded production acceptance remain pending.
+Keep all external dependencies and original failed evidence open/preserved.
+[Details](bugfix-production-acceptance-and-security-2026-10-09.md).
+
 ## October 10 E489 Release Checkpoint
 
 NO-GO: full Docker PostgreSQL completes 2,235 passes/6,705 phases; browser

@@ -1,5 +1,13 @@
 # Strict Enterprise Gap Tasklist
 
+## October 10 Summary Gate Repair
+
+Partially implemented / NO-GO: bounded fresh-session fixture batching and
+independent, actual-state-verified cleanup on `a8979a41` pass all 66 Python
+cases/198 phases and 42 Node 22 cases. Standard CI selects the new controls.
+Fresh full Docker/CI/main/live certification remains required; no inherited
+license or external consent gap is closed. [Evidence](bugfix-production-acceptance-and-security-2026-10-09.md).
+
 ## October 10 E489 Release Checkpoint
 
 **NO-GO / Partially implemented.** Native Docker PostgreSQL reconciles all

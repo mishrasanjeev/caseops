@@ -1,5 +1,31 @@
 # Production Acceptance And Security Follow-Up - 2026-10-09
 
+## October 10 Summary Harness Replacement
+
+**NO-GO / not deployed.** Source correction `a8979a41` integrates reviewed
+`fb53a271` on top of the preserved complete e489 failure checkpoint. Bounded
+structured-stdin batching reduces API fixture interpreter starts from 13 to
+four without sharing authorization or database sessions. Every raw inspection
+is reconciled to its exact tenant/actor/Matter/bookmark/update identity; partial
+failure retains its completed prefix and failing identity. The two installed
+worker executions, frozen cassette, all 82 original assertions and the existing
+600000-ms journey/90000-ms worker/60000-ms fixture budgets are unchanged.
+Cleanup attempts evidence retention, each browser/API disposal and owned-worker
+restoration independently. It verifies the actual original container, image,
+ownership labels and running state; original and cleanup errors remain failures.
+
+Main's complete integrated file executes **66 passes/198 passing phases**, zero
+skips/deselections/errors, with canonical collection, runtime journal and JUnit
+identities in exact agreement. All **42 Node 22.14.0** cleanup/inventory cases
+pass with matching TAP/JUnit identities; Ruff and E2E typecheck pass. The new
+cleanup regressions are unconditionally selected by the standard CI web job,
+with a Python contract asserting that wiring. The agent's earlier 62-case pure
+selection deliberately omitted four runtime cases and is retained as scoped
+proof only. Local receipts: `summary-integrated-r1/`; agent originals:
+`summary-fixture-batch-20261010-r4/`. These checks do not establish the complete
+Docker/browser runtime or production acceptance. Fresh full Docker, sealed
+native readback, hosted CI, main merge and guarded live release remain required.
+
 ## October 10 E489 Complete Failed Gate
 
 **NO-GO.** Frozen candidate `e489f3cbe675c34a2ce3765e260e72aa2f28392f`,
