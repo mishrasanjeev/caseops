@@ -17,9 +17,9 @@ const own = (value, key) => Object.hasOwn(value, key);
 
 export function licenseDecision(expression) {
   if (typeof expression !== "string" || !expression.trim() || expression.length > 2048) {
-    return { approved: false, reason: "missing_or_invalid_license", unapproved_terms: [] };
+    return { approved: false, reason: "missing_or_invalid_license", selected_terms: [], unapproved_terms: [], unused_unapproved_terms: [] };
   }
-  if (expression === "Apache 2.0") return { approved: true, reason: "legacy_exact_allowlist_term", unapproved_terms: [] };
+  if (expression === "Apache 2.0") return { approved: true, reason: "legacy_exact_allowlist_term", selected_terms: [expression], unapproved_terms: [], unused_unapproved_terms: [] };
   // Deliberately no guessed SPDX correction, substring matching or exception waiver.
   const tokens = expression.match(/[A-Za-z0-9][A-Za-z0-9.+:-]*|[()]|\S/g) || [];
   const unapproved = new Set();
@@ -33,38 +33,53 @@ export function licenseDecision(expression) {
       return result;
     }
     const identifier = tokens[cursor++];
-    requireThat(typeof identifier === "string" && /^[A-Za-z0-9][A-Za-z0-9.+:-]*$/.test(identifier)
+    const identifierPattern = /^(DocumentRef-|LicenseRef-)/.test(identifier)
+      ? /^(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+$/ : /^[A-Za-z0-9][A-Za-z0-9.-]*\+?$/;
+    requireThat(typeof identifier === "string" && identifierPattern.test(identifier)
       && !["AND", "OR", "WITH"].includes(identifier), "invalid_license_expression");
-    let result = allowed.has(identifier);
-    if (!result) unapproved.add(identifier);
+    let approved = allowed.has(identifier);
+    if (!approved) unapproved.add(identifier);
     if (tokens[cursor] === "WITH") {
       cursor += 1;
       const exception = tokens[cursor++];
-      requireThat(typeof exception === "string" && /^[A-Za-z0-9][A-Za-z0-9.+:-]*$/.test(exception)
+      requireThat(typeof exception === "string" && /^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(exception)
         && !["AND", "OR", "WITH"].includes(exception), "invalid_license_expression");
       unapproved.add(`${identifier} WITH ${exception}`);
-      result = false;
+      approved = false;
     }
-    return result;
+    return { approved, selected_terms: approved ? [identifier] : [] };
   }
   function and(depth) {
     let result = term(depth);
-    while (tokens[cursor] === "AND") { cursor += 1; const next = term(depth); result = result && next; }
+    while (tokens[cursor] === "AND") {
+      cursor += 1;
+      const next = term(depth);
+      const approved = result.approved && next.approved;
+      result = { approved, selected_terms: approved ? [...result.selected_terms, ...next.selected_terms] : [] };
+    }
     return result;
   }
   function or(depth) {
     let result = and(depth);
-    // The existing policy lists terms, not authority to elect an unlisted alternative.
-    while (tokens[cursor] === "OR") { cursor += 1; const next = and(depth); result = result && next; }
+    while (tokens[cursor] === "OR") {
+      cursor += 1;
+      // Parse the entire alternative even after an approved choice. A Boolean
+      // short circuit must not hide malformed syntax or an exceeded bound.
+      const next = and(depth);
+      if (!result.approved) result = next;
+    }
     return result;
   }
   try {
-    const approved = or(0);
+    const result = or(0);
     requireThat(cursor === tokens.length, "invalid_license_expression");
-    return { approved, reason: approved ? "approved_spdx_terms" : "license_policy_review_required",
-      unapproved_terms: [...unapproved].sort() };
+    const terms = [...unapproved].sort();
+    return { approved: result.approved, reason: result.approved ? (terms.length ? "approved_spdx_alternative" : "approved_spdx_terms") : "license_policy_review_required",
+      selected_terms: [...new Set(result.selected_terms)].sort(), unapproved_terms: terms,
+      unused_unapproved_terms: result.approved ? terms : [] };
   } catch {
-    return { approved: false, reason: "invalid_or_oversized_license_expression", unapproved_terms: [...unapproved].sort() };
+    return { approved: false, reason: "invalid_or_oversized_license_expression", selected_terms: [],
+      unapproved_terms: [...unapproved].sort(), unused_unapproved_terms: [] };
   }
 }
 
@@ -127,7 +142,7 @@ export function buildLicenseReport({ root, manifest, workspaces, lock, lockTree,
   lockExit = 0, installedExit = 0 }) {
   const report = { schema_version: 1, completed: true, inventory_complete: false, policy_passed: false,
     allowed_licenses: [...ALLOWED_LICENSES], policy_sha256: hash(JSON.stringify(ALLOWED_LICENSES)),
-    policy_semantics: "Exact approved terms in both AND/OR expressions; no election of an unlisted alternative. WITH needs explicit approval. No license-text legal approval.",
+    policy_semantics: "Exact allowlisted terms; AND requires both operands, OR elects the first approved alternative after the entire expression validates. Unused unapproved alternatives remain reported, not selected. WITH needs explicit approval. No license-text legal approval.",
     workspaces: [], packages: [], installed_dev_only_extraneous: [], inventory_errors: [], policy_failures: [], counts: {} };
   try {
     requireThat(lockExit === 0 && installedExit === 0, "native_npm_inventory_failed");

@@ -11,7 +11,7 @@ enumeration is not license certification.
 
 Implementation status: `Implemented` locally; bug closure remains
 `Partially fixed` until exact committed hosted gate evidence is reconciled.
-License certification: `NO-GO`. The complete current inventory rejects 20
+License certification: `NO-GO`. The complete current inventory rejects 19
 package locations under the unchanged allowlist. This is a policy dependency,
 not evidence of a concrete security vulnerability or a legal conclusion.
 
@@ -71,15 +71,24 @@ CC0-1.0;0BSD;BlueOak-1.0.0;CC-BY-4.0;CC-BY-3.0;Apache 2.0
 Policy hash: `0bc2696e7d5d262964415118de72c6ca5185e5b8d4202b6a06e2b044f580c3b8`.
 
 Exact identifiers are required: `MIT` does not authorize `MIT-0`. The bounded
-expression grammar accepts parentheses and AND/OR, but requires every explicit
-term already be approved for both operators. It does not silently elect the
-MIT alternative of an expression containing an unlisted GPL alternative.
-WITH exceptions, unknown/missing metadata, malformed expressions and guessed
-license-text corrections fail closed. This conservative OR treatment is an
-explicit review dependency, not a claim that SPDX OR means AND. Any reviewed
-alternative-election rule or new license approval needs a separately authorized
-policy change and tests. The script does not certify license-text accuracy,
-distribution compliance or third-party obligations.
+expression grammar follows [SPDX Annex D.4.2-D.4.5](https://spdx.github.io/spdx-spec/v2.3.1/SPDX-license-expressions/):
+AND requires both operands, OR allows an approved alternative, and AND binds
+before OR. Both branches are parsed and bounded before selecting the first
+approved alternative. Malformed syntax or an exceeded length/token/depth bound
+in an unused branch rejects the whole expression. Valid but unapproved terms
+in unused alternatives remain transparent in `unapproved_terms` and
+`unused_unapproved_terms`; `selected_terms` records only the chosen obligations.
+Unknown standalone/missing metadata, unapproved WITH exceptions and guessed
+license-text corrections still fail closed. This is a bounded expression
+grammar/policy evaluator, not SPDX-registry, license-text or legal certification.
+
+The draft's former all-OR-terms rule was a tooling false positive, not an owner
+approval dependency. `jszip@3.10.2` selects the already-allowlisted MIT branch of
+`(MIT OR GPL-3.0-or-later)`; GPL remains unused metadata and is not approved.
+The inherited [checker 25.0.1 onlyAllow code](https://github.com/davglass/license-checker/blob/v25.0.1/lib/index.js)
+accepted any approved substring, including unsafe AND and `MIT-0` acceptances.
+This semantic repair restores correct OR choice without restoring those flaws
+or expanding the 14 approved terms.
 
 ## Local Native Evidence
 
@@ -88,21 +97,42 @@ Fresh isolated install and capture root:
 `demo-admin-guard-20261010/CaseOps` worktree. It never installs into the root
 `node_modules` junction or modifies another checkout.
 
-The provisional full unit run `unit-2026-10-10T121822779Z` has 70 tests,
-70 pass, zero failures/cancellations/skips/todos; native TAP and JUnit are
-retained. Coverage includes the original root-only/private-workspace defect,
+The historical committed run at `6cb037ab1a8942017c5a614803cd71a26c84c020`,
+`unit-2026-10-10T122104998Z`, has 70 passes and zero skips. It verifies the old
+implementation, not correct OR semantics: two expected OR rejections were
+obsolete. Its report and full native inventory remain immutable.
+
+The corrected provisional full run under
+`.tmp/license-or-semantics-20261010-r1/unit-2026-10-10T125518976Z` has 123
+passes, zero failures/cancellations/skips/todos. It replays the entire original
+70-control file, correcting those two OR expectations, plus 53 new controls.
+Native TAP and JUnit are retained. Coverage includes the root/private-workspace defect,
 all exact terms, compounds, missing/unknown licenses, bounds, omitted
 workspaces/runtime, lock drift, missing installed packages, optional platforms,
 aliases, nested/multiple-workspace/cycle identities, peer/dev flags, exact
 extra diagnostics, traversal order and real CLI report/overwrite behavior.
-The standard Security job selects this exact file without a name filter.
+Additional controls cover both OR orders, nested AND/OR precedence,
+deterministic selected obligations, unused terms, missing/malformed syntax on
+either branch, valid LicenseRef/DocumentRef syntax, invalid identifier/exception
+forms, length/token/depth bounds on both branches, and inventory-level jszip
+approval with no GPL-policy failure. The standard Security job selects this
+exact full file without a name filter.
 
-`actual-report-2026-10-10T121608234Z/license-report.json` is a complete native
+The historical committed 20-rejection report is
+`.tmp/license-gate-20261010-r1/actual-report-2026-10-10T122109487Z/license-report.json`,
+SHA256 `04906622dbbb509455b848df475198ab2347de8ae1723cb3e4734f57a759accd`.
+It contains the OR false positive and is superseded, not rewritten or greened.
+
+The corrected provisional
+`.tmp/license-or-semantics-20261010-r1/actual-2026-10-10T125520285Z/license-report.json` is a complete native
 reconciliation: two first-party roots, 200 runtime locations, 166 unique
 package/version IDs, 158 installed and 42 lock-only optional, zero inventory
-errors, 20 policy rejections. Both native npm inventory exits are zero; the
+errors, 19 policy rejections. Both native npm inventory exits are zero; the
 policy gate exits 1, deliberately not green. Report SHA-256:
-`932858b776d58ad939d55c7f21595e4ee44389a27aea5b03a8697a46bc117df7`.
+`b9f7d3e91ce2289dfbc9b829285485a00f9cadc13f2d0466d4ff6e105ae46f32`.
+`jszip@3.10.2` is approved with `selected_terms: ["MIT"]` and
+`unused_unapproved_terms: ["GPL-3.0-or-later"]`. The 19 other rejection identities
+and expressions remain the same; no license term or dependency version changed.
 
 These provisional runs use Node 24.15.0 on Windows, not the hosted Ubuntu/Node
 22 environment, and precede the final committed-source replay. The final
@@ -139,17 +169,20 @@ Exact current lock IDs outside the allowlist, including compound expressions:
 | `@img/sharp-win32-arm64@0.35.5` | `Apache-2.0 AND LGPL-3.0-or-later` | lock-only optional |
 | `@img/sharp-win32-ia32@0.35.5` | `Apache-2.0 AND LGPL-3.0-or-later` | lock-only optional |
 | `@img/sharp-win32-x64@0.35.5` | `Apache-2.0 AND LGPL-3.0-or-later` | installed |
-| `jszip@3.10.2` | `(MIT OR GPL-3.0-or-later)` | installed |
 | `nodemailer@10.0.13` | `MIT-0` | installed |
 | `pako@1.0.11` | `(MIT AND Zlib)` | installed |
 
-Review is needed for OFL-1.1, LGPL-3.0-or-later, MIT-0 and Zlib and for any
-authorized OR-alternative election. No terms or obligations have been approved
+Review is needed for OFL-1.1, LGPL-3.0-or-later, MIT-0 and Zlib. Selecting the
+already-approved MIT alternative does not require GPL approval. No new terms
+or obligations have been approved
 by this patch. Linux/macOS variants are lock inventory, not a claim of the
 exact deployed image contents. Preserve this red result and the inherited gap;
 do not close license certification on `{}`, metadata-only inventory, skipped
 checks, permissive substrings or a policy edited merely to make CI green.
 
-No PR is created while the actual focused policy gate remains red under the
-user's all-focused-proof-green condition. Main owns subsequent integration,
-hosted release gates and any policy decision; no merge or deployment occurs.
+[Issue #530](https://github.com/mishrasanjeev/caseops/issues/530) and
+[draft PR #531](https://github.com/mishrasanjeev/caseops/pull/531) durably publish
+the repair and remaining policy dependencies under explicit user approval.
+Both remain held/open; the corrected gate is still expected red with 19
+rejections. Main owns integration, hosted release gates and policy decisions.
+No merge, deployment or license certification occurs in this scoped work.

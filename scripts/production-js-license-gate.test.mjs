@@ -36,13 +36,94 @@ for (const expression of ["(MIT OR CC0-1.0)", "MIT AND Apache-2.0", "MIT OR (BSD
   });
 }
 for (const expression of ["OFL-1.1", "MIT-0", "Apache-2.0 AND LGPL-3.0-or-later", "MIT AND Zlib",
-  "MIT OR GPL-3.0-only", "MIT OR LicenseRef-Unknown", "MIT WITH Classpath-exception-2.0", "UNLICENSED", "UNKNOWN",
+  "MIT WITH Classpath-exception-2.0", "UNLICENSED", "UNKNOWN",
   "MIT*", "SEE LICENSE IN COPYING", "MIT OR", "MIT AND OR MIT", "MIT AND (ISC", "MIT) OR ISC", "mit", "MIT OR /etc/passwd",
   "(".repeat(33) + "MIT" + ")".repeat(33), "MIT OR ".repeat(300) + "MIT", "M".repeat(2049), "", null, [], { type: "MIT" }]) {
   test(`rejects unapproved, unknown, malformed or bounded license ${JSON.stringify(expression).slice(0, 70)}`, () => {
     assert.equal(licenseDecision(expression).approved, false);
   });
 }
+
+for (const [expression, selected, unused] of [
+  ["MIT OR GPL-3.0-only", ["MIT"], ["GPL-3.0-only"]],
+  ["MIT OR LicenseRef-Unknown", ["MIT"], ["LicenseRef-Unknown"]],
+  ["(MIT OR GPL-3.0-or-later)", ["MIT"], ["GPL-3.0-or-later"]],
+  ["GPL-3.0-or-later OR MIT", ["MIT"], ["GPL-3.0-or-later"]],
+  ["MIT OR (GPL-3.0-or-later AND LGPL-3.0-or-later)", ["MIT"], ["GPL-3.0-or-later", "LGPL-3.0-or-later"]],
+  ["(GPL-3.0-or-later AND LGPL-3.0-or-later) OR MIT", ["MIT"], ["GPL-3.0-or-later", "LGPL-3.0-or-later"]],
+  ["MIT AND (GPL-3.0-or-later OR Apache-2.0)", ["Apache-2.0", "MIT"], ["GPL-3.0-or-later"]],
+  ["(GPL-3.0-or-later OR MIT) AND (LGPL-3.0-or-later OR BSD-3-Clause)", ["BSD-3-Clause", "MIT"], ["GPL-3.0-or-later", "LGPL-3.0-or-later"]],
+  ["GPL-3.0-or-later OR MIT AND Apache-2.0", ["Apache-2.0", "MIT"], ["GPL-3.0-or-later"]],
+  ["(MIT OR GPL-3.0-or-later) AND (MIT-0 OR ISC)", ["ISC", "MIT"], ["GPL-3.0-or-later", "MIT-0"]],
+  ["MIT OR ISC", ["MIT"], []],
+  ["ISC OR MIT", ["ISC"], []],
+  ["MIT OR (ISC AND MIT)", ["MIT"], []],
+  ["MIT WITH Classpath-exception-2.0 OR ISC", ["ISC"], ["MIT WITH Classpath-exception-2.0"]],
+  ["ISC OR MIT WITH Classpath-exception-2.0", ["ISC"], ["MIT WITH Classpath-exception-2.0"]],
+  ["MIT OR DocumentRef-source:LicenseRef-private", ["MIT"], ["DocumentRef-source:LicenseRef-private"]],
+]) {
+  test(`elects an approved SPDX alternative without approving unused terms: ${expression}`, () => {
+    const value = licenseDecision(expression);
+    assert.equal(value.approved, true);
+    assert.deepEqual(value.selected_terms, selected);
+    assert.deepEqual(value.unapproved_terms, unused);
+    assert.deepEqual(value.unused_unapproved_terms, unused);
+    assert.equal(value.reason, unused.length ? "approved_spdx_alternative" : "approved_spdx_terms");
+  });
+}
+
+for (const expression of ["MIT AND GPL-3.0-or-later", "(MIT OR GPL-3.0-or-later) AND Zlib",
+  "GPL-3.0-or-later OR LGPL-3.0-or-later", "MIT-0 OR GPL-3.0-or-later",
+  "MIT AND Zlib OR MIT-0 AND ISC", "(MIT OR ISC) AND (Zlib OR LGPL-3.0-or-later)"]) {
+  test(`AND still requires every selected obligation: ${expression}`, () => {
+    const value = licenseDecision(expression);
+    assert.equal(value.approved, false);
+    assert.deepEqual(value.selected_terms, []);
+    assert.deepEqual(value.unused_unapproved_terms, []);
+  });
+}
+
+const invalidAlternatives = ["(ISC AND)", "GPL-3.0-or-later WITH", "GPL-3.0-or-later AND OR ISC", "(ISC", "ISC)",
+  "GPL-3.0-or-later WITH Classpath-exception-2.0 WITH Another", "MIT++", "LicenseRef-", "LicenseRef-x+",
+  "DocumentRef-:LicenseRef-x", "((ISC)) WITH Classpath-exception-2.0", "MIT*", "/etc/passwd"];
+for (const [index, alternative] of invalidAlternatives.entries()) {
+  for (const reverse of [false, true]) {
+    test(`validates syntax of both branches before OR choice: ${index} reverse=${reverse}`, () => {
+      const expression = reverse ? `${alternative} OR MIT` : `MIT OR ${alternative}`;
+      const value = licenseDecision(expression);
+      assert.equal(value.approved, false);
+      assert.equal(value.reason, "invalid_or_oversized_license_expression");
+      assert.deepEqual(value.selected_terms, []);
+      assert.deepEqual(value.unused_unapproved_terms, []);
+    });
+  }
+}
+for (const [label, alternative] of [
+  ["depth", "(".repeat(33) + "GPL-3.0-or-later" + ")".repeat(33)],
+  ["tokens", "ISC OR ".repeat(130) + "ISC"],
+  ["length", "M".repeat(2049)],
+]) {
+  for (const reverse of [false, true]) {
+    test(`bounds both branches before OR choice: ${label} reverse=${reverse}`, () => {
+      const value = licenseDecision(reverse ? `${alternative} OR MIT` : `MIT OR ${alternative}`);
+      assert.equal(value.approved, false);
+      assert.deepEqual(value.selected_terms, []);
+    });
+  }
+}
+
+test("actual jszip-style inventory elects MIT and retains unused GPL without a policy failure", () => {
+  const value = fixture();
+  value.lock.packages["node_modules/runtime"].license = "(MIT OR GPL-3.0-or-later)";
+  value.lockTree.dependencies["@fixture/web"].dependencies.runtime.license = "(MIT OR GPL-3.0-or-later)";
+  value.installedTree = structuredClone(value.lockTree);
+  const result = report(value);
+  assert.equal(result.exit_code, 0);
+  assert.equal(result.inventory_complete, true);
+  assert.deepEqual(result.policy_failures, []);
+  assert.deepEqual(result.packages[0].decision.selected_terms, ["MIT"]);
+  assert.deepEqual(result.packages[0].decision.unused_unapproved_terms, ["GPL-3.0-or-later"]);
+});
 
 test("root with only dev dependencies still inventories hoisted private-workspace runtime", () => {
   const value = report(fixture());
