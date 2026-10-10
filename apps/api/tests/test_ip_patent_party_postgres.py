@@ -116,7 +116,9 @@ def test_concurrent_patent_party_commands_cannot_share_a_collection_sequence(
 @pytest.mark.parametrize("kind", ["family", "application"])
 @pytest.mark.parametrize("replay", [False, True])
 def test_closure_wins_over_a_different_actors_waiting_patent_party_command(
-    isolated_postgres_client, kind, replay,
+    isolated_postgres_client,
+    kind,
+    replay,
 ):
     bootstrap, _, _, record, _, raw = journeys._fixture(isolated_postgres_client, kind)
     engine = get_session_factory().kw["bind"]
@@ -141,8 +143,11 @@ def test_closure_wins_over_a_different_actors_waiting_patent_party_command(
     if replay:
         with Session(engine) as session:
             create_patent_party(
-                session, context=_context(session, bootstrap, other_actor),
-                docket_id=record["docket_id"], payload=payload, idempotency_key=command_key,
+                session,
+                context=_context(session, bootstrap, other_actor),
+                docket_id=record["docket_id"],
+                payload=payload,
+                idempotency_key=command_key,
             )
 
     def waiting_writer():
@@ -214,89 +219,107 @@ def test_patent_party_migration_recovers_interrupted_owner_index_without_changin
 
     bootstrap, headers, _, record, base, raw = journeys._fixture(isolated_postgres_client)
     engine = get_session_factory().kw["bind"]
-    config = _alembic()
-    command.downgrade(config, "20260906_0002")
-    admin = create_engine(engine.url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
-    name = f"party-index-{uuid4().hex[:12]}"
+    from tests.fixtures_historical_migrations import (
+        assert_fixture_downgrade_refused,
+        historical_database,
+        insert_historical_fixture,
+        replay_fixture_rows,
+    )
+
     original_id = str(uuid4())
-
-    def index_builder():
-        with admin.connect() as connection:
-            connection.execute(
-                text("SELECT set_config('application_name', :name, false)"), {"name": name}
-            )
-            try:
-                connection.exec_driver_sql(
-                    "CREATE UNIQUE INDEX CONCURRENTLY uq_ip_party_owner "
-                    "ON ip_parties_and_roles (id, company_id, docket_id)"
-                )
-            except DBAPIError as exc:
-                return getattr(exc.orig, "sqlstate", None)
-            raise AssertionError("The deliberately interrupted index unexpectedly completed")
-
-    with Session(engine) as writer, ThreadPoolExecutor(max_workers=1) as pool:
-        writer.add(
-            IpPartyAndRole(
-                id=original_id,
-                company_id=bootstrap["company"]["id"],
-                docket_id=record["docket_id"],
-                party_name="Preserved existing party",
-                role_kind="applicant",
-                effective_from=datetime.now(UTC).date(),
-                source="pre-patent-fixture",
-            )
+    legacy_values = dict(
+        id=original_id,
+        company_id=bootstrap["company"]["id"],
+        docket_id=record["docket_id"],
+        party_name="Preserved existing party",
+        role_kind="applicant",
+        effective_from=datetime.now(UTC).date(),
+        source="pre-patent-fixture",
+    )
+    runtime_engine = engine
+    with historical_database(runtime_engine, "20260906_0002") as (engine, config):
+        replay_fixture_rows(
+            runtime_engine, engine, [("ip_docket_records", {"id": record["docket_id"]})]
         )
-        writer.flush()
-        future = pool.submit(index_builder)
-        try:
-            deadline = monotonic() + 8
-            with admin.connect() as control:
-                while monotonic() < deadline:
-                    pending = control.scalar(
-                        text(
-                            "SELECT NOT indisvalid FROM pg_index "
-                            "WHERE indexrelid = to_regclass('uq_ip_party_owner')"
-                        )
+        admin = create_engine(engine.url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
+        name = f"party-index-{uuid4().hex[:12]}"
+
+        def index_builder():
+            with admin.connect() as connection:
+                connection.execute(
+                    text("SELECT set_config('application_name', :name, false)"), {"name": name}
+                )
+                try:
+                    connection.exec_driver_sql(
+                        "CREATE UNIQUE INDEX CONCURRENTLY uq_ip_party_owner "
+                        "ON ip_parties_and_roles (id, company_id, docket_id)"
                     )
-                    if pending:
-                        break
-                    Event().wait(0.02)
-                assert pending, (
-                    "Concurrent index did not leave its expected in-progress catalogue row"
-                )
-                assert control.scalar(
+                except DBAPIError as exc:
+                    return getattr(exc.orig, "sqlstate", None)
+                raise AssertionError("The deliberately interrupted index unexpectedly completed")
+
+        with Session(engine) as writer, ThreadPoolExecutor(max_workers=1) as pool:
+            insert_historical_fixture(writer.connection(), IpPartyAndRole, **legacy_values)
+            future = pool.submit(index_builder)
+            try:
+                deadline = monotonic() + 8
+                with admin.connect() as control:
+                    pending = False
+                    while monotonic() < deadline:
+                        pending = control.scalar(
+                            text(
+                                "SELECT NOT indisvalid FROM pg_index "
+                                "WHERE indexrelid = to_regclass('uq_ip_party_owner')"
+                            )
+                        )
+                        if pending:
+                            break
+                        Event().wait(0.02)
+                    assert pending, (
+                        "Concurrent index did not leave its expected in-progress catalogue row"
+                    )
+                    assert control.scalar(
+                        text(
+                            "SELECT pg_cancel_backend(pid) FROM pg_stat_activity "
+                            "WHERE application_name=:name"
+                        ),
+                        {"name": name},
+                    )
+                assert future.result(timeout=8) == "57014"
+                writer.commit()
+            finally:
+                writer.rollback()
+                admin.dispose()
+        for _ in range(2):
+            command.upgrade(config, "20260907_0001")
+            with engine.connect() as connection:
+                assert connection.scalar(
                     text(
-                        "SELECT pg_cancel_backend(pid) FROM pg_stat_activity "
-                        "WHERE application_name=:name"
-                    ),
-                    {"name": name},
+                        "SELECT indisvalid AND indisready FROM pg_index "
+                        "WHERE indexrelid='uq_ip_party_owner'::regclass"
+                    )
                 )
-            assert future.result(timeout=8) == "57014"
-            writer.commit()
-        finally:
-            writer.rollback()
-            admin.dispose()
-    for _ in range(2):
-        command.upgrade(config, "head")
-        with engine.connect() as connection:
-            assert connection.scalar(
-                text(
-                    "SELECT indisvalid AND indisready FROM pg_index "
-                    "WHERE indexrelid='uq_ip_party_owner'::regclass"
+                assert (
+                    connection.scalar(
+                        text("SELECT party_name FROM ip_parties_and_roles WHERE id=:id"),
+                        {"id": original_id},
+                    )
+                    == "Preserved existing party"
                 )
-            )
-            assert (
-                connection.scalar(
-                    text("SELECT party_name FROM ip_parties_and_roles WHERE id=:id"),
-                    {"id": original_id},
-                )
-                == "Preserved existing party"
-            )
+
+    engine = runtime_engine
+    with Session(engine) as writer:
+        writer.add(IpPartyAndRole(**legacy_values))
+        writer.commit()
     created = journeys._post(isolated_postgres_client, base, headers, raw)
     assert created.status_code == 201, created.text
-    with pytest.raises(RuntimeError, match="Patent party evidence exists"):
-        command.downgrade(config, "20260906_0002")
-    command.upgrade(config, "head")
+    assert_fixture_downgrade_refused(
+        engine,
+        "20260907_0001",
+        "20260906_0002",
+        [("ip_patent_party_details", {"id": created.json()["id"]})],
+        "Patent party evidence exists",
+    )
     assert (
         isolated_postgres_client.get(f"{base}/{created.json()['id']}", headers=headers).json()
         == created.json()

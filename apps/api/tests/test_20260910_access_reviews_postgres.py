@@ -13,6 +13,7 @@ from alembic import command
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AccessReviewCampaign,
+    AccessReviewDecision,
     Company,
     CompanyMembership,
     IpDocketRecord,
@@ -211,7 +212,7 @@ def test_pg_campaign_evidence_cannot_be_rewritten_or_deleted(isolated_postgres_c
     assert reviewed.status_code == 200, reviewed.text
     assert journey.finalize(isolated_postgres_client, owner, reviewed.json()).status_code == 200
     with get_session_factory()() as session:
-        url = session.get_bind().url.render_as_string(hide_password=False)
+        engine = session.get_bind()
         for sql in (
             "UPDATE access_review_campaigns SET title='forged'",
             "UPDATE access_review_campaigns SET status='open', version=version+1",
@@ -223,14 +224,24 @@ def test_pg_campaign_evidence_cannot_be_rewritten_or_deleted(isolated_postgres_c
                 session.execute(text(sql))
             session.rollback()
         assert session.get(AccessReviewCampaign, campaign["id"]).status == "finalized"
-    monkeypatch.setenv("CASEOPS_DATABASE_URL", url)
-    get_settings.cache_clear()
-    config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
-    try:
-        with pytest.raises(RuntimeError, match="roll forward"):
-            command.downgrade(config, "20260909_0003")
-    finally:
-        get_settings.cache_clear()
+        migration_roots = [("access_review_campaigns", {"id": campaign["id"]})] + [
+            ("access_review_decisions", {"id": decision_id})
+            for decision_id in session.scalars(
+                select(AccessReviewDecision.id).where(
+                    AccessReviewDecision.campaign_id == campaign["id"]
+                )
+            )
+        ]
+        assert len(migration_roots) > 1
+    from tests.fixtures_historical_migrations import assert_fixture_downgrade_refused
+
+    assert_fixture_downgrade_refused(
+        engine,
+        "20260910_0001",
+        "20260909_0003",
+        migration_roots,
+        "roll forward",
+    )
 
 
 def test_independently_fresh_migration_empty_rollback_and_reupgrade(pg_engine, monkeypatch):

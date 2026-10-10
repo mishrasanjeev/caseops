@@ -355,10 +355,18 @@ def test_patent_work_fresh_migration_roundtrip_and_retained_downgrade(
     config.set_main_option("sqlalchemy.url", engine.url.render_as_string(hide_password=False))
     before = _work_schema(engine)
     assert len(before["triggers"]) == 6 and before["columns"] and before["indexes"]
-    command.downgrade(config, "20260909_0003")
-    assert not any(_work_schema(engine).values())
-    command.upgrade(config, "head")
-    assert _work_schema(engine) == before
+    from tests.fixtures_historical_migrations import (
+        assert_fixture_downgrade_refused,
+        historical_database,
+    )
+
+    with historical_database(engine, "20260909_0004") as (dated_engine, dated_config):
+        dated_before = _work_schema(dated_engine)
+        assert len(dated_before["triggers"]) == 6
+        command.downgrade(dated_config, "20260909_0003")
+        assert not any(_work_schema(dated_engine).values())
+        command.upgrade(dated_config, "20260909_0004")
+        assert _work_schema(dated_engine) == dated_before
     for name, value in {
         "CASEOPS_ENV": "local",
         "CASEOPS_AUTO_MIGRATE": "false",
@@ -384,9 +392,17 @@ def test_patent_work_fresh_migration_roundtrip_and_retained_downgrade(
         assert proceeding.status_code == 201, proceeding.text
         proceeding_url = f"{journeys.BASE}/{app['id']}/proceedings/{proceeding.json()['id']}"
         proceeding_before = client.get(proceeding_url, headers=headers).json()
+        assert_fixture_downgrade_refused(
+            engine,
+            "20260909_0004",
+            "20260909_0003",
+            [
+                ("ip_patent_evidence_versions", {"application_id": app["id"], "sequence": 1}),
+                ("ip_patent_proceeding_details", {"id": proceeding.json()["id"]}),
+            ],
+            "Patent work evidence exists",
+        )
         for _ in range(2):
-            with pytest.raises(RuntimeError, match="Patent work evidence exists"):
-                command.downgrade(config, "20260909_0003")
             command.upgrade(config, "head")
             assert _work_schema(engine) == before
             retained = client.get(

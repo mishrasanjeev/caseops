@@ -191,9 +191,19 @@ def test_patent_family_pg_persistence_tenant_constraints_and_atomic_rollback(mig
     config.set_main_option("script_location", str(root / "alembic"))
     config.set_main_option("sqlalchemy.url", pg_engine.url.render_as_string(hide_password=False))
     head = ScriptDirectory.from_config(config).get_current_head()
+    from tests.fixtures_historical_migrations import assert_fixture_downgrade_refused
+
+    assert_fixture_downgrade_refused(
+        pg_engine,
+        "20260906_0001",
+        "20260905_0003",
+        [
+            ("ip_patent_family_versions", {"family_id": str(family.id), "version": version})
+            for version in (1, 2)
+        ],
+        "Patent disclosure evidence exists",
+    )
     for _attempt in range(2):
-        with pytest.raises(RuntimeError, match="Patent disclosure evidence exists"):
-            command.downgrade(config, "20260905_0003")
         command.upgrade(config, "head")
         with pg_engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == head
@@ -1185,7 +1195,9 @@ def test_ip_subject_seek_rejects_present_wrong_subject_and_target_successors(pg_
                         .limit(1)
                     ).one()
                     assert tuple(successor) == (
-                        records[successor_target], successor_target, subject_id
+                        records[successor_target],
+                        successor_target,
+                        subject_id,
                     )
                     assert lookup(target_id, subject) is None
                 for target_id in (first_id, last_id):

@@ -568,6 +568,9 @@ def test_actual_finalizer_allows_same_uploader_login_and_releases_company_writer
     ):
         audit.record("http_client_preflight_complete", duration=monotonic() - started,
                      worker_started=False)
+        preflight = _login(client, origin, fixture, audit)
+        assert preflight.status_code == 200
+        assert preflight.json()["membership"]["id"] == fixture["actor_id"]
         worker = pool.submit(audit.worker, fixture)
         futures.append(worker)
         assert audit.entered.wait(5), "Actual applied-event SQL was not reached"
@@ -575,9 +578,6 @@ def test_actual_finalizer_allows_same_uploader_login_and_releases_company_writer
                    for sql in audit.statements["worker"])
         login = pool.submit(_login, client, origin, fixture, audit)
         futures.append(login)
-        writer = pool.submit(audit.mutate, fixture, mutation)
-        futures.append(writer)
-        audit.await_blocker("mutation", "worker")
         if os.environ.get("CASEOPS_FINALIZER_AUTH_BASELINE") == "strong":
             audit.await_blocker("login", "worker")
         response = login.result(timeout=5)
@@ -588,6 +588,11 @@ def test_actual_finalizer_allows_same_uploader_login_and_releases_company_writer
         assert not worker.done(), "Auth completed only after finalization released its locks"
         assert any("FOR NO KEY UPDATE" in sql and "company_memberships" in sql
                    for sql in audit.statements["login"])
+        # Start the 2s-budget Company contender only after the paused-worker
+        # login proof; password hashing must not consume its lock-wait budget.
+        writer = pool.submit(audit.mutate, fixture, mutation)
+        futures.append(writer)
+        audit.await_blocker("mutation", "worker")
         assert not writer.done()
         audit.record("release_finalizer_after_response", activity=audit.snapshot())
         audit.release.set()

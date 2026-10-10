@@ -43,7 +43,7 @@ def test_matter_status_database_default_upgrades_and_downgrades_cleanly(
     command.upgrade(config, "20260715_0001")
     assert _matter_status_default(database_url) is None
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260717_0001")
     assert (_matter_status_default(database_url) or "").strip("'") == "active"
 
     command.downgrade(config, "20260715_0001")
