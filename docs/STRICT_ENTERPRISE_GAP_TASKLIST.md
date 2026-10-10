@@ -1,26 +1,5 @@
 # Strict Enterprise Gap Tasklist
 
-## October 10 Nonempty Secret Scan
-
-P1-005 secret coverage is **Partially implemented**, not release closure. The
-actual merged-main Security scan on `3dbf364d` reported zero commits/bytes:
-the action's payload-commit range combined `--no-merges --first-parent` and
-excluded the merge and side parents. The replacement scans immutable tracked
-Git blobs independently of all-parent push/PR history (including merge-only
-resolution diffs), preserves scheduled all-ref history and existing allowlists,
-and rejects empty inventories, zero scanner counters and incomplete execution.
-Digest-pinned offline native controls pass 38 cases/114 phases, including a
-real zero-byte scanner result, removed side/merge secrets, and actual running
-container interruption cleanup. A directory scan lacks commit provenance:
-existing historical fingerprints are translated only after native blame proves
-the complete unchanged finding span belongs to the exact reviewed commit/path/
-line, then the same captured tree is rescanned. New credentials at the same
-path/line, changed multiline spans and newly reintroduced literals still fail;
-tracked allowlists remain byte-identical. Failed baselines remain retained under owned
-ignored `.tmp/security-nonempty-secret-scan-20261010-r1`. Postcommit source
-proof and subsequent hosted integration remain required. No main/deployment, inherited
-empty-license policy, consent dependency or unsuppressed quality note is closed.
-
 ## October 10 Summary Gate Repair
 
 Partially implemented / NO-GO: bounded fresh-session fixture batching and
