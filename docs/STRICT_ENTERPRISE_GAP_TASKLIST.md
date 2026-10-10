@@ -1,5 +1,42 @@
 # Strict Enterprise Gap Tasklist
 
+## October 10 Participant And Query Accounting
+
+Tenant-activity delivery is **Partially implemented / NO-GO**. The complete
+dual-database baseline retains 12 active controls/30 product failures among
+42 identities, all 126 phases. New/fallback and retained internal/IP/portal/
+external delivery require current tenant activity. Updated native claim/disable
+replacement passes 115 cases/345 phases and unchanged total-SQL limits 394/400
+and 7,114/7,600. Earlier
+scoped checkpoints below do not certify this later source correction. Company
+replacement passes 260 combined cases/780 phases. A separate 16-case worker
+baseline has four late-grant failures; `20f3f72b` restores its final predicate.
+Complete replacement on `e1a8182c` passes 128 cases/384 phases in eight files,
+zero skips/errors, exact JUnit and unchanged source. Complete Docker/CI and
+the discovered Calendar browser on the exact production revision remain required.
+
+**Partially implemented / NO-GO.** The downstream fence covers bounded
+historical creator, current audit/recipient and assignee foreign keys before
+parent writes; fresh source/lifecycle/authority checks survive commit boundaries.
+Combined proof: 75 API passes/225 phases and 1,234 frontend passes/197 files,
+zero skips, exact inventories and fresh build. Native 102-case checkpoint
+passes, but filtered lock/write SQL cannot establish total work. Actual complete
+accounting finds 17,621 statements for 500 recipients against 7,600. Shared
+live batch predicate `bcde1467` passes 107 dual-database cases/321 phases,
+including current policy changes, grants, walls and tenant exclusion, one SQL
+per batch. Integrated complete SQL counters pass the unchanged 20/500 limits:
+394/400 and 7,114/7,600, with all notifications delivered. Complete Main gates
+pass 69 adjacent-policy, 26 dual-database notification and 42 expanded
+recipient/nested-query cases. The adjacent automatic Calendar policy-call defect
+has 56 SQLite/PostgreSQL replacement passes, not provider-consent acceptance.
+Complete final native races pass 108 identities/324 phases with exact JUnit,
+source identity and clean owned-database teardown. Complete combined backend
+integration passes 218 cases/654 phases in 12 files, zero skips. Final full Docker,
+current CI/actual scans, canonical merge and exact-serving acceptance remain
+required. Preserve failed long-path setup and SQL-receipt assertions separately
+from product defects. Evidence:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 10 Incremental Browser Receipts
 
 **Partially implemented / NO-GO.** Final-only reporting loses completed

@@ -1,5 +1,43 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 10 Downstream Participant Replacement
+
+Adjacent Company-disable delivery gap: **Partially fixed / not deployed**.
+Complete 42-case dual-database baseline retains 12 active passes/30 genuine
+disabled-tenant product failures, 126 phases and exact JUnit. Candidate
+Complete native claim/disable replacement now passes 115 cases/345 phases and
+unchanged SQL caps 394/400 and 7,114/7,600. Complete Company replacement passes
+260 cases/780 phases. Separate
+worker baseline: 16 identities, four actual late-grant failures, 12 controls;
+`20f3f72b` restores the final predicate. Complete replacement on `e1a8182c`
+passes 128 cases/384 phases in eight files, zero skips/errors, exact JUnit and
+unchanged source. Complete Docker/CI and the discovered Calendar browser on the
+exact production revision remain pending. Prior passes are
+scoped source checkpoints, not acceptance of these subsequent corrections.
+
+**Partially fixed; not fixed in production / NO-GO.** The candidate fences
+actual historical/null creators, elected audit actors, work assignees and
+notification recipients before parent persistence without weaker locks or
+mutation retries. Combined `ea625cac` passes 75 API cases/225 retained phases,
+all 1,234 frontend cases/197 files and a fresh build. Native finalizer and
+participant checkpoint passes 102 cases after preserving four SQL-receipt
+assertion failures and one long-path setup error. Actual all-SQL accounting
+reproduces 17,621 statements for 500 recipients, exceeding 7,600. `bcde1467`
+passes 54 SQLite/53 PostgreSQL shared-policy checks with one SQL per batch;
+bounded integration now passes the unchanged complete query limits: 394/400
+and 7,114/7,600 statements, delivering 20/500 notifications. Separate complete
+Main replays pass 69 adjacent-policy, 26 dual-database notification and 42
+expanded isolation/nested-query cases. The automatic Calendar candidate's
+wrong filter signature reproduces 42 TypeErrors with 14 passing explicit-path
+controls, then passes all 56 replacement identities. Retain initial fixture
+failures separately; no local gate establishes live OAuth or bug closure.
+Complete final native races pass 108 identities/324 phases, exact JUnit and
+source identity with clean owned-database teardown. Complete combined backend
+integration passes 218 cases/654 phases in 12 files, zero skips.
+Docker/CI/main/security/live gates remain open, as do genuine
+Google/provider/privacy dependencies. Evidence:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 10 Interrupted Native Evidence
 
 **Partially fixed; not fixed in production / NO-GO.** A real killed Node

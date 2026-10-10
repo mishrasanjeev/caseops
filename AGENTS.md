@@ -1,5 +1,55 @@
 # CaseOps agent instructions
 
+- A native dispatch race must admit a genuinely queued intent before forcing
+  its interleaving. Install deterministic transport configuration before
+  enqueue and assert the pre-claim state; an already blocked intent cannot
+  prove a dispatch winner. External provider acceptance is SENT, not confirmed
+  DELIVERED. Assert single transport, durable claim/event identity, transaction
+  release and replay, rather than changing that contract to fit the test.
+
+- Background notification delivery without an actor context must retain the
+  same final Matter ACL predicate as interactive delivery. Derive recipient
+  scope from freshly admitted tenant and employee data, not the presence of a
+  browser actor. Regress late grant revocation with both absent and retained
+  exact-match notification rows, preserving historical rows without rebinding
+  them to a newly delivered intent.
+
+- Notification admission and retained-intent delivery must require current
+  tenant activity for internal, portal, IP and approved external destinations,
+  including fallbacks. Refresh warmed Company state with the authoritative
+  intent read, retain the final in-app predicate and prove disable/claim winner
+  orders on PostgreSQL. External claims fence Company before employee/parent
+  locks and release before transport; internal writes must not introduce a
+  late tenant lock or exceed the original total-SQL budget.
+
+- A fused parent-authorization/child-idempotency query must retain an explicit
+  non-null parent identity. Prove a visible parent with no existing child,
+  denied parent, exact replay, and sibling identities independently; do not
+  confuse a nullable joined entity with denial or infer success from empty
+  negative results. Preserve fresh checks and test both database dialects.
+- Shared permission-filter call contracts need an automatic-selection regression
+  as well as explicit-selection controls. A valid explicit Matter can bypass
+  a broken automatic path. Prove visible/hidden siblings, current policy and
+  tenant isolation through creation, persistence, audit and replay without
+  implying local provider-event admission proves actual OAuth consent.
+
+- A document's indexing commit does not cover downstream compliance audit,
+  notification or generated-work foreign keys. Capture bounded historical
+  creator, elected human actor, assignee and recipient identities before the
+  earliest parent lock, retain the existing Membership/User lock strength,
+  and recheck source, lifecycle and live authority after every commit.
+  Rule-policy writers must share admission to prevent new-recipient phantoms;
+  never chase a changed participant behind the parent or substitute provenance.
+- A total-query budget must count every SQL statement, not only the filtered
+  lock/write templates retained for diagnostics. Keep those two inventories
+  separate. Native evidence filenames need bounded identity hashes and unique
+  suffixes, with full test identities inside receipts; long Windows paths and
+  omitted diagnostic SELECTs are evidence failures, not product reproductions.
+- Recipient fanout must evaluate the current shared visibility predicate in
+  bounded batches, not repeat scalar ACL and tenant-policy reads per recipient
+  at every fence. Keep employee, capability, source and lifecycle revalidation;
+  do not cache access decisions or raise the query budget to excuse N+1 work.
+
 - Browser release evidence must flush privacy-selected collection and each
   completed attempt/error before process termination can erase them. Reconcile
   that bounded incremental journal with final native JSON/XML and exact release

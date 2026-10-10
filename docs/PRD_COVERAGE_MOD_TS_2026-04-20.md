@@ -1,5 +1,38 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 10 Participant-Fence Coverage
+
+Adjacent delivery-tenant activity baseline reproduces 30 product failures with
+12 active controls passing (42 identities/126 phases across both databases).
+Candidate `e3f16940` Company replacement passes 260 combined cases/780 phases;
+external claim/disable winner races now pass in the complete 115-case/345-phase
+native replacement with unchanged 394/400 and 7,114/7,600 SQL limits. A separate
+16-case worker baseline reproduces four late-grant failures; `20f3f72b` restores
+the final predicate for actorless delivery. Complete replacement on `e1a8182c`
+passes all 128 cases/384 phases in eight files, zero skips/errors, exact JUnit
+and unchanged source. Complete Docker/CI and the discovered Calendar browser
+still need execution on the exact release; earlier passes are checkpoints.
+
+US-001/M02/M03/M08/M13/M14/UJ36/UJ61 are still partial on `b1d3fb23`.
+Combined `ea625cac` passes 75 complete API cases/225 phases and all 1,234
+frontend cases in 197 files with exact native inventories and no skips;
+fresh web build passes. Native participant/finalizer replay subsequently
+passes 102 cases, but all-SQL accounting then reproduces 17,621 statements
+against the unchanged 7,600 budget for 500 recipients. Shared live batch policy
+`bcde1467` passes 107 dual-database cases/321 phases with one SQL per batch;
+the integrated fanout now passes the unchanged complete budget: 394/400 SQL
+statements for 20 recipients and 7,114/7,600 for 500, all delivered. Separate
+complete Main replays pass 69 adjacent-policy, 26 dual-database notification and
+42 expanded recipient/correlation/nested-query cases. Automatic Calendar
+candidate admission's wrong policy-call signature has 56 SQLite/PostgreSQL
+replacement passes; this is local J08/M08/US-023 coverage, not live OAuth proof.
+Final scoped native race replay passes 108 identities/324 phases with exact
+JUnit, source identity and clean owned-database teardown. Complete combined
+backend integration passes 218 cases/654 phases in 12 files, zero skips.
+These checkpoints do not certify full Docker, final CI/security, canonical
+main or production. Preserve the prior failed Windows/SQL evidence and replay
+the final source. Detailed proof: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 10 Integrated Follow-Up Coverage
 
 SEC-031 and release verification remain partial/NO-GO: incremental browser

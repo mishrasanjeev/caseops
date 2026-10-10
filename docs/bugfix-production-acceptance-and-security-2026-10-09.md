@@ -677,6 +677,289 @@ its app browser job. Production is still `b1d3fb23`; no issue is closed here.
 
 ## Required Closure
 
+### Downstream Participant Integration Checkpoint
+
+Main cherry-picks reviewed participant owner `2801efe3` as `ea625cac`.
+`participant-main-integration-r1.*` reconciles every identity in five complete
+files: document worker (7), proceeding intelligence (10), participant dependency
+ownership (11), dependency graph (31), notification convergence (16). All 75
+pass, zero skips/failures, 225 phases, completion exit zero and exact JUnit.
+`web-whole-2b1819d5/full-participant-ea625cac-r1/` separately reconciles all
+1,234 tests in 197 files with zero skips/failures and byte-identical before/after
+frontend/lockfile hashes. `web-build-ea625cac-r1.log` passes a fresh build.
+These are source checkpoints, not full Docker or production acceptance.
+
+The participant final committed replay initially retains 86 passes, four
+call failures and one setup error among 91 identities. All four tie-election
+cases pass actual repeated election and persisted original creator/elected
+audit identity, but the diagnostic fixture omits their nonlocking SELECT from
+its retained templates. The fifth failure is Windows opening a full-test-name
+journal path in setup, not teardown or a product race. The narrow fixture
+follow-up retains election SQL without parameters, uses bounded identity-hash
+plus UUID filenames, keeps full identities inside receipts, and adds privacy
+and long-name controls. Its native 102-case checkpoint completes all 306 phases
+with exit zero, but later review finds that the total-query assertion still
+counts filtered lock/write templates rather than all SQL. Full all-statement
+accounting and a fresh complete replacement are required; do not upgrade the
+filtered count or erase these failures. Native artifacts remain in the owned
+participant worktree's `.tmp/compliance-participant-r1/`.
+
+Hosted CI `38003885346` is now fully successful for intermediate `822127cd`,
+including App browser. Its complete native artifact readback is separate; this
+green run predates the new journal and participant source. It cannot satisfy
+fresh final-head CI. No merge/deployment, default-main alert closure, successful
+Google exclusion or actual Calendar consent is claimed.
+
+### Complete SQL Counter Reopens The Performance Gate
+
+Full `native-work-counter-r1` and `r2` preserve every completed phase and
+source identity. Both 20/500-recipient cases deliver every actual in-app
+notification, without a native deadlock, but fail the existing total budget:
+821 statements against 400, and 17,621 against 7,600. Filtered diagnostic
+counts of 203/4,523 had omitted ordinary SELECTs and cannot certify work.
+The second probe attributes the 500-recipient work to capture/revalidation
+(8,016), enqueue (2,500) and delivery (7,000). Repeated scalar ACL and current
+tenant-policy reads, not required audit or notification persistence, dominate
+capture. These are genuine performance failures, not infrastructure errors;
+the original `100 + 15 * recipients` budget remains unchanged.
+
+Main commits the shared live scalar/batch policy as `bcde1467`. Complete
+`policy-batch-sqlite-r1` and `policy-batch-postgres-r1/results` reconcile 54
+and 53 identities, all 321 setup/call/teardown phases, terminal zero exits and
+exact JUnit, without skips. Each batch is exactly one SQL statement; explicit
+expected visibility and the scalar policy agree for owner, assignee, restricted
+records, current team scoping, active/inactive teams, direct/team grants,
+revocation/effective windows, ethical walls and cross-tenant exclusion. Warmed
+policy and revoked-grant changes recheck the database; raw iteration stops
+at 501 and rejects excess before a query. The PostgreSQL database is created
+independently, migrated, catalogued and dropped by exact owned identity;
+source hashes remain unchanged. No access decision is cached.
+
+The first integrated batch checkpoint still fails the original complete SQL
+limits (444/400 and 8,124/7,600); its completed native receipts remain retained.
+Capture is bounded to 24 statements, but duplicate fresh recipient/ACL and
+idempotency reads still exceed the total. A fresh scalar review/failure recipient
+selection is shared within that capture only. Notification enqueue and final
+in-app creation compose the current ACL predicate with their exact identity
+lookup; they retain the non-null parent identity to distinguish a denied parent
+from a visible parent with no existing child. No authorization decision is
+cached, and the earlier locked operational/recipient checks remain unchanged.
+
+`native-batch-profile-r3` passes both complete all-statement limits: 394/400
+for 20 recipients and 7,114/7,600 for 500, all notifications delivered. Counts
+include diagnostic label statements. Capture remains 24, enqueue 60/1,500 and
+delivery 220/5,500. Complete `native-final-r4` now reconciles all 108 identities
+across finalizer overlap (11), participant fence (53) and notification race
+(44), all 324 phases, zero skips/errors/failures, completion zero and exact
+JUnit. Its separate 106 transaction receipts retain actual backend identities,
+directed blockers, full all-SQL counters and empty cleanup activity/locks; two
+pure journal controls retain their own evidence. Both complete-run delivery
+receipts reproduce 394/7,114 with all 20/500 in-app notifications delivered.
+Source hashes are unchanged, and the fresh owned database is dropped. Main
+verifies byte-identical Git blobs for the eight relevant services and three
+native test files between owner `3caae7fb` and combined `029517a6` (the latter's
+Calendar correction is disjoint). This is complete scoped native proof, not
+full Docker, CI/CodeQL or production certification.
+
+Main's `policy-adjacent-sqlite-r1` reconciles 69 identities/207 phases across
+six complete files with zero skips. `notification-lookup-dual-r1` retains all
+26 identities/78 phases and 14 call failures: two invalid expired-grant fixture
+windows and 12 failed positive controls in the first lookup composition. The
+replacement retains an explicit parent identity, corrects the invalid windows
+and passes all 26 identities/78 phases. Do not attribute a generic ORM cause
+beyond this reproduced query's failure. `policy-composition-and-notification-dual-r1`
+retains 38 passes/two setup-data call failures (missing required notice creator)
+among 40 identities. The valid expanded replacement passes 42 identities/126
+phases: two ordinary recipients under three authority modes, current role/team
+and wall changes, raw candidate bounds, mismatched/missing parents, actual notice
+UNION/count/page/hydration and private-authorized-ID nested NOT IN/EXISTS under
+both team-scoping states, plus exact recipient/event/source/company sibling
+notification identities. Nested private SQL is not generation/readiness proof.
+All complete Main replays reconcile collection/JUnit/completion, retain source
+hashes and clean up their independently migrated owned databases. Original
+failures remain preserved; no issue/alert is closed from these local tests.
+
+### Automatic Calendar Candidate Admission
+
+Independent read-only policy review found an existing signature defect in
+`calendar_event_candidates._suggest_matter`: the keyword-only shared filter
+received context in the session argument. Automatic suggestion fails before
+persisting a candidate, while explicit selection bypasses this defect. The
+corrected complete baseline retains 42 exact TypeErrors and 14 passing controls.
+Its predecessor also contains the defect. The first smaller baseline retains
+20 product failures plus six test defects (four incorrect denial-code assumptions
+and two reserved-domain HTTP bootstraps); those are not additional product bugs.
+
+Reviewed owner commit `90e448ea` is integrated as `029517a6`, changing only the
+call signature and one new regression file. All 56 replacement identities pass
+(27 PostgreSQL, 29 SQLite/HTTP), 168 phases, zero skips and exact normal-discovery
+and JUnit reconciliation. The fresh owned database is migrated and dropped;
+there are no external provider requests. Coverage includes matched/unmatched and
+hidden/visible siblings, tenant/current ACL/team/grant/wall cases, persistence,
+audit/idempotence and unchanged explicit selection, plus Google/Outlook local
+HTTP candidate creation/list/replay with the no-paid marker. PRD mapping is
+J08/M08/MOD-TS-006/US-023/FT-042/043/SEC-003/004. Evidence is retained in the
+owner's `outputs/calendar-candidate-filter-20261010/handoff.json` and native
+baseline/replacement artifacts. Actual OAuth consent and final combined
+Docker/CI/production acceptance remain separate and unverified.
+
+Historical CI `38003885346` readback retains and verifies all 20 GitHub
+artifacts and 405 original files. Exact merge `a761e0b8` has the same tree as
+`822127cd`; 13 API shards reconcile 7,910 identities (5,909 pass/2,001 explicit
+skips), four PostgreSQL shards supplement the exact 1,999 no-PG identities,
+and App Playwright reconciles 505 attempts (490 pass/15 unverified skips).
+All aggregate coverage gates pass. The two remaining API exclusions are the
+Linux-excluded Windows shim and opt-in reranker. These are complete historical
+receipts, not acceptance of newer reporter/participant/policy code. Full details:
+`.tmp/issues-security-20261009/ci-822127cd-complete-readback-r1/report.md`.
+
+### Final Combined Backend Integration
+
+On `029517a6`, `combined-backend-final-r1/results*` reconciles every selected
+identity in 12 complete files: document worker 7, proceeding intelligence 10,
+participant dependencies 11, dependency boundaries 31, notification convergence
+16, notification visibility 28, policy composition 14, Calendar permissions 56,
+legal-workspace Calendar sync 33, court-order creation 7, IP deadline notification
+4 and IP hearing notification 1. All 218 pass, all 654 phases pass, zero
+skips/failures/errors, exact JUnit agreement and native completion zero. Ruff
+passes before execution. All service/selected-test hashes remain unchanged.
+The independently migrated owned database reports migration `20260928_0001`,
+336 tables and 2,464 indexes, then is dropped by exact identity. No production
+database or provider is mutated. This is complete scoped integration proof;
+full frozen-source Docker/CI and deployed browser acceptance still remain.
+
+Independent static review at the same snapshot finds no remaining actionable
+defect in the shared policy, notification lookup compositions or expanded
+recipient/nested-query regressions. The reviewer does not independently execute
+the 42-case native gate. The new notice fixture does not populate its legacy
+attachment UNION arm; the foreign-company notification sibling also changes
+recipient. Those are scoped coverage caveats, not reproduced defects or broad
+release sign-off. The automatic Calendar defect is now integrated; a committed
+browser workflow and its Docker/live execution remain required.
+
+### Tenant Activity Reopens Delivery Acceptance
+
+The final participant handoff identifies a separate existing Company activity
+gap: recipient permission checks require Company existence, not current activity,
+and portal/external branches omit the tenant check. Main's complete 42-identity
+dual-database baseline passes 12 active controls and fails 30 genuine product
+assertions, all 126 phases complete and exact JUnit agrees. Every failed
+structured result is inspected: 12 retained disabled-tenant dispatches (six
+internal rows delivered, six deterministic email transports called), 12 new
+disabled-tenant intents admitted, and six disablements after the early internal
+permission check still delivered. There are no fixture/setup errors or paid
+provider calls. Evidence: `company-delivery-baseline-r1/results*`.
+
+Candidate `e3f16940` adds active-tenant conditions to the existing admission and
+final in-app lookup queries, including standalone, IP, portal and approved
+external intent admission. Their nullable-child lookups retain explicit parent
+identities. The already locked intent query also refreshes the current Company
+entity; no hot-path extra SQL or cached authority is introduced. External
+dispatch acquires Company NO KEY UPDATE before Membership/User/parent/intent
+and releases all locks at its existing durable claim commit before transport.
+Internal notification creation never acquires a late Company lock. Deterministic
+dual-database replacement, native claim/disable winner races, unchanged complete
+SQL budget and full release gates remain pending. Earlier 108-case and 218-case
+checkpoints are not final acceptance of this subsequent source correction.
+
+The complete `combined-backend-company-final-r1/results*` replacement on
+`e3f16940` now passes all 260 identities/780 phases across all 13 selected files
+(the previous 12-file 218 inventory plus 42 tenant-activity cases). No skips,
+failures or errors; exact JUnit/native completion, source hashes and owned
+independent migration/drop receipts reconcile. This closes the scoped baseline
+assertions only, not the subsequent worker correction or broad release gates.
+
+Independent review finds no actionable static cycle in the inspected tenant/
+employee/parent/intent callers, but correctly excludes worker `context=None`
+coverage. A separate complete 16-identity baseline reproduces four actual
+late-grant failures in that worker path, with 12 passing actor-context and
+Company-disable controls. All 48 phases complete; every failed call is inspected
+and exact JUnit agrees. Both new and legacy exact-match notification rows are
+incorrectly marked delivered after the grant is revoked. Evidence:
+`worker-final-acl-baseline-r1/results*`. This is a separate final-ACL omission,
+not a Company-disable reproduction. A worker must build its recipient context
+from the already refreshed tenant/recipient and retain the same final Matter
+predicate; missing browser context cannot bypass it. Correction `20f3f72b`
+derives that context from the joined current Company and recipient for both
+worker and actor calls, retaining the same final SQL predicate and query count.
+Complete `notification-final-composition-r1/results*` replacement on
+`e1a8182c` now passes all 128 identities in eight complete files: Company
+activity 42, worker visibility 16, notification visibility 28, policy composition
+14, notification convergence 16, court-order creation 7, IP deadline notification
+4 and IP hearing workflow 1. All 384 phases pass, zero skips/failures/errors,
+exact JUnit/native completion zero, unchanged service/test hashes, independent
+migration and exact owned-database drop receipts. Updated native race/budget
+proof and complete Docker/CI/deployed browser acceptance remain pending. A fresh
+complete root E2E typecheck exits zero at this snapshot.
+
+The updated complete native replacement on owner `3b9b438e` passes all 115
+identities/345 phases: finalizer 11, participant fence 53, participant
+notifications 44 and new Company races 7. Exact JUnit, zero skips/errors/failures,
+unchanged source and independently migrated UUID database/drop receipts agree.
+All 113 native journals reconcile to the inventory minus two pure receipt tests,
+with full identities, actual backend PIDs, bounded unique paths and empty
+cleanup activity/locks. Manifest SHA256:
+`7b627b1eb993c942999e512fa083e4ef93c97300fe2c2858168a99b62367d4e5`.
+Main's tested delivery and all three original native files have identical Git
+blobs; the only API-source difference is the separately proved Calendar fix.
+
+All six employee/portal/approved-external races use `context=None` and actual
+directed Company waits. Disable-first sends nothing and retains blocked/zero
+attempts; claim-first commits one authorized claim, releases the transaction
+before its deterministic local transport, allows subsequent disablement to
+commit, then retains one SENT/provider-accepted event and unchanged parent.
+Independent read-back and replay produce no duplicate/fallback children. In-app
+delivery completes while Company NO KEY UPDATE is held elsewhere, without
+adding employee or tenant locks. Original total work remains 394/400 for 20
+and 7,114/7,600 for 500, with every real notification persisted. Native evidence:
+`native-company-final-r3/` and its receipts reconciliation in the owner checkout.
+
+Retain two complete failed harness predecessors: R1 has 109 passes/six failures
+because provider configuration was installed after enqueue, producing terminal
+blocked intents; R2 has 112 passes/three failures because the new test mistook
+SENT transport acceptance for DELIVERED. Every setup/teardown passed in both;
+all failed calls were inspected. Neither is a product-race reproduction or
+successful acceptance. Only the new test's setup/DTO expectations were corrected;
+lock, transaction, single-call, audit/read-back/replay and SQL-cap assertions
+remain intact. Full 115-case R3 replaces both, not a filtered rerun.
+
+Fresh native Gitleaks v8.24.3 on all 13 new Main commits since `822127cd` reports
+zero findings with the current unchanged rules/ignore ledger; its redacted JSON
+is retained in `gitleaks-native-e1a8182c-history-r1/current.json`. The new native
+race file also scans clean. Hosted final-head and actual main scans remain
+separate release requirements; no alert is dismissed from these local proofs.
+
+The reviewed browser-only Calendar owner `ecb610cf` is integrated as `e1a8182c`.
+Its existing dated production spec adds non-paid automatic candidate intake,
+no-match and explicit nonexistent-Matter denial, with actual visible suggested
+Matter/control states and reload at 1280/393 widths. Production uses only
+existing `caseops-qa`/`test-legal` credentials; bootstrap is loopback-only. It
+asserts exact API/web SHA before/after mutations, no-paid markers, zero mutation
+retries, no provider/OAuth transport and terminal cleanup of its unique Matter.
+The two original OAuth tests retain their own opt-in skips, without skipping
+the new intake case. Root web/E2E typechecks pass, including the complete web
+replacement after an owned dependency-layout error; source/lockfiles unchanged.
+Real discovery selects the new case once in app (508/129 files), Docker desktop
+(504/128 files) and production tester (115/43 files), with no skip annotation.
+These are explicit project inventories, not the complete multi-project Docker
+or production totals. No browser execution is claimed yet. Retained owner
+proof: `outputs/calendar-candidate-browser-20261010/handoff.json`.
+
+Independent read-only classification confirms the two earlier OAuth cases are
+additional explicit human-consent gaps, not among the previous eight native
+Docker skips. Keep both collected and unverified, require their actual matching
+runtime JSON/XML reasons, and require the new non-paid intake case to pass.
+Do not opt into live consent, exclude the file or describe those skips as OAuth
+coverage. The final native policy must declare these dependencies before browser
+execution; every other current identity remains required.
+
+The separate conditional compliance AI-preparation boundary still uses a
+Session and can retain a transaction when those optional flags are enabled.
+Both defaults remain false and the serving manifest has neither flag; no
+detached-provider-boundary correction, flag activation or comprehensive provider
+I/O safety claim is made by this participant patch. Preserve this open boundary
+rather than treating provenance tests as transaction-free-provider proof.
+
 ### Interrupted Native Evidence Counterexample
 
 Independent review `ci-822127cd-native-integration-review-r1/report.md` proves

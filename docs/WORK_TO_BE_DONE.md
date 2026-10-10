@@ -1,5 +1,43 @@
 # CaseOps  - Work To Be Done
 
+## October 10 Participant-Fence Integration
+
+Before release, finish adjacent Company-disable delivery correction `e3f16940`:
+complete 42-case dual-database baseline has 12 active passes/30 genuine product
+failures and 126 reconciled phases. Replay new/fallback and retained internal/
+IP/portal/external admission, native external claim/disable winner orders and
+original all-SQL limits. Company replacement passes 260 combined cases/780
+phases. Four late-grant worker failures in a separate complete 16-case baseline
+are corrected in `20f3f72b`. Complete replacement on `e1a8182c` passes 128
+cases/384 phases in eight files, zero skips/errors, exact JUnit and unchanged
+source. Updated native replacement passes 115 cases/345 phases, both Company
+claim/disable orders and unchanged total-SQL limits 394/400 and 7,114/7,600.
+Complete Docker/CI and the discovered Calendar browser on the exact production
+revision remain required. Earlier passes below
+are source checkpoints, not final release acceptance.
+
+**NO-GO / not deployed.** Combined `ea625cac` passes 75 complete API
+cases/225 phases and all 1,234 frontend cases in 197 files, zero skips,
+exact discovery/JSON/JUnit agreement, unchanged frontend hashes and fresh
+web build. Native downstream participant/finalizer checkpoint passes 102
+cases after evidence-fixture corrections. Its filtered SQL tally is not total
+query proof; full accounting exposes 17,621 statements for 500 recipients
+against 7,600. Shared live batch visibility `bcde1467` passes 107 cases/321
+phases across SQLite and independently migrated PostgreSQL, one SQL per batch.
+The integrated fanout passes unchanged all-statement limits (394/400 and
+7,114/7,600) with 20/500 notifications delivered. Complete Main adjacent-policy,
+notification and expanded isolation/nested-query gates pass 69, 26 and 42
+identities respectively. Automatic Calendar suggestion's pre-existing wrong
+filter signature is corrected with 56 dual-database replacement passes;
+this does not prove actual Google/Outlook OAuth consent.
+Complete final native races pass 108 identities/324 phases with exact JUnit,
+source identity and clean owned-database teardown. Complete combined backend
+integration passes 218 cases/654 phases in 12 files, zero skips.
+Then run complete Docker/CI/security, canonical merge, guarded deployment,
+complete production matrix and later clean cadence. Retain all failed receipts
+and owner-kept external dependencies. Detailed evidence:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 10 Interrupted Browser Evidence
 
 Release remains **NO-GO / not deployed**. Independent review reproduces lost
