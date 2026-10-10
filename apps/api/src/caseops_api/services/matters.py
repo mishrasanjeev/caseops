@@ -5432,6 +5432,15 @@ def create_matter_court_sync_import(
     ):
         raise HTTPException(403, detail="The current membership cannot import court-sync data.")
     context.company, context.membership, context.user = fresh.company, fresh.membership, fresh.user
+    lock_matter_private_authority(session, company_id=company_id)
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_court_sync_import"],
+    )
+    # Actor denial precedes Matter/input validation. Release this read-only fence
+    # before preparation; the complete participant fence is reacquired after I/O.
+    session.rollback()
     matter = _get_matter_model(
         session, context=context, matter_id=matter_id, commit_access_denial=False,
     )
