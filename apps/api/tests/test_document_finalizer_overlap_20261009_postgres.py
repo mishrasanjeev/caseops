@@ -18,6 +18,7 @@ from hashlib import sha256
 from pathlib import Path
 from threading import Event, Lock, Thread
 from time import monotonic, sleep
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
@@ -248,7 +249,13 @@ class _FinalizerAudit:
 
     def before(self, connection, _cursor, sql, _parameters, _context, _many):
         role = connection.info.get("finalizer_role")
-        if role in self.names and ("FOR " in sql or sql.startswith(("INSERT", "UPDATE"))):
+        election = (
+            sql.startswith("SELECT ")
+            and "ORDER BY company_memberships.created_at ASC" in sql
+        )
+        if role in self.names and (
+            election or "FOR " in sql or sql.startswith(("INSERT", "UPDATE"))
+        ):
             self.statements.setdefault(role, []).append(sql)
             # Only statement templates: never parameters, document text or auth bodies.
             self.record("sql_before", role=role, pid=self.pids.get(role), sql=sql)
@@ -338,6 +345,43 @@ class _FinalizerAudit:
             assert not pending, "Owned contender did not terminate"
 
 
+def _finalizer_evidence_path(directory: Path, nodeid: str) -> Path:
+    identity_hash = sha256(nodeid.encode("utf-8")).hexdigest()[:20]
+    return directory / f"{identity_hash}-{uuid4().hex}.jsonl"
+
+
+def test_finalizer_journal_names_are_bounded_unique_and_retain_full_identity(tmp_path):
+    directory = tmp_path / ("native-" + "n" * 42) / ("transactions-" + "t" * 24)
+    directory.mkdir(parents=True)
+    nodeid = "tests/native.py::test_" + "long_test_identity_" * 40 + "[retained-source]"
+    paths = [_finalizer_evidence_path(directory, nodeid) for _ in range(2)]
+    assert paths[0] != paths[1]
+    for path in paths:
+        assert len(path.name) == 59
+        assert path.name.startswith(sha256(nodeid.encode()).hexdigest()[:20] + "-")
+        with path.open("x", encoding="utf-8") as stream:
+            stream.write(json.dumps({"nodeid": nodeid, "evidence_path": str(path)}) + "\n")
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        assert receipt["nodeid"] == nodeid and receipt["evidence_path"] == str(path)
+
+
+def test_finalizer_election_receipt_keeps_sql_template_not_parameters():
+    receipts = []
+    audit = _FinalizerAudit(None, lambda kind, **data: receipts.append({"event": kind, **data}))
+    audit.pids["worker"] = 123
+    connection = SimpleNamespace(info={"finalizer_role": "worker"})
+    statement = (
+        "SELECT company_memberships.id FROM company_memberships "
+        "WHERE company_memberships.company_id = %(company_id)s "
+        "ORDER BY company_memberships.created_at ASC, company_memberships.id ASC LIMIT %(limit)s"
+    )
+    private_parameter = secrets.token_urlsafe(32)
+    audit.before(connection, None, statement, {"company_id": private_parameter}, None, False)
+    assert audit.statements["worker"] == [statement]
+    assert receipts == [{"event": "sql_before", "role": "worker", "pid": 123, "sql": statement}]
+    assert private_parameter not in json.dumps(receipts)
+
+
 @pytest.fixture
 def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
     monkeypatch.setenv("CASEOPS_ENV", "local")
@@ -361,7 +405,7 @@ def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
         monkeypatch.setattr(identity, "lock_company_memberships_for_assignment", former_auth_option)
     directory = Path(os.environ.get("CASEOPS_FINALIZER_EVIDENCE_DIR", str(tmp_path)))
     directory.mkdir(parents=True, exist_ok=True)
-    evidence_path = directory / f"{request.node.name}-{uuid4().hex[:8]}.jsonl"
+    evidence_path = _finalizer_evidence_path(directory, request.node.nodeid)
     lock = Lock()
     with evidence_path.open("x", encoding="utf-8") as stream:
         def record(kind, **data):
@@ -390,6 +434,7 @@ def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
         for name, callback in audit.hooks:
             event.listen(engine, name, callback)
         record("source_identity", baseline=os.environ.get("CASEOPS_FINALIZER_AUTH_BASELINE"),
+               nodeid=request.node.nodeid, test_name=request.node.name,
                document_jobs_sha256=sha256(Path(document_jobs.__file__).read_bytes()).hexdigest(),
                identity_sha256=sha256(Path(identity.__file__).read_bytes()).hexdigest(),
                private_retrieval_sha256=sha256(
