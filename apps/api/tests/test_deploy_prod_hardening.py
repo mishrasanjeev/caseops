@@ -862,12 +862,16 @@ def test_complete_postgres_selector_rejects_narrowed_or_nonexecuting_gates(
 def test_postgres_ci_requires_complete_disjoint_shard_results_before_browser_acceptance() -> None:
     workflow = yaml.safe_load(_read_repo_text(".github/workflows/ci.yml"))
     shards = workflow["jobs"]["postgres-validation-shards"]
-    assert shards["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert shards["strategy"]["matrix"]["shard"] == list(range(1, 9))
+    assert shards["strategy"]["matrix"]["total_shards"] == [8]
+    assert shards["name"] == (
+        "Postgres + pgvector shard ${{ matrix.shard }}/${{ matrix.total_shards }}"
+    )
     assert shards["strategy"]["fail-fast"] is False
     assert shards["timeout-minutes"] == 12
     step = next(item for item in shards["steps"] if item.get("name") == "Pytest -m postgres")
     assert "-p tests.postgres_sharding" in step["env"]["PYTEST_ADDOPTS"]
-    assert "--postgres-shards=4" in step["env"]["PYTEST_ADDOPTS"]
+    assert "--postgres-shards=${{ matrix.total_shards }}" in step["env"]["PYTEST_ADDOPTS"]
     assert step["env"]["CASEOPS_TEST_RESULT_JOURNAL"] == (
         "postgres-shard-${{ matrix.shard }}.jsonl"
     )
@@ -877,7 +881,7 @@ def test_postgres_ci_requires_complete_disjoint_shard_results_before_browser_acc
     assert upload["if"] == "always()"
     aggregate = workflow["jobs"]["postgres-validation"]
     assert aggregate["needs"] == ["postgres-validation-shards"]
-    assert any("tests.postgres_sharding postgres-evidence --total 4" in item.get("run", "")
+    assert any("tests.postgres_sharding postgres-evidence --total 8" in item.get("run", "")
                for item in aggregate["steps"])
     assert "postgres-validation" in workflow["jobs"]["e2e"]["needs"]
 

@@ -194,6 +194,41 @@ by both Docker and production configs with distinct native identities, receipt
 collection is not execution. No new production deployment, closure or private
 cadence resume has occurred.
 
+Complete Main r21 then replays all five deployment/evidence/planner/partition/
+downgrade unit files, including the existing deployment assertions updated to
+the exact eight-shard manifest. **408 identities / 1,223 phases: 407 pass,
+one unverified Windows POSIX-mount-policy skip**, no failures/errors. Ordered
+independent discovery, incremental results, native JUnit and full before/after
+source pins agree on committed `2b960bbe` plus the captured deployment-test
+diff. Node **22.23.3** runs the actual offline reporter/Playwright CLI contracts:
+all **32** native TAP controls pass with zero skips/cancellations. Its real
+two intentionally failing synthetic API responses are retained by the reporter;
+they are offline negative controls, not production failures or paid calls.
+Receipt SHA256:
+`6352b3420942e2b40b052ff98cccc3426992c463090b0bfb4b811bb571c9ce62`.
+This is scoped replacement, not Docker/native migration/live certification.
+
+Sidecar test-only follow-ups are ready: the expanded historical fixture audit
+passes all **28** unit/SQLite identities (84 phases), including all six dated
+API failures, with independently fresh named-revision rehearsals and separate
+head health. Its original 14-file/20-call claim was not exhaustive; computed
+head callers and helper-return targets are now explicitly inventoried. The
+compliance helper-closure replacement passes **63** unit identities (189
+phases); the original complete PG69 is retained as **65 pass/four failures**,
+not a successful counterproof. Main independently rehashes **71** sealed files
+across these follow-ups, zero mismatches, receipt
+`34be7db0bcf5a6e7beb7a7c912a6f4acb5fa33a78c1971840e98a9b5b6dc74eb`.
+Current integrated native and fresh CodeQL results remain required.
+
+The complete Court/participant replacement r5 independently reaches
+**263 identities / 789 phases: 262 pass/one failure**, zero skips/errors.
+The new `[text-mutation-retry]` failure is an actual Company `55P03`, separate
+from the original no-source update failure. A four-case measured diagnostic
+passed with unchanged budgets, and the five-case isolated recovery/counterproof
+passed, but neither closes this broader failed run. Exact retry-holder timing
+and a complete replacement are required; do not assert CPU contention or
+raise budgets. No new deployment or production closure follows these results.
+
 ## Exact Failed Evidence
 
 [Production verification 38036444501](https://github.com/mishrasanjeev/caseops/actions/runs/38036444501)

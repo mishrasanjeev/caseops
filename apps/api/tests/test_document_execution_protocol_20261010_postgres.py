@@ -415,8 +415,12 @@ def test_document_protocol_rehearsal_refuses_a_retained_legacy_compliance_root(p
     root = Table("matter_compliance_extraction_runs", MetaData(), autoload_with=database.engine)
     assert "persistence_protocol" not in root.c
     with database.engine.begin() as seed:
+        matter_id = seed.scalar(select(fixture.model.matter_id).where(
+            fixture.model.id == fixture.source,
+        ))
+        assert matter_id is not None
         seed.execute(root.insert().values(id=str(uuid4()), company_id=fixture.company,
-            matter_id=fixture.matter, attachment_id=fixture.source, source_type="attachment",
+            matter_id=matter_id, attachment_id=fixture.source, source_type="attachment",
             trigger="manual", parser_version="legacy-fixture", status="failed",
             created_by_membership_id=fixture.actor, created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC)))
