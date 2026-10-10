@@ -934,7 +934,7 @@ def _process_ip_document_version_job(session: Session, job: DocumentProcessingJo
     if version is None:
         _mark_job_failed(session, job, error_message="IP document version could not be found.")
         return
-    from caseops_api.services.ip_document_workflow import (
+    from caseops_api.services.ip_document_targets import (
         _lock_upload_targets,
         _upload_document_targets,
         _upload_target_lifecycles,

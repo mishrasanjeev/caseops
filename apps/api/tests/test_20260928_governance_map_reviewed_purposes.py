@@ -98,7 +98,7 @@ def test_generate_keeps_reviewed_purposes_while_refreshing_the_inventory(
     assert rows[BULK]["purpose"] == reviewed
     assert rows[SEEDED]["purpose"] == SEEDED_PURPOSE
     assert rows[NEW_TABLE]["purpose"] == governance._generic_purpose(NEW_TABLE)
-    assert after["table_purpose_overrides"] == {BULK: reviewed, SEEDED: SEEDED_PURPOSE}
+    assert after["table_purpose_overrides"] == before["table_purpose_overrides"]
     # The generated inventory still refreshed around the preserved purposes.
     assert after["schema_fingerprint"] == governance._fingerprint(
         governance._schema_fingerprint_payload(schema, orm_indexes, migration_indexes)

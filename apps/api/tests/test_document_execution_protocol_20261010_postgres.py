@@ -279,12 +279,11 @@ def test_transaction_local_identity_resets_on_native_pooled_connection(pg_engine
     try:
         with pooled.connect() as connection:
             pid = connection.scalar(text("SELECT pg_backend_pid()"))
-            if finish == "savepoint":
-                nested = connection.begin_nested()
+            nested = connection.begin_nested() if finish == "savepoint" else None
             connection.execute(text(
                 "SELECT set_config('caseops.document_job_attempt', :value, true)"
             ), {"value": '{"id":"owned-attempt"}'})
-            if finish == "savepoint":
+            if nested is not None:
                 nested.rollback()
                 assert not connection.scalar(text(
                     "SELECT current_setting('caseops.document_job_attempt', true)"))
@@ -393,7 +392,9 @@ def test_invalid_recovery_contract_rejects_before_session_creation(monkeypatch, 
 def test_attempt_bound_disposal_cancellation_has_no_message_only_exemption(pg_engine, status):
     fixture = _fixture(pg_engine, active=False)
     with Session(pg_engine) as seed:
-        from tests.test_document_worker_claims_20261010_postgres import _legacy_receipt_fixture
+        from tests.fixtures_document_jobs import (
+            legacy_document_processing_receipt as _legacy_receipt_fixture,
+        )
 
         _legacy_receipt_fixture(seed, fixture.job, status=status, attempt_count=1,
                                 started_at=datetime.now(UTC) - timedelta(days=154)
@@ -516,7 +517,9 @@ def test_identical_terminal_execution_update_still_requires_attempt_context(pg_e
 def test_stale_recovery_installs_identity_per_individual_flush_at_most_five(pg_engine, monkeypatch):
     fixtures = [_fixture(pg_engine, active=False) for _ in range(6)]
     with Session(pg_engine) as seed:
-        from tests.test_document_worker_claims_20261010_postgres import _legacy_receipt_fixture
+        from tests.fixtures_document_jobs import (
+            legacy_document_processing_receipt as _legacy_receipt_fixture,
+        )
 
         for fixture in fixtures:
             _legacy_receipt_fixture(seed, fixture.job, status="processing", attempt_count=1,

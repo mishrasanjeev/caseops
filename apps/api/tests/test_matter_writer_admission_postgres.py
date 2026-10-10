@@ -902,7 +902,9 @@ def test_matter_worker_missing_legacy_actor_is_explicit(pg_engine, monkeypatch, 
 
 @pytest.mark.parametrize("autoflush", [False, True])
 def test_matter_worker_rejects_cross_tenant_event_actor(pg_engine, monkeypatch, race):
-    from tests.test_document_worker_claims_20261010_postgres import _legacy_receipt_fixture
+    from tests.fixtures_document_jobs import (
+        legacy_document_processing_receipt as _legacy_receipt_fixture,
+    )
 
     fixture = _fixture(pg_engine)
     with Session(pg_engine) as seed:
@@ -932,7 +934,9 @@ def test_matter_worker_rejects_cross_tenant_event_actor(pg_engine, monkeypatch, 
 def test_worker_retained_membership_fks_precede_source(
     pg_engine, monkeypatch, race, first, active, retained
 ):
-    from tests.test_document_worker_claims_20261010_postgres import _legacy_receipt_fixture
+    from tests.fixtures_document_jobs import (
+        legacy_document_processing_receipt as _legacy_receipt_fixture,
+    )
 
     source = "matter" if retained == "matter-uploader" else "ip"
     fixture = _fixture(pg_engine, source, active=active)

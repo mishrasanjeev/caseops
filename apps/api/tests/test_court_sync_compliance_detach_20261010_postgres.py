@@ -910,7 +910,8 @@ def test_native_selected_order_identity_change_rejects_prepared_output(
     )
     assert len(calls) == 1
     counts = _counts(audit, fixture)
-    assert counts.pop("matter_court_orders") == 1 and set(counts.values()) == {0}
+    retained_order_count = counts.pop("matter_court_orders")
+    assert retained_order_count == 1 and set(counts.values()) == {0}
     with Session(audit.engine) as session:
         retained = session.scalar(
             select(MatterCourtOrder).where(

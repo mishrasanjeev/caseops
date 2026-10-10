@@ -120,6 +120,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Select deterministic test shard
+        id: shard-files
         working-directory: apps/api
         env:
           PYTEST_SHARD: ${{ matrix.shard }}
@@ -142,6 +143,20 @@ jobs:
             --isolated-file test_matter_file_qa.py \
             --output .pytest-shard-files
           cp .pytest-shard-files "api-shard-${{ matrix.shard }}-files.txt"
+          if rg --fixed-strings --line-regexp 'tests/test_prod_playwright_evidence.py' .pytest-shard-files > /dev/null; then
+            echo "requires_playwright=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up offline evidence Node runtime
+        if: steps.shard-files.outputs.requires_playwright == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install offline evidence Playwright dependencies
+        if: steps.shard-files.outputs.requires_playwright == 'true'
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Pytest with coverage shard (P1-001 per-area gates)
         id: pytest

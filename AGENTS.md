@@ -1798,3 +1798,12 @@ requirements when using the fallback.
   as incomplete for that interaction. CI browser success requires an independent
   collected inventory, native per-test outcomes/skip reasons and completion
   bound to its actual checkout, retained even when the browser gate fails.
+- An ORM change must refresh both the reviewed governance map and its compiled
+  runtime projection. Run the complete CI control-plane command inventory,
+  including canonical-base `check-change` gates; a map-only validation cannot
+  prove runtime fingerprint agreement or migration readiness. Preserve the
+  fail-closed stale-projection response rather than bypassing it.
+- Test fixtures must not form cyclic imports or hide mutations inside assertions.
+  Move a genuinely shared pre-feature fixture to a test-owned helper, keep its
+  operations and assertions unchanged, reconcile every consumer, and require
+  fresh native coverage and actual CodeQL results before scanner closure.

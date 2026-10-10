@@ -32,6 +32,9 @@ from caseops_api.db.models import (
     utcnow,
 )
 from caseops_api.services import document_jobs, document_processing
+from tests.fixtures_document_jobs import (
+    legacy_document_processing_receipt as _legacy_receipt_fixture,
+)
 from tests.test_matter_writer_admission_postgres import _fixture
 from tests.test_postgres_validation import _ensure_migrations  # noqa: F401
 
@@ -56,21 +59,6 @@ def _worker(monkeypatch, engine, parse):
 
 def _parsed(value="Prepared content"):
     return document_processing.ParsedDocument("indexed", value, [value], None)
-
-
-def _legacy_receipt_fixture(session, job_id, **state):
-    # Insert the legacy initial state explicitly; head's execution trigger is
-    # never disabled or supplied an invented authorization for fixture UPDATEs.
-    old = session.get(DocumentProcessingJob, job_id)
-    assert old is not None and old.status == "queued" and old.attempt_count == 0
-    values = {column.key: getattr(old, column.key)
-              for column in DocumentProcessingJob.__table__.columns}
-    session.delete(old)
-    session.flush()
-    job = DocumentProcessingJob(**(values | state))
-    session.add(job)
-    session.flush()
-    return job
 
 
 def _assert_success(engine, fixture, attempts, content="Prepared content"):

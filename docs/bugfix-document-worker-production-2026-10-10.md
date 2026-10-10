@@ -17,6 +17,40 @@ This scope maps to existing US-001/M02/M03/M08/M13/M14/UJ36/UJ61 release
 journeys and J19/M21/US-063/SEC-031 public discovery and evidence controls.
 It adds no legal-source approval, consent or commercial commitment.
 
+## Draft PR532 Checkpoint
+
+[PR532](https://github.com/mishrasanjeev/caseops/pull/532) is draft at
+`0fd0b74e`, unmerged and not deployed. Its first
+[CI run](https://github.com/mishrasanjeev/caseops/actions/runs/38058946001)
+fails. All seven completed PostgreSQL failures were read individually from
+their native reports: five legal-hold responses correctly reject a stale
+compiled governance fingerprint, and two court-worker tests fail recovery
+assertions. Shards two and three are cancelled, not successful coverage.
+Backend coverage shard failures also require complete individual reconciliation;
+their green siblings cannot certify the candidate. The generated runtime
+projection has now been refreshed locally without changing the reviewed
+admission policy; replacement native/hosted proof remains pending.
+
+The checkpoint's governance diff gate rejects migration 0002's absent purpose
+marker before Ruff runs. A separate exact-base migration preflight identifies
+four blocking index builds and two destructive no-paid-column downgrades in
+0001/0002. These require real concurrent-index recovery and a reviewed
+restore-forward policy, not blanket risk acknowledgements.
+
+The PR-ref CodeQL report contains five new test-code findings (535-539): one
+possibly uninitialized local, three cyclic imports and one mutation inside an
+assertion. Local edits move the unchanged legacy receipt setup to a shared
+test helper, initialize the savepoint variable explicitly and move `pop`
+before its unchanged assertion. All four consuming test modules collect
+264 identities and scoped Ruff passes. Collection is not execution; fresh
+native and actual SARIF results are still required. Main-ref open alerts
+remain a separate inventory, not proof that this PR is clean.
+
+Agent broad replacements are still red: document r9 completes 331 identities
+with 314 passes and 17 failures; court r4 completes 253 identities with 251
+passes and two failures. No assertion, wait/lock budget or provider fence is
+waived. Original reports remain retained while every failure is diagnosed.
+
 ## Exact Failed Evidence
 
 [Production verification 38036444501](https://github.com/mishrasanjeev/caseops/actions/runs/38036444501)
