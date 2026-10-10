@@ -8,6 +8,7 @@ import json
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from threading import Event
@@ -40,6 +41,7 @@ from caseops_api.db.models import (
 from caseops_api.schemas.matters import MatterCourtOrderSyncItem, MatterCourtSyncImportRequest
 from caseops_api.services import (
     compliance_extraction,
+    compliance_participants,
     court_sync_jobs,
     document_jobs,
     document_processing,
@@ -168,6 +170,17 @@ def _legacy(database):
         "compliance_extraction_3dbf.py",
         "15b0353be9ea24f376aac63d6a1b6e71ba1eb0bd6b93201d5e29a43299971a87",
     )
+    participants = _load_frozen(
+        "compliance_participants_3dbf.py",
+        "cebe9e90a70e7e09499c639f5c7ad526656c9d037c3a606e340d4082ca9dbf09",
+    )
+    for name in (
+        "ComplianceParticipantFenceError",
+        "lock_compliance_participants",
+        "_notification_context",
+        "_recipient_memberships",
+    ):
+        setattr(module, name, getattr(participants, name))
     module.MatterComplianceExtractionRun = database.legacy_run
     return module
 
@@ -184,13 +197,13 @@ def _install(database):
     assert _snapshot(database) == before, "Installing a protocol must not rewrite historical rows"
 
 
-def _snapshot(database):
+def _snapshot(database, *, connection=None):
     # Full raw rows, not filtered ORM DTOs, expose earlier writes and changed history.
-    with database.engine.connect() as connection:
+    with (database.engine.connect() if connection is None else nullcontext(connection)) as active:
         result = {
             table: [
                 dict(row)
-                for row in connection.execute(
+                for row in active.execute(
                     text(f'SELECT * FROM "{table}" ORDER BY id')
                 ).mappings()
             ]
@@ -198,19 +211,19 @@ def _snapshot(database):
         }
         result["index"] = [
             dict(row)
-            for row in connection.execute(
+            for row in active.execute(
                 text("SELECT * FROM matter_attachments ORDER BY id")
             ).mappings()
         ]
         result["chunks"] = [
             dict(row)
-            for row in connection.execute(
+            for row in active.execute(
                 text("SELECT * FROM matter_attachment_chunks ORDER BY id")
             ).mappings()
         ]
         result["jobs"] = [
             dict(row)
-            for row in connection.execute(
+            for row in active.execute(
                 text("SELECT * FROM document_processing_jobs ORDER BY id")
             ).mappings()
         ]
@@ -353,7 +366,7 @@ def test_actual_full_3db_extraction_cannot_create_tail_outputs(
             session.get(MatterCourtOrder, database.fixture.order).order_text = None
             session.get(MatterAttachment, database.fixture.attachment).extracted_text = None
             session.commit()
-    before = _snapshot(database)
+    _snapshot(database)
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(_invoke, legacy, database, source)
         try:
@@ -467,10 +480,23 @@ def test_full_frozen_existing_run_tail_rolls_back_already_created_items(
     database = tail_database
     run_id = _historical_run(database)
     _install(database)
+
+    def current_helper_was_used(*_args, **_kwargs):
+        raise AssertionError("The frozen tail must use its historical participant helpers")
+
+    for name in ("lock_compliance_participants", "_notification_context", "_recipient_memberships"):
+        monkeypatch.setattr(compliance_participants, name, current_helper_was_used)
     legacy = _legacy(database)
     _provider(legacy, monkeypatch)
     before = _snapshot(database)
     with Session(database.engine) as session:
+        # The actual 3dbf pipeline admits participants before parent/child persistence too.
+        legacy.lock_compliance_participants(
+            session,
+            company_id=database.fixture.company,
+            matter_id=database.fixture.matter,
+            actor_membership_id=database.fixture.actor,
+        )
         matter = session.get(Matter, database.fixture.matter)
         run = session.get(database.legacy_run, run_id)
         order = session.get(MatterCourtOrder, database.fixture.order)
@@ -486,6 +512,13 @@ def test_full_frozen_existing_run_tail_rolls_back_already_created_items(
         assert items, "The frozen pre-finalization path must really create child rows"
         session.flush()
         assert list(session.scalars(select(MatterComplianceItem)))
+        staged = _snapshot(database, connection=session.connection())
+        assert staged["matter_compliance_items"] and staged["matter_tasks"]
+        assert staged["matter_deadlines"] and staged["notification_delivery_intents"]
+        assert (
+            staged["matter_compliance_extraction_runs"]
+            == before["matter_compliance_extraction_runs"]
+        )
         with pytest.raises(DBAPIError) as rejected:
             legacy._finish_run(
                 session,
@@ -684,6 +717,7 @@ def test_current_existing_run_finalize_review_and_legacy_retry_are_distinct(
         session.commit()
         legacy_id = old.id
     command.upgrade(database.cfg, "head")
+    original = _snapshot(database)["matter_compliance_extraction_runs"]
     _provider(compliance_extraction, monkeypatch)
     with Session(database.engine) as session:
         context = _ip_race_context(
@@ -704,6 +738,15 @@ def test_current_existing_run_finalize_review_and_legacy_retry_are_distinct(
             item_id=items[0].id,
             action="confirm",
         )
+        # Public retry/review commit; private finalization requires fresh admission.
+        compliance_extraction.lock_compliance_participants(
+            session,
+            company_id=database.fixture.company,
+            matter_id=database.fixture.matter,
+            actor_membership_id=context.membership.id,
+            context=context,
+            required_capability="matters:write",
+        )
         retained = session.get(MatterComplianceExtractionRun, fresh.id)
         compliance_extraction._finish_run(
             session,
@@ -714,6 +757,11 @@ def test_current_existing_run_finalize_review_and_legacy_retry_are_distinct(
         )
         session.commit()
         assert session.get(MatterComplianceExtractionRun, legacy_id).persistence_protocol is None
+    assert [
+        row
+        for row in _snapshot(database)["matter_compliance_extraction_runs"]
+        if row["id"] == legacy_id
+    ] == original
 
 
 @pytest.mark.parametrize(

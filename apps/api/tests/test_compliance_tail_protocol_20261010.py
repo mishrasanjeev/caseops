@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib.util
+import inspect
 import json
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -16,7 +17,9 @@ import pytest
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import MatterComplianceExtractionRun
+from caseops_api.services import compliance_participants
 from caseops_api.services import compliance_tail_protocol as protocol
+from tests.test_compliance_tail_protocol_20261010_postgres import _legacy
 
 LEGACY_SHA256 = "15b0353be9ea24f376aac63d6a1b6e71ba1eb0bd6b93201d5e29a43299971a87"
 ROOT = Path(__file__).resolve().parents[1]
@@ -235,6 +238,9 @@ def test_frozen_compliance_and_document_sources_are_exact_3dbf_bytes():
     fixtures = Path(__file__).parent / "fixtures"
     expected = {
         "compliance_extraction_3dbf.py": LEGACY_SHA256,
+        "compliance_participants_3dbf.py": (
+            "cebe9e90a70e7e09499c639f5c7ad526656c9d037c3a606e340d4082ca9dbf09"
+        ),
         "document_jobs_3dbf.py": "c4acf5992cf7e73c62702c2420a7468beb1358723dca4db4f674bc179cf0f78f",
     }
     for name, digest in expected.items():
@@ -242,6 +248,59 @@ def test_frozen_compliance_and_document_sources_are_exact_3dbf_bytes():
             hashlib.sha256((fixtures / name).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
             == digest
         )
+
+
+@pytest.mark.parametrize(
+    ("name", "digest"),
+    [
+        (
+            "lock_compliance_participants",
+            "58dd6b76695b68db61a0933f4c9f03f9eb5895d67025d0426af8c009d68f0ed5",
+        ),
+        ("_participant_fence", "f834d48f8132a91bda056d509d4e24c867d6db012280cc6b81a3f6e91145f5df"),
+        (
+            "_notification_context",
+            "976c848eeac193bb7b84ef83beb8849d9fa0555a2fa67cae47c4e557dbef44bf",
+        ),
+        (
+            "_recipient_memberships",
+            "558f17904d8337b25e45b021850130f34d0830d100b93d20552d85214701dd9f",
+        ),
+    ],
+)
+def test_frozen_participant_body_and_transitive_globals_match_3dbf(name, digest):
+    legacy = _legacy(SimpleNamespace(legacy_run=type("LegacyRun", (), {})))
+    namespace = legacy._notification_context.__globals__
+    function = namespace[name]
+    body = ast.parse(inspect.getsource(function)).body[0]
+    assert hashlib.sha256(ast.dump(body, include_attributes=False).encode()).hexdigest() == digest
+    assert function.__globals__ is namespace
+    assert Path(function.__code__.co_filename).resolve() == (
+        ROOT / "tests/fixtures/compliance_participants_3dbf.py"
+    ).resolve()
+    for imported in (
+        "lock_compliance_participants", "_notification_context", "_recipient_memberships",
+    ):
+        assert getattr(legacy, imported) is namespace[imported]
+    assert legacy.ComplianceParticipantFenceError is namespace["ComplianceParticipantFenceError"]
+
+
+def test_frozen_notifications_ignore_current_bindings_but_still_require_admission(monkeypatch):
+    def current_helper_was_used(*_args, **_kwargs):
+        raise AssertionError("Current helper was used instead of pinned 3dbf semantics")
+
+    for name in (
+        "lock_compliance_participants", "_notification_context", "_recipient_memberships",
+        "_participant_fence",
+    ):
+        monkeypatch.setattr(compliance_participants, name, current_helper_was_used)
+    legacy = _legacy(SimpleNamespace(legacy_run=type("LegacyRun", (), {})))
+    session = SimpleNamespace(info={}, get_transaction=lambda: None)
+    matter = SimpleNamespace(company_id=str(uuid4()), id=str(uuid4()))
+    for helper in (legacy._notification_context, legacy._recipient_memberships):
+        with pytest.raises(RuntimeError, match="Compliance participant fence must precede"):
+            helper(session, matter=matter, actor_membership_id=None)
+    assert not session.info
 
 
 def test_current_create_and_finish_bind_before_any_flush_or_run_mutation():
