@@ -5361,6 +5361,7 @@ class MatterComplianceExtractionRun(Base):
     )
     source_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     trigger: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    persistence_protocol: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(
         String(24),
         nullable=False,

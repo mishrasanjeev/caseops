@@ -39,17 +39,12 @@ from caseops_api.schemas.compliance import (
     ComplianceExtractionRunRecord,
     ComplianceItemRecord,
 )
-from caseops_api.schemas.matters import MatterCourtOrderSyncItem
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.compliance_participants import (
     ComplianceParticipantFenceError,
     _notification_context,
     _recipient_memberships,
     lock_compliance_participants,
-)
-from caseops_api.services.compliance_tail_protocol import (
-    admit_compliance_run,
-    bind_compliance_run_context,
 )
 from caseops_api.services.llm import (
     LLMCallContext,
@@ -66,7 +61,6 @@ from caseops_api.services.matter_operational_guard import (
     assert_operational_matter,
     require_operational_matter,
 )
-from caseops_api.services.matter_write_fence import require_read_only_upload_session
 from caseops_api.services.notification_delivery import enqueue_notification_delivery_intent
 from caseops_api.services.proceeding_intelligence import (
     extract_imported_order_proceeding_intelligence,
@@ -74,7 +68,6 @@ from caseops_api.services.proceeding_intelligence import (
 )
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_ai_policy import (
-    ResolvedAIPolicy,
     is_model_allowed,
     resolve_tenant_policy,
 )
@@ -116,33 +109,6 @@ class _PreparedAICompliance:
     prompt_hash: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)
     error_message_redacted: str | None = None
-    policy: ResolvedAIPolicy | None = None
-    preparation_error_redacted: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class _ComplianceMatterInput:
-    id: str
-    company_id: str
-    title: str
-    lifecycle_version: int
-
-
-@dataclass(frozen=True, slots=True)
-class _PreparedCourtOrderCompliance:
-    input_hash: str
-    existing_order_id: str | None
-    prior_order_index: int | None
-    order_text: str | None
-    ai: _PreparedAICompliance
-
-
-@dataclass(frozen=True, slots=True)
-class PreparedCourtSyncCompliance:
-    matter: _ComplianceMatterInput
-    source: str
-    enabled: tuple[bool, bool]
-    orders: tuple[_PreparedCourtOrderCompliance, ...]
 
 
 def _now() -> datetime:
@@ -385,7 +351,6 @@ def _create_run(
             ),
         },
     )
-    admit_compliance_run(session, run)
     session.add(run)
     session.flush()
     return run
@@ -409,14 +374,11 @@ def _safe_source_text(
             return text[:_MAX_SOURCE_CHARS], None
         return None, "text_extraction_pending"
     if order is not None:
-        return _safe_order_text(order.order_text)
+        text = order.order_text
+        if text and len(" ".join(text.split())) >= _MIN_SOURCE_CHARS:
+            return text[:_MAX_SOURCE_CHARS], None
+        return None, "order_text_missing"
     return None, "source_missing"
-
-
-def _safe_order_text(text: str | None) -> tuple[str | None, str | None]:
-    if text and len(" ".join(text.split())) >= _MIN_SOURCE_CHARS:
-        return text[:_MAX_SOURCE_CHARS], None
-    return None, "order_text_missing"
 
 
 def _create_item(
@@ -571,10 +533,9 @@ def _deterministic_items(
 def _prepare_ai_items(
     session: Session,
     *,
-    matter: Matter | _ComplianceMatterInput,
+    matter: Matter,
     source_text: str,
     provider: LLMProvider | None,
-    detached: bool = False,
 ) -> _PreparedAICompliance:
     """Complete provider-bound analysis without creating operational children."""
 
@@ -588,8 +549,7 @@ def _prepare_ai_items(
     policy = resolve_tenant_policy(session, company_id=matter.company_id)
     if not is_model_allowed(policy, purpose="metadata_extract", model=llm.model):
         return _PreparedAICompliance(
-            metadata={"ai_skipped": "tenant_ai_policy_blocked_model"},
-            policy=policy if detached else None,
+            metadata={"ai_skipped": "tenant_ai_policy_blocked_model"}
         )
     messages = [
         LLMMessage(
@@ -613,10 +573,6 @@ def _prepare_ai_items(
     prompt_hash = hashlib.sha256(
         "\n".join(f"{message.role}:{message.content}" for message in messages).encode("utf-8")
     ).hexdigest()
-    if detached:
-        require_read_only_upload_session(
-            session, detail="Court compliance preparation cannot release caller-owned writes."
-        )
     try:
         payload, completion = generate_structured(
             llm,
@@ -626,92 +582,18 @@ def _prepare_ai_items(
             context=LLMCallContext(purpose="metadata_extract"),
             temperature=settings.llm_temperature,
             max_tokens=min(settings.llm_max_output_tokens, 1600),
-            release_session_before_provider=detached,
         )
     except LLMProviderError as exc:
         return _PreparedAICompliance(
             metadata={"ai_failed": True},
             error_message_redacted=redact_provider_error(exc),
-            policy=policy if detached else None,
         )
     return _PreparedAICompliance(
         payload=payload,
         completion=completion,
         prompt_hash=prompt_hash,
         metadata={"ai_item_count": len(payload.items)},
-        policy=policy if detached else None,
     )
-
-
-def _court_order_input_hash(order: MatterCourtOrderSyncItem) -> str:
-    return hashlib.sha256(order.model_dump_json().encode("utf-8")).hexdigest()
-
-
-def prepare_court_sync_compliance(
-    session: Session, *, matter: Matter, orders: list[MatterCourtOrderSyncItem],
-    source: str, order_sources: list[tuple[str | None, int | None, str | None]],
-) -> PreparedCourtSyncCompliance:
-    """Court callers enter before any import write or authority lock, never mid-import."""
-    require_read_only_upload_session(
-        session, detail="Court compliance preparation cannot release caller-owned writes."
-    )
-    snapshot = _ComplianceMatterInput(
-        matter.id, matter.company_id, matter.title, matter.lifecycle_version,
-    )
-    settings = get_settings()
-    enabled = (
-        settings.compliance_ai_extraction_enabled,
-        settings.compliance_ai_extraction_auto_run_enabled,
-    )
-    # Capture all inputs before rollback expires ORM reads or a callback changes a payload.
-    inputs = tuple(
-        (_court_order_input_hash(order), existing_id, prior_index, order_text)
-        for order, (existing_id, prior_index, order_text) in zip(orders, order_sources, strict=True)
-    )
-    prepared = []
-    for input_hash, existing_id, prior_index, order_text in inputs:
-        source_text, _skip_reason = _safe_order_text(order_text)
-        ai = _PreparedAICompliance()
-        if source_text is not None:
-            try:
-                ai = _prepare_ai_items(
-                    session, matter=snapshot, source_text=source_text,
-                    provider=None, detached=True,
-                )
-            except LLMProviderError as exc:
-                # Keep configuration failure on the existing failed-extraction path.
-                ai = _PreparedAICompliance(preparation_error_redacted=redact_provider_error(exc))
-        prepared.append(_PreparedCourtOrderCompliance(
-            input_hash, existing_id, prior_index, order_text, ai,
-        ))
-    require_read_only_upload_session(
-        session, detail="Court compliance preparation cannot release caller-owned writes."
-    )
-    session.rollback()
-    return PreparedCourtSyncCompliance(snapshot, source, enabled, tuple(prepared))
-
-
-def validate_court_sync_compliance(
-    session: Session, *, matter: Matter, orders: list[MatterCourtOrderSyncItem],
-    source: str, prepared: PreparedCourtSyncCompliance,
-) -> None:
-    """Reject stale prepared input under the caller's fresh Company/parent fence."""
-    snapshot = _ComplianceMatterInput(
-        matter.id, matter.company_id, matter.title, matter.lifecycle_version,
-    )
-    settings = get_settings()
-    if snapshot != prepared.matter or source != prepared.source or prepared.enabled != (
-        settings.compliance_ai_extraction_enabled,
-        settings.compliance_ai_extraction_auto_run_enabled,
-    ) or tuple(_court_order_input_hash(order) for order in orders) != tuple(
-        order.input_hash for order in prepared.orders
-    ):
-        raise ComplianceParticipantFenceError(409, detail={"code": "compliance_source_changed"})
-    policies = [order.ai.policy for order in prepared.orders if order.ai.policy is not None]
-    if policies:
-        current_policy = resolve_tenant_policy(session, company_id=matter.company_id)
-        if any(policy != current_policy for policy in policies):
-            raise ComplianceParticipantFenceError(409, detail={"code": "compliance_policy_changed"})
 
 
 def _persist_ai_items(
@@ -794,7 +676,6 @@ def _finish_run(
     skip_reason: str | None = None,
     error: object | None = None,
 ) -> None:
-    bind_compliance_run_context(session, run)
     run.status = status_value
     run.skip_reason = skip_reason
     run.completed_at = _now()
@@ -850,10 +731,7 @@ def run_compliance_extraction_for_order(
     context: SessionContext | None = None,
     provider: LLMProvider | None = None,
     required_capability: str = "matters:edit",
-    prepared_ai: _PreparedAICompliance | None = None,
 ) -> tuple[MatterComplianceExtractionRun, list[MatterComplianceItem]]:
-    if trigger == "court_sync" and prepared_ai is None:
-        raise RuntimeError("Court compliance must be prepared before import persistence.")
     previous = session.info.get("compliance_participants", {}).get(
         (matter.company_id, matter.id, actor_membership_id),
     )
@@ -926,9 +804,7 @@ def run_compliance_extraction_for_order(
         )
         return run, []
     try:
-        if prepared_ai is not None and prepared_ai.preparation_error_redacted is not None:
-            raise LLMProviderError(prepared_ai.preparation_error_redacted)
-        prepared_ai = prepared_ai if prepared_ai is not None else _prepare_ai_items(
+        prepared_ai = _prepare_ai_items(
             session,
             matter=matter,
             source_text=source_text,
