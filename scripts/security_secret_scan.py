@@ -159,6 +159,120 @@ def scanner_receipt(output: bytes, *, history: bool) -> dict:
     }
 
 
+def tree_policy_provenance(
+    repo: Path, tree: Path, findings: list[dict], output: Path, head: str
+) -> str:
+    """Apply existing commit fingerprints only to unchanged, fully attributed spans."""
+    policy = (tree / ".gitleaksignore").read_bytes()
+    reviewed = set(policy.decode("utf-8").splitlines())
+    if not findings or len(findings) > 500:
+        raise ScanError("Tree finding inventory is empty or exceeds bounded policy review")
+    proofs = []
+    translated = set()
+    original_blobs = {}
+    for finding in findings:
+        location = finding["locations"][0]["physicalLocation"]
+        path = location["artifactLocation"]["uri"]
+        region = location["region"]
+        start, end = region["startLine"], region["endLine"]
+        relative = PurePosixPath(path)
+        if (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or "\\" in path
+            or not isinstance(start, int)
+            or not isinstance(end, int)
+            or start <= 0
+            or end < start
+            or end - start > 100
+        ):
+            raise ScanError("Tree finding has invalid path/span provenance")
+        data = (tree / path).read_bytes().splitlines(keepends=True)
+        blame = git(
+            repo,
+            "-c",
+            "core.quotePath=false",
+            "blame",
+            "--line-porcelain",
+            "-L",
+            f"{start},{end}",
+            head,
+            "--",
+            path,
+        ).splitlines()
+        attributed = []
+        current = None
+        for line in blame:
+            if re.fullmatch(rb"[0-9a-f]{40} \d+ \d+(?: \d+)?", line):
+                parts = line.split()
+                current = {
+                    "commit": parts[0].decode(),
+                    "original_line": int(parts[1]),
+                    "candidate_line": int(parts[2]),
+                    "path": None,
+                }
+            elif line.startswith(b"filename ") and current is not None:
+                current["path"] = line[9:].decode("utf-8")
+            elif line.startswith(b"\t") and current is not None:
+                attributed.append(current)
+                current = None
+        accepted = False
+        fingerprint = None
+        if len(attributed) == end - start + 1 and attributed:
+            first = attributed[0]
+            origin = first["commit"]
+            origin_start = first["original_line"]
+            fingerprint = f"{origin}:{path}:{finding['ruleId']}:{origin_start}"
+            consecutive = all(
+                row
+                == {
+                    "commit": origin,
+                    "original_line": origin_start + index,
+                    "candidate_line": start + index,
+                    "path": path,
+                }
+                for index, row in enumerate(attributed)
+            )
+            if consecutive and fingerprint in reviewed:
+                key = (origin, path)
+                if key not in original_blobs:
+                    original_blobs[key] = git(repo, "show", origin + ":" + path).splitlines(
+                        keepends=True
+                    )
+                original = original_blobs[key][origin_start - 1 : origin_start + end - start]
+                captured = data[start - 1 : end]
+                accepted = len(original) == end - start + 1 and captured == original
+        proofs.append(
+            {
+                "path": path,
+                "rule": finding["ruleId"],
+                "start_line": start,
+                "end_line": end,
+                "existing_fingerprint": fingerprint,
+                "accepted_existing_policy": accepted,
+                "span_sha256": hashlib.sha256(b"".join(data[start - 1 : end])).hexdigest(),
+            }
+        )
+        if accepted:
+            translated.add(f"{path}:{finding['ruleId']}:{start}")
+    (output / "tree-policy-provenance.json").write_text(
+        json.dumps(
+            {
+                "candidate_policy_sha256": hashlib.sha256(policy).hexdigest(),
+                "findings": proofs,
+                "accepted_existing_policy": sum(row["accepted_existing_policy"] for row in proofs),
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    if not all(row["accepted_existing_policy"] for row in proofs):
+        raise ScanError("Tree has unreviewed findings; no new suppression is permitted")
+    target = tree.parent / "tree-policy.ignore"
+    target.write_bytes(policy + b"\n" + "\n".join(sorted(translated)).encode() + b"\n")
+    return "/scan/tree-policy.ignore"
+
+
 def scan_boundary(
     repo: Path,
     workspace: Path,
@@ -168,6 +282,8 @@ def scan_boundary(
     selection: str,
     docker: str,
     timeout: int,
+    head: str,
+    _tree_ignore: str | None = None,
 ) -> dict:
     name = "caseops-secret-" + uuid.uuid4().hex
     report = workspace / (kind + ".sarif")
@@ -191,7 +307,7 @@ def scan_boundary(
         "dir" if kind == "tree" else "git",
         ".",
         "--config=/scan/tree/.gitleaks.toml",
-        "--gitleaks-ignore-path=/scan/tree/.gitleaksignore",
+        "--gitleaks-ignore-path=" + (_tree_ignore or "/scan/tree/.gitleaksignore"),
         "--redact=100",
         "--no-banner",
         "--no-color",
@@ -263,6 +379,28 @@ def scan_boundary(
         (output / report.name).write_bytes(data)
         receipt["report_sha256"] = hashlib.sha256(data).hexdigest()
     (output / (kind + "-receipt.json")).write_text(json.dumps(receipt, indent=2) + "\n")
+    if kind == "tree" and result.returncode == 2 and _tree_ignore is None:
+        # The directory scanner cannot interpret commit-bound fingerprints.
+        # Keep its original native report, prove existing policy provenance,
+        # then rescan the SAME immutable tree with only those exact translations.
+        (output / "tree-initial.sarif").write_bytes(report.read_bytes())
+        (output / "tree-initial-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+        scanner_receipt(result.stdout + result.stderr, history=False)
+        findings = json.loads(report.read_bytes())["runs"][0]["results"]
+        resolved = tree_policy_provenance(repo, workspace / "tree", findings, output, head)
+        final = scan_boundary(
+            repo,
+            workspace,
+            output,
+            kind=kind,
+            selection=selection,
+            docker=docker,
+            timeout=timeout,
+            head=head,
+            _tree_ignore=resolved,
+        )
+        final["existing_policy_translations"] = len(findings)
+        return final
     if result.returncode != 0:
         raise ScanError(
             f"{kind} scanner failed (exit {result.returncode}); redacted report retained"
@@ -348,6 +486,7 @@ def run_scan(
                     selection=selection,
                     docker=docker,
                     timeout=timeout,
+                    head=head,
                 )
                 record({"event": "boundary_completed", "kind": kind, **receipts[kind]})
             if git(repo, "rev-parse", "HEAD").decode().strip() != head:
