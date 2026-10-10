@@ -46,7 +46,16 @@ function testCaseLocation() {
 async function capture(options = {}) {
   const prior = { ...process.env };
   const originalWrite = fs.writeFileSync;
+  const originalOpen = fs.openSync;
+  const originalAppend = fs.writeSync;
+  const originalSync = fs.fsyncSync;
+  const originalClose = fs.closeSync;
   const writes = [];
+  const progress = [];
+  let syncs = 0;
+  let closes = 0;
+  let writesToProgress = 0;
+  let reporter;
   const directory = path.join(root, "test-results/prod-native-evidence/offline");
   try {
     Object.assign(process.env, { CASEOPS_EXPECTED_RELEASE_SHA: sha,
@@ -66,21 +75,164 @@ async function capture(options = {}) {
         assert.ok(!content.includes(privateValue), `Unsafe value at write boundary: ${privateValue}`);
       }
       writes.push({ file, content });
+      if (options.finalWriteFailure) throw new Error("Safe final output unavailable");
     };
+    fs.openSync = (file, flags) => {
+      assert.equal(file, path.join(directory, "progress.jsonl"));
+      assert.equal(flags, "wx");
+      if (options.existingProgress) throw new Error("EEXIST progress evidence retained");
+      return 12007;
+    };
+    fs.writeSync = (fd, buffer, offset, length) => {
+      assert.equal(fd, 12007);
+      if (options.partialFailure && writesToProgress++ === 1) throw new Error("Injected partial write failure");
+      if (options.invalidWrite !== undefined) return options.invalidWrite;
+      const written = options.partialWrites ? Math.min(length, 13) : length;
+      const content = buffer.toString("utf8");
+      for (const privateValue of [sentinel, "PRIVATE-INLINE-AUTHSTATE", "private-legal-body", "toBeOK raw response"]) {
+        assert.ok(!content.includes(privateValue), `Unsafe progress value at first write: ${privateValue}`);
+      }
+      progress.push(Buffer.from(buffer.subarray(offset, offset + written)));
+      return written;
+    };
+    fs.fsyncSync = (fd) => {
+      assert.equal(fd, 12007); syncs++;
+      if (options.fsyncFailure) throw new Error("Injected fsync failure");
+    };
+    fs.closeSync = (fd) => { assert.equal(fd, 12007); closes++; };
     const data = fixture(options);
     if (options.mutate) options.mutate(data);
-    const reporter = new Reporter();
+    reporter = new Reporter();
+    const earlyError = { message: `Authorization: Bearer ${sentinel} private-legal-body`, location: testCaseLocation() };
+    if (options.beforeConfigure) reporter.onError(earlyError);
+    reporter.configure(data.config);
+    if (options.beforeBegin) reporter.onError(earlyError);
+    if (options.configureTwice) reporter.configure(data.config);
     if (!options.noBegin) reporter.onBegin(data.config, data.suite);
+    if (options.nearLimit) reporter.progressBytes = 64 * 1024 * 1024;
+    if (!options.noBegin && !options.discovery && !options.empty) reporter.onTestEnd(data.testCase, data.testCase.results[0]);
     if (options.globalError) reporter.onError({ message: `Authorization: Bearer ${sentinel} private-legal-body`,
       get stack() { return forbidden(); }, location: testCaseLocation() });
-    await reporter.onEnd({ status: options.fullStatus ?? "passed", duration: 5 });
-    return { writes, json: JSON.parse(writes[0].content), xml: writes[1]?.content };
+    if (!options.noEnd) await reporter.onEnd({ status: options.fullStatus ?? "passed", duration: 5 });
+    if (options.exit) reporter.onExit();
+    return { writes, json: writes[0] ? JSON.parse(writes[0].content) : undefined,
+      xml: writes[1]?.content, progress: Buffer.concat(progress).toString("utf8").split("\n").filter(Boolean).map(JSON.parse), syncs, closes };
   } finally {
+    reporter?.onExit();
     fs.writeFileSync = originalWrite;
+    fs.openSync = originalOpen;
+    fs.writeSync = originalAppend;
+    fs.fsyncSync = originalSync;
+    fs.closeSync = originalClose;
     for (const key of Object.keys(process.env)) if (!(key in prior)) delete process.env[key];
     Object.assign(process.env, prior);
   }
 }
+
+test("completed failed attempts and collection are flushed before hard interruption", async () => {
+  const result = await capture({ outcome: "unexpected", noEnd: true, globalError: true });
+  assert.deepEqual(result.progress.map((row) => row.event), ["invocation_started", "collection", "test_end", "global_error"]);
+  assert.equal(result.progress[0].release_sha, sha);
+  assert.equal(result.progress[0].invocation, "offline");
+  const attempt = result.progress[2].suites[0].suites[0].specs[0];
+  assert.equal(attempt.id, "canonical-native-id");
+  assert.equal(attempt.tests[0].results[0].status, "failed");
+  assert.equal(result.syncs, 4);
+  assert.equal(result.writes.length, 0);
+  assert.ok(!result.progress.some((row) => row.event === "session_finished"));
+});
+
+test("journal completion follows safe final reports and retains exact attempts", async () => {
+  const { progress, syncs, closes, json } = await capture();
+  assert.deepEqual(progress.map((row) => row.event), ["invocation_started", "collection", "test_end", "session_finished"]);
+  assert.deepEqual(progress[2].suites, json.suites);
+  assert.deepEqual(progress[3], { event: "session_finished", status: "passed", test_count: 1 });
+  assert.equal(syncs, 4);
+  assert.equal(closes, 1);
+});
+
+test("native discovery never opens an execution journal", async () => {
+  const result = await capture({ discovery: true, outcome: "skipped" });
+  assert.deepEqual(result.progress, []);
+  assert.equal(result.syncs, 0);
+});
+
+test("existing progress evidence is rejected rather than overwritten", async () => {
+  await assert.rejects(capture({ existingProgress: true }), /EEXIST/);
+});
+
+test("partial synchronous writes preserve complete UTF8 packets and flush once per event", async () => {
+  const result = await capture({ partialWrites: true });
+  assert.deepEqual(result.progress[2].suites, result.json.suites);
+  assert.equal(result.syncs, 4);
+  assert.equal(result.closes, 1);
+});
+
+test("zero, negative, noninteger and oversized progress writes fail before completion", async () => {
+  for (const invalidWrite of [0, -1, 0.5, 64 * 1024 * 1024]) {
+    await assert.rejects(capture({ invalidWrite }), /Incomplete safe progress write/);
+  }
+});
+
+test("cumulative progress bound rejects later packets without final reports", async () => {
+  await assert.rejects(capture({ nearLimit: true }), /oversized safe progress evidence/);
+});
+
+test("normal exit without completion closes the journal but cannot create a finish receipt", async () => {
+  const result = await capture({ noEnd: true, exit: true });
+  assert.equal(result.closes, 1);
+  assert.equal(result.writes.length, 0);
+  assert.ok(!result.progress.some((row) => row.event === "session_finished"));
+});
+
+test("failed final report write cannot produce a journal completion", async () => {
+  await assert.rejects(capture({ finalWriteFailure: true }), /Safe final output unavailable/);
+});
+
+test("pre-collection errors are fsynced without inventing collection or completion", async () => {
+  const result = await capture({ noBegin: true, noEnd: true, beforeBegin: true });
+  assert.deepEqual(result.progress.map((row) => row.event), ["invocation_started", "global_error"]);
+  assert.equal(result.syncs, 2);
+  assert.equal(result.writes.length, 0);
+});
+
+test("errors delivered before collection flush exactly once under reviewed invocation binding", async () => {
+  const result = await capture({ beforeConfigure: true, fullStatus: "failed" });
+  assert.deepEqual(result.progress.map((row) => row.event),
+    ["invocation_started", "global_error", "collection", "test_end", "session_finished"]);
+  assert.equal(result.json.errors.length, 1);
+});
+
+test("fsync failure closes the journal and rejects all later appends inside the bound", () => {
+  const reporter = Object.create(Reporter.prototype);
+  const value = { event: "global_error", error: { message: "[redacted native error]" } };
+  const bytes = Buffer.byteLength(JSON.stringify(value) + "\n", "utf8");
+  const limit = 64 * 1024 * 1024;
+  reporter.progressFd = 12007;
+  reporter.progressBytes = limit - bytes;
+  const original = { write: fs.writeSync, sync: fs.fsyncSync, close: fs.closeSync };
+  let written = reporter.progressBytes;
+  let closes = 0;
+  try {
+    fs.writeSync = (_, __, ___, length) => { written += length; return length; };
+    fs.fsyncSync = () => { throw new Error("Injected fsync failure"); };
+    fs.closeSync = (fd) => { assert.equal(fd, 12007); closes++; };
+    assert.throws(() => reporter.appendProgress(value), /Injected fsync failure/);
+    assert.equal(reporter.progressBytes, limit);
+    assert.equal(reporter.progressFd, undefined);
+    assert.throws(() => reporter.appendProgress(value), /Missing or oversized/);
+    assert.equal(written, limit);
+    assert.equal(closes, 1);
+  } finally { fs.writeSync = original.write; fs.fsyncSync = original.sync; fs.closeSync = original.close; }
+});
+
+test("partial write failure cannot continue a damaged journal", async () => {
+  await assert.rejects(capture({ partialWrites: true, partialFailure: true }), /Injected partial write failure/);
+});
+
+test("repeat configuration cannot overwrite the original invocation", async () => {
+  await assert.rejects(capture({ configureTwice: true }), /already configured/);
+});
 
 test("native identity, config/project binding and safe annotations survive before-write selection", async () => {
   const { json, xml, writes } = await capture();

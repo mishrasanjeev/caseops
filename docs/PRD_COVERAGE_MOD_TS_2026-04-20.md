@@ -2,6 +2,19 @@
 
 ## October 10 Integrated Follow-Up Coverage
 
+SEC-031 and release verification remain partial/NO-GO: incremental browser
+receipts survive real process termination while missing completion stays
+fail-closed. Complete two-file local proof is 139 passes/417 phases, including
+27 privacy-safe reporter controls. The later 174-pass run overlaps formatting
+and requires stable replay; final native browser/Docker/main/live proof remains
+pending. Earlier acceptance does not certify this changed reporter.
+
+Stable replacement completes 180 passes/540 phases and 32 reporter controls.
+Actual installed browser-free Playwright independently validates six cases,
+including two unverified skips; a failed global setup stays incomplete. The
+public adapter's early-error delivery limit remains explicit, not bypassed
+with a private protocol. Final release/browser proof is still pending.
+
 US-001/M02/M03/M08/M13/M14/UJ36/UJ61 and J19/M21/US-063/SEC-031 remain
 partial on serving `b1d3fb23`. Integrated `e0004687` adds complete scoped
 257-case API, 1,225-case frontend and 336-case report/deploy proof (335 passed,

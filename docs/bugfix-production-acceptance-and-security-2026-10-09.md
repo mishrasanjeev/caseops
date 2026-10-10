@@ -677,6 +677,86 @@ its app browser job. Production is still `b1d3fb23`; no issue is closed here.
 
 ## Required Closure
 
+### Interrupted Native Evidence Counterexample
+
+Independent review `ci-822127cd-native-integration-review-r1/report.md` proves
+the final-only reporter does not write completed failure/global-error outcomes
+before `onEnd`. A hard-killed wrapper remains incomplete, but loses the useful
+native results. This is an evidence-retention defect, not a false-green gate.
+The candidate captures an exclusive, 64-MiB-total JSONL journal bound to the
+release and invocation: full collection, each privacy-selected native attempt,
+redacted global errors and a finish receipt only after safe final JSON/XML.
+Each event is synchronously written and fsynced; partial writes are completed,
+invalid writes/bounds reject, and normal exit closes without inventing finish.
+Final readback reconciles ordered identities and exact attempts/errors/status
+with the native reports, hashes the journal and rejects missing or tampered
+evidence independently. Discovery never opens an execution journal.
+
+`native-progress-baseline-r1.tap` retains the 22-case baseline: 19 pass/three
+new contract failures, including no retained before-end result. The first
+Python replacement `native-progress-python-fixed-r1.*` has 119 identities,
+118 pass/one stale reporter-count failure, 357 phases, completion and matching
+JUnit. The full failure was inspected, not dismissed as a product reproduction.
+`native-progress-python-fixed-r2.*` passes all 139 identities in both complete
+affected files (113 native-capture +26 workflow), zero skips/failures, 417
+phases and exact JUnit agreement. Its 27 Node reporter controls pass. A real
+Node subprocess is killed after three fsynced packets; the failed attempt and
+redacted error survive, discovery remains, and wrapper execution is incomplete
+with no final report or completion file. This is actual process/file retention
+proof, not browser execution. The four-file `native-progress-complete-r3.*`
+completes 174 passes but overlaps a formatting-only source edit; retain it as
+non-frozen and rerun the stable complete inventory before certification.
+
+The participant agent's first native provision stop is separately traced to an
+extra `pass` prefix in its ignored runner's DSN. Main checks the approved
+sidecar identity and actual read-only psycopg connection successfully; this is
+an operator setup error, not a new user credential dependency. Preserve its
+NOT RUN evidence, correct only that owned runner and use a fresh independently
+migrated database for the downstream participant/recipient overlaps. Neither
+this correction nor collected-but-unexecuted races close the Docker deadlock.
+
+Independent follow-up `native-progress-independent-review-r1/report.md`
+finds a modeled fsync counterexample: a 71-byte packet is physically written
+but uncharged on failure, then another append exceeds the original 64-MiB
+bound. The replacement reserves bytes before I/O, closes after every damaged
+write/fsync and rejects further events. The reviewed public Playwright V1
+adapter defers pre-collection errors. A normal failed global setup retains a
+safe error at fallback begin/end and stays incomplete; the review's native
+hard-kill setup probe is itself failed/inconclusive, not a successful
+reproduction. Preserve that failure and do not assert otherwise.
+
+The final local candidate uses only the public reporter callback protocol.
+Its constructor binds the reviewed environment and fsyncs invocation startup
+before collection. Every delivered attempt/error is retained, but startup
+does not certify an undelivered early error. `onConfigure`/V2 is not a public
+1.60 Reporter contract and is not adopted. See the
+[official reporter API](https://playwright.dev/docs/api/class-reporter).
+`native-progress-complete-stable-r5.*` reconciles 180 passes in four complete
+files (119 capture +26 workflow +19 PostgreSQL reconciliation +16 shard
+planning), zero skips/failures, 540 phases and exact JUnit/native agreement.
+All 32 first-write/privacy/I/O reporter controls pass, including both actual
+Node-kill prefixes (completed failure and delivered pre-collection error).
+`native-progress-protocol-fixed-r4.*` independently retains its 180-pass
+pre-format checkpoint; the later stable r5 supersedes it for source proof.
+
+`native-progress-abi-fixed-r5/` copies the reviewed no-network/no-server fixture
+without altering its earlier receipts, seals unchanged source hashes and
+replays the actual installed Playwright 1.60 CLI. Six cases reconcile as four
+expected/two skips: one pass, three expected failures (assertion/setup/teardown)
+and two explicit exclusions. Independent native validation exits zero. Actual
+global-setup failure retains one safe error, empty fallback collection and
+failed native status; wrapper exits one, preserves discovery and has no
+completion receipt. The two-case verification harness also reconciles all six
+pytest phases/JUnit identities. This is browser-free ABI proof, not App,
+public-page, Docker or production acceptance. No source edit overlaps r5.
+
+Committed `822127cd` separately has zero API/SARIF findings in actual Python,
+JavaScript/TypeScript and Actions analyses (1926858937/1926853565/1926847711)
+on merge `a761e0b8`, whose tree equals the candidate. This predates the new
+reporter/backend repair and is not default-main closure: 28 main alerts remain
+open at `5c322339`. No alert is dismissed and production still serves
+`b1d3fb23` on both surfaces. Final integrated gates remain mandatory.
+
 ### Frozen C7 Complete Failed Readback
 
 Candidate `c7dfdc5cf9215b21d25511f8409e1fe81f9f6b94`, tree

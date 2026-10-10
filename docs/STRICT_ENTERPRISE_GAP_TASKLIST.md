@@ -1,5 +1,25 @@
 # Strict Enterprise Gap Tasklist
 
+## October 10 Incremental Browser Receipts
+
+**Partially implemented / NO-GO.** Final-only reporting loses completed
+outcomes when the process is killed even though certification correctly fails.
+The candidate retains bounded, fsynced, privacy-selected collection and native
+attempt/error events, checks exact release/inventory/final JSON/XML agreement
+and rejects missing completion, duplicate/tampered results and oversized writes.
+139 local contract tests/417 reconciled phases and 27 reporter controls pass;
+an actual killed process proves retained failure plus incomplete wrapper state.
+The later 174-pass run overlaps formatting and is not frozen-source proof.
+Fresh complete release/browser/production verification remains pending.
+Evidence: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+The stable follow-up passes 180 cases/540 phases and 32 reporter controls;
+actual installed browser-free Playwright reconciles six cases, with two explicit
+skips. The writer now reserves bytes before I/O and closes permanently after
+write/fsync failure. Startup is retained in the constructor using reviewed
+invocation environment, while the public adapter's deferred early-error
+delivery stays explicit. No private API or complete release proof is claimed.
+
 ## October 10 C7 Downstream And Evidence Gaps
 
 **NO-GO / partially implemented.** Full frozen `c7dfdc5c` PostgreSQL acceptance

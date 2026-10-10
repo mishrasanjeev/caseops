@@ -1,5 +1,28 @@
 # CaseOps  - Work To Be Done
 
+## October 10 Interrupted Browser Evidence
+
+Release remains **NO-GO / not deployed**. Independent review reproduces lost
+completed browser outcomes on hard interruption: the existing final-only
+reporter remains fail-closed, but its diagnostics disappear. The candidate
+adds bounded, exclusive, fsynced privacy-safe collection/attempt/error receipts
+and full final-report reconciliation. Complete two-file local proof is 139
+passes/417 phases with exact JUnit agreement, including actual Node termination
+and 27 first-write reporter controls. This is not browser or release acceptance.
+An overlapping formatting change makes the later 174-pass four-file checkpoint
+non-frozen; rerun its complete stable inventory before certification. The
+downstream participant repair, final Docker/CI/main/security/live gates and
+external consent/privacy/provider dependencies remain open. Detailed receipts:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+Stable incremental-evidence replacement now passes all 180 cases in four
+complete files/540 phases, zero skips, plus 32 reporter controls. Real installed
+Playwright replays six browser-free cases (four expected, two skipped) and
+validates native receipts; actual global-setup failure remains incomplete.
+Invocation startup is durable before collection, but the public adapter may
+defer early errors. No private reporter protocol or false early-error guarantee
+is introduced. These are scoped controls, not final release acceptance.
+
 ## October 10 Frozen C7 NO-GO
 
 PR #528 is not releasable: frozen `c7dfdc5c` completes PostgreSQL (1999 pass)

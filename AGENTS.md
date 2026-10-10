@@ -1,5 +1,19 @@
 # CaseOps agent instructions
 
+- Browser release evidence must flush privacy-selected collection and each
+  completed attempt/error before process termination can erase them. Reconcile
+  that bounded incremental journal with final native JSON/XML and exact release
+  identity; a retained interrupted prefix is diagnostic evidence, never a
+  completed acceptance gate. Prove a real killed reporter, not only mocked I/O.
+  The public Playwright adapter can defer early error delivery; invocation
+  startup is not proof that an undelivered error was retained. Do not adopt an
+  undocumented reporter protocol to hide that limitation. Reserve bytes before
+  writing and make any partial-write/fsync failure terminal.
+- A failed local database login is not an external credential dependency until
+  its constructed connection parameters match the approved sidecar. The extra
+  `pass` prefix in an ignored regression runner was an operator setup error;
+  preserve it as NOT RUN and replay a fresh independently migrated database.
+
 - Public claims must match the actual bounded safety mechanism, not promise
   universal legal correctness or absence of hallucinations. Audit adjacent
   persona and guide copy, assert visible review limitations, and replay every

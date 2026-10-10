@@ -1,5 +1,24 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 10 Interrupted Native Evidence
+
+**Partially fixed; not fixed in production / NO-GO.** A real killed Node
+reporter now retains completed failure/error packets without writing a finish
+receipt; the wrapper preserves discovery and rejects incomplete execution.
+Two complete affected files pass 139 cases/417 phases with exact native/JUnit
+agreement, including 27 reporter controls. The first 119-case replacement
+retains 118 passes/one stale count assertion failure. A later 174-pass gate
+overlaps a formatting change and is not frozen-source acceptance. Stable replay,
+actual final browser execution and production acceptance remain required.
+See `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+Stable replacement `native-progress-complete-stable-r5.*` has 180 passes,
+540 phases and exact JUnit/native inventory agreement; all 32 reporter controls
+pass. Real installed Playwright ABI accepts four expected outcomes/two skips,
+while its actual failed global setup preserves safe diagnostics and stays
+incomplete. Invocation startup cannot certify early errors deferred by the
+public adapter. Final Docker/CI/production proof is still pending.
+
 ## October 10 Frozen C7 Counterexamples
 
 **Not fixed in production; NO-GO.** `c7dfdc5c` has 1999 complete PostgreSQL

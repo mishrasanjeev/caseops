@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
@@ -73,6 +74,7 @@ def capture(tmp_path, monkeypatch):
     reporter = tmp_path / evidence.REPORTER
     reporter.parent.mkdir()
     reporter.touch()
+    node = shutil.which("node")
     monkeypatch.setattr(evidence.shutil, "which", lambda _: "offline-node")
     monkeypatch.setattr(evidence.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=BASE))
     env = {
@@ -168,6 +170,7 @@ def capture(tmp_path, monkeypatch):
         missing=None,
         junit_count=1,
         mutate_xml=None,
+        node=node,
     )
 
     def launch(command, **kwargs):
@@ -244,6 +247,55 @@ def capture(tmp_path, monkeypatch):
             ET.ElementTree(xml).write(
                 kwargs["env"]["CASEOPS_PW_EVIDENCE_JUNIT_FILE"], encoding="utf-8"
             )
+        if not listing and state.missing != "progress":
+            collection = copy.deepcopy(doc["suites"])
+
+            def strip_attempts(suites):
+                for suite in suites:
+                    for spec in suite.get("specs", []):
+                        for native_test in spec["tests"]:
+                            native_test["results"] = []
+                    strip_attempts(suite.get("suites", []))
+
+            def individual_cases(suites):
+                for suite in suites:
+                    for spec in suite.get("specs", []):
+                        for native_test in spec["tests"]:
+                            current = copy.deepcopy(spec)
+                            current["tests"] = [copy.deepcopy(native_test)]
+                            yield {"title": suite["title"], "specs": [current]}
+                    for child in individual_cases(suite.get("suites", [])):
+                        yield {"title": suite["title"], "specs": [], "suites": [child]}
+
+            strip_attempts(collection)
+            packets = [
+                {"event": "invocation_started", "release_sha": BASE, "invocation": "offline"},
+                {
+                    "event": "collection",
+                    "release_sha": BASE,
+                    "invocation": "offline",
+                    "suites": collection,
+                }
+            ]
+            packets.extend(
+                {"event": "test_end", "suites": [suite]}
+                for suite in individual_cases(doc["suites"])
+            )
+            packets.extend(
+                {"event": "global_error", "error": value} for value in doc.get("errors", [])
+            )
+            packets.append(
+                {
+                    "event": "session_finished",
+                    "status": doc["status"],
+                    "test_count": len(evidence._inventory(doc, env)),
+                }
+            )
+            if getattr(state, "mutate_progress", None):
+                state.mutate_progress(packets)
+            with (state.path / "progress.jsonl").open("x", encoding="utf-8") as stream:
+                for packet in packets:
+                    stream.write(json.dumps(packet, ensure_ascii=False) + "\n")
         return SimpleNamespace(returncode=state.discovery_exit if listing else state.execution_exit)
 
     state.launch = launch
@@ -282,9 +334,220 @@ def test_complete_native_evidence_binds_release_config_and_full_utf8_inventory(c
         "native-discovery.json",
         "native-results.json",
         "native-results.xml",
+        "progress.jsonl",
         "completion.json",
         "exit.json",
     }
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "wrong_release",
+        "wrong_invocation",
+        "missing_finish",
+        "finish_status",
+        "finish_count",
+        "boolean_count",
+        "extra_finish_key",
+        "missing_attempt",
+        "duplicate_attempt",
+        "attempt_status",
+        "collection_identity",
+        "collection_tags",
+        "collection_attempt",
+        "extra_event_key",
+        "nonobject_event",
+        "multi_attempt_packet",
+        "wrong_header", "missing_header", "duplicate_collection", "attempt_before_collection",
+    ],
+)
+def test_progress_mutation_cannot_complete_an_invocation(capture, mutation):
+    def mutate(packets):
+        started, collection, attempt, finish = packets
+        if mutation == "wrong_release":
+            collection["release_sha"] = "f" * 40
+        elif mutation == "wrong_invocation":
+            collection["invocation"] = "other"
+        elif mutation == "missing_finish":
+            packets.pop()
+        elif mutation == "finish_status":
+            finish["status"] = "failed"
+        elif mutation == "finish_count":
+            finish["test_count"] = 2
+        elif mutation == "boolean_count":
+            finish["test_count"] = True
+        elif mutation == "extra_finish_key":
+            finish["extra"] = "not-reviewed"
+        elif mutation == "missing_attempt":
+            packets.pop(2)
+        elif mutation == "duplicate_attempt":
+            packets.insert(2, copy.deepcopy(attempt))
+        elif mutation == "attempt_status":
+            attempt["suites"][0]["specs"][0]["tests"][0]["results"][0]["status"] = "failed"
+        elif mutation == "collection_identity":
+            collection["suites"][0]["specs"][0]["id"] = "other-id"
+        elif mutation == "collection_tags":
+            collection["suites"][0]["specs"][0]["tags"] = ["@unexpected"]
+        elif mutation == "collection_attempt":
+            collection["suites"][0]["specs"][0]["tests"][0]["results"] = copy.deepcopy(
+                attempt["suites"][0]["specs"][0]["tests"][0]["results"]
+            )
+        elif mutation == "extra_event_key":
+            attempt["extra"] = "not-reviewed"
+        elif mutation == "nonobject_event":
+            packets[2] = None
+        elif mutation == "multi_attempt_packet":
+            other = copy.deepcopy(attempt["suites"][0])
+            other["specs"][0]["id"] = "other-id"
+            attempt["suites"].append(other)
+        elif mutation == "wrong_header":
+            started["invocation"] = "other"
+        elif mutation == "missing_header":
+            packets.pop(0)
+        elif mutation == "duplicate_collection":
+            packets.insert(1, copy.deepcopy(collection))
+        elif mutation == "attempt_before_collection":
+            packets[1], packets[2] = packets[2], packets[1]
+
+    capture.mutate_progress = mutate
+    assert capture.run() == 1
+    assert not (capture.path / "completion.json").exists()
+    marker = json.loads((capture.path / "exit.json").read_text(encoding="utf-8"))
+    assert marker["completed"] is False
+    assert marker["incomplete_reason"].startswith("progress_")
+    assert (capture.path / "native-results.json").is_file()
+
+
+def test_rehashed_incomplete_progress_still_fails_independent_validation(capture):
+    assert capture.run() == 0
+    progress = capture.path / "progress.jsonl"
+    packets = progress.read_text(encoding="utf-8").splitlines()
+    progress.write_text("\n".join([packets[0], packets[1], packets[-1]]) + "\n", encoding="utf-8")
+    completion_path = capture.path / "completion.json"
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    completion["sha256"]["progress.jsonl"] = evidence._hash(progress)
+    completion_path.write_text(json.dumps(completion), encoding="utf-8")
+    with pytest.raises(evidence.EvidenceError, match="progress_missing_attempt_or_error"):
+        evidence.validate(capture.root, ["offline"], BASE)
+
+
+def test_progress_tamper_is_detected_by_completion_hash(capture):
+    assert capture.run() == 0
+    with (capture.path / "progress.jsonl").open("a", encoding="utf-8") as stream:
+        stream.write("{}\n")
+    with pytest.raises(evidence.EvidenceError, match="evidence_hash_mismatch"):
+        evidence.validate(capture.root, ["offline"], BASE)
+
+
+def test_missing_incremental_global_error_cannot_complete_failed_run(capture):
+    capture.runtime["errors"] = [{"message": "Redacted native test error"}]
+    capture.runtime["status"] = "failed"
+    capture.execution_exit = 1
+    capture.mutate_progress = lambda packets: packets.pop(-2)
+    assert capture.run() == 1
+    marker = json.loads((capture.path / "exit.json").read_text(encoding="utf-8"))
+    assert marker["incomplete_reason"] == "progress_missing_attempt_or_error"
+    assert not (capture.path / "completion.json").exists()
+
+
+def test_incremental_global_error_must_match_the_native_final_error(capture):
+    capture.runtime["errors"] = [{"message": "Redacted native test error"}]
+    capture.runtime["status"] = "failed"
+    capture.execution_exit = 1
+    capture.mutate_progress = lambda packets: packets[-2].update(error={"message": "different"})
+    assert capture.run() == 1
+    marker = json.loads((capture.path / "exit.json").read_text(encoding="utf-8"))
+    assert marker["incomplete_reason"] == "progress_missing_attempt_or_error"
+    assert not (capture.path / "completion.json").exists()
+
+
+@pytest.mark.parametrize("before_collection", [False, True])
+def test_real_killed_reporter_retains_failure_but_wrapper_stays_incomplete(
+    capture, before_collection,
+):
+    assert capture.node, "Native release evidence requires Node.js."
+    shutil.copyfile(ROOT / "scripts/prod_playwright_reporter.cjs", capture.root / evidence.REPORTER)
+    script = (
+        '"use strict"; const path = require("node:path"); '
+        'const Reporter = require("./scripts/prod_playwright_reporter.cjs"); '
+        f"const doc = {json.dumps(capture.runtime)}; "
+        "const spec = doc.suites[0].specs[0]; const native = spec.tests[0]; "
+        "const results = []; const testcase = { ...spec, ...native, results, "
+        "parent: { project: () => doc.config.projects[0] }, "
+        "location: { file: path.join(doc.config.rootDir, spec.file), "
+        "line: spec.line, column: spec.column }, "
+        'titlePath: () => ["", "offline", "offline.spec.ts", spec.title], '
+        'outcome: () => results.length ? "unexpected" : "skipped", ok: () => false }; '
+        "const reporter = new Reporter(); reporter.configure(doc.config); "
+        + ("" if before_collection else
+           "reporter.onBegin(doc.config, { allTests: () => [testcase] }); ")
+        + 'const result = { status: "failed", retry: 0, duration: 1, '
+        'workerIndex: 1, parallelIndex: 0, '
+        'startTime: new Date("2026-10-10T00:00:00Z"), annotations: [], attachments: [], '
+        'errors: [{ message: "Authorization: Bearer private-test-password '
+        'private-legal-body" }] }; '
+        + ("" if before_collection else
+           "results.push(result); reporter.onTestEnd(testcase, result); ")
+        + 'reporter.onError({ message: "private-legal-body" }); '
+        'process.stdout.write("READY\\n"); setInterval(() => {}, 1000);'
+    )
+
+    def launch(command, **kwargs):
+        if "--list" in command:
+            return capture.launch(command, **kwargs)
+        child_env = {**os.environ, **kwargs["env"]}
+        child = subprocess.Popen(
+            [capture.node, "-e", script],
+            cwd=capture.root,
+            env=child_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+        )
+        progress = capture.path / "progress.jsonl"
+        expected_packets = 2 if before_collection else 4
+        try:
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline and child.poll() is None:
+                if (
+                    progress.is_file()
+                    and len(progress.read_bytes().splitlines()) == expected_packets
+                ):
+                    break
+                time.sleep(0.02)
+            else:
+                pytest.fail(
+                    "Killed-process fixture did not durably emit every expected native packet."
+                )
+            child.kill()
+            child.communicate(timeout=10)
+            assert child.returncode != 0
+            return SimpleNamespace(returncode=child.returncode)
+        finally:
+            if child.poll() is None:
+                child.kill()
+            child.communicate(timeout=10)
+
+    assert evidence.run(capture.root, "offline", capture.args, env=capture.env, launch=launch) == 1
+    progress = (capture.path / "progress.jsonl").read_text(encoding="utf-8")
+    packets = [json.loads(line) for line in progress.splitlines()]
+    expected_events = ["invocation_started", "global_error"] if before_collection else [
+        "invocation_started", "collection", "test_end", "global_error",
+    ]
+    assert [packet["event"] for packet in packets] == expected_events
+    assert packets[0]["release_sha"] == BASE
+    if not before_collection:
+        attempt = evidence._inventory(packets[2], {})[0]
+        assert attempt["native_spec_id"] == "native-id"
+        assert attempt["results"][0]["status"] == "failed"
+    assert "private-test-password" not in progress and "private-legal-body" not in progress
+    assert not (capture.path / "completion.json").exists()
+    assert not (capture.path / "native-results.json").exists()
+    marker = json.loads((capture.path / "exit.json").read_text(encoding="utf-8"))
+    assert marker["completed"] is False and marker["execution_exit"] != 0
+    assert (capture.path / "discovery.json").is_file()
 
 
 def test_runtime_skip_reason_and_annotations_are_retained_in_json_and_native_junit(capture):
@@ -339,7 +602,7 @@ def test_privacy_minimization_removes_raw_detail_and_redacts_annotation_secrets(
     assert "redacted" in archived
 
 
-@pytest.mark.parametrize("problem", ["discovery", "json", "junit"])
+@pytest.mark.parametrize("problem", ["discovery", "json", "junit", "progress"])
 def test_missing_native_files_never_create_completion(capture, problem):
     capture.missing = problem
     assert capture.run() != 0
@@ -783,10 +1046,10 @@ def test_complete_native_reporter_pre_disk_privacy_contracts(tmp_path, record_pr
     path = tmp_path / "native-reporter.tap"
     path.write_text(result.stdout + result.stderr, encoding="utf-8")
     record_property("native_reporter_inventory", str(path))
-    record_property("native_reporter_test_count", "18")
+    record_property("native_reporter_test_count", "32")
     assert result.returncode == 0, result.stdout + result.stderr
     assert (
-        "# tests 18" in result.stdout
+        "# tests 32" in result.stdout
         and "# fail 0" in result.stdout
         and "# skipped 0" in result.stdout
     )

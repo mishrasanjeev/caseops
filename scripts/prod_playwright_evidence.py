@@ -37,6 +37,7 @@ REPORT_FILES = {
     "native-discovery.json",
     "native-results.json",
     "native-results.xml",
+    "progress.jsonl",
 }
 REPORTER = "./scripts/prod_playwright_reporter.cjs"
 
@@ -268,6 +269,84 @@ def _identity(row):
         row["column"],
         tuple(row["title_path"]),
     )
+
+
+def _progress(path: Path, binding, result, env, native_errors) -> None:
+    if not path.is_file() or path.stat().st_size > LIMIT:
+        raise EvidenceError("missing_or_oversized_progress")
+    try:
+        content = path.read_text(encoding="utf-8")
+        rows = [json.loads(line) for line in content.splitlines()]
+    except (UnicodeError, ValueError):
+        raise EvidenceError("invalid_progress_json") from None
+    if not content.endswith("\n") or len(rows) < 2:
+        raise EvidenceError("incomplete_progress")
+    if not all(isinstance(row, dict) for row in rows):
+        raise EvidenceError("progress_event_schema_mismatch")
+    started, completion = rows[0], rows[-1]
+    if (
+        set(started) != {"event", "release_sha", "invocation"}
+        or started["event"] != "invocation_started"
+        or started["release_sha"] != binding["release_sha"]
+        or started["invocation"] != binding["invocation"]
+        or set(completion) != {"event", "status", "test_count"}
+        or completion["event"] != "session_finished"
+        or completion["status"] != result["report_status"]
+        or type(completion["test_count"]) is not int
+        or completion["test_count"] != len(result["tests"])
+    ):
+        raise EvidenceError("progress_binding_or_completion_mismatch")
+    collections = [row for row in rows[1:-1] if row.get("event") == "collection"]
+    if len(collections) != 1:
+        raise EvidenceError("progress_collection_mismatch")
+    collection = collections[0]
+    if (
+        set(collection) != {"event", "release_sha", "invocation", "suites"}
+        or collection["release_sha"] != binding["release_sha"]
+        or collection["invocation"] != binding["invocation"]
+    ):
+        raise EvidenceError("progress_collection_mismatch")
+    collected = _inventory(collection, env)
+
+    def identity(row):
+        return (_identity(row), row["tags"], row["retries"], row["repeat_each_index"])
+
+    if [identity(row) for row in collected] != [
+        identity(row) for row in result["tests"]
+    ] or any(row["results"] for row in collected):
+        raise EvidenceError("progress_collection_mismatch")
+    expected = {row["id"]: row for row in result["tests"]}
+    observed = set()
+    errors = []
+    collection_seen = False
+    for packet in rows[1:-1]:
+        if packet.get("event") == "collection":
+            collection_seen = True
+            continue
+        if packet.get("event") == "global_error":
+            if set(packet) != {"event", "error"}:
+                raise EvidenceError("progress_event_schema_mismatch")
+            errors.append(packet["error"])
+            continue
+        if (
+            not collection_seen
+            or set(packet) != {"event", "suites"}
+            or packet["event"] != "test_end"
+        ):
+            raise EvidenceError("progress_event_schema_mismatch")
+        attempts = _inventory(packet, env)
+        if len(attempts) != 1:
+            raise EvidenceError("progress_attempt_inventory_mismatch")
+        row = attempts[0]
+        if row["id"] in observed or row != expected.get(row["id"]):
+            raise EvidenceError("progress_attempt_mismatch")
+        observed.add(row["id"])
+    if (
+        observed != set(expected)
+        or len(errors) != result["global_error_count"]
+        or errors != native_errors
+    ):
+        raise EvidenceError("progress_missing_attempt_or_error")
 
 
 def _reconcile(discovery, result):
@@ -595,6 +674,13 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         _junit(
             destination / "native-results.xml", destination / "results.xml", env, result
         )
+        _progress(
+            destination / "progress.jsonl",
+            binding,
+            result,
+            env,
+            _json(destination / "native-results.json").get("errors", []),
+        )
         if _hash(root / binding["config"]) != binding["config_sha256"]:
             raise EvidenceError("config_changed_during_execution")
         head = subprocess.run(
@@ -631,6 +717,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
                         "native-discovery.json",
                         "native-results.json",
                         "native-results.xml",
+                        "progress.jsonl",
                     )
                 },
             },
@@ -711,6 +798,13 @@ def validate(root: Path, required, expected: str) -> None:
         _reconcile(discovery, result)
         _junit(directory / "native-results.xml", None, {}, result)
         _junit(directory / "results.xml", None, {}, result)
+        _progress(
+            directory / "progress.jsonl",
+            binding,
+            result,
+            {},
+            _json(directory / "native-results.json").get("errors", []),
+        )
 
 
 def main() -> int:
