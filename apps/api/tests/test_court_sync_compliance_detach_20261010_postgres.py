@@ -923,3 +923,62 @@ def test_native_selected_order_identity_change_rejects_prepared_output(
             )
         else:
             assert retained.order_text == item.order_text
+
+
+@pytest.mark.parametrize("boundary", ["manual", "worker"])
+def test_native_provider_construction_failure_keeps_failed_extraction_import(
+    court_audit,
+    monkeypatch,
+    boundary,
+):
+    audit, fixture, sessions, run = court_audit
+    calls = _provider(audit, sessions, monkeypatch)
+
+    def unavailable(**_):
+        raise LLMProviderError("Deterministic provider configuration unavailable")
+
+    monkeypatch.setattr(compliance_extraction, "build_provider", unavailable)
+    result = _result("Retained import with unavailable AI configuration")
+    monkeypatch.setattr(
+        court_sync_jobs,
+        "get_court_sync_adapter",
+        lambda _: SimpleNamespace(fetch=lambda **_: result),
+    )
+    if boundary == "worker":
+        assert run() is True
+        assert _readback(audit, fixture)["job_status"] == "completed"
+    else:
+        _manual(
+            audit,
+            fixture,
+            sessions,
+            MatterCourtSyncImportRequest(
+                source="manual-native",
+                orders=result.orders,
+            ),
+        )
+    assert calls == [] and _readback(audit, fixture)["runs"] == 1
+    with Session(audit.engine) as session:
+        extraction = session.scalar(
+            select(MatterComplianceExtractionRun).where(
+                MatterComplianceExtractionRun.matter_id == fixture["matter_id"],
+            )
+        )
+        assert extraction.status == "failed" and extraction.error_message_redacted
+        assert extraction.created_by_membership_id == fixture["actor_id"]
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(ModelRun)
+                .where(
+                    ModelRun.matter_id == fixture["matter_id"],
+                )
+            )
+            == 0
+        )
+        audit.record(
+            "court_provider_construction_failure",
+            status=extraction.status,
+            external_calls=0,
+            import_runs=1,
+        )

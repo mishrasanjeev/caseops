@@ -113,6 +113,7 @@ class _PreparedAICompliance:
     metadata: dict[str, object] = field(default_factory=dict)
     error_message_redacted: str | None = None
     policy: ResolvedAIPolicy | None = None
+    preparation_error_redacted: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -667,10 +668,14 @@ def prepare_court_sync_compliance(
         source_text, _skip_reason = _safe_order_text(order_text)
         ai = _PreparedAICompliance()
         if source_text is not None:
-            ai = _prepare_ai_items(
-                session, matter=snapshot, source_text=source_text,
-                provider=None, detached=True,
-            )
+            try:
+                ai = _prepare_ai_items(
+                    session, matter=snapshot, source_text=source_text,
+                    provider=None, detached=True,
+                )
+            except LLMProviderError as exc:
+                # Keep configuration failure on the existing failed-extraction path.
+                ai = _PreparedAICompliance(preparation_error_redacted=redact_provider_error(exc))
         prepared.append(_PreparedCourtOrderCompliance(
             input_hash, existing_id, prior_index, order_text, ai,
         ))
@@ -915,6 +920,8 @@ def run_compliance_extraction_for_order(
         )
         return run, []
     try:
+        if prepared_ai is not None and prepared_ai.preparation_error_redacted is not None:
+            raise LLMProviderError(prepared_ai.preparation_error_redacted)
         prepared_ai = prepared_ai if prepared_ai is not None else _prepare_ai_items(
             session,
             matter=matter,
