@@ -1889,3 +1889,7 @@ requirements when using the fallback.
   campaign and decision stages. Reserve capacity before each insert, prove the
   old helper's excess writes and keep the real transition guards, source rows,
   depth cap and below-bound positive finalization unchanged.
+- After code or documentation changes, run the actual pinned tracked-tree and
+  changed-history secret preflight before costly acceptance. Independently
+  verify reported artifact checksums against immutable bytes; allow only an
+  exact reviewed historical fingerprint, never path, rule or all-hash suppression.

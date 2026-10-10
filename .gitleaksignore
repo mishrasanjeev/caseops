@@ -141,3 +141,9 @@ c0f9775f437d8deaeabc84eaec928cc1359ebd02:apps/api/tests/test_document_storage_pa
 # The current schema fixture uses a low-entropy valid UUID; no value, path or
 # rule-wide exemption is added. Future credentials at this path remain blocking.
 7189ed1661a18a45639f9cd42ddba6b2472f9b55:apps/web/lib/seo_demo_20261009.test.ts:generic-api-key:11
+
+# 2026-10-11: exact historical SHA256 readback receipt, not a credential.
+# The retained raw CI report hash and the original two-line span were verified
+# before this review. The current label is neutral; only this immutable
+# commit/path/rule/line is covered, never future or changed span findings.
+307e62e8ab008700c92827eb945df7ddcc7bc6cf:docs/bugfix-document-worker-production-2026-10-10.md:generic-api-key:393

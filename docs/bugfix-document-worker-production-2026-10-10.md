@@ -390,7 +390,7 @@ failures, thirteen exact whole-file partitions. All eight PostgreSQL shards
 have **2,514 passes /7,542 phases**, zero failures/skips, including the six
 original failures, all69 compliance cases and all18 dated migration cases.
 Main independently rehashes 89 PG artifacts and 307 immutable source blobs
-with zero mismatches. API receipt SHA256:
+with zero mismatches. Readback receipt SHA256:
 `cfc2317e38233cf1b9362220de0637f33422fa9c00b545cc993d8a30facc43be`;
 PG readback SHA256:
 `cc17ac367fc5e1cf7c5c7c3305d43c017a595bac57956edf47e93f7a92683670`.
