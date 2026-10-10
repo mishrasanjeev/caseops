@@ -1,5 +1,18 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 10 E489 Release Checkpoint
+
+#527 remains **Not fixed in production**; summary acceptance is **Inconclusive**.
+Full native Docker PostgreSQL passes 2,235 cases/6,705 phases. Browser partition
+one has 252 passes, one known unverified skip, one 600000-ms summary timeout
+and secondary cleanup error; 254 identities remain unexecuted. Preserve the
+failed reports, all 17 byte-identical media/log copies and the documented
+manual owned-worker restoration. A bounded setup/readback and independent
+cleanup correction still requires complete replacement and live replay.
+Hosted green CI/zero PR SARIF results do not close main's 28 alerts, serving b1,
+Google exclusion/Calendar consent or the user-kept dependencies. See
+[complete native readback](bugfix-production-acceptance-and-security-2026-10-09.md).
+
 ## October 10 Downstream Participant Replacement
 
 Adjacent Company-disable delivery gap: **Partially fixed / not deployed**.

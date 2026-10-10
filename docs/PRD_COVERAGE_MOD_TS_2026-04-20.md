@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 10 E489 Release Checkpoint
+
+Existing document/authentication, Matter/IP, Calendar and public-acquisition
+coverage is not production certified. Frozen Docker PostgreSQL passes all
+2,235 cases/6,705 phases; 252 first-partition browser cases pass, one skips,
+one summary times out, and 254 identities remain unexecuted. Full hosted CI
+and zero actual PR SARIF results do not certify main or serving b1. All
+replacement/live gates and inherited owner-review dependencies remain open;
+[exact evidence](bugfix-production-acceptance-and-security-2026-10-09.md).
+
 ## October 10 Participant-Fence Coverage
 
 Adjacent delivery-tenant activity baseline reproduces 30 product failures with

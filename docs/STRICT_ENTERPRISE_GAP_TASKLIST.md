@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 10 E489 Release Checkpoint
+
+**NO-GO / Partially implemented.** Native Docker PostgreSQL reconciles all
+2,235 passes/6,705 phases. Browser partition one retains 252 passes, one known
+unverified skip and a summary timeout plus cleanup error; 254 identities do
+not execute. Full hosted CI and three zero-result actual PR CodeQL analyses
+are scoped exact-tree proof, not main-alert or production closure. The empty
+license artifact supplies no license coverage; its inherited enumeration and
+owner-policy review remains open. Production is b1; main still has 28 alerts.
+Complete replacement/live gates, actual main scans and post-QA maintenance
+remain required. [Evidence and learning](bugfix-production-acceptance-and-security-2026-10-09.md).
+
 ## October 10 Participant And Query Accounting
 
 Tenant-activity delivery is **Partially implemented / NO-GO**. The complete

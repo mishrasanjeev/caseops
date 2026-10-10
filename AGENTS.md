@@ -1,5 +1,23 @@
 # CaseOps agent instructions
 
+- Multi-tenant Docker fixture preparation and inspection must amortize process
+  startup without reusing tenant authorization or database sessions. Preserve
+  real worker executions, raw persisted snapshots, responsive/source/replay
+  assertions and the original overall and per-command budgets. Profile startup
+  separately from database work; timings from different workloads are not a
+  controlled comparison or proof of production causality.
+- Acceptance cleanup must attempt evidence retention, context disposal and
+  owned worker restoration independently, including after a timeout. Verify
+  the actual restored state, retain every cleanup error and the original
+  failure, and fail cleanup-only errors. A manually restored failed run is not
+  accepted evidence; its complete replacement must still execute.
+- Name an isolated, clean, approved checkout before delegating edits beside a
+  frozen gate. Explicitly distinguish the frozen parent from the writable
+  child, and verify execution started before describing implementation progress.
+- Snapshot evidence-copy inputs before hashing, and write the hash manifest
+  outside the payload being enumerated. Reconcile every original/copy pair;
+  preserve a failed or self-including manifest as incomplete evidence.
+
 - A native dispatch race must admit a genuinely queued intent before forcing
   its interleaving. Install deterministic transport configuration before
   enqueue and assert the pre-claim state; an already blocked intent cannot

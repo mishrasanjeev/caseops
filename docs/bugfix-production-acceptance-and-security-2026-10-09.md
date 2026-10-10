@@ -1,5 +1,101 @@
 # Production Acceptance And Security Follow-Up - 2026-10-09
 
+## October 10 E489 Complete Failed Gate
+
+**NO-GO.** Frozen candidate `e489f3cbe675c34a2ce3765e260e72aa2f28392f`,
+tree `1f53c6475179cf7370d1e818544d72af05a8c412`, is not deployed. Fresh
+API/web readback still identifies `b1d3fb23` on both production surfaces.
+Keep #527 open; source corrections and green PR scans are not live closure.
+
+Full workstation Docker PostgreSQL acceptance completes **2,235 passes,
+6,705 setup/call/teardown phases, zero skips/failures**, exact native/JUnit
+identities and `session_finished` exit zero. Migration/index checks, the
+512-MiB job health check and exact-image seed restoration also pass. The seed
+has 23 Acts/5,028 catalogued provisions; this is not complete verified content.
+
+Desktop partition one completes 254 identities: **252 passes, one known
+unverified Pine Labs skip, one failure**, no retries/flaky. The summary journey
+exceeds its existing 600000-ms budget and then fails at browser-context disposal
+before restoring the service worker. Partition two and mobile do not run:
+**254 of 508 discovered browser identities are missing**. The sealed independent
+auditor correctly returns `FAILED/INCOMPLETE`, accepted false. Its provisional
+partition diagnostics cannot be treated as another product reproduction when
+the complete exact-once union is absent. The 498 mandatory identities are not
+fully verified, and the ten known exclusions remain unverified.
+
+The summary's real first worker exits zero and processes three events; a
+positive generated summary is visible. That does not prove the complete
+three-tenant responsive/source-download/replay contract. Native evidence retains
+the timeout and secondary cleanup error. A read-only inspection confirms the
+owned worker was stopped; Main restores only that exact acceptance worker to
+its original running state. This intervention does not make the failed gate
+pass. The following local recordal, Notice, revocation, lifecycle, FAQ and public
+content results are scoped outcomes, not completed production acceptance.
+
+A post-failure read-only interpreter inspects the exact three original fixtures
+with fresh sessions and current actor scope. All three events succeeded on their
+first attempt: the positive scenario has one mock model run and a completed
+tracked-case update; marked and persistent-QA scenarios have no model runs and
+the required automated-request/worker suppression. Provider operations and
+spend reservations are zero throughout. These raw records corroborate backend
+processing, not the timed-out browser, source-download or replay assertions.
+The original raw result is retained in
+`summary-e489-post-failure-readback-r1.json`. After preserving all evidence,
+Main removes only the named acceptance Compose project. Independent label-scoped
+readback confirms zero remaining containers, networks or volumes; the unrelated
+PostgreSQL verification sidecar and workstation processes are untouched.
+
+The source audit inventories 13 scalar fixture processes, two real worker
+launchers and normally 39 Docker commands. Loaded trace gaps include a 59.34-s
+contract call, 83-89-s seed/inspection pairs and a 120-s three-inspection readback.
+After the gate, a separate read-only contract profile completes in 8.908 s:
+1,220 import records, 5.924 s summed self time, no database work. These different
+workloads do not establish that every loaded delay was import time, or explain
+the old production lock failures. The proposed correction batches bounded
+fixture setup/readback with fresh sessions/current actor scope per operation
+and makes cleanup failure-safe. It must retain both real workers and every
+original assertion and budget; no replacement Docker pass is claimed yet.
+
+Complete hosted CI `38015191310`, Security `38015191255` and CodeQL
+`38015191176` pass on synthetic merge `5e3224e2`, whose tree equals this
+candidate. All 13 API shards reconcile 8,317 identities/534 files: 6,080 pass,
+2,237 skips; all four PostgreSQL shards execute 2,235 of those skips with
+6,705 passing phases. Thus 8,315 distinct pytest identities execute; the
+Windows-CMD-only and opt-in native-reranker cases remain unverified. Native
+hosted app results reconcile 508 identities: 491 pass, 17 unverified skips,
+zero retries/errors, complete discovery/attempt/JSON/XML/progress agreement.
+Frontend completes 1,234 passes/197 files. All 22 downloaded ZIPs, 511 original
+artifact files and three actual SARIF reports are hash-sealed. Actual PR
+Python/JavaScript/Actions analyses have zero results; **28 main alerts remain
+open**. No alert is dismissed. Subsequent source edits require fresh CI.
+
+The inherited September 7 license-enumeration/review gap remains open. The
+current scanner artifact is an empty object, not license coverage. Dependency
+locks and the web dependency manifest are unchanged from production; there
+is no new license approval or claim of a proven dependency-license violation.
+Keep sender/privacy/retention, provider/identity/merchant consent and actual
+Calendar OAuth acceptance dependencies open. Scheduled production run
+`38025328422` succeeds only for read-only statutes on the old serving release,
+not for the skipped full product matrix or cadence-resume authorization.
+
+Evidence: `docker-e489f3cb-r13/`, the original wrapper log, and
+`docker-audit-857a5008/readback-e489-r13-failed-r1/`. All 17 original summary
+failure files are copied byte-identically before any replacement can overwrite
+`test-results/`; independent copy-manifest SHA-256 is
+`ab093bb6eb38626db0773a3b19213414433b47dd1774178fd8c3895dedbb9a36`.
+The initial self-including hash manifest remains incomplete and preserved.
+Manual worker restoration is separately recorded in
+`docker-e489f3cb-r13-intervention.md`; profiling is in
+`summary-import-e489-contract-r1.log`. Hosted readback is in the participant
+sidecar's `ci-e489f3cb-full-readback-r1/report.md`. No failed evidence is erased.
+
+An initially ambiguous delegation did not execute the proposed repair. Main
+then names and verifies a separate clean attached checkout and explicitly
+authorizes isolated implementation while leaving the acceptance parent frozen.
+Never describe a proposal as an executed repair. Complete fresh replacement
+Docker/CI, normal main merge, guarded exact-SHA release, full live replay, actual
+main scans and two later clean maintenance executions still precede closure.
+
 ## October 10 Public-Claims Proof Boundary
 
 Further independent review of frozen `f2c6a411` found equivalent guide citation

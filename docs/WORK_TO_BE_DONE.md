@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 10 E489 Release Checkpoint
+
+NO-GO: full Docker PostgreSQL completes 2,235 passes/6,705 phases; browser
+partition one completes 252 passes/one unverified skip/one summary timeout,
+leaving 254 discovered browser identities unexecuted. Full hosted CI passes
+on this exact tree, but production remains b1 and main has 28 open alerts.
+Repair bounded fixture startup and independent cleanup, then run the complete
+fresh replacement and guarded live release. Retain the inherited license,
+Google exclusion/consent and user-kept provider/privacy dependencies. See
+[native evidence and closure boundary](bugfix-production-acceptance-and-security-2026-10-09.md).
+
 ## October 10 Participant-Fence Integration
 
 Before release, finish adjacent Company-disable delivery correction `e3f16940`:
