@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import MetaData, Table, and_, create_engine, inspect, select, text
+from sqlalchemy import MetaData, Table, and_, create_engine, inspect, select, text, update
 from sqlalchemy.pool import NullPool
 
 from alembic import command
@@ -119,6 +119,8 @@ def replay_fixture_rows(source_engine, destination_engine, roots):
                     )
                 )
                 if all(value is not None for value in parent.values()):
+                    if _initial_evidence_self_root(name, foreign_key, values):
+                        continue
                     copy(foreign_key["referred_table"], parent, depth + 1)
             destination.execute(target.insert().values(values))
             assert (
@@ -134,43 +136,124 @@ def replay_fixture_rows(source_engine, destination_engine, roots):
     return copied
 
 
+def _initial_evidence_self_root(name, foreign_key, values):
+    # This one declared FK is satisfied by its own initial-edition INSERT.
+    return (
+        name == "ip_patent_evidence_versions"
+        and foreign_key["name"] == "fk_patent_evidence_root"
+        and foreign_key["referred_table"] == name
+        and foreign_key["constrained_columns"] == ["root_id", "company_id", "application_id"]
+        and foreign_key["referred_columns"] == ["id", "company_id", "application_id"]
+        and values["root_id"] == values["id"]
+        and values["predecessor_id"] is None
+        and values["edition"] == 1
+    )
+
+
+def replay_finalized_access_review(source_engine, destination_engine, reviewed):
+    """Replay the captured open row, decisions, then its real guarded finalization."""
+    campaign_id = reviewed["id"]
+    target = "matters" if reviewed["matter_id"] is not None else "ip_docket_records"
+    target_id = reviewed["matter_id"] or reviewed["ip_docket_id"]
+    copied = replay_fixture_rows(
+        source_engine,
+        destination_engine,
+        [(target, {"id": target_id}), ("users", {"id": reviewed["creator_user_id"]})],
+    )
+    with source_engine.connect() as source:
+        campaigns = Table(
+            "access_review_campaigns", MetaData(), autoload_with=source, resolve_fks=False
+        )
+        finalized = dict(
+            source.execute(select(campaigns).where(campaigns.c.id == campaign_id)).mappings().one()
+        )
+        decisions = Table(
+            "access_review_decisions", MetaData(), autoload_with=source, resolve_fks=False
+        )
+        decision_ids = source.scalars(
+            select(decisions.c.id)
+            .where(decisions.c.campaign_id == campaign_id)
+            .order_by(decisions.c.id)
+            .limit(64)
+        ).all()
+    assert 0 < len(decision_ids) < 64, "Review decisions must be explicit and bounded"
+    assert reviewed["status"] == "open" and reviewed["finalized_at"] is None
+    assert finalized["status"] == "finalized" and finalized["finalized_at"] is not None
+    assert finalized["version"] == reviewed["version"] + 1
+    assert set(reviewed) == set(finalized)
+    assert {key for key in reviewed if reviewed[key] != finalized[key]} == {
+        "status",
+        "version",
+        "finalized_at",
+    }, "Only the actual finalization may differ from the captured open campaign"
+    with destination_engine.begin() as destination:
+        campaigns = Table(
+            "access_review_campaigns", MetaData(), autoload_with=destination, resolve_fks=False
+        )
+        destination.execute(campaigns.insert().values(reviewed))
+    copied.append(("access_review_campaigns", {"id": campaign_id}))
+    copied.extend(
+        replay_fixture_rows(
+            source_engine,
+            destination_engine,
+            [("access_review_decisions", {"id": identifier}) for identifier in decision_ids],
+        )
+    )
+    assert len(copied) < 64, "Fixture lineage is unbounded"
+    with destination_engine.begin() as destination:
+        destination.execute(
+            update(campaigns).where(campaigns.c.id == campaign_id).values(finalized)
+        )
+        assert (
+            dict(
+                destination.execute(select(campaigns).where(campaigns.c.id == campaign_id))
+                .mappings()
+                .one()
+            )
+            == finalized
+        )
+    return copied
+
+
 def assert_fixture_downgrade_refused(source_engine, revision, predecessor, roots, message):
     with historical_database(source_engine, revision) as (engine, config):
         copied = replay_fixture_rows(source_engine, engine, roots)
-        assert copied, "Retained evidence must exist before exercising its guard"
-        snapshots = []
+        assert_retained_downgrade_refused(engine, config, revision, predecessor, copied, message)
+
+
+def assert_retained_downgrade_refused(engine, config, revision, predecessor, copied, message):
+    assert copied, "Retained evidence must exist before exercising its guard"
+    snapshots = []
+    with engine.connect() as connection:
+        before = connection.execute(
+            text(
+                "SELECT table_name, column_name, data_type, is_nullable, column_default "
+                "FROM information_schema.columns WHERE table_schema='public' ORDER BY 1,2"
+            )
+        ).all()
+        for name, identity in copied:
+            table = Table(name, MetaData(), autoload_with=connection, resolve_fks=False)
+            statement = select(table).where(
+                and_(*(table.c[column] == value for column, value in identity.items()))
+            )
+            snapshots.append((statement, dict(connection.execute(statement).mappings().one())))
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match=message):
+            command.downgrade(config, predecessor)
         with engine.connect() as connection:
-            before = connection.execute(
-                text(
-                    "SELECT table_name, column_name, data_type, is_nullable, column_default "
-                    "FROM information_schema.columns WHERE table_schema='public' ORDER BY 1,2"
-                )
-            ).all()
-            for name, identity in copied:
-                table = Table(name, MetaData(), autoload_with=connection, resolve_fks=False)
-                statement = select(table).where(
-                    and_(*(table.c[column] == value for column, value in identity.items()))
-                )
-                snapshots.append((statement, dict(connection.execute(statement).mappings().one())))
-        for _ in range(2):
-            with pytest.raises(RuntimeError, match=message):
-                command.downgrade(config, predecessor)
-            with engine.connect() as connection:
-                assert (
-                    connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
-                )
-                assert (
-                    connection.execute(
-                        text(
-                            "SELECT table_name, column_name, data_type, is_nullable, "
-                            "column_default FROM information_schema.columns "
-                            "WHERE table_schema='public' ORDER BY 1,2"
-                        )
-                    ).all()
-                    == before
-                )
-                for statement, original in snapshots:
-                    assert dict(connection.execute(statement).mappings().one()) == original
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT table_name, column_name, data_type, is_nullable, "
+                        "column_default FROM information_schema.columns "
+                        "WHERE table_schema='public' ORDER BY 1,2"
+                    )
+                ).all()
+                == before
+            )
+            for statement, original in snapshots:
+                assert dict(connection.execute(statement).mappings().one()) == original
 
 
 def insert_historical_fixture(connection, model, **values):

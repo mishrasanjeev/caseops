@@ -260,7 +260,11 @@ def test_priority_migration_recovers_interrupted_index_and_preserves_legacy_rela
         engine,
         "20260907_0002",
         "20260907_0001",
-        [("ip_patent_priority_details", {"id": created.json()["id"]})],
+        [
+            ("ip_patent_applications", {"id": child["id"]}),
+            ("ip_patent_applications", {"id": parent["id"]}),
+            ("ip_patent_priority_details", {"id": created.json()["id"]}),
+        ],
         "Patent priority evidence exists",
     )
     with Session(engine) as session:
