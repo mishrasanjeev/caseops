@@ -9,9 +9,14 @@ excluded the merge and side parents. The replacement scans immutable tracked
 Git blobs independently of all-parent push/PR history (including merge-only
 resolution diffs), preserves scheduled all-ref history and existing allowlists,
 and rejects empty inventories, zero scanner counters and incomplete execution.
-Digest-pinned offline native controls pass 34 cases/102 phases, including a
+Digest-pinned offline native controls pass 38 cases/114 phases, including a
 real zero-byte scanner result, removed side/merge secrets, and actual running
-container interruption cleanup. Failed baselines remain retained under owned
+container interruption cleanup. A directory scan lacks commit provenance:
+existing historical fingerprints are translated only after native blame proves
+the complete unchanged finding span belongs to the exact reviewed commit/path/
+line, then the same captured tree is rescanned. New credentials at the same
+path/line, changed multiline spans and newly reintroduced literals still fail;
+tracked allowlists remain byte-identical. Failed baselines remain retained under owned
 ignored `.tmp/security-nonempty-secret-scan-20261010-r1`. Postcommit source
 proof and subsequent hosted integration remain required. No main/deployment, inherited
 empty-license policy, consent dependency or unsuppressed quality note is closed.

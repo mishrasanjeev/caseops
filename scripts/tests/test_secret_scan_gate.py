@@ -486,6 +486,100 @@ class RealGitleaksTests(GitFixture):
         self.assertIn("scanned ~0 bytes (0)", receipt["counter_lines"])
         self.assertIn("0 commits scanned.", receipt["counter_lines"])
 
+    def reviewed_fixture(self):
+        self.write("record.txt", self.canary())
+        origin = self.commit("reviewed synthetic canary")
+        self.write(
+            ".gitleaksignore",
+            f"{origin}:record.txt:stripe-access-token:1\n{origin}:record.txt:generic-api-key:1\n",
+        )
+        return origin, self.commit("existing exact reviewed fingerprint")
+
+    def test_real_existing_commit_fingerprint_keeps_exact_unchanged_tree_provenance(self):
+        origin, _ = self.reviewed_fixture()
+        self.write("record.txt", "# harmless inserted line\n" + self.canary())
+        head = self.commit("shift unchanged reviewed line")
+        result = self.run_scan(head)
+        self.assertGreater(result["boundaries"]["tree"]["existing_policy_translations"], 0)
+        provenance = json.loads((self.root / "evidence/tree-policy-provenance.json").read_text())
+        self.assertTrue(all(row["accepted_existing_policy"] for row in provenance["findings"]))
+        self.assertTrue(
+            all(
+                row["existing_fingerprint"].startswith(origin + ":")
+                for row in provenance["findings"]
+            )
+        )
+        self.assertTrue((self.root / "evidence/tree-initial.sarif").exists())
+
+    def test_real_future_secret_same_path_line_is_not_covered_by_historical_fingerprint(self):
+        self.reviewed_fixture()
+        replacement = (
+            "payment_key = sk_"
+            + "live_"
+            + hashlib.sha256(b"new-offline-canary").hexdigest()[:24]
+            + "\n"
+        )
+        self.write("record.txt", replacement)
+        head = self.commit("future credential must fail")
+        with self.assertRaisesRegex(scan.ScanError, "unreviewed findings"):
+            self.run_scan(head)
+        self.assert_incomplete()
+        provenance = json.loads((self.root / "evidence/tree-policy-provenance.json").read_text())
+        self.assertEqual(provenance["accepted_existing_policy"], 0)
+
+
+class ProvenanceTests(GitFixture):
+    def test_new_multiline_suffix_cannot_inherit_reviewed_start_line(self):
+        self.write("record.txt", "old first line\nold second line\n")
+        origin = self.commit("old span")
+        self.write(".gitleaksignore", f"{origin}:record.txt:generic-api-key:1\n")
+        self.write("record.txt", "old first line\nnew secret suffix\n")
+        head = self.commit("changed suffix")
+        tree = self.root / "tree"
+        scan.tracked_tree(self.repo, head, tree)
+        output = self.root / "evidence"
+        output.mkdir()
+        finding = {
+            "ruleId": "generic-api-key",
+            "locations": [
+                {
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": "record.txt"},
+                        "region": {"startLine": 1, "endLine": 2},
+                    }
+                }
+            ],
+        }
+        with self.assertRaisesRegex(scan.ScanError, "unreviewed findings"):
+            scan.tree_policy_provenance(self.repo, tree, [finding], output, head)
+        self.assertFalse((tree.parent / "tree-policy.ignore").exists())
+
+    def test_unrelated_equal_literal_cannot_use_another_commits_reviewed_fingerprint(self):
+        self.write("record.txt", "reviewed equal literal\n")
+        origin = self.commit("reviewed original")
+        self.write("record.txt", "removed\n")
+        self.commit("remove original")
+        self.write("record.txt", "reviewed equal literal\n")
+        self.write(".gitleaksignore", f"{origin}:record.txt:generic-api-key:1\n")
+        head = self.commit("new introduction at same path")
+        tree = self.root / "tree"
+        scan.tracked_tree(self.repo, head, tree)
+        output = self.root / "evidence"
+        output.mkdir()
+        finding = {
+            "ruleId": "generic-api-key",
+            "locations": [
+                {
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": "record.txt"},
+                        "region": {"startLine": 1, "endLine": 1},
+                    }
+                }
+            ],
+        }
+        with self.assertRaisesRegex(scan.ScanError, "unreviewed findings"):
+            scan.tree_policy_provenance(self.repo, tree, [finding], output, head)
+
     def test_real_client_timeout_removes_actual_owned_container(self):
         self.write("record.txt", "change\n")
         head = self.commit("change")
