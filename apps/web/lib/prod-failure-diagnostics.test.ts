@@ -43,8 +43,10 @@ describe("API application assertion evidence", () => {
 
   function fixture(status: number, headers: Record<string, string> = {}, bytes = Buffer.alloc(0)) {
     const body = vi.fn(async () => bytes);
+    const text = vi.fn(() => { throw new Error("Raw text must not be accessed"); });
+    const json = vi.fn(() => { throw new Error("Raw JSON must not be accessed"); });
     const response = { status: () => status, headers: () => headers, body,
-      text: () => { throw new Error("Raw text must not be accessed"); },
+      text, json,
       url: () => { throw new Error("Private URL must not be accessed"); } } as unknown as APIResponse;
     const api = { post: vi.fn(async () => response) };
     const attach = vi.fn(async () => {});
@@ -52,6 +54,9 @@ describe("API application assertion evidence", () => {
       headers: { Authorization: privateValue, "Idempotency-Key": privateValue }, data: { source: privateValue },
     });
     const snapshot = () => {
+      expect(body).not.toHaveBeenCalled();
+      expect(text).not.toHaveBeenCalled();
+      expect(json).not.toHaveBeenCalled();
       expect(attach).toHaveBeenCalledTimes(1);
       const [name, attachment] = attach.mock.calls[0] as unknown as [string, { body: Buffer; contentType: string }];
       expect(name).toBe("sanitized-network-evidence");
@@ -82,24 +87,25 @@ describe("API application assertion evidence", () => {
     }] });
   });
 
-  it("extracts only fixed 503 problem metadata and prefers a validated header request ID", async () => {
+  it("retains a validated 503 header request ID but never reads its problem body", async () => {
     const bytes = Buffer.from(JSON.stringify({ type: "urn:caseops:database_lock_timeout", request_id: id,
       detail: privateValue, instance: `/private?token=${privateValue}`, tenant_id: privateValue }));
     const headerId = "12345678-1234-1234-1234-123456789abc";
     const f = fixture(503, { "content-type": "application/problem+json; charset=utf-8",
       "content-length": String(bytes.length), "x-request-id": headerId }, bytes);
     await expect(f.run()).rejects.toThrow();
-    expect(f.snapshot().records[0]).toMatchObject({ status: 503, requestId: headerId, problemType: "database_lock_timeout" });
-    expect(f.body).toHaveBeenCalledTimes(1);
+    expect(f.snapshot().records[0]).toMatchObject({ status: 503, requestId: headerId, problemType: null });
+    expect(f.body).not.toHaveBeenCalled();
     expect(f.api.post).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects unknown problem text and invalid header IDs while allowing a validated body ID", async () => {
+  it("rejects invalid header IDs without falling back to a body request ID", async () => {
     const bytes = Buffer.from(JSON.stringify({ type: privateValue, request_id: id, detail: privateValue }));
     const f = fixture(503, { "content-type": "application/problem+json", "content-length": String(bytes.length),
       "x-request-id": `${id}\n${privateValue}` }, bytes);
     await expect(f.run()).rejects.toThrow();
-    expect(f.snapshot().records[0]).toMatchObject({ requestId: id, problemType: null });
+    expect(f.snapshot().records[0]).toMatchObject({ requestId: null, problemType: null });
+    expect(f.body).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -111,33 +117,41 @@ describe("API application assertion evidence", () => {
     [{ "content-type": "application/problem+json", "content-length": "-2" }, 0],
     [{ "content-type": "application/problem+json", "content-length": "2e2" }, 0],
     [{ "content-type": "application/problem+json", "content-length": "2\n" }, 0],
-  ] as const)("fails closed without a bounded approved body header: %j", async (headers, reads) => {
+  ] as const)("ignores body headers and retains only header metadata: %j", async (headers, reads) => {
     const f = fixture(503, headers, Buffer.from(privateValue));
     await expect(f.run()).rejects.toThrow();
     expect(f.body).toHaveBeenCalledTimes(reads);
     expect(f.snapshot().records[0]).toMatchObject({ status: 503, requestId: null, problemType: null });
   });
 
-  it.each([Buffer.alloc(16_385, "x"), Buffer.from([0xff]), Buffer.from("not JSON"), Buffer.alloc(0)])(
-    "retains status but no body metadata for oversized, invalid UTF8/JSON or empty bodies %#", async (bytes) => {
-      const f = fixture(503, { "content-type": "application/problem+json", "content-length": "1" }, bytes);
-      await expect(f.run()).rejects.toThrow();
-      expect(f.snapshot().records[0]).toMatchObject({ status: 503, requestId: null, problemType: null });
-    },
-  );
+  const untrustedBodyHeaders: Array<Record<string, string>> = [
+    { "content-type": "application/problem+json", "content-length": "1", "content-encoding": "gzip" },
+    { "content-type": "application/problem+json", "content-length": "1", "content-encoding": "br" },
+    { "content-type": "application/problem+json", "content-length": "1" },
+    { "content-type": "application/problem+json", "content-length": "4294967295" },
+  ];
+  it.each(untrustedBodyHeaders)("never accesses a compressed, misdeclared or oversized decoded body %#", async (headers) => {
+    const f = fixture(503, headers);
+    f.body.mockImplementation(async () => { throw new Error("Decoded body must never be allocated"); });
+    await expect(f.run()).rejects.toThrow();
+    expect(f.snapshot().records[0]).toMatchObject({ status: 503, requestId: null, problemType: null });
+    expect(f.body).not.toHaveBeenCalled();
+  });
 
-  it("admits an exactly 16-KiB safe problem body without retaining its private fields", async () => {
+  it("ignores even a valid problem body and its request ID without a validated header ID", async () => {
     const bytes = Buffer.from(JSON.stringify({ type: "database_lock_timeout", request_id: id, detail: privateValue }).padEnd(16_384));
     const f = fixture(503, { "content-type": "application/problem+json", "content-length": "16384" }, bytes);
     await expect(f.run()).rejects.toThrow();
-    expect(f.snapshot().records[0]).toMatchObject({ requestId: id, problemType: "database_lock_timeout" });
+    expect(f.snapshot().records[0]).toMatchObject({ requestId: null, problemType: null });
+    expect(f.body).not.toHaveBeenCalled();
   });
 
-  it("preserves status evidence when problem body access fails", async () => {
+  it("preserves status evidence without accessing an unavailable problem body", async () => {
     const f = fixture(503, { "content-type": "application/problem+json", "content-length": "2" });
     f.body.mockRejectedValue(new Error(privateValue));
     await expect(f.run()).rejects.toThrow("Patent application creation must return HTTP 201.");
     expect(f.snapshot().records[0]).toMatchObject({ status: 503, requestId: null, problemType: null });
+    expect(f.body).not.toHaveBeenCalled();
   });
 
   it("does not inspect or attach successful 201 bodies", async () => {

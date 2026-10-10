@@ -515,13 +515,16 @@ import { test } from "@playwright/test";
 import { createPatentApplicationWithEvidence } from ${JSON.stringify(path.join(root, "tests/e2e/support/prod-api-response-evidence"))};
 for (const status of [503, 200]) {
   test("offline API-first response " + status, async ({}, testInfo) => {
-    const bytes = Buffer.from(JSON.stringify({ type: "database_lock_timeout", request_id: "01234567-89ab-cdef-0123-456789abcdef", detail: ${JSON.stringify(sentinel)} }));
+    let bodyReads = 0;
+    const forbiddenBody = async () => { bodyReads++; throw new Error(${JSON.stringify(sentinel)}); };
     const api = { post: async () => ({ status: () => status,
-      headers: () => status === 503 ? { "content-type": "application/problem+json", "content-length": String(bytes.length) } : {},
-      body: async () => bytes }) };
+      headers: () => status === 503 ? { "content-type": "application/problem+json", "content-length": "1",
+        "content-encoding": "gzip", "x-request-id": "01234567-89ab-cdef-0123-456789abcdef" } : {},
+      body: forbiddenBody, text: forbiddenBody, json: forbiddenBody }) };
     try {
       await createPatentApplicationWithEvidence(api as any, testInfo, "https://api.example.invalid", { data: {} });
     } catch (error) {
+      if (bodyReads !== 0) throw new Error("Diagnostic accessed a decoded response body");
       await testInfo.attach("sanitized-network-evidence", { contentType: "application/json", body: Buffer.from(JSON.stringify(${JSON.stringify(page)})) });
       throw error;
     }
@@ -561,6 +564,9 @@ for (const status of [503, 200]) {
       assert.equal(run.networkEvidence.snapshot.records.length, 64);
       assert.equal(run.networkEvidence.snapshot.records[0].route, "ip/application");
       assert.equal(run.networkEvidence.snapshot.records[0].status, spec.title.endsWith("503") ? 503 : 200);
+      assert.equal(run.networkEvidence.snapshot.records[0].problemType, null);
+      assert.equal(run.networkEvidence.snapshot.records[0].requestId,
+        spec.title.endsWith("503") ? "01234567-89ab-cdef-0123-456789abcdef" : null);
       assert.equal(run.networkEvidence.snapshot.omitted, 3);
     }
   }
