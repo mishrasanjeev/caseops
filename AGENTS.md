@@ -1,5 +1,15 @@
 # CaseOps agent instructions
 
+- Detached retry/reindex preparation must keep the retained index untouched
+  through external work. After fresh claim, source and parent authority checks,
+  delete old chunks before inserting replacements in the same transaction;
+  ORM delete-orphan ordering alone can collide with retained chunk identities.
+  Prove two reindexes, parser/persistence failure rollback and a competing
+  source writer on both Matter and Contract, then replay the visible workflow.
+- Reconcile test identities case-sensitively, including parameter IDs and
+  nested test classes. PowerShell's default unique sorting can collapse valid
+  distinct cases. Cancelled job metadata does not override a complete retained
+  native collection, phase journal and finished result; retain both truths.
 - Request-based Cloud Run cannot certify database work scheduled after the
   response. Durable document admission must retain bounded atomic claims,
   crash recovery, stale-attempt rejection and the original no-paid marker

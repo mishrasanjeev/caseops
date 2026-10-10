@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, or_, select, text, update
+from sqlalchemy import and_, delete, or_, select, text, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
@@ -208,6 +208,26 @@ def _assert_same_source(session: Session, source) -> None:
         ))
         if ids != session.info["document_source_chunks"]:
             raise ValueError("Document chunks changed during processing.")
+
+
+def _attach_replacement_chunks(
+    session: Session, source: MatterAttachment | ContractAttachment,
+) -> None:
+    # Authority and the unchanged source/chunk inventory are already locked.
+    # ORM orphan deletion otherwise follows INSERTs and collides with retained
+    # (attachment_id, chunk_index) keys. Delete only inside finalization so a
+    # failed or fenced attempt rolls back without losing the prior index.
+    chunk_model = type(source).chunks.property.mapper.class_
+    prepared = list(source.chunks)
+    result = session.execute(
+        delete(chunk_model).where(chunk_model.attachment_id == source.id)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != len(session.info["document_source_chunks"]):
+        raise ValueError("Document chunks changed during finalization.")
+    set_committed_value(source, "chunks", [])
+    source.chunks = prepared
+    session.add(source)
 
 
 def _job_record(job: DocumentProcessingJob) -> DocumentProcessingJobRecord:
@@ -689,9 +709,8 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
 
     lifecycle_version = attachment.matter.lifecycle_version
     _release_preparation_transaction(session, attachment)
-    # Replacing the relationship also deletes prior chunks for retry/reindex,
-    # but deliberately leave that mutation unflushed until the external
-    # parse/embed work has finished and the parent lifecycle row is locked.
+    # Prepare replacement chunks without deleting the retained index until
+    # external work finishes and fresh authority/source checks succeed.
     index_matter_attachment(attachment)
 
     event_actor_membership_id = (
@@ -733,7 +752,7 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
                 raise ValueError("Matter lifecycle changed during document processing.")
             _assert_same_source(session, attachment)
             set_committed_value(attachment, "matter", fresh_matter)
-            session.add(attachment)
+            _attach_replacement_chunks(session, attachment)
         parent_locked_for_persist = True
 
     # Keep the attachment, chunks, and Matter row unlocked throughout the
@@ -888,7 +907,7 @@ def _process_contract_attachment_job(session: Session, job: DocumentProcessingJo
             raise ValueError("Contract parent changed during processing.")
         _assert_same_source(session, attachment)
         set_committed_value(attachment, "contract", contract)
-        session.add(attachment)
+        _attach_replacement_chunks(session, attachment)
     job.processed_char_count = attachment.extracted_char_count
     job.error_message = attachment.extraction_error
     job.completed_at = utcnow()

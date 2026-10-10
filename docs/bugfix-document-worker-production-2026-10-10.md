@@ -22,12 +22,10 @@ It adds no legal-source approval, consent or commercial commitment.
 [PR532](https://github.com/mishrasanjeev/caseops/pull/532) is draft at
 `0fd0b74e`, unmerged and not deployed. Its first
 [CI run](https://github.com/mishrasanjeev/caseops/actions/runs/38058946001)
-fails. All seven completed PostgreSQL failures were read individually from
-their native reports: five legal-hold responses correctly reject a stale
-compiled governance fingerprint, and two court-worker tests fail recovery
-assertions. Shards two and three are cancelled, not successful coverage.
-Backend coverage shard failures also require complete individual reconciliation;
-their green siblings cannot certify the candidate. The generated runtime
+fails. The initial partial readback examined seven PostgreSQL failures and
+reported shards two and three as cancelled/incomplete from job metadata.
+That coverage claim is retained as an incomplete checkpoint, not current
+native truth; the complete readback below supersedes it. The generated runtime
 projection has now been refreshed locally without changing the reviewed
 admission policy; replacement native/hosted proof remains pending.
 
@@ -50,6 +48,53 @@ Agent broad replacements are still red: document r9 completes 331 identities
 with 314 passes and 17 failures; court r4 completes 253 identities with 251
 passes and two failures. No assertion, wait/lock budget or provider fence is
 waived. Original reports remain retained while every failure is diagnosed.
+
+### Complete Native CI Readback And Reindex Reproduction
+
+All 13 API and four PostgreSQL artifacts from checkpoint `0fd0b74e` are now
+retained and reconciled case-sensitively, including full failure details.
+API: **8,815 identities, 6,326 passes, 2,409 unverified skips, 80 failures**,
+24,036 phases. PostgreSQL: **2,407 identities, 2,392 passes, 15 failures**,
+7,221 phases, zero skips. No duplicate, missing or extra identities/phases
+remain; native finished events and JUnit agree. PostgreSQL shards two and
+three have complete failing native evidence despite cancelled GitHub job
+metadata. The shard plan sorts selection, whereas pytest preserves collection
+order; exact selected multisets agree, not ordered plan/execution sequences.
+Readback SHA256:
+`f8348eb7d460b3556a36341fa01e18006bfb9ea7f9479424b61b1396d55f999c`.
+
+The fifteen PostgreSQL failures include eleven stale-governance legal-hold
+failures, three court-worker recovery/race assertions and one migration test
+whose moving `head` expectation predates migration 0003. API failures include
+governance-dependent paths, the new document/workflow import cycle, absent
+Playwright dependencies in the Python-only shard, two historical actor checks,
+dated gate-contract drift and an actual Contract reindex defect. These remain
+open until complete replacement evidence, not merely a matching diagnosis.
+
+Local checkpoint `fa300d36` refreshes the compiled governance projection without
+weakening admission, extracts shared IP upload-target helpers to remove the
+workflow/worker cycle, and installs the root Playwright dependency only for
+the API shard whose exact selected inventory needs its offline CLI test.
+Whole-module Main r16 reconciles **223 identities / 669 phases: 222 passes,
+one failure**, no skips/errors, exact ordered collection/JUnit and unchanged
+before/after source pins. Evidence SHA256:
+`eb5d6a4d9d0bec9f47c7c8c747db2328a83b11e579f57a67af9711d7cd284b20`.
+This scoped result is not final-image or production certification.
+
+The remaining r16 Contract failure reproduces a real retained
+`(attachment_id, chunk_index)` uniqueness collision. Detached preparation
+replaced the ORM relationship, but orphan deletion followed new inserts.
+The same Matter path requires correction. The proposed replacement deletes
+the unchanged prior chunks only after the fresh Company/attempt/source/parent
+fences, before new inserts, in the same finalization transaction. New native
+controls cover consecutive reindex, parser failure, competing source changes
+and post-deletion rollback. The new dated browser spec covers Matter's actual
+Reindex control and Contract's public reindex API with its visible workspace,
+at desktop/mobile widths, original byte preservation and exact release checks.
+It is discovered by standard Docker and production configs. Typecheck and
+four-case Docker collection pass; no browser execution, PostgreSQL replacement
+or deployed-fix claim is made yet. Contract currently has no browser reindex
+button; this evidence must not claim one was exercised.
 
 ## Exact Failed Evidence
 

@@ -19,6 +19,12 @@ skip; later runtime controls pass 221 cases/663 phases. The separate post-index
 compliance tail still needs its root-run persistence fence. Historical autoscale
 retirement is operational inference, not native zeros or physical-stop proof.
 These are not full-image/live proof.
+Complete first-checkpoint native CI readback retains 80 API failures and 15
+PostgreSQL failures; cancelled job metadata on two PG shards still contains
+complete failing native results. Local whole-module r16 on `fa300d36` passes
+222/223, with one confirmed Contract retained-chunk reindex collision. Its
+Matter sibling and atomic replacement regressions are under repair. New
+desktop/mobile browser collection is not browser execution or production proof.
 Full evidence, current verdict and required replacement:
 [document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
 

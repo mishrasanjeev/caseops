@@ -663,6 +663,110 @@ def test_contract_parser_releases_transaction_and_rechecks_linked_matter(
         )
 
 
+@pytest.mark.parametrize("target", ["matter", "contract"])
+@pytest.mark.parametrize("boundary", [
+    "replace", "parser_failure", "source_change", "finalize_failure",
+])
+def test_reindex_replaces_retained_chunks_only_after_fresh_authority(
+    pg_engine, monkeypatch, target, boundary,
+):
+    fixture = _activity_source(pg_engine, target, active=False)
+    old_text = "Retained first chunk. Retained second chunk."
+    new_text = "Replacement first chunk. Replacement second chunk."
+    chunk_model = fixture.model.chunks.property.mapper.class_
+    with Session(pg_engine) as seed:
+        source = seed.get(fixture.model, fixture.source)
+        source.processing_status = "indexed"
+        source.extracted_text = old_text
+        source.extracted_char_count = len(old_text)
+        source.processed_at = utcnow()
+        source.chunks = [
+            chunk_model(chunk_index=index, content=value, token_count=len(value.split()))
+            for index, value in enumerate(["Retained first chunk.", "Retained second chunk."])
+        ]
+        original_job = seed.get(DocumentProcessingJob, fixture.job)
+        target_type = original_job.target_type
+        seed.delete(original_job)
+        seed.flush()
+        job = DocumentProcessingJob(company_id=fixture.company,
+            requested_by_membership_id=fixture.actor, target_type=target_type,
+            attachment_id=fixture.source, action="reindex", no_paid_providers=True)
+        seed.add(job)
+        seed.commit()
+        job_id = job.id
+        old_ids = [chunk.id for chunk in source.chunks]
+        parent_model = Matter if target == "matter" else Contract
+        parent_id = source.matter_id if target == "matter" else source.contract_id
+    observations = []
+
+    def parse(*_):
+        assert all(not session.in_transaction() for session in sessions)
+        with Session(pg_engine) as concurrent:
+            assert concurrent.scalar(select(parent_model.id).where(parent_model.id == parent_id)
+                                     .with_for_update(nowait=True)) == parent_id
+            retained = concurrent.get(fixture.model, fixture.source)
+            observations.append([chunk.content for chunk in retained.chunks])
+            assert retained.extracted_text == old_text
+            assert observations[-1] == ["Retained first chunk.", "Retained second chunk."]
+            if boundary == "source_change":
+                retained.chunks.append(chunk_model(chunk_index=2,
+                    content="Concurrent writer wins.", token_count=4))
+                concurrent.commit()
+        if boundary == "parser_failure":
+            raise RuntimeError("Deterministic parser failure before replacement")
+        return document_processing.ParsedDocument("indexed", new_text,
+            ["Replacement first chunk.", "Replacement second chunk."], None)
+
+    sessions = _worker(monkeypatch, pg_engine, parse)
+    if boundary == "finalize_failure":
+        replace = document_jobs._attach_replacement_chunks
+
+        def fail_after_delete(session, source):
+            replace(session, source)
+            assert session.scalar(select(func.count()).select_from(chunk_model).where(
+                chunk_model.attachment_id == source.id)) == 0
+            raise RuntimeError("Deterministic persistence failure after replacement delete")
+
+        monkeypatch.setattr(document_jobs, "_attach_replacement_chunks", fail_after_delete)
+    assert document_jobs.run_document_processing_job(job_id) is True
+    assert len(observations) == 1
+    with Session(pg_engine) as check:
+        job = check.get(DocumentProcessingJob, job_id)
+        source = check.get(fixture.model, fixture.source)
+        assert job.status == ("completed" if boundary == "replace" else "failed"), job.error_message
+        assert source.extracted_text == (new_text if boundary == "replace" else old_text)
+        chunks = list(source.chunks)
+        assert [chunk.chunk_index for chunk in chunks] == (
+            [0, 1, 2] if boundary == "source_change" else [0, 1])
+        assert [chunk.content for chunk in chunks] == (
+            ["Replacement first chunk.", "Replacement second chunk."] if boundary == "replace"
+            else ["Retained first chunk.", "Retained second chunk."]
+                 + (["Concurrent writer wins."] if boundary == "source_change" else []))
+        if boundary == "replace":
+            assert set(old_ids).isdisjoint(chunk.id for chunk in chunks)
+        else:
+            assert [chunk.id for chunk in chunks[:2]] == old_ids
+        assert job.processed_char_count == (len(new_text) if boundary == "replace" else 0)
+    if boundary == "replace":
+        with Session(pg_engine) as seed:
+            repeated = DocumentProcessingJob(company_id=fixture.company,
+                requested_by_membership_id=fixture.actor, target_type=target_type,
+                attachment_id=fixture.source, action="reindex", no_paid_providers=True)
+            seed.add(repeated)
+            seed.commit()
+            repeated_id = repeated.id
+        monkeypatch.setattr(document_processing, "parse_attachment", lambda *_:
+            document_processing.ParsedDocument("indexed", "Second replacement.",
+                                               ["Second replacement."], None))
+        assert document_jobs.run_document_processing_job(repeated_id) is True
+        with Session(pg_engine) as check:
+            assert check.get(DocumentProcessingJob, repeated_id).status == "completed"
+            source = check.get(fixture.model, fixture.source)
+            assert source.extracted_text == "Second replacement."
+            assert [(chunk.chunk_index, chunk.content) for chunk in source.chunks] == [
+                (0, "Second replacement.")]
+
+
 @pytest.mark.parametrize("terminal", [False, True])
 def test_ip_parser_releases_transaction_and_rechecks_target_lifecycle(
     pg_engine, monkeypatch, terminal,
