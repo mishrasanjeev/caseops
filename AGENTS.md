@@ -1861,3 +1861,17 @@ requirements when using the fallback.
   Freeze and verify the relevant old helper bodies and bindings as well, so a
   legacy counterproof reaches the intended database boundary rather than a new
   application fence. Keep the earlier fixture failure as failed evidence.
+- A source-tree Next build does not prove the container's type-check inputs.
+  Reconcile colocated tests' external imports and their transitive helpers with
+  explicit builder COPY paths and both Docker/Cloud Build ignore policies. Keep
+  those inputs out of the runner, retain type checking, and build the actual web
+  builder in standard CI; never hide a missing input with ignored build errors.
+- A test's frozen source does not freeze its borrowed Python environment.
+  Dependency synchronization in another acceptance run can remove packages
+  during execution. Give concurrent runs independently owned environments,
+  retain failed setup evidence, and rerun the final candidate after frozen
+  dependency setup; never describe executable hashes alone as a frozen runtime.
+- Historical fixture replay has one cumulative admission bound across parent,
+  campaign and decision stages. Reserve capacity before each insert, prove the
+  old helper's excess writes and keep the real transition guards, source rows,
+  depth cap and below-bound positive finalization unchanged.

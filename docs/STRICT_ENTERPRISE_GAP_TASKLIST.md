@@ -1,5 +1,19 @@
 # Strict Enterprise Gap Tasklist
 
+## October 11 Container Input Regression
+
+Partially implemented / NO-GO: reviewed test corrections at `5f4e70a8` pass
+528/529 local cases with one unverified POSIX-only skip, and actual fresh
+three-language SARIF is clean. That local source-stable run shares an
+environment modified by Docker dependency setup and is not frozen-runtime
+final certification. The actual Docker web build fails on missing external
+test-helper inputs before any PG/browser execution, despite a green CI
+source-tree web build. Repair the narrow builder dependency closure and both
+ignore policies; add the actual web builder to CI. Complete new-source Docker,
+native CI and serving-release browser proof. Production is unchanged at
+`3dbf364d`; license and owner-kept dependencies remain open. See the
+[retained evidence](bugfix-document-worker-production-2026-10-10.md).
+
 ## October 10 Live Certification Failure
 
 Partially implemented / NO-GO: main `3dbf364d` is deployed, yet three complete

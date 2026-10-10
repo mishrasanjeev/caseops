@@ -301,6 +301,66 @@ instrumented older-schema slice is not Main0004 or serving-release proof.
 R5's uninstrumented 2.170158-second interval remains causally Inconclusive;
 do not infer CPU causality or relabel its genuine 55P03 as fixture drift.
 
+### October 11 Packaging And Final-Candidate Checkpoint
+
+The complete API readback of CI38071812851 reconciles **9,053 identities /
+24,643 phases: 6,536 passes, 2,516 unverified skips and one call failure**
+across all thirteen whole-file partitions. No identity or phase is missing,
+duplicated or extra; completion and JUnit agree. The sole failure is the old
+selector-contract assertion corrected above. Receipt SHA256:
+`cc91b507f40f16bac6fec1510c5a32526fa4c4af726ad5049622a11feed95d2c`.
+The skips are not verified coverage. Native TAP from the hosted wrapper is
+not independently downloaded; the separate local TAP remains retained.
+
+Reviewed replay corrections `09b3635e`/`e594267b` are integrated as
+`8a5315cc`/`5f4e70a8`: reconstruct the captured open campaign, insert its real
+decisions and execute actual guarded finalization; seed both semantic patent
+application parents; exempt only the declared initial self-root. All replay
+stages share pre-insert capacity. The old helper's two retained counterproofs
+observe 65 and 68 INSERTs; the replacement rejects before excess admission and
+keeps a 63-row positive finalization. Its complete two-module unit evidence is
+35 passes/105 phases, with no skips. Main independently verifies 17 sealed
+artifact/source hashes; agent seal SHA256:
+`a35fd6f45d10c0e9ccd8866ae1ce9b1f39fa28f700a7b7ecde686a0bcafdd8bb`.
+Independent read-only review finds no weakened guard or assertion.
+
+Main r24 on source-stable `5f4e70a8` reconciles all sixteen selected modules:
+**529 identities /1,586 phases: 528 passes, one unverified POSIX-mount-policy
+skip**, zero failures/errors; local Node22 TAP contains 32 passes, zero skips
+or cancellations. Receipt SHA256:
+`9467d741d6053610072e9424178574f3d205decc9cd73b4002acdac642591f36`.
+Docker's host dependency synchronization removed optional packages from the
+borrowed Python environment during that run. Source remained stable, but this
+is not frozen-runtime final certification; the replacement uses its own
+frozen environment. Preserve the failed first hardlink-based environment
+setup and use the established copy-mode installation rather than deleting
+another run's environment.
+
+Fresh [CodeQL38075836594](https://github.com/mishrasanjeev/caseops/actions/runs/38075836594)
+on exact `5f4e70a8` has three actual SARIF analyses, zero findings/errors/
+warnings and zero open PR-ref alerts. Its hosted merge and head trees agree;
+receipt SHA256:
+`6cb2154b25abec0f3f99b6cd9eebbc110f3aeb82ab86e60e51623940d0b8c40e`.
+Main-ref open alerts also remain zero. This is exact-tree scanning proof,
+not production or license-policy certification.
+
+The first exact-source Docker attempt fails before PostgreSQL or browser
+execution. Next's actual container type check cannot resolve the shared
+`bounded-network-evidence` and `prod-api-response-evidence` helpers imported by
+colocated web tests. The latter also imports `cost-controls`. The source-tree
+CI web build passes because those files exist there; its success does not
+certify the narrow Docker/Cloud Build context. Retain the original build error,
+API build cancellation and failed wrapper completion. Repair explicit
+builder-only copies and both ignore policies, regress the dependency closure,
+and require a real web-builder build in standard CI without suppressing types.
+Fresh CI38075836642 is not yet a complete reconciled release result.
+
+Production remains `3dbf364d`, private cadence paused, with no new independent
+Docs/Court jobs or triggers. No merge/deploy/issue closure follows the scoped
+results. Full fresh candidate Docker, complete native CI and exact-production
+browser/cadence certification remain required; license policy, Google-reported
+noindex exclusion and owner-kept consent/provider gaps remain open.
+
 ## Exact Failed Evidence
 
 [Production verification 38036444501](https://github.com/mishrasanjeev/caseops/actions/runs/38036444501)

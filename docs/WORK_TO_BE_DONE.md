@@ -1,5 +1,17 @@
 # CaseOps  - Work To Be Done
 
+## October 11 Container Input Regression
+
+NO-GO: finish the actual web container's missing shared-helper dependency
+closure, both ignore policies and a real web-builder CI gate. `5f4e70a8` has
+528 local passes/one unverified POSIX skip and clean actual SARIF, not complete
+frozen-runtime/full-image/live proof. Its first Docker build fails before
+PG or Playwright; preserve that failed evidence. Finish complete fresh native
+CI/Docker, merge to canonical main and guarded exact-release production replay.
+Serving `3dbf364d`, paused private cadence, missing independent Docs/Court
+resources, unchanged license-policy rejections and owner-kept dependencies
+remain open. [Details](bugfix-document-worker-production-2026-10-10.md).
+
 ## October 10 Live Certification Failure
 
 NO-GO: PR528/522 are deployed as exact main `3dbf364d`, but the complete live

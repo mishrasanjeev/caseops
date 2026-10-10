@@ -1,5 +1,17 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 11 Container Input Regression
+
+#527 remains Not fixed on serving `3dbf364d`. `5f4e70a8` completes 528 local
+passes/one unverified POSIX skip and fresh zero-result SARIF, but the real
+Docker web build fails before PG/browser tests: two new shared helpers and
+their import closure are absent from its narrow builder context. Preserve
+that failure, repair builder/context admission without suppressing types,
+and gate the actual web builder in CI. Require independent frozen-runtime
+local replay, complete final-image Docker and exact production acceptance;
+source-tree build success is not a deployed fix. See
+[evidence and limits](bugfix-document-worker-production-2026-10-10.md).
+
 ## October 10 Live Certification Failure
 
 #527 is Not fixed on deployed main `3dbf364d`: the full 341-identity production
