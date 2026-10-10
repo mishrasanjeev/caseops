@@ -125,14 +125,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Gitleaks
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+      # The action's --no-merges --first-parent range can scan zero bytes after
+      # a normal main merge. Scan immutable tracked blobs plus all side-parent
+      # history, including merge-resolution diffs, and retain nonempty receipts.
+      - name: Load reviewed Gitleaks image
+        run: docker pull ghcr.io/gitleaks/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
+      - name: Native offline secret-scan regressions
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # GITLEAKS_LICENSE only needed for org-level scanning — we
-          # use the free per-repo path. Default config catches AWS
-          # keys, GitHub PATs, Stripe keys, generic high-entropy
-          # strings, and OpenAI / SendGrid keys.
+          CASEOPS_SECRET_SCAN_TEST_EVIDENCE: ${{ runner.temp }}/secret-scan-regressions
+        run: python3 -B -m unittest discover -s scripts/tests -p test_secret_scan_gate.py -v
+      - name: Gitleaks tracked tree and changed history
+        env:
+          SCAN_HEAD: ${{ github.sha }}
+        run: |
+          python3 -B scripts/security_secret_scan.py \
+            --head "$SCAN_HEAD" --event-name "$GITHUB_EVENT_NAME" \
+            --event-path "$GITHUB_EVENT_PATH" \
+            --output "$RUNNER_TEMP/secret-scan-evidence"
+      - name: Retain native secret-scan evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secret-scan-native
+          path: |
+            ${{ runner.temp }}/secret-scan-evidence
+            ${{ runner.temp }}/secret-scan-regressions
+          if-no-files-found: error
 
   license-allowlist:
     name: License allow-list
