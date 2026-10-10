@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import time
+from argparse import Namespace
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -499,7 +500,7 @@ def test_actual_downgrade_refuses_before_any_receipt_or_index_loss(independent_d
 
 
 @pytest.mark.postgres
-def test_full_head_refusal_rolls_back_earlier_guard_ddl(independent_database):
+def test_full_head_refusal_rolls_back_earlier_guard_ddl(independent_database, record_property):
     engine = independent_database
     config = _config()
     command.upgrade(config, "20260928_0001")
@@ -510,24 +511,64 @@ def test_full_head_refusal_rolls_back_earlier_guard_ddl(independent_database):
     for queue in QUEUES:
         _insert_receipt(engine, queue, owner, marker=False)
     receipts = [_snapshot(engine, queue) for queue in QUEUES]
+    guarded_tables = ("document_processing_jobs", "matter_compliance_extraction_runs")
     catalog_sql = sa.text(
-        "SELECT t.tgname, pg_get_triggerdef(t.oid), p.proname, pg_get_functiondef(p.oid) "
+        "SELECT c.relname, t.tgname, pg_get_triggerdef(t.oid), "
+        "p.proname, pg_get_functiondef(p.oid) "
         "FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid "
-        "WHERE t.tgrelid = 'document_processing_jobs'::regclass AND NOT t.tgisinternal "
-        "ORDER BY t.tgname"
+        "JOIN pg_class c ON c.oid = t.tgrelid "
+        "WHERE c.relnamespace = 'public'::regnamespace "
+        "AND c.relname IN ('document_processing_jobs', 'matter_compliance_extraction_runs') "
+        "AND NOT t.tgisinternal ORDER BY c.relname, t.tgname"
     )
+
+    def columns():
+        return {
+            table: [
+                (column["name"], str(column["type"]), column["nullable"], column["default"])
+                for column in sa.inspect(engine).get_columns(table)
+            ]
+            for table in guarded_tables
+        }
+
+    before_columns = columns()
     with engine.connect() as connection:
         head = connection.scalar(sa.text("SELECT version_num FROM alembic_version"))
         catalog = connection.execute(catalog_sql).all()
-        assert len(catalog) == 2
+        assert sum(row.relname == "document_processing_jobs" for row in catalog) == 2
+        tail_count = connection.scalar(
+            sa.text("SELECT count(*) FROM matter_compliance_extraction_runs")
+        )
+        assert tail_count == 0
+    tail_installed = any(
+        column[0] == "persistence_protocol"
+        for column in before_columns["matter_compliance_extraction_runs"]
+    )
+    assert sum(row.relname == "matter_compliance_extraction_runs" for row in catalog) == (
+        2 if tail_installed else 0
+    )
+    # Only 0004's locked-empty tail may descend. Populated queue guards still refuse.
+    config.cmd_opts = Namespace(x=["compliance_tail_fresh_downgrade=true"])
     with pytest.raises(RuntimeError, match="restore-forward"):
         command.downgrade(config, "20260928_0001")
     assert [_snapshot(engine, queue) for queue in QUEUES] == receipts
+    assert columns() == before_columns
     with engine.connect() as connection:
         assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == head
         assert connection.execute(catalog_sql).all() == catalog
     command.upgrade(config, "head")
     assert [_snapshot(engine, queue) for queue in QUEUES] == receipts
+    assert columns() == before_columns
+    record_property(
+        "full_head_refusal",
+        {
+            "head": head,
+            "guard_count": len(catalog),
+            "tail_installed": tail_installed,
+            "empty_tail_opt_in_only": config.cmd_opts.x,
+            "populated_queue_and_catalog_retained": True,
+        },
+    )
 
 
 @pytest.mark.postgres
