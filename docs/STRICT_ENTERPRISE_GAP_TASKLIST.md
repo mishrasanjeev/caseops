@@ -2,6 +2,15 @@
 
 ## October 11 Container Input Regression
 
+Reviewed implementation is now integrated at `19f12ec8`, with all twenty
+packaging controls and independent review. Main's independently owned frozen
+Python replay passes557/558, with one known unverified POSIX-only skip and
+stable source/dependency hashes. The earlier5f backend replacement reconciles
+9,074 unique native API/PG passes, two remaining opt-in/platform skips and all
+six prior PG failures corrected. These are not final-image or serving-release
+acceptance. Require the new real builder/full CI and fresh Docker/production
+gates; keep NO-GO until actual completion. Evidence is linked below.
+
 Partially implemented / NO-GO: reviewed test corrections at `5f4e70a8` pass
 528/529 local cases with one unverified POSIX-only skip, and actual fresh
 three-language SARIF is clean. That local source-stable run shares an

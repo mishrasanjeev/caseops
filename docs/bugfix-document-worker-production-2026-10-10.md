@@ -361,6 +361,51 @@ results. Full fresh candidate Docker, complete native CI and exact-production
 browser/cadence certification remain required; license policy, Google-reported
 noindex exclusion and owner-kept consent/provider gaps remain open.
 
+### Reviewed Packaging Replacement And Isolated Replay
+
+Packaging repair `26e4d89a` is integrated as `19f12ec8`: explicit direct and
+transitive helper copies, matching narrow Docker/Cloud Build admission, and a
+required real web-builder CI step after the source-tree build. Strict Next
+type checking and runner copies are unchanged. Independent review finds no
+actionable defect; Main rehashes 33 sealed artifacts/source files with zero
+mismatches. The complete deployment-contract module has 230 passes/one known
+unverified POSIX-only skip, 231 identities/692 phases. All twenty packaging
+controls pass, with three pre-fix failures retained. Agent seal SHA256:
+`cab985aaf77dbf01af2f883f72e495c5231199bf8162d042eac1fdc14025d869`.
+The literal-import inventory is supplemental; actual compiler/context proof
+and fit within the unchanged fifteen-minute CI web-job budget remain required.
+
+Main r25 on clean `19f12ec8` uses its own frozen Python environment. All
+seventeen selected modules reconcile **558 identities /1,673 phases: 557
+passes, one unverified POSIX-only skip**, zero failures/errors. Full source
+pins and installed distribution versions plus METADATA/RECORD hashes agree
+before/after; actual local Node22 TAP has 32 passes, zero skips/cancellations.
+Receipt SHA256:
+`98afc45533da3a843629ab0c79c2a8ecaaebbcf8dc43789c5d15b6cc9ebe470d`.
+This replaces r24's shared-environment limitation, not final-image/live proof.
+
+The earlier exact `5f4e70a8` hosted backend replacement is now complete:
+**9,076 API identities /24,712 phases: 6,560 passes and 2,516 skips**, zero
+failures, thirteen exact whole-file partitions. All eight PostgreSQL shards
+have **2,514 passes /7,542 phases**, zero failures/skips, including the six
+original failures, all69 compliance cases and all18 dated migration cases.
+Main independently rehashes 89 PG artifacts and 307 immutable source blobs
+with zero mismatches. API receipt SHA256:
+`cfc2317e38233cf1b9362220de0637f33422fa9c00b545cc993d8a30facc43be`;
+PG readback SHA256:
+`cc17ac367fc5e1cf7c5c7c3305d43c017a595bac57956edf47e93f7a92683670`.
+Its initial auditor ordering error remains retained and incomplete.
+
+Exact identity reconciliation proves every one of the2,514 API PG exclusions
+has a native PG pass in that same head. Combined unique passes are9,074;
+the remaining two skips are opt-in native fastembed-model acceptance and the
+Windows gcloud command-shim case on Linux, still unverified by that hosted
+cohort. Combined receipt SHA256:
+`2cfdc23a6e05f8a792233a98c9b6cbbcd9ac5f7a5ade6195505dafed7350ec4c`.
+The earlier complete failed runs are not overwritten. This earlier backend
+proof and clean SARIF do not certify the packaging-corrected candidate or its
+still-required full Docker/CI/browser and serving-production release gates.
+
 ## Exact Failed Evidence
 
 [Production verification 38036444501](https://github.com/mishrasanjeev/caseops/actions/runs/38036444501)

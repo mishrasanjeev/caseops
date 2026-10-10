@@ -2,6 +2,13 @@
 
 ## October 11 Container Input Regression
 
+Candidate `19f12ec8` integrates the reviewed builder/context fix and twenty
+regressions. Fresh owned-runtime Main replay completes557 passes/one known
+POSIX-only skip, with stable source/dependency hashes. Earlier5f API/PG native
+replacement has9,074 unique passes, two opt-in/platform skips and all six
+previous PG failures passing. Do not upgrade #527: new-source full Docker/CI
+and exact serving-production replay still have not completed.
+
 #527 remains Not fixed on serving `3dbf364d`. `5f4e70a8` completes 528 local
 passes/one unverified POSIX skip and fresh zero-result SARIF, but the real
 Docker web build fails before PG/browser tests: two new shared helpers and

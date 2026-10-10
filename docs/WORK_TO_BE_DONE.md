@@ -2,6 +2,14 @@
 
 ## October 11 Container Input Regression
 
+Reviewed packaging fix and twenty regression controls are integrated at
+`19f12ec8`; independently owned frozen-runtime local replay has557 passes,
+one known POSIX-only skip, stable source and dependency hashes. Earlier5f
+native backend replacement reconciles9,074 unique passes/two opt-in or
+platform skips and all six original PG failures corrected. Finish the new
+actual-builder CI gate, clean final-image Docker and exact production replay.
+This checkpoint is not a new merge/deployment or production-green claim.
+
 NO-GO: finish the actual web container's missing shared-helper dependency
 closure, both ignore policies and a real web-builder CI gate. `5f4e70a8` has
 528 local passes/one unverified POSIX skip and clean actual SARIF, not complete
