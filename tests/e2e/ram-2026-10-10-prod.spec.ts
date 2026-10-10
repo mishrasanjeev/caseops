@@ -134,7 +134,7 @@ for (const target of ["matter", "contract"] as const) {
           if (target === "contract") await page.getByRole("tab", { name: /^Attachments/ }).click();
           const row = page.getByRole(target === "matter" ? "row" : "listitem").filter({ hasText: filename });
           await expect(row).toBeVisible();
-          await expect(row.getByText("Indexed", { exact: true })).toBeVisible();
+          await expect(row.getByText("indexed", { exact: true })).toBeVisible();
           await release(request);
           if (target === "matter") {
             const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === `${parentPath}/attachments/${attachmentId}/reindex`
@@ -165,7 +165,7 @@ for (const target of ["matter", "contract"] as const) {
         if (target === "contract") await page.getByRole("tab", { name: /^Attachments/ }).click();
         const finalRow = page.getByRole(target === "matter" ? "row" : "listitem").filter({ hasText: filename });
         await expect(finalRow).toBeVisible();
-        await expect(finalRow.getByText("Indexed", { exact: true })).toBeVisible();
+        await expect(finalRow.getByText("indexed", { exact: true })).toBeVisible();
         const downloaded = await request.get(`${api.origin}${parentPath}/attachments/${attachmentId}/download`, { headers });
         expect(downloaded.status(), "authorized immutable original bytes").toBe(200);
         expect(await downloaded.body()).toEqual(Buffer.from(body));
