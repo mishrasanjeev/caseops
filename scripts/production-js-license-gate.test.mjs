@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { ALLOWED_LICENSES, buildLicenseReport, licenseDecision } from "./production-js-license-gate.mjs";
+import { ALLOWED_LICENSES, buildLicenseReport, licenseDecision, readJson } from "./production-js-license-gate.mjs";
 
 const ROOT = path.resolve("license-fixture");
 const script = fileURLToPath(new URL("./production-js-license-gate.mjs", import.meta.url));
@@ -336,6 +336,197 @@ test("standard Security gate runs this complete test file and always retains nat
   assert.match(job, /if: always\(\)/);
   assert.match(job, /if-no-files-found: error/);
   assert.doesNotMatch(job, /onlyAllow|excludePrivatePackages|continue-on-error/);
+});
+
+function jsonInputFixture(t, contents = "{}") {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "caseops-license-input-"));
+  const filename = path.join(directory, "input.json");
+  fs.writeFileSync(filename, contents);
+  t.after(() => { t.mock.restoreAll(); fs.rmSync(directory, { recursive: true, force: true }); });
+  return { directory, filename, hashes: {} };
+}
+
+test("JSON opens once and checks/reads/closes that descriptor, never a path-based read", t => {
+  const value = jsonInputFixture(t);
+  const open = fs.openSync, read = fs.readSync, close = fs.closeSync;
+  const descriptors = [], reads = [], closes = [];
+  t.mock.method(fs, "statSync", () => { throw new Error("path_stat_forbidden"); });
+  t.mock.method(fs, "readFileSync", () => { throw new Error("path_read_forbidden"); });
+  t.mock.method(fs, "openSync", (file, flags) => {
+    assert.equal(file, value.filename);
+    if (fs.constants.O_NOFOLLOW) assert.ok(flags & fs.constants.O_NOFOLLOW);
+    if (fs.constants.O_NONBLOCK) assert.ok(flags & fs.constants.O_NONBLOCK);
+    const descriptor = open(file, flags); descriptors.push(descriptor); return descriptor;
+  });
+  t.mock.method(fs, "readSync", (descriptor, ...args) => { reads.push(descriptor); return read(descriptor, ...args); });
+  t.mock.method(fs, "closeSync", descriptor => { closes.push(descriptor); return close(descriptor); });
+  assert.deepEqual(readJson(value.filename, value.hashes, "input"), {});
+  assert.equal(descriptors.length, 1);
+  assert.ok(reads.length > 0 && reads.every(descriptor => descriptor === descriptors[0]));
+  assert.deepEqual(closes, descriptors);
+  assert.match(value.hashes.input, /^[a-f0-9]{64}$/);
+});
+
+test("JSON rejects an oversized descriptor before buffer allocation or reading", t => {
+  const value = jsonInputFixture(t);
+  fs.truncateSync(value.filename, 16 * 1024 * 1024 + 1);
+  const allocation = t.mock.method(Buffer, "allocUnsafe", () => { throw new Error("allocation_forbidden"); });
+  const read = t.mock.method(fs, "readSync", () => { throw new Error("read_forbidden"); });
+  assert.throws(() => readJson(value.filename, value.hashes, "input"), /oversized_json_input/);
+  assert.equal(allocation.mock.callCount(), 0);
+  assert.equal(read.mock.callCount(), 0);
+  assert.deepEqual(value.hashes, {});
+});
+
+test("JSON accepts exactly 16MiB with at most size plus one bounded buffer", t => {
+  const body = Buffer.alloc(16 * 1024 * 1024, " "); body.write("{}");
+  const value = jsonInputFixture(t, body), allocate = Buffer.allocUnsafe, read = fs.readSync;
+  const allocations = [], requested = [];
+  t.mock.method(Buffer, "allocUnsafe", size => { allocations.push(size); return allocate(size); });
+  t.mock.method(fs, "readSync", (descriptor, buffer, offset, length, position) => {
+    requested.push(length); return read(descriptor, buffer, offset, length, position);
+  });
+  assert.deepEqual(readJson(value.filename, value.hashes, "input"), {});
+  assert.deepEqual(allocations, [16 * 1024 * 1024 + 1]);
+  assert.ok(requested.every(length => length <= 64 * 1024));
+});
+
+test("JSON growth after fstat cannot turn a small allocation into an unbounded read", t => {
+  const value = jsonInputFixture(t), stat = fs.fstatSync, read = fs.readSync, allocate = Buffer.allocUnsafe;
+  const allocations = [], requested = []; let mutated = false;
+  t.mock.method(fs, "fstatSync", (descriptor, options) => {
+    const result = stat(descriptor, options);
+    if (!mutated) { mutated = true; fs.truncateSync(value.filename, 16 * 1024 * 1024 + 100); }
+    return result;
+  });
+  t.mock.method(Buffer, "allocUnsafe", size => { allocations.push(size); return allocate(size); });
+  t.mock.method(fs, "readSync", (descriptor, buffer, offset, length, position) => {
+    requested.push(length); return read(descriptor, buffer, offset, length, position);
+  });
+  assert.throws(() => readJson(value.filename, value.hashes, "input"), /json_input_changed_while_reading/);
+  assert.deepEqual(allocations, [3]);
+  assert.ok(requested.reduce((sum, length) => sum + length, 0) <= 3);
+  assert.deepEqual(value.hashes, {});
+});
+
+for (const [label, mutate] of [
+  ["growth", file => fs.appendFileSync(file, "x")],
+  ["truncation", file => fs.truncateSync(file, 1)],
+  ["same-size rewrite", file => { fs.writeFileSync(file, "[]"); fs.utimesSync(file, new Date(0), new Date(1_000)); }],
+]) {
+  test(`JSON rejects ${label} during descriptor reads`, t => {
+    const value = jsonInputFixture(t), read = fs.readSync, close = fs.closeSync, stat = fs.fstatSync;
+    let changed = false, closed;
+    t.mock.method(fs, "readSync", (descriptor, ...args) => {
+      if (!changed) { changed = true; mutate(value.filename); }
+      return read(descriptor, ...args);
+    });
+    t.mock.method(fs, "closeSync", descriptor => { closed = descriptor; return close(descriptor); });
+    assert.throws(() => readJson(value.filename, value.hashes, "input"), /json_input_changed_while_reading/);
+    assert.deepEqual(value.hashes, {});
+    assert.throws(() => stat(closed), { code: "EBADF" });
+  });
+}
+
+test("JSON rejects symlink leaves with native nofollow or Windows descriptor-bound metadata", t => {
+  const value = jsonInputFixture(t);
+  const read = t.mock.method(fs, "readSync", () => { throw new Error("symlink_read_forbidden"); });
+  if (fs.constants.O_NOFOLLOW) {
+    const link = path.join(value.directory, "link.json"); fs.symlinkSync(value.filename, link);
+    assert.throws(() => readJson(link, value.hashes, "input"), { code: "ELOOP" });
+  } else {
+    const lstat = fs.lstatSync;
+    t.mock.method(fs, "lstatSync", (file, options) => Object.assign(Object.create(lstat(file, options)), { isSymbolicLink: () => true }));
+    assert.throws(() => readJson(value.filename, value.hashes, "input"), /json_input_path_identity_changed/);
+  }
+  assert.equal(read.mock.callCount(), 0);
+  assert.deepEqual(value.hashes, {});
+});
+
+test("JSON rejects a changed leaf identity before reading the opened descriptor", t => {
+  const value = jsonInputFixture(t), lstat = fs.lstatSync;
+  t.mock.method(fs, "lstatSync", (file, options) => {
+    const result = lstat(file, options);
+    return Object.assign(Object.create(result), { ino: result.ino + 1n });
+  });
+  const read = t.mock.method(fs, "readSync", () => { throw new Error("identity_read_forbidden"); });
+  assert.throws(() => readJson(value.filename, value.hashes, "input"), /json_input_path_identity_changed/);
+  assert.equal(read.mock.callCount(), 0);
+  assert.deepEqual(value.hashes, {});
+});
+
+test("JSON never reopens a path replaced by an oversized file after descriptor validation", t => {
+  const value = jsonInputFixture(t), read = fs.readSync, open = fs.openSync;
+  const gateDescriptors = [], sizes = []; let changed = false;
+  t.mock.method(fs, "openSync", (file, ...args) => {
+    const descriptor = open(file, ...args);
+    if (file === value.filename && !changed) gateDescriptors.push(descriptor);
+    return descriptor;
+  });
+  t.mock.method(fs, "readSync", (descriptor, buffer, offset, length, position) => {
+    if (!changed) {
+      changed = true;
+      fs.renameSync(value.filename, path.join(value.directory, "original.json"));
+      fs.writeFileSync(value.filename, "[]"); fs.truncateSync(value.filename, 16 * 1024 * 1024 + 100);
+    }
+    sizes.push(buffer.length);
+    assert.equal(descriptor, gateDescriptors[0]);
+    return read(descriptor, buffer, offset, length, position);
+  });
+  try { assert.deepEqual(readJson(value.filename, value.hashes, "input"), {}); }
+  catch (error) { assert.match(error.message, /^json_input_changed_while_reading$/); }
+  assert.equal(gateDescriptors.length, 1);
+  assert.ok(sizes.length > 0 && sizes.every(size => size === 3));
+});
+
+test("JSON closes the descriptor on invalid JSON without returning a parsed value", t => {
+  const value = jsonInputFixture(t, "{"), close = fs.closeSync, stat = fs.fstatSync; let closed;
+  t.mock.method(fs, "closeSync", descriptor => { closed = descriptor; return close(descriptor); });
+  assert.throws(() => readJson(value.filename, value.hashes, "input"), SyntaxError);
+  assert.throws(() => stat(closed), { code: "EBADF" });
+});
+
+for (const operation of ["fstatSync", "readSync"]) {
+  test(`JSON closes the descriptor and preserves ${operation} failure`, t => {
+    const value = jsonInputFixture(t), close = fs.closeSync, stat = fs.fstatSync; let closed;
+    t.mock.method(fs, operation, () => { throw Object.assign(new Error("injected_io_error"), { code: "EIO" }); });
+    t.mock.method(fs, "closeSync", descriptor => { closed = descriptor; return close(descriptor); });
+    assert.throws(() => readJson(value.filename, value.hashes, "input"), { code: "EIO" });
+    assert.deepEqual(value.hashes, {});
+    assert.throws(() => stat(closed), { code: "EBADF" });
+  });
+}
+
+test("JSON handles real short descriptor reads without path fallback", t => {
+  const value = jsonInputFixture(t, '{"verified":true}'), read = fs.readSync;
+  let calls = 0;
+  t.mock.method(fs, "readSync", (descriptor, buffer, offset, length, position) => {
+    calls += 1; return read(descriptor, buffer, offset, Math.min(length, 1), position);
+  });
+  assert.deepEqual(readJson(value.filename, value.hashes, "input"), { verified: true });
+  assert.ok(calls > 2);
+});
+
+test("JSON rejects directories without reading content", t => {
+  const value = jsonInputFixture(t);
+  const read = t.mock.method(fs, "readSync", () => { throw new Error("directory_read_forbidden"); });
+  assert.throws(() => readJson(value.directory, value.hashes, "input"), /json_input_not_regular_file|EISDIR/);
+  assert.equal(read.mock.callCount(), 0);
+});
+
+test("JSON missing files fail on open without a precheck or fallback read", t => {
+  const value = jsonInputFixture(t); fs.unlinkSync(value.filename);
+  const stat = t.mock.method(fs, "statSync", () => { throw new Error("precheck_forbidden"); });
+  assert.throws(() => readJson(value.filename, value.hashes, "input"), { code: "ENOENT" });
+  assert.equal(stat.mock.callCount(), 0);
+  assert.deepEqual(value.hashes, {});
+});
+
+test("JSON descriptor-close failure remains a failure, never a returned success", t => {
+  const value = jsonInputFixture(t), close = fs.closeSync, stat = fs.fstatSync; let closed;
+  t.mock.method(fs, "closeSync", descriptor => { closed = descriptor; close(descriptor); throw new Error("injected_close_failure"); });
+  assert.throws(() => readJson(value.filename, value.hashes, "input"), /injected_close_failure/);
+  assert.throws(() => stat(closed), { code: "EBADF" });
 });
 
 test("real CLI writes a complete hashed report before policy failure, preserves prior output", t => {

@@ -90,6 +90,38 @@ accepted any approved substring, including unsafe AND and `MIT-0` acceptances.
 This semantic repair restores correct OR choice without restoring those flaws
 or expanding the 14 approved terms.
 
+## Descriptor Read And Original CodeQL Finding
+
+The original draft at `6cb037ab1a8942017c5a614803cd71a26c84c020` received
+CodeQL advisory check `114214720606`: FAILED, one HIGH `js/file-system-race`
+alert #534 at script line 214. Its exact merge was
+`1d349cd8e80fd085013ff07d0f2fb0618df5267c`. The three original SARIFs contain
+one JavaScript result and zero Python/actions results. Successful Advanced jobs
+did not make the advisory or SARIF green. These original bytes are retained in
+`.tmp/license-toctou-20261010-r1/original-2026-10-10T130505759Z`, manifest SHA256
+`e47834303ff3c3567bf177434a1c52f0357aab7f67f0aefd236616ab5e71d212`.
+
+The vulnerable filename `statSync` followed by filename `readFileSync` is
+replaced by one open descriptor, `fstat` regular-file/size checks, bounded
+positioned reads, and descriptor closure in `finally`. POSIX uses O_NOFOLLOW
+and O_NONBLOCK. Because Node on Windows exposes neither flag, the opened
+descriptor must match the non-symlink leaf's device/inode metadata; the same
+post-open identity check runs everywhere. No pathname is reopened for content.
+A nonzero inode identity is required. The buffer is bounded to the initial
+size plus one, at most 16MiB plus one byte; reads are at most 64KiB. Growth,
+truncation or modification detected by byte count/size/nanosecond metadata
+rejects the snapshot. No unbounded `readFileSync(fd)` replaces the path read.
+
+Seventeen added native controls prove one-descriptor ownership, exact-bound
+acceptance, oversized rejection before allocation, growth after fstat and
+during reads, truncation, same-size rewrite, symlink/leaf identity rejection,
+pathname replacement, short reads, invalid JSON, missing/nonregular files and
+I/O/stat/close failure handling. POSIX exercises a real symlink; local Windows
+exercises the descriptor-bound metadata fallback. No query suppression,
+CodeQL workflow/policy change or alert dismissal is added. Fresh exact-head
+hosted advisory/SARIF readback is required and retained separately; the old
+finding is not retroactively greened.
+
 ## Local Native Evidence
 
 Fresh isolated install and capture root:
@@ -102,7 +134,7 @@ The historical committed run at `6cb037ab1a8942017c5a614803cd71a26c84c020`,
 implementation, not correct OR semantics: two expected OR rejections were
 obsolete. Its report and full native inventory remain immutable.
 
-The corrected provisional full run under
+The OR-only corrected provisional full run under
 `.tmp/license-or-semantics-20261010-r1/unit-2026-10-10T125518976Z` has 123
 passes, zero failures/cancellations/skips/todos. It replays the entire original
 70-control file, correcting those two OR expectations, plus 53 new controls.
@@ -117,6 +149,14 @@ either branch, valid LicenseRef/DocumentRef syntax, invalid identifier/exception
 forms, length/token/depth bounds on both branches, and inventory-level jszip
 approval with no GPL-policy failure. The standard Security job selects this
 exact full file without a name filter.
+
+After descriptor hardening, the provisional complete run
+`unit-2026-10-10T130259214Z` has 140 passes and zero
+failures/cancellations/skips/todos: the original 70 controls with two corrected
+OR expectations, 53 OR controls and 17 descriptor controls. All run in the
+same standard file. The final clean-commit replay and source/blob hashes are
+retained in the new ignored evidence root, not substituted for the historical
+123- or 70-control inventories.
 
 The historical committed 20-rejection report is
 `.tmp/license-gate-20261010-r1/actual-report-2026-10-10T122109487Z/license-report.json`,
@@ -133,6 +173,10 @@ policy gate exits 1, deliberately not green. Report SHA-256:
 `jszip@3.10.2` is approved with `selected_terms: ["MIT"]` and
 `unused_unapproved_terms: ["GPL-3.0-or-later"]`. The 19 other rejection identities
 and expressions remain the same; no license term or dependency version changed.
+The descriptor-hardened provisional replay
+`actual-2026-10-10T130341187Z/license-report.json` has the same complete inventory
+and 19 rejections, SHA256
+`3fcdf5f240374e3aaa05af576dbd4cb700413c5f93e3c07c3f499404f90c1026`.
 
 These provisional runs use Node 24.15.0 on Windows, not the hosted Ubuntu/Node
 22 environment, and precede the final committed-source replay. The final

@@ -224,12 +224,35 @@ export function buildLicenseReport({ root, manifest, workspaces, lock, lockTree,
   return report;
 }
 
-function readJson(filename, hashes, label) {
-  requireThat(fs.statSync(filename).size <= 16 * 1024 * 1024, "oversized_json_input");
-  const raw = fs.readFileSync(filename);
-  requireThat(raw.length <= 16 * 1024 * 1024, "oversized_json_input");
-  hashes[label] = hash(raw);
-  return JSON.parse(raw.toString("utf8"));
+export function readJson(filename, hashes, label) {
+  const descriptor = fs.openSync(filename, fs.constants.O_RDONLY
+    | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
+  try {
+    const before = fs.fstatSync(descriptor, { bigint: true });
+    requireThat(before.isFile(), "json_input_not_regular_file");
+    requireThat(before.size >= 0n && before.size <= 16n * 1024n * 1024n, "oversized_json_input");
+    // Windows lacks O_NOFOLLOW. On every platform, bind the non-symlink leaf
+    // to the already-open descriptor before reading; never reopen the path.
+    const entry = fs.lstatSync(filename, { bigint: true });
+    requireThat(entry.isFile() && !entry.isSymbolicLink() && before.ino > 0n
+      && entry.dev === before.dev && entry.ino === before.ino, "json_input_path_identity_changed");
+    const size = Number(before.size);
+    const buffer = Buffer.allocUnsafe(size + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const count = fs.readSync(descriptor, buffer, length, Math.min(64 * 1024, buffer.length - length), length);
+      if (count === 0) break;
+      length += count;
+    }
+    const after = fs.fstatSync(descriptor, { bigint: true });
+    requireThat(length === size && after.size === before.size && after.mtimeNs === before.mtimeNs
+      && after.ctimeNs === before.ctimeNs, "json_input_changed_while_reading");
+    const raw = buffer.subarray(0, length);
+    hashes[label] = hash(raw);
+    return JSON.parse(raw.toString("utf8"));
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 
 export function main(argv) {
