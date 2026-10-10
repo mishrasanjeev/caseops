@@ -406,6 +406,59 @@ The earlier complete failed runs are not overwritten. This earlier backend
 proof and clean SARIF do not certify the packaging-corrected candidate or its
 still-required full Docker/CI/browser and serving-production release gates.
 
+### Complete Hosted Browser Failure And Contract Repair
+
+CI38075836642 on head `5f4e70a8`, actual checkout `6fe50e8f` with the same
+tree, finishes **512 identities: 490 pass, 17 unverified skip, five fail**.
+Native collection, JSON/XML, incremental journal and completion hashes agree;
+there are no omissions, duplicates, retries, interruptions or global errors.
+Execution order differs from canonical report order and is retained separately,
+not silently rewritten. Every skip has its actual runtime reason and source.
+Original artifact11680440610 SHA256:
+`d452aee55d5790b077cf93bc493f8bd3519366dce48cd4d8f4a7579167b6833d`.
+
+All five complete error contexts establish contract drift, not five proven
+product failures. Four Matter/Contract desktop/mobile journeys complete the
+initial durable index but fail at the exact capitalized `Indexed` locator;
+the shared badge lowercases DOM text even when CSS capitalizes it visually.
+Neither reindex nor final original-byte download was reached. The diagnostic
+case expects a body-derived problem type, but both bounded collectors
+intentionally avoid decoded-body allocation and return explicit null. Typed
+sanitizer unit positives do not prove runtime body capture. Its later timing,
+transport and privacy assertions were not completed either.
+
+Agent `ce8d79c0`, integrated as `91486e85`, changes only those two specs:
+exact lowercase badge checks at both locations and explicit null diagnostic
+expectation. All original source hashes, job identities, two reindexes,
+responsive visibility, byte equality, timeouts, retries and privacy controls
+remain unchanged. Independent actual-patch review finds no weakening. Agent
+E2E typecheck passes on Node24; browser replay remains **Inconclusive**.
+Main independently verifies586 sealed files and229 immutable source blobs,
+zero mismatches. Receipt SHA256:
+`1e2bb82c9db54aa02230af3e02d429b53e6211cfa2650135de7baacbf81a7c97`.
+The first ordinary Windows long-path reader failure remains retained; the
+complete replacement uses extended-length paths without rewriting inputs.
+
+Docker307 R2 stops before building because the retained R1 subnet overlaps;
+it is a setup failure, not a PG/browser result. R3 uses a fresh isolated pair,
+builds both real images, proves exact API/web identity and internal origin,
+and passes current0004 schema/index checks including the production memory
+ceiling. It collects2514 PG cases before Main supersedes it for the browser
+correction:623 passed calls, zero recorded failed phases, no completion event
+or final JUnit. This is **incomplete**, never full acceptance. The original
+journal SHA256 is
+`b2e610e60682034a6ae9d320bf4458a6ead2ccb2577e9cd6968ff9ba76f740c1`.
+All seven owned containers, two volumes and two networks are removed by exact
+project labels, with empty post-cleanup inventories; unrelated workloads and
+earlier failed evidence remain untouched.
+
+Require the complete fresh corrected-head Docker/CI/SARIF and exact serving
+production replay. No merge/deploy follows this correction. Parent Search
+Console access remains available despite the reviewer's empty browser context:
+one authorized read-only refresh still reports /sign-in indexed, with its
+September22 crawl blocked by robots. No crawl/submission is repeated; #521,
+license policy and owner-kept consent/privacy/provider dependencies stay open.
+
 ## Exact Failed Evidence
 
 [Production verification 38036444501](https://github.com/mishrasanjeev/caseops/actions/runs/38036444501)

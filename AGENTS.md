@@ -1,5 +1,19 @@
 # CaseOps agent instructions
 
+- CSS capitalization is not DOM text. Assert the shared StatusBadge's exact
+  canonical lowercase text inside the reported record, retaining persisted
+  status, source hashes, distinct jobs, both reindexes and responsive proof.
+  A failure before reindex does not verify the unexecuted retention journey.
+- A bounded browser/API diagnostic collector intentionally avoids decoded
+  response-body allocation. Keep its explicit nullable problem-type contract,
+  validated request identity, status, timestamps and transport evidence. A
+  sanitizer's typed-problem unit test is not runtime collector-body coverage;
+  do not reintroduce unbounded reads to satisfy an obsolete browser assertion.
+- Retained Docker acceptance networks can overlap the next explicit subnet.
+  Inventory pools before allocating a fresh isolated pair; preserve setup
+  failures and incomplete phase journals, never prune unrelated workloads or
+  certify database/browser execution that the attempt did not reach.
+
 - A CI dependency-selector replacement must audit every workflow-contract test,
   not just the planner tests. Update obsolete command-shape assertions to the
   required runtime, preserving exact selected-inventory, dependency ordering

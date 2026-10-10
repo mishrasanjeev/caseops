@@ -1,5 +1,15 @@
 # CaseOps  - Work To Be Done
 
+## October 11 Browser Contract Repair
+
+Finish full fresh Docker/CI/SARIF and exact-production replay after reviewed
+two-spec correction `91486e85`. Earlier5f browser completes490 pass/17
+unverified skip/five contract failures, not green. Docker307 R3 is retained
+as incomplete at623 passed calls, no finished event/JUnit. Do not relabel
+those results or the unexecuted two-reindex/download journeys as accepted.
+Production remains3db; license policy, Google exclusion and owner-kept
+dependencies remain open. [Evidence](bugfix-document-worker-production-2026-10-10.md).
+
 ## October 11 Container Input Regression
 
 Reviewed packaging fix and twenty regression controls are integrated at

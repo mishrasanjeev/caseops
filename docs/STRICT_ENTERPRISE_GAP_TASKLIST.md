@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## October 11 Browser Contract Repair
+
+Partially implemented / NO-GO: native5f browser completion reconciles490
+passes,17 unverified skips and five contract-drift failures across512 IDs.
+Reviewed `91486e85` changes only the exact badge and nullable no-body
+diagnostic expectations. Unexecuted two-reindex/download tails are not
+certified. Docker307 R3 is explicitly superseded/incomplete at623 calls;
+owned cleanup is verified. Require fresh full corrected-image Docker/CI and
+serving-release browser/cadence proof before upgrading #527 or readiness.
+[Evidence and limits](bugfix-document-worker-production-2026-10-10.md).
+
 ## October 11 Container Input Regression
 
 Reviewed implementation is now integrated at `19f12ec8`, with all twenty

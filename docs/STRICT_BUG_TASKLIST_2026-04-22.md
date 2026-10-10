@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 11 Browser Contract Repair
+
+NO-GO. Full5f hosted browser evidence is490 pass/17 unverified skip/five fail,
+all512 identities retained. `91486e85` corrects only two specs' exact badge
+text and explicit nullable no-body diagnostics; no assertion weakening or
+product-logic change. Both reindex sequences still need complete replay.
+Docker307 R3's623 passed calls are an interrupted prefix without completion
+or JUnit, not full PG acceptance. Fresh corrected-source Docker/CI and exact
+production proof remain required; serving3db and open dependencies are
+unchanged. [Evidence](bugfix-document-worker-production-2026-10-10.md).
+
 ## October 11 Container Input Regression
 
 Candidate `19f12ec8` integrates the reviewed builder/context fix and twenty
