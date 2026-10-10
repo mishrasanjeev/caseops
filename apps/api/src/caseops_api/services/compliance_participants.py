@@ -23,8 +23,9 @@ from caseops_api.services.assignment_memberships import (
     lock_company_memberships_for_assignment,
     require_locked_membership_capability,
 )
-from caseops_api.services.matter_access import assert_access, can_access
+from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_write_fence import lock_matter_private_authority
+from caseops_api.services.record_access_policy import visible_matter_membership_ids
 from caseops_api.services.session_context import SessionContext
 
 _MAX_PARTICIPANTS = 500
@@ -197,16 +198,12 @@ def _select_order_notifications(
     )
     if pairs > _MAX_PARTICIPANTS:
         raise ComplianceParticipantFenceError(409, detail={"code": "compliance_participant_limit"})
-    company = session.get(Company, matter.company_id)
-    eligible = {
-        member.id
-        for member in candidates
-        if can_access(
-            session,
-            context=SessionContext(company=company, user=member.user, membership=member),
-            matter=matter,
-        )
-    }
+    eligible = visible_matter_membership_ids(
+        session,
+        company_id=matter.company_id,
+        matter_id=matter.id,
+        membership_ids=[member.id for member in candidates],
+    )
     return tuple(
         CapturedOrderNotificationRule(
             rule.id,

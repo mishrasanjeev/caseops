@@ -317,6 +317,29 @@ def test_rule_delivery_total_queries_and_lock_inventory_are_bounded(
         _rule(session, fixture, "company")
         session.commit()
     stage_counts = {}
+    batch_receipts = []
+    batch_visibility = compliance_participants.visible_matter_membership_ids
+
+    def measure_visibility(session, *, company_id, matter_id, membership_ids):
+        ids = tuple(membership_ids)
+        before = audit.statement_counts.get("mutation", 0)
+        result = batch_visibility(
+            session,
+            company_id=company_id,
+            matter_id=matter_id,
+            membership_ids=ids,
+        )
+        batch_receipts.append(
+            {
+                "candidates": len(ids),
+                "sql_count": audit.statement_counts.get("mutation", 0) - before,
+            }
+        )
+        return result
+
+    monkeypatch.setattr(
+        compliance_participants, "visible_matter_membership_ids", measure_visibility
+    )
 
     def measure(original, stage):
         def measured(*args, **kwargs):
@@ -363,7 +386,10 @@ def test_rule_delivery_total_queries_and_lock_inventory_are_bounded(
         pre_parent_lock_batches={"company": 1, "membership": 1, "user": 1},
         delivered_in_app=delivered,
         stage_sql_counts=stage_counts,
+        visibility_batch_receipts=batch_receipts,
     )
+    assert len(batch_receipts) >= 2
+    assert all(receipt == {"candidates": count, "sql_count": 1} for receipt in batch_receipts)
     # All discovery/ACL/delivery SELECTs, writes and transaction-label statements.
     assert total_sql <= 100 + 15 * count, total_sql
 
