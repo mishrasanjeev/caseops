@@ -47,11 +47,15 @@ from tests.test_court_sync_execution_20261010_postgres import (
 from tests.test_court_sync_execution_20261010_postgres import (
     finalizer_audit as _finalizer_audit_fixture,
 )
+from tests.test_court_sync_execution_20261010_postgres import (
+    isolated_court_audit as _isolated_court_audit_fixture,
+)
 from tests.test_postgres_validation import _ensure_migrations, _ip_race_context  # noqa: F401
 
 pytestmark = pytest.mark.postgres
 court_audit = _court_audit_fixture
 finalizer_audit = _finalizer_audit_fixture
+isolated_court_audit = _isolated_court_audit_fixture
 
 
 def _provider(audit, sessions, monkeypatch, callback=None, outcome="valid"):
@@ -498,7 +502,7 @@ def test_native_detached_ai_returns_to_company_first_authority_in_both_orders(
     winner,
 ):
     audit, fixture, sessions, run = court_audit
-    returned, release = Event(), Event()
+    returned, release = Event(), audit.release
     original = compliance_extraction._persist_ai_items
 
     def persist(*args, **kwargs):
@@ -728,8 +732,10 @@ def test_native_court_skipped_ai_branches_keep_import_and_zero_transport(
     assert _readback(audit, fixture)["runs"] == 1
 
 
-def test_native_ai_recovery_completed_replacement_rejects_old_output(court_audit, monkeypatch):
-    audit, fixture, sessions, run = court_audit
+def test_native_ai_recovery_completed_replacement_rejects_old_output(
+    isolated_court_audit, monkeypatch,
+):
+    audit, fixture, sessions, run = isolated_court_audit
     adapter_calls = []
 
     def fetch(**_):
@@ -760,8 +766,10 @@ def test_native_ai_recovery_completed_replacement_rejects_old_output(court_audit
     audit.record("court_completed_ai_replacement", adapter_calls=adapter_calls, ai_calls=len(calls))
 
 
-def test_native_post_ai_flush_expiry_rolls_back_all_import_outputs(court_audit, monkeypatch):
-    audit, fixture, sessions, run = court_audit
+def test_native_post_ai_flush_expiry_rolls_back_all_import_outputs(
+    isolated_court_audit, monkeypatch,
+):
+    audit, fixture, sessions, run = isolated_court_audit
     calls = _provider(audit, sessions, monkeypatch)
     original = compliance_extraction._persist_ai_items
 

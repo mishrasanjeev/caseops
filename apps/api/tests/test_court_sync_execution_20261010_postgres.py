@@ -59,6 +59,22 @@ def court_audit(finalizer_audit, monkeypatch):
     return audit, fixture, sessions, run
 
 
+@pytest.fixture
+def isolated_court_audit(http_pg_engine, request):
+    # Resolve the audit only after the independently migrated template child is
+    # selected. Global recovery must not consume another test's retained claim.
+    result = request.getfixturevalue("court_audit")
+    audit, fixture, _sessions, _run = result
+    assert audit.engine.url == http_pg_engine.url
+    assert audit.engine.url.database.startswith("caseops_http_")
+    with Session(audit.engine) as session:
+        jobs = list(session.scalars(select(MatterCourtSyncJob.id)))
+    assert jobs == [fixture["court_job_id"]]
+    audit.record("court_isolated_recovery_database", database=audit.engine.url.database,
+                 initial_job_ids=jobs, template_child=True)
+    return result
+
+
 def _result(title):
     return SimpleNamespace(
         adapter_name="deterministic-court-emulator",
@@ -168,11 +184,11 @@ def test_native_overlapping_claimers_dispatch_exactly_once(court_audit, monkeypa
 
 @pytest.mark.parametrize("old_outcome", ["result", "error"])
 def test_native_recovery_replacement_fences_stale_success_and_failure(
-    court_audit,
+    isolated_court_audit,
     monkeypatch,
     old_outcome,
 ):
-    audit, fixture, sessions, run = court_audit
+    audit, fixture, sessions, run = isolated_court_audit
     entered, release = Event(), Event()
     calls = []
 
@@ -214,6 +230,39 @@ def test_native_recovery_replacement_fences_stale_success_and_failure(
     assert rows["job_status"] == "completed" and rows["job_error"] is None
     assert rows["runs"] == 1 and rows["orders"] == ["Replacement result"]
     assert rows["started_at"] != str(old_started)
+
+
+def test_native_global_recovery_counts_unrelated_retained_stale_claim(
+    isolated_court_audit, monkeypatch,
+):
+    audit, fixture, _sessions, _run = isolated_court_audit
+    unrelated = _seed_finalizer(audit.engine, "matter")
+    now = datetime.now(UTC)
+    stale = now - timedelta(minutes=30)
+    with Session(audit.engine) as session:
+        target = session.get(MatterCourtSyncJob, fixture["court_job_id"])
+        target.status, target.started_at = "processing", stale
+        retained = MatterCourtSyncJob(
+            company_id=unrelated["company_id"], matter_id=unrelated["matter_id"],
+            requested_by_membership_id=unrelated["actor_id"],
+            source="local-emulator", source_reference="unrelated-retained-source",
+            status="processing", started_at=stale,
+        )
+        session.add(retained)
+        session.commit()
+        ids = sorted([target.id, retained.id])
+        assert target.company_id != retained.company_id
+    monkeypatch.setattr(court_sync_jobs, "utcnow", lambda: now)
+    recovered = court_sync_jobs.recover_stale_matter_court_sync_jobs(stale_after_minutes=15)
+    audit.record("court_shared_recovery_counterproof", job_ids=ids,
+                 recovered=recovered, old_fixture_expected=1)
+    assert recovered == 2
+    with Session(audit.engine) as session:
+        rows = list(session.execute(
+            select(MatterCourtSyncJob.id, MatterCourtSyncJob.status)
+            .where(MatterCourtSyncJob.id.in_(ids)).order_by(MatterCourtSyncJob.id)
+        ))
+    assert rows == [(job_id, "queued") for job_id in ids]
 
 
 @pytest.mark.parametrize("winner", ["disposal", "source_change"])
