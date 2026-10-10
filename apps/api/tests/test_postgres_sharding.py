@@ -44,6 +44,10 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     root = Path(__file__).resolve().parents[3]
     workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
     steps = workflow["jobs"]["postgres-validation-shards"]["steps"]
+    job = workflow["jobs"]["postgres-validation-shards"]
+    assert job["timeout-minutes"] == 12
+    total = job["strategy"]["matrix"]["total_shards"][0]
+    assert total == 8 and job["strategy"]["matrix"]["shard"] == list(range(1, total + 1))
     step = next(item for item in steps if item.get("name") == "Pytest -m postgres")
     command = shlex.split(step["run"])
     assert command[:2] == ["uv", "run"]
@@ -65,24 +69,26 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     environment = {key: value for key, value in os.environ.items()
                    if key not in {"PYTHONPATH", "PYTEST_ADDOPTS", "COVERAGE_PROCESS_START"}}
     environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
-    for shard in range(1, 5):
+    for shard in range(1, total + 1):
         environment["PYTEST_ADDOPTS"] = step["env"]["PYTEST_ADDOPTS"].replace(
             "${{ matrix.shard }}", str(shard)
-        )
+        ).replace("${{ matrix.total_shards }}", str(total))
         result = subprocess.run(command, cwd=tmp_path, env=environment, capture_output=True,
                                 text=True, timeout=30, check=False)
         assert result.returncode == 0, result.stdout + result.stderr
-    assert verify_reports(tmp_path, 4) == {
-        "status": "passed", "shards": 4, "collected": 8, "skipped": 0
+    assert verify_reports(tmp_path, total) == {
+        "status": "passed", "shards": total, "collected": 8, "skipped": 0
     }
 
 
-def test_postgres_partition_is_complete_disjoint_and_order_independent():
+@pytest.mark.parametrize("total", [4, 8])
+def test_postgres_partition_is_complete_disjoint_and_order_independent(total):
     nodes = [f"tests/test_example.py::test_item[{index}]" for index in range(193)]
-    selections = [partition(nodes, shard, 4) for shard in range(1, 5)]
+    selections = [partition(nodes, shard, total) for shard in range(1, total + 1)]
     assert sorted(node for selected in selections for node in selected) == sorted(nodes)
     assert max(map(len, selections)) - min(map(len, selections)) == 1
-    assert selections == [partition(list(reversed(nodes)), shard, 4) for shard in range(1, 5)]
+    assert selections == [partition(list(reversed(nodes)), shard, total)
+                          for shard in range(1, total + 1)]
 
 
 @pytest.mark.parametrize("nodes,shard,total", [([], 1, 4), (["a", "a"], 1, 1),
@@ -95,11 +101,12 @@ def test_postgres_partition_rejects_incomplete_or_invalid_selections(nodes, shar
 @pytest.mark.parametrize(
     "fault", [None, "missing", "drift", "skipped", "failure", "error", "wrong-node"]
 )
-def test_postgres_report_gate_requires_every_actual_success(tmp_path, fault):
+@pytest.mark.parametrize("total", [4, 8])
+def test_postgres_report_gate_requires_every_actual_success(tmp_path, fault, total):
     nodes = [f"tests/test_example.py::TestCases::test_item[{index}]" for index in range(8)]
-    for shard in range(1, 5):
-        selected = partition(nodes, shard, 4)
-        inventory = {"shard": shard, "total": 4, "nodeids": nodes, "selected": selected}
+    for shard in range(1, total + 1):
+        selected = partition(nodes, shard, total)
+        inventory = {"shard": shard, "total": total, "nodeids": nodes, "selected": selected}
         if fault == "drift" and shard == 1:
             inventory["nodeids"] = nodes[:-1]
         if fault != "missing" or shard != 1:
@@ -114,9 +121,9 @@ def test_postgres_report_gate_requires_every_actual_success(tmp_path, fault):
                 case.set("name", "test_unselected")
         ElementTree.ElementTree(suite).write(tmp_path / f"postgres-shard-{shard}.xml")
     if fault is None:
-        assert verify_reports(tmp_path, 4) == {
-            "status": "passed", "shards": 4, "collected": 8, "skipped": 0
+        assert verify_reports(tmp_path, total) == {
+            "status": "passed", "shards": total, "collected": 8, "skipped": 0
         }
     else:
         with pytest.raises(ValueError):
-            verify_reports(tmp_path, 4)
+            verify_reports(tmp_path, total)

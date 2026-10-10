@@ -143,9 +143,8 @@ jobs:
             --isolated-file test_matter_file_qa.py \
             --output .pytest-shard-files
           cp .pytest-shard-files "api-shard-${{ matrix.shard }}-files.txt"
-          if rg --fixed-strings --line-regexp 'tests/test_prod_playwright_evidence.py' .pytest-shard-files > /dev/null; then
-            echo "requires_playwright=true" >> "$GITHUB_OUTPUT"
-          fi
+          python ../../scripts/pytest_shard_plan.py \
+            --selected-files .pytest-shard-files --github-output "$GITHUB_OUTPUT"
 
       - name: Set up offline evidence Node runtime
         if: steps.shard-files.outputs.requires_playwright == 'true'
@@ -265,13 +264,14 @@ jobs:
     # FK ON DELETE SET NULL, JSONB roundtrip, server_default=false,
     # and migrations under batch_alter_table on a real PG dialect.
     # See apps/api/tests/test_postgres_validation.py for what's covered.
-    name: Postgres + pgvector shard ${{ matrix.shard }}/4
+    name: Postgres + pgvector shard ${{ matrix.shard }}/${{ matrix.total_shards }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        total_shards: [8]
     services:
       postgres:
         # pgvector-on-pg17 image — same backend version as prod Cloud SQL.
@@ -353,7 +353,7 @@ jobs:
           CASEOPS_AUTH_SECRET: pg-validation-secret-at-least-32-bytes
           CASEOPS_TEST_RESULT_JOURNAL: postgres-shard-${{ matrix.shard }}.jsonl
           PYTEST_ADDOPTS: >-
-            -p tests.postgres_sharding --postgres-shard=${{ matrix.shard }} --postgres-shards=4
+            -p tests.postgres_sharding --postgres-shard=${{ matrix.shard }} --postgres-shards=${{ matrix.total_shards }}
             --postgres-inventory=postgres-shard-${{ matrix.shard }}.json
             --junitxml=postgres-shard-${{ matrix.shard }}.xml
         run: uv run python -m pytest -q -m postgres
@@ -391,7 +391,7 @@ jobs:
           merge-multiple: true
       - name: Reconcile complete PostgreSQL acceptance
         working-directory: apps/api
-        run: uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence --total 4
+        run: uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence --total 8
 
   web:
     name: Web (typecheck + vitest + build)

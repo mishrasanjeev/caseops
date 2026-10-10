@@ -1817,3 +1817,22 @@ requirements when using the fallback.
   Move a genuinely shared pre-feature fixture to a test-owned helper, keep its
   operations and assertions unchanged, reconcile every consumer, and require
   fresh native coverage and actual CodeQL results before scanner closure.
+- Conditional CI dependencies must be decided by a required runtime from the
+  actual selected inventory. A missing optional executable inside a shell `if`
+  can silently skip installation. Reject empty/invalid inventories, test the
+  real selection CLI without optional binaries, and verify installation precedes
+  the dependent native suite. Preserve job deadlines when partitioning work.
+- A restore-forward execution fence must survive attempted downgrade with
+  retained receipts, including roots whose document job is gone. Default refusal
+  precedes DDL; an explicit empty rehearsal must lock every relevant table and
+  prove emptiness under the unchanged migration lock budget. Preserve captured
+  human FALSE and automated TRUE policy across all legacy job states.
+- Concurrent index creation still waits for preexisting reader snapshots.
+  Prove bounded interruption, committed column/invalid-index recovery and a
+  second upgrade after quiescence. Separately prove that additive DDL installed
+  before an old worker starts is not a stale-writer fence; never remove the
+  concurrent build or raise its timeout to satisfy a race fixture.
+- A pinned legacy module does not pin its imported helper dependency closure.
+  Freeze and verify the relevant old helper bodies and bindings as well, so a
+  legacy counterproof reaches the intended database boundary rather than a new
+  application fence. Keep the earlier fixture failure as failed evidence.

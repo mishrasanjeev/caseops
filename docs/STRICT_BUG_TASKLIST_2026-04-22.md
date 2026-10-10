@@ -14,6 +14,14 @@ interleavings, full Docker, hosted CI/SARIF and live browser proof remain open.
 Full evidence, current verdict and required replacement:
 [document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
 
+Later draft `1d5eb65b` remains NO-GO: complete hosted API has 6,468 passes,
+2,513 unverified skips and seven failures across 8,988 identities. All four
+PostgreSQL shards are genuinely interrupted at the unchanged deadline, with
+449 identities not started and no final XML/completion. Portable conditional
+dependency selection, eight-shard controls and restore-forward downgrade
+units pass complete local r20 (76/76); new native rollback/race fixtures,
+full Docker, fresh CodeQL note 540 and exact production replay remain open.
+
 ## October 10 Summary Gate Repair
 
 Summary browser acceptance remains Inconclusive; #527 remains not fixed in

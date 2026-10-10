@@ -3,9 +3,14 @@
 Revision ID: 20261010_0003
 Revises: 20261010_0002
 DATA-GOVERNANCE-MAP: updated
+MIGRATION-ROLLBACK: restore-forward: retain execution/provenance guards on
+application rollback. Only an explicit, locked-empty document and compliance
+rehearsal may remove them; any retained receipt refuses before guard removal.
 """
 
-from alembic import op
+import sqlalchemy as sa
+
+from alembic import context, op
 
 revision = "20261010_0003"
 down_revision = "20261010_0002"
@@ -132,8 +137,24 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if op.get_bind().dialect.name != "postgresql":
+    bind = op.get_bind()
+    if bind.dialect.name != "postgresql":
         return
+    refusal = (
+        "Document execution protocol must be retained; restore-forward. "
+        "Only an empty rehearsal with -x document_execution_fresh_downgrade=true may downgrade."
+    )
+    opted_in = context.get_x_argument(as_dictionary=True).get(
+        "document_execution_fresh_downgrade"
+    ) == "true"
+    if not opted_in:
+        raise RuntimeError(refusal)
+    # Keep env.py's bounded migration lock budget through emptiness checks and DDL.
+    for table in ("document_processing_jobs", "matter_compliance_extraction_runs"):
+        bind.execute(sa.text(f"LOCK TABLE {table} IN ACCESS EXCLUSIVE MODE"))
+    for table in ("document_processing_jobs", "matter_compliance_extraction_runs"):
+        if bind.execute(sa.text(f"SELECT 1 FROM {table} LIMIT 1")).scalar():
+            raise RuntimeError(refusal)
     op.execute("DROP TRIGGER document_execution_protocol ON document_processing_jobs")
     op.execute("DROP TRIGGER document_execution_provenance ON document_processing_jobs")
     op.execute("DROP FUNCTION caseops_document_execution_protocol()")

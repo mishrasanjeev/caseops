@@ -13,6 +13,7 @@ from uuid import uuid4
 import pytest
 from alembic.config import Config
 from sqlalchemy import MetaData, Table, create_engine, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, joinedload, registry, relationship, selectinload, sessionmaker
 
 from alembic import command
@@ -190,17 +191,63 @@ def test_first_release_requires_legacy_quiescence_before_recovery(
             document_processing.ParsedDocument("indexed", "New fenced result",
                                                 ["New fenced result"], None))
         monkeypatch.setattr(document_jobs, "embed_matter_attachment_chunks", lambda *_, **__: 0)
+        if not quiesce_before_claim:
+            # Install only the additive policy before the old snapshot exists.
+            # This branch proves that successful DDL alone is not a writer fence.
+            command.upgrade(cfg, "20261010_0002")
         with ThreadPoolExecutor(max_workers=1) as pool:
             old = pool.submit(old_run, old_id)
             try:
                 assert old_entered.wait(10)
-                command.upgrade(cfg, "20261010_0002")
+                if quiesce_before_claim:
+                    # CONCURRENTLY still waits for an old reader's snapshot.
+                    # Keep the real migration lock budget and its partial DDL.
+                    with pytest.raises(OperationalError) as interrupted:
+                        command.upgrade(cfg, "20261010_0002")
+                    assert interrupted.value.orig.sqlstate == "55P03"
+                    assert not release_old.is_set()
+                    with engine.connect() as check:
+                        assert check.scalar(text("SELECT version_num FROM alembic_version")) == (
+                            "20260928_0001"
+                        )
+                        assert check.execute(text(
+                            "SELECT id, status, attempt_count, no_paid_providers "
+                            "FROM document_processing_jobs ORDER BY id"
+                        )).all() == sorted([
+                            (old_id, "processing", 1, True),
+                            (queued_id, "queued", 0, True),
+                        ])
+                        index_state = check.execute(text(
+                            "SELECT i.indisvalid, i.indisready FROM pg_index i "
+                            "JOIN pg_class c ON c.oid = i.indexrelid "
+                            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                            "WHERE n.nspname = current_schema() "
+                            "AND c.relname = 'ix_document_processing_jobs_queue'"
+                        )).one()
+                        assert index_state.indisvalid is False
+                    release_old.set()
+                    old.result(10)
+                    command.upgrade(cfg, "20261010_0002")
+                    command.upgrade(cfg, "20261010_0002")
+                    with engine.connect() as check:
+                        assert check.scalar(text("SELECT version_num FROM alembic_version")) == (
+                            "20261010_0002"
+                        )
+                        assert check.execute(text(
+                            "SELECT c.relname, i.indisvalid, i.indisready FROM pg_index i "
+                            "JOIN pg_class c ON c.oid = i.indexrelid "
+                            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                            "WHERE n.nspname = current_schema() AND c.relname IN "
+                            "('ix_document_processing_jobs_queue', "
+                            "'ix_document_processing_jobs_recovery') ORDER BY c.relname"
+                        )).all() == [
+                            ("ix_document_processing_jobs_queue", True, True),
+                            ("ix_document_processing_jobs_recovery", True, True),
+                        ]
                 with Session(engine) as check:
                     assert check.get(DocumentProcessingJob, old_id).no_paid_providers is True
                     assert check.get(DocumentProcessingJob, queued_id).status == "queued"
                 if quiesce_before_claim:
-                    release_old.set()
-                    old.result(10)
                     assert document_jobs.recover_stale_document_processing_jobs(limit=5) == 0
                     outcomes = {}
                     assert document_jobs.drain_document_processing_jobs(

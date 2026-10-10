@@ -19,8 +19,8 @@ It adds no legal-source approval, consent or commercial commitment.
 
 ## Draft PR532 Checkpoint
 
-[PR532](https://github.com/mishrasanjeev/caseops/pull/532) is draft at
-`0fd0b74e`, unmerged and not deployed. Its first
+[PR532](https://github.com/mishrasanjeev/caseops/pull/532) remains draft,
+unmerged and not deployed. The initial checkpoint at `0fd0b74e` and its first
 [CI run](https://github.com/mishrasanjeev/caseops/actions/runs/38058946001)
 fails. The initial partial readback examined seven PostgreSQL failures and
 reported shards two and three as cancelled/incomplete from job metadata.
@@ -139,6 +139,60 @@ ownership. All four changed migrations pass the canonical-base preflight.
 The individually hashed command logs remain under `.tmp/control-plane-r2`;
 the earlier 10-pass/two-failure r1 is retained. These scoped results are not a
 fresh image, current hosted CI/SARIF or exact production proof.
+
+### Complete Replacement CI Readback At 1d5eb65b
+
+The later draft head `1d5eb65b` is still **NO-GO**.
+[CI 38066864544](https://github.com/mishrasanjeev/caseops/actions/runs/38066864544)
+completes all 13 API native inventories: **8,988 identities, 6,468 passes,
+2,513 unverified skips and seven failures**, 24,451 phases. Ordered collection,
+JUnit, selected files and completion agree without missing/extra identities.
+The four PostgreSQL plans reconcile the complete **2,511** canonical identities,
+but each hits the unchanged 12-minute job deadline. Their 6,182 retained phases
+contain **2,044 passes, 16 failures, two partial tests and 449 not started**.
+No final PostgreSQL XML or session-finished event exists: the full PostgreSQL
+gate is **INCOMPLETE**, not a successful run or complete failure inventory.
+Readback receipt SHA256:
+`9a85aa60ee7bfa0d4cf35eb3ce7df600926e776e2978f50923a9fa47be46fd3f`.
+Eight retained-chunk PostgreSQL interleavings pass all 24 phases inside that
+interrupted run; this is scoped evidence, not full acceptance.
+
+Every actual API failure is retained. Six historical migration journeys attempt
+to descend from the new moving head through a restore-forward fence; their
+fixtures need explicit pre-feature revisions and independent fresh full-head
+rehearsals, not bypass flags. The seventh is the real offline Playwright CLI:
+its shard selects the required file, but `rg` is absent on the hosted runner.
+The shell conditional silently skips Node/Playwright installation, and one of
+32 native Node controls fails without its required result file. Root npm
+dependencies must be selected through required Python, with an exact validated
+nonempty inventory and explicit true/false output.
+
+The local dependency/partition replacement retains the 12-minute deadline,
+expands native PostgreSQL CI from four to eight disjoint shards, and verifies
+all eight real toy pytest launches plus aggregate rejection controls. Complete
+Main r20 passes **76 identities / 228 phases**, zero skips/errors, unchanged
+before/after full-source pins. Receipt SHA256:
+`160a40cf523eaaa002821a6a37d46e330e39c88e7b92464f8bfe3b6fd36aaf95`.
+This includes all 18 new execution-fence downgrade unit controls. Their earlier
+complete r19 receipt is retained:
+`b454951517084b3ea88c5e272c0a385afc678b0a6afab4f53936a3f0e47b9125`.
+New native downgrade fixtures cover legacy queued/processing/completed/failed
+receipts with both provider-policy values, a retained root with no document
+job, and a separately fresh explicit empty rehearsal. These later native
+fixtures and the corrected rolling-reader interruption/recovery race are
+**not yet executed**; r20 must not be cited as PostgreSQL proof.
+
+Fresh actual CodeQL at `1d5eb65b` clears findings 535-539 without dismissal,
+but adds open note 540, a redundant snapshot assignment in the compliance
+PostgreSQL test. Python SARIF has one result; JS/actions have zero results,
+and all three have zero analysis errors/warnings. Receipt SHA256:
+`6fdbb187de16c534dfd94460ce720acfc96d04020b14b225c540fa0f31c224cf`.
+A successful CodeQL job is not a zero-result candidate. Replacement remains
+required. The four new dated reindex browser cases are independently discovered
+by both Docker and production configs with distinct native identities, receipt
+`391cf415ba51647c8c6c9c535e619ea422dbebe2788057564c4d6de8923ffd7b`;
+collection is not execution. No new production deployment, closure or private
+cadence resume has occurred.
 
 ## Exact Failed Evidence
 

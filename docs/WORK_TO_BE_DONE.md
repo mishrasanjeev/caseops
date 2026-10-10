@@ -20,6 +20,13 @@ PostgreSQL interleaving, hosted CI/SARIF or serving-release browser proof.
 Full evidence, current verdict and required replacement:
 [document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
 
+Draft `1d5eb65b` still has seven complete API failures and an interrupted
+2,511-identity PostgreSQL gate (449 not started). Required-runtime dependency
+selection, unchanged-deadline eight-shard partition controls and downgrade
+units complete local 76/76. Finish dated pre-feature migration fixtures,
+native rolling-reader/recovery and retained-root fence coverage, worker
+replacements, CodeQL 540, then complete Docker/CI and exact production replay.
+
 ## October 10 Summary Gate Repair
 
 NO-GO: integrated `a8979a41` completes 66 Python passes/198 phases and 42

@@ -31,6 +31,14 @@ proof; native PostgreSQL, full Docker and hosted CI/SARIF remain open.
 Full evidence, current verdict and required replacement:
 [document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
 
+The later draft `1d5eb65b` is not release-ready: seven actual API failures,
+an interrupted complete PostgreSQL plan and fresh CodeQL note 540 remain open.
+Local r20 proves 76 portable dependency, eight-shard and downgrade controls,
+not full native migration or final-image acceptance. Preserve restore-forward
+guards and the existing job/lock budgets; require root-only retained receipts,
+concurrent-index interruption recovery, independent dated migration fixtures
+and complete final-source replacement before production certification.
+
 ## October 10 Summary Gate Repair
 
 Partially implemented / NO-GO: bounded fresh-session fixture batching and

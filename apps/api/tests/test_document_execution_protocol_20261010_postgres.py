@@ -344,10 +344,25 @@ def test_requester_fk_set_null_retains_legacy_receipt_and_marker(pg_engine):
         check.commit()
 
 
-def test_independent_trigger_upgrade_downgrade_preserves_catalog_and_receipts(protocol_database):
+def test_independent_trigger_upgrade_retained_downgrade_preserves_catalog_and_receipts(
+    protocol_database,
+):
     database = protocol_database
-    fixture = _activity_source(database.engine, "matter")
-    before = _snapshot(database.engine, fixture)
+    fixtures = []
+    for status in ("queued", "processing", "completed", "failed"):
+        for no_paid in (False, True):
+            fixture = _activity_source(database.engine, "matter")
+            with Session(database.engine) as seed:
+                receipt = seed.get(DocumentProcessingJob, fixture.job)
+                receipt.status, receipt.no_paid_providers = status, no_paid
+                receipt.attempt_count = 0 if status == "queued" else 1
+                receipt.started_at = None if status == "queued" else datetime.now(UTC)
+                receipt.completed_at = (
+                    datetime.now(UTC) if status in ("completed", "failed") else None
+                )
+                seed.commit()
+            fixtures.append(fixture)
+    before = [_snapshot(database.engine, fixture) for fixture in fixtures]
     with database.engine.connect() as check:
         indexes = check.execute(text("SELECT indexname, indexdef FROM pg_indexes "
             "WHERE tablename='document_processing_jobs' ORDER BY indexname")).all()
@@ -364,7 +379,77 @@ def test_independent_trigger_upgrade_downgrade_preserves_catalog_and_receipts(pr
                                  "proname='caseops_document_execution_protocol'")) == 1
         assert check.execute(text("SELECT indexname,indexdef FROM pg_indexes WHERE "
             "tablename='document_processing_jobs' ORDER BY indexname")).all() == indexes
-    assert _snapshot(database.engine, fixture) == before
+    assert [_snapshot(database.engine, fixture) for fixture in fixtures] == before
+    for opt_in in (None, "document_execution_fresh_downgrade=false",
+                   "document_execution_fresh_downgrade=true"):
+        database.cfg.cmd_opts = SimpleNamespace(x=[] if opt_in is None else [opt_in])
+        with pytest.raises(RuntimeError, match="Document execution protocol.*restore-forward"):
+            command.downgrade(database.cfg, "20261010_0002")
+        assert [_snapshot(database.engine, fixture) for fixture in fixtures] == before
+        with database.engine.connect() as check:
+            assert check.scalar(text("SELECT version_num FROM alembic_version")) == "20261010_0003"
+            assert check.scalar(text("SELECT count(*) FROM pg_trigger WHERE "
+                "tgrelid='document_processing_jobs'::regclass AND NOT tgisinternal "
+                "AND tgname IN ('document_execution_protocol', 'document_execution_provenance')"
+            )) == 2
+            assert check.scalar(text(
+                "SELECT to_regprocedure('caseops_document_execution_protocol()')"
+            )) is not None
+            assert check.execute(text("SELECT indexname,indexdef FROM pg_indexes WHERE "
+                "tablename='document_processing_jobs' ORDER BY indexname")).all() == indexes
+        with database.engine.connect() as old:
+            with pytest.raises(DBAPIError) as rejected:
+                old.execute(text("UPDATE document_processing_jobs SET status='processing', "
+                    "attempt_count=1,started_at=clock_timestamp() WHERE id=:id"
+                ), {"id": fixtures[0].job})
+            assert rejected.value.orig.sqlstate == "55000"
+            old.rollback()
+    database.cfg.cmd_opts = SimpleNamespace(x=[])
+    command.upgrade(database.cfg, "head")
+    assert [_snapshot(database.engine, fixture) for fixture in fixtures] == before
+
+
+def test_document_protocol_rehearsal_refuses_a_retained_legacy_compliance_root(protocol_database):
+    database = protocol_database
+    fixture = _activity_source(database.engine, "matter")
+    root = Table("matter_compliance_extraction_runs", MetaData(), autoload_with=database.engine)
+    assert "persistence_protocol" not in root.c
+    with database.engine.begin() as seed:
+        seed.execute(root.insert().values(id=str(uuid4()), company_id=fixture.company,
+            matter_id=fixture.matter, attachment_id=fixture.source, source_type="attachment",
+            trigger="manual", parser_version="legacy-fixture", status="failed",
+            created_by_membership_id=fixture.actor, created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC)))
+        seed.execute(text("DELETE FROM document_processing_jobs WHERE id=:id"), {"id": fixture.job})
+        assert seed.scalar(text("SELECT count(*) FROM document_processing_jobs")) == 0
+        before = [dict(row) for row in seed.execute(select(root)).mappings()]
+        assert len(before) == 1
+    command.upgrade(database.cfg, "20261010_0003")
+    database.cfg.cmd_opts = SimpleNamespace(x=["document_execution_fresh_downgrade=true"])
+    with pytest.raises(RuntimeError, match="Document execution protocol.*restore-forward"):
+        command.downgrade(database.cfg, "20261010_0002")
+    with database.engine.connect() as check:
+        assert [dict(row) for row in check.execute(select(root)).mappings()] == before
+        assert check.scalar(text("SELECT version_num FROM alembic_version")) == "20261010_0003"
+        assert check.scalar(text("SELECT count(*) FROM pg_trigger WHERE "
+            "tgrelid='document_processing_jobs'::regclass AND NOT tgisinternal "
+            "AND tgname IN ('document_execution_protocol', 'document_execution_provenance')")) == 2
+
+
+def test_independent_empty_document_protocol_rehearsal_requires_explicit_opt_in(protocol_database):
+    database = protocol_database
+    with database.engine.connect() as check:
+        assert check.scalar(text("SELECT count(*) FROM document_processing_jobs")) == 0
+        assert check.scalar(text("SELECT count(*) FROM matter_compliance_extraction_runs")) == 0
+        indexes = check.execute(text("SELECT indexname,indexdef FROM pg_indexes WHERE "
+            "tablename='document_processing_jobs' ORDER BY indexname")).all()
+        columns = check.execute(text("SELECT column_name,data_type,is_nullable,column_default "
+            "FROM information_schema.columns WHERE table_name='document_processing_jobs' "
+            "ORDER BY ordinal_position")).all()
+    command.upgrade(database.cfg, "20261010_0003")
+    with pytest.raises(RuntimeError, match="Document execution protocol.*restore-forward"):
+        command.downgrade(database.cfg, "20261010_0002")
+    database.cfg.cmd_opts = SimpleNamespace(x=["document_execution_fresh_downgrade=true"])
     command.downgrade(database.cfg, "20261010_0002")
     with database.engine.connect() as check:
         assert check.scalar(text(
@@ -373,9 +458,20 @@ def test_independent_trigger_upgrade_downgrade_preserves_catalog_and_receipts(pr
         assert check.scalar(text("SELECT count(*) FROM pg_trigger WHERE "
             "tgrelid='document_processing_jobs'::regclass AND NOT tgisinternal "
             "AND tgname IN ('document_execution_protocol', 'document_execution_provenance')")) == 0
-    assert _snapshot(database.engine, fixture) == before
-    command.upgrade(database.cfg, "head")
-    assert _snapshot(database.engine, fixture) == before
+        assert check.scalar(text("SELECT version_num FROM alembic_version")) == "20261010_0002"
+        assert check.execute(text("SELECT indexname,indexdef FROM pg_indexes WHERE "
+            "tablename='document_processing_jobs' ORDER BY indexname")).all() == indexes
+        assert check.execute(text("SELECT column_name,data_type,is_nullable,column_default "
+            "FROM information_schema.columns WHERE table_name='document_processing_jobs' "
+            "ORDER BY ordinal_position")).all() == columns
+        assert check.scalar(text("SELECT count(*) FROM document_processing_jobs")) == 0
+        assert check.scalar(text("SELECT count(*) FROM matter_compliance_extraction_runs")) == 0
+    command.upgrade(database.cfg, "20261010_0003")
+    command.upgrade(database.cfg, "20261010_0003")
+    with database.engine.connect() as check:
+        assert check.scalar(text("SELECT count(*) FROM pg_trigger WHERE "
+            "tgrelid='document_processing_jobs'::regclass AND NOT tgisinternal "
+            "AND tgname IN ('document_execution_protocol', 'document_execution_provenance')")) == 2
 
 
 @pytest.mark.parametrize("age,limit", [(1, 5), (14, 5), (15, 6), (15, 0)])

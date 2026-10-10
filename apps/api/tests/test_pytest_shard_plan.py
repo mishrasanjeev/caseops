@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -94,6 +95,77 @@ def test_write_shard_file_uses_test_root_relative_paths(tmp_path: Path) -> None:
 
     assert selected.number == 2
     assert output.read_text(encoding="utf-8") == "tests/nested/test_beta.py\n"
+
+
+@pytest.mark.parametrize("required", [False, True])
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_offline_dependency_cli_uses_exact_inventory_without_rg_or_node(
+    tmp_path, required, newline,
+):
+    selected, output = tmp_path / "selected.txt", tmp_path / "github-output.txt"
+    names = ["tests/test_ordinary.py"]
+    if required:
+        names.append("tests/test_prod_playwright_evidence.py")
+    selected.write_bytes((newline.join(names) + newline).encode())
+    output.write_text("retained=true\n", encoding="utf-8")
+    result = subprocess.run([sys.executable, str(SCRIPT_PATH), "--selected-files", str(selected),
+        "--github-output", str(output)], capture_output=True, text=True, timeout=30,
+        env=dict(os.environ, PATH=""), check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output.read_text(encoding="utf-8") == (
+        f"retained=true\nrequires_playwright={str(required).lower()}\n")
+    assert f"selected files: {len(names)}" in result.stdout
+
+
+@pytest.mark.parametrize("inventory", ["", "tests/test_a.py\ntests/test_a.py\n",
+    "../tests/test_a.py\n", "tests/../test_a.py\n", "tests\\test_a.py\n",
+    "tests/test_a.py \n", "tests/test_prod_playwright_evidence.py.not-a-test\n"])
+def test_offline_dependency_rejects_invalid_inventory_without_changing_output(tmp_path, inventory):
+    selected, output = tmp_path / "selected.txt", tmp_path / "github-output.txt"
+    selected.write_text(inventory, encoding="utf-8")
+    output.write_text("retained=true\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="selected pytest inventory"):
+        pytest_shard_plan.write_ci_dependency_output(selected, output)
+    assert output.read_text(encoding="utf-8") == "retained=true\n"
+
+
+def test_ci_installs_offline_playwright_before_the_exact_selected_python_gate():
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["api-test-shards"]["steps"]
+    selection = next(step for step in steps if step.get("id") == "shard-files")
+    assert (
+        '--selected-files .pytest-shard-files --github-output "$GITHUB_OUTPUT"'
+        in selection["run"]
+    )
+    assert "if rg " not in selection["run"]
+    setup = next(step for step in steps
+                 if step.get("name") == "Set up offline evidence Node runtime")
+    install = next(step for step in steps
+                   if step.get("name") == "Install offline evidence Playwright dependencies")
+    execution = next(step for step in steps if step.get("id") == "pytest")
+    assert setup["if"] == install["if"] == "steps.shard-files.outputs.requires_playwright == 'true'"
+    assert install["run"] == "npm ci --ignore-scripts --no-audit --no-fund"
+    assert (steps.index(selection) < steps.index(setup)
+            < steps.index(install) < steps.index(execution))
+
+
+@pytest.mark.parametrize("mode", ["missing-output", "missing-inventory", "mixed-mode"])
+def test_offline_dependency_cli_rejects_partial_or_conflicting_modes(tmp_path, mode):
+    selected, output = tmp_path / "selected.txt", tmp_path / "github-output.txt"
+    selected.write_text("tests/test_prod_playwright_evidence.py\n", encoding="utf-8")
+    output.write_text("retained=true\n", encoding="utf-8")
+    args = ["--selected-files", str(selected), "--github-output", str(output)]
+    if mode == "missing-output":
+        args = args[:2]
+    elif mode == "missing-inventory":
+        args = args[2:]
+    else:
+        args += ["--test-root", str(tmp_path)]
+    result = subprocess.run([sys.executable, str(SCRIPT_PATH), *args],
+        capture_output=True, text=True, timeout=30, env=dict(os.environ, PATH=""), check=False)
+    assert result.returncode == 2
+    assert "Dependency mode requires" in result.stderr
+    assert output.read_text(encoding="utf-8") == "retained=true\n"
 
 
 def test_dense_test_modules_are_balanced_by_static_runtime_cost(tmp_path: Path) -> None:
