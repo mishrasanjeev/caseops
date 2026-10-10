@@ -207,3 +207,38 @@ def test_enqueue_rejects_cross_tenant_recipient(visibility_session):
     assert _enqueue(session, context, outsider, matter, str(uuid4())) is None
     assert _count(session, NotificationDeliveryIntent, company.id) == 0
     assert session.get(CompanyMembership, outsider.id).company_id != company.id
+
+
+def test_exact_lookup_does_not_reuse_or_rewrite_sibling_identities(visibility_session):
+    session = visibility_session
+    company, matter, members, outsider, _team, _other = _seed(session)
+    context = _context(session, company, members["owner"])
+    source_id = str(uuid4())
+    earlier = _enqueue(session, context, members["member"], matter, str(uuid4()))
+    assert earlier is not None
+    siblings = []
+    for changed in ("recipient", "event", "source_type", "source_id", "company"):
+        row = InAppNotification(
+            company_id=outsider.company_id if changed == "company" else company.id,
+            recipient_membership_id=outsider.id if changed == "company"
+            else members["assignee"].id if changed == "recipient" else members["member"].id,
+            event_type="other_event" if changed == "event" else "fresh_visibility",
+            source_type="other_source" if changed == "source_type" else "court_order",
+            source_id=str(uuid4()) if changed == "source_id" else source_id,
+            title="Sibling retained title", body="Sibling retained body",
+        )
+        session.add(row)
+        siblings.append(row)
+    session.commit()
+    sibling_ids = {row.id for row in siblings}
+    intent = _enqueue(session, context, members["member"], matter, source_id)
+    assert intent is not None and intent.id != earlier.id
+    result = delivery.process_notification_delivery_intent(
+        session, intent_id=intent.id, context=context,
+    )
+    assert result.delivered and intent.in_app_notification_id not in sibling_ids
+    session.commit()
+    assert _count(session, InAppNotification, company.id) == 5
+    assert all(row.title == "Sibling retained title" and row.body == "Sibling retained body"
+               for row in siblings)
+    assert _enqueue(session, context, members["member"], matter, source_id).id == intent.id
