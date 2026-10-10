@@ -104,6 +104,26 @@ unchanged full-source pins reconcile. Receipt SHA256:
 This is API replacement evidence only; the new retained-chunk PostgreSQL
 interleavings and four browser journeys remain required.
 
+Agent migration commit `7e723f67` is integrated as `06bb7850`: its separately
+frozen controls reconcile **47 unit/SQLite passes and 29 native PostgreSQL
+passes**, 76 identities / 228 phases, zero skips/failures. Four real index-build
+cancellations preserve legacy TRUE and captured human FALSE, allow ordinary
+insertion, recover matching invalid remnants and pass second upgrade plus
+idempotent replay. Independent migration databases are removed. Populated
+restore-forward refusal is proved; historical moving-head descent callers and
+a fresh empty full-head rehearsal still require separate integration work.
+No production mutation or provider entitlement is inferred from this slice.
+
+The locked court-import actor correction `1e82ef95` is integrated as `42a34cb4`;
+its historical and new complete Main replacements remain pending. Compliance
+tail commit `f48f4774` is integrated as `b89cd0db`; its 58 unit passes are scoped
+evidence only, while the complete 69-case native PostgreSQL gate is in progress.
+The governance map and compiled runtime projection are regenerated together
+for **335 tables / 5,332 columns**, with the nullable execution marker reviewed
+as configuration/state metadata. No retention, legal approval or general
+disposition authority is added. The complete control-plane gate, fresh image,
+current hosted CI/SARIF and exact production proof are not yet complete.
+
 ## Exact Failed Evidence
 
 [Production verification 38036444501](https://github.com/mishrasanjeev/caseops/actions/runs/38036444501)

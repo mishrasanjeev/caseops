@@ -6,9 +6,9 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `e4f6e9f14f1f6a6f055b42e5dc6a5dcd8e19ca72530a83725ed204d003a624ce`
+- Canonical map SHA-256: `9619dda4deba829e21e21b848cdae475fbe7a424f611d720cfbefb3e6527d508`
 - SQL tables: `335`
-- SQL columns: `5331`
+- SQL columns: `5332`
 - ORM indexes: `1765`
 - Alembic/raw index declarations: `1549`
 - Non-SQL data classes: `12`
@@ -251,7 +251,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_bulk_update_operations` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
 | `matter_cause_list_entries` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `matter_client_assignments` | `tenant_restricted_legal_content` | 6 | `registry_fail_closed` |
-| `matter_compliance_extraction_runs` | `tenant_restricted_legal_content` | 19 | `registry_fail_closed` |
+| `matter_compliance_extraction_runs` | `tenant_restricted_legal_content` | 20 | `registry_fail_closed` |
 | `matter_compliance_items` | `tenant_restricted_legal_content` | 30 | `registry_fail_closed` |
 | `matter_conflict_checks` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `matter_court_orders` | `public_or_licensed_legal_reference` | 18 | `registry_fail_closed` |
