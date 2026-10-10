@@ -723,8 +723,9 @@ def test_reindex_replaces_retained_chunks_only_after_fresh_authority(
 
         def fail_after_delete(session, source):
             replace(session, source)
-            assert session.scalar(select(func.count()).select_from(chunk_model).where(
-                chunk_model.attachment_id == source.id)) == 0
+            with session.no_autoflush:
+                assert session.scalar(select(func.count()).select_from(chunk_model).where(
+                    chunk_model.attachment_id == source.id)) == 0
             raise RuntimeError("Deterministic persistence failure after replacement delete")
 
         monkeypatch.setattr(document_jobs, "_attach_replacement_chunks", fail_after_delete)

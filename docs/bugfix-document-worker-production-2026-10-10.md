@@ -96,6 +96,14 @@ four-case Docker collection pass; no browser execution, PostgreSQL replacement
 or deployed-fix claim is made yet. Contract currently has no browser reindex
 button; this evidence must not claim one was exercised.
 
+Committed chunk correction `a91acd92` then completes Main r17: all **19 cases
+/ 57 phases** in the complete Contract and document-worker API modules pass,
+including the originally failing reindex. Ordered collection, JUnit and the
+unchanged full-source pins reconcile. Receipt SHA256:
+`f2750d59cc03ef9b5c39d41e56e2bda0759a7ebec602020536621552282df646`.
+This is API replacement evidence only; the new retained-chunk PostgreSQL
+interleavings and four browser journeys remain required.
+
 ## Exact Failed Evidence
 
 [Production verification 38036444501](https://github.com/mishrasanjeev/caseops/actions/runs/38036444501)
