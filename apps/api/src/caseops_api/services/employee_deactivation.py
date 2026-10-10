@@ -22,9 +22,10 @@ from caseops_api.db.models import (
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
 )
-from caseops_api.services.ip_coverage_projection import (
+from caseops_api.services.calendar_projection_tombstones import (
     tombstone_membership_calendar_projections,
 )
+from caseops_api.services.ip_coverage_read import operational_coverages_for_member
 from caseops_api.services.session_context import SessionContext
 
 _TERMINAL_DOCKET_STATUSES = ("archived", "abandoned", "transferred", "retired", "closed")
@@ -80,8 +81,6 @@ def operational_ip_live_reference_counts(
     authoritative pre-deactivation postcondition for operational IP work.
     """
 
-    from caseops_api.services.ip_operations import _coverages_for_member
-
     context_membership = session.get(CompanyMembership, membership_id)
     if context_membership is None:
         return {}
@@ -100,7 +99,7 @@ def operational_ip_live_reference_counts(
         {deadline.id for deadline, _docket in operational_deadline_rows}
     )
     counts["ip_deadline_coverages"] = len(
-        _coverages_for_member(
+        operational_coverages_for_member(
             session,
             context=context,
             membership_id=membership_id,

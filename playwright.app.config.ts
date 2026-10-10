@@ -25,6 +25,8 @@ export default defineConfig({
   testMatch: [
     /marketing\.spec\.ts/,
     /public-content\.spec\.ts/,
+    /seo_demo_\d{8}\.spec\.ts$/,
+    /prod-failure-diagnostics\.spec\.ts$/,
     /app-spine\.spec\.ts/,
     /functional-qa-regression\.spec\.ts/,
     /a11y\.spec\.ts/,
@@ -56,6 +58,7 @@ export default defineConfig({
     /google-workspace-oauth-reauthorization-2026-10-07\.spec\.ts/,
     /ram-2026-09-21-bugfixes\.spec\.ts/,
     /ram-2026-09-24-prod\.spec\.ts/,
+    /ram-2026-10-08-prod\.spec\.ts$/,
     /ram-2026-10-08-notices\.spec\.ts$/,
     /ram-2026-10-08-drive\.spec\.ts$/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,
@@ -143,8 +146,8 @@ export default defineConfig({
       // bucket scripts) holds a lock on a .venv/Scripts/*.exe.
       command:
         process.platform === "win32"
-          ? `apps\\api\\.venv\\Scripts\\python.exe -m uvicorn oauth_emulator_api:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`
-          : `apps/api/.venv/bin/uvicorn oauth_emulator_api:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`,
+          ? `apps\\api\\.venv\\Scripts\\python.exe -m uvicorn oauth_emulator_api:app --no-proxy-headers --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`
+          : `apps/api/.venv/bin/uvicorn oauth_emulator_api:app --no-proxy-headers --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir tests/e2e/support/oauth`,
       cwd: repoRoot,
       env: {
         ...e2eEnv,

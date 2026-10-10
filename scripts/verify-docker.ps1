@@ -519,7 +519,7 @@ try {
     Assert-CandidatePlaywrightSuite -Arguments $PlaywrightArgs
 
     Write-Host "[docker-acceptance] resetting isolated project $ComposeProject"
-    & docker compose --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
+    & docker compose --profile acceptance --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
     if ($LASTEXITCODE -ne 0) { throw "Could not reset the isolated Compose project." }
 
     # Retained acceptance projects can exhaust Docker's default address pools.
@@ -573,6 +573,11 @@ try {
     if ($ApiHealth.status -ne "ok") { throw "API health probe did not return ok." }
     if ($ApiIdentity.release_sha -ne $ReleaseSha) { throw "API runtime identity does not match the candidate." }
     if ($WebIdentity.release_sha -ne $ReleaseSha) { throw "Web runtime identity does not match the candidate." }
+
+    Write-Host "[docker-acceptance] verifying the web server's internal API origin"
+    $ServerOriginProbe = "(async()=>{const base=process.env.CASEOPS_API_BASE_URL;if(base!=='http://api:8000')throw new Error('Invalid internal API origin');const health=await fetch(base+'/api/health',{signal:AbortSignal.timeout(5000)});const build=await fetch(base+'/api/build',{signal:AbortSignal.timeout(5000)});if(!health.ok||!build.ok)throw new Error('Internal API unavailable');if((await health.json()).status!=='ok'||(await build.json()).release_sha!==process.env.CASEOPS_RELEASE_SHA)throw new Error('Internal API identity mismatch');process.stdout.write('internal-api-origin-and-identity-ok');})().catch(()=>process.exit(1))"
+    & docker compose --project-name $ComposeProject --file $ComposeFile exec --no-TTY web node -e $ServerOriginProbe
+    if ($LASTEXITCODE -ne 0) { throw "Web server-to-server API origin/identity preflight failed." }
 
     Write-Host "[docker-acceptance] verifying complete PostgreSQL index coverage"
     & docker compose --project-name $ComposeProject --file $ComposeFile exec --no-TTY api caseops-db-index-health
@@ -722,7 +727,7 @@ finally {
         }
     }
     if (-not $KeepRunning) {
-        & docker compose --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
+        & docker compose --profile acceptance --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
     }
     foreach ($Name in $AcceptanceEnvironment.Keys) {
         [Environment]::SetEnvironmentVariable($Name, $PreviousEnvironment[$Name], "Process")

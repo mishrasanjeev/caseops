@@ -211,7 +211,7 @@ def test_document_sister_draft_stays_revoked_after_restore_rebuild_and_fixture_r
         # still match after real APIs restore access and rebuild the index.
         with monkeypatch.context() as old_behavior:
             old_behavior.setattr(
-                private_retrieval, "_later_event_reaches_projection", lambda: false()
+                private_retrieval, "_later_event_reaches_projection", false
             )
             assert (
                 private_retrieval.private_saved_source_manifest_is_current(

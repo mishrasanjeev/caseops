@@ -314,6 +314,32 @@ test.describe("Public landing page and user guide", () => {
     );
   });
 
+  test("sign-in noindex is crawlable while app and API exclusions remain", async ({ page, request }) => {
+    const response = await request.get("/robots.txt");
+    expect(response.status()).toBe(200);
+    const rules = (await response.text()).split(/\r?\n/).map((line) => line.trim());
+    const userAgents = rules.filter((line) => /^User-Agent:/i.test(line));
+    const disallowed = rules.filter((line) => /^Disallow:/i.test(line));
+    expect(userAgents.length).toBeGreaterThan(0);
+    expect(disallowed.filter((line) => line === "Disallow: /app")).toHaveLength(userAgents.length);
+    expect(disallowed.filter((line) => line === "Disallow: /api/")).toHaveLength(userAgents.length);
+    expect(disallowed, "robots must let crawlers read the public sign-in noindex").not.toContain("Disallow: /sign-in");
+
+    const signIn = await page.goto("/sign-in");
+    expect(signIn?.status()).toBe(200);
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://caseops.ai/sign-in");
+    await expect(page.getByRole("textbox", { name: "Work email", exact: true })).toBeVisible();
+  });
+
+  for (const path of ["/account/forgot-password", "/portal/sign-in"]) {
+    test(`${path} remains noindex without submitting credentials`, async ({ page }) => {
+      const response = await page.goto(path);
+      expect(response?.status()).toBe(200);
+      await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+    });
+  }
+
   test("home retains the Google Search Console ownership tag", async ({ page }) => {
     const response = await page.goto("/");
     expect(response?.status()).toBe(200);

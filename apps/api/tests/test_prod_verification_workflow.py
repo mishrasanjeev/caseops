@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -105,7 +110,9 @@ def test_scheduled_prod_verification_is_read_only() -> None:
     steps_digest = hashlib.sha256(
         json.dumps(scheduled["steps"], sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-    assert steps_digest == "0eb6062e19bf61ada88a35ce91ba6698b378ca4b6070062626d4777c6abcf28c"
+    # Reviewed 10 October: capture requires the before-disk safe native reporter.
+    # The exact statute project, source-spec bytes and four read-only workers remain.
+    assert steps_digest == "3475f5a0418cc20b4f95c721b62c642f44263a5bbe6bb366c2febdc5daee4dd4"
     config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
     assert (
         'name: "statute-source-prod-chromium",\n'
@@ -123,7 +130,7 @@ def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:
 
     workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(encoding="utf-8")
     notice_step = workflow.split("- name: Run prod-Playwright suite (notice module)", 1)[1]
-    next_step = notice_step.split("- name: Upload Playwright report on failure", 1)[0]
+    next_step = notice_step.split("- name: Check release-owned patent and statute acceptance", 1)[0]
 
     assert "if: always()" in next_step
     assert "playwright.notice-prod.config.ts" in next_step
@@ -136,6 +143,7 @@ def test_prod_verification_preserves_each_suite_failure_artifact() -> None:
     for output_directory in (
         "tester",
         "legacy",
+        "test-legal-readonly",
         "ip-a0",
         "ip-renewal",
         "ip-cost",
@@ -144,9 +152,15 @@ def test_prod_verification_preserves_each_suite_failure_artifact() -> None:
         "statute-sources",
     ):
         assert f"--output=test-results/{output_directory}" in workflow
-    upload_step = workflow.split("- name: Upload Playwright report on failure", 1)[1]
-    assert "test-results/" in upload_step
-    assert "if-no-files-found: error" in upload_step
+    upload_step = workflow.split("- name: Upload native Playwright evidence", 1)[1].split(
+        "  scheduled-statute-verification:", 1
+    )[0]
+    assert "if: always()" in upload_step
+    assert "test-results/prod-native-evidence/" in upload_step
+    assert (
+        "steps.prod-playwright-prerequisites.outputs.ready == 'true' && 'error' || 'warn'"
+        in upload_step
+    )
     assert "prod-playwright-report-${{ matrix.suite }}" in upload_step
 
 
@@ -218,6 +232,145 @@ def test_exact_release_dispatch_records_only_the_claim_proven_by_the_suite() -> 
     assert "--pine" not in writer["run"]
 
 
+def test_public_claims_attestation_requires_exact_release_nonmutating_browser_evidence() -> None:
+    import yaml
+
+    parsed = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    job = parsed["jobs"]["prod-playwright-shards"]
+    assert "public-pages" in job["strategy"]["matrix"]["suite"]
+    steps = {step.get("name"): step for step in job["steps"]}
+    selected = steps["Run exact-release public SEO read-only acceptance"]
+    assert "matrix.suite == 'public-pages'" in selected["if"]
+    assert 'test "${{ steps.native-evidence.outputs.mode }}" = native' in selected["run"]
+    assert "test -f playwright.public-seo.config.ts" in selected["run"]
+    assert '--invocation' not in selected["run"]
+    assert 'caseops-prod-playwright" public-pages --config=playwright.public-seo.config.ts' in (
+        selected["run"]
+    )
+    assert "--workers=1 --retries=0 --reporter=list" in selected["run"]
+    assert selected["env"]["CASEOPS_WEB_BASE_URL"] == "https://caseops.ai"
+    reconcile = steps["Reconcile required native Playwright evidence"]["run"]
+    assert "public-pages) required=(public-pages)" in reconcile
+    config = (REPO_ROOT / "playwright.public-seo.config.ts").read_text()
+    assert "public-content\\.spec\\.ts" in config
+    assert "seo_demo_20261009\\.spec\\.ts" in config
+    assert "marketing\\.spec\\.ts" in config
+    assert (
+        "public CTA and truthful copy|public read-only prototype source rejection|"
+        "FAQ panels expand and collapse"
+    ) in config
+    assert "globalSetup: undefined" in config and "webServer: undefined" in config
+    for policy in ('trace: "off"', 'screenshot: "off"', 'video: "off"',
+                   "extraHTTPHeaders: noPaidProviderHeaders"):
+        assert policy in config
+    assert "public-pages" not in steps.get("Run legacy QA production regressions", {}).get(
+        "run", ""
+    )
+
+
+def test_app_ci_retains_the_complete_native_browser_inventory() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    steps = {step.get("name"): step for step in workflow["jobs"]["e2e"]["steps"]}
+    execute = steps["Playwright (app config)"]
+    assert execute["id"] == "app-playwright"
+    assert execute["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == "${{ github.sha }}"
+    assert execute["env"]["CASEOPS_RELEASE_SHA"] == "${{ github.sha }}"
+    assert execute["env"]["CASEOPS_WEB_BASE_URL"] == "http://127.0.0.1:3100"
+    assert execute["run"].strip() == (
+        "uv run --project apps/api --python 3.13 python "
+        "scripts/prod_playwright_evidence.py run --invocation ci-app -- "
+        "--config=playwright.app.config.ts --workers=1 --retries=0 "
+        "--reporter=list --output=test-results/app"
+    )
+    reconcile = steps["Reconcile app native Playwright evidence"]
+    assert reconcile["if"] == (
+        "always() && steps.app-playwright.outcome != 'skipped'"
+    )
+    assert reconcile["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == "${{ github.sha }}"
+    assert reconcile["run"].strip() == (
+        "uv run --project apps/api --python 3.13 python "
+        "scripts/prod_playwright_evidence.py validate --required ci-app"
+    )
+    upload = steps["Upload Playwright report"]
+    assert upload["if"] == "always()"
+    assert "test-results/" in upload["with"]["path"]
+    assert "test-results/prod-native-evidence/ci-app/" in upload["with"]["path"]
+
+
+@pytest.mark.parametrize("stage", ["execute", "reconcile"])
+@pytest.mark.parametrize("exit_code", [0, 7])
+def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_code):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    name = (
+        "Playwright (app config)" if stage == "execute"
+        else "Reconcile app native Playwright evidence"
+    )
+    step = next(step for step in workflow["jobs"]["e2e"]["steps"]
+                if step.get("name") == name)
+    assert step["run"].startswith("uv run --project apps/api --python 3.13 python ")
+    # A shell function cannot fall through to a real uv or external service.
+    script = (
+        'uv() { printf "%s\\n" "$@" > native-arguments; return "$OFFLINE_EXIT"; }\n'
+        + step["run"]
+    )
+    bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
+    assert bash and Path(bash).is_file()
+    result = subprocess.run(
+        [bash, "-e", "-c", script], cwd=tmp_path, capture_output=True, encoding="utf-8",
+        env={**os.environ, "OFFLINE_EXIT": str(exit_code)},
+    )
+    assert result.returncode == exit_code
+    arguments = (tmp_path / "native-arguments").read_text().splitlines()
+    assert arguments[:7] == [
+        "run", "--project", "apps/api", "--python", "3.13", "python",
+        "scripts/prod_playwright_evidence.py",
+    ]
+    assert arguments[7:] == (
+        ["run", "--invocation", "ci-app", "--", "--config=playwright.app.config.ts",
+         "--workers=1", "--retries=0", "--reporter=list", "--output=test-results/app"]
+        if stage == "execute" else ["validate", "--required", "ci-app"]
+    )
+
+
+@pytest.mark.parametrize("mode", ["missing-native", "missing-config", "ready", "failed-wrapper"])
+def test_public_claims_shell_cannot_run_unreleased_tests_or_hide_native_failure(tmp_path, mode):
+    import yaml
+
+    parsed = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    step = next(
+        step for step in parsed["jobs"]["prod-playwright-shards"]["steps"]
+        if step.get("name") == "Run exact-release public SEO read-only acceptance"
+    )
+    native_mode = "legacy" if mode == "missing-native" else "native"
+    script = step["run"].replace("${{ steps.native-evidence.outputs.mode }}", native_mode)
+    if mode != "missing-config":
+        (tmp_path / "playwright.public-seo.config.ts").write_text(
+            "// Offline shell fixture only.\n"
+        )
+    (tmp_path / "caseops-prod-playwright").write_text(
+        'printf "%s\\n" "$@" > wrapper-called\nexit "$OFFLINE_EXIT"\n'
+    )
+    bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
+    assert bash and Path(bash).is_file()
+    result = subprocess.run(
+        [bash, "-e", "-c", script], cwd=tmp_path, capture_output=True, encoding="utf-8",
+        env={**os.environ, "RUNNER_TEMP": tmp_path.as_posix(),
+             "OFFLINE_EXIT": "7" if mode == "failed-wrapper" else "0"},
+    )
+    called = tmp_path / "wrapper-called"
+    assert (result.returncode == 0) is (mode == "ready")
+    assert called.exists() is (mode in {"ready", "failed-wrapper"})
+    if called.exists():
+        assert called.read_text().splitlines() == [
+            "public-pages", "--config=playwright.public-seo.config.ts", "--workers=1",
+            "--retries=0", "--reporter=list", "--output=test-results/public-pages",
+        ]
+
+
 def test_exact_release_verification_is_serialized_into_bounded_jobs() -> None:
     import yaml
 
@@ -234,6 +387,7 @@ def test_exact_release_verification_is_serialized_into_bounded_jobs() -> None:
         "legacy",
         "supporting",
         "patent-statute",
+        "public-pages",
     ]
 
     by_name = {step.get("name"): step for step in shard_job["steps"]}

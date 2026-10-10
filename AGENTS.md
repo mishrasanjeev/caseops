@@ -1,5 +1,176 @@
 # CaseOps agent instructions
 
+- Multi-tenant Docker fixture preparation and inspection must amortize process
+  startup without reusing tenant authorization or database sessions. Preserve
+  real worker executions, raw persisted snapshots, responsive/source/replay
+  assertions and the original overall and per-command budgets. Profile startup
+  separately from database work; timings from different workloads are not a
+  controlled comparison or proof of production causality.
+- Acceptance cleanup must attempt evidence retention, context disposal and
+  owned worker restoration independently, including after a timeout. Verify
+  the actual restored state, retain every cleanup error and the original
+  failure, and fail cleanup-only errors. A manually restored failed run is not
+  accepted evidence; its complete replacement must still execute.
+- Name an isolated, clean, approved checkout before delegating edits beside a
+  frozen gate. Explicitly distinguish the frozen parent from the writable
+  child, and verify execution started before describing implementation progress.
+- Snapshot evidence-copy inputs before hashing, and write the hash manifest
+  outside the payload being enumerated. Reconcile every original/copy pair;
+  preserve a failed or self-including manifest as incomplete evidence.
+
+- A native dispatch race must admit a genuinely queued intent before forcing
+  its interleaving. Install deterministic transport configuration before
+  enqueue and assert the pre-claim state; an already blocked intent cannot
+  prove a dispatch winner. External provider acceptance is SENT, not confirmed
+  DELIVERED. Assert single transport, durable claim/event identity, transaction
+  release and replay, rather than changing that contract to fit the test.
+
+- Background notification delivery without an actor context must retain the
+  same final Matter ACL predicate as interactive delivery. Derive recipient
+  scope from freshly admitted tenant and employee data, not the presence of a
+  browser actor. Regress late grant revocation with both absent and retained
+  exact-match notification rows, preserving historical rows without rebinding
+  them to a newly delivered intent.
+
+- Notification admission and retained-intent delivery must require current
+  tenant activity for internal, portal, IP and approved external destinations,
+  including fallbacks. Refresh warmed Company state with the authoritative
+  intent read, retain the final in-app predicate and prove disable/claim winner
+  orders on PostgreSQL. External claims fence Company before employee/parent
+  locks and release before transport; internal writes must not introduce a
+  late tenant lock or exceed the original total-SQL budget.
+
+- A fused parent-authorization/child-idempotency query must retain an explicit
+  non-null parent identity. Prove a visible parent with no existing child,
+  denied parent, exact replay, and sibling identities independently; do not
+  confuse a nullable joined entity with denial or infer success from empty
+  negative results. Preserve fresh checks and test both database dialects.
+- Shared permission-filter call contracts need an automatic-selection regression
+  as well as explicit-selection controls. A valid explicit Matter can bypass
+  a broken automatic path. Prove visible/hidden siblings, current policy and
+  tenant isolation through creation, persistence, audit and replay without
+  implying local provider-event admission proves actual OAuth consent.
+
+- A document's indexing commit does not cover downstream compliance audit,
+  notification or generated-work foreign keys. Capture bounded historical
+  creator, elected human actor, assignee and recipient identities before the
+  earliest parent lock, retain the existing Membership/User lock strength,
+  and recheck source, lifecycle and live authority after every commit.
+  Rule-policy writers must share admission to prevent new-recipient phantoms;
+  never chase a changed participant behind the parent or substitute provenance.
+- A total-query budget must count every SQL statement, not only the filtered
+  lock/write templates retained for diagnostics. Keep those two inventories
+  separate. Native evidence filenames need bounded identity hashes and unique
+  suffixes, with full test identities inside receipts; long Windows paths and
+  omitted diagnostic SELECTs are evidence failures, not product reproductions.
+- Recipient fanout must evaluate the current shared visibility predicate in
+  bounded batches, not repeat scalar ACL and tenant-policy reads per recipient
+  at every fence. Keep employee, capability, source and lifecycle revalidation;
+  do not cache access decisions or raise the query budget to excuse N+1 work.
+
+- Browser release evidence must flush privacy-selected collection and each
+  completed attempt/error before process termination can erase them. Reconcile
+  that bounded incremental journal with final native JSON/XML and exact release
+  identity; a retained interrupted prefix is diagnostic evidence, never a
+  completed acceptance gate. Prove a real killed reporter, not only mocked I/O.
+  The public Playwright adapter can defer early error delivery; invocation
+  startup is not proof that an undelivered error was retained. Do not adopt an
+  undocumented reporter protocol to hide that limitation. Reserve bytes before
+  writing and make any partial-write/fsync failure terminal.
+- A failed local database login is not an external credential dependency until
+  its constructed connection parameters match the approved sidecar. The extra
+  `pass` prefix in an ignored regression runner was an operator setup error;
+  preserve it as NOT RUN and replay a fresh independently migrated database.
+
+- Public claims must match the actual bounded safety mechanism, not promise
+  universal legal correctness or absence of hallucinations. Audit adjacent
+  persona and guide copy, assert visible review limitations, and replay every
+  public CTA at mobile and desktop widths. A producer may attest public review
+  only after its graph selects and reconciles the exact release's public
+  inventory; an unrelated green authenticated suite is not that evidence.
+  Passing a phrase blacklist is not a complete copy audit: review adjacent
+  drafting paragraphs and callouts for equivalent guarantees, including fact
+  gaps and citation resolution, and assert their visible bounded limitations.
+
+- An evidence aggregate needs the same pinned interpreter as its test shards
+  before dependency resolution. Installing uv alone can select a newly released
+  unsupported Python. Audit every Python-consuming CI job, reproduce a missing
+  pin, replay actual retained shard artifacts and require fresh hosted closure;
+  do not blame successful PostgreSQL tests for a resolver/setup failure.
+
+- Use low-entropy valid IDs for offline public idempotency fixtures, not
+  credential-looking random literals. A historical false positive needs an
+  exact reviewed commit/path/rule/line fingerprint and a native future-commit
+  credential canary; never exclude a file, rule or nonce-shaped values broadly.
+- Do not start a second gate while a release wrapper replaces its shared
+  dependencies. Wait for the pinned installation to complete, retain any
+  zero-discovery failure as incomplete, then replay the entire inventory.
+
+- A throttle identity must come from a verified, purpose-specific edge claim,
+  not raw XFF, x-real-ip or forwarded scheme headers. Disable Uvicorn's implicit
+  proxy rewriting on every entry point, validate the complete signed Web/API
+  hop and preserve the no-paid marker. The key grants rate/scheme authority,
+  never authentication or capabilities; process-local limits are not global.
+- Native cloud helpers must resolve the installed executable on Windows as
+  well as Linux, without shell interpolation or secret-bearing arguments.
+  Run canonical-main mutation guards before launch. A mock transport cannot
+  substitute for a read-only native CLI probe of the actual deployment tree.
+- Readiness booleans require strict types: Python equality admits 1 as True
+  and 0 as False. Reject extra fields, numeric/string/null readiness and wrong
+  provenance or release identity before certification.
+- Production test evidence must match exact discovery/configuration metadata
+  and JSON/XML identity-and-outcome multisets, including multiplicity and
+  zero-retry attempts. Equal totals or unchanged IDs alone are insufficient.
+  Select safe evidence before disk writes, retain full sanitized skip reasons
+  and bounded approved diagnostics, and fail incomplete/interrupted evidence.
+
+- Administrative mutations must declare the existing platform capability
+  dependency before handler entry; an inline check cannot satisfy the route
+  guard contract. Anonymous denial tests must pass the legitimate CSRF pair
+  so they prove authentication, then assert retained lead/outbox state and
+  zero delivery/audit side effects. Preserve separate CSRF rejection coverage.
+
+- Public route allowlists must check own properties; inherited JavaScript keys
+  such as `constructor` and `__proto__` are not admitted routes. Preserve 404/no-form
+  browser regressions and reconcile each new page's sibling unit inventory before
+  freezing Docker acceptance; a green component test does not cover its page.
+
+- CI aggregate jobs must run after genuine prerequisite failures but stop
+  on workflow cancellation. An unconditional `always()` can retain queued
+  aggregates after every test job is cancelled and hold the next exact-head
+  run's concurrency group. Preserve fail-closed parent checks and artifact
+  evidence; only obsolete unresponsive runs may be force-cancelled.
+- Explicitly starting a Compose profile service does not enable its profile
+  for later cleanup. Include the owned acceptance profile on reset/down and
+  verify no owned emulator or network remains; never prune unrelated projects.
+- A browser's loopback API address is not a server address inside a container.
+  Give server-side proxy routes the internal API origin, preserve the explicit
+  no-paid marker, and prove admission plus protected readback through the real
+  Docker network before treating same-host browser acceptance as release proof.
+
+- A row lock does not refresh an ORM identity already cached by the session.
+  Refresh the locked authoritative event/generation before status, replay or
+  readiness decisions; regress a committed competing application/readiness
+  transition, immutable counts/timestamps, manifest invalidation and old-writer
+  rejection through separate PostgreSQL sessions.
+
+- Auth/session minting must serialize current User and Membership changes
+  without conflicting with historical FK key-share provenance. Prove both
+  lock orders and deactivation/cutoff rejection on PostgreSQL; provenance
+  compatibility must not weaken live mutation authorization.
+- Synchronous database, scanner and password work must not run on the HTTP
+  event loop. Prove an unrelated real socket request stays responsive while
+  the actual handler's service is blocked, and preserve its error/commit contract.
+- A green CodeQL job is not a zero-alert security inventory. Reconcile fresh
+  main alert states and original taint/dependency paths; suppressions and
+  moving imports inside functions do not establish a permanent fix.
+
+- A public authentication entry page that must disappear from search needs a
+  crawler-readable noindex, not a robots.txt block that hides that directive.
+  Keep authenticated app/API exclusions and real access control unchanged;
+  regress the rendered metadata, crawl policy and sitemap together. A local
+  correction or recrawl request is not proof of Google deindexing the URL.
+
 - Keyset performance must cover a validated cursor beyond the pre-import ID
   histogram. A first page and a generic plan can be bounded while a custom
   cursor plan scans/sorts thousands of keys. Train and assert the stale
@@ -1570,3 +1741,34 @@ requirements when using the fallback.
   rendered persisted value) and verify the durable state there. Distinguish
   browser-protocol response-body loss from a product persistence failure, and
   preserve both sync-success and post-reload persistence assertions.
+- A workflow-condition repair must update every existing manifest assertion,
+  not only add a new focused test. Preserve failure and coverage guards plus
+  always-uploaded native results, while cancelled aggregates must not retain
+  the concurrency group. Replay the complete historical contract file before
+  freezing Docker acceptance; new green assertions do not cover old drift.
+- A dependency extraction must inventory real compatibility exports and
+  private helper callers. Declare a literal public export contract for retained
+  APIs and move test-only private imports to their owner; a green CodeQL job
+  can still introduce unused-import findings. Reconcile its actual results.
+- A secret scanner may flag a non-secret attack path or local fixture value.
+  Inspect the exact native finding, preserve attack coverage and generate local
+  signing keys per fixture. Historical false-positive exceptions must name
+  only the reviewed commit/file/rule/line fingerprint, and a positive new-
+  credential canary must still fail. Never exclude a rule or test directory.
+- Replacing ORM hydration with set-based DML also changes race-test barriers.
+  Inventory existing ORM-load hooks before freezing acceptance; synchronize on
+  the actual bounded SQL mutation and assert that private rows are not hydrated.
+  Keep disposal, concurrent cleanup, byte purge and event-count assertions;
+  never restore expensive reads or raise a wait budget to satisfy an obsolete hook.
+- A document worker's indexing commit does not finish its lock-order surface.
+  Exercise the real downstream compliance/proceeding/notification/audit phase,
+  including implicit foreign-key locks for selected human provenance and
+  recipients, against interactive parent writers. Preserve elected actors and
+  historical creator nulls; a mock of the whole downstream extractor cannot
+  certify this boundary or justify a retry, longer timeout or system actor.
+- Read-only public acceptance must include changed historical FAQ journeys,
+  not just newly added copy checks. Assert the actual qualified safety content
+  and accessible expand/collapse state; retain the earlier narrower inventory
+  as incomplete for that interaction. CI browser success requires an independent
+  collected inventory, native per-test outcomes/skip reasons and completion
+  bound to its actual checkout, retained even when the browser gate fails.

@@ -29,7 +29,7 @@ every value the release does not set. Every release sets this contract, and
 `apps/api/tests/test_deploy_prod_hardening.py` pins the executed command:
 
 - Two containers. `api` runs the API image with no command override, so the
-  image `CMD` (`uvicorn caseops_api.main:app --host 0.0.0.0 --port ${PORT}
+  image `CMD` (`uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 --port ${PORT}
   --app-dir src`) serves on port 8080 with 2 CPU and 4 GiB. `clamav` runs the
   ClamAV image already deployed to the service.
 - TCP startup probes on 8080 and 3310: initial delay 0, period 2 s, timeout

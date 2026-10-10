@@ -4175,6 +4175,23 @@ export const platformEnrollmentRecord = z.object({
   selected_plan: z.string().nullable(),
   status: z.string(),
   created_at: z.string(),
+  contact_mobile: z.string().nullable().optional().default(null),
+  notes: z.string().nullable().optional().default(null),
+  source: z.string().nullable().optional().default(null),
+  attribution: z.object({
+    entry_point: z.string().nullable().optional(),
+    role: z.string().nullable().optional(),
+    intent: z.string().nullable().optional(),
+    privacy_notice_version: z.string().nullable().optional(),
+    attribution_qualified: z.boolean().optional().default(false),
+  }).nullable().optional().default(null),
+  demo_notification: z.object({
+    notification_status: z.string().nullable().optional(),
+    attempts: z.number().int().nonnegative().optional(),
+    last_error_code: z.string().nullable().optional(),
+    next_attempt_at: z.string().nullable().optional(),
+    expires_at: z.string().nullable().optional(),
+  }).nullable().optional().default(null),
 });
 
 export const platformEnrollmentsResponse = z.object({

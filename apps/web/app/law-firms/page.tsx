@@ -257,7 +257,7 @@ export default function LawFirmPitchPage() {
                 outside counsel and billing, with control surfaces that legal teams can trust.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Button href={`mailto:${siteConfig.contact.founder}`} size="lg">
+                <Button href="/demo/law-firms" size="lg">
                   Contact Sanjeev
                 </Button>
                 <Button
@@ -435,8 +435,8 @@ export default function LawFirmPitchPage() {
               </div>
               <PitchCard
                 icon={BookOpen}
-                title="Authorities attached"
-                body="Substantive output is grounded in statutes, judgments and internal precedents, not free-floating model guesses."
+                title="Review proposed authorities"
+                body="Inspect available statutes, judgments and internal precedents alongside generated text. Proposed citations can be wrong or incomplete; verify their support and current legal relevance."
               />
               <PitchCard
                 icon={BadgeCheck}
@@ -456,7 +456,7 @@ export default function LawFirmPitchPage() {
               <PitchCard
                 icon={Lock}
                 title="Refusal over fabrication"
-                body="Weak evidence and absent facts should produce a refusal or a placeholder, not a polished hallucination."
+                body="Insufficient source context may trigger a refusal or placeholders. Review remaining gaps, citations and potential errors before approval."
               />
             </div>
           </div>
@@ -638,13 +638,13 @@ export default function LawFirmPitchPage() {
           tone="light"
           eyebrow="The AI angle"
           title="AI as associate leverage, not as an autopilot."
-          description="AI is a feature of the system, not the product. Legal knowledge stays in retrieval and source systems — statutes, judgments, your own precedents — not baked into model weights. Every substantive output is grounded in a named source; uncertainty renders as a refusal or a placeholder, not a polished hallucination."
+          description="AI supports the matter workflow using available source context and review checks. Generated output can contain legal or factual errors. Check cited authorities, statute attribution and the current law before use; a refusal or placeholder is not a guarantee that all errors were detected."
         >
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <PitchCard
               icon={Sparkles}
               title="Drafting Studio"
-              body="Produces a first draft from the matter record with inline citations to named judgments. Refuses to cite what it cannot ground."
+              body="Prepare a first draft from the available matter record and proposed source references. Verify any proposed citations against the sources before use."
             />
             <PitchCard
               icon={Search}
@@ -672,10 +672,10 @@ export default function LawFirmPitchPage() {
                 <p className="mt-3 text-[15.5px] leading-relaxed text-[var(--color-ink-2)]">
                   CaseOps assembles the matter record, draft structure and named sources
                   into one review path. The partner's review stays focused on the legal
-                  work instead of rebuilding context across tools. Citation discipline
-                  remains explicit because the reviewer-findings block catches BNS vs
-                  BNSS, uncited claims and fact gaps before the draft
-                  leaves chambers.
+                  work instead of rebuilding context across tools. Reviewer findings cover
+                  selected statute and citation checks, not every factual or legal error.
+                  Verify unsupported claims and remaining fact gaps before the draft leaves
+                  chambers.
                 </p>
               </div>
               <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] p-4 text-[13.5px] leading-relaxed text-[var(--color-mute)]">
@@ -706,17 +706,17 @@ export default function LawFirmPitchPage() {
                 Direct contact
               </div>
               <a
-                href={`mailto:${siteConfig.contact.founder}`}
+                href="/demo/law-firms"
                 className="mt-4 inline-block font-display text-[2.6rem] font-normal leading-none tracking-tight text-white hover:text-white/85 md:text-[3.5rem]"
               >
-                {siteConfig.contact.founder}
+                Request a conversation
               </a>
               <p className="mt-4 max-w-xl text-base leading-relaxed text-white/75">
-                Write directly for a live walkthrough of the platform, law-firm pilot discussions
-                or a founder-level conversation about how the operating model fits your practice.
+                Request a walkthrough or discuss a law-firm pilot. Scheduling, supported
+                workflows and commercial terms require separate confirmation.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Button href={`mailto:${siteConfig.contact.founder}`} size="lg">
+                <Button href="/demo/law-firms" size="lg">
                   Contact us
                 </Button>
                 <Button
@@ -786,7 +786,7 @@ function PitchHeader() {
           <Button href="/" variant="ghost" size="sm">
             Home
           </Button>
-          <Button href={`mailto:${siteConfig.contact.founder}`} size="sm">
+          <Button href="/demo/law-firms" size="sm">
             Contact us
           </Button>
         </div>

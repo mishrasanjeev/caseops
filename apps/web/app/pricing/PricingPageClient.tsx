@@ -3,14 +3,11 @@
 import { Check, Loader2, Mail, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import { DemoRequestForm } from "@/components/marketing/DemoRequestForm";
 
 import { Logo } from "@/components/marketing/Logo";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
 import {
-  createBillingDemoRequest,
   fetchBillingPlans,
 } from "@/lib/api/endpoints";
 import type { BillingPlanRecord, BillingPlansResponse } from "@/lib/api/schemas";
@@ -68,12 +65,7 @@ export function PricingPageClient() {
   const [activeSegment, setActiveSegment] = useState<Segment>("solo");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<string>("solo_pro");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [notes, setNotes] = useState("");
-  const [requestState, setRequestState] = useState<"idle" | "saving" | "sent">("idle");
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,31 +92,6 @@ export function PricingPageClient() {
     const plans = catalog?.plans ?? [];
     return plans.filter((plan) => segmentFor(plan) === activeSegment);
   }, [activeSegment, catalog]);
-
-  async function submitDemoRequest(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!name.trim() || !email.includes("@")) {
-      setError("Name and email are required.");
-      return;
-    }
-    setRequestState("saving");
-    try {
-      await createBillingDemoRequest({
-        contactName: name.trim(),
-        contactEmail: email.trim().toLowerCase(),
-        companyName: companyName.trim() || null,
-        segment: activeSegment,
-        selectedPlan,
-        notes: notes.trim() || null,
-        source: "pricing_page",
-      });
-      setRequestState("sent");
-      setError(null);
-    } catch (err) {
-      setError(apiErrorMessage(err, "Could not send pricing request."));
-      setRequestState("idle");
-    }
-  }
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
@@ -165,7 +132,7 @@ export function PricingPageClient() {
             <button
               key={segment.key}
               type="button"
-              onClick={() => setActiveSegment(segment.key)}
+              onClick={() => { setActiveSegment(segment.key); setSelectedPlan(null); }}
               className={
                 activeSegment === segment.key
                   ? "rounded-md bg-[var(--color-ink)] px-4 py-3 text-left text-white"
@@ -277,59 +244,7 @@ export function PricingPageClient() {
               Approved GC and enterprise plans can use manual invoices.
             </p>
           </div>
-          <form className="grid gap-4" onSubmit={submitDemoRequest}>
-            {requestState === "sent" ? (
-              <div role="status" className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
-                Request received. CaseOps will follow up on the selected plan.
-              </div>
-            ) : null}
-            {error ? (
-              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                {error}
-              </div>
-            ) : null}
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="pricing-name">Name</Label>
-                <Input id="pricing-name" value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="pricing-email">Email</Label>
-                <Input id="pricing-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="pricing-company">Company</Label>
-                <Input id="pricing-company" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="pricing-plan">Plan</Label>
-                <select
-                  id="pricing-plan"
-                  className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
-                  value={selectedPlan}
-                  onChange={(e) => setSelectedPlan(e.target.value)}
-                >
-                  {(catalog?.plans ?? []).map((plan) => (
-                    <option key={plan.plan_code} value={plan.plan_code}>
-                      {plan.display_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="pricing-notes">Notes</Label>
-              <textarea
-                id="pricing-notes"
-                className="min-h-24 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </div>
-            <Button type="submit" disabled={requestState === "saving"}>
-              {requestState === "saving" ? "Sending..." : "Request pricing"}
-            </Button>
-          </form>
+          <DemoRequestForm source="pricing_page" segment={activeSegment} intent="pricing" selectedPlan={selectedPlan} />
         </div>
       </section>
     </main>

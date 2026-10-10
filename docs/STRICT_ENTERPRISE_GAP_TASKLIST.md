@@ -1,5 +1,154 @@
 # Strict Enterprise Gap Tasklist
 
+## October 10 Summary Gate Repair
+
+Partially implemented / NO-GO: bounded fresh-session fixture batching and
+independent, actual-state-verified cleanup on `a8979a41` pass all 66 Python
+cases/198 phases and 42 Node 22 cases. Standard CI selects the new controls.
+Fresh full Docker/CI/main/live certification remains required; no inherited
+license or external consent gap is closed. [Evidence](bugfix-production-acceptance-and-security-2026-10-09.md).
+
+## October 10 E489 Release Checkpoint
+
+**NO-GO / Partially implemented.** Native Docker PostgreSQL reconciles all
+2,235 passes/6,705 phases. Browser partition one retains 252 passes, one known
+unverified skip and a summary timeout plus cleanup error; 254 identities do
+not execute. Full hosted CI and three zero-result actual PR CodeQL analyses
+are scoped exact-tree proof, not main-alert or production closure. The empty
+license artifact supplies no license coverage; its inherited enumeration and
+owner-policy review remains open. Production is b1; main still has 28 alerts.
+Complete replacement/live gates, actual main scans and post-QA maintenance
+remain required. [Evidence and learning](bugfix-production-acceptance-and-security-2026-10-09.md).
+
+## October 10 Participant And Query Accounting
+
+Tenant-activity delivery is **Partially implemented / NO-GO**. The complete
+dual-database baseline retains 12 active controls/30 product failures among
+42 identities, all 126 phases. New/fallback and retained internal/IP/portal/
+external delivery require current tenant activity. Updated native claim/disable
+replacement passes 115 cases/345 phases and unchanged total-SQL limits 394/400
+and 7,114/7,600. Earlier
+scoped checkpoints below do not certify this later source correction. Company
+replacement passes 260 combined cases/780 phases. A separate 16-case worker
+baseline has four late-grant failures; `20f3f72b` restores its final predicate.
+Complete replacement on `e1a8182c` passes 128 cases/384 phases in eight files,
+zero skips/errors, exact JUnit and unchanged source. Complete Docker/CI and
+the discovered Calendar browser on the exact production revision remain required.
+
+**Partially implemented / NO-GO.** The downstream fence covers bounded
+historical creator, current audit/recipient and assignee foreign keys before
+parent writes; fresh source/lifecycle/authority checks survive commit boundaries.
+Combined proof: 75 API passes/225 phases and 1,234 frontend passes/197 files,
+zero skips, exact inventories and fresh build. Native 102-case checkpoint
+passes, but filtered lock/write SQL cannot establish total work. Actual complete
+accounting finds 17,621 statements for 500 recipients against 7,600. Shared
+live batch predicate `bcde1467` passes 107 dual-database cases/321 phases,
+including current policy changes, grants, walls and tenant exclusion, one SQL
+per batch. Integrated complete SQL counters pass the unchanged 20/500 limits:
+394/400 and 7,114/7,600, with all notifications delivered. Complete Main gates
+pass 69 adjacent-policy, 26 dual-database notification and 42 expanded
+recipient/nested-query cases. The adjacent automatic Calendar policy-call defect
+has 56 SQLite/PostgreSQL replacement passes, not provider-consent acceptance.
+Complete final native races pass 108 identities/324 phases with exact JUnit,
+source identity and clean owned-database teardown. Complete combined backend
+integration passes 218 cases/654 phases in 12 files, zero skips. Final full Docker,
+current CI/actual scans, canonical merge and exact-serving acceptance remain
+required. Preserve failed long-path setup and SQL-receipt assertions separately
+from product defects. Evidence:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+## October 10 Incremental Browser Receipts
+
+**Partially implemented / NO-GO.** Final-only reporting loses completed
+outcomes when the process is killed even though certification correctly fails.
+The candidate retains bounded, fsynced, privacy-selected collection and native
+attempt/error events, checks exact release/inventory/final JSON/XML agreement
+and rejects missing completion, duplicate/tampered results and oversized writes.
+139 local contract tests/417 reconciled phases and 27 reporter controls pass;
+an actual killed process proves retained failure plus incomplete wrapper state.
+The later 174-pass run overlaps formatting and is not frozen-source proof.
+Fresh complete release/browser/production verification remains pending.
+Evidence: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+The stable follow-up passes 180 cases/540 phases and 32 reporter controls;
+actual installed browser-free Playwright reconciles six cases, with two explicit
+skips. The writer now reserves bytes before I/O and closes permanently after
+write/fsync failure. Startup is retained in the constructor using reviewed
+invocation environment, while the public adapter's deferred early-error
+delivery stays explicit. No private API or complete release proof is claimed.
+
+## October 10 C7 Downstream And Evidence Gaps
+
+**NO-GO / partially implemented.** Full frozen `c7dfdc5c` PostgreSQL acceptance
+passes, but real Docker BUG-042 court-order creation deadlocks against the
+document worker's later compliance audit phase. The indexing commit and its
+historical-member race tests do not certify later audit/recipient foreign-key
+locks. A forced independently migrated PostgreSQL counterexample retains
+SQLSTATE `40P01`. Hosted CI also lacks the complete structured App browser
+inventory despite retaining failure media; add exact-checkout privacy-safe
+collection/outcomes/skip/completion evidence and preserve failure exits.
+The stale FAQ assertion is separately corrected and added to nonmutating live
+acceptance. These repairs require fresh complete gates, not a broad actor-lock
+weakening, changed provenance or mutation retry. Details and retained failed
+receipts: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+## October 10 Integrated Control Replacement
+
+**Partially implemented / NO-GO.** Integrated `e0004687` has complete scoped
+edge/admin (257), frontend (1,225) and native-report/deploy (335 plus one
+POSIX-only Windows skip) replacement proof. The guarded purpose-only edge
+chain, strict readiness, native executable resolution and exact per-case
+evidence address reproduced controls without expanding auth authority or
+relaxing privacy. Default-main security closure and final Docker/CI/deployed
+acceptance remain open on serving `b1d3fb23`. See the preserved baselines and
+remaining external boundaries in `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+## October 10 Positive Docker, Remaining Control Gaps
+
+**Partially implemented / NO-GO.** Frozen `99297e17` passes complete Docker
+PostgreSQL and browser acceptance (1992/495 passes, eight explicit known skips).
+All three actual PR CodeQL analyses now have zero findings on the exact accepted
+tree, including the follow-up unused imports; default-main closure is unproved.
+Current CI catches missing page contracts and two inline admin mutation guards.
+New page tests reproduce prototype-name admission, and read-only deployed edge
+configuration confirms unauthenticated forwarded-IP trust. Successful production
+runs lack complete retained runtime skip evidence. Independent repairs retain
+privacy/security fences and require full final-head and deployed acceptance.
+Evidence: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+## October 10 Purpose-Only Edge Rate Identity
+
+**Partially implemented**; production bug verdict **Inconclusive**. Raw XFF
+trust has three deterministic local failed calls. The independent repair
+uses dedicated verified edge claims, narrowly signed Web-to-API rate identity,
+verified HTTPS scheme authority and guarded canonical reconciliation. It does
+not grant auth/capability authority or certify global rate limits. Compute
+configuration readers are privileged purpose-key principals. Production
+installation, exact-serving readiness and fresh full acceptance remain open;
+no cloud mutation or release closure occurred here. Scoped evidence and tests:
+`docs/bugfix-edge-rate-identity-2026-10-10.md`.
+
+Primary contract: [Google Cloud custom backend headers](https://docs.cloud.google.com/load-balancing/docs/https/custom-headers-global),
+last updated **2026-10-06 UTC**, rechecked 2026-10-10: `client_ip_address`,
+case-insensitive overwrite, URL-map precedence and 8 KB/16-header limits.
+Actual controlled GET overwrite/readiness proof remains pending deployment.
+
+## October 9 Acceptance And Security NO-GO
+
+PRs #525/#526 are deployed as `b1d3fb23`, but production run `37909107955`
+has five failures. Certification is **NO-GO**; private cadence stays paused
+until replacement QA and two clean quiescent runs. Six high path alerts,
+eighteen cycles and four test-quality findings require fresh main analysis,
+not a green job or dismissals. Evidence:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+Fresh PR analysis clears the original assigned findings but introduces five
+unused-import findings; actual main closure is still unproved. Hosted CI also
+catches an older aggregate-condition assertion missed by focused coverage.
+Exact historical non-secret fixture fingerprints require strict native replay
+and a positive secret-scan canary. Full final-head Docker, CI and deployment
+remain required; interrupted inventories are not acceptance.
+
 ## October 9 Custom Cursor Release Blocker
 
 **NO-GO** for deployment of merged `47e3554c`: main CI catches a stale-ID
@@ -2441,3 +2590,15 @@ job or scheduler was changed.
   harness withheld Playwright. The corrected code now passes those five
   selected PostgreSQL cases and 136 local hearing/provider tests. A full
   replacement Docker inventory and production proof are still pending.
+## October 10 Public-Claims Boundary
+
+Public-review attestation now requires release-owned native
+23+16 public-page acceptance; missing config/native capture and wrapper failure
+fail closed. Local implementation only, not a production GO. Dated audit:
+bugfix-production-acceptance-and-security-2026-10-09.md.
+
+The same bounded-claims audit includes shared homepage components/FAQ, GC rollup
+and guide pack/recommendation statements. Twenty-five source cases pass after
+seven reproduced claim failures. The visible browser checks include nondefault
+drafting/FAQ states. Exact-release production proof and CI image-pull recovery
+remain required; no public registry or IAM change is authorized by these tests.

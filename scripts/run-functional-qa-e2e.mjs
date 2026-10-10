@@ -149,6 +149,7 @@ function startApi() {
     command,
     [
       "caseops_api.main:app",
+      "--no-proxy-headers",
       "--host",
       "127.0.0.1",
       "--port",

@@ -15,6 +15,31 @@ import yaml
 from tests.postgres_sharding import _junit_identity, partition, verify_reports
 
 
+@pytest.mark.parametrize("job", [
+    "api-ruff", "api-test-shards", "api", "postgres-validation-shards", "postgres-validation",
+])
+def test_every_ci_api_consumer_selects_the_supported_python_before_resolution(job):
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    selected = False
+    for step in workflow["jobs"][job]["steps"]:
+        command = shlex.split(step.get("run", ""))
+        if not command or command[0] != "uv":
+            continue
+        if command == ["uv", "python", "install", "3.13"]:
+            selected = True
+            continue
+        versions = [
+            command[index + 1] if argument == "--python" else argument.split("=", 1)[1]
+            for index, argument in enumerate(command)
+            if argument == "--python" or argument.startswith("--python=")
+        ]
+        assert all(version == "3.13" for version in versions), f"{job}: conflicting Python selector"
+        assert selected or versions, (
+            f"{job}: unpinned project resolution can select an unsupported Python"
+        )
+
+
 def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath(tmp_path):
     root = Path(__file__).resolve().parents[3]
     workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))

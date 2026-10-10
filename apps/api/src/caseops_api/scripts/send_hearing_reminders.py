@@ -11,6 +11,7 @@ See ``services/hearing_reminders.py`` for the state machine and
 ``memory/feedback_fix_vs_mitigation.md`` for why this ships
 dark-launched (persist intent, send later).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,12 +22,15 @@ from collections.abc import Iterable
 from typing import Literal
 
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.billing_demo import drain_demo_notifications, purge_expired_demo_leads
 from caseops_api.services.hearing_reminders import run_reminder_worker
 from caseops_api.services.notification_delivery import drain_notification_delivery_intents
 
 
 def run(
-    *, mode: Literal["auto", "dry_run", "live"] = "auto", limit: int = 100,
+    *,
+    mode: Literal["auto", "dry_run", "live"] = "auto",
+    limit: int = 100,
 ) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -40,6 +44,16 @@ def run(
             if mode == "dry_run"
             else drain_notification_delivery_intents(session, limit=limit)
         )
+    # Public admissions have no tenant membership; drain their own durable
+    # aggregate after the hearing worker's database session has closed.
+    report["demo_admissions"] = (
+        {"mode": "dry_run", "retention_deleted": 0, "notifications_selected": 0}
+        if mode == "dry_run"
+        else {
+            "retention": purge_expired_demo_leads(limit=min(limit, 100)),
+            "notifications": drain_demo_notifications(limit=min(limit, 100)),
+        }
+    )
     # Machine-readable output for Cloud Scheduler → Cloud Run Job logs.
     sys.stdout.write(json.dumps(report, sort_keys=True) + "\n")
     return 0
@@ -48,9 +62,7 @@ def run(
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="caseops-send-hearing-reminders",
-        description=(
-            "Drain QUEUED hearing reminders whose scheduled_for has passed."
-        ),
+        description=("Drain QUEUED hearing reminders whose scheduled_for has passed."),
     )
     parser.add_argument(
         "--mode",
@@ -64,7 +76,10 @@ def main(argv: Iterable[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
-        "--limit", type=int, default=100, help="Max rows to process per run.",
+        "--limit",
+        type=int,
+        default=100,
+        help="Max rows to process per run.",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
     return run(mode=args.mode, limit=args.limit)

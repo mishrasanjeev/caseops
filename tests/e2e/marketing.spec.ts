@@ -88,14 +88,21 @@ test.describe("Marketing site", () => {
     });
     const secondPanel = page.locator("#faq-panel-1");
     await expect(secondPanel).toBeHidden();
+    await expect(secondBtn).toHaveAttribute("aria-expanded", "false");
 
     await secondBtn.scrollIntoViewIfNeeded();
     await secondBtn.click();
     await expect(secondPanel).toBeVisible();
-    await expect(secondPanel).toContainText(/retrieval and source systems/i);
+    await expect(secondBtn).toHaveAttribute("aria-expanded", "true");
+    await expect(secondPanel).toContainText("retrieval, source references and bounded checks");
+    await expect(secondPanel).toContainText("A citation or refusal is not a guarantee of correctness");
+    await expect(secondPanel).toContainText("verify each authority, quotation and fact");
 
     const firstPanel = page.locator("#faq-panel-0");
     await expect(firstPanel).toBeHidden();
+    await secondBtn.click();
+    await expect(secondBtn).toHaveAttribute("aria-expanded", "false");
+    await expect(secondPanel).toBeHidden();
   });
 
   test("robots and sitemap are served", async ({ request }) => {
@@ -121,17 +128,21 @@ test.describe("Marketing site", () => {
     expect(body.byteLength).toBeGreaterThan(5000);
   });
 
-  test("demo request API validates input", async ({ request }) => {
+  test("demo request API validates input", async ({ request, baseURL }) => {
+    test.skip(!["127.0.0.1", "localhost", "::1"].includes(new URL(baseURL!).hostname), "Synthetic public-demo admissions are loopback-only; production is read-only.");
+    expect(["127.0.0.1", "localhost", "::1"]).toContain(new URL(baseURL!).hostname);
+    const identity = crypto.randomUUID();
     const ok = await request.post("/api/demo-request", {
       data: {
-        name: "Asha Rao",
-        email: "asha@example.com",
-        company: "Rao Legal LLP",
-        role: "Partner",
+        contact_name: "Asha Rao",
+        contact_email: "asha@example.com",
+        company_name: "Rao Legal LLP",
+        role: "partner", segment: "firm", intent: "demo", source: "homepage",
+        idempotency_key: identity, privacy_notice_version: "2026-10-09",
       },
     });
     expect(ok.status()).toBe(202);
-    expect(await ok.json()).toEqual({ accepted: true });
+    expect(await ok.json()).toEqual({ accepted: true, id: identity, status: "demo_requested" });
 
     const bad = await request.post("/api/demo-request", {
       data: { name: "x" },
@@ -152,18 +163,20 @@ test.describe("Marketing site", () => {
       },
     });
     expect(longEmail.status()).toBe(400);
-    expect(await longEmail.json()).toEqual({ error: "Field too long." });
+    expect(await longEmail.json()).toEqual({ error: "Review the request fields and try again." });
   });
 
-  test("demo form on the landing page submits successfully", async ({ page }) => {
+  test("demo form on the landing page submits successfully", async ({ page, baseURL }) => {
+    test.skip(!["127.0.0.1", "localhost", "::1"].includes(new URL(baseURL!).hostname), "Synthetic public-demo admissions are loopback-only; production is read-only.");
     await page.goto("/#cta");
+    expect(["127.0.0.1", "localhost", "::1"]).toContain(new URL(page.url()).hostname);
     const form = page.locator("form[aria-label='Request a demo']");
-    await form.locator("input[name='name']").fill("Asha Rao");
-    await form.locator("input[name='email']").fill("asha@example.com");
-    await form.locator("input[name='company']").fill("Rao Legal LLP");
+    await form.locator("input[name='contact_name']").fill("Asha Rao");
+    await form.locator("input[name='contact_email']").fill("asha@example.com");
+    await form.locator("input[name='company_name']").fill("Rao Legal LLP");
     await form.locator("select[name='role']").selectOption({ index: 1 });
-    await form.getByRole("button", { name: /Request a demo/i }).click();
-    await expect(page.getByText(/we'll be in touch within a working day/i)).toBeVisible();
+    await form.getByRole("button", { name: "Request a conversation" }).click();
+    await expect(form.getByRole("status")).toContainText("Request saved.");
   });
 
   test("every CTA on the landing page leads somewhere (not a dead mailto or 404)", async ({

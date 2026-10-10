@@ -99,6 +99,9 @@ def issue_auth_session_under_fence(
     resolving capabilities and minting the JWT so the response is serialized
     against those cutoffs.
 
+    Identifiers do not change during minting. NO KEY UPDATE still excludes
+    identity updates, but allows unrelated historical FK key-share holders.
+
     Login supplies ``submitted_password`` so a reset that wins the fence also
     changes the refreshed hash and makes the stale login fail. Refresh supplies
     ``source_token_issued_at`` so a cutoff that wins cannot be bypassed by
@@ -109,6 +112,7 @@ def issue_auth_session_under_fence(
         session,
         company_id=company_id,
         membership_ids=(membership_id,),
+        no_key_update=True,
     ).get(membership_id)
     if membership is None:
         _raise_unauthorized("The current session is no longer valid.")

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Any, Literal
+from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 BillingInterval = Literal["month", "year", "one_time", "custom"]
 CheckoutType = Literal["new_subscription", "renewal", "upgrade", "topup", "addon", "manual_invoice"]
@@ -210,6 +211,8 @@ class TrialStartRequest(BaseModel):
 
 
 class DemoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
     contact_name: str = Field(min_length=2, max_length=255)
     contact_email: EmailStr
     contact_mobile: str | None = Field(default=None, max_length=40)
@@ -218,6 +221,38 @@ class DemoRequest(BaseModel):
     selected_plan: str | None = Field(default=None, max_length=80)
     notes: str | None = Field(default=None, max_length=4000)
     source: str = Field(default="demo", max_length=40)
+    role: Literal[
+        "solo_advocate",
+        "partner",
+        "associate",
+        "general_counsel",
+        "legal_ops",
+        "other",
+        "not_specified",
+    ] = "not_specified"
+    intent: Literal["demo", "pilot", "pricing"] = "demo"
+    idempotency_key: UUID | None = None
+    privacy_notice_version: Literal["2026-10-09"] | None = None
+
+    @model_validator(mode="after")
+    def complete_keyed_admission(self) -> DemoRequest:
+        if self.idempotency_key is not None:
+            if self.role == "not_specified" or self.privacy_notice_version is None:
+                raise ValueError("Keyed requests require role and privacy notice version.")
+            if self.source not in {
+                "demo",
+                "pricing_page",
+                "homepage",
+                "solo_lawyers",
+                "law_firms",
+                "general_counsels",
+                "guide",
+                "resource",
+            }:
+                raise ValueError("Keyed requests require an allowlisted public entry point.")
+            if self.notes and len(self.notes) > 1000:
+                raise ValueError("Keyed request notes must be at most 1000 characters.")
+        return self
 
 
 class DemoRequestResponse(BaseModel):

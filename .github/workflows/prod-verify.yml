@@ -93,6 +93,8 @@ jobs:
     # Keep each shard below that boundary and serialize mutation-capable QA
     # work so persistent test tenants cannot race each other.
     timeout-minutes: 38
+    env:
+      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -103,11 +105,13 @@ jobs:
           - legacy
           - supporting
           - patent-statute
+          - public-pages
     steps:
       - name: Check out the exact serving production release
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.resolve-release.outputs.release_sha }}
+          fetch-depth: 0
 
       - name: Recheck exact serving identity at shard boundary
         run: |
@@ -182,6 +186,44 @@ jobs:
         id: prod-playwright-prerequisites
         run: echo "ready=true" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare release-owned native Playwright evidence
+        id: native-evidence
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CASEOPS_EXPECTED_RELEASE_SHA"
+          [[ "$CASEOPS_EXPECTED_RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          if [[ -f scripts/prod_playwright_evidence.py && -f scripts/prod_playwright_reporter.cjs ]]; then
+            echo "mode=native" >> "$GITHUB_OUTPUT"
+          elif git merge-base --is-ancestor HEAD 99297e17b00dd51178e21baf596ba2ebfd92c5f7; then
+            # Only a serving ancestor predating this helper may use its original CLI.
+            # This is explicitly incomplete native evidence, never a new-main waiver.
+            echo "mode=legacy" >> "$GITHUB_OUTPUT"
+            mkdir -p test-results/prod-native-evidence
+            python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path("test-results/prod-native-evidence/legacy.json").write_text(
+              json.dumps({"release_sha": os.environ["CASEOPS_EXPECTED_RELEASE_SHA"],
+                          "completed": False, "reason": "serving_release_predates_native_capture"}),
+              encoding="utf-8")
+          PY
+            echo "::notice::Older exact serving release: native capture is unavailable; do not certify skip reasons from this legacy run."
+          else
+            echo "::error::A newer serving release is missing required native evidence capture."
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/caseops-prod-playwright" <<'SH'
+          set -euo pipefail
+          invocation="$1"
+          shift
+          test "$(git rev-parse HEAD)" = "$CASEOPS_EXPECTED_RELEASE_SHA"
+          if [[ -f scripts/prod_playwright_evidence.py && -f scripts/prod_playwright_reporter.cjs ]]; then
+            exec python scripts/prod_playwright_evidence.py run --invocation "$invocation" -- "$@"
+          fi
+          git merge-base --is-ancestor HEAD 99297e17b00dd51178e21baf596ba2ebfd92c5f7
+          exec npx playwright test "$@"
+          SH
+
       - name: Run canonical tester production regressions
         if: matrix.suite == 'tester'
         env:
@@ -204,7 +246,7 @@ jobs:
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
           CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
           CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
-        run: npx playwright test --config=playwright.prod-ram.config.ts --project=tester-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester
+        run: bash "$RUNNER_TEMP/caseops-prod-playwright" tester --config=playwright.prod-ram.config.ts --project=tester-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester
 
       - name: Run legacy QA production regressions
         if: matrix.suite == 'legacy'
@@ -217,7 +259,7 @@ jobs:
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
           CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
           CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
-        run: npx playwright test --config=playwright.prod-ram.config.ts --project=prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/legacy
+        run: bash "$RUNNER_TEMP/caseops-prod-playwright" legacy --config=playwright.prod-ram.config.ts --project=prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/legacy
 
       - name: Run test-legal read-only hearing acceptance
         if: matrix.suite == 'test-legal-readonly'
@@ -233,7 +275,7 @@ jobs:
             echo "::error::CASEOPS_TEST_LEGAL_PROD_PASSWORD secret is not configured."
             exit 1
           fi
-          npx playwright test --config=playwright.prod-ram.config.ts --project=test-legal-readonly-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-readonly
+          bash "$RUNNER_TEMP/caseops-prod-playwright" test-legal-readonly --config=playwright.prod-ram.config.ts --project=test-legal-readonly-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-readonly
 
       - name: Run IPLF-027B A0 quiescence acceptance
         # This is immutable historical rollout evidence tied to one exact
@@ -245,7 +287,7 @@ jobs:
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
           CASEOPS_IP_A0_PROD_MODE: verify
-        run: npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list --output=test-results/ip-a0
+        run: bash "$RUNNER_TEMP/caseops-prod-playwright" ip-a0 --config=playwright.ip-a0-prod.config.ts --reporter=list --output=test-results/ip-a0
 
       - name: Check IPLF-037B renewal acceptance configuration
         id: renewal-prerequisites
@@ -290,7 +332,7 @@ jobs:
           CASEOPS_IP_RENEWAL_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_RULE_VERSION_ID }}
           CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID }}
           CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID }}
-        run: npx playwright test --config=playwright.ip-renewal-prod.config.ts --reporter=list --output=test-results/ip-renewal
+        run: bash "$RUNNER_TEMP/caseops-prod-playwright" ip-renewal --config=playwright.ip-renewal-prod.config.ts --reporter=list --output=test-results/ip-renewal
 
       - name: Check IPLF-039F cost acceptance configuration
         id: ip-cost-prerequisites
@@ -345,7 +387,7 @@ jobs:
           CASEOPS_IP_COST_PROD_EMAIL: ${{ vars.CASEOPS_IP_COST_PROD_EMAIL }}
           CASEOPS_IP_COST_PROD_PASSWORD: ${{ secrets.CASEOPS_IP_COST_PROD_PASSWORD }}
           CASEOPS_IP_COST_PROD_DOCKET_ID: ${{ vars.CASEOPS_IP_COST_PROD_DOCKET_ID }}
-        run: npx playwright test --config=playwright.ip-cost-prod.config.ts --reporter=list --output=test-results/ip-cost
+        run: bash "$RUNNER_TEMP/caseops-prod-playwright" ip-cost --config=playwright.ip-cost-prod.config.ts --reporter=list --output=test-results/ip-cost
 
       - name: Run prod-Playwright suite (notice module)
         # The RAM batch is intentionally broad and can expose an independent
@@ -359,7 +401,7 @@ jobs:
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
           CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
-        run: npx playwright test --config=playwright.notice-prod.config.ts --reporter=list --output=test-results/notice
+        run: bash "$RUNNER_TEMP/caseops-prod-playwright" notice --config=playwright.notice-prod.config.ts --reporter=list --output=test-results/notice
 
       - name: Check release-owned patent and statute acceptance
         id: patent-statute-prerequisites
@@ -381,7 +423,7 @@ jobs:
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: npx playwright test --config=playwright.prod-ram.config.ts --project=patent-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/patent
+        run: bash "$RUNNER_TEMP/caseops-prod-playwright" patent --config=playwright.prod-ram.config.ts --project=patent-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/patent
 
       - name: Verify every release-owned statute source record
         if: always() && !cancelled() && matrix.suite == 'patent-statute' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.patent-statute-prerequisites.outputs.ready == 'true'
@@ -393,16 +435,48 @@ jobs:
           CASEOPS_RAM_PROD_SLUG: caseops-qa
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
         # Read-only batches use bounded parallelism after all mutation phases.
-        run: npx playwright test --config=playwright.prod-ram.config.ts --project=statute-source-prod-chromium --workers=4 --retries=0 --reporter=list --output=test-results/statute-sources
+        run: bash "$RUNNER_TEMP/caseops-prod-playwright" statute-sources --config=playwright.prod-ram.config.ts --project=statute-source-prod-chromium --workers=4 --retries=0 --reporter=list --output=test-results/statute-sources
 
-      - name: Upload Playwright report on failure
-        if: failure()
+      - name: Run exact-release public SEO read-only acceptance
+        if: always() && !cancelled() && matrix.suite == 'public-pages' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        env:
+          CASEOPS_WEB_BASE_URL: https://caseops.ai
+        run: |
+          test "${{ steps.native-evidence.outputs.mode }}" = native
+          test -f playwright.public-seo.config.ts
+          bash "$RUNNER_TEMP/caseops-prod-playwright" public-pages --config=playwright.public-seo.config.ts --workers=1 --retries=0 --reporter=list --output=test-results/public-pages
+
+      - name: Reconcile required native Playwright evidence
+        if: always() && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.native-evidence.outputs.mode == 'native'
+        env:
+          SUITE: ${{ matrix.suite }}
+          HISTORICAL_A0: ${{ inputs.run_historical_a0_gate }}
+          RENEWAL_CONFIGURED: ${{ steps.renewal-prerequisites.outputs.configured }}
+          COST_CONFIGURED: ${{ steps.ip-cost-prerequisites.outputs.configured }}
+        run: |
+          set -euo pipefail
+          case "$SUITE" in
+            tester|legacy|test-legal-readonly) required=("$SUITE") ;;
+            supporting)
+              required=(notice)
+              if [[ "$HISTORICAL_A0" == true ]]; then required+=(ip-a0); fi
+              if [[ "$RENEWAL_CONFIGURED" == true ]]; then required+=(ip-renewal); fi
+              if [[ "$COST_CONFIGURED" == true ]]; then required+=(ip-cost); fi
+              ;;
+            patent-statute) required=(patent statute-sources) ;;
+            public-pages) required=(public-pages) ;;
+            *) exit 1 ;;
+          esac
+          python scripts/prod_playwright_evidence.py validate --required "${required[@]}"
+
+      - name: Upload native Playwright evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: prod-playwright-report-${{ matrix.suite }}
           path: |
-            test-results/
-          if-no-files-found: error
+            test-results/prod-native-evidence/
+          if-no-files-found: ${{ steps.prod-playwright-prerequisites.outputs.ready == 'true' && 'error' || 'warn' }}
           retention-days: 14
 
   scheduled-statute-verification:
@@ -411,11 +485,14 @@ jobs:
     needs: resolve-release
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
     steps:
       - name: Check out the exact serving production release
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.resolve-release.outputs.release_sha }}
+          fetch-depth: 0
 
       - name: Recheck exact serving identity
         run: |
@@ -451,6 +528,48 @@ jobs:
           test -f tests/e2e/support/patent-acceptance.ts
           test -f tests/e2e/ram-2026-09-07-statute-source-data.spec.ts
 
+      - name: Mark prod-Playwright prerequisites ready
+        id: prod-playwright-prerequisites
+        run: echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release-owned native Playwright evidence
+        id: native-evidence
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CASEOPS_EXPECTED_RELEASE_SHA"
+          [[ "$CASEOPS_EXPECTED_RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          if [[ -f scripts/prod_playwright_evidence.py && -f scripts/prod_playwright_reporter.cjs ]]; then
+            echo "mode=native" >> "$GITHUB_OUTPUT"
+          elif git merge-base --is-ancestor HEAD 99297e17b00dd51178e21baf596ba2ebfd92c5f7; then
+            # Only a serving ancestor predating this helper may use its original CLI.
+            # This is explicitly incomplete native evidence, never a new-main waiver.
+            echo "mode=legacy" >> "$GITHUB_OUTPUT"
+            mkdir -p test-results/prod-native-evidence
+            python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path("test-results/prod-native-evidence/legacy.json").write_text(
+              json.dumps({"release_sha": os.environ["CASEOPS_EXPECTED_RELEASE_SHA"],
+                          "completed": False, "reason": "serving_release_predates_native_capture"}),
+              encoding="utf-8")
+          PY
+            echo "::notice::Older exact serving release: native capture is unavailable; do not certify skip reasons from this legacy run."
+          else
+            echo "::error::A newer serving release is missing required native evidence capture."
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/caseops-prod-playwright" <<'SH'
+          set -euo pipefail
+          invocation="$1"
+          shift
+          test "$(git rev-parse HEAD)" = "$CASEOPS_EXPECTED_RELEASE_SHA"
+          if [[ -f scripts/prod_playwright_evidence.py && -f scripts/prod_playwright_reporter.cjs ]]; then
+            exec python scripts/prod_playwright_evidence.py run --invocation "$invocation" -- "$@"
+          fi
+          git merge-base --is-ancestor HEAD 99297e17b00dd51178e21baf596ba2ebfd92c5f7
+          exec npx playwright test "$@"
+          SH
+
       - name: Verify every release-owned statute source record
         env:
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
@@ -459,15 +578,19 @@ jobs:
           CASEOPS_RAM_PROD_EMAIL: qa-bot@caseops.ai
           CASEOPS_RAM_PROD_SLUG: caseops-qa
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: npx playwright test --config=playwright.prod-ram.config.ts --project=statute-source-prod-chromium --workers=4 --retries=0 --reporter=list --output=test-results/statute-sources
+        run: bash "$RUNNER_TEMP/caseops-prod-playwright" statute-sources --config=playwright.prod-ram.config.ts --project=statute-source-prod-chromium --workers=4 --retries=0 --reporter=list --output=test-results/statute-sources
 
-      - name: Upload Playwright report on failure
-        if: failure()
+      - name: Reconcile required native Playwright evidence
+        if: always() && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.native-evidence.outputs.mode == 'native'
+        run: python scripts/prod_playwright_evidence.py validate --required statute-sources
+
+      - name: Upload native Playwright evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: prod-playwright-report-scheduled-statutes
-          path: test-results/
-          if-no-files-found: error
+          path: test-results/prod-native-evidence/
+          if-no-files-found: ${{ steps.prod-playwright-prerequisites.outputs.ready == 'true' && 'error' || 'warn' }}
           retention-days: 14
 
   record-release-evidence:

@@ -2,7 +2,7 @@ import hmac
 from datetime import datetime
 from functools import lru_cache
 
-from pydantic import AnyHttpUrl, Field, model_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PLACEHOLDER_AUTH_SECRET = "change-me-change-me-change-me-2026"
@@ -355,6 +355,10 @@ class Settings(BaseSettings):
     auth_rate_limit_login_per_minute: int = Field(default=20, ge=1)
     auth_rate_limit_bootstrap_per_hour: int = Field(default=10, ge=1)
     auth_rate_limit_enabled: bool = Field(default=True)
+    # Dedicated rate-identity key, never an authentication/capability credential.
+    rate_identity_edge_secret: SecretStr | None = Field(default=None)
+    rate_identity_required: bool = Field(default=False)
+    rate_identity_edge_https: bool = Field(default=False)
     mfa_existing_user_grace_days: int = Field(default=7, ge=0, le=90)
     mfa_step_up_ttl_minutes: int = Field(default=15, ge=1, le=480)
     mfa_max_failures_per_5m: int = Field(default=5, ge=1, le=50)

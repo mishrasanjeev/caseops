@@ -34,15 +34,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # deploy before the domain mapping is live.
 ARG NEXT_PUBLIC_API_BASE_URL=https://api.caseops.ai
 ARG NEXT_PUBLIC_APP_URL=https://caseops.ai
-ARG NEXT_PUBLIC_GA_MEASUREMENT_ID=
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
-ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=$NEXT_PUBLIC_GA_MEASUREMENT_ID
 
 COPY apps/web ./
 # One colocated page test imports this canonical fixture during Next's type
 # check. Keep it in the builder context only; the runner copies no test files.
 COPY tests/fixtures/statutes/structured-schedule-api.json /app/tests/fixtures/statutes/structured-schedule-api.json
+# Colocated sanitizer units use this pure helper during builder type checking.
+COPY tests/e2e/support/prod-failure-diagnostics.ts /app/tests/e2e/support/prod-failure-diagnostics.ts
 
 RUN npm run build
 

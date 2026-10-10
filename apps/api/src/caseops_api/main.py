@@ -12,6 +12,7 @@ from caseops_api.core.canonical_redirects import CanonicalSlashRedirectMiddlewar
 from caseops_api.core.csrf import CSRFMiddleware
 from caseops_api.core.observability import configure_logging, configure_tracing
 from caseops_api.core.problem_details import problem_json, register_problem_handlers
+from caseops_api.core.rate_identity import RateIdentityMiddleware, validate_rate_identity_settings
 from caseops_api.core.rate_limit import RateLimitExceeded, configure_limiter
 from caseops_api.core.request_context import RequestContextMiddleware
 from caseops_api.core.settings import get_settings
@@ -47,6 +48,7 @@ async def lifespan(_: FastAPI):
 def create_application() -> FastAPI:
     started = perf_counter()
     settings = get_settings()
+    validate_rate_identity_settings(settings)
     # Install JSON logging + (optional) OTel before building the app
     # so the FastAPI instrumentor can see the new logger + tracer.
     configure_logging()
@@ -77,6 +79,8 @@ def create_application() -> FastAPI:
     # surfaces it as a real HTTP error rather than a generic CORS
     # block.
     application.add_middleware(CSRFMiddleware)
+    # Resolve identity/scheme before CSRF and SlowAPI, with CORS outside errors.
+    application.add_middleware(RateIdentityMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

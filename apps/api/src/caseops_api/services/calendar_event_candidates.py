@@ -85,7 +85,7 @@ def _suggest_matter(
     for matter in session.scalars(
         select(Matter).where(
             Matter.company_id == context.company.id,
-            visible_matters_filter(context),
+            visible_matters_filter(session, context=context),
         )
     ):
         if matter.matter_code.lower() in lowered:

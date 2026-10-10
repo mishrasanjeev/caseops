@@ -35,7 +35,7 @@ const features = [
   {
     icon: BookOpenText,
     title: "Research & Citations",
-    body: "Hybrid retrieval across statutes, judgments, and your internal precedents. Every answer is grounded and linked to source.",
+    body: "Hybrid retrieval across available statutes, judgments and internal precedents. Inspect retrieved sources and generated answers; source links do not guarantee correctness or complete coverage.",
   },
   {
     icon: FileSignature,

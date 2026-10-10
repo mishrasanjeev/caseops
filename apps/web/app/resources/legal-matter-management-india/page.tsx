@@ -110,7 +110,7 @@ export default async function LegalMatterManagementIndiaPage() {
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Button href="#checklist" variant="primary">Use the checklist</Button>
-              <Button href="/#cta" variant="outline">Request a demo</Button>
+              <Button href="/demo/resource" variant="outline">Request a demo</Button>
             </div>
           </Container>
         </header>
@@ -190,7 +190,7 @@ export default async function LegalMatterManagementIndiaPage() {
                 <p className="mt-4 leading-relaxed">
                   Explore the <a className="font-medium underline underline-offset-4" href="/guide">product guide</a>,
                   review <a className="font-medium underline underline-offset-4" href="/pricing">current plans</a>,
-                  or <a className="font-medium underline underline-offset-4" href="/#cta">request a guided walkthrough</a>.
+                  or <a className="font-medium underline underline-offset-4" href="/demo/resource">request a guided walkthrough</a>.
                 </p>
               </section>
 

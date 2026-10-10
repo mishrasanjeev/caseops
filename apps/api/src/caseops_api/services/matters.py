@@ -4743,6 +4743,14 @@ def create_matter_court_order(
     the in-app notification rules other workspace members rely on.
     """
 
+    from caseops_api.services.compliance_participants import lock_compliance_participants
+
+    lock_compliance_participants(
+        session, company_id=context.company.id, matter_id=matter_id,
+        actor_membership_id=context.membership.id, context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_court_order"],
+        include_order_notifications=payload.order_attachment_id is not None,
+    )
     _lock_matter_mutation_actor(
         session,
         context=context,
@@ -4837,6 +4845,7 @@ def create_matter_court_order(
 
     try:
         from caseops_api.services.compliance_extraction import (
+            ComplianceParticipantFenceError,
             run_compliance_extraction_for_order,
         )
 
@@ -4848,6 +4857,8 @@ def create_matter_court_order(
             actor_membership_id=context.membership.id,
             context=context,
         )
+    except ComplianceParticipantFenceError:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.warning("compliance extraction failed for court_order_id=%s: %s", order.id, exc)
 
@@ -4864,6 +4875,13 @@ def update_matter_court_order(
     order_id: str,
     payload: MatterCourtOrderUpdateRequest,
 ) -> MatterCourtOrderRecord:
+    from caseops_api.services.compliance_participants import lock_compliance_participants
+
+    lock_compliance_participants(
+        session, company_id=context.company.id, matter_id=matter_id,
+        actor_membership_id=context.membership.id, context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["update_matter_court_order"],
+    )
     _lock_matter_mutation_actor(
         session,
         context=context,
@@ -5114,6 +5132,13 @@ def _persist_court_sync_import(
     cause_list_entries,
     orders,
 ) -> MatterCourtSyncRun:
+    from caseops_api.services.compliance_participants import lock_compliance_participants
+
+    lock_compliance_participants(
+        session, company_id=matter.company_id, matter_id=matter.id,
+        actor_membership_id=actor_membership_id,
+        expected_lifecycle_version=matter.lifecycle_version,
+    )
     _assert_matter_not_disposed(matter, operation="import court-sync data")
     if not cause_list_entries and not orders:
         raise HTTPException(
@@ -5257,6 +5282,7 @@ def _persist_court_sync_import(
 
     if new_orders:
         from caseops_api.services.compliance_extraction import (
+            ComplianceParticipantFenceError,
             run_compliance_extraction_for_order,
         )
         from caseops_api.services.proceeding_intelligence import (
@@ -5271,6 +5297,8 @@ def _persist_court_sync_import(
                     order=order,
                     actor_membership_id=actor_membership_id,
                 )
+            except ComplianceParticipantFenceError:
+                raise
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "proceeding_intelligence: failed for court_order_id=%s: %s",
@@ -5285,6 +5313,8 @@ def _persist_court_sync_import(
                     trigger="court_sync",
                     actor_membership_id=actor_membership_id,
                 )
+            except ComplianceParticipantFenceError:
+                raise
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "compliance_extraction: failed for court_order_id=%s: %s",
@@ -5302,6 +5332,13 @@ def create_matter_court_sync_import(
     matter_id: str,
     payload: MatterCourtSyncImportRequest,
 ) -> MatterCourtSyncRunRecord:
+    from caseops_api.services.compliance_participants import lock_compliance_participants
+
+    lock_compliance_participants(
+        session, company_id=context.company.id, matter_id=matter_id,
+        actor_membership_id=context.membership.id, context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_court_sync_import"],
+    )
     _lock_matter_mutation_actor(
         session,
         context=context,
@@ -5380,12 +5417,18 @@ def create_matter_attachment(
     linked_court_order_id: str | None = None,
     hearing_id: str | None = None,
 ) -> tuple[MatterAttachmentRecord, str]:
+    from caseops_api.services.compliance_participants import lock_compliance_participants
     from caseops_api.services.identity import get_session_context
 
     require_read_only_upload_session(
         session, detail="Matter upload requires a read-only session before its I/O boundary.",
     )
-    lock_matter_private_authority(session, company_id=context.company.id)
+    lock_compliance_participants(
+        session, company_id=context.company.id, matter_id=matter_id,
+        actor_membership_id=context.membership.id, context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_attachment"],
+        include_order_notifications=linked_court_order_id is not None,
+    )
     _lock_matter_mutation_actor(
         session,
         context=context,
@@ -5530,6 +5573,13 @@ def create_matter_attachment(
             matter_id=audit_matter_id,
             incoming_size_bytes=stored.size_bytes,
         )
+        lock_compliance_participants(
+            session, company_id=upload_company_id, matter_id=audit_matter_id,
+            actor_membership_id=context.membership.id, context=context,
+            required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_attachment"],
+            expected_lifecycle_version=upload_lifecycle_version,
+            include_order_notifications=linked_court_order_id is not None,
+        )
         _lock_matter_mutation_actor(
             session,
             context=context,
@@ -5628,6 +5678,7 @@ def create_matter_attachment(
         if linked_court_order_id or document_type == "order_judgment":
             try:
                 from caseops_api.services.compliance_extraction import (
+                    ComplianceParticipantFenceError,
                     run_compliance_extraction_for_attachment,
                 )
 
@@ -5639,6 +5690,8 @@ def create_matter_attachment(
                     actor_membership_id=context.membership.id,
                     context=context,
                 )
+            except ComplianceParticipantFenceError:
+                raise
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "compliance extraction pending run failed for attachment_id=%s: %s",
@@ -5697,6 +5750,13 @@ def update_matter_attachment_metadata(
     attachment_id: str,
     payload: MatterAttachmentMetadataUpdateRequest,
 ) -> MatterAttachmentRecord:
+    from caseops_api.services.compliance_participants import lock_compliance_participants
+
+    lock_compliance_participants(
+        session, company_id=context.company.id, matter_id=matter_id,
+        actor_membership_id=context.membership.id, context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["update_matter_attachment_metadata"],
+    )
     _lock_matter_mutation_actor(
         session,
         context=context,
@@ -5854,6 +5914,7 @@ def update_matter_attachment_metadata(
         if attachment.linked_court_order_id or attachment.document_type == "order_judgment":
             try:
                 from caseops_api.services.compliance_extraction import (
+                    ComplianceParticipantFenceError,
                     run_compliance_extraction_for_attachment,
                 )
 
@@ -5865,6 +5926,8 @@ def update_matter_attachment_metadata(
                     actor_membership_id=context.membership.id,
                     context=context,
                 )
+            except ComplianceParticipantFenceError:
+                raise
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "compliance extraction failed for attachment_id=%s: %s",

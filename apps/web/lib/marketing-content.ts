@@ -5,7 +5,7 @@ export const marketingFaqs = [
   },
   {
     q: "How does CaseOps avoid hallucinated citations?",
-    a: "Legal knowledge lives in retrieval and source systems, not the model. Every substantive answer is grounded in statutes, judgments, or your own precedents with inline citations, assumptions, missing facts, and confidence. Weak-evidence prompts return an explicit refusal. The structured statute model feeds available bare text into appeal drafts so quotations can be checked against the source.",
+    a: "CaseOps uses retrieval, source references and bounded checks to support review. Generated text can contain unsupported claims or incorrect citations. Weak source context may trigger a refusal or placeholders. A citation or refusal is not a guarantee of correctness: verify each authority, quotation and fact against the available source and current law. Source-verified statute text is available where catalog coverage permits.",
   },
   {
     q: "How do intake conflict checks work?",

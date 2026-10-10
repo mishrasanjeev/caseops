@@ -55,6 +55,9 @@ from caseops_api.services.security import (
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 
+# SQLAlchemy, password hashing and MFA services are synchronous. Dispatch the
+# complete handler in FastAPI's worker pool, including its transaction cleanup.
+
 
 def _ttl_seconds() -> int:
     return get_settings().access_token_ttl_minutes * 60
@@ -62,7 +65,7 @@ def _ttl_seconds() -> int:
 
 @router.post("/login", response_model=AuthSessionResponse, summary="Login with email and password")
 @limiter.limit(login_rate_limit)
-async def login(
+def login(
     request: Request,
     response: Response,
     payload: LoginRequest,
@@ -120,7 +123,7 @@ async def login(
     summary="Complete a one-time employee account setup link",
 )
 @limiter.limit(login_rate_limit)
-async def account_setup_complete(
+def account_setup_complete(
     request: Request,
     response: Response,
     payload: AccountSetupCompleteRequest,
@@ -147,7 +150,7 @@ async def account_setup_complete(
     summary="Request a password-reset link without revealing account existence",
 )
 @limiter.limit(login_rate_limit)
-async def password_reset_start(
+def password_reset_start(
     request: Request,
     payload: PasswordResetStartRequest,
     session: DbSession,
@@ -165,7 +168,7 @@ async def password_reset_start(
     summary="Complete a one-time employee password reset link",
 )
 @limiter.limit(login_rate_limit)
-async def password_reset_complete(
+def password_reset_complete(
     request: Request,
     response: Response,
     payload: AccountSetupCompleteRequest,
@@ -187,7 +190,7 @@ async def password_reset_complete(
 
 
 @router.get("/me", response_model=AuthContextResponse, summary="Get the current auth context")
-async def me(context: CurrentContext, session: DbSession) -> AuthContextResponse:
+def me(context: CurrentContext, session: DbSession) -> AuthContextResponse:
     return build_auth_context(session, context)
 
 
@@ -196,7 +199,7 @@ async def me(context: CurrentContext, session: DbSession) -> AuthContextResponse
     response_model=MFASecurityStatusResponse,
     summary="Get account security and MFA status.",
 )
-async def security_status(
+def security_status(
     context: CurrentContext,
     session: DbSession,
 ) -> MFASecurityStatusResponse:
@@ -208,7 +211,7 @@ async def security_status(
     response_model=MFAEnrollmentStartResponse,
     summary="Start TOTP MFA enrollment.",
 )
-async def mfa_enroll(
+def mfa_enroll(
     context: CurrentContext,
     session: DbSession,
 ) -> MFAEnrollmentStartResponse:
@@ -220,7 +223,7 @@ async def mfa_enroll(
     response_model=MFAEnrollmentVerifyResponse,
     summary="Verify TOTP MFA enrollment and return one-time recovery codes.",
 )
-async def mfa_enroll_verify(
+def mfa_enroll_verify(
     payload: MFAVerifyRequest,
     context: CurrentContext,
     session: DbSession,
@@ -233,7 +236,7 @@ async def mfa_enroll_verify(
     response_model=MFAStepUpResponse,
     summary="Complete MFA step-up for high-risk actions.",
 )
-async def mfa_step_up(
+def mfa_step_up(
     payload: MFAStepUpRequest,
     context: CurrentContext,
     session: DbSession,
@@ -252,7 +255,7 @@ async def mfa_step_up(
     response_model=MFARecoveryCodesResponse,
     summary="Regenerate single-use MFA recovery codes.",
 )
-async def mfa_recovery_codes_regenerate(
+def mfa_recovery_codes_regenerate(
     context: CurrentContext,
     session: DbSession,
 ) -> MFARecoveryCodesResponse:
@@ -264,7 +267,7 @@ async def mfa_recovery_codes_regenerate(
     response_model=MFADisableResponse,
     summary="Disable MFA after step-up verification.",
 )
-async def mfa_disable(
+def mfa_disable(
     payload: MFADisableRequest,
     context: CurrentContext,
     session: DbSession,
@@ -283,7 +286,7 @@ async def mfa_disable(
     response_model=AuthSessionResponse,
     summary="Issue a fresh access token for the current session",
 )
-async def refresh(
+def refresh(
     response: Response,
     context: CurrentContext,
     session: DbSession,

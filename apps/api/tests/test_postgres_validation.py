@@ -10017,7 +10017,12 @@ def test_matter_disposal_survives_concurrent_failed_shadow_cleanup_on_postgres(
     and the later ORM flush raising StaleDataError. The event owns only the
     active generation captured at enqueue; shadow safety is enforced by the
     generation epoch fence.
+
+    Synchronize on the bulk tombstone write, not an ORM load: the critical
+    section must not hydrate private projection bytes.
     """
+
+    from sqlalchemy.sql.dml import Update
 
     from caseops_api.db.models import (
         Company,
@@ -10126,8 +10131,9 @@ def test_matter_disposal_survives_concurrent_failed_shadow_cleanup_on_postgres(
         expected_updated_at = matter.updated_at
         setup.commit()
 
-    active_projection_loaded = Event()
+    active_projection_updated = Event()
     shadow_cleanup_committed = Event()
+    hydrated_projection_ids: list[str] = []
 
     def dispose_matter() -> str:
         with Session(pg_engine) as lifecycle:
@@ -10142,16 +10148,32 @@ def test_matter_disposal_survives_concurrent_failed_shadow_cleanup_on_postgres(
             assert context.membership is not None
             assert context.user is not None
 
-            def pause_after_active_projection_load(_session, instance) -> None:
+            def record_projection_hydration(_session, instance) -> None:
+                if isinstance(instance, PrivateIndexProjection):
+                    hydrated_projection_ids.append(str(instance.id))
+
+            def pause_after_active_projection_update(
+                _connection,
+                cursor,
+                _statement,
+                _parameters,
+                execution_context,
+                _executemany,
+            ) -> None:
+                compiled = execution_context.compiled
                 if (
-                    isinstance(instance, PrivateIndexProjection)
-                    and instance.generation_id == active_generation_id
+                    compiled is not None
+                    and isinstance(compiled.statement, Update)
+                    and compiled.statement.table.name == PrivateIndexProjection.__tablename__
                 ):
-                    active_projection_loaded.set()
+                    active_projection_updated.set()
+                    assert cursor.rowcount == 1
                     if not shadow_cleanup_committed.wait(timeout=5):
                         raise TimeoutError("Failed-shadow cleanup did not commit in time.")
 
-            event.listen(lifecycle, "loaded_as_persistent", pause_after_active_projection_load)
+            connection = lifecycle.connection()
+            event.listen(lifecycle, "loaded_as_persistent", record_projection_hydration)
+            event.listen(connection, "after_cursor_execute", pause_after_active_projection_update)
             try:
                 result = transition_matter_lifecycle_status(
                     lifecycle,
@@ -10165,12 +10187,15 @@ def test_matter_disposal_survives_concurrent_failed_shadow_cleanup_on_postgres(
                     ),
                 )
             finally:
-                event.remove(lifecycle, "loaded_as_persistent", pause_after_active_projection_load)
+                event.remove(
+                    connection, "after_cursor_execute", pause_after_active_projection_update,
+                )
+                event.remove(lifecycle, "loaded_as_persistent", record_projection_hydration)
             return str(result.status)
 
     def delete_failed_shadow() -> str:
-        if not active_projection_loaded.wait(timeout=5):
-            raise TimeoutError("Lifecycle writer did not load its active projection.")
+        if not active_projection_updated.wait(timeout=5):
+            raise TimeoutError("Lifecycle writer did not tombstone its active projection.")
         try:
             with Session(pg_engine) as maintenance:
                 maintenance.execute(text("SET LOCAL lock_timeout = '5s'"))
@@ -10202,6 +10227,8 @@ def test_matter_disposal_survives_concurrent_failed_shadow_cleanup_on_postgres(
         assert cleanup.result(timeout=10) == shadow_generation_id
         assert disposal.result(timeout=10) == "disposed"
 
+    assert active_projection_updated.is_set()
+    assert hydrated_projection_ids == []
     with Session(pg_engine) as verify:
         persisted_matter = verify.get(Matter, matter_id)
         persisted_projection = verify.get(PrivateIndexProjection, active_projection_id)
@@ -10227,6 +10254,8 @@ def test_matter_disposal_survives_concurrent_failed_shadow_cleanup_on_postgres(
     assert str(persisted_matter.status) == "disposed"
     assert persisted_matter.is_active is False
     assert persisted_projection is not None and persisted_projection.is_tombstoned
+    assert persisted_projection.content_text == ""
+    assert persisted_projection.embedding_json is None
     assert applied_event is not None and applied_event.affected_projection_count == 1
     assert shadow_projection_count == 0
 

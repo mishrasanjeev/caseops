@@ -1350,12 +1350,10 @@ export default function GuidePage() {
 
                 <Section id="drafting" title="10 · Drafting with citations">
                   <p>
-                    The Drafting Studio produces a first draft from the matter's own
-                    record — parties, stage, documents, focus note — grounded in statutes
-                    and judgments retrieved from the CaseOps corpus and your internal
-                    precedents. Every inline citation resolves to a named authority. Every
-                    fact gap renders as a placeholder the reviewer fills in, not as a
-                    fabricated number.
+                    The Drafting Studio prepares a first draft from available matter
+                    context and retrieved sources. Proposed citations and factual
+                    statements can be wrong or incomplete. Open the cited authorities,
+                    compare them with the draft and verify the facts before use.
                   </p>
                   <Steps
                     items={[
@@ -1369,9 +1367,9 @@ export default function GuidePage() {
                         draft must argue. This is the single most load-bearing field.
                       </>,
                       <>
-                        Press <strong>Generate</strong>. The first pass finishes in 30–90s;
-                        the draft opens with inline citation pills and a grounding panel on
-                        the right.
+                        Press <strong>Generate</strong>. Generation time depends on source
+                        coverage and provider availability. Inspect the proposed citations
+                        and available grounding context when the draft opens.
                       </>,
                       <>
                         Review for: fact placeholders to resolve, citations to verify, and
@@ -1384,11 +1382,11 @@ export default function GuidePage() {
                       </>,
                     ]}
                   />
-                  <Callout tone="warn" title="CaseOps will refuse to invent facts">
-                    Missing facts render as <code>[____]</code> placeholders — FIR number,
-                    dates, amounts, witness names. This is by design. A draft that invents a
-                    fact is a ship-stopper; a draft that openly asks for a fact is normal
-                    first-pass work.
+                  <Callout tone="warn" title="Verify generated facts and citations">
+                    Missing facts may be marked as <code>[____]</code> placeholders.
+                    A refusal or placeholder does not prove that every unsupported fact
+                    was detected. Check FIR numbers, dates, amounts and witness names
+                    against the record; do not use an unsupported statement.
                   </Callout>
                 </Section>
 
@@ -1425,8 +1423,9 @@ export default function GuidePage() {
                       linked sources, and limitation notes where the corpus supports it.
                     </li>
                     <li>
-                      The <strong>source list</strong> — every piece of content in the pack
-                      is traceable back to a matter document or a named authority.
+                      The <strong>source list</strong> shows available references. Some pack
+                      items may have no source reference; check missing links and factual
+                      support against the matter record before use.
                     </li>
                   </ul>
                   <Callout title="Cause-list and tracking sources">
@@ -1764,10 +1763,9 @@ export default function GuidePage() {
                       <strong>quote verbatim</strong> instead of paraphrasing.
                     </li>
                     <li>
-                      <strong>BNSS vs BNS unambiguous.</strong> The structured
-                      reference makes the act explicit, so &quot;Section 483
-                      BNSS&quot; (bail) is never confused with &quot;Section 483
-                      BNS&quot;.
+                      <strong>Explicit Act identity.</strong> Structured references
+                      distinguish BNSS from BNS. Review the Act and subsection before use.
+                      This identity does not guarantee correct attribution in generated text.
                     </li>
                     <li>
                       <strong>Catalog visibility.</strong> An Act page lists every
@@ -1920,8 +1918,9 @@ export default function GuidePage() {
                   </p>
                   <ol className="mt-3 list-decimal space-y-2 pl-6 text-[15px]">
                     <li>
-                      <strong>Rationale.</strong> Two to four sentences, grounded in named
-                      authorities and the matter record.
+                      <strong>Rationale.</strong> A model-proposed explanation. Verify that
+                      available authorities and the matter record support it; citations do
+                      not guarantee that the explanation is correct.
                     </li>
                     <li>
                       <strong>Assumptions.</strong> Facts the system took as given. Wrong
@@ -2120,11 +2119,11 @@ export default function GuidePage() {
                   </ul>
                   <Callout title="Request a security review">
                     Enterprise prospects can request the security one-pager and a live
-                    review from{" "}
-                    <a className="underline" href={`mailto:${siteConfig.contact.sales}`}>
-                      {siteConfig.contact.sales}
+                    review through{" "}
+                    <a className="underline" href="/demo/guide">
+                      a saved conversation request
                     </a>
-                    . DPAs and sub-processor lists are available on signature.
+                    . Availability, documentation and any agreement are confirmed separately.
                   </Callout>
                 </Section>
 
@@ -2142,8 +2141,9 @@ export default function GuidePage() {
                     Citations in my draft look wrong
                   </h3>
                   <p>
-                    Use the grounding panel on the right side of the Drafting Studio —
-                    every inline citation has a source. If an authority is wrong for the
+                    Use the grounding panel on the right side of the Drafting Studio to
+                    inspect available source references. Check each citation against its
+                    source; generated text may contain errors. If an authority is wrong for the
                     point, open it, remove it from the shortlist, and regenerate. The
                     reviewer findings block at the foot of the draft also flags likely
                     mismatches.
@@ -2387,9 +2387,9 @@ export default function GuidePage() {
                     <a className="underline" href="mailto:support@caseops.ai">
                       support@caseops.ai
                     </a>
-                    . For security reviews and enterprise trials, write to{" "}
-                    <a className="underline" href={`mailto:${siteConfig.contact.sales}`}>
-                      {siteConfig.contact.sales}
+                    . Email contact is not a saved demo request. For security reviews and possible pilots, use{" "}
+                    <a className="underline" href="/demo/guide">
+                      the conversation request form
                     </a>
                     . This guide is versioned; the top of the page shows when it was last
                     updated.

@@ -27,7 +27,6 @@ import "@fontsource/jetbrains-mono/500.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { ProductOwnershipNotice } from "@/components/legal/ProductOwnershipNotice";
 
 import "./globals.css";
@@ -193,7 +192,6 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         />
         {children}
         <ProductOwnershipNotice />
-        <GoogleAnalytics nonce={nonce} />
       </body>
     </html>
   );

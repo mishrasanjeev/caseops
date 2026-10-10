@@ -17,7 +17,7 @@ export function FAQ() {
         <SectionHeader
           eyebrow="FAQ"
           title="Answers before you book a call."
-          description={`If we missed your question, write to ${siteConfig.contact.email} and a human will respond within a working day.`}
+          description={`For questions not covered here, contact ${siteConfig.contact.email}. Response timing depends on availability.`}
         />
 
         <ul className="mx-auto mt-14 max-w-3xl divide-y divide-[var(--color-line)] rounded-2xl border border-[var(--color-line)] bg-white">

@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.core.problem_details import ProblemHTTPException
-from caseops_api.db.models import BillingEnrollment, PlatformAdminMembership
+from caseops_api.db.models import BillingAdminNote, BillingEnrollment, PlatformAdminMembership
 from caseops_api.schemas.forum_catalog import (
     ForumAliasVerificationStatus,
     ForumCatalogAliasCreateRequest,
@@ -61,6 +62,7 @@ from caseops_api.schemas.saas_billing import (
     PlatformReasonRequest,
     PlatformSubscriptionMutation,
 )
+from caseops_api.services.billing_demo import ADMISSION_CONTRACT, deliver_demo_notification
 from caseops_api.services.connector_health import list_platform_connector_health
 from caseops_api.services.forum_catalog import (
     ForumCatalogAliasError,
@@ -360,15 +362,104 @@ def list_platform_enrollments(context: PlatformContext, session: DbSession) -> d
                 "company_id": row.company_id,
                 "contact_name": row.contact_name,
                 "contact_email": row.contact_email,
+                "contact_mobile": row.contact_mobile,
+                "notes": row.notes,
                 "company_name": row.company_name,
                 "segment": row.segment,
                 "selected_plan": row.selected_plan,
                 "status": row.status,
                 "created_at": row.created_at,
+                "source": row.source,
+                "attribution": row.utm_json,
+                "demo_notification": {
+                    key: value
+                    for key, value in (row.status_timestamps_json or {})
+                    .get("demo_admission", {})
+                    .items()
+                    if key
+                    in {
+                        "notification_status",
+                        "attempts",
+                        "last_error_code",
+                        "next_attempt_at",
+                        "expires_at",
+                    }
+                },
             }
             for row in rows
         ]
     }
+
+
+@router.post("/enrollments/{enrollment_id}/retry-notification")
+def retry_enrollment_notification(
+    enrollment_id: str,
+    payload: PlatformReasonRequest,
+    route_context: PlatformBillingManager,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
+) -> dict[str, str]:
+    row = session.scalar(
+        select(BillingEnrollment).where(BillingEnrollment.id == enrollment_id).with_for_update()
+    )
+    state = dict((row.status_timestamps_json or {}).get("demo_admission", {})) if row else {}
+    if not row or not state:
+        raise HTTPException(404, "Demo request not found.")
+    if state["notification_status"] not in {"retry_pending", "exhausted"}:
+        raise HTTPException(409, "This notification is already sent, queued, or being delivered.")
+    state.update(
+        notification_status="pending", attempts=0, next_attempt_at=datetime.now(UTC).isoformat()
+    )
+    row.status_timestamps_json = {**row.status_timestamps_json, "demo_admission": state}
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.demo_notification.retry_requested",
+        target_type="billing_enrollment",
+        target_id=enrollment_id,
+        reason=payload.reason,
+    )
+    session.commit()
+    background_tasks.add_task(deliver_demo_notification, enrollment_id)
+    return {"status": "queued"}
+
+
+@router.delete("/enrollments/{enrollment_id}")
+def delete_demo_enrollment(
+    enrollment_id: str,
+    payload: PlatformReasonRequest,
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> dict[str, str]:
+    row = session.scalar(
+        select(BillingEnrollment).where(BillingEnrollment.id == enrollment_id).with_for_update()
+    )
+    if (
+        not row
+        or row.company_id is not None
+        or row.status != "demo_requested"
+        or (row.status_timestamps_json or {}).get("demo_admission", {}).get("contract_version")
+        != ADMISSION_CONTRACT
+        or session.scalar(
+            select(BillingAdminNote.id)
+            .where(BillingAdminNote.enrollment_id == enrollment_id)
+            .limit(1)
+        )
+    ):
+        raise HTTPException(404, "Unconverted demo request not found.")
+    session.delete(row)
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.demo_enrollment.deleted",
+        target_type="billing_enrollment",
+        target_id=enrollment_id,
+        reason=payload.reason,
+    )
+    session.commit()
+    return {"status": "deleted"}
 
 
 @router.get("/integrations", response_model=ConnectorRegistryResponse)

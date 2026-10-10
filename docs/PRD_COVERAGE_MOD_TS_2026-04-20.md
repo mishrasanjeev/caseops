@@ -1,5 +1,98 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 10 Summary Gate Repair
+
+The summary gate repair on `a8979a41` has complete scoped local proof:
+66 Python passes/198 phases and 42 Node 22 cleanup passes, exact native
+inventories and mandatory CI selection. Original assertions/workers/budgets
+remain intact. Full fresh Docker/browser and live coverage remain uncertified.
+[Evidence](bugfix-production-acceptance-and-security-2026-10-09.md).
+
+## October 10 E489 Release Checkpoint
+
+Existing document/authentication, Matter/IP, Calendar and public-acquisition
+coverage is not production certified. Frozen Docker PostgreSQL passes all
+2,235 cases/6,705 phases; 252 first-partition browser cases pass, one skips,
+one summary times out, and 254 identities remain unexecuted. Full hosted CI
+and zero actual PR SARIF results do not certify main or serving b1. All
+replacement/live gates and inherited owner-review dependencies remain open;
+[exact evidence](bugfix-production-acceptance-and-security-2026-10-09.md).
+
+## October 10 Participant-Fence Coverage
+
+Adjacent delivery-tenant activity baseline reproduces 30 product failures with
+12 active controls passing (42 identities/126 phases across both databases).
+Candidate `e3f16940` Company replacement passes 260 combined cases/780 phases;
+external claim/disable winner races now pass in the complete 115-case/345-phase
+native replacement with unchanged 394/400 and 7,114/7,600 SQL limits. A separate
+16-case worker baseline reproduces four late-grant failures; `20f3f72b` restores
+the final predicate for actorless delivery. Complete replacement on `e1a8182c`
+passes all 128 cases/384 phases in eight files, zero skips/errors, exact JUnit
+and unchanged source. Complete Docker/CI and the discovered Calendar browser
+still need execution on the exact release; earlier passes are checkpoints.
+
+US-001/M02/M03/M08/M13/M14/UJ36/UJ61 are still partial on `b1d3fb23`.
+Combined `ea625cac` passes 75 complete API cases/225 phases and all 1,234
+frontend cases in 197 files with exact native inventories and no skips;
+fresh web build passes. Native participant/finalizer replay subsequently
+passes 102 cases, but all-SQL accounting then reproduces 17,621 statements
+against the unchanged 7,600 budget for 500 recipients. Shared live batch policy
+`bcde1467` passes 107 dual-database cases/321 phases with one SQL per batch;
+the integrated fanout now passes the unchanged complete budget: 394/400 SQL
+statements for 20 recipients and 7,114/7,600 for 500, all delivered. Separate
+complete Main replays pass 69 adjacent-policy, 26 dual-database notification and
+42 expanded recipient/correlation/nested-query cases. Automatic Calendar
+candidate admission's wrong policy-call signature has 56 SQLite/PostgreSQL
+replacement passes; this is local J08/M08/US-023 coverage, not live OAuth proof.
+Final scoped native race replay passes 108 identities/324 phases with exact
+JUnit, source identity and clean owned-database teardown. Complete combined
+backend integration passes 218 cases/654 phases in 12 files, zero skips.
+These checkpoints do not certify full Docker, final CI/security, canonical
+main or production. Preserve the prior failed Windows/SQL evidence and replay
+the final source. Detailed proof: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+## October 10 Integrated Follow-Up Coverage
+
+SEC-031 and release verification remain partial/NO-GO: incremental browser
+receipts survive real process termination while missing completion stays
+fail-closed. Complete two-file local proof is 139 passes/417 phases, including
+27 privacy-safe reporter controls. The later 174-pass run overlaps formatting
+and requires stable replay; final native browser/Docker/main/live proof remains
+pending. Earlier acceptance does not certify this changed reporter.
+
+Stable replacement completes 180 passes/540 phases and 32 reporter controls.
+Actual installed browser-free Playwright independently validates six cases,
+including two unverified skips; a failed global setup stays incomplete. The
+public adapter's early-error delivery limit remains explicit, not bypassed
+with a private protocol. Final release/browser proof is still pending.
+
+US-001/M02/M03/M08/M13/M14/UJ36/UJ61 and J19/M21/US-063/SEC-031 remain
+partial on serving `b1d3fb23`. Integrated `e0004687` adds complete scoped
+257-case API, 1,225-case frontend and 336-case report/deploy proof (335 passed,
+one explicit POSIX-only Windows skip). This is not final Docker or production
+acceptance. Purpose-only edge identity and exact privacy-safe native evidence
+retain no-paid/auth/lifecycle fences; all required canonical release and live
+gates remain open. Evidence: `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+## October 10 Complete Local Candidate, No Production Closure
+
+Frozen `99297e17` passes 1992 PostgreSQL tests plus 495 browser cases, with
+eight unchanged explicit skips. Exact production replay is still missing;
+US-001/M02/M03/M08/M13/M14/UJ36/UJ61 remain partial on serving `b1d3fb23`.
+J19/M21/US-063/SEC-031 follow-up contracts include prototype-name rejection,
+trusted throttle provenance, recognized admin guards and full privacy-safe
+native runtime evidence. PR #528 is draft/NO-GO until final repaired-head gates.
+See `docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
+## October 9 Exact-Serving Acceptance Follow-Up
+
+PRs #525/#526 serve as `b1d3fb23`; the five failed production journeys in
+`37909107955` keep US-001, M02/M03/M08/M13/M14 and UJ36/UJ61 partial.
+J19/M21/US-063 includes existing #513/#515/#521 and PR #522, not completed
+conversion or Google indexing claims. Storage and dependency repairs require
+fresh main CodeQL findings plus full runtime/Docker acceptance. Evidence:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 ## October 9 Custom Cursor Follow-Up
 
 UJ-29/PAT-01 (M02/M08/M13/M14) remains partial, not deployed. The complete
@@ -662,3 +755,17 @@ Matter dates and preserves existing history/source provenance (`BUG-017`,
 links, unverified multiple-candidate selection, `BUG-014` Court Sync Run Sync,
 full Calendar/Today/Cause List acceptance, and exact-release production proof
 remain open; no paid automated provider probe is authorized.
+## October 10 Public-Claims Boundary
+
+J19/M21/US-063, FT-094..096/NFT-023/SEC-031: release-owned
+public-pages adds 23 public-content +16 nonmutating SEO identities +1 historical
+FAQ expansion/collapse case (40 total) with exact
+native reconciliation. Browser limitations cover solo, firm and guide safety
+copy. Fresh release and live evidence are pending, not complete coverage.
+
+Shared homepage/FAQ, GC and guide pack/recommendation claims are included in
+25 source checks. Existing read-only browser cases now open the actual drafting
+tab and safety FAQ. The earlier 39-case pass did not exercise the separate
+historical FAQ interaction. Frozen `c7dfdc5c` standard Docker/hosted CI catches
+its stale copy assertion; the updated qualified-text and accessible collapse
+checks need fresh local and live execution. No live execution claimed.

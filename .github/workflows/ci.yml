@@ -186,7 +186,7 @@ jobs:
     name: API (ruff + pytest)
     runs-on: ubuntu-latest
     needs: [api-ruff, api-test-shards]
-    if: always()
+    if: always() && !cancelled()
     timeout-minutes: 15
     steps:
       - name: Fail if API prerequisites failed
@@ -359,7 +359,7 @@ jobs:
     name: Postgres + pgvector validation
     runs-on: ubuntu-latest
     needs: [postgres-validation-shards]
-    if: always()
+    if: always() && !cancelled()
     timeout-minutes: 5
     steps:
       - name: Require every PostgreSQL shard
@@ -376,7 +376,7 @@ jobs:
           merge-multiple: true
       - name: Reconcile complete PostgreSQL acceptance
         working-directory: apps/api
-        run: uv run python -m tests.postgres_sharding postgres-evidence --total 4
+        run: uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence --total 4
 
   web:
     name: Web (typecheck + vitest + build)
@@ -395,6 +395,9 @@ jobs:
 
       - name: Functional QA runner security tests
         run: npm run test:functional-qa-runner
+
+      - name: Docker summary fixture and cleanup unit regressions
+        run: node --experimental-strip-types --test scripts/summary-fixture-support.test.mjs
 
       - name: Web typecheck
         run: npm run typecheck:web
@@ -510,6 +513,7 @@ jobs:
         run: npm run build:web
 
       - name: Playwright (app config)
+        id: app-playwright
         # playwright.app.config.ts probes for Windows Edge/Chrome paths on
         # the developer's workstation. On the Ubuntu runner those paths
         # don't exist, so `launchOptions` stays empty and Playwright uses
@@ -520,7 +524,20 @@ jobs:
         # ERR_ABORTED and produces a misleading cascade of locator errors.
         env:
           CASEOPS_WEB_BASE_URL: http://127.0.0.1:3100
-        run: npm run test:e2e:app
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ github.sha }}
+          CASEOPS_RELEASE_SHA: ${{ github.sha }}
+        run: >-
+          uv run --project apps/api --python 3.13 python scripts/prod_playwright_evidence.py
+          run --invocation ci-app -- --config=playwright.app.config.ts
+          --workers=1 --retries=0 --reporter=list --output=test-results/app
+
+      - name: Reconcile app native Playwright evidence
+        if: always() && steps.app-playwright.outcome != 'skipped'
+        env:
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ github.sha }}
+        run: >-
+          uv run --project apps/api --python 3.13 python scripts/prod_playwright_evidence.py
+          validate --required ci-app
 
       # MUST be always(). A job killed by timeout-minutes IS cancelled, so both
       # `failure()` and `!cancelled()` skip this step - verified on run
@@ -537,6 +554,7 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            test-results/prod-native-evidence/ci-app/
           retention-days: 7
 
   # ---------------------------------------------------------------------------

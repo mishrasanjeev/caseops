@@ -12,6 +12,10 @@ describe("PricingPage", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     mockBillingFetch(fetchMock);
+    const catalogFetch = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((input, init) => String(input) === "/api/demo-request"
+      ? Promise.resolve(Response.json({ accepted: true, id: JSON.parse(String(init?.body)).idempotency_key, status: "demo_requested" }, { status: 202 }))
+      : catalogFetch(input, init));
     originalFetch = globalThis.fetch;
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
   });
@@ -34,28 +38,28 @@ describe("PricingPage", () => {
     expect((await screen.findAllByText("GC Professional")).length).toBeGreaterThan(0);
     expect(screen.getByText(/per year \+ GST/i)).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText("Name"), "Founder One");
-    await user.type(screen.getByLabelText("Email"), "founder@example.com");
-    await user.type(screen.getByLabelText("Company"), "Acme Law");
-    await user.selectOptions(screen.getByLabelText("Plan"), "firm_growth");
-    await user.click(screen.getByRole("button", { name: "Request pricing" }));
+    await user.type(screen.getByLabelText("Full name"), "Founder One");
+    await user.type(screen.getByLabelText("Work email"), "founder@example.com");
+    await user.type(screen.getByLabelText("Firm / company (optional)"), "Acme Law");
+    await user.selectOptions(screen.getByLabelText("Role"), "general_counsel");
+    await user.click(screen.getByRole("button", { name: "Request a conversation" }));
 
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(([input]) =>
-          String(input).includes("/api/billing/enrollments/demo-request"),
+          String(input) === "/api/demo-request",
         ),
       ).toBe(true),
     );
     const [, init] = fetchMock.mock.calls.find(([input]) =>
-      String(input).includes("/api/billing/enrollments/demo-request"),
+      String(input) === "/api/demo-request",
     )!;
     expect(JSON.parse(String(init.body))).toMatchObject({
       contact_email: "founder@example.com",
       company_name: "Acme Law",
-      selected_plan: "firm_growth",
+      selected_plan: null,
       segment: "gc",
     });
-    expect(screen.getByRole("status")).toHaveTextContent(/request received/i);
+    expect(screen.getByRole("status")).toHaveTextContent(/request saved/i);
   });
 });

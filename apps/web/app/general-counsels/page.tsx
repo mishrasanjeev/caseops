@@ -77,7 +77,7 @@ export default function GeneralCounselsPage() {
             <div className="flex flex-col gap-3 lg:items-end">
               <PersonaSwitch active="gcs" />
               <a
-                href={`mailto:${siteConfig.contact.founder}?subject=CaseOps%20for%20our%20legal%20team`}
+                href="/demo/general-counsels"
                 className="inline-flex items-center rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-[var(--color-ink)] transition-colors hover:bg-white/85"
               >
                 Talk to the founder
@@ -91,7 +91,7 @@ export default function GeneralCounselsPage() {
           index="02"
           tone="light"
           eyebrow="What's broken today"
-          title="Five tools, none of them agreeing."
+          title="A shared record for legal-team coordination."
           description="A GC stitches a matter tracker, a contract repo, an outside-counsel spreadsheet, a compliance calendar and a board deck. Nothing rolls up. The quarterly board answer is improvised."
         >
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -130,18 +130,18 @@ export default function GeneralCounselsPage() {
           tone="light"
           eyebrow="The AI angle"
           title="Explainable answers the board will accept."
-          description="AI compresses 80 matters and 200 contracts into 'here is what is open, here is who said what, here is what is due next quarter' - with every number traceable to a source. Litigation intelligence stays source-backed, reviewable, and explicitly non-advisory."
+          description="Review supported matter and contract workflows, records and dates in context. AI output depends on permitted sources, coverage and plan limits; it requires human verification and is not legal advice."
         >
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <PitchCard
               icon={FileSearch}
               title="Contract → obligation — shipped"
-              body="LLM extracts parties, covenants, payment terms, consent clauses, audit rights today. Every duty becomes a task; due dates pulled where the contract states them, placeholders where it doesn't."
+              body="Review extracted parties, covenants, payment terms, consent clauses and audit rights, plus any derived tasks or dates, against the contract. Extraction may omit duties or misread terms; check missing and uncertain fields before relying on them."
             />
             <PitchCard
               icon={Activity}
               title="Portfolio rollups"
-              body="AI summarises 80 matter records into a board-ready extract. Every line is traceable to the underlying matter and audit event."
+              body="Review available matter summaries and portfolio records together. Per-line provenance is not guaranteed; verify generated statements against their matter records and supporting documents before board use."
             />
             <PitchCard
               icon={BadgeCheck}
@@ -370,7 +370,7 @@ export default function GeneralCounselsPage() {
             <PitchCard
               icon={Users}
               title="Tenant-private by default"
-              body="Your matter documents never leave your workspace for training. Separate from the public authority corpus."
+              body="Tenant-private documents are access-controlled separately from the public authority corpus. Review the configured model providers and data-processing terms before sending confidential material to AI workflows."
             />
             <PitchCard
               icon={FileSearch}
@@ -386,7 +386,7 @@ export default function GeneralCounselsPage() {
           tone="ink"
           eyebrow="Contact"
           title="A 45-minute walkthrough, shaped to your sector."
-          description="We set up a sandbox with a sample portfolio from your industry — banking, SaaS, pharma, infrastructure — and walk through outside-counsel spend, obligations and the audit export with your team."
+          description="Discuss the supported workflows for your team. Any walkthrough, sample workspace, security review and pilot terms require separate confirmation."
           className="border-b-0"
         >
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
@@ -395,14 +395,14 @@ export default function GeneralCounselsPage() {
                 Direct contact
               </div>
               <a
-                href={`mailto:${siteConfig.contact.founder}?subject=CaseOps%20for%20our%20legal%20team`}
+                href="/demo/general-counsels"
                 className="mt-4 inline-block font-display text-[2.25rem] font-normal leading-none tracking-tight text-white hover:text-white/85 md:text-[3rem]"
               >
-                {siteConfig.contact.founder}
+                Request a conversation
               </a>
               <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/75">
-                Write directly for a walkthrough, a sector-specific sandbox or a security
-                and DPA conversation. Founder-led until we are larger.
+                Request a walkthrough or a security and DPA conversation. Availability,
+                workspace scope and commercial terms are confirmed separately.
               </p>
             </div>
             <PersonaSwitch active="gcs" />

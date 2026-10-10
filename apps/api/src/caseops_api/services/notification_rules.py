@@ -4,16 +4,15 @@ from collections.abc import Iterable
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
-    Company,
     CompanyMembership,
     Matter,
+    MembershipRole,
     NotificationDeliveryChannel,
     NotificationDeliveryStatus,
     NotificationRule,
-    NotificationRuleEventType,
     NotificationRuleScopeType,
     User,
 )
@@ -23,9 +22,12 @@ from caseops_api.schemas.calendar import (
     NotificationRuleRecord,
     NotificationRuleUpdateRequest,
 )
+from caseops_api.services.assignment_memberships import lock_company_memberships_for_assignment
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.matter_access import assert_access, can_access
+from caseops_api.services.compliance_participants import captured_order_notification_recipients
+from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
+from caseops_api.services.matter_write_fence import lock_matter_private_authority
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
     process_notification_delivery_intent,
@@ -33,6 +35,23 @@ from caseops_api.services.notification_delivery import (
 from caseops_api.services.session_context import SessionContext
 
 _CHANNELS = {"in_app", "email", "sms", "whatsapp"}
+
+
+def _lock_rule_authority(session: Session, context: SessionContext) -> None:
+    from caseops_api.services.identity import get_session_context
+
+    # Policy writers share the capture admission, including new-rule phantoms.
+    lock_matter_private_authority(session, company_id=context.company.id)
+    members = lock_company_memberships_for_assignment(
+        session, company_id=context.company.id, membership_ids=[context.membership.id],
+    )
+    fresh = get_session_context(
+        session, context.membership.id, token_issued_at=context.token_issued_at,
+    )
+    actor = members.get(context.membership.id)
+    if actor is None or actor.role not in (MembershipRole.OWNER, MembershipRole.ADMIN):
+        raise HTTPException(403, detail="Managing notification rules requires an admin or owner.")
+    context.company, context.membership, context.user = fresh.company, actor, actor.user
 
 
 def _channels(value: Iterable[str] | None) -> list[str]:
@@ -194,6 +213,7 @@ def create_notification_rule(
     context: SessionContext,
     payload: NotificationRuleCreateRequest,
 ) -> NotificationRuleRecord:
+    _lock_rule_authority(session, context)
     _validate_scope(
         session,
         context=context,
@@ -238,6 +258,7 @@ def update_notification_rule(
     rule_id: str,
     payload: NotificationRuleUpdateRequest,
 ) -> NotificationRuleRecord:
+    _lock_rule_authority(session, context)
     rule = session.scalar(
         select(NotificationRule).where(
             NotificationRule.id == rule_id,
@@ -311,6 +332,7 @@ def delete_notification_rule(
     context: SessionContext,
     rule_id: str,
 ) -> None:
+    _lock_rule_authority(session, context)
     rule = session.scalar(
         select(NotificationRule).where(
             NotificationRule.id == rule_id,
@@ -340,66 +362,6 @@ def delete_notification_rule(
     session.commit()
 
 
-def _active_memberships(session: Session, company_id: str) -> list[CompanyMembership]:
-    return list(
-        session.scalars(
-            select(CompanyMembership)
-            .options(joinedload(CompanyMembership.user), joinedload(CompanyMembership.company))
-            .join(User, User.id == CompanyMembership.user_id)
-            .where(
-                CompanyMembership.company_id == company_id,
-                CompanyMembership.is_active.is_(True),
-                User.is_active.is_(True),
-            )
-        )
-    )
-
-
-def _recipient_context(
-    *,
-    company: Company,
-    membership: CompanyMembership,
-) -> SessionContext:
-    return SessionContext(company=company, user=membership.user, membership=membership)
-
-
-def _eligible_recipients(
-    session: Session,
-    *,
-    actor_context: SessionContext,
-    rule: NotificationRule,
-    matter: Matter,
-) -> list[CompanyMembership]:
-    if rule.scope_type == NotificationRuleScopeType.USER:
-        membership = session.scalar(
-            select(CompanyMembership)
-            .options(joinedload(CompanyMembership.user), joinedload(CompanyMembership.company))
-            .join(User, User.id == CompanyMembership.user_id)
-            .where(
-                CompanyMembership.id == rule.scope_id,
-                CompanyMembership.company_id == actor_context.company.id,
-                CompanyMembership.is_active.is_(True),
-                User.is_active.is_(True),
-            )
-        )
-        candidates = [membership] if membership is not None else []
-    else:
-        candidates = _active_memberships(session, actor_context.company.id)
-
-    recipients: list[CompanyMembership] = []
-    for membership in candidates:
-        assert membership is not None
-        # Owners may see all matters via the access helper; other roles remain
-        # bound by restricted access, team scoping, grants, and ethical walls.
-        recipient_context = _recipient_context(
-            company=actor_context.company,
-            membership=membership,
-        )
-        if can_access(session, context=recipient_context, matter=matter):
-            recipients.append(membership)
-    return recipients
-
-
 def create_new_order_uploaded_notifications(
     session: Session,
     *,
@@ -416,27 +378,13 @@ def create_new_order_uploaded_notifications(
     direct-send path is never called here.
     """
 
-    rules = list(
-        session.scalars(
-            select(NotificationRule).where(
-                NotificationRule.company_id == context.company.id,
-                NotificationRule.enabled.is_(True),
-                NotificationRule.event_type == NotificationRuleEventType.NEW_ORDER_UPLOADED,
-            )
-        )
+    selections = captured_order_notification_recipients(
+        session, matter=matter, actor_membership_id=context.membership.id,
     )
     created = 0
     seen: set[tuple[str, str, str]] = set()
-    for rule in rules:
-        if rule.scope_type == NotificationRuleScopeType.MATTER and rule.scope_id != matter.id:
-            continue
-        channels = _channels(rule.channels_json)
-        recipients = _eligible_recipients(
-            session,
-            actor_context=context,
-            rule=rule,
-            matter=matter,
-        )
+    for rule, recipients in selections:
+        channels = _channels(rule.channels)
         for membership in recipients:
             for channel in channels:
                 key = (membership.id, rule.event_type, channel)

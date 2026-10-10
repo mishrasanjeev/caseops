@@ -74,6 +74,7 @@ from caseops_api.schemas.saas_billing import (
     TrialStartRequest,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.billing_demo import admit_demo
 from caseops_api.services.csv_security import csv_bytes
 from caseops_api.services.pine_labs import (
     PineLabsGatewayClient,
@@ -2121,21 +2122,7 @@ def reactivate_subscription(
 
 
 def create_demo_request(session: Session, payload: DemoRequest) -> DemoRequestResponse:
-    row = BillingEnrollment(
-        contact_name=payload.contact_name,
-        contact_email=str(payload.contact_email).lower(),
-        contact_mobile=payload.contact_mobile,
-        company_name=payload.company_name,
-        segment=payload.segment,
-        selected_plan=payload.selected_plan,
-        source=payload.source,
-        notes=payload.notes,
-        status="demo_requested",
-        status_timestamps_json={"demo_requested_at": _now().isoformat()},
-    )
-    session.add(row)
-    session.commit()
-    return DemoRequestResponse(id=row.id, status=row.status)
+    return admit_demo(session, payload)
 
 
 def assert_trial_start_allowed(session: Session, payload: TrialStartRequest) -> None:

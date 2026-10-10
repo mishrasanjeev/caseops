@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev:infra": "docker compose up postgres valkey",
-    "dev:api": "uv --directory apps/api run uvicorn caseops_api.main:app --reload --app-dir src",
+    "dev:api": "uv --directory apps/api run uvicorn caseops_api.main:app --no-proxy-headers --reload --app-dir src",
     "dev:web": "npm run dev --workspace @caseops/web",
     "test:api": "uv --directory apps/api run pytest",
     "lint:api": "uv --directory apps/api run ruff check src tests",

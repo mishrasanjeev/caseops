@@ -1,5 +1,14 @@
 # Strict Repository Quality Audit - 2026-07-10
 
+## October 9 Exact-Serving And Security Follow-Up
+
+Serving `b1d3fb23` passes guarded deployment, not complete acceptance:
+`37909107955` has five failed required identities. Preserve its sealed native
+reports and reconcile every replacement phase/inventory. Initial GitHub scope
+is four issues, two PRs and 28 findings; green CodeQL is not zero alerts.
+Permanent regression scope:
+`docs/bugfix-production-acceptance-and-security-2026-10-09.md`.
+
 Verdict: **NO-GO** for a release-grade sign-off.
 
 The audited code now contains targeted fixes for the highest-confidence

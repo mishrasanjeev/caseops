@@ -13,6 +13,7 @@ services:
     environment:
       CASEOPS_RELEASE_SHA: ${CASEOPS_RELEASE_SHA:-unavailable}
       NEXT_PUBLIC_API_BASE_URL: ${CASEOPS_DOCKER_PUBLIC_API_URL:-http://localhost:8000}
+      CASEOPS_API_BASE_URL: http://api:8000
     depends_on:
       api:
         condition: service_healthy
@@ -34,7 +35,7 @@ services:
     # Acceptance selects a test-only entrypoint from a read-only bind mount.
     # The normal app entrypoint and production image remain unchanged.
     command:
-      ["sh", "-c", "uvicorn ${CASEOPS_DOCKER_API_APP:-caseops_api.main:app} --host 0.0.0.0 --port 8000 --app-dir ${CASEOPS_DOCKER_API_APP_DIR:-src}"]
+      ["sh", "-c", "uvicorn ${CASEOPS_DOCKER_API_APP:-caseops_api.main:app} --no-proxy-headers --host 0.0.0.0 --port 8000 --app-dir ${CASEOPS_DOCKER_API_APP_DIR:-src}"]
     build:
       context: ./apps/api
       args:

@@ -16,6 +16,8 @@ import {
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, repoRoot, webBaseUrl } from "./support/env";
+import { reconcileSummaryBatch, restoreSummaryWorker, runSummaryCleanup, type SummaryCleanupStep,
+  type SummaryIdentity, type SummarySeed } from "./support/summary-fixture-support";
 
 const fixtureModule = "caseops_api.scripts.docker_acceptance_summary";
 const sourceText = "Synthetic order dated 10 September 2026. File the witness list before the next hearing.";
@@ -23,7 +25,7 @@ const fallback = "Provider fixture: review the order and prepare the witness lis
 const generated = "The order directs filing of a witness list before the next hearing.";
 const hash = (value: Buffer | string) => createHash("sha256").update(value).digest("hex");
 type Scenario = "positive" | "marked" | "persistent_qa";
-type Seed = { actor_id: string; matter_id: string; bookmark_id: string; update_id: string };
+type Seed = SummarySeed;
 type Inspection = {
   summary: string; model_run_id: string | null; source_sha256: string;
   ai_summary: { concise_summary: string; summary_source: string };
@@ -93,8 +95,8 @@ test("dated async summary: visible fallback, release-image worker, retained sour
   const record = (phase: string, detail: unknown) => {
     fs.appendFileSync(journal, JSON.stringify({ phase, at: new Date().toISOString(), detail }) + "\n");
   };
-  const docker = (args: string[], timeout = 60_000) => {
-    const result = spawnSync("docker", args, { encoding: "utf8", timeout, maxBuffer: 8 * 1024 * 1024 });
+  const docker = (args: string[], timeout = 60_000, input?: string) => {
+    const result = spawnSync("docker", args, { encoding: "utf8", timeout, input, maxBuffer: 8 * 1024 * 1024 });
     if (result.error || result.status !== 0) {
       record("command_failed", { error: result.error?.message, status: result.status,
         stdout: result.stdout, stderr: result.stderr });
@@ -137,6 +139,15 @@ test("dated async summary: visible fallback, release-image worker, retained sour
   const fixture = <T,>(command: string, args: string[] = []): T => JSON.parse(docker([
     ...compose, "exec", "-T", "api", "python", "-m", fixtureModule, command, ...args,
   ]));
+  const fixtureBatch = (command: "seed-inspect-many" | "inspect-many", identities: (SummaryIdentity | Seed)[]) => {
+    const input = JSON.stringify({ items: identities });
+    expect(Buffer.byteLength(input)).toBeLessThanOrEqual(16_384);
+    const response: unknown = JSON.parse(docker([
+      ...compose, "exec", "-T", "api", "python", "-m", fixtureModule, command,
+    ], 60_000, input));
+    record("fixture_batch", { command, identities, response });
+    return reconcileSummaryBatch(identities, response);
+  };
   const contract = fixture<{ hashes: Record<string, string>; source_sha256: string; cassette_key: string }>("contract");
   expect(contract.cassette_key).toBe("fb977e47e7dde573278d134ae98d89580cb2b6dbbcb847ac406d13d6600e20db");
   expect(contract.source_sha256).toBe(hash(sourceText));
@@ -148,26 +159,18 @@ test("dated async summary: visible fallback, release-image worker, retained sour
     )));
   }
   const apiContexts: APIRequestContext[] = [];
-  const controlApi = await playwrightRequest.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
-  apiContexts.push(controlApi);
-  const build = await controlApi.get(`${apiBaseUrl}/api/build`, { headers: noPaidProviderHeaders });
-  expect(build.ok()).toBe(true);
-  expect((await build.json()).release_sha).toBe(process.env.CASEOPS_RELEASE_SHA);
-  record("image_verified", { api: api.Image, worker: worker.Image, contract });
 
   const contexts: BrowserContext[] = [];
   const ownedRunners: string[] = [];
   const cases: { scenario: Scenario; slug: string; seed: Seed; page: Page;
     api: APIRequestContext; headers: Record<string, string>; lifecycle: unknown; before: Inspection }[] = [];
+  const prepared: { identity: SummaryIdentity; slug: string; email: string; password: string;
+    api: APIRequestContext; headers: Record<string, string>; lifecycle: unknown }[] = [];
   const missingMarkers: string[] = [];
   const paidActions: string[] = [];
   const override = info.outputPath("summary-worker.compose.json");
-  fs.writeFileSync(override, JSON.stringify({ services: { worker: {
-    cpus: 1, mem_limit: "2g", memswap_limit: "2g",
-  } } }));
-  const inspect = (seed: Seed) => fixture<Inspection>("inspect", [
-    "--actor-id", seed.actor_id, "--update-id", seed.update_id,
-  ]);
+  const inspectMany = () => fixtureBatch("inspect-many", cases.map(c => c.seed))
+    .map(row => row.inspection as Inspection);
   const lifecycle = async (api: APIRequestContext, matterId: string, headers: Record<string, string>) => {
     const response = await api.get(`${apiBaseUrl}/api/matters/${matterId}`, { headers });
     expect(response.ok(), await response.text()).toBe(true);
@@ -179,7 +182,17 @@ test("dated async summary: visible fallback, release-image worker, retained sour
     await page.getByTestId(`case-tracking-bookmark-${seed.bookmark_id}`).getByRole("button").first().click();
     return page.getByTestId(`case-tracking-update-${seed.update_id}`);
   };
+  const originalErrors: unknown[] = [];
   try {
+    const controlApi = await playwrightRequest.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
+    apiContexts.push(controlApi);
+    const build = await controlApi.get(`${apiBaseUrl}/api/build`, { headers: noPaidProviderHeaders });
+    expect(build.ok()).toBe(true);
+    expect((await build.json()).release_sha).toBe(process.env.CASEOPS_RELEASE_SHA);
+    record("image_verified", { api: api.Image, worker: worker.Image, contract });
+    fs.writeFileSync(override, JSON.stringify({ services: { worker: {
+      cpus: 1, mem_limit: "2g", memswap_limit: "2g",
+    } } }));
     if (worker.State.Running) docker([...compose, "stop", "--timeout", "30", "worker"]);
     expect(service("worker").State.Running).toBe(false);
     record("worker_paused", { was_running: worker.State.Running });
@@ -213,9 +226,15 @@ test("dated async summary: visible fallback, release-image worker, retained sour
       expect(originalLifecycle.status).toBe("intake");
       expect(originalLifecycle.is_active).toBe(true);
       expect(typeof originalLifecycle.lifecycle_version).toBe("number");
-      const seed = fixture<Seed>("seed", ["--actor-id", identity.membership.id,
-        "--matter-id", matterId, "--scenario", scenario]);
-      const before = inspect(seed);
+      prepared.push({ identity: { company_id: identity.company.id, actor_id: identity.membership.id,
+        matter_id: matterId, scenario }, slug, email, password, api: tenantApi, headers, lifecycle: originalLifecycle });
+    }
+    const seeded = fixtureBatch("seed-inspect-many", prepared.map(current => current.identity));
+    for (const [index, current] of prepared.entries()) {
+      const { slug, email, password, api: tenantApi, headers, lifecycle: originalLifecycle } = current;
+      const { scenario } = current.identity;
+      const seed = seeded[index].seed!;
+      const before = seeded[index].inspection as Inspection;
       expect(before.summary).toBe(fallback);
       expect(before.ai_summary.summary_source).toBe("provider");
       expect(before.model_run_id).toBeNull();
@@ -275,7 +294,7 @@ test("dated async summary: visible fallback, release-image worker, retained sour
       expect(logs).toContain("case_summaries_processed=");
     };
     runWorker(1);
-    const afterFirst = cases.map(c => inspect(c.seed));
+    const afterFirst = inspectMany();
     for (const [index, current] of cases.entries()) {
       const after = afterFirst[index];
       expect(after.event.state).toBe("succeeded");
@@ -324,7 +343,7 @@ test("dated async summary: visible fallback, release-image worker, retained sour
       record("published_or_suppressed", { scenario: current.scenario, after, update });
     }
     runWorker(2);
-    expect(cases.map(c => inspect(c.seed))).toEqual(afterFirst);
+    expect(inspectMany()).toEqual(afterFirst);
     record("replay_unchanged", afterFirst);
 
     for (const current of cases) {
@@ -349,22 +368,62 @@ test("dated async summary: visible fallback, release-image worker, retained sour
     expect(paidActions).toEqual([]);
     record("completed", { scenarios: cases.map(c => c.scenario), worker_external_egress: false,
       missing_markers: missingMarkers, browser_paid_actions: paidActions });
+  } catch (error) {
+    originalErrors.push(error);
   } finally {
+    const steps: SummaryCleanupStep[] = [];
+    if (originalErrors.length) steps.push({ name: "original_test_failure", run: () => {
+      record("test_failed", { error: String(originalErrors[0]) });
+    } });
     for (const name of ownedRunners) {
-      const state = spawnSync("docker", ["inspect", name], { encoding: "utf8", timeout: 15_000 });
-      if (state.status === 0 && (JSON.parse(state.stdout)[0] as Container).State.Running) {
-        docker(["stop", "--time", "10", name]);
-      }
-      if (state.status === 0) {
+      steps.push({ name: `runner_stop:${name}`, run: () => {
+        const state: Container = JSON.parse(docker(["inspect", name], 15_000))[0];
+        expect(state.Config.Labels["com.docker.compose.project"]).toBe(project);
+        expect(state.Config.Labels["com.docker.compose.service"]).toBe("worker");
+        expect(state.Image).toBe(api.Image);
+        if (state.State.Running) docker(["stop", "--time", "10", name]);
+      } });
+      steps.push({ name: `runner_logs:${name}`, run: () => {
         const logs = docker(["logs", name]);
         fs.writeFileSync(info.outputPath(`${name}-final.log`), logs);
-        record("runner_retained", { name, state: inspectContainer(name).State, logs });
-      }
+        return { name, logs };
+      } });
+      steps.push({ name: `runner_inspect:${name}`, run: () => {
+        const state = inspectContainer(name).State;
+        record("runner_retained", { name, state });
+        return state;
+      } });
     }
-    await Promise.all(contexts.map(context => context.close()));
-    await Promise.all(apiContexts.map(api => api.dispose()));
-    if (worker.State.Running) docker([...compose, "start", "worker"]);
-    record("cleanup", { service_worker_restored: worker.State.Running, retained_runners: ownedRunners });
-    await info.attach("summary-boundary-journal", { path: journal, contentType: "application/x-ndjson" });
+    contexts.forEach((context, index) => steps.push({ name: `browser_close:${index}`, run: () => context.close() }));
+    apiContexts.forEach((context, index) => steps.push({ name: `api_dispose:${index}`, run: () => context.dispose() }));
+    const ownedWorker = () => {
+      const state = inspectContainer(worker.Id);
+      expect(state.Id).toBe(worker.Id);
+      expect(state.Image).toBe(worker.Image);
+      expect(state.Config.Labels["com.docker.compose.project"]).toBe(project);
+      expect(state.Config.Labels["com.docker.compose.service"]).toBe("worker");
+      expect(state.Config.Labels["com.docker.compose.oneoff"]).toBe("False");
+      return state;
+    };
+    let actualWorker: Container | undefined;
+    steps.push({ name: "worker_restore", run: () => {
+      restoreSummaryWorker(worker, project!, inspectContainer, (id, running) => {
+        docker(running ? ["start", id] : ["stop", "--time", "30", id]);
+      });
+    } });
+    steps.push({ name: "worker_verify", run: () => {
+      actualWorker = ownedWorker();
+      expect(actualWorker.State.Running, "Restore the canonical worker's actual original state").toBe(worker.State.Running);
+      return actualWorker.State;
+    } });
+    steps.push({ name: "cleanup_journal", run: () => record("cleanup", {
+      service_worker_restored: actualWorker?.State.Running === worker.State.Running,
+      original_worker_state: worker.State, actual_worker_state: actualWorker?.State ?? null,
+      retained_runners: ownedRunners,
+    }) });
+    steps.push({ name: "journal_attach", run: () => info.attach("summary-boundary-journal", {
+      path: journal, contentType: "application/x-ndjson",
+    }) });
+    await runSummaryCleanup(steps, record, originalErrors);
   }
 });

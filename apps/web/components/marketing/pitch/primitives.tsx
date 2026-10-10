@@ -200,7 +200,6 @@ export function MetricCard({
 export function PitchNav({
   persona,
   slides,
-  contactEmail,
 }: {
   persona: "Law firms" | "General counsels" | "Solo lawyers";
   slides: readonly { id: string; label: string }[];
@@ -238,7 +237,7 @@ export function PitchNav({
             Home
           </a>
           <a
-            href={`mailto:${contactEmail}`}
+            href={`/demo/${persona === "Solo lawyers" ? "solo-lawyers" : persona === "Law firms" ? "law-firms" : "general-counsels"}`}
             className="inline-flex items-center rounded-full bg-[var(--color-ink)] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[var(--color-ink-2)]"
           >
             Talk to us

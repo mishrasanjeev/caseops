@@ -179,6 +179,13 @@ def extract_order_proceeding_intelligence(
     matter_id: str,
     order_id: str,
 ) -> ProceedingIntelligenceResponse:
+    from caseops_api.services.compliance_participants import lock_compliance_participants
+
+    lock_compliance_participants(
+        session, company_id=context.company.id, matter_id=matter_id,
+        actor_membership_id=context.membership.id, context=context,
+        required_capability="matters:write",
+    )
     matter = _load_matter(session, context=context, matter_id=matter_id)
     matter = require_operational_matter(
         session,
@@ -192,6 +199,7 @@ def extract_order_proceeding_intelligence(
         order=order,
         actor_membership_id=context.membership.id,
         context=context,
+        required_capability="matters:write",
     )
     session.commit()
     return list_proceeding_intelligence(session, context=context, matter_id=matter.id)
@@ -297,7 +305,16 @@ def _extract_and_persist(
     order: MatterCourtOrder,
     actor_membership_id: str | None,
     context: SessionContext | None,
+    required_capability: str = "matters:edit",
 ) -> list[MatterProceedingSignal]:
+    from caseops_api.services.compliance_participants import lock_compliance_participants
+
+    lock_compliance_participants(
+        session, company_id=matter.company_id, matter_id=matter.id,
+        actor_membership_id=actor_membership_id, context=context,
+        required_capability=required_capability if context else None,
+        expected_lifecycle_version=matter.lifecycle_version,
+    )
     matter = assert_operational_matter(session, matter=matter)
     source_text = _usable_source_text(order.order_text)
     if source_text is None:

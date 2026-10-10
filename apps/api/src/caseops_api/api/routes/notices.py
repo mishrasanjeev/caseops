@@ -52,7 +52,7 @@ NoticeFileUploader = Annotated[
     response_model=NoticeListResponse,
     summary="List standalone and legacy notices visible to the current company member",
 )
-async def current_company_notices(
+def current_company_notices(
     context: CurrentContext,
     session: DbSession,
     filters: Annotated[NoticeListFilters, Depends()],
@@ -66,7 +66,7 @@ async def current_company_notices(
     status_code=status.HTTP_201_CREATED,
     summary="Create a standalone notice without requiring a document",
 )
-async def post_current_company_notice(
+def post_current_company_notice(
     payload: NoticeCreateRequest,
     context: NoticeCreator,
     session: DbSession,
@@ -79,7 +79,7 @@ async def post_current_company_notice(
     response_model=list[NoticeOwnerOption],
     summary="List active company members eligible for notice assignment",
 )
-async def get_current_company_notice_owners(
+def get_current_company_notice_owners(
     context: NoticeManager,
     session: DbSession,
 ) -> list[NoticeOwnerOption]:
@@ -91,7 +91,7 @@ async def get_current_company_notice_owners(
     response_model=NoticeRecord,
     summary="Get a visible standalone or primary legacy notice",
 )
-async def get_current_company_notice(
+def get_current_company_notice(
     notice_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -108,7 +108,7 @@ async def get_current_company_notice(
     response_model=NoticeRecord,
     summary="Update standalone notice metadata, assignment, or matter links",
 )
-async def patch_current_company_notice(
+def patch_current_company_notice(
     notice_id: str,
     payload: NoticeUpdateRequest,
     context: NoticeManager,
@@ -127,7 +127,7 @@ async def patch_current_company_notice(
     response_model=NoticeRecord,
     summary="Upload or replace the optional file on a standalone notice",
 )
-async def post_current_company_notice_file(
+def post_current_company_notice_file(
     notice_id: str,
     expected_updated_at: Annotated[datetime, Form(...)],
     file: Annotated[UploadFile, File(...)],
@@ -158,7 +158,7 @@ async def post_current_company_notice_file(
     },
     summary="Download a standalone or legacy notice file",
 )
-async def download_current_company_notice_file(
+def download_current_company_notice_file(
     notice_id: str,
     context: CurrentContext,
     session: DbSession,

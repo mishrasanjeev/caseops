@@ -19,8 +19,9 @@ import { siteConfig } from "@/lib/site";
 //   - DuckDuckGo: DuckDuckBot
 //   - Applebot (Siri / Apple Intelligence)
 //   - Amazon: Amazonbot
-// Authenticated app shell + sign-in + API routes stay disallowed
-// — nothing personal or tenant-scoped should land in a crawl.
+// App and API routes stay disallowed. The public sign-in page must be
+// crawlable so engines can read its noindex; robots blocking can index a URL
+// without fetching it. Authentication remains the private-data boundary.
 const ALLOW_ALL_UA = [
   "*",
   "Googlebot",
@@ -48,7 +49,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: ALLOW_ALL_UA.map((ua) => ({
       userAgent: ua,
       allow: "/",
-      disallow: ["/app", "/app/", "/sign-in", "/api/"],
+      disallow: ["/app", "/app/", "/api/"],
     })),
     sitemap: `${siteConfig.url}/sitemap.xml`,
     host: siteConfig.url,

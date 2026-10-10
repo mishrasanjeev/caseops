@@ -37,7 +37,8 @@ export function Hero() {
           Run intake and optional conflict review, every matter and notice, tracked case update,
           court-order compliance item, cause-list PDF, drafting pass, hearing, contract,
           invoice, and review queue from one matter-graph workspace. Grounded in statutes,
-          orders, affidavits, judgments, and your own precedents - never guesses.
+          orders, affidavits, judgments, and your own precedents. Review the cited
+          sources and verify any legal conclusion before use.
         </p>
 
         <p className="mt-5 text-sm font-medium text-[var(--color-ink-2)]">
