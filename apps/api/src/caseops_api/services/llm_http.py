@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, status
 
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.llm import LLMProviderError, LLMQuotaExhaustedError
 
 
@@ -10,6 +11,11 @@ def provider_failure_http_exception(
     noun: str,
     exc: LLMProviderError,
 ) -> HTTPException:
+    if isinstance(exc, AiMoneyBudgetError):
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        )
     if isinstance(exc, LLMQuotaExhaustedError):
         return HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

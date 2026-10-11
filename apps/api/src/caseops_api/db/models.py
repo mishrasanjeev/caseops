@@ -31,6 +31,10 @@ from sqlalchemy import (
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
+from caseops_api.db.ai_spend_models import (  # noqa: F401
+    AiProviderSpendAdmission,
+    AiProviderSpendMonth,
+)
 from caseops_api.db.base import Base
 from caseops_api.db.index_coverage import ensure_foreign_key_indexes
 from caseops_api.db.ip_specialist_models import (  # noqa: F401

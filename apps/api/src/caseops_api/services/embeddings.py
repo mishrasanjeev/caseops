@@ -21,9 +21,11 @@ Design notes:
 All non-mock providers are imported at call time so the base install stays
 light — callers opt in via ``CASEOPS_EMBEDDING_PROVIDER``.
 """
+
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import time
 from collections.abc import Iterable
@@ -34,6 +36,7 @@ from caseops_api.core.automated_test_context import paid_providers_blocked_for_r
 from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
 from caseops_api.services import voyage_usage as _voyage_usage
+from caseops_api.services.llm_types import LLMProviderError
 
 
 class EmbeddingProviderError(RuntimeError):
@@ -65,6 +68,44 @@ class EmbeddingProvider(Protocol):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _assert_paid_embedding_allowed() -> None:
+    if paid_providers_blocked_for_request():
+        raise EmbeddingProviderError("Paid embeddings are blocked for this automated request.")
+
+
+def _reserve_paid_embedding_call(
+    *,
+    provider: str,
+    model: str,
+    request_body: dict,
+    automatic_prompt_bytes: int = 0,
+    retry_count: int = 0,
+) -> object | None:
+    _assert_paid_embedding_allowed()
+    if not get_settings().effective_ai_money_budget_enabled:
+        return
+
+    from caseops_api.services.ai_money_budget import assert_paid_ai_dispatch, reserve_paid_ai_call
+
+    try:
+        admission = reserve_paid_ai_call(
+            provider=provider,
+            model=model,
+            # Match the SDK's ASCII-escaped JSON framing, plus provider-added prompts.
+            # This upper bound is separate from token estimates used only for batching.
+            input_bytes=len(json.dumps(request_body).encode("utf-8")) + automatic_prompt_bytes,
+            output_tokens=0,
+            retry_count=retry_count,
+        )
+        assert_paid_ai_dispatch(admission)
+        return admission
+    except LLMProviderError as exc:
+        raise EmbeddingProviderError(
+            "Paid embeddings are unavailable under the current AI budget. "
+            "Check billing reconciliation and available budget before retrying."
+        ) from exc
 
 
 def _pad(vector: list[float], target: int) -> list[float]:
@@ -250,7 +291,7 @@ class VoyageProvider:
                 "The 'voyageai' package is not installed. Run "
                 "`uv add voyageai` and set CASEOPS_EMBEDDING_PROVIDER=voyage.",
             ) from exc
-        self._client = voyageai.Client(api_key=api_key)
+        self._client = voyageai.Client(api_key=api_key, max_retries=0)
         self._query_client = voyageai.Client(
             api_key=api_key,
             max_retries=0,
@@ -265,6 +306,11 @@ class VoyageProvider:
     # the limit) without the ingest pipeline caring.
     _MAX_BATCH_TOKENS = 100_000
     _MAX_BATCH_ITEMS = 128
+    # https://docs.voyageai.com/reference/embeddings-api documents these prefixes.
+    _INPUT_PROMPTS = {
+        "query": "Represent the query for retrieving supporting documents: ",
+        "document": "Represent the document for retrieval: ",
+    }
 
     def embed(
         self,
@@ -291,11 +337,14 @@ class VoyageProvider:
         Automatically splits the input into sub-batches that fit under
         Voyage's per-request ceilings (120K tokens / 128 items). Large
         judgments that chunk into 60+ pieces are transparently handled.
+        Global monetary admission applies from the configured start month;
+        a provider error does not refund its durable reservation.
         """
         if not texts:
             return EmbeddingResult(
                 vectors=[], provider=self.name, model=self.model, dimensions=self.dimensions
             )
+        _assert_paid_embedding_allowed()
         # Cap check happens once at the top of every embed() call. The
         # batches below all run under the same cap; if we'd race past
         # it mid-call we'd at most overshoot by one batch.
@@ -354,7 +403,6 @@ class VoyageProvider:
             groups.append(current)
 
         all_vectors: list[list[float]] = [None] * len(texts)  # type: ignore[list-item]
-        request_client = self._query_client if input_type == "query" else self._client
         for group in groups:
             batch_texts = [texts[i] for i in group]
             batch_tokens = (
@@ -362,6 +410,23 @@ class VoyageProvider:
                 if per_text_tokens is not None
                 else sum(max(1, len(texts[i]) // 4) for i in group)
             )
+            _reserve_paid_embedding_call(
+                provider=self.name,
+                model=self.model,
+                request_body={
+                    "input": batch_texts,
+                    "model": self.model,
+                    "input_type": input_type,
+                    "truncation": True,
+                    "output_dtype": None,
+                    "output_dimension": self.dimensions,
+                    "encoding_format": "base64",
+                },
+                automatic_prompt_bytes=(
+                    len(self._INPUT_PROMPTS.get(input_type, "").encode("utf-8")) * len(batch_texts)
+                ),
+            )
+            request_client = self._query_client if input_type == "query" else self._client
             t0 = time.perf_counter()
             try:
                 result = request_client.embed(
@@ -438,6 +503,27 @@ class GeminiProvider:
             return EmbeddingResult(
                 vectors=[], provider=self.name, model=self.model, dimensions=self.dimensions
             )
+        _reserve_paid_embedding_call(
+            provider=self.name,
+            model=self.model,
+            # The Developer API repeats model/content framing for each request.
+            # This also bounds the smaller text-only Vertex instances envelope.
+            request_body={
+                "model": self.model,
+                "requests": [
+                    {
+                        "model": self.model
+                        if self.model.startswith("models/")
+                        else f"models/{self.model}",
+                        "content": {"role": "user", "parts": [{"text": text}]},
+                    }
+                    for text in texts
+                ],
+            },
+            # Reserve the native five-attempt ceiling without changing October's
+            # constructor/retry options. Shorter SDK policies remain over-reserved.
+            retry_count=4,
+        )
         try:
             response = self._client.models.embed_content(
                 model=self.model,

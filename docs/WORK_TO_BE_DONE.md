@@ -1,5 +1,15 @@
 # CaseOps  - Work To Be Done
 
+## October 11 AI Money And Provider Gate
+
+In progress / not production-certified: shared INR 10,000 paid-AI admission,
+October exemption, model request compatibility, detailed recommendation guide
+and a model-neutral public article. Require complete money/transport/concurrency
+regressions, fresh Docker/Playwright, green CI, canonical main and exact live
+replay. Gemini migration/fallback remains unverified and cannot exceed the
+shared ceiling. No October billing baseline or provider-quality result is
+invented. [Assessment](AI_PROVIDER_BUDGET_GEMINI_ASSESSMENT_2026-10-11.md).
+
 ## October 10 Summary Gate Repair
 
 NO-GO: integrated `a8979a41` completes 66 Python passes/198 phases and 42

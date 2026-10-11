@@ -363,6 +363,14 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- An AI provider fallback cannot replenish an exhausted aggregate money cap.
+  Reserve all native SDK attempts and schema/framing/output costs before
+  transport, retain uncertain charges, recheck the billing period at dispatch,
+  and use one authoritative ledger across tenant, corpus and CLI paths. Test
+  native SDK transports offline, separate-process database admission and retained
+  financial evidence on downgrade; retail credits and invoices are not the same
+  thing as conservative admission liability.
+
 - Parallel pytest collection occurs on xdist workers, not its controller.
   Retain each worker's complete ordered inventory and its agreement with the
   canonical collection before reconciling setup/call/teardown results. A green

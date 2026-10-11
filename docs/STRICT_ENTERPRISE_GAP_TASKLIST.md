@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## October 11 Shared AI Money Boundary
+
+Partially implemented / NO-GO until native acceptance and release: tenant
+credits and provider daily caps do not establish a shared money ceiling.
+New account-period admission retains conservative liability before transport,
+requires explicit baseline/pricing/FX evidence and preserves October behavior.
+The revised owner ceiling is INR 10,000, not INR 5,000. Unknown balance and a
+paid fallback cannot be treated as free usage. All-Gemini quality, region,
+privacy, provider readiness and exact-release proof remain open.
+[Assessment](AI_PROVIDER_BUDGET_GEMINI_ASSESSMENT_2026-10-11.md).
+
 ## October 10 Summary Gate Repair
 
 Partially implemented / NO-GO: bounded fresh-session fixture batching and
