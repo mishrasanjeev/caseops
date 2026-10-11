@@ -2,6 +2,18 @@
 
 ## October 11 Court-Write Release Gate
 
+Current bf2 CI passed, including complete native/browser artifact reconciliation.
+Exact Docker R7 passed all 2,301 native calls, then failed five browser cases.
+All 507 desktop identities reconcile (490 pass / five fail / 12 skip); four
+mobile identities and final health are unrun. The new standard browser inventory
+discovers 20 fixture/transport regressions, totaling 531 identities with all
+511 previous identities retained. Nineteen pure controls pass with exact
+JSON/XML agreement; real-web and complete original journeys remain pending.
+Windows wrapper coverage is 26 API tests / 78 phases and 37 behavioral cases
+per shell; it is not Linux CI or complete image/browser acceptance.
+No current production, fallback activation or primary-promotion certification.
+[Evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
 Current native coverage is incomplete on `9667ad02`: shard 1 timed out at
 12 minutes after 571/576 passing calls, with no completion/JUnit. Other native
 shards completed, but the aggregate failed and hosted browser acceptance

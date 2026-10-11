@@ -2,6 +2,15 @@
 
 ## October 11 Court-Write Investigation
 
+Latest gate: **Inconclusive** for product/root-cause closure. bf2 CI passed;
+its exact Docker R7 native stage passed all 2,301 cases, but five browser cases
+failed (two poll subprocesses, selection, Drive isolation, demo replay).
+Desktop inventories reconcile 490 passes / five failures / 12 skips; four
+mobile cases and final health are unrun. Retain failed evidence. Database
+isolation and fixture/transport amendments are not production fixes until
+complete amended Docker/CI and exact live journeys pass.
+[Current checkpoint](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
 Native CI timeout: **Inconclusive** until the complete capacity replacement
 runs. On `9667ad02`, shard 1 passed 571/576 calls before its 12-minute job
 timeout, with no completion/JUnit and no reported pytest failure. All other

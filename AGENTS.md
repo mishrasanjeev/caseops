@@ -371,6 +371,21 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- Native PostgreSQL acceptance must use its own independently migrated database,
+  separate from the browser application database. Retained synthetic tenants can
+  make an unrelated whole-tenant worker scan appear to be a browser defect.
+  Keep the complete native inventory, dedicated migration rehearsals, exact-image
+  seeds and both schema/index gates; never clone retained application data.
+- A subprocess fixture failure must retain the native error/code/signal, elapsed
+  time and complete bounded output before teardown. A null status or later idle
+  pass cannot establish failure-time timeout, contention or a product root cause.
+  Preserve all failed siblings and capture owned service logs before cleanup.
+- A validated host fixture may read isolated Docker PostgreSQL only with explicit
+  loopback database and test-secret configuration, fresh actor/record validation
+  and a read-only transaction. Keep the original native signing function and
+  prove its token through the real image's API; never cache capabilities or add
+  a production signing endpoint. Fixture startup deadlines remain unchanged.
+
 - An AI provider fallback cannot replenish an exhausted aggregate money cap.
   Reserve all native SDK attempts and schema/framing/output costs before
   transport, retain uncertain charges, recheck the billing period at dispatch,

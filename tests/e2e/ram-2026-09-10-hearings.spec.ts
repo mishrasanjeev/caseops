@@ -6,6 +6,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, repoRoot } from "./support/env";
 import { plusDays } from "./support/helpers";
+import { fixtureProcessEvidence } from "./support/fixture-process";
 
 const web = process.env.PROD_BASE_URL || process.env.CASEOPS_WEB_BASE_URL || "http://127.0.0.1:3100";
 const api = process.env.PROD_API_BASE_URL || apiBaseUrl;
@@ -52,14 +53,19 @@ async function visibleMatter(page: Page, code: string, expectedDate: string | nu
   }
 }
 
-function poll() {
+async function poll() {
   const project = process.env.CASEOPS_E2E_DOCKER_PROJECT;
   const file = process.env.CASEOPS_E2E_DOCKER_COMPOSE_FILE;
   if (!local || !project || !file || process.env.CASEOPS_E2E_HEARING_PROVIDER !== "sep10-offline") {
     throw new Error("The isolated September 10 hearing emulator and Docker project are required; paid polling is forbidden.");
   }
+  const startedAt = new Date().toISOString();
+  const started = performance.now();
   const result = spawnSync("docker", ["compose", "--project-name", project, "--file", file, "exec", "-T", "api", "caseops-poll-tracked-cases", "--force"], { cwd: repoRoot, encoding: "utf8", timeout: 120_000 });
-  expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  const evidence = fixtureProcessEvidence(result, startedAt, performance.now() - started);
+  await test.info().attach("hearing-poll-process", { body: evidence, contentType: "application/json" });
+  expect(result.error, evidence).toBeUndefined();
+  expect(result.status, evidence).toBe(0);
 }
 
 function seedLegacyBookmark(matterId: string, membershipId: string): string {
@@ -172,7 +178,7 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
     await page.getByTestId("matter-search-link-submit").click();
     await expect(page.getByTestId("matter-search-linked")).toBeVisible();
   }
-  poll();
+  await poll();
   await page.setExtraHTTPHeaders(noPaidProviderHeaders);
   for (const fixture of fixtures) {
     const response = await request.get(`${api}/api/matters/${fixture.id}`, { headers });
@@ -191,7 +197,7 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
     court_name: "Delhi High Court", expected_updated_at: (await current.json()).updated_at,
   } });
   expect(correction.status(), await correction.text()).toBe(200);
-  poll();
+  await poll();
   const recovered = await request.get(`${api}/api/case-tracking/bookmarks`, { headers });
   expect(recovered.status()).toBe(200);
   const recoveredRows = (await recovered.json()).bookmarks.filter((row: { matter_id: string }) => row.matter_id === legacyMatter.id);
@@ -208,7 +214,7 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
   await expect(page.getByTestId("matter-search-link-submit")).toBeVisible();
   await page.getByTestId("matter-search-link-submit").click();
   await expect(page.getByTestId("matter-search-linked")).toBeVisible();
-  poll();
+  await poll();
   await page.setExtraHTTPHeaders(noPaidProviderHeaders);
   const restored = await request.get(`${api}/api/case-tracking/bookmarks`, { headers });
   expect(restored.status()).toBe(200);

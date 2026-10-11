@@ -2,6 +2,61 @@
 
 ## Release Verdict
 
+### 15:38 UTC Exact-Candidate Checkpoint
+
+Production API/web still serve `3dbf364d9834316d181d4a52b2e9b4c7bee431b4`.
+PR #533 is draft/unmerged at `bf2fc616`; no provider activation or primary
+promotion occurred. Current hosted CI is green, including independently
+reconciled native/API/browser artifacts. The hosted browser used GitHub's
+`d9db2df5` PR merge, whose tree exactly matches bf2; that is not literal
+candidate or production identity.
+
+Exact-bf2 Docker R7 failed, controller exit 1 at 15:12 UTC. Native gate:
+2,301 passes / 6,903 passing phases, matching complete collection/JUnit and
+completion. Desktop browser union: 507 identities, 490 passes, five failures,
+12 skips (including three serial dependency skips), no flaky cases. Four
+mobile identities and final post-browser health were not reached. Original
+reports, all five failed traces and the incremental native journal are retained
+under `outputs/ai-budget-release-recovery-20261011` in the original checkout.
+The independent `docker-r7-sidecar-20261011T1530Z-87d7b2f4/README.md` reconciles
+all desktop identities and failure boundaries; failed evidence is not replaced.
+
+Both poll subprocesses lost their native error/signal; selection and Drive
+report explicit subprocess timeouts; public-demo replay reports a socket reset
+without an HTTP response. Their failure-time internal phases and common root
+cause remain **Inconclusive**. Later read-only diagnostics found native-test
+tenant contamination in the browser database, a cold selection process near
+its 30-second limit, and a seven-case idle Drive replay passing in 29.19 seconds.
+Those observations do not close any failed browser journey.
+
+Replacement work on `codex/release-browser-recovery-20261011` isolates native
+PostgreSQL into an independently migrated database, retains bounded failure
+logs and subprocess receipts, runs the selection fixture through the validated
+host runtime against read-only Docker PostgreSQL, runs Drive isolation inside
+the acceptance API image, and explicitly closes completed loopback web
+connections. Original deadlines, provider fences and workflow assertions stay
+unchanged. The latest focused run passes 19 receipt/database/header-policy
+controls, with matching JSON/XML identities and no retries or skips; the
+actual web header and all affected journeys still require acceptance.
+Standard discovery includes all 20 added regressions: 531 identities,
+527 desktop and four mobile, with every original identity retained. The
+Windows wrapper regressions pass 26 API tests / 78 phases, including 37
+behavioral cases on each of PowerShell and pwsh. Linux CI and real-image
+integration still require the amended gate. This infrastructure
+repair does not bound the production poller's global tenant scan or prove the
+cause of the original socket reset. Complete amended Docker/CI, canonical main,
+guarded exact-SHA deployment and live replay still precede certification.
+
+Focused amendment receipts: `browser-amendment-reconciliation-r3.json` and
+`native-isolation-local-r1/payload/api-reconciliation.json` under the retained
+original-checkout recovery output directory. The two failed intermediate
+wrapper controls remain retained beside their passing replacement; neither
+they nor the passing controls replace R7's five failed product journeys.
+
+The selected Gemini fallback remains disabled pending the global processing
+and retention review. It is neither a legal-quality certification nor a free
+route after the shared November INR 10,000 allowance is exhausted.
+
 **NO-GO pending complete release gates.** This is not a production deployment
 receipt, provider activation or legal-quality certification. Canonical source
 base: `dfda0eb3ee3d109f86092962a08d125878b24932`. Candidate branch:

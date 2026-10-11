@@ -2,6 +2,15 @@
 
 ## October 11 Release Recovery
 
+Latest checkpoint: bf2 hosted CI is fully green, but exact-bf2 Docker R7 is
+NO-GO: 2,301 native passes / 6,903 phases; desktop 490 passes / five failures /
+12 skips, with four mobile tests and final health unrun. All five failures are
+retained and individually inspected; no common product cause is established.
+New native/browser database isolation, fixture receipts and loopback transport
+controls require complete amended acceptance. Production still serves 3db at
+15:38 UTC. No merge, provider activation or primary promotion has occurred.
+[Current checkpoint](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
 Current `9667ad02` hosted gate is NO-GO: native shard 1 timed out at 12 minutes
 after 571/576 passing calls, without completion/JUnit. The other three native
 shards and all API/web/security checks passed, but hosted browser acceptance

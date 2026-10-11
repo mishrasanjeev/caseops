@@ -49,7 +49,7 @@ export const e2eEnv: Record<string, string> = {
   CASEOPS_API_PORT: apiPort,
   CASEOPS_AUTO_MIGRATE: "false",
   CASEOPS_DATABASE_URL: databaseUrl,
-  CASEOPS_AUTH_SECRET: "caseops-e2e-secret-caseops-e2e-secret",
+  CASEOPS_AUTH_SECRET: process.env.CASEOPS_E2E_AUTH_SECRET?.trim() || "caseops-e2e-secret-caseops-e2e-secret",
   CASEOPS_PUBLIC_APP_URL: webBaseUrl,
   CASEOPS_CORS_ORIGINS: JSON.stringify([
     webBaseUrl,

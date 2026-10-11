@@ -6,6 +6,8 @@ import { expect, test } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { fixtureProcessEvidence } from "./support/fixture-process";
+import { requireFixtureDatabaseUrl } from "./support/fixture-database";
 
 const web = process.env.PROD_BASE_URL || process.env.CASEOPS_WEB_BASE_URL || "http://127.0.0.1:3000";
 const api = process.env.PROD_API_BASE_URL || apiBaseUrl;
@@ -25,7 +27,10 @@ async function waitForSignInForm(page: import("@playwright/test").Page) {
   });
 }
 
-function localSignedMatterSelection(matterId: string, membershipId: string): string {
+async function localSignedMatterSelection(matterId: string, membershipId: string): Promise<string> {
+  if (production || !["127.0.0.1", "localhost"].includes(new URL(api).hostname)) {
+    throw new Error("Nonbillable selection fixtures are loopback-only.");
+  }
   const python = process.env.CASEOPS_E2E_PYTHON || path.join(
     repoRoot, "apps", "api", ".venv",
     process.platform === "win32" ? "Scripts" : "bin",
@@ -33,14 +38,17 @@ function localSignedMatterSelection(matterId: string, membershipId: string): str
   );
   const script = [
     "import sys",
+    "from sqlalchemy import text",
     "from caseops_api.db.session import get_session_factory",
     "from caseops_api.db.models import Matter",
     "from caseops_api.schemas.case_tracking import CaseTrackingSearchResultRecord",
     "from caseops_api.services.case_tracking import _matter_selection_token",
     "from caseops_api.services.identity import get_session_context",
     "with get_session_factory()() as session:",
+    "    if session.bind.dialect.name == 'postgresql': session.execute(text('SET TRANSACTION READ ONLY'))",
     "    matter = session.get(Matter, sys.argv[1])",
     "    context = get_session_context(session, sys.argv[2])",
+    "    assert matter is not None and matter.company_id == context.company.id and matter.is_active",
     "    result = CaseTrackingSearchResultRecord(provider='ecourtsindia', cnr_number='DLHC010012342026', case_number='WP(C) 1/2026', court_code='DLHC', court_name='Delhi High Court', case_title='Selected candidate', party_names=[], current_status='Pending', current_stage='Arguments', next_hearing_on=None, source_url=None)",
     "    print(_matter_selection_token(context=context, matter=matter, result=result))",
   ].join("\n");
@@ -49,19 +57,23 @@ function localSignedMatterSelection(matterId: string, membershipId: string): str
   if (dockerProject && !dockerComposeFile) {
     throw new Error("Docker acceptance requires its exact Compose file.");
   }
-  const run = dockerProject && dockerComposeFile
-    ? spawnSync("docker", [
-        "compose", "--project-name", dockerProject, "--file", dockerComposeFile,
-        "exec", "-T", "api", "python", "-c", script, matterId, membershipId,
-      ], { cwd: repoRoot, encoding: "utf8", timeout: 30_000 })
-    : spawnSync(python, ["-c", script, matterId, membershipId], {
-        cwd: path.join(repoRoot, "apps", "api"),
-        env: { ...process.env, ...e2eEnv, PYTHONPATH: path.join(repoRoot, "apps", "api", "src") },
-        encoding: "utf8",
-        timeout: 30_000,
-      });
+  if (dockerProject && (!process.env.CASEOPS_E2E_AUTH_SECRET || !process.env.CASEOPS_E2E_DATABASE_URL)) {
+    throw new Error("Docker selection requires its explicit fixture secret and isolated database URL.");
+  }
+  const ownedSqliteUrl = "sqlite+pysqlite:///" + path.join(repoRoot, "caseops-e2e.db").replace(/\\/g, "/");
+  requireFixtureDatabaseUrl(e2eEnv.CASEOPS_DATABASE_URL, dockerProject ? "" : ownedSqliteUrl);
+  const startedAt = new Date().toISOString();
+  const started = performance.now();
+  const run = spawnSync(python, ["-c", script, matterId, membershipId], {
+    cwd: path.join(repoRoot, "apps", "api"),
+    env: { ...process.env, ...e2eEnv, PYTHONPATH: path.join(repoRoot, "apps", "api", "src") },
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+  const evidence = fixtureProcessEvidence(run, startedAt, performance.now() - started, false);
+  await test.info().attach("selection-fixture-process", { body: evidence, contentType: "application/json" });
   if (run.error || run.status !== 0) {
-    throw new Error(`Could not create local nonbillable selection: ${run.error?.message || run.stderr || `exit ${run.status}`}`);
+    throw new Error(`Could not create local nonbillable selection: ${evidence}`);
   }
   return run.stdout.trim();
 }
@@ -104,7 +116,7 @@ test("Matter court link shows the user-selected case without provider spend in l
   });
   expect(created.status(), await created.text()).toBe(200);
   const matterId = (await created.json()).id as string;
-  const selectedToken = localSignedMatterSelection(matterId, bootData.membership.id as string);
+  const selectedToken = await localSignedMatterSelection(matterId, bootData.membership.id as string);
   await page.setExtraHTTPHeaders(noPaidProviderHeaders);
   await page.goto(`${web}/sign-in`);
   await waitForSignInForm(page);

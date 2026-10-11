@@ -1,5 +1,15 @@
 # Strict Enterprise Gap Tasklist
 
+## October 11 Exact-Release Checkpoint
+
+NO-GO: bf2 hosted CI is green, while exact Docker R7 browser acceptance failed
+five cases after all 2,301 native passes. Four mobile cases and final health
+remain unrun. Independently migrated native/browser databases and structured
+fixture/transport evidence are candidate controls, not certified product fixes.
+Production serves 3db at 15:38 UTC. Global Gemini processing/retention, paid
+quality and November financial reconciliation remain open; no paid fallback
+can bypass the shared cap. [Evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
 ## October 11 Court-Write Release Recovery
 
 Native CI capacity remains **Partially fixed / NO-GO** pending current hosted
