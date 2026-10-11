@@ -85,6 +85,27 @@ Switching providers does not replenish this balance. A prospective primary and
 fallback allocation must fit **inside** INR 10,000; no allocation or automatic
 fallback has been deployed by this candidate.
 
+Financial denial must not become a permanent source-data failure:
+
+- Metadata, structured corpus backfill and statute enrichment stop submitting
+  later work, drain only an already bounded concurrent window and return a
+  nonzero operational status. Previously admitted results remain retained.
+- Title embedding, ingestion and reembedding stop without deleting denied or
+  unprocessed inputs. Remote HC/SC staging admits one owned batch per temp root;
+  retained work blocks further staging rather than accumulating downloads.
+  Resume the retained PDFs with the local `--path` workflow after reconciliation;
+  remove only confirmed-empty owned workdirs. Do not delete pending sources.
+- A hearing-update summary waits 15 minutes after financial denial without
+  consuming its transport retry allowance. Earlier uncertain attempts and money
+  admissions remain charged. Stale or superseded claims cannot reschedule it.
+- Compliance keeps valid deterministic items and exposes the optional AI phase
+  as deferred, including its history and audit metadata. A completed deterministic
+  run is not evidence that the AI phase completed.
+- Predictive classification does not quarantine a valid source or erase its
+  earlier accepted classifications solely because financial admission failed.
+
+These are candidate recovery contracts, not production acceptance receipts.
+
 Missing reconciliation is not a transient provider outage. Repeated clicks or
 an automatic retry cannot resolve it. Obtain current billing evidence, retain
 the original receipts and investigate any mismatch. The initializer deliberately
@@ -96,6 +117,14 @@ paid work resumes. Admissions and immediate dispatch checks use the IST period;
 provider invoice periods and delayed billing may differ and still need account
 reconciliation. A populated financial-table downgrade refuses to discard this
 evidence. Roll back the application while retaining the additive schema instead.
+
+After the guard's start month, a rollback must retain guarded adapters on every
+paid executor. An older pre-guard API image, manual job or ingest VM can bypass
+the ledger even while these tables remain present. If no verified guarded
+rollback is available, stop paid dispatch at the provider/key boundary and
+correct forward; do not certify a ceiling from the schema alone. Repin dormant
+paid jobs before they can be invoked and rebuild the stopped ingest VM before
+resuming it against production credentials.
 
 ## Gemini Evaluation
 

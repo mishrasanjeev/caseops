@@ -2,6 +2,13 @@
 
 ## October 10 Summary Gate Repair
 
+Latest October 11 source scope also covers J05/M04, J08/M08, J09/M07,
+J14/M14 and J19/M21/US-063: aggregate money admission, operational financial
+denial recovery, recommendation guidance and model-neutral public content.
+All remain production-uncertified until amended CI, complete clean Docker
+and exact live replay. Gemini activation and monthly reconciliation remain
+separate dependencies. [Candidate evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
 The summary gate repair on `a8979a41` has complete scoped local proof:
 66 Python passes/198 phases and 42 Node 22 cleanup passes, exact native
 inventories and mandatory CI selection. Original assertions/workers/budgets

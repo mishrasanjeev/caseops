@@ -404,7 +404,8 @@ def test_openai_reserves_actual_utf8_request_schema_output_floor_and_constructor
         completion = _call(_adapter(mode, model=model, max_retries=max_retries), mode)
     wire = dict(boundary.transports[0][1])
     if mode == "parse":
-        assert wire.pop("response_format") is _Answer
+        response_format = wire.pop("response_format")
+        assert response_format is _Answer
     request_bytes = len(json.dumps(wire, ensure_ascii=False).encode("utf-8"))
     schema_bytes = (
         len(

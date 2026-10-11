@@ -43,6 +43,10 @@ class EmbeddingProviderError(RuntimeError):
     """Raised when an embedding backend cannot produce vectors."""
 
 
+class EmbeddingMoneyBudgetError(EmbeddingProviderError):
+    """Account-level financial denial; callers must stop further submission."""
+
+
 @dataclass
 class EmbeddingResult:
     vectors: list[list[float]]
@@ -85,9 +89,13 @@ def _reserve_paid_embedding_call(
 ) -> object | None:
     _assert_paid_embedding_allowed()
     if not get_settings().effective_ai_money_budget_enabled:
-        return
+        return None
 
-    from caseops_api.services.ai_money_budget import assert_paid_ai_dispatch, reserve_paid_ai_call
+    from caseops_api.services.ai_money_budget import (
+        AiMoneyBudgetError,
+        assert_paid_ai_dispatch,
+        reserve_paid_ai_call,
+    )
 
     try:
         admission = reserve_paid_ai_call(
@@ -101,6 +109,11 @@ def _reserve_paid_embedding_call(
         )
         assert_paid_ai_dispatch(admission)
         return admission
+    except AiMoneyBudgetError as exc:
+        raise EmbeddingMoneyBudgetError(
+            "Paid embeddings are unavailable under the current AI budget. "
+            "Check billing reconciliation and available budget before retrying."
+        ) from exc
     except LLMProviderError as exc:
         raise EmbeddingProviderError(
             "Paid embeddings are unavailable under the current AI budget. "
@@ -593,6 +606,7 @@ def embed_many(provider: EmbeddingProvider, texts: Iterable[str]) -> EmbeddingRe
 
 
 __all__ = [
+    "EmbeddingMoneyBudgetError",
     "EmbeddingProvider",
     "EmbeddingProviderError",
     "EmbeddingResult",

@@ -13,6 +13,8 @@ from caseops_api.core.automated_test_context import (
     set_automated_test_request,
 )
 from caseops_api.db.models import (
+    AiProviderSpendAdmission,
+    AiProviderSpendMonth,
     BillingUsageAttribution,
     Company,
     CompanyMembership,
@@ -29,9 +31,16 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import case_tracking_summary as summaries
+from caseops_api.services import domain_outbox
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.case_tracking import _create_update, apply_snapshot
 from caseops_api.services.case_tracking_providers import ProviderCaseEvent, ProviderCaseSnapshot
-from caseops_api.services.domain_outbox import claim_outbox_events, replay_dead_letter_event
+from caseops_api.services.domain_outbox import (
+    claim_consumer_effect,
+    claim_outbox_events,
+    renew_outbox_lease,
+    replay_dead_letter_event,
+)
 from caseops_api.services.identity import get_session_context
 from caseops_api.services.llm import LLMCompletion, LLMProviderError, MockProvider
 from tests.test_auth_company import auth_headers, bootstrap_company
@@ -162,6 +171,26 @@ class SummaryEmulator(MockProvider):
             latency_ms=1,
             raw=None,
         )
+
+
+@pytest.fixture
+def summary_clock(monkeypatch):
+    class Clock(datetime):
+        current = datetime.now(UTC)
+
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return cls.current.replace(tzinfo=None)
+            return cls.current.astimezone(tz)
+
+        @classmethod
+        def advance(cls, duration):
+            cls.current += duration
+
+    monkeypatch.setattr(summaries, "datetime", Clock)
+    monkeypatch.setattr(domain_outbox, "_now", lambda: Clock.now(UTC))
+    return Clock
 
 
 def _rows(case):
@@ -460,6 +489,398 @@ def test_bounded_retry_dead_letter_and_explicit_replay(summary_case, malformed):
         session.commit()
     assert summaries.drain_update_summaries(provider=SummaryEmulator()) == 1
     assert _rows(case)[0].summary == "Generated fixture summary."
+
+
+@pytest.mark.parametrize("spent_attempts", [0, 2])
+def test_financial_denial_cools_down_without_spending_transport_attempts(
+    summary_case, summary_clock, spent_attempts,
+):
+    case = summary_case
+    _enqueue_summary(case)
+    # Retain actual transport failures, not a manufactured reset of their budget.
+    for _ in range(spent_attempts):
+        assert summaries.drain_update_summaries(limit=1, provider=SummaryEmulator(fail=True)) == 1
+        summary_clock.advance(timedelta(seconds=90))
+
+    def deny_admission():
+        raise AiMoneyBudgetError("Private billing evidence must not enter the outbox error.")
+
+    denied = SummaryEmulator(deny_admission)
+    previous_fence = _rows(case)[1][0].fence_version
+    fallback = _rows(case)[0].ai_summary_json
+    for denial in range(5):
+        before = summary_clock.now(UTC)
+        assert summaries.drain_update_summaries(limit=5, provider=denied) == 1
+        after = summary_clock.now(UTC)
+        update, events, runs = _rows(case)
+        event = events[0]
+        assert denied.calls == denial + 1
+        assert event.state == DomainOutboxState.RETRY_SCHEDULED
+        assert event.attempts == spent_attempts
+        assert event.max_attempts == 3
+        assert event.fence_version > previous_fence
+        previous_fence = event.fence_version
+        retry_at = event.next_attempt_at
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=UTC)
+        assert before + timedelta(minutes=15) <= retry_at <= after + timedelta(minutes=15)
+        assert event.lease_owner is None and event.lease_token is None
+        assert event.lease_expires_at is None
+        assert event.dead_lettered_at is None and event.dead_letter_reason is None
+        assert event.dead_letter_resolution is None
+        assert event.last_error_redacted == "summary_financial_admission_deferred"
+        assert update.summary == "Provider-authorized fixture fallback."
+        assert update.ai_summary_json == fallback and update.model_run_id is None
+        assert not runs
+        with get_session_factory()() as session:
+            effect = session.scalar(select(DomainConsumerEffect))
+            assert effect.state == "failed"
+            assert effect.attempts == spent_attempts + denial + 1
+            assert effect.lease_token is None and effect.lease_expires_at is None
+            assert effect.result_type is None and effect.result_id is None
+            assert effect.last_error_redacted == "summary_financial_admission_deferred"
+            assert session.scalar(select(func.count()).select_from(BillingUsageAttribution)) == 0
+        assert summaries.drain_update_summaries(provider=denied) == 0
+        response = case["client"].get(
+            f"/api/case-tracking/bookmarks/{case['bookmark_id']}/updates",
+            headers=case["headers"],
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["updates"][0]["summary"] == "Provider-authorized fixture fallback."
+        summary_clock.advance(timedelta(minutes=14, seconds=59))
+        assert summaries.drain_update_summaries(provider=denied) == 0
+        summary_clock.advance(timedelta(seconds=1))
+
+    # A later machine pass recovers directly when funding admits the request.
+    # No dead-letter operator replay or immutable-source rewrite is involved.
+    recovered = SummaryEmulator()
+    assert summaries.drain_update_summaries(provider=recovered) == 1
+    update, events, runs = _rows(case)
+    assert recovered.calls == 1
+    assert events[0].state == DomainOutboxState.SUCCEEDED
+    assert events[0].attempts == spent_attempts + 1
+    assert events[0].last_error_redacted is None
+    assert update.summary == "Generated fixture summary."
+    assert update.model_run_id == runs[0].id
+    assert len(runs) == 1 and runs[0].status == "ok"
+    assert summaries.drain_update_summaries(provider=recovered) == 0
+
+
+@pytest.mark.parametrize(
+    "fence", ["outbox_expiry", "outbox_reclaim", "effect_expiry", "effect_reclaim"],
+)
+def test_financial_denial_cannot_refund_a_lost_claim(summary_case, summary_clock, fence):
+    case = summary_case
+    _enqueue_summary(case)
+    retained = {}
+    fallback = _rows(case)[0].ai_summary_json
+    with get_session_factory()() as session:
+        claim = claim_outbox_events(
+            session, lease_owner="original", event_type=summaries.EVENT_TYPE,
+            limit=1, lease_for=summaries.LEASE,
+        )[0]
+        session.commit()
+
+    def deny_after_lease_loss():
+        with get_session_factory()() as session:
+            event = session.scalar(select(DomainOutboxEvent))
+            effect = session.scalar(select(DomainConsumerEffect))
+            if fence.startswith("effect"):
+                renew_outbox_lease(session, claim=claim, lease_for=2 * summaries.LEASE)
+                session.commit()
+            summary_clock.advance(summaries.LEASE + timedelta(seconds=1))
+            if fence == "outbox_reclaim":
+                replacement = claim_outbox_events(
+                    session, lease_owner="replacement", event_type=summaries.EVENT_TYPE,
+                    limit=1, lease_for=summaries.LEASE,
+                )[0]
+                session.commit()
+                retained["outbox_fence"] = replacement.fence_version
+            elif fence == "effect_reclaim":
+                # The same durable parent claim can have a newer consumer lease.
+                claim_consumer_effect(
+                    session, outbox_claim=claim, consumer_name=summaries.CONSUMER,
+                    consumer_version="1", effect_key=claim.event_key,
+                    lease_owner="replacement", lease_for=summaries.LEASE,
+                )
+                session.commit()
+            session.expire_all()
+            retained["event"] = (
+                event.state, event.attempts, event.fence_version, event.lease_token,
+                event.next_attempt_at, event.last_error_redacted,
+            )
+            retained["effect"] = (
+                effect.state, effect.attempts, effect.fence_version, effect.lease_token,
+                effect.last_error_redacted,
+            )
+        raise AiMoneyBudgetError("Private admission denial after lease loss.")
+
+    summaries.run_update_summary(claim, provider=SummaryEmulator(deny_after_lease_loss))
+    update, events, runs = _rows(case)
+    event = events[0]
+    assert (
+        event.state, event.attempts, event.fence_version, event.lease_token,
+        event.next_attempt_at, event.last_error_redacted,
+    ) == retained["event"]
+    with get_session_factory()() as session:
+        effect = session.scalar(select(DomainConsumerEffect))
+        assert (
+            effect.state, effect.attempts, effect.fence_version, effect.lease_token,
+            effect.last_error_redacted,
+        ) == retained["effect"]
+    assert update.summary == "Provider-authorized fixture fallback."
+    assert update.model_run_id is None and update.ai_summary_json == fallback and not runs
+
+
+@pytest.mark.parametrize("guard", ["dispose", "revoke", "source", "bookmark", "policy", "marker"])
+@pytest.mark.parametrize("winner", ["denial_in_flight", "cooldown"])
+def test_financial_cooldown_rechecks_current_authority_before_recovery(
+    summary_case, summary_clock, guard, winner,
+):
+    case = summary_case
+    _enqueue_summary(case)
+    fallback = _rows(case)[0].ai_summary_json
+    marker_token = None
+
+    def change_authority():
+        nonlocal marker_token
+        if guard == "marker":
+            marker_token = set_automated_test_request(NO_PAID_PROVIDERS_VALUE)
+            return
+        if guard == "dispose":
+            response = _lifecycle(
+                case["client"], case["boot"]["access_token"], case["matter"], to_status="disposed",
+            )
+            assert response.status_code == 200, response.text
+        with get_session_factory()() as session:
+            if guard == "revoke":
+                session.get(CompanyMembership, case["actor_id"]).is_active = False
+            elif guard == "source":
+                session.get(TrackedCaseUpdate, case["update_id"]).current_hash = "b" * 64
+            elif guard == "bookmark":
+                session.get(TrackedCaseBookmark, case["bookmark_id"]).is_archived = True
+            elif guard == "policy":
+                session.add(TenantAIPolicy(
+                    company_id=case["company_id"],
+                    allowed_models_recommendations_json='["other-model"]',
+                ))
+            session.commit()
+
+    def deny_admission():
+        if winner == "denial_in_flight":
+            change_authority()
+        raise AiMoneyBudgetError("Synthetic pre-transport admission refusal.")
+
+    token = set_automated_test_request(None)
+    provider = SummaryEmulator()
+    try:
+        assert summaries.drain_update_summaries(provider=SummaryEmulator(deny_admission)) == 1
+        update, events, _ = _rows(case)
+        original_payload_hash = events[0].payload_hash
+        if winner == "cooldown":
+            change_authority()
+        summary_clock.advance(timedelta(minutes=15))
+        assert summaries.drain_update_summaries(provider=provider) == 1
+    finally:
+        if guard == "marker" and marker_token is not None:
+            reset_automated_test_request(marker_token)
+        reset_automated_test_request(token)
+    update, events, runs = _rows(case)
+    assert provider.calls == 0
+    assert events[0].state == DomainOutboxState.SUCCEEDED
+    assert events[0].payload_hash == original_payload_hash
+    assert events[0].payload_json["no_paid_providers"] is False
+    assert update.summary == "Provider-authorized fixture fallback."
+    assert update.model_run_id is None and update.ai_summary_json == fallback and not runs
+    with get_session_factory()() as session:
+        effect = session.scalar(select(DomainConsumerEffect))
+        assert effect.state == "completed"
+        assert effect.result_type == "case_summary_suppressed"
+
+
+def test_financial_cooldown_does_not_reset_later_transport_failure_cap(summary_case, summary_clock):
+    case = summary_case
+    _enqueue_summary(case)
+
+    def deny_admission():
+        raise AiMoneyBudgetError("Synthetic pre-transport admission refusal.")
+
+    assert summaries.drain_update_summaries(provider=SummaryEmulator(deny_admission)) == 1
+    failed = SummaryEmulator(fail=True)
+    for attempt in range(1, 4):
+        summary_clock.advance(timedelta(minutes=15))
+        assert summaries.drain_update_summaries(limit=1, provider=failed) == 1
+        update, events, runs = _rows(case)
+        assert failed.calls == attempt
+        assert events[0].attempts == attempt
+        assert events[0].last_error_redacted == "LLMProviderError"
+        assert update.model_run_id is None and not runs
+        assert events[0].state == (
+            DomainOutboxState.RETRY_SCHEDULED if attempt < 3 else DomainOutboxState.DEAD_LETTER
+        )
+    assert summaries.drain_update_summaries(provider=failed) == 0
+
+
+@pytest.mark.parametrize("guard", ["dispose", "revoke"])
+def test_financial_recovery_still_fences_authority_lost_during_generation(
+    summary_case, summary_clock, guard,
+):
+    case = summary_case
+    _enqueue_summary(case)
+    fallback = _rows(case)[0].ai_summary_json
+
+    def deny_admission():
+        raise AiMoneyBudgetError("Synthetic pre-transport admission refusal.")
+
+    assert summaries.drain_update_summaries(provider=SummaryEmulator(deny_admission)) == 1
+    summary_clock.advance(timedelta(minutes=15))
+
+    def change_authority():
+        if guard == "dispose":
+            response = _lifecycle(
+                case["client"], case["boot"]["access_token"], case["matter"], to_status="disposed",
+            )
+            assert response.status_code == 200, response.text
+        else:
+            with get_session_factory()() as session:
+                session.get(CompanyMembership, case["actor_id"]).is_active = False
+                session.commit()
+
+    provider = SummaryEmulator(change_authority)
+    assert summaries.drain_update_summaries(provider=provider) == 1
+    update, events, runs = _rows(case)
+    assert provider.calls == 1
+    assert events[0].state == DomainOutboxState.SUCCEEDED
+    assert events[0].attempts == 1
+    assert update.ai_summary_json == fallback and update.model_run_id is None
+    assert len(runs) == 1 and runs[0].status == "usage_recorded"
+
+
+def test_financial_deferral_refuses_other_canonical_consumer_work(summary_case):
+    from caseops_api.services.domain_outbox import StaleOutboxLeaseError
+
+    case = summary_case
+    contract = next(
+        row for row in domain_outbox.domain_event_contract_snapshot()
+        if row["name"] == summaries.EVENT_TYPE
+    )
+    assert contract["consumers"] == (summaries.CONSUMER,)
+    with get_session_factory()() as session:
+        envelope = _enqueue(
+            session, company_id=case["company_id"], event_key="other-consumer-work",
+        ).event
+        session.commit()
+        event = session.get(DomainOutboxEvent, envelope.id)
+        claim = claim_outbox_events(session, lease_owner="other-worker", limit=1)[0]
+        consumer = event.expected_consumers_json[0]
+        effect = claim_consumer_effect(
+            session, outbox_claim=claim, consumer_name=consumer, consumer_version="1",
+            effect_key=claim.event_key, lease_owner="other-worker", lease_for=summaries.LEASE,
+        )
+        session.commit()
+        effect_args = dict(
+            outbox_claim=claim, effect_id=effect.effect.id,
+            effect_lease_token=effect.lease_token, effect_fence_version=effect.fence_version,
+        )
+        event_identity = (event.attempts, event.state, event.fence_version, event.lease_token)
+        effect_identity = (
+            effect.effect.attempts, effect.effect.state,
+            effect.effect.fence_version, effect.effect.lease_token,
+        )
+        with pytest.raises(StaleOutboxLeaseError, match="sole summary consumer"):
+            summaries._defer_financial_admission(session, claim=claim, effect_args=effect_args)
+        session.rollback()
+        session.refresh(event)
+        session.refresh(effect.effect)
+        assert (
+            event.attempts, event.state, event.fence_version, event.lease_token,
+        ) == event_identity
+        assert (
+            effect.effect.attempts, effect.effect.state,
+            effect.effect.fence_version, effect.effect.lease_token,
+        ) == effect_identity
+
+
+def test_native_money_denial_and_reconciliation_resume_without_refunding_spend(
+    summary_case, summary_clock, monkeypatch,
+):
+    from types import SimpleNamespace
+
+    from caseops_api.scripts.reconcile_ai_money_budget import ReconciledBudget, initialize_budget
+    from caseops_api.services import ai_money_budget as budget
+
+    case = summary_case
+    _enqueue_summary(case)
+    monkeypatch.setattr(budget, "get_settings", lambda: SimpleNamespace(
+        effective_ai_money_budget_enabled=True, ai_money_budget_start_month="2026-11",
+    ))
+    monkeypatch.setattr(budget, "current_budget_month", lambda: "2026-11")
+    # Retain an existing uncertain monetary reservation. It is never refunded
+    # by deferring summary delivery or reconciling a different month.
+    with get_session_factory()() as session:
+        session.add(AiProviderSpendMonth(
+            month="2026-10", limit_minor=1_000_000, opening_spend_minor=0,
+            admitted_minor=100, inr_per_usd_all_in=100, pricing_json={},
+            opening_evidence_sha256="a" * 64, reconciled_at=datetime.now(UTC),
+        ))
+        session.flush()
+        old_reservation = AiProviderSpendAdmission(
+            month="2026-10", provider="openai", model="fixture-model", upper_bound_minor=100,
+        )
+        session.add(old_reservation)
+        session.flush()
+        old_id = old_reservation.id
+        session.commit()
+    observed_denials = []
+    worker_sessions = []
+    original = summaries.generate_structured
+
+    def observe(*args, **kwargs):
+        worker_sessions.append(kwargs["session"])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(summaries, "generate_structured", observe)
+
+    def native_admission():
+        assert not worker_sessions[-1].in_transaction()
+        try:
+            budget.reserve_paid_ai_call(
+                provider="openai", model="fixture-model", input_bytes=100, output_tokens=100,
+            )
+        except AiMoneyBudgetError as exc:
+            assert "AI monthly spending is awaiting reconciliation" in str(exc)
+            observed_denials.append(type(exc))
+            raise
+
+    provider = SummaryEmulator(native_admission)
+    assert summaries.drain_update_summaries(provider=provider) == 1
+    assert observed_denials == [AiMoneyBudgetError]
+    update, events, runs = _rows(case)
+    assert events[0].attempts == 0 and events[0].state == DomainOutboxState.RETRY_SCHEDULED
+    assert update.model_run_id is None and not runs
+    with get_session_factory()() as session:
+        assert session.get(AiProviderSpendMonth, "2026-10").admitted_minor == 100
+        assert session.get(AiProviderSpendAdmission, old_id).upper_bound_minor == 100
+        assert session.scalar(select(func.count()).select_from(AiProviderSpendAdmission)) == 1
+    assert initialize_budget(ReconciledBudget.model_validate({
+        "month": "2026-11", "opening_spend_minor": 0, "inr_per_usd_all_in": "100",
+        "opening_evidence_sha256": "b" * 64,
+        "pricing": {"openai:fixture-model": {
+            "input_usd_per_million": "1", "output_usd_per_million": "1",
+            "source_url": "https://pricing.example/synthetic-fixture", "source_sha256": "c" * 64,
+        }},
+    })) is True
+    summary_clock.advance(timedelta(minutes=15))
+    assert summaries.drain_update_summaries(provider=provider) == 1
+    update, events, runs = _rows(case)
+    assert provider.calls == 2 and observed_denials == [AiMoneyBudgetError]
+    assert update.summary == "Generated fixture summary."
+    assert events[0].state == DomainOutboxState.SUCCEEDED and events[0].attempts == 1
+    assert len(runs) == 1 and runs[0].status == "ok"
+    with get_session_factory()() as session:
+        assert session.get(AiProviderSpendMonth, "2026-10").admitted_minor == 100
+        assert session.get(AiProviderSpendAdmission, old_id).upper_bound_minor == 100
+        assert session.scalar(select(func.count()).select_from(AiProviderSpendAdmission)) == 2
 
 
 def test_expired_lease_recovery_fences_original_worker(summary_case):

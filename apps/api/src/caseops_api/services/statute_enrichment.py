@@ -34,6 +34,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import ModelRun, Statute, StatuteSection
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
@@ -205,6 +206,9 @@ def model_generate_section_text(
             temperature=0.0,
             max_tokens=2048,
         )
+    except AiMoneyBudgetError:
+        # No model transport occurred; do not fabricate a run or commit caller work.
+        raise
     except LLMProviderError as exc:
         _persist_model_run(
             session, completion=None, context=context,

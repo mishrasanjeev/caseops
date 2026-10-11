@@ -39,6 +39,7 @@ from caseops_api.schemas.compliance import (
     ComplianceExtractionRunRecord,
     ComplianceItemRecord,
 )
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.compliance_participants import (
     ComplianceParticipantFenceError,
@@ -583,6 +584,11 @@ def _prepare_ai_items(
             temperature=settings.llm_temperature,
             max_tokens=min(settings.llm_max_output_tokens, 1600),
         )
+    except AiMoneyBudgetError as exc:
+        return _PreparedAICompliance(
+            metadata={"ai_deferred": "shared_ai_budget"},
+            error_message_redacted=f"AI extraction deferred: {redact_provider_error(exc)}",
+        )
     except LLMProviderError as exc:
         return _PreparedAICompliance(
             metadata={"ai_failed": True},
@@ -693,6 +699,8 @@ def _finish_run(
         "source_type": run.source_type,
         "trigger": run.trigger,
     }
+    if run.metadata_json.get("ai_deferred") == "shared_ai_budget":
+        metadata["ai_phase"] = "deferred_shared_budget"
     audit_context = _notification_context(
         session,
         matter=matter,

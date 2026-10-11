@@ -30,6 +30,7 @@ from sqlalchemy import func, select
 
 from caseops_api.db.models import ModelRun, Statute, StatuteSection
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.llm import PURPOSE_METADATA_EXTRACT
 from caseops_api.services.statute_enrichment import (
     SOURCE_INDIACODE,
@@ -90,9 +91,10 @@ def run(
     counters: dict[str, dict[str, int]] = defaultdict(
         lambda: {
             "scraped": 0, "model": 0, "skipped_budget": 0,
-            "failed": 0, "already_filled": 0,
+            "failed": 0, "already_filled": 0, "budget_blocked": 0,
         }
     )
+    money_stopped = False
     with factory() as session:
         statutes_q = select(Statute).order_by(Statute.id)
         if statute_filter:
@@ -164,10 +166,15 @@ def run(
                                 act_label, sec.section_number,
                             )
                             continue
-                        result = enrich_section(
-                            session, sec, statute=st, http_client=client,
-                            allow_model_fallback=allow_model_fallback,
-                        )
+                        try:
+                            result = enrich_section(
+                                session, sec, statute=st, http_client=client,
+                                allow_model_fallback=allow_model_fallback,
+                            )
+                        except AiMoneyBudgetError:
+                            counters[st.id]["budget_blocked"] += 1
+                            money_stopped = True
+                            break
 
                     if result.source == SOURCE_INDIACODE:
                         counters[st.id]["scraped"] += 1
@@ -187,25 +194,28 @@ def run(
                 )
                 logger.info(
                     "ACT END %s — scraped=%d model=%d skipped_budget=%d "
-                    "failed=%d (this-Act model spend: $%.4f)",
+                    "failed=%d budget_blocked=%d (this-Act model spend: $%.4f)",
                     act_label,
                     counters[st.id]["scraped"],
                     counters[st.id]["model"],
                     counters[st.id]["skipped_budget"],
                     counters[st.id]["failed"],
+                    counters[st.id]["budget_blocked"],
                     spend_after_act - spend_at_act_start,
                 )
+                if money_stopped:
+                    break
 
     # Summary table
     print()
     print("=" * 78)
     print("Statute enrichment summary")
     print("=" * 78)
-    widths = [22, 10, 10, 16, 10]
-    header = ["statute_id", "scraped", "model", "skipped_budget", "failed"]
+    widths = [22, 10, 10, 16, 10, 16]
+    header = ["statute_id", "scraped", "model", "skipped_budget", "failed", "budget_blocked"]
     print("  ".join(c.ljust(w) for c, w in zip(header, widths, strict=False)))
     print("-" * sum(widths))
-    grand = {"scraped": 0, "model": 0, "skipped_budget": 0, "failed": 0}
+    grand = {"scraped": 0, "model": 0, "skipped_budget": 0, "failed": 0, "budget_blocked": 0}
     for sid, c in counters.items():
         cells = [
             sid,
@@ -213,6 +223,7 @@ def run(
             f"{c['model']:>6}",
             f"{c['skipped_budget']:>6}",
             f"{c['failed']:>6}",
+            f"{c['budget_blocked']:>6}",
         ]
         print("  ".join(s.ljust(w) for s, w in zip(cells, widths, strict=False)))
         for k in grand:
@@ -224,8 +235,16 @@ def run(
         f"{grand['model']:>6}",
         f"{grand['skipped_budget']:>6}",
         f"{grand['failed']:>6}",
+        f"{grand['budget_blocked']:>6}",
     ]
     print("  ".join(s.ljust(w) for s, w in zip(cells, widths, strict=False)))
+    if money_stopped:
+        print(
+            "shared_ai_budget: AI money admission stopped this run; "
+            "no later sections were submitted.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

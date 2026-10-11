@@ -1,5 +1,13 @@
 # CaseOps agent instructions
 
+- Account-level AI money denial is an operational batch stop, not a corrupt
+  document or transient per-record failure. Stop submission, drain only the
+  bounded in-flight window, retain the distinct halt reason and return a
+  non-success job outcome. Prove sequential, concurrent and CLI boundaries;
+  a transport cap alone does not prove the surrounding job stopped honestly.
+  After activation, rollback and dormant paid executors must keep the same
+  guarded adapters and authoritative ledger, not merely its additive schema.
+
 - Multi-tenant Docker fixture preparation and inspection must amortize process
   startup without reusing tenant authorization or database sessions. Preserve
   real worker executions, raw persisted snapshots, responsive/source/replay

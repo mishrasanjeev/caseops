@@ -11,6 +11,14 @@ paid fallback cannot be treated as free usage. All-Gemini quality, region,
 privacy, provider readiness and exact-release proof remain open.
 [Assessment](AI_PROVIDER_BUDGET_GEMINI_ASSESSMENT_2026-10-11.md).
 
+The denial boundary includes operational callers, not only SDK admission:
+candidate corpus workers stop without source deletion or false corruption;
+predictive/statute handlers preserve prior evidence; summaries retain a bounded
+cooldown and owned claim fences; compliance records its deferred optional phase.
+Stopped legacy executors must be upgraded before resumption. Complete amended
+release evidence is still required; no provider migration or November billing
+baseline is fabricated. [Evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
 ## October 10 Summary Gate Repair
 
 Partially implemented / NO-GO: bounded fresh-session fixture batching and

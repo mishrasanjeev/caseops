@@ -14,8 +14,9 @@ Network, cost, and time:
 
 - Each row sends ~3 KB of document text to the configured OpenAI model.
 - Rows are processed concurrently (``--concurrency``, default 6).
-- A failed extraction logs and moves on; the row is left untouched so
-  a re-run will pick it up.
+- Transient extraction errors move on; operational money/quota stops drain
+  only in-flight work and return a distinct nonzero exit. Denied rows stay
+  untouched for a later run.
 
 The per-document JSON contract is defined by ``_Extracted`` below; any
 response that fails validation is recorded as an error, not silently
@@ -39,6 +40,7 @@ from sqlalchemy import func, or_, select, text
 
 from caseops_api.db.models import AuthorityDocument, ModelRun
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
     LLMCompletion,
@@ -82,6 +84,7 @@ _DEFAULT_DAILY_USD_CAP = 100.0
 EXIT_DAILY_CAP_REACHED = 2
 EXIT_QUOTA_EXHAUSTED = 3
 EXIT_PROVIDER_CANARY_FAILED = 4
+EXIT_AI_MONEY_DENIED = 5
 
 
 def _rates_for(model: str | None) -> tuple[float, float]:
@@ -93,6 +96,7 @@ def _rates_for(model: str | None) -> tuple[float, float]:
     return _DEFAULT_RATES
 _HALT_FLAG = threading.Event()
 _QUOTA_EXHAUSTED_FLAG = threading.Event()
+_AI_MONEY_DENIED_FLAG = threading.Event()
 # Re-check the cap every N completed extractions so a runaway cannot
 # overshoot by more than a few seconds of throughput.
 _CAP_CHECK_EVERY_N = 50
@@ -250,6 +254,7 @@ _stats = {
     "skipped_no_text": 0,
     "llm_error": 0,
     "quota_exhausted": 0,
+    "ai_money_denied": 0,
     "parse_error": 0,
     "nothing_to_set": 0,
     "started_at": 0.0,
@@ -261,6 +266,7 @@ def _reset_run_state() -> None:
     global _processed_since_cap_check
     _HALT_FLAG.clear()
     _QUOTA_EXHAUSTED_FLAG.clear()
+    _AI_MONEY_DENIED_FLAG.clear()
     with _cap_check_lock:
         _processed_since_cap_check = 0
     with _stats_lock:
@@ -342,6 +348,8 @@ def _extract_one(doc_id: str, provider: LLMProvider) -> dict:
         # Cap check — fast-path bail before spending tokens.
         # A worker submitted just before a sibling observes exhausted quota
         # drains without spending another provider request.
+        if _AI_MONEY_DENIED_FLAG.is_set():
+            return {"ok": False, "reason": "ai_money_halt"}
         if _QUOTA_EXHAUSTED_FLAG.is_set():
             return {"ok": False, "reason": "quota_halt"}
         if _HALT_FLAG.is_set():
@@ -356,6 +364,14 @@ def _extract_one(doc_id: str, provider: LLMProvider) -> dict:
                 temperature=0.0,
                 max_tokens=512,
             )
+        except AiMoneyBudgetError:
+            with _stats_lock:
+                _AI_MONEY_DENIED_FLAG.set()
+                _stats["ai_money_denied"] += 1
+            logger.warning("shared AI money admission denied; stopping metadata sweep")
+            # No provider completion exists; the independent money ledger owns
+            # any retained reservation. Do not fabricate a failed ModelRun.
+            return {"ok": False, "reason": "ai_money_denied"}
         except LLMQuotaExhaustedError as exc:
             # This typed subclass must precede LLMProviderError. Exhausted
             # account credit affects the whole sweep, rather than one row.
@@ -576,14 +592,18 @@ def run(
 
             def submit_next() -> bool:
                 nonlocal submitted
-                try:
-                    doc_id = next(id_iter)
-                except StopIteration:
-                    return False
-                future = pool.submit(_extract_one, doc_id, provider)
-                in_flight[future] = doc_id
-                submitted += 1
-                return True
+                # Serialize submission with a worker's money-stop observation.
+                with _stats_lock:
+                    if _AI_MONEY_DENIED_FLAG.is_set():
+                        return False
+                    try:
+                        doc_id = next(id_iter)
+                    except StopIteration:
+                        return False
+                    future = pool.submit(_extract_one, doc_id, provider)
+                    in_flight[future] = doc_id
+                    submitted += 1
+                    return True
 
             # Keep a bounded rolling window. The former list comprehension
             # enqueued every corpus row (803k in the incident) before the
@@ -598,6 +618,12 @@ def run(
                     _stats["processed"] += 1
                 try:
                     result = future.result()
+                except AiMoneyBudgetError:
+                    with _stats_lock:
+                        _AI_MONEY_DENIED_FLAG.set()
+                        _stats["ai_money_denied"] += 1
+                    logger.warning("shared AI money stop escaped metadata worker")
+                    result = {"ok": False, "reason": "ai_money_denied"}
                 except LLMQuotaExhaustedError as exc:
                     # Defence in depth: _extract_one handles and audits this,
                     # but a future refactor must still stop the outer driver.
@@ -616,17 +642,25 @@ def run(
                     and result.get("provider_completed") is True
                 ):
                     provider_canary_succeeded = True
-                if reason in {"quota_exhausted", "quota_halt"}:
+                if reason in {"ai_money_denied", "ai_money_halt"}:
+                    _AI_MONEY_DENIED_FLAG.set()
+                elif reason in {"quota_exhausted", "quota_halt"}:
                     _QUOTA_EXHAUSTED_FLAG.set()
                 elif reason == "daily_cap_halt":
                     _HALT_FLAG.set()
 
-                stopping = _QUOTA_EXHAUSTED_FLAG.is_set() or _HALT_FLAG.is_set()
+                stopping = (
+                    _AI_MONEY_DENIED_FLAG.is_set()
+                    or _QUOTA_EXHAUSTED_FLAG.is_set()
+                    or _HALT_FLAG.is_set()
+                )
                 if stopping:
                     if not stop_logged:
                         stop_logged = True
                         stop_name = (
-                            "upstream quota exhausted"
+                            "shared AI money admission denied"
+                            if _AI_MONEY_DENIED_FLAG.is_set()
+                            else "upstream quota exhausted"
                             if _QUOTA_EXHAUSTED_FLAG.is_set()
                             else "daily spend cap reached"
                         )
@@ -647,17 +681,21 @@ def run(
     elapsed = time.time() - _stats["started_at"]
     logger.info(
         "done: processed=%d submitted=%d updated=%d no_text=%d llm_err=%d "
-        "quota_exhausted=%d parse_err=%d nothing_to_set=%d elapsed=%.0fs",
+        "quota_exhausted=%d ai_money_denied=%d parse_err=%d "
+        "nothing_to_set=%d elapsed=%.0fs",
         _stats["processed"],
         submitted,
         _stats["updated"],
         _stats["skipped_no_text"],
         _stats["llm_error"],
         _stats["quota_exhausted"],
+        _stats["ai_money_denied"],
         _stats["parse_error"],
         _stats["nothing_to_set"],
         elapsed,
     )
+    if _AI_MONEY_DENIED_FLAG.is_set():
+        return EXIT_AI_MONEY_DENIED
     if _QUOTA_EXHAUSTED_FLAG.is_set():
         return EXIT_QUOTA_EXHAUSTED
     if _HALT_FLAG.is_set():

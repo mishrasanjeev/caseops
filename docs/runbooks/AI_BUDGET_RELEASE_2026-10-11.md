@@ -32,10 +32,11 @@ or October pause was changed during local implementation.
 - Final r4 gate: **343 collected and passed**, no skipped or missing results,
   including the caller-held SQLite writer mutex and three actionable HTTP-copy
   controls. Whole API source/test Ruff and `git diff --check` passed.
-- Five new money test files contributed 204 cases: budget primitive 46,
+- Five new money test files contributed 205 cases in r4: budget primitive 47,
   dispatch/process/migration 13, LLM boundary 61, native LLM SDK transport 37,
   embedding boundary 47. The expanded gate contained eight historical
-  adapter/settings files, 135 cases.
+  adapter/settings files, 138 cases. Earlier r3 had 204 new/135 historical;
+  those smaller inventories are retained, not substituted for r4.
 - PostgreSQL money-lock controls prove both directed lock orders using separate
   backend PIDs and owned UUID schemas; teardown proved those schemas absent.
 - Native SDK controls use pinned OpenAI 2.32.0, google-genai 1.73.1 and HTTPX
@@ -56,7 +57,66 @@ Local retained artifacts are in this worktree's `.tmp/ai-money-native-20261011-r
 `.tmp/ai-money-migration-20261011`. Earlier incomplete/misspelled lint selection
 was retained and corrected; it was never full-coverage evidence.
 
+## Adjacent Denial Amendment
+
+Independent review of the first candidate found that the shared SDK denial
+could still be treated as an ordinary failed document by operational callers.
+The amendment stops metadata/backfill/statute batches, retains denied ingest
+inputs, preserves accepted predictive classifications, cools down summaries
+without exhausting transport attempts and distinguishes compliance's deferred
+AI phase from its completed deterministic work. Provider I/O in the amended
+corpus paths owns no source transaction, and publication rechecks frozen source
+identity. Remote retained staging is bounded to one owned slot per temp root.
+
+Retained red evidence includes 13 failures/eight controls for metadata and
+structured backfill; 21 failures/three controls for corpus money stops and
+transaction ownership; five additional title/source/timestamp failures; two
+repeated remote-staging failures; and two original summary financial-denial
+failures. Early collection/fixture defects are explicitly NOT RUN, not product
+reproductions. Initial amended summary runs still failed before the complete
+55-case replacement passed; the failed receipts remain available.
+
+Agent-scoped replacement evidence: corpus 157 passes/471 phases, summary
+55 passes/165 phases and classification/statute 38 passes/114 phases, zero skips.
+These do not certify the combined tree. Parent r5 selected 27 exact files and
+collected 714 identities, including PostgreSQL: **708 passed, six explicit
+Windows title-extraction skips, zero failures/errors**, pytest completion exit 0,
+714 JUnit identities and 2,136 setup/call/teardown reports. Independent native
+reconciliation proves the exact requested file inventory, each permitted skipped
+phase, no duplicate/missing result and unchanged API source hashes. Both owned
+runner/pytest PIDs are absent. The outer console tee failed after pytest completion
+with a Windows UnicodeEncodeError (caller exit 1); its failed receipt is retained,
+not relabeled clean wrapper acceptance. Six skipped identities still require
+positive Linux replay; the canonical amended planner selects their module in
+coverage shard 7/13. Evidence: `.tmp/ai-money-native-20261011-r5/results.jsonl`,
+`results.xml` and `independent-reconciliation.json`. The compliance red control reproduced one
+missing deferred-phase annotation while the ordinary failure control passed;
+its first replacement exposed a test assertion treating serialized audit JSON
+as a dictionary. That test defect was corrected without changing the API.
+
+CodeQL's side-effect-in-assert finding and mixed implicit return were corrected
+in source. Alerts 541/542 (Alembic reflective metadata) and 543 (ORM registration)
+were individually dismissed as false positives; 546 is an isolated test-worker
+failure receipt, individually classified as used in tests. No scanning rule or
+security boundary was relaxed. Fresh amended analysis is still required.
+
+The terminated ingest VM was not resumed. Its legacy sweep wrapper tolerates
+nonzero stage exits, and dormant pre-guard images cannot be certified as guarded
+executors. Upgrade and prove the authoritative database/adapters before any
+resumption; do not infer a global account cap from the API alone.
+
 ## Remaining Gates
+
+The first Docker run at `ab07681ecbd27f9ce110f73ec664ec9c5fe74a5d` was
+intentionally interrupted after independent review found missing corpus-driver
+money-denial halt handling. Its journal retains 2,237 collected identities and
+27 completed calls, no completion event: **incomplete, not acceptance**.
+The owned Python child was confirmed absent, and only its exact Compose project
+`caseops-acceptance-ab07681ecbd2-a27280ba9b78` was removed, including the
+acceptance emulator, both networks and owned volumes. Replacement evidence is
+required for the amended commit. The full web unit suite independently passed
+1,242 tests across 198 files. Hosted CodeQL, security and web checks passed on
+the earlier candidate, but are not closure evidence for the amendment.
 
 1. Pass change-relative governance and migration contracts after commit.
 2. Run committed clean-image Docker acceptance: full PostgreSQL inventory,

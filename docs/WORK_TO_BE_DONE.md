@@ -10,6 +10,14 @@ replay. Gemini migration/fallback remains unverified and cannot exceed the
 shared ceiling. No October billing baseline or provider-quality result is
 invented. [Assessment](AI_PROVIDER_BUDGET_GEMINI_ASSESSMENT_2026-10-11.md).
 
+Adjacent-path review reproduced financial-denial misclassification in corpus,
+statute/predictive and summary workflows. Candidate amendments preserve source
+files and accepted classifications, halt batches, defer summaries without
+spending transport retries and annotate compliance's deferred optional AI phase.
+J05/M04 and J08/M08 join the existing J09/M07 and J14/M14 scope. Full combined
+native, Docker, amended CI and exact-production proof remain required; the first
+Docker journal is incomplete, not a pass. See the [release evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
 ## October 10 Summary Gate Repair
 
 NO-GO: integrated `a8979a41` completes 66 Python passes/198 phases and 42

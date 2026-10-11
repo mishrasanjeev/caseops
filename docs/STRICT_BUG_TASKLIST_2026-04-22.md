@@ -1,5 +1,17 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 11 Financial Denial Regressions
+
+**Partially fixed in source; not production-certified.** Independent review
+reproduced continued batch submission, deletion of unprocessed ingest inputs,
+false source quarantine and exhausted summary transport retries after account
+money denial. Candidate amendments distinguish this operational stop from a
+corrupt source or ordinary provider failure. Compliance retains deterministic
+items while explicitly recording a deferred AI phase. Earlier harness/setup
+failures and incomplete Docker evidence remain retained; combined native,
+clean-image Docker, amended CI and exact-serving browser acceptance precede
+closure. [Evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
 ## October 10 Summary Gate Repair
 
 Summary browser acceptance remains Inconclusive; #527 remains not fixed in
