@@ -2,6 +2,99 @@
 
 ## Release Verdict
 
+### 19:17 UTC Focused Replacement, Not Release Acceptance
+
+R10 finished naturally exit 1 at 18:45 UTC: 2,301 collected, 2,291 passed,
+two call failures, eight setup errors, 6,895 complete phases and matching JUnit.
+All ten original failures are read and retained; its browser gate never ran.
+The original seven containers, two networks and two volumes are absent.
+`docker-r10-reconciliation-01/README.md` records the complete failed inventory.
+
+The amended six-module native replay R4 reports all 202 cases / 606 phases
+passing, no skips, fresh template0 migration and release seed, completion 0.
+R3's one old exact-receipt-shape assertion failure remains retained (201/202
+passed); its replacement asserts the new opaque transaction token without
+weakening private-parameter exclusion. R1/R2 are retained pre-test harness
+failures, not product reproductions. The former stronger auth lock still
+produces four intentional HTTP 503 call failures under the same bounds in
+`native-auth-strong-baseline-r1`; this is a susceptibility control, not a
+passing release gate or proof of the original upload latency's cause.
+
+Twenty-eight offline Playwright controls pass, zero retries/skips, with actual
+exclusive receipt/transcript files and exact safe seven-unit output hashes.
+Only the real-web connection-close journey is excluded from this focused run;
+the full gate must execute it and the original selection/Drive workflows.
+Sensitive/oversized rejected streams retain no bytes or digest. E2E typecheck,
+full API Ruff and all sixteen governance/offline-safety commands pass. Standard
+collection and independent receipt reconciliation are retained separately;
+discovery is not execution. See `fixture-receipt-r4.*`, `native-race-focused-r4`
+and `native-child-static-r1` in the durable recovery output directory.
+
+These amendments change tests/evidence/ledgers, not runtime, dependencies,
+migrations or workflows relative to a770. This does not waive fresh complete
+exact-current Docker/CI, canonical-main merge, guarded deploy or live replay.
+The original preflight latency and historical artifact omission remain open
+until their respective complete replacement evidence; no common cause or
+paid legal-quality result is claimed. Production API/web still serve 3db at
+18:49 UTC. Gemini stays off, October stays unchanged and no primary promotion
+or November financial initialization has occurred. **NO-GO / not deployed.**
+
+### 18:42 UTC Additional Evidence Boundaries
+
+R10 has eight additional **setup** errors, all individually read: the actor-
+safety fixture's historical four-name allowlist rejects the new independently
+migrated `caseops_native_<12-hex-release>_<12-hex-nonce>` database. These are not
+eight successful product reproductions. The candidate guard retains loopback,
+non-production, exact PostgreSQL driver and no routing overrides, and accepts
+only that bounded name when its full DSN matches the current configuration.
+Nineteen positive/negative guard cases are added; full replacement is pending.
+
+Hosted a770 CI `38160179268` completed success. Independent browser inventory:
+532 identities, 515 passes, 17 explicit skips, no failures/flaky/retries; all
+previous identities and 21 October controls retained. Actual GitHub merge
+`0392ae6c951e67ede2fe38eb441998d0ad00e227` has candidate-identical tree
+`d696a76c3505d11abddc38ca0e3ce1cdec2ec4b1`. ZIP digest/member verification
+passes, but selection/Drive process receipts and the seven-unit Drive transcript
+were attached only in memory and omitted from the upload. Required receipt
+acceptance remains incomplete. The correction persists selected sanitized
+output files without expanding the privacy-selected reporter. Original hosted
+evidence remains sealed; it does not certify the amended child or failed Docker.
+
+Keep the original upload-preflight identities. Add separate final-admission and
+passive no-pause probes rather than replacing the original boundary. All native
+deadlines, participant/lifecycle assertions and security fences remain unchanged.
+Full current focused, Docker, CI, canonical-main and exact-live gates stay open.
+
+### 18:17 UTC Native Race Checkpoint
+
+Frozen `a770f6cd` Docker R10 is still collecting its complete 2,301-case
+inventory. Two call failures are fully inspected with original byte-identical
+native SQL and setup/call/teardown evidence retained. No browser acceptance or
+production mutation is claimed. Source corrections are in the separate writable
+`codex/native-race-orchestration-20261011` child; the gate checkout stays frozen.
+
+The same-uploader auth race intentionally holds finalization until the real HTTP
+body completes, but starts a two-second SQL writer first while allowing auth
+five seconds. The receipt proves 2.574-second HTTP completion after writer
+55P03. Correct pairwise proof authenticates while the worker remains held, then
+starts and observes the writer against that same held worker. It is not a
+three-way simultaneous assertion; all original timeouts and final outcomes stay.
+The cause of that auth duration is not established.
+
+The upload race pauses its first Matter UPDATE in initial preflight, not the
+claimed post-storage final admission. The pause was promptly released, but
+uninstrumented work before rollback prevents attributing its worker 55P03.
+Verdict remains **Inconclusive** for the original preflight latency. An explicit
+storage-complete marker corrects the chosen boundary; passive transaction/SQL
+receipts support further diagnosis without parameters, private text or retries.
+Corrected final-admission success cannot silently close the original finding.
+No Company/participant lock, runtime route, deadline or financial fence changes.
+
+Full failed readouts: `docker-r10-compliance-failure/READOUT.md` and
+`docker-r10-finalizer-auth-failure/failed-native-sql.jsonl` under the durable
+recovery output directory. Complete affected/adjacent and amended Docker/CI,
+canonical merge, guarded deployment and exact-live acceptance remain required.
+
 ### 17:32 UTC Replacement Checkpoint
 
 The complete focused replacement passed 44 API cases / 132 phases and twenty

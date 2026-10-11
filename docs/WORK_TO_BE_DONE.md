@@ -2,6 +2,29 @@
 
 ## October 11 Release Recovery
 
+19:17 UTC checkpoint: R10 is completed failed, not still running: 2,291/2,301
+passed, two call failures/eight setup errors, browser unrun. Original evidence
+and owned cleanup are reconciled. Amended six-module R4 reports 202/202 native
+passes; R3's one receipt-shape failure and pre-test R1/R2 failures remain retained.
+The former strong auth lock gives four intended negative-control failures.
+Twenty-eight offline receipt controls, Ruff, E2E typecheck and sixteen static
+gates pass. Full amended Docker/CI/live and uploaded-artifact retention remain
+open; original upload latency is still Inconclusive. Runtime/primary/October
+and production remain unchanged; Gemini activation is not authorized or done.
+
+Add bounded configured-DSN admission for native fixture names: eight R10 setup
+errors are not product call failures. Preserve failed evidence and rerun every
+affected case. Hosted a770 CI passed, but selection/Drive receipts and the
+seven-unit transcript were omitted before upload; persist selected sanitized
+files and reconcile the next actual artifact. Full amended release stays open.
+
+R10 on `a770f6cd` remains in progress with two complete inspected native
+failures. Correct the pairwise auth/writer orchestration and explicitly select
+post-storage upload admission while retaining original deadlines and assertions.
+Keep the original upload preflight latency Inconclusive; add passive timing
+receipts and require complete affected/adjacent, Docker, CI and exact-live replay.
+No prior hosted or local green gate certifies the amended candidate.
+
 47 CI `38156566072` failed one stale header-expression assertion; browser
 acceptance skipped. Preserve all failed evidence and the no-paid fence.
 Replacement passes 44 API / twenty offline browser cases, with exact inventory

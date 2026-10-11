@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
 from io import BytesIO
+from pathlib import Path
 from threading import Event
+from time import monotonic
 from types import SimpleNamespace
 
 import pytest
@@ -51,6 +53,7 @@ from caseops_api.services.assignment_memberships import lock_company_memberships
 from caseops_api.services.document_storage import StoredDocument
 from caseops_api.services.llm import LLMCompletion
 from tests.test_document_finalizer_overlap_20261009_postgres import (
+    _FinalizerAudit,
     _seed_finalizer,  # noqa: F401
 )
 from tests.test_document_finalizer_overlap_20261009_postgres import (
@@ -65,6 +68,281 @@ from tests.test_postgres_validation import (
 pytestmark = pytest.mark.postgres
 finalizer_audit = _finalizer_audit_fixture
 _TEXT = "The parties shall comply within two weeks from today."
+_MAX_PREFLIGHT_READ_RECEIPTS = 32
+
+
+class _UploadPhase:
+    def __init__(self, audit):
+        self.audit = audit
+        self.phase = "preflight"
+        self.storage_complete = Event()
+        self.preflight_transaction = None
+        self.initial_transaction = None
+        self.initial_started = None
+        self.initial_duration = None
+        self.initial_ended = False
+        self.read_count = 0
+        self.reads_omitted = 0
+
+    def observe(self, session):
+        event.listen(session, "after_transaction_create", self.created)
+        event.listen(session, "after_begin", self.began)
+        event.listen(session, "after_transaction_end", self.ended)
+
+    def created(self, _session, transaction):
+        if transaction.parent is None and self.initial_transaction is None:
+            self.initial_transaction = transaction
+            self.initial_started = monotonic()
+
+    def began(self, _session, transaction, connection):
+        if transaction is self.initial_transaction:
+            self.preflight_transaction = connection.info.get("finalizer_transaction")
+            self.audit.record(
+                "upload_initial_transaction_started", role="mutation",
+                pid=self.audit.pids.get("mutation"), transaction=self.preflight_transaction,
+                duration_since_create=monotonic() - self.initial_started,
+            )
+
+    def ended(self, _session, transaction):
+        if transaction is self.initial_transaction:
+            self.initial_ended = True
+            self.initial_duration = monotonic() - self.initial_started
+            self.audit.record(
+                "upload_initial_transaction_ended", role="mutation",
+                pid=self.audit.pids.get("mutation"), transaction=self.preflight_transaction,
+                duration=self.initial_duration,
+                reads_observed=self.read_count, reads_omitted=self.reads_omitted,
+            )
+
+    def before(self, connection, _cursor, sql, _parameters, context, _many):
+        # Supplement only reads omitted by the shared lock/write/election journal.
+        if (
+            connection.info.get("finalizer_role") != "mutation"
+            or self.phase != "preflight"
+            or not sql.startswith("SELECT ")
+            or (" FROM " not in sql and "\nFROM " not in sql)
+            or "FOR " in sql
+            or "ORDER BY company_memberships.created_at ASC" in sql
+        ):
+            return
+        self.read_count += 1
+        if self.read_count > _MAX_PREFLIGHT_READ_RECEIPTS:
+            self.reads_omitted += 1
+            return
+        context.compliance_preflight_read_ordinal = self.read_count
+        self.audit.record(
+            "upload_preflight_read_before", role="mutation",
+            pid=self.audit.pids.get("mutation"),
+            transaction=connection.info.get("finalizer_transaction"),
+            ordinal=self.read_count, sql=sql,
+        )
+        context.compliance_preflight_read_started = monotonic()
+
+    def after(self, connection, _cursor, sql, _parameters, context, _many):
+        started = getattr(context, "compliance_preflight_read_started", None)
+        if started is not None:
+            self.audit.record(
+                "upload_preflight_read_after", role="mutation",
+                pid=self.audit.pids.get("mutation"),
+                transaction=connection.info.get("finalizer_transaction"),
+                ordinal=context.compliance_preflight_read_ordinal, sql=sql,
+                duration=monotonic() - started,
+            )
+
+
+def _matches_compliance_boundary(
+    *, first, path, role, sql, parameters, upload=None, upload_overlap_phase=None,
+    transaction=None,
+):
+    if first == "worker":
+        return (
+            role == "worker"
+            and sql.startswith("INSERT INTO audit_events")
+            and isinstance(parameters, dict)
+            and parameters.get("action") == "matter_compliance.extraction.completed"
+        )
+    if first != "mutation" or role != "mutation" or "FOR UPDATE OF matters" not in sql:
+        return False
+    if path != "attachment_upload":
+        return True
+    if upload is None or not transaction or not upload.preflight_transaction:
+        return False
+    if upload_overlap_phase == "preflight":
+        return (
+            upload.phase == "preflight" and not upload.initial_ended
+            and not upload.storage_complete.is_set()
+            and transaction == upload.preflight_transaction
+        )
+    return (
+        upload_overlap_phase == "admission"
+        and upload.phase == "final_admission" and upload.initial_ended
+        and upload.storage_complete.is_set()
+        and transaction != upload.preflight_transaction
+    )
+
+
+@pytest.mark.parametrize(
+    "phase,storage_complete,initial_ended,transaction,preflight_transaction",
+    [
+        pytest.param("preflight", False, False, "initial", "initial", id="initial-preflight"),
+        pytest.param("storage", False, True, "storage", "initial", id="storage-in-progress"),
+        pytest.param("quota_preflight", False, True, "quota", "initial", id="advisory-quota"),
+        pytest.param("final_admission", False, True, "final", "initial", id="missing-storage"),
+        pytest.param("final_admission", True, False, "final", "initial", id="unreleased-initial"),
+        pytest.param("final_admission", True, True, "initial", "initial", id="initial-replay"),
+        pytest.param("final_admission", True, True, None, "initial", id="missing-current-token"),
+        pytest.param("final_admission", True, True, "final", None, id="missing-initial-token"),
+    ],
+)
+def test_upload_admission_boundary_rejects_incorrect_phase(
+    phase, storage_complete, initial_ended, transaction, preflight_transaction,
+):
+    upload = _UploadPhase(None)
+    upload.phase = phase
+    upload.initial_ended = initial_ended
+    upload.preflight_transaction = preflight_transaction
+    if storage_complete:
+        upload.storage_complete.set()
+    assert not _matches_compliance_boundary(
+        first="mutation", path="attachment_upload", role="mutation",
+        sql="SELECT matters.id FROM matters FOR UPDATE OF matters", parameters=None,
+        upload=upload, upload_overlap_phase="admission", transaction=transaction,
+    )
+
+
+@pytest.mark.parametrize(
+    "first,path,role,sql,action,phase,expected",
+    [
+        pytest.param("worker", "create", "worker", "INSERT INTO audit_events",
+                     "matter_compliance.extraction.completed", None, True, id="worker-completed"),
+        pytest.param("worker", "create", "worker", "INSERT INTO audit_events",
+                     "other.action", None, False, id="wrong-worker-action"),
+        pytest.param("worker", "create", "mutation", "INSERT INTO audit_events",
+                     "matter_compliance.extraction.completed", None, False, id="wrong-worker-role"),
+        pytest.param("mutation", "create", "worker", "FOR UPDATE OF matters",
+                     None, None, False, id="wrong-mutation-role"),
+        pytest.param("mutation", "create", "mutation", "FOR NO KEY UPDATE OF companies",
+                     None, None, False, id="wrong-mutation-lock"),
+        pytest.param("mutation", "create", "mutation", "FOR UPDATE OF matters",
+                     None, None, True, id="ordinary-mutation"),
+        pytest.param("mutation", "attachment_upload", "mutation", "FOR UPDATE OF matters",
+                     None, "preflight", True, id="explicit-preflight"),
+        pytest.param("mutation", "attachment_upload", "mutation", "FOR UPDATE OF matters",
+                     None, "admission", True, id="explicit-admission"),
+    ],
+)
+def test_compliance_boundary_preserves_exact_order_role_and_sql(
+    first, path, role, sql, action, phase, expected,
+):
+    upload = _UploadPhase(None)
+    upload.preflight_transaction = "initial"
+    if phase == "admission":
+        upload.phase = "final_admission"
+        upload.initial_ended = True
+        upload.storage_complete.set()
+    assert _matches_compliance_boundary(
+        first=first, path=path, role=role, sql=sql, parameters={"action": action},
+        upload=upload, upload_overlap_phase=phase,
+        transaction="final" if phase == "admission" else "initial",
+    ) is expected
+    if path == "attachment_upload":
+        assert not _matches_compliance_boundary(
+            first=first, path=path, role=role, sql=sql, parameters=None, upload=upload,
+            upload_overlap_phase="admission" if phase == "preflight" else "preflight",
+            transaction="final" if phase == "admission" else "initial",
+        )
+
+
+def test_upload_preflight_read_receipts_are_bounded_without_private_parameters():
+    receipts = []
+    audit = SimpleNamespace(
+        pids={"mutation": 7},
+        record=lambda kind, **data: receipts.append({"event": kind, **data}),
+    )
+    upload = _UploadPhase(audit)
+    connection = SimpleNamespace(info={
+        "finalizer_role": "mutation", "finalizer_transaction": "opaque-initial",
+    })
+    sql = "SELECT matters.id FROM matters WHERE matters.id = %(id)s"
+    parameters = {"id": "private-parameter-must-not-be-retained"}
+    for _ in range(_MAX_PREFLIGHT_READ_RECEIPTS + 1):
+        context = SimpleNamespace()
+        upload.before(connection, None, sql, parameters, context, False)
+        upload.after(connection, None, sql, parameters, context, False)
+    assert upload.read_count == _MAX_PREFLIGHT_READ_RECEIPTS + 1
+    assert upload.reads_omitted == 1
+    assert len(receipts) == 2 * _MAX_PREFLIGHT_READ_RECEIPTS
+    assert all(row["sql"] == sql and row["transaction"] == "opaque-initial" for row in receipts)
+    assert all(row["duration"] >= 0 for row in receipts if row["event"].endswith("after"))
+    assert parameters["id"] not in repr(receipts)
+    assert all("parameters" not in row for row in receipts)
+
+
+def test_upload_initial_transaction_timing_includes_creation_and_ignores_later_roots(monkeypatch):
+    receipts = []
+    audit = SimpleNamespace(
+        pids={"mutation": 7},
+        record=lambda kind, **data: receipts.append({"event": kind, **data}),
+    )
+    clock = iter((10.0, 11.0, 13.0))
+    monkeypatch.setattr(__name__ + ".monotonic", lambda: next(clock))
+    upload = _UploadPhase(audit)
+    initial = SimpleNamespace(parent=None)
+    connection = SimpleNamespace(info={"finalizer_transaction": "opaque-initial"})
+    upload.created(None, initial)
+    upload.began(None, initial, connection)
+    upload.ended(None, SimpleNamespace(parent=initial))
+    assert not upload.initial_ended
+    upload.ended(None, initial)
+    upload.phase = "final_admission"
+    later = SimpleNamespace(parent=None)
+    upload.created(None, later)
+    upload.began(None, later, connection)
+    upload.ended(None, later)
+    assert upload.initial_ended and upload.preflight_transaction == "opaque-initial"
+    assert [row["event"] for row in receipts] == [
+        "upload_initial_transaction_started", "upload_initial_transaction_ended",
+    ]
+    assert receipts[0]["duration_since_create"] == 1.0
+    assert receipts[1]["duration"] == 3.0
+    assert all(row["transaction"] == "opaque-initial" for row in receipts)
+
+
+def test_upload_phase_captures_token_after_shared_audit_label_listener():
+    receipts, commands = [], []
+    audit = _FinalizerAudit(None, lambda kind, **data: receipts.append({"event": kind, **data}))
+    upload = _UploadPhase(audit)
+    session = audit.session("mutation")
+    upload.observe(session)
+    initial = SimpleNamespace(parent=None)
+
+    def execute(statement, _parameters=None):
+        commands.append(str(statement))
+
+    def scalar(statement):
+        commands.append(str(statement))
+        return 7
+
+    connection = SimpleNamespace(info={}, execute=execute, scalar=scalar)
+    try:
+        session.dispatch.after_transaction_create(session, initial)
+        session.dispatch.after_begin(session, initial, connection)
+        token = connection.info["finalizer_transaction"]
+        assert token and upload.preflight_transaction == token
+        assert audit.pids["mutation"] == 7
+        assert [row["event"] for row in receipts] == [
+            "transaction_started", "upload_initial_transaction_started",
+        ]
+        session.dispatch.after_transaction_end(session, initial)
+        assert [row["event"] for row in receipts[-2:]] == [
+            "transaction_ended", "upload_initial_transaction_ended",
+        ]
+        assert all(row["transaction"] == token for row in receipts)
+        assert "SET LOCAL lock_timeout = '2s'" in commands
+        assert "SET LOCAL statement_timeout = '10s'" in commands
+        assert session.get_transaction() is None
+    finally:
+        session.close()
 
 
 def _seed(audit):
@@ -97,7 +375,7 @@ def _seed(audit):
     return fixture
 
 
-def _mutate(audit, fixture, path, monkeypatch):
+def _mutate(audit, fixture, path, monkeypatch, upload=None):
     if path == "court_worker":
         order = MatterCourtOrderSyncItem(
             order_date=date(2026, 10, 11),
@@ -123,6 +401,9 @@ def _mutate(audit, fixture, path, monkeypatch):
             assert job.status == "completed", job.error_message
         return
     with audit.session("mutation") as session:
+        if path == "attachment_upload":
+            assert upload is not None
+            upload.observe(session)
         context = _ip_race_context(
             session, company_id=fixture["company_id"], membership_id=fixture["actor_id"]
         )
@@ -166,14 +447,39 @@ def _mutate(audit, fixture, path, monkeypatch):
 
             def store(**kwargs):
                 assert not session.in_transaction(), "Upload storage must be detached"
+                assert upload.initial_ended, "Initial upload transaction must end before storage"
+                upload.phase = "storage"
+                storage_started = monotonic()
+                audit.record(
+                    "upload_storage_entered", phase=upload.phase, in_transaction=False,
+                    preflight_transaction=upload.preflight_transaction,
+                )
                 content = kwargs["stream"].read()
-                kwargs["before_store"](len(content))
+                upload.phase = "quota_preflight"
+                quota_started = monotonic()
+                try:
+                    kwargs["before_store"](len(content))
+                finally:
+                    audit.record(
+                        "upload_quota_preflight_returned", phase=upload.phase,
+                        duration=monotonic() - quota_started,
+                        in_transaction=session.in_transaction(),
+                    )
+                    upload.phase = "storage"
                 assert not session.in_transaction()
-                return StoredDocument(
+                stored = StoredDocument(
                     storage_key="native-upload/" + fixture["attachment_id"],
                     size_bytes=len(content),
                     sha256_hex=sha256(content).hexdigest(),
                 )
+                upload.phase = "final_admission"
+                upload.storage_complete.set()
+                audit.record(
+                    "upload_storage_complete", phase=upload.phase, in_transaction=False,
+                    duration=monotonic() - storage_started,
+                    preflight_transaction=upload.preflight_transaction,
+                )
+                return stored
 
             monkeypatch.setattr(matters, "persist_matter_attachment", store)
             monkeypatch.setattr(matters, "delete_stored_document", lambda _: None)
@@ -226,8 +532,31 @@ def test_real_downstream_compliance_completes_in_both_lock_orders(
     first,
     source,
 ):
-    audit = finalizer_audit
+    _run_downstream_overlap(
+        finalizer_audit, monkeypatch, path, first, source,
+        upload_overlap_phase="preflight" if path == "attachment_upload" and first == "mutation"
+        else None,
+    )
+
+
+@pytest.mark.parametrize("source", ["text", "no_source"])
+def test_upload_final_admission_completes_downstream_compliance(
+    finalizer_audit, monkeypatch, source,
+):
+    _run_downstream_overlap(
+        finalizer_audit, monkeypatch, "attachment_upload", "mutation", source,
+        upload_overlap_phase="admission",
+    )
+
+
+def _run_downstream_overlap(audit, monkeypatch, path, first, source, *, upload_overlap_phase):
     fixture = _seed(audit)
+    upload = _UploadPhase(audit) if path == "attachment_upload" else None
+    selected_boundary = {}
+    audit.record(
+        "compliance_test_identity", test_sha256=sha256(Path(__file__).read_bytes()).hexdigest(),
+        path=path, first=first, upload_overlap_phase=upload_overlap_phase,
+    )
     if source == "no_source":
         monkeypatch.setattr(
             document_processing,
@@ -262,18 +591,24 @@ def test_real_downstream_compliance_completes_in_both_lock_orders(
 
     def pause(_connection, _cursor, sql, parameters, _context, _many):
         role = _connection.info.get("finalizer_role")
-        boundary = (
-            first == "worker"
-            and role == "worker"
-            and sql.startswith("INSERT INTO audit_events")
-            and isinstance(parameters, dict)
-            and parameters.get("action") == "matter_compliance.extraction.completed"
-        ) or (first == "mutation" and role == "mutation" and "FOR UPDATE OF matters" in sql)
+        transaction = _connection.info.get("finalizer_transaction")
+        boundary = _matches_compliance_boundary(
+            first=first, path=path, role=role, sql=sql, parameters=parameters,
+            upload=upload, upload_overlap_phase=upload_overlap_phase, transaction=transaction,
+        )
         if boundary and not audit.entered.is_set():
-            audit.record("actual_compliance_boundary", role=role, sql=sql)
+            selected_boundary.update(
+                role=role, pid=audit.pids.get(role), transaction=transaction,
+                upload_overlap_phase=upload_overlap_phase,
+            )
+            audit.record("actual_compliance_boundary", sql=sql, **selected_boundary)
             audit.entered.set()
             assert audit.release.wait(8)
+            audit.record("compliance_boundary_release_observed", **selected_boundary)
 
+    if upload is not None:
+        event.listen(audit.engine, "before_cursor_execute", upload.before)
+        event.listen(audit.engine, "after_cursor_execute", upload.after)
     event.listen(audit.engine, "after_cursor_execute", pause)
     try:
         with audit.pool() as (pool, futures):
@@ -283,12 +618,21 @@ def test_real_downstream_compliance_completes_in_both_lock_orders(
                 assert ready.wait(8), "Real indexing commit was not reached"
             else:
                 assert audit.entered.wait(8)
-            mutation = pool.submit(_mutate, audit, fixture, path, monkeypatch)
+            mutation = pool.submit(_mutate, audit, fixture, path, monkeypatch, upload)
             futures.append(mutation)
             if first == "mutation":
                 assert audit.entered.wait(8)
+                assert selected_boundary["pid"] == audit.pids["mutation"]
+                if upload is not None:
+                    assert selected_boundary["upload_overlap_phase"] == upload_overlap_phase
+                    assert _matches_compliance_boundary(
+                        first=first, path=path, role="mutation", sql="FOR UPDATE OF matters",
+                        parameters=None, upload=upload, upload_overlap_phase=upload_overlap_phase,
+                        transaction=selected_boundary["transaction"],
+                    )
                 proceed.set()
             audit.await_blocker("mutation" if first == "worker" else "worker", first)
+            audit.record("compliance_boundary_release_requested", **selected_boundary)
             audit.release.set()
             worker.result(10)
             mutation.result(10)
@@ -296,7 +640,12 @@ def test_real_downstream_compliance_completes_in_both_lock_orders(
         proceed.set()
         audit.release.set()
         event.remove(audit.engine, "after_cursor_execute", pause)
+        if upload is not None:
+            event.remove(audit.engine, "before_cursor_execute", upload.before)
+            event.remove(audit.engine, "after_cursor_execute", upload.after)
     assert audit.errors == []
+    if upload is not None:
+        assert upload.initial_ended and upload.storage_complete.is_set()
     with Session(audit.engine) as session:
         job = session.get(DocumentProcessingJob, fixture["job_id"])
         assert job.status == "completed" and job.error_message is None
@@ -351,6 +700,42 @@ def test_real_downstream_compliance_completes_in_both_lock_orders(
             assert uploaded_runs[0].status == "skipped"
             assert uploaded_runs[0].skip_reason == "text_extraction_pending"
             assert uploaded_runs[0].created_by_membership_id == fixture["actor_id"]
+
+
+def test_upload_initial_transaction_is_observed_without_artificial_pause(
+    finalizer_audit, monkeypatch,
+):
+    audit = finalizer_audit
+    fixture = _seed(audit)
+    upload = _UploadPhase(audit)
+    audit.record(
+        "compliance_test_identity", test_sha256=sha256(Path(__file__).read_bytes()).hexdigest(),
+        path="attachment_upload", upload_overlap_phase="passive_initial", artificial_pause=False,
+    )
+    event.listen(audit.engine, "before_cursor_execute", upload.before)
+    event.listen(audit.engine, "after_cursor_execute", upload.after)
+    try:
+        _mutate(audit, fixture, "attachment_upload", monkeypatch, upload)
+    finally:
+        event.remove(audit.engine, "before_cursor_execute", upload.before)
+        event.remove(audit.engine, "after_cursor_execute", upload.after)
+    assert audit.errors == []
+    assert not audit.entered.is_set(), "Passive upload must not enter any artificial pause"
+    assert upload.initial_ended and upload.storage_complete.is_set()
+    assert upload.preflight_transaction and upload.initial_duration is not None
+    with Session(audit.engine) as session:
+        uploaded = list(session.scalars(select(MatterAttachment).where(
+            MatterAttachment.matter_id == fixture["matter_id"],
+            MatterAttachment.id != fixture["attachment_id"],
+        )))
+        assert len(uploaded) == 1
+        runs = list(session.scalars(select(MatterComplianceExtractionRun).where(
+            MatterComplianceExtractionRun.attachment_id == uploaded[0].id,
+            MatterComplianceExtractionRun.trigger == "attachment_processed",
+        )))
+        assert len(runs) == 1 and runs[0].status == "skipped"
+        assert runs[0].skip_reason == "text_extraction_pending"
+        assert runs[0].created_by_membership_id == fixture["actor_id"]
 
 
 def _generated_count(session, fixture):

@@ -7,7 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, repoRoot } from "./support/env";
-import { fixtureProcessEvidence } from "./support/fixture-process";
+import { persistFixtureProcessEvidence } from "./support/fixture-process";
 
 const fixtureRoot = apiBaseUrl + "/_e2e/drive-import/fixtures";
 const password = "DriveBrowserRegression123!";
@@ -116,11 +116,9 @@ test("Drive browser emulator cannot activate in production or fetch other fixtur
     },
   });
   const output = result.stdout + result.stderr;
-  await testInfo.attach("drive-isolation-process", {
-    body: fixtureProcessEvidence(result, startedAt, performance.now() - started),
-    contentType: "application/json",
-  });
-  await testInfo.attach("drive-emulator-isolation", { body: output, contentType: "text/plain" });
+  await persistFixtureProcessEvidence(
+    testInfo, "drive-isolation-process", result, startedAt, performance.now() - started, output,
+  );
   expect(result.error, output).toBeUndefined();
   expect(result.status, output).toBe(0);
   expect(output).toContain("Ran 7 tests");

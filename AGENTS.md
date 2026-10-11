@@ -1,5 +1,25 @@
 # CaseOps agent instructions
 
+- Required diagnostic evidence must be a retained output file within the
+  uploader's inventory, not a body attachment silently omitted by a privacy-
+  selected reporter. Preserve sanitized process metadata and approved local
+  emulator outcomes without expanding generic telemetry or retaining tokens.
+  Verify artifact members and per-test identity, not attachment API success.
+  Rejected sensitive or oversized transcripts retain only bounded metadata;
+  do not hash rejected private bytes or retain a truncated success transcript.
+- Test-database safety guards must recognize the exact bounded name emitted by
+  the owned isolation harness and match its configured local DSN. Keep loopback,
+  non-production, driver and routing-override checks; an arbitrary prefix or
+  removal of the guard is not an acceptable fix for a stale literal allowlist.
+
+- A controlled race must pause at the exact claimed persistence boundary,
+  not an earlier preflight lock with the same SQL template. Give multi-phase
+  upload fixtures an explicit post-storage marker and retain passive transaction
+  timing. A corrected final-admission race cannot close an unexplained preflight
+  latency finding. Pairwise contenders must each overlap the held worker without
+  consuming another contender's shorter SQL wait budget; do not claim a
+  three-way overlap or increase deadlines to hide fixture orchestration errors.
+
 - A transport helper may change a config's expression without changing its
   authoritative no-paid marker. Audit every inherited/direct config, require
   the reviewed helper's input and marker-preserving return, regress removed

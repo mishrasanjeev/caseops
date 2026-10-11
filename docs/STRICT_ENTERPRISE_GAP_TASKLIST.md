@@ -2,6 +2,27 @@
 
 ## October 11 Exact-Release Checkpoint
 
+19:17 UTC: NO-GO remains. R10 completed failed with a complete native journal
+and no browser execution; its owned resources are absent. Six-module R4
+reports 202 passes and four former-lock controls fail as intended; R3 and
+pre-test R1/R2 failures remain retained. Twenty-eight offline receipt controls,
+Ruff/typecheck and sixteen static gates pass. This test/evidence-only amendment
+does not inherit a770's hosted acceptance or waive the full new exact Docker/
+CI/main/live release. Retention/privacy checks do not certify legal quality.
+No provider activation, financial initialization, primary switch or deploy.
+
+NO-GO: eight additional R10 setup errors reject the new native database name.
+Correct the exact bounded local guard without sharing browser data or removing
+safety checks. Hosted a770 CI is green, but selected process/transcript body
+attachments were omitted from its complete artifact. Persistent sanitized
+file evidence and full amended acceptance are still required.
+
+NO-GO: R10 has two inspected native failures. Separate fixture boundary and
+budget-coupling corrections are being prepared without runtime/security or
+deadline changes. Original upload preflight latency remains Inconclusive;
+passive timing and complete replacement inventories are required. Green hosted
+checks cannot override failed exact-candidate Docker or certify production.
+
 NO-GO: 47 CI failed the old direct-header source assertion after the loopback
 helper adoption. It is a test-contract defect, not proof of paid transport.
 Retain explicit no-paid/config binding and negative controls plus resolved

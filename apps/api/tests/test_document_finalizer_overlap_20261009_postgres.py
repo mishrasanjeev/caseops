@@ -219,6 +219,8 @@ class _FinalizerAudit:
     def __init__(self, engine, record):
         self.engine, self.record = engine, record
         self.entered, self.release = Event(), Event()
+        self.auth_body_complete = Event()
+        self.require_auth_before_writer = False
         self.boundary = "applied"
         self.pids, self.errors, self.statements = {}, [], {}
         self.statement_counts = {}
@@ -236,6 +238,8 @@ class _FinalizerAudit:
 
         def label(_session, _transaction, connection):
             connection.info["finalizer_role"] = role
+            connection.info["finalizer_transaction"] = uuid4().hex
+            _session.info["finalizer_transaction"] = connection.info["finalizer_transaction"]
             connection.execute(text("SELECT set_config('application_name', :name, true)"),
                                {"name": self.names[role]})
             connection.execute(text("SET LOCAL lock_timeout = '2s'"))
@@ -243,9 +247,16 @@ class _FinalizerAudit:
             pid = connection.scalar(text("SELECT pg_backend_pid()"))
             self.pids[role] = pid
             self.all_pids.add(pid)
-            self.record("transaction_started", role=role, pid=pid, instance=self.instance)
+            self.record("transaction_started", role=role, pid=pid, instance=self.instance,
+                        transaction=connection.info["finalizer_transaction"])
+
+        def ended(_session, transaction):
+            if transaction.parent is None:
+                self.record("transaction_ended", role=role, pid=self.pids.get(role),
+                            transaction=_session.info.pop("finalizer_transaction", None))
 
         event.listen(session, "after_begin", label)
+        event.listen(session, "after_transaction_end", ended)
         return session
 
     def before(self, connection, _cursor, sql, _parameters, _context, _many):
@@ -260,11 +271,19 @@ class _FinalizerAudit:
             election or "FOR " in sql or sql.startswith(("INSERT", "UPDATE"))
         ):
             self.statements.setdefault(role, []).append(sql)
+            if _context is not None:
+                _context.finalizer_sql_started = monotonic()
             # Only statement templates: never parameters, document text or auth bodies.
-            self.record("sql_before", role=role, pid=self.pids.get(role), sql=sql)
+            self.record("sql_before", role=role, pid=self.pids.get(role), sql=sql,
+                        transaction=connection.info.get("finalizer_transaction"))
 
     def after(self, connection, _cursor, sql, parameters, _context, _many):
         role = connection.info.get("finalizer_role")
+        started = getattr(_context, "finalizer_sql_started", None)
+        if role in self.names and started is not None:
+            self.record("sql_after", role=role, pid=self.pids.get(role), sql=sql,
+                        transaction=connection.info.get("finalizer_transaction"),
+                        duration=monotonic() - started)
         if role == "worker" and self.boundary == "applied" and (
             sql.startswith("UPDATE private_projection_events")
             and isinstance(parameters, dict) and parameters.get("status") == "applied"
@@ -276,9 +295,11 @@ class _FinalizerAudit:
 
     def error(self, context):
         original = context.original_exception
+        connection = getattr(context, "connection", None)
+        role = connection.info.get("finalizer_role") if connection is not None else None
         row = {"sqlstate": getattr(original, "sqlstate", None),
                "native_message": getattr(getattr(original, "diag", None), "message_primary", None),
-               "sql": context.statement}
+               "sql": context.statement, "role": role, "pid": self.pids.get(role)}
         self.errors.append(row)
         self.record("native_database_error", **row)
 
@@ -314,6 +335,10 @@ class _FinalizerAudit:
         self.record("worker_returned", completed_at=datetime.now(UTC).isoformat())
 
     def mutate(self, fixture, operation="metadata", *, source=False):
+        if self.require_auth_before_writer:
+            assert self.auth_body_complete.is_set(), (
+                "Bounded writer must start after the independent auth transport completes"
+            )
         with self.session("mutation") as session:
             context = _ip_race_context(session, company_id=fixture["company_id"],
                                        membership_id=fixture["actor_id"])
@@ -372,7 +397,8 @@ def test_finalizer_election_receipt_keeps_sql_template_not_parameters():
     receipts = []
     audit = _FinalizerAudit(None, lambda kind, **data: receipts.append({"event": kind, **data}))
     audit.pids["worker"] = 123
-    connection = SimpleNamespace(info={"finalizer_role": "worker"})
+    connection = SimpleNamespace(info={"finalizer_role": "worker",
+                                       "finalizer_transaction": "receipt-only-transaction"})
     statement = (
         "SELECT company_memberships.id FROM company_memberships "
         "WHERE company_memberships.company_id = %(company_id)s "
@@ -381,11 +407,38 @@ def test_finalizer_election_receipt_keeps_sql_template_not_parameters():
     private_parameter = secrets.token_urlsafe(32)
     audit.before(connection, None, statement, {"company_id": private_parameter}, None, False)
     assert audit.statements["worker"] == [statement]
-    assert receipts == [{"event": "sql_before", "role": "worker", "pid": 123, "sql": statement}]
+    assert receipts == [{"event": "sql_before", "role": "worker", "pid": 123, "sql": statement,
+                         "transaction": "receipt-only-transaction"}]
     assert private_parameter not in json.dumps(receipts)
     audit.before(connection, None, "SELECT %(value)s", {"value": private_parameter}, None, False)
     assert audit.statement_counts["worker"] == 2
     assert audit.statements["worker"] == [statement] and len(receipts) == 1
+
+
+def test_auth_overlap_guard_rejects_starting_a_bounded_writer_before_http_completion():
+    receipts = []
+    audit = _FinalizerAudit(None, lambda kind, **data: receipts.append({"event": kind, **data}))
+    audit.require_auth_before_writer = True
+    with pytest.raises(AssertionError, match="independent auth transport completes"):
+        audit.mutate({})
+    assert receipts == [] and audit.statement_counts == {}
+
+
+def test_finalizer_sql_duration_receipt_omits_private_parameters():
+    receipts = []
+    audit = _FinalizerAudit(None, lambda kind, **data: receipts.append({"event": kind, **data}))
+    connection = SimpleNamespace(info={"finalizer_role": "mutation",
+                                       "finalizer_transaction": "receipt-only-transaction"})
+    context = SimpleNamespace()
+    statement = "SELECT matters.id FROM matters FOR UPDATE OF matters"
+    audit.pids["mutation"] = 123
+    parameters = {"private": "must-not-be-retained"}
+    audit.before(connection, None, statement, parameters, context, False)
+    audit.after(connection, None, statement, parameters, context, False)
+    assert [row["event"] for row in receipts] == ["sql_before", "sql_after"]
+    assert receipts[-1]["duration"] >= 0
+    assert receipts[-1]["transaction"] == "receipt-only-transaction"
+    assert "must-not-be-retained" not in json.dumps(receipts)
 
 
 @pytest.fixture
@@ -504,6 +557,7 @@ def _login(origin, fixture, audit):
     audit.record("http_body_complete", status=response.status_code,
                  request_id=response.headers.get("x-request-id"),
                  duration=monotonic() - started, completed_at=datetime.now(UTC).isoformat())
+    audit.auth_body_complete.set()
     return response
 
 
@@ -562,9 +616,6 @@ def test_actual_finalizer_allows_same_uploader_login_and_releases_company_writer
                    for sql in audit.statements["worker"])
         login = pool.submit(_login, origin, fixture, audit)
         futures.append(login)
-        writer = pool.submit(audit.mutate, fixture, mutation)
-        futures.append(writer)
-        audit.await_blocker("mutation", "worker")
         if os.environ.get("CASEOPS_FINALIZER_AUTH_BASELINE") == "strong":
             audit.await_blocker("login", "worker")
         response = login.result(timeout=5)
@@ -575,6 +626,12 @@ def test_actual_finalizer_allows_same_uploader_login_and_releases_company_writer
         assert not worker.done(), "Auth completed only after finalization released its locks"
         assert any("FOR NO KEY UPDATE" in sql and "company_memberships" in sql
                    for sql in audit.statements["login"])
+        # Both contenders overlap the same held finalizer. Auth's five-second
+        # transport allowance must not consume the writer's two-second SQL wait.
+        audit.require_auth_before_writer = True
+        writer = pool.submit(audit.mutate, fixture, mutation)
+        futures.append(writer)
+        audit.await_blocker("mutation", "worker")
         assert not writer.done()
         audit.record("release_finalizer_after_response", activity=audit.snapshot())
         audit.release.set()

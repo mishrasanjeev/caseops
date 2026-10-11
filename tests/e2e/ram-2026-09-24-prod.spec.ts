@@ -6,7 +6,7 @@ import { expect, test } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
-import { fixtureProcessEvidence } from "./support/fixture-process";
+import { persistFixtureProcessEvidence } from "./support/fixture-process";
 import { requireFixtureDatabaseUrl } from "./support/fixture-database";
 
 const web = process.env.PROD_BASE_URL || process.env.CASEOPS_WEB_BASE_URL || "http://127.0.0.1:3000";
@@ -70,8 +70,9 @@ async function localSignedMatterSelection(matterId: string, membershipId: string
     encoding: "utf8",
     timeout: 30_000,
   });
-  const evidence = fixtureProcessEvidence(run, startedAt, performance.now() - started, false);
-  await test.info().attach("selection-fixture-process", { body: evidence, contentType: "application/json" });
+  const { receipt: evidence } = await persistFixtureProcessEvidence(
+    test.info(), "selection-fixture-process", run, startedAt, performance.now() - started,
+  );
   if (run.error || run.status !== 0) {
     throw new Error(`Could not create local nonbillable selection: ${evidence}`);
   }

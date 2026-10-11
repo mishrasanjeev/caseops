@@ -2,6 +2,28 @@
 
 ## October 11 Court-Write Release Gate
 
+19:17 UTC current evidence: completed R10 has 2,291 passes/two call failures/
+eight setup errors and no real browser run. Focused six-module R4 reports all
+202 cases passing; old strong-auth control retains four intended failures.
+Twenty-eight offline persisted-receipt controls pass with zero retries/skips;
+the real-web case and full original workflows remain mandatory in the new
+complete gate. Ruff/typecheck/sixteen static gates pass. This is not uploaded
+CI artifact, complete Docker or exact-live certification, and no provider
+quality or deployment claim follows. [Checkpoint](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
+Eight additional R10 actor-safety setup errors expose a stale local database
+allowlist, not executed product assertions. Bounded-name/configured-DSN guard
+controls and complete original calls require replay. Hosted a770 passes all
+532 browser identities (515 pass/17 skip), but required process/transcript
+body attachments are not in its sealed ZIP; retention proof remains incomplete.
+
+R10 native acceptance is not green: two failures expose different fixture
+orchestration gaps, not an established common product cause. Replacement must
+prove each auth/writer contender overlaps the held finalizer and that upload
+pauses at post-storage admission, with the unchanged SQL/Event deadlines and
+all native outcomes. New passive receipt controls do not close the original
+preflight latency or replace complete current Docker/CI/live inventories.
+
 47 hosted API coverage is 6,819 pass / one stale direct-header assertion fail /
 2,303 explicit skips; hosted browser execution skipped. Marker-preserving
 helper/inherited-config and resolved-browser-header coverage is being added

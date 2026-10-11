@@ -2,6 +2,29 @@
 
 ## October 11 Court-Write Investigation
 
+19:17 UTC replacement: **Partially fixed** at the test/evidence boundary only.
+Complete six-module R4 reports 202 passes and the four old-lock susceptibility
+cases still fail intentionally; R3's exact-receipt failure remains retained.
+Twenty-eight offline browser controls persist selected sanitized files and
+reject private/oversized output, with no retries/skips. Ruff/typecheck/static
+gates pass. Full new Docker, hosted uploaded bytes and exact-live acceptance
+remain pending; R10's original preflight cause remains **Inconclusive**.
+No product closure, global Gemini activation or production deployment claim.
+[Evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
+R10 actor-safety fixture and hosted subprocess retention: **Not fixed**.
+Eight setup errors reject the independently migrated native database; no body
+assertions ran. The complete hosted browser artifact omits three required
+diagnostic attachments despite green CI. Guard/retention amendments preserve
+security, deadlines and all failed evidence; complete replacement is required.
+
+R10 native failures: **Inconclusive** for product closure. Auth/writer timing
+coupling and upload preflight/final-admission mismatch are separately proven
+fixture defects. Corrections are unverified; the original preflight latency
+cause remains unknown. Retain complete native receipts and all failure phases,
+preserve two-second lock/eight-second Event deadlines and require full replay.
+No production fix or common-cause claim follows from a corrected fixture.
+
 47 CI header-expression drift: **Not fixed in this release yet**. One complete
 API call failed a stale literal assertion; its setup/teardown passed and hosted
 browser execution skipped. Explicit helper binding/marker and inherited-config
