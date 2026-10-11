@@ -601,6 +601,8 @@ $PinnedNodeVersion = ((Get-Content -LiteralPath (Join-Path $RepoRoot ".nvmrc") -
 & (Join-Path $RepoRoot "tests\docker-acceptance-repo-root-guard.ps1")
 & (Join-Path $RepoRoot "tests\docker-native-postgres-isolation-guard.ps1")
 & (Join-Path $RepoRoot "tests\docker-failure-evidence-guard.ps1")
+& (Join-Path $RepoRoot "tests\docker-release-image-identity-guard.ps1") `
+    -EvidenceDirectory (Join-Path $ResultsDirectory "image-identity-guard")
 $NodePath = (Get-Command node -ErrorAction Stop).Source
 Write-Host "[docker-acceptance] validating local proxy cancellation and transport semantics"
 & $NodePath --test (Join-Path $RepoRoot "scripts\docker-acceptance-api-proxy.test.mjs")
@@ -738,12 +740,19 @@ try {
     $ApiImageId = $null
     foreach ($Service in @("api", "web")) {
         $ImageId = ((& docker compose --project-name $ComposeProject --file $ComposeFile images --quiet $Service | Out-String).Trim())
+        if ($LASTEXITCODE -ne 0 -or $ImageId -cnotmatch '^(?:sha256:)?[0-9a-f]{12,64}$') {
+            throw "$Service image handle resolution failed."
+        }
         $ImageMetadata = (& docker image inspect $ImageId | ConvertFrom-Json)
+        if ($LASTEXITCODE -ne 0 -or $ImageMetadata.Count -ne 1 -or
+            $ImageMetadata[0].Id -cnotmatch '^sha256:[0-9a-f]{64}$') {
+            throw "$Service canonical image inspection failed."
+        }
         $ImageRevision = $ImageMetadata[0].Config.Labels.'org.opencontainers.image.revision'
         if ($ImageRevision -ne $ReleaseSha) {
             throw "$Service image revision $ImageRevision does not match $ReleaseSha."
         }
-        if ($Service -eq "api") { $ApiImageId = $ImageId }
+        if ($Service -eq "api") { $ApiImageId = $ImageMetadata[0].Id }
     }
 
     $ApiHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health"

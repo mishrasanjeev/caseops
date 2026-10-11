@@ -371,6 +371,13 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- Release wrapper fakes must exercise the real CLI caller as well as the
+  downstream guard. Docker Compose may return a bare or abbreviated image handle;
+  retain the inspected canonical image ID after exact revision validation.
+  Reject missing or multiple inspected images and replay JSON-array behavior
+  on both PowerShell 5.1 and pwsh before a complete real-image gate. A fake
+  pre-populated with a canonical ID cannot prove this boundary.
+
 - Native PostgreSQL acceptance must use its own independently migrated database,
   separate from the browser application database. Retained synthetic tenants can
   make an unrelated whole-tenant worker scan appear to be a browser defect.

@@ -2,6 +2,10 @@
 
 ## October 11 Court-Write Investigation
 
+R8's introduced wrapper image-ID defect is reproduced separately; native and
+browser tests did not run. Caller controls pass, but product closure remains
+Inconclusive pending the full replacement and exact-production journeys.
+
 Latest gate: **Inconclusive** for product/root-cause closure. bf2 CI passed;
 its exact Docker R7 native stage passed all 2,301 cases, but five browser cases
 failed (two poll subprocesses, selection, Drive isolation, demo replay).

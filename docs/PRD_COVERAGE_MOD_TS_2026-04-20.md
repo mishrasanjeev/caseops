@@ -2,6 +2,10 @@
 
 ## October 11 Court-Write Release Gate
 
+R8 on `3ca46ae5` stopped before any native/browser test because the caller
+retained a bare image hash. Canonical caller controls and real inert-image
+proof do not certify the pending complete amended release inventory.
+
 Current bf2 CI passed, including complete native/browser artifact reconciliation.
 Exact Docker R7 passed all 2,301 native calls, then failed five browser cases.
 All 507 desktop identities reconcile (490 pass / five fail / 12 skip); four

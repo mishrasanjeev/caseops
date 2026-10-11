@@ -2,6 +2,33 @@
 
 ## Release Verdict
 
+### R8 Infrastructure Failure
+
+Exact `3ca46ae5` Docker R8 finished exit 1 at 16:28:41 UTC before native or
+browser execution. Images built, migration and index-health probes passed.
+The new native gate rejected the caller's noncanonical Compose image handle:
+the caller inspected the full image metadata but retained the short handle
+instead of its canonical `Id`. This introduced acceptance-wrapper defect is
+not a product reproduction. Bounded pre-cleanup logs/state and the full console
+are retained in `docker-r8`; all seven owned containers and both networks and
+volumes were subsequently absent. No provider call or production mutation.
+
+The replacement caller retains the exact inspected canonical ID and rejects
+missing, ambiguous, malformed, wrong-release and failed inspections. Actual
+caller AST controls reproduced eight failures on the old script; all ten
+controls now pass on pwsh and Windows PowerShell. A failed intermediate
+Windows ambiguous-array control is retained; it caught the PowerShell 5.1
+JSON-array wrapping distinction. Read-only real Compose/inspection replay with
+the retained API/web images reproduced bare 64-hex IDs without the `sha256:`
+prefix, proved canonical output from the corrected caller, and removed both
+owned network-disabled inert containers without ever starting them. That is
+caller proof, not native or browser acceptance. Focused Windows replacement:
+28 tests / 84 passing phases, full ordered collection and JUnit agreement,
+zero skips/failures. The first reconciliation helper incorrectly split `::`
+inside parameter IDs; its mismatch is retained and corrected, not relabelled
+as a test failure. Complete amended Docker/CI remains required;
+R7's original five browser failures remain Inconclusive pending full replay.
+
 ### 15:38 UTC Exact-Candidate Checkpoint
 
 Production API/web still serve `3dbf364d9834316d181d4a52b2e9b4c7bee431b4`.

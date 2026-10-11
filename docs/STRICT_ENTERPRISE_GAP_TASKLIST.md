@@ -2,6 +2,10 @@
 
 ## October 11 Exact-Release Checkpoint
 
+R8's canonical-image caller defect stopped acceptance before native/browser
+tests. Failed source/logs remain retained; inspected caller proof is not the
+complete amended Docker/CI or exact-live release certification.
+
 NO-GO: bf2 hosted CI is green, while exact Docker R7 browser acceptance failed
 five cases after all 2,301 native passes. Four mobile cases and final health
 remain unrun. Independently migrated native/browser databases and structured

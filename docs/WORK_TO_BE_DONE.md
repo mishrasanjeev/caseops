@@ -2,6 +2,10 @@
 
 ## October 11 Release Recovery
 
+R8 on `3ca46ae5` stopped before native/browser tests on a noncanonical image
+handle from the real caller. Caller/inspection guards are being corrected;
+failed raw evidence is retained. This is still NO-GO, not a deployed repair.
+
 Latest checkpoint: bf2 hosted CI is fully green, but exact-bf2 Docker R7 is
 NO-GO: 2,301 native passes / 6,903 phases; desktop 490 passes / five failures /
 12 skips, with four mobile tests and final health unrun. All five failures are

@@ -214,3 +214,52 @@ def test_failure_evidence_capture_before_cleanup_preserves_primary_exception(
     assert [report["nodeid"] for report in reports] == EXPECTED_CAPTURE_CASES
     assert all(report["outcome"] == "passed" for report in reports)
     assert completion == {"event": "execution_finished", "tests": 10, "exit_code": 0}
+
+
+@pytest.mark.parametrize("shell_name", SHELL_NAMES)
+def test_release_image_identity_uses_actual_inspected_caller(
+    shell_name: str, tmp_path: Path
+) -> None:
+    shell = shutil.which(shell_name)
+    assert shell, f"Release image guard requires {shell_name}."
+    evidence = tmp_path / "image-identity"
+    result = subprocess.run(
+        [
+            shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+            str(REPO_ROOT / "tests/docker-release-image-identity-guard.ps1"),
+            "-EvidenceDirectory", str(evidence),
+        ],
+        cwd=tmp_path, capture_output=True, text=True, timeout=120, check=False,
+    )
+    (tmp_path / "image-guard.stdout.log").write_text(result.stdout, encoding="utf-8")
+    (tmp_path / "image-guard.stderr.log").write_text(result.stderr, encoding="utf-8")
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    assert "10 regression cases passed" in result.stdout
+    expected = [
+        "abbreviated-compose-image-resolves-canonical",
+        "bare-full-compose-image-resolves-canonical",
+        "canonical-compose-image-retains-canonical",
+        "invalid-compose-handle-rejected",
+        "compose-exit-rejected",
+        "inspect-exit-rejected",
+        "empty-inspection-rejected",
+        "ambiguous-inspection-rejected",
+        "noncanonical-inspected-id-rejected",
+        "wrong-release-image-rejected",
+    ]
+    inventory = json.loads((evidence / "guard-inventory.json").read_text(encoding="utf-8-sig"))
+    reports = [
+        json.loads(line)
+        for line in (evidence / "guard-results.jsonl").read_text(encoding="utf-8-sig").splitlines()
+    ]
+    completion = json.loads((evidence / "guard-completion.json").read_text(encoding="utf-8-sig"))
+    assert inventory == expected
+    assert [report["nodeid"] for report in reports] == expected
+    assert all(report["outcome"] == "passed" for report in reports)
+    assert completion == {
+        "event": "execution_finished", "tests": 10, "failures": 0, "exit_code": 0
+    }
+    source = WRAPPER.read_text(encoding="utf-8")
+    assert 'tests\\docker-release-image-identity-guard.ps1' in source
+    assert '$ApiImageId = $ImageMetadata[0].Id' in source
+    assert '$ApiImageId = $ImageId' not in source
