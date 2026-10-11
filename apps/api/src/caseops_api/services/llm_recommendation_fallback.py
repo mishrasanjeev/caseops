@@ -13,7 +13,7 @@ from caseops_api.services.ai_money_budget import (
     budget_applies,
     current_budget_month,
 )
-from caseops_api.services.llm import GeminiProvider
+from caseops_api.services.llm import GeminiProvider, provider_deadline, provider_time_remaining
 from caseops_api.services.llm_types import (
     LLMCompletion,
     LLMMessage,
@@ -89,9 +89,13 @@ class RecommendationFallbackPlan:
             raise LLMProviderError("The recommendation provider deadline has elapsed.")
         timeout = min(40.0 if self.fallback_used else 45.0, remaining)
         factory = self._fallback_factory if self.fallback_used else self._primary_factory
-        active = factory(timeout)
-        self.attempts += 1
-        return invoke(active, messages)
+        with provider_deadline(self.deadline):
+            active = factory(timeout)
+            provider_time_remaining()
+            self.attempts += 1
+            result = invoke(active, messages)
+            provider_time_remaining()
+            return result
 
     def run[T](
         self,

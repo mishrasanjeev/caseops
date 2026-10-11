@@ -1820,3 +1820,19 @@ requirements when using the fallback.
   denials. Share a bounded attempt/deadline budget with output repairs and
   prove the no-paid marker before construction and dispatch. A stable/newer
   model or valid JSON cannot establish comparative legal quality.
+- An isolated PostgreSQL HTTP fixture's no-paid marker is authoritative, not
+  a fallback-routing defect. Human-route regression emulation may replace only
+  that routing dependency after both transports are deterministic offline
+  emulators; retain the request marker and native SDK admission guards. Pair it
+  with an unmodified marked HTTP test that proves no paid provider is constructed.
+- A fallback must revalidate retained authority versions and actual body/excerpt
+  bytes, not rebuild its prompt from stale retrieval objects. Chunk-only edits
+  may not advance the parent timestamp. Bound source identities, child rows and
+  SQL work, and prove rejection before fallback admission and final persistence.
+  Capture the displayed title, summary, citation and source reference with the
+  original retrieval edition; a later baseline must not relabel stale text.
+  Retain deterministic parent/child locks through final persistence, not across
+  model transport, and prove edits, deletion, replacement and insertion races.
+- A model HTTP timeout is not the whole recommendation deadline. Authentication,
+  construction and financial admission consume the same absolute allowance;
+  reject expired dispatch and results without refunding a potentially paid call.

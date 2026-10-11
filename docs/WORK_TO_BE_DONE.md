@@ -2,7 +2,19 @@
 
 ## October 11 Release Recovery
 
-NO-GO: PR #533's hosted CI is green but the recorded local Docker R2 failed
+NO-GO: earlier PR #533 hosted CI was green, but `67fab368` failed PostgreSQL
+shards 1/3/4 and its aggregate; cancelled shard 2's retained native journal also
+completed with one failure. The shared fixture's no-paid
+marker correctly excluded live fallback; preserve that fence and test human
+routing only with offline emulators. Separate reviewer-found stale authority
+grounding and credential/deadline gaps have source amendments, not release
+certification. Original retrieval metadata/excerpts, current bounded source
+hashes, final-save locks and credential/admission deadline checks need complete
+amended Docker/CI and exact live acceptance.
+The frozen affected/adjacent replacement has 762 passes across all 24 files,
+including 39 PostgreSQL cases, 2,286 phases, no skips and exact retained
+collection/JUnit/hash agreement. It does not supersede the full release gates.
+The recorded local Docker R2 failed
 one of 2,262 PostgreSQL cases before any browser phase. Recover the missing
 checkout/evidence with fresh tests. Court-write hydration is bounded in source,
 with intended RED and 68-case PostgreSQL GREEN; original timeout remains
@@ -18,6 +30,9 @@ processing/retention and runtime review. Preserve October and share November's
 INR 10,000 ceiling. Docker R3 on `5a66c091` was intentionally interrupted
 (169 passed calls/no completion); replace it after the fallback amendment.
 No old or scoped green result certifies the new tree or live provider.
+R4 on `67fab368` was interrupted for these corrections: 2,270 collected,
+80 completed calls, 241 phase records and no completion event. Preserve its
+raw journal; the 26 passing exact-image public tests do not close that gate.
 
 In progress / not production-certified: shared INR 10,000 paid-AI admission,
 October exemption, model request compatibility, detailed recommendation guide

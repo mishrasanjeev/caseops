@@ -149,6 +149,20 @@ therefore reduce the available provider time. These are candidate routing bounds
 not an end-to-end latency acceptance result or an authorization to retry a
 failed browser mutation.
 
+The amendment applies the remaining allowance to credential discovery/refresh,
+provider construction, serialization, financial admission, dispatch and result
+return. Managed authentication uses bounded public transport and a token-only
+SDK credential; an expired attempt cannot acquire hidden refresh retries.
+Admission already recorded is not refunded merely because dispatch or the
+response misses its deadline. These checks do not forcibly preempt synchronous
+local work and are not live end-to-end latency certification.
+
+Source integrity also spans both attempts: capture the original retrieved
+edition, displayed metadata and excerpt hashes, compare bounded current source
+bytes, and retain parent/child locks through final persistence. Changed,
+withdrawn, missing or oversized evidence prevents another disclosure or saved
+output. No request transaction is held across provider transport.
+
 Google now documents service-scoped spend-cap budgets, but enforcement is not
 instant and overages remain billable. Such a cap is defense in depth, not a
 replacement for pre-call reservations. Do not cap Cloud Run to control AI costs:
@@ -194,6 +208,13 @@ production deployment. Fresh amended Docker, CI, canonical-main deployment and
 exact-serving-revision replay remain required. See the
 [release ledger](runbooks/AI_BUDGET_RELEASE_2026-10-11.md); this document changes
 no runtime configuration and invokes no paid provider.
+
+The later `67fab368` PostgreSQL CI failed four fake-route cases because its
+isolated client correctly retains the no-paid marker. Corrected offline human
+emulation preserves that marker and the real native spending guards. R4 was
+also deliberately interrupted for source-integrity/deadline amendments; it has
+no completion event. Neither the earlier CI nor scoped passes supersede a full
+failed/interrupted gate. Current proof is tracked in the linked release ledger.
 
 ## Source References
 

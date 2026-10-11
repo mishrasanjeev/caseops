@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
 from caseops_api.schemas.source_actions import SourceActionRecord
 
@@ -167,6 +167,8 @@ AuthorityCitationTreatmentLiteral = Literal[
 
 
 class AuthoritySearchResult(BaseModel):
+    _grounding_lineage: tuple[object, ...] | None = PrivateAttr(default=None)
+    _grounding_chunks: tuple[tuple[str, int, str], ...] = PrivateAttr(default=())
     authority_document_id: str
     title: str
     court_name: str

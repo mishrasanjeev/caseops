@@ -1300,6 +1300,25 @@ def search_authority_catalog(
             score=adjusted_score,
             matched_terms=result.matched_terms,
         )
+        frozen = best_by_document[document.id]
+        # Non-serialized lineage belongs to the same loaded edition/chunks that
+        # produced this result; a later reread must not relabel an old excerpt.
+        frozen._grounding_lineage = (
+            document.id,
+            document.title,
+            document.case_reference,
+            document.summary,
+            document.source_reference,
+            document.source_version,
+            document.content_hash,
+            document.source_access_state,
+            document.legal_review_status,
+            document.updated_at,
+        )
+        frozen._grounding_chunks = tuple(
+            (chunk.id, chunk.chunk_index, hashlib.sha256(chunk.content.encode("utf-8")).hexdigest())
+            for chunk in chunks_by_document.get(document.id, [])
+        )
 
     results = sorted(best_by_document.values(), key=lambda item: item.score, reverse=True)
     # Optional rerank pass (CASEOPS_RERANK_ENABLED=true). Over-fetch the

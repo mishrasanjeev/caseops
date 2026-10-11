@@ -8,6 +8,13 @@ schema, availability-only routing, current policy/source/lifecycle fencing,
 aggregate reservations and a shared two-attempt deadline. Primary promotion
 and live global activation remain unverified; interrupted Docker R3 is not
 acceptance. [Current evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+Independent-review extensions cover authority content-only child changes,
+version/access and displayed metadata changes before admission and after
+transport, final-save source locks, and authentication or admission consuming
+the shared deadline. `67fab368` PostgreSQL CI failed;
+the 2,270-case R4 journal has no completion event. Neither certifies release.
+The frozen replacement passed all 762 affected/adjacent cases in 24 files,
+including 39 PostgreSQL cases, without skips; full Docker/CI/live remain open.
 
 J08/M08/US-023/FT-042/043 and M02/SEC-003/004 remain production uncertified.
 Hosted PR #533 success does not close its recorded native 2,261-pass/one-fail

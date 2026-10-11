@@ -279,6 +279,71 @@ the earlier candidate, but are not closure evidence for the amendment.
    legal benchmark remain open. No full migration or automatic fallback is live.
    A paid fallback cannot exceed the aggregate INR 10,000 allowance.
 
+## Fallback Review And CI Checkpoint
+
+`67fab368` is not release-certified. CI run `38128905001` failed its PostgreSQL
+aggregate. Shards 1, 3 and 4 are labelled failed; shard 2 is labelled cancelled,
+but its uploaded native journal also completed with one call failure and exit 1.
+All four failures have been read individually: the isolated HTTP client's
+authoritative no-paid marker correctly disables availability fallback, whereas
+the new fake-provider tests expected a human route. This is a diagnosed harness
+defect, not permission to remove the marker or weaken production isolation.
+
+Local RED retains four collected failures, successful setup/teardown and exit 1
+in `fallback-postgres-red-r1`. The corrected human-route emulation replaces only
+the routing marker dependency after deterministic transports are installed. Its
+unmodified marked-request sibling proves zero paid construction or reservation.
+Scoped PostgreSQL GREEN r1 retains five collected/passed cases, 15 phases,
+matching JUnit identities and both exits 0. Neither closes a full release gate.
+
+Independent review also reproduced two product defects: stale authority
+body/version/access accepted across fallback, and managed authentication allowed
+past the shared deadline. Authority RED retains eight collected calls: seven
+failures, one existing post-transport chunk-change control and exit 1. One
+primary chunk-change case rejected persistence only after incurring fallback;
+the other failures could return saved output. Body/excerpt byte and immutable
+version checks now fence admission and persistence with bounded current scalar
+reads. The deadline correction is implemented; full combined amended proof is
+still required. Its frozen native/adjacent 337-case receipt covers credential
+discovery/refresh, constructor, serialization, admission, dispatch and return
+with public SDK/auth APIs and deterministic offline transports.
+
+The initial authority baseline now must match retrieval-time metadata and
+excerpt hashes, not a subsequently relabelled edition. Coherence RED retains
+three intended failures; GREEN r2 has six passing SQLite/PostgreSQL cases.
+Boundary r1 has 20 passing cases for byte caps, unmodified public DTO, deleted/
+replaced chunks and final persistence locks (60 phases, no skips, completion
+exit 0). Metadata RED r1 separately retains four call failures (title, summary,
+citation and source reference), all returning stale success before correction.
+Source locking rejects concurrent version/chunk writes and parent-FK insertion
+until final commit, not during transport. Work bounds are six sources, 4,096
+child rows, two scalar reads, 8 MiB per body and 64 KiB per chunk. PostgreSQL
+uses its core SHA-256 functions, not an uninstalled extension. No public DTO or
+migration change is introduced by this amendment.
+
+The frozen replacement `fallback-combined-final-r1` passed **762/762 cases in
+all 24 selected files**, including every one of **39 PostgreSQL cases** (35
+fallback HTTP/locking, two money races and two compliance boundaries). It has
+2,286 passing setup/call/teardown phases, 762 matching JUnit identities, no
+skips/failures/errors, no unknown or missing identities, exact canonical ordered
+collection and both exits 0. All Python source/test hashes agree before/after.
+The 92-case route file, 173-case native adapter and 21-case deadline file are
+actually discovered/run. Receipt: the durable recovery directory's
+`fallback-combined-final-r1/{reconciliation,postgres-reconciliation}.json`.
+This is affected/adjacent proof, not the complete PostgreSQL/Docker inventory,
+hosted amended CI or exact-production acceptance. Full replacement gates remain
+required, and no live model-quality or managed activation is implied.
+
+R4 was intentionally stopped and its exact parent/pytest processes reaped to
+allow these amendments. Its unchanged raw journal has 2,270 collected identities,
+80 completed calls and 241 phase records, **no completion event**. The passing
+26-case public-content replay on its exact `67fab368` API/web image is separate:
+both release identities matched before/after and responsive screenshots were
+inspected, but the full application PostgreSQL/Playwright gate did not complete.
+No production mutation or provider activation occurred. Retain every failed and
+interrupted receipt under the durable recovery directory; replace them with a
+fresh frozen-candidate gate, not a selective rerun presented as full acceptance.
+
 ## User Documents
 
 - [Recommendations user guide](../AI_RECOMMENDATIONS_USER_GUIDE.md)

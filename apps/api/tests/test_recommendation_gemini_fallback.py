@@ -6,15 +6,18 @@ import time
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from caseops_api.core.automated_test_context import (
+    paid_providers_blocked_for_request,
     reset_automated_test_request,
     set_automated_test_request,
 )
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
+    AuthorityDocument,
+    AuthorityDocumentChunk,
     CompanyMembership,
     Matter,
     MatterStatus,
@@ -24,8 +27,8 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import ai_money_budget as money
+from caseops_api.services import llm, recommendations
 from caseops_api.services import llm_recommendation_fallback as routing
-from caseops_api.services import recommendations
 from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.llm import MockProvider
 from caseops_api.services.llm_types import (
@@ -122,6 +125,8 @@ def _post(client, token, matter_id):
 
 
 def _wire(monkeypatch, primary, fallback):
+    assert isinstance(primary, _Unavailable)
+    assert isinstance(fallback, _GroundedFallback)
     original_generate = recommendations.generate_structured
 
     def tracked_generate(*args, **kwargs):
@@ -130,9 +135,222 @@ def _wire(monkeypatch, primary, fallback):
 
     monkeypatch.setattr(recommendations, "generate_structured", tracked_generate)
     monkeypatch.setattr(recommendations, "build_provider", lambda *a, **k: primary)
-    monkeypatch.setattr(
-        routing, "build_recommendation_fallback", lambda **kwargs: fallback
+    monkeypatch.setattr(routing, "build_recommendation_fallback", lambda **kwargs: fallback)
+    # Simulate human routing only after both transports are offline emulators.
+    # Keep the PostgreSQL HTTP marker and the native SDK spending guards intact;
+    # the separate marked-request test exercises routing without this override.
+    monkeypatch.setattr(routing, "paid_providers_blocked_for_request", lambda: False)
+
+
+@pytest.mark.parametrize(
+    "client_fixture",
+    ["client", pytest.param("isolated_postgres_client", marks=pytest.mark.postgres)],
+)
+def test_marked_http_uses_mock_without_constructing_either_paid_provider(
+    request, client_fixture, monkeypatch, enabled
+):
+    client = request.getfixturevalue(client_fixture)
+    enabled()
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    constructed = []
+
+    def forbidden(*args, **kwargs):
+        constructed.append("paid-provider")
+        pytest.fail("A marked HTTP request must not construct a paid provider.")
+
+    monkeypatch.setattr(llm, "OpenAIProvider", forbidden)
+    monkeypatch.setattr(llm, "GeminiProvider", forbidden)
+    monkeypatch.setattr(llm, "reserve_paid_ai_call", forbidden)
+    monkeypatch.setattr(routing, "build_recommendation_fallback", forbidden)
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers={**auth_headers(token), "X-CaseOps-Automated-Test": "no-paid-providers"},
+        json={"type": "authority"},
     )
+    assert response.status_code == 200, response.text
+    assert constructed == []
+    with get_session_factory()() as session:
+        record = session.get(Recommendation, response.json()["id"])
+        run = session.get(ModelRun, record.model_run_id)
+        assert run.provider == "mock"
+        event = session.scalar(
+            select(AuditEvent).where(AuditEvent.action == "recommendation.generated")
+        )
+        assert "availability_fallback_used" not in json.loads(event.metadata_json)
+
+
+@pytest.mark.parametrize(
+    "client_fixture",
+    ["client", pytest.param("isolated_postgres_client", marks=pytest.mark.postgres)],
+)
+@pytest.mark.parametrize("additional_chunks", [0, 4095, 4096])
+def test_grounding_revalidation_bounds_rows_and_queries(request, client_fixture, additional_chunks):
+    request.getfixturevalue(client_fixture)
+    _seed_relevant_authority()
+    factory = get_session_factory()
+    with factory() as session:
+        document_id = session.scalar(select(AuthorityDocument.id))
+        session.add_all(
+            [
+                AuthorityDocumentChunk(
+                    authority_document_id=document_id,
+                    chunk_index=index + 1,
+                    content=f"Retained source excerpt {index}",
+                )
+                for index in range(additional_chunks)
+            ]
+        )
+        session.commit()
+        authorities = [
+            recommendations.RetrievedAuthority(
+                identifier="Frozen authority",
+                text="Excerpt",
+                authority_document_id=document_id,
+            )
+        ]
+        statements = []
+        engine = session.get_bind()
+
+        def record_sql(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record_sql)
+        try:
+            if additional_chunks == 4096:
+                with pytest.raises(HTTPException) as error:
+                    recommendations._authority_grounding_state(session, authorities)
+                assert error.value.status_code == 503
+            else:
+                fingerprint = recommendations._authority_grounding_state(session, authorities)
+                assert len(fingerprint) == 64
+        finally:
+            event.remove(engine, "before_cursor_execute", record_sql)
+        assert len(statements) == 2
+        if engine.dialect.name == "postgresql":
+            assert all("sha256" in statement for statement in statements)
+
+
+@pytest.mark.parametrize(
+    "client_fixture",
+    ["client", pytest.param("isolated_postgres_client", marks=pytest.mark.postgres)],
+)
+def test_missing_authority_identity_and_removed_record_fail_closed(request, client_fixture):
+    request.getfixturevalue(client_fixture)
+    _seed_relevant_authority()
+    with get_session_factory()() as session:
+        with pytest.raises(HTTPException) as error:
+            recommendations._authority_grounding_state(
+                session,
+                [recommendations.RetrievedAuthority(identifier="Unbound", text="Excerpt")],
+            )
+        assert error.value.status_code == 409
+        document = session.scalar(select(AuthorityDocument))
+        authorities = [
+            recommendations.RetrievedAuthority(
+                identifier="Frozen",
+                text="Excerpt",
+                authority_document_id=document.id,
+            )
+        ]
+        session.delete(document)
+        session.commit()
+        with pytest.raises(HTTPException) as error:
+            recommendations._authority_grounding_state(session, authorities)
+        assert error.value.status_code == 409
+
+
+@pytest.mark.parametrize(
+    "client_fixture",
+    ["client", pytest.param("isolated_postgres_client", marks=pytest.mark.postgres)],
+)
+@pytest.mark.parametrize("kind,max_bytes", [("body", 8 * 1024 * 1024), ("chunk", 64 * 1024)])
+@pytest.mark.parametrize("over_limit", [False, True])
+def test_grounding_revalidation_bounds_source_bytes(
+    request, client_fixture, kind, max_bytes, over_limit
+):
+    request.getfixturevalue(client_fixture)
+    _seed_relevant_authority()
+    with get_session_factory()() as session:
+        document = session.scalar(select(AuthorityDocument))
+        text = "x" * (max_bytes + int(over_limit))
+        if kind == "body":
+            document.document_text = text
+        else:
+            session.scalar(select(AuthorityDocumentChunk)).content = text
+        session.commit()
+        authorities = [
+            recommendations.RetrievedAuthority(
+                identifier="Bounded source",
+                text="Excerpt",
+                authority_document_id=document.id,
+            )
+        ]
+        if over_limit:
+            with pytest.raises(HTTPException) as error:
+                recommendations._authority_grounding_state(session, authorities)
+            assert error.value.status_code == 503
+        else:
+            assert len(recommendations._authority_grounding_state(session, authorities)) == 64
+
+
+def test_retrieval_lineage_is_not_part_of_the_public_dto(client):
+    from caseops_api.schemas.authorities import AuthoritySearchResult
+
+    _seed_relevant_authority()
+    with get_session_factory()() as session:
+        result = recommendations.search_authority_catalog(
+            session,
+            query="Ssangyong Arbitration patent illegality",
+            limit=6,
+        )[0]
+        assert result._grounding_lineage is not None
+        assert result._grounding_chunks
+        assert result.model_copy()._grounding_chunks == result._grounding_chunks
+        assert all(not key.startswith("_") for key in result.model_dump())
+        properties = AuthoritySearchResult.model_json_schema()["properties"]
+        assert all(not key.startswith("_") for key in properties)
+
+
+@pytest.mark.postgres
+@pytest.mark.parametrize("write", ["version", "chunk", "insert"])
+def test_final_grounding_lock_protects_source_until_persistence(isolated_postgres_client, write):
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
+
+    _seed_relevant_authority()
+    factory = get_session_factory()
+    with factory() as request_session:
+        document_id = request_session.scalar(select(AuthorityDocument.id))
+        authorities = [
+            recommendations.RetrievedAuthority(
+                identifier="Pinned",
+                text="Excerpt",
+                authority_document_id=document_id,
+            )
+        ]
+        recommendations._authority_grounding_state(request_session, authorities, lock_sources=True)
+        with factory() as writer:
+            writer.execute(text("SET LOCAL lock_timeout = '100ms'"))
+            with pytest.raises(OperationalError) as error:
+                if write == "version":
+                    writer.scalar(select(AuthorityDocument)).source_version = "concurrent-edition"
+                elif write == "chunk":
+                    writer.scalar(select(AuthorityDocumentChunk)).content = "Concurrent correction"
+                else:
+                    writer.add(
+                        AuthorityDocumentChunk(
+                            authority_document_id=document_id,
+                            chunk_index=1,
+                            content="New excerpt",
+                        )
+                    )
+                writer.commit()
+            assert error.value.orig.sqlstate == "55P03"
+            writer.rollback()
+            request_session.commit()
+            writer.scalar(select(AuthorityDocument)).source_version = "after-request-commit"
+            writer.commit()
 
 
 @pytest.mark.parametrize(
@@ -146,7 +364,13 @@ def test_availability_fallback_saves_actual_provider_and_grounded_options(
     enabled()
     token, _, matter_id = _setup_matter(client)
     _seed_relevant_authority()
-    primary, fallback = _Unavailable(), _GroundedFallback()
+
+    def observe_preserved_marker():
+        expected = client_fixture == "isolated_postgres_client"
+        assert paid_providers_blocked_for_request() is expected
+
+    primary, fallback = _Unavailable(observe_preserved_marker), _GroundedFallback()
+    fallback.callback = observe_preserved_marker
     _wire(monkeypatch, primary, fallback)
     response = _post(client, token, matter_id)
     assert response.status_code == 200, response.text
@@ -211,9 +435,163 @@ def test_fallback_rechecks_changes_after_unavailable_primary(
     assert fallback.calls == 0
     with factory() as session:
         assert session.scalar(select(Recommendation.id)) is None
-        assert session.scalar(
-            select(ModelRun.id).where(ModelRun.purpose == "recommendation:authority")
-        ) is None
+        assert (
+            session.scalar(
+                select(ModelRun.id).where(ModelRun.purpose == "recommendation:authority")
+            )
+            is None
+        )
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["body", "chunk", "chunk_delete", "chunk_replace", "version", "withdraw"],
+)
+@pytest.mark.parametrize("phase", ["primary", "fallback"])
+@pytest.mark.parametrize(
+    "client_fixture",
+    ["client", pytest.param("isolated_postgres_client", marks=pytest.mark.postgres)],
+)
+def test_changed_authority_blocks_fallback_admission_or_final_save(
+    request, client_fixture, monkeypatch, enabled, change, phase
+):
+    client = request.getfixturevalue(client_fixture)
+    enabled()
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+
+    def correct_authority():
+        with get_session_factory()() as session:
+            document = session.scalar(select(AuthorityDocument))
+            assert document is not None
+            if change == "body":
+                document.document_text = "Corrected official source body."
+            elif change.startswith("chunk"):
+                chunk = session.scalar(select(AuthorityDocumentChunk))
+                assert chunk is not None
+                if change == "chunk":
+                    chunk.content = "Corrected source excerpt without a parent update."
+                else:
+                    content, index, document_id = (
+                        chunk.content,
+                        chunk.chunk_index,
+                        chunk.authority_document_id,
+                    )
+                    session.delete(chunk)
+                    session.flush()
+                    if change == "chunk_replace":
+                        session.add(
+                            AuthorityDocumentChunk(
+                                authority_document_id=document_id,
+                                chunk_index=index,
+                                content=content,
+                            )
+                        )
+            elif change == "version":
+                document.source_version = "corrected-source-edition"
+            else:
+                document.source_access_state = "withdrawn"
+            session.commit()
+
+    primary = _Unavailable(correct_authority if phase == "primary" else None)
+    fallback = _GroundedFallback()
+    if phase == "fallback":
+        fallback.callback = correct_authority
+    _wire(monkeypatch, primary, fallback)
+    response = _post(client, token, matter_id)
+    assert response.status_code == 409, response.text
+    assert primary.calls == 1
+    assert fallback.calls == (1 if phase == "fallback" else 0)
+    with get_session_factory()() as session:
+        assert session.scalar(select(Recommendation.id)) is None
+        assert (
+            session.scalar(
+                select(ModelRun.id).where(ModelRun.purpose == "recommendation:authority")
+            )
+            is None
+        )
+
+
+@pytest.mark.parametrize(
+    "change", ["version", "chunk", "title", "summary", "case_reference", "source_reference"]
+)
+@pytest.mark.parametrize(
+    "client_fixture",
+    ["client", pytest.param("isolated_postgres_client", marks=pytest.mark.postgres)],
+)
+def test_changed_edition_between_retrieval_and_baseline_prevents_any_model_call(
+    request, client_fixture, monkeypatch, enabled, change
+):
+    client = request.getfixturevalue(client_fixture)
+    enabled()
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    original = recommendations._gather_authorities_with_trace
+
+    def retrieve_then_correct(*args, **kwargs):
+        result = original(*args, **kwargs)
+        with get_session_factory()() as session:
+            if change == "version":
+                session.scalar(select(AuthorityDocument)).source_version = "new-edition"
+            elif change == "chunk":
+                session.scalar(select(AuthorityDocumentChunk)).content = "Corrected legal excerpt."
+            else:
+                from sqlalchemy import update
+
+                document = session.scalar(select(AuthorityDocument))
+                session.execute(
+                    update(AuthorityDocument)
+                    .where(
+                        AuthorityDocument.id == document.id,
+                    )
+                    .values(
+                        {change: "Corrected source metadata", "updated_at": document.updated_at}
+                    )
+                )
+            session.commit()
+        return result
+
+    monkeypatch.setattr(recommendations, "_gather_authorities_with_trace", retrieve_then_correct)
+    primary, fallback = _Unavailable(), _GroundedFallback()
+    _wire(monkeypatch, primary, fallback)
+    response = _post(client, token, matter_id)
+    assert response.status_code == 409, response.text
+    assert primary.calls == fallback.calls == 0
+    with get_session_factory()() as session:
+        assert session.scalar(select(Recommendation.id)) is None
+
+
+@pytest.mark.parametrize(
+    "client_fixture",
+    ["client", pytest.param("isolated_postgres_client", marks=pytest.mark.postgres)],
+)
+def test_version_change_at_final_save_boundary_prevents_persistence(
+    request, client_fixture, monkeypatch, enabled
+):
+    from caseops_api.services import matter_operational_guard
+
+    client = request.getfixturevalue(client_fixture)
+    enabled()
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    original = matter_operational_guard.require_operational_matter
+
+    def guard_then_correct(*args, **kwargs):
+        matter = original(*args, **kwargs)
+        if kwargs.get("operation") == "save a generated recommendation":
+            with get_session_factory()() as session:
+                session.scalar(select(AuthorityDocument)).source_version = "late-source-edition"
+                session.commit()
+        return matter
+
+    monkeypatch.setattr(matter_operational_guard, "require_operational_matter", guard_then_correct)
+    primary, fallback = _Unavailable(), _GroundedFallback()
+    _wire(monkeypatch, primary, fallback)
+    response = _post(client, token, matter_id)
+    assert response.status_code == 409, response.text
+    assert primary.calls == fallback.calls == 1
+    with get_session_factory()() as session:
+        assert session.scalar(select(Recommendation.id)) is None
 
 
 @pytest.mark.parametrize("change", ["restrict", "deactivate", "role"])
@@ -249,9 +627,12 @@ def test_changed_actor_or_access_blocks_disclosure_or_final_save(
     assert fallback.calls == (1 if phase == "fallback" else 0)
     with get_session_factory()() as session:
         assert session.scalar(select(Recommendation.id)) is None
-        assert session.scalar(
-            select(ModelRun.id).where(ModelRun.purpose == "recommendation:authority")
-        ) is None
+        assert (
+            session.scalar(
+                select(ModelRun.id).where(ModelRun.purpose == "recommendation:authority")
+            )
+            is None
+        )
 
 
 def test_policy_revoked_during_fallback_blocks_final_persistence(
@@ -280,9 +661,12 @@ def test_policy_revoked_during_fallback_blocks_final_persistence(
     assert primary.calls == fallback.calls == 1
     with get_session_factory()() as session:
         assert session.scalar(select(Recommendation.id)) is None
-        assert session.scalar(
-            select(ModelRun.id).where(ModelRun.purpose == "recommendation:authority")
-        ) is None
+        assert (
+            session.scalar(
+                select(ModelRun.id).where(ModelRun.purpose == "recommendation:authority")
+            )
+            is None
+        )
 
 
 @pytest.mark.parametrize("output_mode", ["malformed", "unsafe"])
@@ -299,9 +683,9 @@ def test_rejected_fallback_cannot_make_a_third_call(
     assert primary.calls == fallback.calls == 1
     with get_session_factory()() as session:
         assert session.scalar(select(Recommendation.id)) is None
-        runs = list(session.scalars(
-            select(ModelRun).where(ModelRun.purpose == "recommendation:authority")
-        ))
+        runs = list(
+            session.scalars(select(ModelRun).where(ModelRun.purpose == "recommendation:authority"))
+        )
         if output_mode == "unsafe":
             assert len(runs) == 1
             assert runs[0].status == "rejected_unsafe_output"
@@ -349,7 +733,8 @@ def test_fallback_retains_primary_liability_and_requires_its_own_admission(
 ):
     # Deliberately fictitious arithmetic, never a provider invoice/price claim.
     rate = {
-        "input_usd_per_million": "1", "output_usd_per_million": "2",
+        "input_usd_per_million": "1",
+        "output_usd_per_million": "2",
         "source_url": "https://example.com/offline-price-fixture",
         "source_sha256": "a" * 64,
     }
@@ -368,8 +753,10 @@ def test_fallback_retains_primary_liability_and_requires_its_own_admission(
 
     def invoke(provider, messages):
         ticket = money.reserve_paid_ai_call(
-            provider=provider.name, model=provider.model,
-            input_bytes=1000, output_tokens=1000,
+            provider=provider.name,
+            model=provider.model,
+            input_bytes=1000,
+            output_tokens=1000,
         )
         money.assert_paid_ai_dispatch(ticket)
         transports.append(provider.name)

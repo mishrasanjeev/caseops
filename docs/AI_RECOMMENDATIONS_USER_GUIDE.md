@@ -451,12 +451,29 @@ before retrieval**. Retrieval/preflight reduce the remaining time. A consumed
 second attempt leaves no third attempt for fallback or repair. These are source
 contract limits, not proven live latency or paid-provider acceptance.
 
+Credential discovery/refresh, construction, serialization, spending admission,
+dispatch and result return consume that same allowance. An expired request
+cannot silently refresh credentials or obtain extra SDK attempts. A retained
+spending admission is not refunded just because a response times out.
+
+Before a fallback receives legal evidence, the server rechecks access, tenant
+model policy, Matter lifecycle and the original authority edition, displayed
+metadata and excerpt hashes. It checks current bounded source bytes again and
+locks source rows through the final save. A changed, withdrawn, missing or
+oversized source stops generation; no recommendation is saved. Database locks
+are not retained during model transport. A user should reload changed evidence
+and review it, not repeatedly resubmit an old request.
+
 The release-owner checkpoint records **full Docker R3 on `5a66c091` as
 intentionally interrupted** because the fallback scope changed. That gate is
 incomplete. Its earlier 26 public-content Playwright passes and scoped green
 results do not cover the new fallback or certify production. The amended
 candidate needs fresh complete gates and exact live replay before this guide
 can describe it as deployed.
+The later `67fab368` CI failed its native aggregate and Docker R4 was also
+intentionally interrupted for review corrections. The [release ledger](runbooks/AI_BUDGET_RELEASE_2026-10-11.md)
+separates those failures from each narrower replacement proof; no scoped test
+or mock certifies a live provider or legal quality.
 
 ### Evidence Needed Before Activation Or Primary Promotion
 

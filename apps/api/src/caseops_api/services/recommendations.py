@@ -34,7 +34,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.core.settings import get_settings
@@ -42,6 +42,7 @@ from caseops_api.db.models import (
     AuditResult,
     AuthorityCitation,
     AuthorityDocument,
+    AuthorityDocumentChunk,
     Judge,
     Matter,
     MatterActivity,
@@ -278,6 +279,108 @@ class RetrievedAuthority:
     text: str
     aliases: tuple[str, ...] = ()
     rerank_explanation: str | None = None
+    authority_document_id: str | None = None
+    grounding_lineage: tuple[object, ...] | None = None
+    grounding_chunks: tuple[tuple[str, int, str], ...] = ()
+
+
+def _authority_grounding_state(
+    session: Session, authorities: list[RetrievedAuthority], *, lock_sources: bool = False
+) -> str:
+    ids = sorted({item.authority_document_id for item in authorities if item.authority_document_id})
+    if len(ids) > 6 or any(not item.authority_document_id for item in authorities):
+        raise HTTPException(409, "Authority source identities cannot be revalidated.")
+    if not ids:
+        return hashlib.sha256(b"[]").hexdigest()
+
+    # Scalar reads bypass the ORM identity map. PostgreSQL hashes source bytes
+    # in place instead of copying entire judgments into the request again.
+    postgres = session.get_bind().dialect.name == "postgresql"
+
+    def digest(column, max_bytes):
+        if not postgres:
+            return column
+        return case(
+            (func.octet_length(column) > max_bytes, "source-exceeds-byte-bound"),
+            else_=func.encode(
+                func.sha256(func.convert_to(func.coalesce(column, ""), "UTF8")),
+                "hex",
+            ),
+        )
+
+    body = digest(AuthorityDocument.document_text, 8 * 1024 * 1024)
+    content = digest(AuthorityDocumentChunk.content, 64 * 1024)
+    document_query = (
+        select(
+            AuthorityDocument.id,
+            AuthorityDocument.title,
+            AuthorityDocument.case_reference,
+            AuthorityDocument.summary,
+            AuthorityDocument.source_reference,
+            AuthorityDocument.source_version,
+            AuthorityDocument.content_hash,
+            AuthorityDocument.source_access_state,
+            AuthorityDocument.legal_review_status,
+            AuthorityDocument.updated_at,
+            body,
+        )
+        .where(AuthorityDocument.id.in_(ids))
+        .order_by(AuthorityDocument.id)
+    )
+    if lock_sources:
+        document_query = document_query.with_for_update(of=AuthorityDocument)
+    documents = session.execute(document_query).all()
+    if len(documents) != len(ids):
+        raise HTTPException(409, "An authority source is no longer available. No output was saved.")
+    chunk_query = (
+        select(
+            AuthorityDocumentChunk.authority_document_id,
+            AuthorityDocumentChunk.id,
+            AuthorityDocumentChunk.chunk_index,
+            content,
+        )
+        .where(AuthorityDocumentChunk.authority_document_id.in_(ids))
+        .order_by(AuthorityDocumentChunk.authority_document_id, AuthorityDocumentChunk.chunk_index)
+        .limit(4097)
+    )
+    if lock_sources:
+        chunk_query = chunk_query.with_for_update(of=AuthorityDocumentChunk)
+    chunks = session.execute(chunk_query).all()
+    if len(chunks) > 4096:
+        raise HTTPException(503, "Authority source revalidation exceeded its bounded work budget.")
+
+    def fingerprint(row, max_bytes):
+        values = list(row)
+        if not postgres:
+            raw = (values[-1] or "").encode("utf-8")
+            if len(raw) > max_bytes:
+                raise HTTPException(503, "Authority source revalidation exceeded its byte budget.")
+            values[-1] = hashlib.sha256(raw).hexdigest()
+        elif values[-1] == "source-exceeds-byte-bound":
+            raise HTTPException(503, "Authority source revalidation exceeded its byte budget.")
+        return values
+
+    document_values = [fingerprint(row, 8 * 1024 * 1024) for row in documents]
+    chunk_values = [fingerprint(row, 64 * 1024) for row in chunks]
+    by_document = {row[0]: tuple(row[:10]) for row in document_values}
+    by_chunk = {row[1]: (row[2], row[3]) for row in chunk_values}
+    for authority in authorities:
+        if (
+            authority.grounding_lineage is not None
+            and by_document[authority.authority_document_id] != authority.grounding_lineage
+        ) or any(
+            by_chunk.get(chunk_id) != (index, content_hash)
+            for chunk_id, index, content_hash in authority.grounding_chunks
+        ):
+            raise HTTPException(409, "The authority edition changed. No recommendation was saved.")
+    return hashlib.sha256(
+        json.dumps(
+            [document_values, chunk_values],
+            default=str,
+            ensure_ascii=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -752,11 +855,12 @@ def _gather_authorities_with_trace(
             RetrievedAuthority(
                 identifier=identifier,
                 text=text,
+                authority_document_id=result.authority_document_id,
+                grounding_lineage=result._grounding_lineage,
+                grounding_chunks=result._grounding_chunks,
                 aliases=tuple(dict.fromkeys(aliases)),
                 rerank_explanation=(
-                    explanations.get(result.authority_document_id)
-                    if explanations
-                    else None
+                    explanations.get(result.authority_document_id) if explanations else None
                 ),
             )
         )
@@ -1700,6 +1804,15 @@ def generate_recommendation(
         recommendation_fallback_enabled,
     )
 
+    use_fallback_plan = (
+        provider is None and llm.name == "openai" and recommendation_fallback_enabled()
+    )
+    if use_fallback_plan and any(item.grounding_lineage is None for item in retrieved):
+        raise HTTPException(409, "Authority edition evidence is missing. No model was called.")
+    source_grounding_state = (
+        _authority_grounding_state(session, retrieved) if use_fallback_plan else None
+    )
+
     def _revalidate_before_provider() -> None:
         nonlocal context
         # Never discard surrounding writes or keep source locks while an ADC
@@ -1737,6 +1850,7 @@ def generate_recommendation(
         if (
             current.lifecycle_version != source_lifecycle_version
             or _prompt_hash(current_messages) != source_prompt_hash
+            or _authority_grounding_state(session, retrieved) != source_grounding_state
         ):
             session.rollback()
             raise HTTPException(
@@ -1749,11 +1863,12 @@ def generate_recommendation(
         RecommendationFallbackPlan(
             started_at=_t0,
             primary_factory=lambda timeout: build_provider(
-                purpose=PURPOSE_RECOMMENDATIONS, timeout_seconds=timeout,
+                purpose=PURPOSE_RECOMMENDATIONS,
+                timeout_seconds=timeout,
             ),
             revalidate=_revalidate_before_provider,
         )
-        if provider is None and llm.name == "openai" and recommendation_fallback_enabled()
+        if use_fallback_plan
         else None
     )
 
@@ -1880,14 +1995,22 @@ def generate_recommendation(
             ),
         )
 
-    current_retrieved, _current_bench_trace = _gather_authorities_with_trace(
-        session,
-        query=_build_retrieval_query(matter, rec_type, objective=objective),
-        forum_level=matter.forum_level,
-        matter=matter,
-        context=context,
-        enable_bench_citation_rerank=(rec_type == "authority"),
-    )
+    if fallback_plan is not None:
+        # Keep current source locks until persistence; new chunks need the
+        # parent FK lock. Do not rerun an external embedder under these locks.
+        current_grounding = _authority_grounding_state(session, retrieved, lock_sources=True)
+        if current_grounding != source_grounding_state:
+            raise HTTPException(409, "Authority sources changed. No recommendation was saved.")
+        current_retrieved = retrieved
+    else:
+        current_retrieved, _current_bench_trace = _gather_authorities_with_trace(
+            session,
+            query=_build_retrieval_query(matter, rec_type, objective=objective),
+            forum_level=matter.forum_level,
+            matter=matter,
+            context=context,
+            enable_bench_citation_rerank=(rec_type == "authority"),
+        )
     current_intelligence_context = _build_matter_intelligence_context(session, matter)
     current_messages = _build_prompt(
         rec_type=rec_type,

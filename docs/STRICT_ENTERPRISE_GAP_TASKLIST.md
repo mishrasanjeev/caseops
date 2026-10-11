@@ -22,6 +22,18 @@ Current ACL/lifecycle/source state and the actual fallback model policy must
 be rechecked with no transaction retained across transport. Compare legal
 evidence before any primary promotion; replace intentionally interrupted R3
 with full amended acceptance. No live activation is claimed.
+Fresh-source validation includes authority body/excerpt bytes and retained
+source versions, not just Matter facts or stale retrieved objects. The original
+retrieval-time metadata/excerpt snapshot must agree with the current edition;
+source parent/child locks must survive through final persistence without
+covering transport. Missing source lineage is a denial, not an empty success.
+The complete deadline must also bound managed authentication, admission and final return,
+not only the model HTTP timeout. Reviewer reproductions remain open until
+combined replacement proof. CI `67fab368` failed its PostgreSQL aggregate;
+R4 was deliberately interrupted without a completion event, not passed.
+Frozen affected/adjacent replacement: 762 passes in all 24 requested files,
+including 39 native PostgreSQL cases, no skips and exact collection/phase/JUnit/
+source-hash agreement. Full current release proof is still required.
 
 Partially implemented / NO-GO until native acceptance and release: tenant
 credits and provider daily caps do not establish a shared money ceiling.

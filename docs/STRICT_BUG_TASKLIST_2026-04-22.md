@@ -18,6 +18,19 @@ strict schema, availability-only recovery and no third transport attempt or
 financial/security/safety bypass. R3 was intentionally interrupted for this
 scope; retain its incomplete evidence. Global activation and comparative legal
 quality remain separate open dependencies, not a reason to call a mock correct.
+Independent review additionally reproduced stale authority body/version/access
+acceptance and a late credential refresh escaping the shared deadline.
+Both are **Inconclusive / not production-certified** until their amendments,
+complete replacement inventory and exact live user-visible proof. Local source
+corrections must not supersede `67fab368`'s failed CI or interrupted R4.
+The amendment captures original retrieval metadata and excerpt hashes, checks
+current source bytes under bounded work, retains final-save source locks, and
+bounds managed authentication/admission as well as SDK transport. Four intended
+metadata RED cases also reproduced stale title/summary/citation/source labels.
+These are source corrections; deployed end-user proof is still missing.
+Frozen affected/adjacent proof is 762 passed/24 files, including 39 PostgreSQL
+cases, zero skips and 2,286 reconciled phases. Verdict remains **Inconclusive**
+for deployed end-user behavior until full current release/browser evidence.
 
 **Partially fixed in source; not production-certified.** Independent review
 reproduced continued batch submission, deletion of unprocessed ingest inputs,
