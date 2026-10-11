@@ -2,6 +2,13 @@
 
 ## October 11 Release Recovery
 
+47 CI `38156566072` failed one stale header-expression assertion; browser
+acceptance skipped. Preserve all failed evidence and the no-paid fence.
+Replacement passes 44 API / twenty offline browser cases, with exact inventory
+agreement and no skips/retries; 532 standard browser identities are discovered.
+Fresh full acceptance is required. R9 was intentionally superseded with 1,075
+passing calls/no completion; retained raw evidence is not amended acceptance.
+
 R8 on `3ca46ae5` stopped before native/browser tests on a noncanonical image
 handle from the real caller. Caller/inspection guards are being corrected;
 failed raw evidence is retained. This is still NO-GO, not a deployed repair.

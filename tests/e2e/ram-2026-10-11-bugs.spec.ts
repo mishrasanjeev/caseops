@@ -82,6 +82,15 @@ test("transport header policy is local-only and preserves provider isolation", (
   }
 });
 
+test("resolved browser headers retain the authoritative no-paid marker", ({}, testInfo) => {
+  const headers = testInfo.project.use.extraHTTPHeaders;
+  expect(headers?.["X-CaseOps-Automated-Test"]).toBe("no-paid-providers");
+  const origin = new URL(testInfo.project.use.baseURL!);
+  const loopback = origin.protocol === "http:"
+    && ["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname);
+  expect(headers?.Connection).toBe(loopback ? "close" : undefined);
+});
+
 test("fixture database refuses SQLite in Docker acceptance", () => {
   expect(() => requireFixtureDatabaseUrl(ownedSqlite, "")).toThrow();
 });

@@ -2,6 +2,11 @@
 
 ## October 11 Court-Write Release Gate
 
+47 hosted API coverage is 6,819 pass / one stale direct-header assertion fail /
+2,303 explicit skips; hosted browser execution skipped. Marker-preserving
+helper/inherited-config and resolved-browser-header coverage is being added
+without changing runtime behavior. Full amended Docker/CI/live stays open.
+
 R8 on `3ca46ae5` stopped before any native/browser test because the caller
 retained a bare image hash. Canonical caller controls and real inert-image
 proof do not certify the pending complete amended release inventory.

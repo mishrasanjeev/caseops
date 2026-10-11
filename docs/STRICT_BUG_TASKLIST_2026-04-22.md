@@ -2,6 +2,12 @@
 
 ## October 11 Court-Write Investigation
 
+47 CI header-expression drift: **Not fixed in this release yet**. One complete
+API call failed a stale literal assertion; its setup/teardown passed and hosted
+browser execution skipped. Explicit helper binding/marker and inherited-config
+checks plus negative controls and resolved headers need complete replacement.
+No paid transport, deployment or fixed production claim follows from this.
+
 R8's introduced wrapper image-ID defect is reproduced separately; native and
 browser tests did not run. Caller controls pass, but product closure remains
 Inconclusive pending the full replacement and exact-production journeys.

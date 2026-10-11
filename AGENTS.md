@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A transport helper may change a config's expression without changing its
+  authoritative no-paid marker. Audit every inherited/direct config, require
+  the reviewed helper's input and marker-preserving return, regress removed
+  markers and unreviewed bindings, and assert Playwright's resolved headers.
+  A stale literal assertion is a test defect, not permission to drop the fence.
+
 - Account-level AI money denial is an operational batch stop, not a corrupt
   document or transient per-record failure. Stop submission, drain only the
   bounded in-flight window, retain the distinct halt reason and return a

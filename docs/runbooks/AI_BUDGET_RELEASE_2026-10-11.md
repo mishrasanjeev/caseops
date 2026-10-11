@@ -2,6 +2,42 @@
 
 ## Release Verdict
 
+### 17:32 UTC Replacement Checkpoint
+
+The complete focused replacement passed 44 API cases / 132 phases and twenty
+offline browser cases, zero skips/failures/retries and exact collection/JUnit
+agreement. All 531 previous standard browser identities remain; the resolved
+header case increases discovery to 532. Ruff, E2E type checking and governance
+validation pass. Receipt: `provider-marker-reconciliation-r1.json` in the durable
+recovery output directory. This is not complete release acceptance.
+
+R9 on 47 was intentionally superseded at 17:29 UTC, not passed: 1,075 calls /
+3,226 passing phases, no pytest completion, no browser run. The owned pytest
+processes are absent; all seven owned containers, networks and volumes are
+absent. Full journals, bounded logs/state and failed interruption-helper guards
+remain retained. No original gate is overwritten. The corrected full candidate
+requires fresh Docker/CI/main/live gates; production and provider activation
+remain unchanged.
+
+### 17:20 UTC Header-Guard Checkpoint
+
+Exact `47a09f03` CI `38156566072` failed one of 9,123 API cases:
+`test_every_playwright_config_blocks_paid_provider_requests` still demanded
+the former direct header expression in two loopback configs. The reviewed
+transport helper preserves the authoritative no-paid marker. All failing
+setup/call/teardown and matching JUnit evidence have been read; this is a
+static test-contract defect, not evidence of paid traffic. Hosted browser
+acceptance skipped and cannot certify its 531 expected cases. Six complete
+Linux wrapper tests pass, including the new canonical-image caller.
+
+The replacement keeps explicit inheritance and production config checks,
+requires the local helper's reviewed input and marker-preserving return,
+adds seven negative mutation controls and asserts the resolved browser headers.
+Frozen Docker R9 initially continued on 47 in its untouched checkout; its later
+intentional interruption is recorded above. It cannot certify this amended
+candidate; full amended Docker/CI and exact production acceptance
+remain required. No merge, deployment, provider activation or primary promotion.
+
 ### R8 Infrastructure Failure
 
 Exact `3ca46ae5` Docker R8 finished exit 1 at 16:28:41 UTC before native or

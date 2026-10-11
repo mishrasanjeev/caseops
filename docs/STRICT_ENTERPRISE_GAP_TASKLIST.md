@@ -2,6 +2,12 @@
 
 ## October 11 Exact-Release Checkpoint
 
+NO-GO: 47 CI failed the old direct-header source assertion after the loopback
+helper adoption. It is a test-contract defect, not proof of paid transport.
+Retain explicit no-paid/config binding and negative controls plus resolved
+Playwright-header proof. Hosted browser execution skipped; complete amended
+Docker/CI and live replay remain required, independent of frozen R9.
+
 R8's canonical-image caller defect stopped acceptance before native/browser
 tests. Failed source/logs remain retained; inspected caller proof is not the
 complete amended Docker/CI or exact-live release certification.
