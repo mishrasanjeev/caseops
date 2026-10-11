@@ -316,7 +316,10 @@ def _install_fake_openai_structured(
     captured: dict,
     *,
     include_parsed: bool = True,
+    outcome: str = "valid",
 ) -> None:
+    import openai as native_openai
+
     class _FakeCompletions:
         def create(self, **_kwargs):
             raise AssertionError("structured generation must use the native parse contract")
@@ -324,6 +327,13 @@ def _install_fake_openai_structured(
         def parse(self, **kwargs):
             captured.update(kwargs)
             captured["method"] = "parse"
+            captured["calls"] = captured.get("calls", 0) + 1
+            if outcome == "malformed_json":
+                raise json.JSONDecodeError("Malformed offline response", "{", 1)
+            if outcome == "length":
+                raise _FakeLengthFinishReasonError()
+            if outcome == "content_filter":
+                raise _FakeContentFilterFinishReasonError()
             response_format = kwargs["response_format"]
             parsed = (
                 response_format(
@@ -340,10 +350,14 @@ def _install_fake_openai_structured(
                 if include_parsed
                 else None
             )
+            if outcome in {"missing", "refusal"}:
+                parsed = None
+            elif outcome == "schema_mismatch":
+                parsed = {"title": "Malformed offline response", "options": "not-a-list"}
 
             class _Message:
                 content = "provider text is deliberately not trusted here"
-                refusal = None
+                refusal = "Offline refusal" if outcome == "refusal" else None
 
                 def __init__(self) -> None:
                     self.parsed = parsed
@@ -375,6 +389,7 @@ def _install_fake_openai_structured(
         (),
         {
             "OpenAI": _FakeClient,
+            "pydantic_function_tool": staticmethod(native_openai.pydantic_function_tool),
             "LengthFinishReasonError": _FakeLengthFinishReasonError,
             "ContentFilterFinishReasonError": _FakeContentFilterFinishReasonError,
         },
@@ -501,3 +516,150 @@ def test_openai_provider_floor_applies_to_o3_models(
         max_tokens=1024,
     )
     assert captured.get("max_completion_tokens") == 8192
+
+
+@pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-6-luna-2026-10-11"])
+@pytest.mark.parametrize("max_tokens", [1024, 4096, 16384])
+def test_openai_luna_request_uses_low_reasoning_without_raising_token_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    model: str,
+    max_tokens: int,
+) -> None:
+    from caseops_api.services.llm import OpenAIProvider
+
+    # The date-shaped name checks compatibility, not snapshot availability.
+    captured: dict = {}
+    _install_fake_openai(monkeypatch, captured)
+    provider = OpenAIProvider(model=model, api_key="k")
+
+    completion = provider.generate(
+        [LLMMessage(role="user", content="Offline request")],
+        temperature=0.7,
+        max_tokens=max_tokens,
+    )
+
+    assert captured == {
+        "model": model,
+        "messages": [{"role": "user", "content": "Offline request"}],
+        "max_completion_tokens": max_tokens,
+        "reasoning_effort": "low",
+    }
+    assert completion.model == model
+
+
+@pytest.mark.parametrize(
+    ("model", "expected_cap", "reasoning"),
+    [
+        ("gpt-4o-mini", 1024, False),
+        ("gpt-5.1", 8192, True),
+        ("gpt-5-mini-2025-08-07", 8192, True),
+        ("o1-mini", 8192, True),
+        ("o3-mini-2025-01-31", 8192, True),
+        ("gpt-6-sol", 1024, False),
+        ("gpt-6-astra", 1024, False),
+        ("unknown-model", 1024, False),
+        ("gpt-6-lunatic", 1024, False),
+        ("gpt-6-luna-preview", 1024, False),
+        ("gpt-6-luna-20261011", 1024, False),
+        ("gpt-6-luna-2026-10-11-extra", 1024, False),
+    ],
+)
+def test_openai_luna_compatibility_preserves_other_model_requests(
+    monkeypatch: pytest.MonkeyPatch,
+    model: str,
+    expected_cap: int,
+    reasoning: bool,
+) -> None:
+    from caseops_api.services.llm import OpenAIProvider
+
+    captured: dict = {}
+    _install_fake_openai(monkeypatch, captured)
+    provider = OpenAIProvider(model=model, api_key="k")
+    provider.generate([LLMMessage(role="user", content="Offline request")], temperature=0.7)
+
+    expected = {
+        "model": model,
+        "messages": [{"role": "user", "content": "Offline request"}],
+        "max_completion_tokens": expected_cap,
+    }
+    if reasoning:
+        expected["reasoning_effort"] = "low"
+    else:
+        expected["temperature"] = 0.7
+    assert captured == expected
+
+
+@pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-6-luna-2026-10-11"])
+@pytest.mark.parametrize("max_tokens", [1024, 4096, 16384])
+def test_openai_luna_structured_request_preserves_native_parse_and_token_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    model: str,
+    max_tokens: int,
+) -> None:
+    from caseops_api.services.llm import OpenAIProvider
+
+    captured: dict = {}
+    _install_fake_openai_structured(monkeypatch, captured)
+    provider = OpenAIProvider(model=model, api_key="k")
+    validated, completion = generate_structured(
+        provider,
+        schema=_Structured,
+        messages=_prompt(structured=True),
+        context=LLMCallContext(purpose="unit-test"),
+        temperature=0.7,
+        max_tokens=max_tokens,
+    )
+
+    assert captured["method"] == "parse"
+    assert captured["calls"] == 1
+    assert captured["model"] == model
+    assert captured["response_format"] is _Structured
+    assert captured["reasoning_effort"] == "low"
+    assert captured["max_completion_tokens"] == max_tokens
+    assert "temperature" not in captured
+    assert "tools" not in captured
+    assert validated.title == "Native structured response"
+    assert json.loads(completion.text)["options"][0]["label"] == "Option A"
+    assert (completion.prompt_tokens, completion.completion_tokens) == (3, 5)
+
+
+@pytest.mark.parametrize("model", ["gpt-5.1", "gpt-6-luna"])
+@pytest.mark.parametrize(
+    ("outcome", "error_detail"),
+    [
+        ("missing", "contained no parsed value"),
+        ("refusal", "structured response refused"),
+        ("schema_mismatch", "outside the required schema"),
+        ("malformed_json", "did not complete the required structured response"),
+        ("length", "did not complete the required structured response"),
+        ("content_filter", "did not complete the required structured response"),
+    ],
+)
+def test_openai_luna_preserves_strict_structured_failure_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    model: str,
+    outcome: str,
+    error_detail: str,
+) -> None:
+    from caseops_api.services.llm import OpenAIProvider
+
+    captured: dict = {}
+    _install_fake_openai_structured(monkeypatch, captured, outcome=outcome)
+    provider = OpenAIProvider(model=model, api_key="k")
+
+    with pytest.raises(LLMResponseFormatError, match=error_detail):
+        generate_structured(
+            provider,
+            schema=_Structured,
+            messages=_prompt(structured=True),
+            context=LLMCallContext(purpose="unit-test"),
+            max_tokens=1024,
+        )
+
+    assert captured["method"] == "parse"
+    assert captured["calls"] == 1
+    assert captured["model"] == model
+    assert captured["response_format"] is _Structured
+    assert captured["reasoning_effort"] == "low"
+    assert captured["max_completion_tokens"] == (1024 if model == "gpt-6-luna" else 8192)
+    assert "temperature" not in captured

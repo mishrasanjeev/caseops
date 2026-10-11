@@ -8,6 +8,7 @@ const PUBLIC_SITEMAP_PATHS = [
   "/law-firms",
   "/pricing",
   "/resources/legal-matter-management-india",
+  "/resources/source-grounded-legal-recommendations",
   "/solo-lawyers",
 ] as const;
 
@@ -382,6 +383,123 @@ test.describe("Public landing page and user guide", () => {
   });
 
   for (const viewport of VIEWPORTS) {
+    test(`${viewport.name} October 11 recommendation article is discoverable, source-qualified and read-only`, async ({
+      page,
+    }, testInfo) => {
+      const pathname = "/resources/source-grounded-legal-recommendations";
+      const title = "Source-grounded recommendations for law firms";
+      await page.setViewportSize(viewport);
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      const entry = page.locator(`footer a[href="${pathname}"]`);
+      await expect(entry).toHaveCount(1);
+      await entry.scrollIntoViewIfNeeded();
+      await expect(entry).toBeVisible();
+      await entry.click();
+      await expect(page).toHaveURL(new RegExp(`${pathname}$`));
+
+      const response = await page.reload({ waitUntil: "domcontentloaded" });
+      expect(response?.status()).toBe(200);
+      const nonce = response?.headers()["content-security-policy"]?.match(/script-src[^;]*'nonce-([^']+)'/)?.[1];
+      expect(nonce, "article JSON-LD must use the request CSP nonce").toBeTruthy();
+      await expect(page.locator("main h1")).toHaveText(title);
+      await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `https://caseops.ai${pathname}`);
+      await expect(page.locator('meta[property="og:type"]')).toHaveAttribute("content", "article");
+      const description = await page.locator('meta[name="description"]').getAttribute("content");
+      const jsonLd = page.locator("#source-grounded-recommendations-article-jsonld");
+      const article = JSON.parse((await jsonLd.textContent())!) as Record<string, unknown>;
+      expect(article).toMatchObject({
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: title,
+        description,
+        mainEntityOfPage: `https://caseops.ai${pathname}`,
+        inLanguage: "en-IN",
+      });
+      await expect(page.locator("main > header")).toContainText(String(description));
+      expect(await jsonLd.evaluate((element) => (element as HTMLScriptElement).nonce)).toBe(nonce);
+
+      const contents = page.getByRole("navigation", { name: "On this page" });
+      const targets = await page.locator("article > section[id]").evaluateAll(
+        (sections) => sections.map((section) => `#${section.id}`),
+      );
+      expect(await contents.locator("a").evaluateAll(
+        (links) => links.map((link) => link.getAttribute("href")),
+      )).toEqual(targets);
+      expect(new Set(targets).size).toBe(targets.length);
+      for (const link of await contents.getByRole("link").all()) {
+        await link.scrollIntoViewIfNeeded();
+        await expect(link).toBeVisible();
+        const box = await link.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 1);
+      }
+      await contents.getByRole("link", { name: "The workflow", exact: true }).click();
+      await expect(page).toHaveURL(/#workflow$/);
+      const workflow = page.locator("#workflow");
+      await expect(workflow.getByRole("heading", { level: 2 })).toBeVisible();
+      await expect(workflow.locator("ol > li")).toHaveCount(5);
+      await expect(workflow).toContainText("assumptions and missing facts");
+      await expect(workflow).toContainText("generation may be refused");
+      await expect(workflow).toContainText("Recording a decision is not a court filing");
+
+      const review = page.locator("#source-checks");
+      await review.scrollIntoViewIfNeeded();
+      await expect(review.getByRole("heading", { level: 2 })).toBeVisible();
+      await expect(review).toContainText("Generated output can contain legal or factual errors");
+      await expect(review).toContainText("The lawyer must verify each authority, quotation and material fact");
+      await expect(review).toContainText("A confidence label is not a probability of winning a case");
+      for (const paragraph of await review.locator("p").all()) {
+        await paragraph.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "auto" }));
+        await expect(paragraph).toBeVisible();
+        const box = await paragraph.boundingBox();
+        const navigation = await page.getByRole("banner").boundingBox();
+        expect(box).not.toBeNull();
+        expect(navigation).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 1);
+        expect(box!.y).toBeGreaterThanOrEqual(navigation!.y + navigation!.height);
+        expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 1);
+      }
+      await testInfo.attach("recommendation-review-limitations", {
+        body: await review.screenshot(), contentType: "image/png",
+      });
+
+      const access = page.locator("#controlled-access");
+      await access.scrollIntoViewIfNeeded();
+      await expect(access.getByRole("heading", { level: 2 })).toBeVisible();
+      await expect(access).toContainText("ethical wall");
+      await expect(access).toContainText("Tenant AI policy and available source coverage");
+      await expect(page.locator("#team-checklist ul > li")).toHaveCount(5);
+      await expect(page.locator("article form, article input, article textarea")).toHaveCount(0);
+      await expect(page.locator('article a[href^="/demo"]')).toHaveCount(0);
+      await expect(page.locator('script[src*="googletagmanager"], script[src*="google-analytics"]')).toHaveCount(0);
+      const copy = `${await page.locator("main").innerText()} ${await jsonLd.textContent()}`;
+      expect(copy).not.toMatch(/\b(?:gpt[\w.-]*|claude|gemini|llama|mistral|deepseek|qwen|voyage[\w.-]*|bge[\w.-]*)\b/i);
+      expect(copy).not.toMatch(/hallucination[- ]free|guaranteed (?:win|success|outcome)|100% (?:accuracy|correctness)|\u20b9|\$\d/i);
+
+      const widths = await page.evaluate(() => ({
+        client: document.documentElement.clientWidth,
+        scroll: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+      }));
+      expect(widths.scroll, `article overflows at ${viewport.width}px`).toBeLessThanOrEqual(widths.client + 1);
+      const guide = page.locator("article").getByRole("link", { name: "product guide", exact: true });
+      await guide.scrollIntoViewIfNeeded();
+      await expect(guide).toBeVisible();
+      await guide.click();
+      await expect(page).toHaveURL(/\/guide$/);
+      await expect(page.getByRole("heading", { level: 1, name: /how to run your practice on caseops/i })).toBeVisible();
+
+      await page.goto("/resources/legal-matter-management-india", { waitUntil: "domcontentloaded" });
+      const related = page.locator("article").getByRole("link", { name: title, exact: true });
+      await related.scrollIntoViewIfNeeded();
+      await expect(related).toBeVisible();
+      await related.click();
+      await expect(page).toHaveURL(new RegExp(`${pathname}$`));
+      await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
+    });
+
     test(`${viewport.name} September 10 guide and sales copy preserve source and provider limits`, async ({
       page,
     }, testInfo) => {

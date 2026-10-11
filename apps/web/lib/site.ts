@@ -46,6 +46,7 @@ export const siteConfig = {
         { label: "For solo lawyers", href: "/solo-lawyers" },
         { label: "User guide", href: "/guide" },
         { label: "Matter management checklist", href: "/resources/legal-matter-management-india" },
+        { label: "Recommendation review", href: "/resources/source-grounded-legal-recommendations" },
         { label: "Request a conversation", href: "/demo/guide" },
       ],
       Trust: [

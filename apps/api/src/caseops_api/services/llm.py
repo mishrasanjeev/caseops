@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 from typing import Any, NoReturn
 
@@ -26,6 +27,11 @@ from pydantic import BaseModel, ValidationError
 
 from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
 from caseops_api.core.settings import get_settings
+from caseops_api.services.ai_money_budget import (
+    AiMoneyBudgetError,
+    assert_paid_ai_dispatch,
+    reserve_paid_ai_call,
+)
 from caseops_api.services.llm_types import (
     LLMCallContext,
     LLMCompletion,
@@ -629,11 +635,13 @@ class OpenAIProvider:
     Defaults to ``gpt-5.1`` and fails closed when its configured credentials
     or model are unavailable; CaseOps does not silently cross providers.
 
-    Two model-family quirks worth knowing:
+    Model-family quirks worth knowing:
 
     - ``gpt-5.x`` reasoning models reject any temperature other than
       the default. We omit the parameter entirely for ``gpt-5*`` so the
       wire request never carries it.
+    - ``gpt-6-luna`` uses low reasoning without temperature, but preserves
+      the caller's completion-token ceiling rather than the legacy floor.
     - The Chat Completions API now prefers ``max_completion_tokens``
       over the legacy ``max_tokens``. We send the new field; the SDK
       maps it correctly for older models too.
@@ -683,10 +691,18 @@ class OpenAIProvider:
         )
         self._openai = openai
         self.model = model
+        self._budget_retry_count = max_retries
 
     def _model_rejects_temperature(self) -> bool:
         name = (self.model or "").lower()
-        return any(name.startswith(p) for p in self._NO_TEMPERATURE_PREFIXES)
+        return self._is_luna_model() or any(
+            name.startswith(p) for p in self._NO_TEMPERATURE_PREFIXES
+        )
+
+    def _is_luna_model(self) -> bool:
+        name = (self.model or "").lower()
+        # Match only Luna and date-shaped snapshots, not unreviewed siblings.
+        return re.fullmatch(r"gpt-6-luna(?:-[0-9]{4}-[0-9]{2}-[0-9]{2})?", name) is not None
 
     def _is_reasoning_model(self) -> bool:
         name = (self.model or "").lower()
@@ -726,7 +742,7 @@ class OpenAIProvider:
         }
         if not self._model_rejects_temperature():
             kwargs["temperature"] = temperature
-        if self._is_reasoning_model():
+        if self._is_reasoning_model() or self._is_luna_model():
             kwargs["reasoning_effort"] = "low"
         return kwargs
 
@@ -753,6 +769,22 @@ class OpenAIProvider:
             latency_ms=max(1, int((time.perf_counter() - started) * 1000)),
             raw=response,
         )
+
+    def _budget_input_bytes(
+        self, kwargs: dict[str, Any], schema: type[BaseModel] | None = None
+    ) -> int:
+        wire_bytes = len(json.dumps(kwargs, ensure_ascii=False).encode("utf-8")) + 4096
+        if schema is not None and not paid_providers_blocked_for_request():
+            # This public SDK helper uses the same strict schema conversion as
+            # parse(). Raw Pydantic schema bytes omit required-field/ref expansion.
+            try:
+                contract = self._openai.pydantic_function_tool(schema)
+                wire_bytes += len(json.dumps(contract, ensure_ascii=False).encode("utf-8"))
+            except Exception as exc:
+                raise AiMoneyBudgetError(
+                    "AI structured request cost cannot be bounded. No external request was sent."
+                ) from exc
+        return wire_bytes
 
     def _raise_call_error(self, exc: Exception) -> NoReturn:
         if _is_quota_exhausted(exc):
@@ -783,6 +815,14 @@ class OpenAIProvider:
         # stress-matter probe (BUG-024 grounding) hit a 110s client
         # timeout post-deploy.
         started = time.perf_counter()
+        admission = reserve_paid_ai_call(
+            provider=self.name,
+            model=self.model,
+            input_bytes=self._budget_input_bytes(kwargs),
+            output_tokens=kwargs["max_completion_tokens"],
+            retry_count=getattr(self, "_budget_retry_count", 2),
+        )
+        assert_paid_ai_dispatch(admission)
         try:
             response = self._client.chat.completions.create(**kwargs)
         except Exception as exc:
@@ -813,6 +853,14 @@ class OpenAIProvider:
             max_tokens=max_tokens,
         )
         started = time.perf_counter()
+        admission = reserve_paid_ai_call(
+            provider=self.name,
+            model=self.model,
+            input_bytes=self._budget_input_bytes(kwargs, schema),
+            output_tokens=kwargs["max_completion_tokens"],
+            retry_count=getattr(self, "_budget_retry_count", 2),
+        )
+        assert_paid_ai_dispatch(admission)
         try:
             response = self._client.chat.completions.parse(
                 **kwargs,
@@ -871,6 +919,7 @@ class GeminiProvider:
             }
         self._client = genai.Client(api_key=api_key, **client_options)
         self.model = model
+        self._budget_retry_count = 0 if timeout_seconds is not None else 4
 
     def generate(
         self,
@@ -881,6 +930,16 @@ class GeminiProvider:
     ) -> LLMCompletion:
         contents = _messages_to_gemini(messages)
         started = time.perf_counter()
+        # Unknown/unreviewed Gemini rates are rejected by the same account
+        # ledger; switching providers is never a budget-exhaustion bypass.
+        admission = reserve_paid_ai_call(
+            provider=self.name,
+            model=self.model,
+            input_bytes=len(json.dumps(contents, ensure_ascii=False).encode("utf-8")) + 4096,
+            output_tokens=max_tokens,
+            retry_count=getattr(self, "_budget_retry_count", 4),
+        )
+        assert_paid_ai_dispatch(admission)
         try:
             response = self._client.models.generate_content(
                 model=self.model,
