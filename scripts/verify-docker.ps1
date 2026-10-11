@@ -303,6 +303,209 @@ function Invoke-CandidatePlaywright {
         throw "Docker acceptance owns its structured Playwright reporters."
     }
     $ReportStem = Join-Path $ResultsDirectory ("playwright-" + [Guid]::NewGuid().ToString("N"))
+    # Playwright clears project output directories at the next invocation. Keep
+    # all bytes, including unattached originals, before another shard can start.
+    $RetainArtifacts = {
+        param($Report)
+
+        $Staging = "$ReportStem.artifacts"
+        try {
+            [void](New-Item -ItemType Directory -Path $Staging -ErrorAction Stop)
+            $SelectedProjects = @()
+            $Pending = New-Object 'System.Collections.Generic.Queue[object]'
+            foreach ($Suite in @($Report.suites)) { if ($null -ne $Suite) { $Pending.Enqueue($Suite) } }
+            while ($Pending.Count) {
+                $Suite = $Pending.Dequeue()
+                foreach ($Spec in @($Suite.specs)) {
+                    $SelectedProjects += @($Spec.tests | Where-Object { $_.projectName } |
+                        ForEach-Object { $_.projectName })
+                }
+                foreach ($Child in @($Suite.suites)) { if ($null -ne $Child) { $Pending.Enqueue($Child) } }
+            }
+            if (-not $SelectedProjects.Count) {
+                for ($Index = 0; $Index -lt $Arguments.Count; $Index++) {
+                    if ($Arguments[$Index] -match '^--project=(.+)$') { $SelectedProjects += $Matches[1] }
+                    elseif ($Arguments[$Index] -eq '--project' -and $Index + 1 -lt $Arguments.Count) {
+                        $SelectedProjects += $Arguments[++$Index]
+                    }
+                }
+            }
+            $OutputDirs = @($Report.config.projects |
+                Where-Object { -not $SelectedProjects.Count -or $_.name -in $SelectedProjects } |
+                ForEach-Object { $_.outputDir } |
+                Where-Object { $_ } | Sort-Object -Unique -CaseSensitive)
+            if (-not $OutputDirs.Count) {
+                $InventoryPath = Join-Path $ResultsDirectory "playwright-inventory.json"
+                if (Test-Path -LiteralPath $InventoryPath -PathType Leaf) {
+                    $Inventory = Get-Content -LiteralPath $InventoryPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                    $OutputDirs = @($Inventory.config.projects |
+                        Where-Object { -not $SelectedProjects.Count -or $_.name -in $SelectedProjects } |
+                        ForEach-Object { $_.outputDir } |
+                        Where-Object { $_ } | Sort-Object -Unique -CaseSensitive)
+                }
+            }
+            $ResolvedOutputs = $OutputDirs.Count -gt 0
+            if (-not $ResolvedOutputs) { $OutputDirs = @(Join-Path $RepoRoot "test-results") }
+            $SnapshotTree = {
+                param([string]$Root)
+
+                $Items = New-Object 'System.Collections.Generic.List[object]'
+                $Queue = New-Object 'System.Collections.Generic.Queue[string]'
+                $Queue.Enqueue($Root)
+                while ($Queue.Count) {
+                    $Directory = [IO.DirectoryInfo]::new((& $IoPath $Queue.Dequeue()))
+                    if ($Directory.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                        throw "Artifact retention refuses reparse points."
+                    }
+                    $Items.Add([pscustomobject]@{
+                        FullName = (& $NormalPath $Directory.FullName); PSIsContainer = $true
+                    })
+                    foreach ($Item in $Directory.GetFileSystemInfos()) {
+                        if ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                            throw "Artifact retention refuses reparse points."
+                        }
+                        if ($Item.Attributes -band [IO.FileAttributes]::Directory) {
+                            $Queue.Enqueue((& $NormalPath $Item.FullName))
+                        }
+                        else { $Items.Add([pscustomobject]@{
+                            FullName = (& $NormalPath $Item.FullName); PSIsContainer = $false; Length = $Item.Length
+                        }) }
+                    }
+                }
+                return $Items.ToArray()
+            }
+            $Comparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+                [StringComparer]::OrdinalIgnoreCase
+            } else { [StringComparer]::Ordinal }
+            $Files = New-Object 'System.Collections.Generic.Dictionary[string,object]' ($Comparison)
+            $Directories = New-Object 'System.Collections.Generic.List[string]'
+            # .NET Framework directory operations otherwise reject long evidence paths.
+            $IoPath = {
+                param([string]$Path)
+                if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+                    if ($Path.StartsWith('\\')) { return '\\?\UNC\' + $Path.Substring(2) }
+                    return '\\?\' + $Path
+                }
+                return $Path
+            }
+            $NormalPath = {
+                param([string]$Path)
+                if ($Path.StartsWith('\\?\UNC\')) { return '\\' + $Path.Substring(8) }
+                if ($Path.StartsWith('\\?\')) { return $Path.Substring(4) }
+                return $Path
+            }
+            $HashFile = {
+                param([string]$Path)
+                $Stream = [IO.File]::OpenRead((& $IoPath $Path))
+                $Hasher = [Security.Cryptography.SHA256]::Create()
+                try { return -join ($Hasher.ComputeHash($Stream) | ForEach-Object { $_.ToString("x2") }) }
+                finally { $Hasher.Dispose(); $Stream.Dispose() }
+            }
+            $RootPrefix = [IO.Path]::GetFullPath($RepoRoot).TrimEnd([char[]]"\/") + [IO.Path]::DirectorySeparatorChar
+            foreach ($OutputDir in $OutputDirs) {
+                if (-not (Test-PathWithinRoot -Path $OutputDir -Root $RepoRoot) -or
+                    (Test-PathWithinRoot -Path $ResultsDirectory -Root $OutputDir) -or
+                    (Test-PathWithinRoot -Path $OutputDir -Root $ResultsDirectory) -or
+                    [IO.Path]::GetFullPath($OutputDir) -eq [IO.Path]::GetFullPath($ResultsDirectory)) {
+                    throw "Artifact output directory is outside the candidate or overlaps retained reports."
+                }
+                # Check ancestors too: a lexically contained output may cross a junction.
+                $Ancestor = Get-Item -LiteralPath (Split-Path -Parent $OutputDir) -Force -ErrorAction Stop
+                while (Test-PathWithinRoot -Path $Ancestor.FullName -Root $RepoRoot) {
+                    if ($Ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                        throw "Artifact retention refuses reparse points."
+                    }
+                    $Ancestor = $Ancestor.Parent
+                }
+                if (-not (Test-Path -LiteralPath $OutputDir -PathType Container)) {
+                    if ($ResolvedOutputs) { throw "Artifact output directory is missing." }
+                    continue
+                }
+                $Before = @(& $SnapshotTree $OutputDir | Sort-Object FullName)
+                foreach ($Item in $Before) {
+                    $Relative = $Item.FullName.Substring($RootPrefix.Length).Replace('\', '/')
+                    $Retained = "payload/$Relative"
+                    $Target = Join-Path $Staging $Retained
+                    if ($Item.PSIsContainer) {
+                        [void][IO.Directory]::CreateDirectory((& $IoPath $Target))
+                        if (-not $Directories.Contains($Retained)) { $Directories.Add($Retained) }
+                        continue
+                    }
+                    if ($Files.ContainsKey($Item.FullName)) { continue }
+                    $Hash = & $HashFile $Item.FullName
+                    [IO.File]::Copy((& $IoPath $Item.FullName), (& $IoPath $Target), $false)
+                    if ([IO.FileInfo]::new((& $IoPath $Target)).Length -ne $Item.Length -or
+                        (& $HashFile $Target) -cne $Hash) {
+                        throw "Artifact copy verification failed."
+                    }
+                    $Files[$Item.FullName] = [ordered]@{
+                        original_path = $Item.FullName; relative_path = $Relative
+                        retained_path = $Retained; size = $Item.Length; sha256 = $Hash
+                    }
+                }
+                $After = @(& $SnapshotTree $OutputDir | Sort-Object FullName)
+                if ($Before.Count -ne $After.Count -or
+                    [string]::Join("`n", @($Before.FullName)) -cne [string]::Join("`n", @($After.FullName))) {
+                    throw "Artifact source inventory changed during retention."
+                }
+                foreach ($Item in $After | Where-Object { -not $_.PSIsContainer }) {
+                    if ($Item.Length -ne $Files[$Item.FullName].size -or
+                        (& $HashFile $Item.FullName) -cne $Files[$Item.FullName].sha256) {
+                        throw "Artifact source bytes changed during retention."
+                    }
+                }
+            }
+            $Attachments = New-Object 'System.Collections.Generic.List[object]'
+            $Pending = New-Object 'System.Collections.Generic.Queue[object]'
+            foreach ($Suite in @($Report.suites)) { if ($null -ne $Suite) { $Pending.Enqueue($Suite) } }
+            while ($Pending.Count) {
+                $Suite = $Pending.Dequeue()
+                foreach ($Spec in @($Suite.specs)) {
+                    foreach ($Test in @($Spec.tests | Where-Object { $null -ne $_ })) {
+                        foreach ($Result in @($Test.results)) {
+                            foreach ($Attachment in @($Result.attachments | Where-Object { $_.path })) {
+                                $Original = [string]$Attachment.path
+                                $Absolute = if ([IO.Path]::IsPathRooted($Original)) {
+                                    & $NormalPath ([IO.Path]::GetFullPath((& $IoPath $Original)))
+                                } else { & $NormalPath ([IO.Path]::GetFullPath((& $IoPath (Join-Path $RepoRoot $Original)))) }
+                                if (-not $Files.ContainsKey($Absolute)) {
+                                    throw "Reported attachment is missing from retained output: $Original"
+                                }
+                                $Attachments.Add([ordered]@{
+                                    test_id = $Test.id; project_name = $Test.projectName
+                                    name = $Attachment.name; original_path = $Original
+                                    retained_path = $Files[$Absolute].retained_path
+                                    size = $Files[$Absolute].size; sha256 = $Files[$Absolute].sha256
+                                })
+                            }
+                        }
+                    }
+                }
+                foreach ($Child in @($Suite.suites)) { if ($null -ne $Child) { $Pending.Enqueue($Child) } }
+            }
+            $Manifest = [ordered]@{
+                event = "artifacts_retained"; release_sha = $ReleaseSha
+                json = "$ReportStem.json"; junit = "$ReportStem.xml"
+                output_directories = @($OutputDirs); directories = @($Directories.ToArray())
+                files = @($Files.Values | Sort-Object relative_path); attachments = @($Attachments.ToArray())
+            } | ConvertTo-Json -Depth 12
+            [IO.File]::WriteAllText((& $IoPath (Join-Path $Staging "manifest.pending.json")), $Manifest,
+                (New-Object Text.UTF8Encoding($false)))
+            # An atomic same-directory manifest rename commits the complete payload;
+            # a partial copy never has a manifest or an execution completion receipt.
+            [IO.File]::Move((& $IoPath (Join-Path $Staging "manifest.pending.json")),
+                (& $IoPath (Join-Path $Staging "manifest.json")))
+            return (Join-Path $Staging "manifest.json")
+        }
+        catch {
+            [ordered]@{
+                event = "artifact_retention_failed"; release_sha = $ReleaseSha
+                partial = $Staging; json = "$ReportStem.json"; junit = "$ReportStem.xml"
+                detail = $_.Exception.Message
+            } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath "$ReportStem.retention-failed.json" -Encoding UTF8
+            throw
+        }
+    }
     $ReportEnvironment = @{
         PLAYWRIGHT_JSON_OUTPUT_FILE = "$ReportStem.json"
         PLAYWRIGHT_JUNIT_OUTPUT_FILE = "$ReportStem.xml"
@@ -320,6 +523,10 @@ function Invoke-CandidatePlaywright {
         $LocationPushed = $true
         & $NodePath $PlaywrightCli test --config $PlaywrightConfig --reporter=list,json,junit @Arguments
         $PlaywrightExitCode = $LASTEXITCODE
+        $ArtifactReport = $null
+        try { $ArtifactReport = Get-Content -LiteralPath "$ReportStem.json" -Raw -Encoding UTF8 | ConvertFrom-Json }
+        catch { } # Keep failed-run output even when the final reporter is incomplete.
+        $ArtifactsManifest = & $RetainArtifacts $ArtifactReport
         foreach ($ReportPath in $ReportEnvironment.Values) {
             if (-not (Test-Path -LiteralPath $ReportPath -PathType Leaf)) {
                 throw "Playwright execution is incomplete: missing report $ReportPath."
@@ -381,6 +588,7 @@ function Invoke-CandidatePlaywright {
             stats = $Report.stats
             json = "$ReportStem.json"
             junit = "$ReportStem.xml"
+            artifacts_manifest = $ArtifactsManifest
         } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath "$ReportStem.completion.json" -Encoding UTF8
         Write-Host "[docker-acceptance] browser execution reports: $ReportStem ($BrowserTests tests)"
     }

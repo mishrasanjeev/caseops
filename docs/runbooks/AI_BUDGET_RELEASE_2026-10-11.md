@@ -2,6 +2,137 @@
 
 ## Release Verdict
 
+### 22:12 UTC Current Technical Proof, External Policy Still Blocked
+
+Independent narrow review-03 verifies the workspace-binding correction:
+117 focused cases/351 phases, all 107 standard-discovered units, preserved
+RED failures and unchanged policy. Actual current-guard musl R2 completed
+naturally at 21:58:04 UTC: 129/129 identities, 163 copies and a positively
+bound `node_modules/@caseops/web` -> `apps/web` manifest. All eight existing
+policy denials remain blocked. Build/container/step/controller exits reconcile;
+the owned audit tag was removed after exact ID/source/policy checks.
+Receipts: `workspace-link-followup-01/README.md`,
+`license-guard-independent-review-03/README.md`, `musl-license-workflow-replay-r2`.
+Linux adversarial controls and current hosted/full release proof remain open.
+
+The per-invocation retention correction passes all 38 Windows cases/114 phases
+on PowerShell 5.1 and pwsh, including original paths up to 378 characters and
+retained paths up to 439. Every copy and attachment binds its hash and native
+test identity before an atomic manifest commit. It stops the next invocation
+on failure, preserving partial evidence. All 38 historical failed calls and
+lint failures remain individually classified and retained; final source has
+38/38 positives and Ruff passes. Source scope is only the browser launcher and
+new focused test module. Readout: `browser-retention-followup-01/README.md`.
+Its process receipts, screenshots and seven-unit transcripts are explicitly
+FAKE controls, not executions of those seven real Drive units. Independent
+retention review remains pending; Linux's 19-case selection has not run here.
+Neither this proof nor hosted d829 recovers the actual R11 missing attachments.
+
+Parent's final full API/source/test Ruff passes; `security-child-static-r2`
+retains all 16 intended commands, all exits 0 and explicit completion. Mock
+legal-safety fixtures are not legal-quality approval. Full new amended Docker,
+current CI/exact-ref CodeQL, canonical-main deployment and live replay remain
+required; no runtime-unchanged waiver is introduced.
+
+Owner licensing review/replacement is unanswered. Keep the PR draft/unmerged
+and the unchanged allowlist; do not grant an exception just to green CI.
+Fresh origin/main remains dfda. A no-paid read at 22:08:49 UTC confirms both
+production surfaces still serve `3dbf364d9834316d181d4a52b2e9b4c7bee431b4`
+(API00488-5sd/web00465-sk6), receipt `live-identities-2208Z.json`.
+October remains unchanged. Selected `gemini-3.5-flash-lite` is still OFF pending
+the separate global processing/retention review. No paid legal comparison,
+primary promotion, financial baseline, provider activation, merge or deployment.
+**NO-GO.**
+
+### 21:47 UTC Frozen R11 Finished, Raw Retention And License Gates Open
+
+Frozen d829's controller finished naturally at 21:21:19 UTC, exit 0. Native
+acceptance reconciles 2,344 passes/7,032 phases. The full Docker browser union
+is 540 identities across 130 files, 530 passes/10 explicit skips/no failures,
+flaky results or retries; all five original R7 journeys executed and passed.
+Final API health and worker state pass; only owned resources were cleaned up.
+
+The independent browser receipt is explicitly **NO-GO for raw-artifact closure**:
+28 path attachments were deleted by subsequent Playwright invocations,
+including the actual Drive receipt and seven-unit transcript. Their passed
+native browser outcome is retained, not their missing diagnostic bytes. Do not
+substitute hosted d829's actual transcript, an older run, or fake controls.
+Receipt: `docker-r11-browser-reconciliation-01/EVIDENCE_RECEIPT.md`; parent
+closure: `docker-r11-parent-closure-01/receipt.json`. Fix per-invocation retention
+in the separate child and require fresh full amended acceptance.
+
+The actual extracted musl license step completed at 21:41:17 UTC: build 0,
+scanner 0, inventory 129 identities/163 physical copies, exact nonempty report
+coverage, final strict policy 1 with eight out-of-policy identities. The image
+iidfile equals canonical inspect `.Id`; this is real pruned linux-x64-musl
+coverage, not the host install. The owned audit tag was removed after checking
+its exact ID and absence of containers. Receipts are under
+`musl-license-workflow-replay-r1`; no policy widening or paid provider calls.
+
+Independent review-02 verifies the existing 103 tests/309 phases/93 standard
+unit cases but finds an unchecked physical workspace target/manifest exemption.
+That residual remains open until the narrow RED/GREEN correction is proven.
+The actual R11 workspace link was correct; the static counterexample is not a
+claim that the runtime image contained a wrong target. Licensing owner
+review/replacement is unanswered. Full amended Docker/CI/main/live remains
+required, not waived by unchanged runtime inputs. PR533 is still draft/unmerged
+at d829. October stays unchanged; fallback remains selected and OFF pending
+global processing/retention review. No primary promotion, financial baseline,
+runtime activation or deployment. **NO-GO.**
+
+### 20:55 UTC Reconciled Hosted Gate, License Disposition Pending
+
+Frozen d829 CI38167712151 succeeded and its actual artifacts are reconciled:
+2,344 native passes/7,032 phases; 9,173 API identities, 6,827 passes/2,346
+reconciled skips; 540 browser identities, 523 passes/17 explicit skips and no
+failures, flaky results or retries. Current selection/Drive process receipts
+and the real seven-unit Drive transcript are retained in the uploaded ZIP.
+Their historical a770 omission remains preserved, not relabelled as complete.
+
+Docker R11's independently migrated native database passes all 2,344 cases with
+7,032 phases and matching JUnit/completion; browser/final-health acceptance is
+still pending. `docker-r11-native-reconciliation-01/README.md` records its exact
+scope. Hosted skips do not certify those pending Docker journeys or live use.
+
+The separate security child preserves the dynamic migration fixture. Alert 550
+was dismissed as a false positive after independent four-case native proof;
+the first rejected overlength disposition request remains retained. Four actual
+test-code findings have source cleanup with 45 passes/135 phases and exact
+collection/JUnit/hash reconciliation in `codeql-quality-focused-r1`. They still
+require fresh CodeQL against the amended PR merge ref, not an unqualified list.
+
+The formerly successful license step had literal zero-package `{}` output.
+Its nonempty replacement exposes existing OFL, LGPL conjunction, MIT-0 and Zlib
+terms outside the unchanged allowlist. The owner question about documented
+review versus replacement is unanswered. No exception, exclusion or dependency
+replacement is authorized merely to obtain green CI. A host-installed Windows
+or glibc inventory cannot certify the shipped Alpine/musl production tree;
+record that remaining platform gap explicitly. Full amended acceptance remains
+required even if d829's currently running gate completes successfully.
+
+At 20:55:57 UTC both public release identities still report
+`3dbf364d9834316d181d4a52b2e9b4c7bee431b4` (API00488-5sd/web00465-sk6).
+Receipt: `live-identities-205556Z.json`, no mutation/provider calls. October's
+primary and behavior remain unchanged. Exact selected Gemini fallback remains
+OFF pending global processing/retention review; no legal-quality benchmark,
+primary promotion, financial baseline, canonical merge or deploy. **NO-GO.**
+
+### 20:27 UTC Security Inventory Gap
+
+Current d829 hosted native/API evidence is complete: 2,344 native passes,
+9,173 API identities and actual combined coverage. Frozen Docker R11 and the
+hosted browser remain in progress; neither certifies the separate security
+child. Its successful license job retained literal empty `{}`, not coverage of
+the shipped JS workspace. The unqualified code-scanning endpoint omitted five
+open exact-PR instances. Four test-code findings have source-only cleanup; the
+dynamic pytest migration fixture has four current hosted native positives and
+an independent false-positive review pending. Preserve all original evidence.
+
+Add strict nonempty workspace dependency/license reconciliation and focused
+negative coverage without widening the allowlist. Require complete new amended
+Docker/CI/main/live gates. No release waiver, alert blanket-dismissal, runtime
+provider activation, financial initialization, primary change or deployment.
+
 ### 19:17 UTC Focused Replacement, Not Release Acceptance
 
 R10 finished naturally exit 1 at 18:45 UTC: 2,301 collected, 2,291 passed,

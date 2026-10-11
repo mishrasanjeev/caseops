@@ -2,6 +2,45 @@
 
 ## October 11 Court-Write Release Gate
 
+22:12 UTC: source-only repair proof is 117 license-focused passes/351 phases,
+107 standard units and actual musl R2 coverage of 129 identities/163 copies
+with eight strict policy denials. Narrow independent workspace review passes.
+Retention has 38 Windows passes/114 phases, not Linux/full amended acceptance;
+independent retention review remains pending. Ruff/all 16 static gates pass.
+R11's 28 missing attachments and every earlier failure remain open/preserved.
+Owner licensing disposition and complete Docker/CI/main/live gates remain
+required. Production still serves 3db at 22:08:49 UTC; no primary or live change.
+
+21:47 UTC: d829 R11 results are reconciled: 2,344 native passes and all
+540 browser identities (530 pass/10 explicit skips/no retries). Controller,
+final API health/worker state and owned cleanup complete. Artifact closure is
+NO-GO: 28 cleared path attachments include actual Drive process/transcript
+bytes. The real musl pruned license step covers 129 identities/163 copies and
+correctly blocks eight identities outside the unchanged policy. Owner
+disposition is pending. New workspace-target binding and per-invocation
+retention fixes need focused proof and complete amended acceptance; prior
+103 guard-focused passes do not certify the new residual. Draft PR #533 remains
+unmerged. No deployed fix, provider activation or primary promotion.
+
+20:55 UTC: d829 hosted 2,344 native passes, 9,173 API identities and 540 browser
+identities (523 pass/17 skips/no retries) are reconciled. Frozen Docker R11 has
+2,344 native passes/7,032 phases; browser/final-health gate remains pending.
+Separate CodeQL cleanup passes 45 cases/135 phases; alert 550's required dynamic
+fixture is preserved and its independently proven false positive dismissed.
+Four actual cleanup findings need a new exact-ref scan. QG-SEC-004 remains open:
+strict inventory exposes unapproved licenses, the owner disposition is pending,
+and host-platform coverage cannot certify Alpine/musl production dependencies.
+No amended full acceptance, primary promotion, Gemini activation or deployment.
+Production API/web still serve 3db at 20:55 UTC. October remains unchanged.
+
+20:27 UTC: d829 hosted native 2,344 passes and complete API 9,173 identities
+are independently reconciled, including actual combined coverage. This does not
+certify its running browser/Docker gate or the separate security amendment.
+QG-SEC-004 remains open: the successful license job uploaded zero packages.
+Exact PR-ref CodeQL review adds four test-code corrections and one dynamic
+fixture false-positive investigation. Require current nonempty dependency
+coverage, focused regressions and full amended release gates. No live change.
+
 19:17 UTC current evidence: completed R10 has 2,291 passes/two call failures/
 eight setup errors and no real browser run. Focused six-module R4 reports all
 202 cases passing; old strong-auth control retains four intended failures.

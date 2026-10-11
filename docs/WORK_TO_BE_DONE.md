@@ -2,6 +2,48 @@
 
 ## October 11 Release Recovery
 
+22:12 UTC: narrow workspace repair is independently reviewed with 117 passes/
+351 phases, 107 standard units and current-guard actual musl R2. It checks
+129 identities/163 copies and still blocks eight policy entries. Retention
+repair passes 38 Windows cases/114 phases; finish independent review and prove
+Linux/current full amended Docker/CI/main/live acceptance. Original R11 missing
+attachments are not recovered by fake controls. Ruff/16 static gates pass.
+Owner license review/replacement remains unanswered. API/web still serve 3db
+at 22:08:49 UTC; no merge/deploy, financial initialization, activation or
+primary promotion. Separate Google processing/retention review stays open.
+
+21:47 UTC: d829 R11 has completed results (2,344 native passes; browser
+540 identities/530 passes/10 explicit skips/no failures or retries), final API
+health/worker state and owned cleanup. Do not close its artifact gap: 28 path
+attachments were cleared, including the actual Drive receipt/seven-unit
+transcript. Add and prove per-invocation retention. Actual musl production
+license coverage is 129 identities/163 copies; strict policy correctly denies
+eight identities, pending the unanswered owner review/replacement decision.
+Fix the independently found workspace-link target exemption and retain its
+RED/GREEN proof. Complete amended Docker/CI/main/live remains mandatory; PR533
+is still draft/unmerged at d829, with no runtime or primary changes/deploy.
+
+20:55 UTC: d829 hosted CI is fully reconciled, including 540 browser identities
+(523 pass/17 skips/no retries); frozen Docker R11 has all 2,344 native passes
+but browser/final-health acceptance is pending. Test-code cleanup in the separate
+security child passes 45 cases/135 phases. Keep the dynamically used migration
+fixture; alert 550 was dismissed with independent four-case native proof. Require
+a new exact-ref scan for the four actual cleanup findings. The nonempty license
+guard exposes existing out-of-policy licenses. Owner review or replacement is
+pending, and Windows/glibc inventory is not Alpine/musl runtime coverage. Keep
+full amended Docker/CI/main/live gates open. Production API/web still serve 3db
+at 20:55 UTC; no merge, deploy, financial baseline or provider activation. Exact
+Gemini fallback selection does not authorize global processing or promotion.
+
+20:27 UTC: current d829 hosted native/API inventories and combined coverage
+are reconciled, but its browser/Docker R11 are still running. Security has five
+open PR-instance quality findings despite a zero unqualified alert listing;
+the license job uploaded an empty report. Test-code cleanup and nonempty exact
+workspace production-license admission are being implemented in a separate
+child. Prove the dynamic migration fixture before false-positive disposition.
+Keep these gaps and full amended Docker/CI/main/live acceptance open; no new
+deployment, provider activation, primary promotion or financial initialization.
+
 19:17 UTC checkpoint: R10 is completed failed, not still running: 2,291/2,301
 passed, two call failures/eight setup errors, browser unrun. Original evidence
 and owned cleanup are reconciled. Amended six-module R4 reports 202/202 native

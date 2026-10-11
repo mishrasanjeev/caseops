@@ -37,8 +37,10 @@ from tests.test_contract_intelligence import _bootstrap, _create_contract
 
 _DENIALS = [
     "AI monthly spending is awaiting reconciliation. No external request was sent.",
-    "The shared monthly AI budget is exhausted. Existing work remains available; "
-    "new paid generation is unavailable. No external request was sent.",
+    (
+        "The shared monthly AI budget is exhausted. Existing work remains available; "
+        + "new paid generation is unavailable. No external request was sent."
+    ),
     "AI spending controls are temporarily unavailable. No external request was sent.",
 ]
 _WORKFLOWS = [

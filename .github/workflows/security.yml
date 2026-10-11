@@ -166,20 +166,86 @@ jobs:
           cache: "npm"
           cache-dependency-path: package-lock.json
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      # license-checker enumerates every transitive package's license.
-      # CaseOps's CODEX.md allow-list: MIT, Apache-2.0, BSD-2-Clause,
-      # BSD-3-Clause, ISC, PostgreSQL, Python-2.0, Unlicense, CC0-1.0,
-      # 0BSD, BlueOak-1.0.0. AGPL/SSPL/BSL/BUSL block.
-      - name: Check JS licenses
+      # The private root has no production dependencies; license-checker's
+      # legacy --production traversal ignores hoisted npm workspaces. Select
+      # installed production identities, including copied foreign optionals.
+      # Host coverage is not coverage of the shipped Linux x64 musl runtime.
+      # Actual musl artifact coverage and target-platform CI remain separate gates.
+      - name: Check host-installed JS production licenses
+        env:
+          CASEOPS_JS_LICENSE_EVIDENCE: ${{ runner.temp }}/js-license-evidence
         run: |
-          npx --yes --prefer-offline license-checker@25.0.1 \
-            --production --json --excludePrivatePackages \
-            --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;PostgreSQL;Python-2.0;Unlicense;CC0-1.0;0BSD;BlueOak-1.0.0;CC-BY-4.0;CC-BY-3.0;Apache 2.0" \
-            > license-report.json
+          set -eu
+          mkdir -p "$CASEOPS_JS_LICENSE_EVIDENCE"
+          audit="$RUNNER_TEMP/license-audit-host"
+          npm install --prefix "$audit" --ignore-scripts --no-audit --no-fund \
+            --save-exact license-checker@25.0.1
+          export PATH="$audit/node_modules/.bin:$PATH"
+          export CASEOPS_LICENSE_CHECKER_PACKAGE="$audit/node_modules/license-checker/package.json"
+          python3 -B -m unittest discover -s scripts/tests -p test_js_license_coverage.py -v
+          output="$CASEOPS_JS_LICENSE_EVIDENCE/host"
+          python3 -B scripts/check_js_license_coverage.py inventory --output "$output"
+          packages="$(cat "$output/packages.txt")"
+          allowlist="$(cat "$output/allowlist.txt")"
+          license-checker --json --packages "$packages" > "$output/license-report.json"
+          python3 -B scripts/check_js_license_coverage.py verify --output "$output"
+          license-checker --json --packages "$packages" --onlyAllow "$allowlist" > "$output/policy-report.json"
+      # Independent of host policy success: inspect the same install-scripts/prune
+      # stage copied into the shipped runner. Audit tools mutate only a disposable
+      # root container, never the production Dockerfile or /app dependency tree.
+      - name: Audit actual pruned Linux x64 musl production licenses
+        if: ${{ always() && !cancelled() }}
+        env:
+          CASEOPS_JS_LICENSE_EVIDENCE: ${{ runner.temp }}/js-license-evidence
+        run: |
+          set -eu
+          output="$CASEOPS_JS_LICENSE_EVIDENCE/musl"
+          mkdir -p "$output"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          printf '%s\n' "$GITHUB_SHA" > "$output/checkout-sha.txt"
+          image="caseops-js-license-musl:$GITHUB_SHA"
+          set +e
+          docker build --platform linux/amd64 --file apps/web/Dockerfile \
+            --target prod-deps --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$image" --iidfile "$output/image-id.txt" . 2>&1 | tee "$output/build.log"
+          build_status=${PIPESTATUS[0]}
+          set -e
+          printf '{"exit_code":%s}\n' "$build_status" > "$output/build-completion.json"
+          if [ "$build_status" -ne 0 ]; then exit "$build_status"; fi
+          docker image inspect "$image" > "$output/image-inspect.json"
+          image_id="$(cat "$output/image-id.txt")"
+          test "$(docker image inspect --format '{{.Id}}' "$image")" = "$image_id"
+          set +e
+          docker run --rm -i --user 0 --workdir /app \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/scripts/check_js_license_coverage.py,dst=/license-guard/check_js_license_coverage.py,readonly" \
+            --mount "type=bind,src=$output,dst=/evidence" \
+            "$image_id" sh -eu <<'AUDIT' 2>&1 | tee "$output/container.log"
+          trap 'status=$?; printf "{\"exit_code\":%s}\n" "$status" > /evidence/container-completion.json' EXIT
+          apk add --no-cache python3
+          npm install --prefix /license-audit --cache /license-audit/npm-cache \
+            --ignore-scripts --no-audit --no-fund --save-exact license-checker@25.0.1
+          cp /license-audit/package-lock.json /evidence/scanner-package-lock.json
+          export PATH="/license-audit/node_modules/.bin:$PATH"
+          export CASEOPS_LICENSE_CHECKER_PACKAGE=/license-audit/node_modules/license-checker/package.json
+          python3 -B /license-guard/check_js_license_coverage.py inventory --root /app \
+            --require-platform linux-x64-musl --require-pruned-tree --output /evidence/scan
+          packages="$(cat /evidence/scan/packages.txt)"
+          allowlist="$(cat /evidence/scan/allowlist.txt)"
+          license-checker --start /app --json --packages "$packages" > /evidence/scan/license-report.json
+          python3 -B /license-guard/check_js_license_coverage.py verify --root /app \
+            --require-platform linux-x64-musl --require-pruned-tree --output /evidence/scan
+          license-checker --start /app --json --packages "$packages" --onlyAllow "$allowlist" > /evidence/scan/policy-report.json
+          AUDIT
+          audit_status=${PIPESTATUS[0]}
+          set -e
+          printf '{"exit_code":%s}\n' "$audit_status" > "$output/run-completion.json"
+          exit "$audit_status"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: js-license-report
-          path: license-report.json
+          path: ${{ runner.temp }}/js-license-evidence
+          if-no-files-found: error
 
   openapi-client-drift:
     name: OpenAPI -> generated client clean diff (QG-API-012, P1-010)

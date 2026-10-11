@@ -1,5 +1,24 @@
 # CaseOps agent instructions
 
+- Security workflow success is not license coverage. Reconcile the nonempty
+  production dependency inventory against the actual workspace/lockfile graph;
+  a root with only development dependencies can emit an empty passing report
+  while its application workspace ships packages. Regress empty, omitted,
+  unexpected and disallowed entries without broadening the license allowlist.
+- A host-filtered dependency audit certifies only that installed platform.
+  Reconcile the actual production container's OS, CPU and libc before claiming
+  shipped-runtime coverage. Windows or Ubuntu/glibc reports cannot certify an
+  Alpine/musl dependency tree; retain explicit platform exclusions and gaps.
+- Required dependency edges must resolve to installed, compatible targets;
+  an optional flag on the target cannot excuse a required edge. Audit every
+  physically copied production package and every same-identity copy. Missing
+  license declarations cannot inherit another copy's declaration, and malformed
+  metadata must fail with a retained structured receipt, not an empty success.
+- Query code-scanning alerts for the exact PR merge ref as well as main.
+  PR-only alerts can have a null global state and an open instance; an empty
+  unqualified listing is not an all-clear. Prove dynamic pytest fixture usage
+  before deleting a registration or dismissing its unused-global finding.
+
 - Required diagnostic evidence must be a retained output file within the
   uploader's inventory, not a body attachment silently omitted by a privacy-
   selected reporter. Preserve sanitized process metadata and approved local
@@ -1889,3 +1908,17 @@ requirements when using the fallback.
   selected identities with the exact union and complete results. A timed-out
   shard with only passing reports but no completion/JUnit remains incomplete;
   retain that evidence and require a complete replacement before release.
+- Serial Playwright invocations clear their shared output directory. Retain each
+  invocation's complete path attachments before starting the next one, bind the
+  copied bytes to its native test identities, and fail acceptance on incomplete
+  retention. Periodic observers and a green browser summary cannot certify a
+  receipt or transcript that was deleted between observations.
+- A lockfile workspace-link declaration is not physical-package evidence.
+  Require the installed link to resolve to the exact reviewed workspace and
+  bind its manifest bytes before excluding that link from a pruned-tree audit.
+  Containment alone does not exclude a wrong target inside the repository.
+- Windows evidence retention must exercise long original and retained paths on
+  PowerShell 5.1 as well as pwsh. Native extended-path IO must cover enumeration,
+  copy, hashing, metadata and publication; shortening a fixture cannot prove the
+  real archive boundary. Commit a hash-verified manifest atomically and preserve
+  partial bytes on failure without retrying or starting a destructive next shard.

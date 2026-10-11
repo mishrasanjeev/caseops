@@ -2,6 +2,49 @@
 
 ## October 11 Court-Write Investigation
 
+22:12 UTC: workspace/retention repairs are **Partially fixed**, not deployed.
+Independent narrow workspace review verifies 117 cases/351 phases, 107 standard
+units and current-guard actual musl R2. Complete 129-identity/163-copy coverage
+correctly blocks eight policy entries pending owner disposition. Retention has
+38 Windows passes/114 phases, with long-path and both-shell coverage; independent
+review, Linux/current full amended acceptance remain required. All earlier
+38 failed retention calls are classified and preserved; R11's actual missing
+Drive evidence remains open. Ruff/16 static gates pass. Production still serves
+3db at 22:08:49 UTC; original preflight cause stays **Inconclusive**, no live fix
+or primary-promotion claim. Global processing/retention consent remains pending.
+
+21:47 UTC: license coverage remains **Partially fixed**: the real pruned musl
+step reconciles 129 identities/163 copies and exits 1 for eight policy denials;
+owner review/replacement is open. A workspace link's actual target/manifest
+binding is **Not fixed** in the reviewed 103-case source. R11 browser retention
+is **Not fixed**: 28 cleared path attachments include actual Drive process and
+seven-unit transcript evidence. All 540 browser outcomes reconcile (530 passes,
+10 explicit skips/no failures or retries); 2,344 native passes and final health/
+cleanup do not replace missing bytes. Narrow repairs and full amended gates
+remain required. Original preflight cause stays **Inconclusive**. No merge,
+production fix, Gemini activation or primary-promotion claim.
+
+20:55 UTC license coverage: **Partially fixed**, source-only. Strict nonempty
+inventory exposes existing licenses outside the unchanged policy; owner review
+or replacement is pending. Host-platform proof is not Alpine/musl runtime
+coverage. The CodeQL cleanup independently passes 45 cases/135 phases, but four
+actual findings need a new exact-ref scan. Alert 550 is a proven dynamic-fixture
+false positive, dismissed with current native evidence; the fixture is retained.
+d829 hosted 540 browser identities reconcile (523 pass/17 skips/no retries),
+and frozen Docker R11 passes 2,344 native cases/7,032 phases. Docker browsers,
+final health and complete amended gates remain pending. Original preflight
+latency cause is still **Inconclusive**. Production serves 3db at 20:55 UTC;
+no deployed-fix, Gemini activation or primary-promotion claim follows.
+
+20:27 UTC security coverage: **Not fixed**. The successful d829 license job
+retained an empty report, and the unqualified alert listing missed five open
+PR-ref quality instances. Four test-code findings have source-only cleanup;
+the migration fixture has actual four-case hosted native use and requires
+independent false-positive review, not deletion. Full license admission and
+focused regression are pending in the separate child. d829 hosted native/API
+acceptance cannot certify this amendment or its running full Docker/browser.
+No production fix, provider activation or primary-promotion claim follows.
+
 19:17 UTC replacement: **Partially fixed** at the test/evidence boundary only.
 Complete six-module R4 reports 202 passes and the four old-lock susceptibility
 cases still fail intentionally; R3's exact-receipt failure remains retained.

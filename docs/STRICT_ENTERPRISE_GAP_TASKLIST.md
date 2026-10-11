@@ -2,6 +2,48 @@
 
 ## October 11 Exact-Release Checkpoint
 
+22:12 UTC: NO-GO. Independent narrow workspace review verifies 117 focused
+passes/351 phases and current-guard actual musl R2 positive binding: 129
+identities/163 copies/eight unchanged policy denials. Standard 107 units pass.
+Retention's 38 Windows cases/114 phases and Ruff/16 static gates pass; independent
+retention review, Linux and full amended release proof remain required. R11's
+missing actual attachments remain open, not replaced by fake transcripts.
+Owner licensing disposition remains pending; no blanket policy exception.
+Both serving identities still report 3db at 22:08:49 UTC, with no primary,
+provider, financial baseline, canonical merge or deployment changes.
+
+21:47 UTC: NO-GO remains. Frozen d829 R11 results reconcile 2,344 native passes
+and 540 browser identities (530 passes/10 explicit skips/no retries). Controller,
+final API health/worker and owned cleanup complete, but 28 declared path
+attachments are missing, including actual Drive receipt/transcript bytes.
+Per-invocation retention is required. Actual pruned musl licensing covers
+129 identities/163 copies and correctly blocks eight out-of-policy identities;
+the owner decision is pending. The new physical workspace-target exemption
+needs independent RED/GREEN repair beyond the existing 103 focused positives.
+No complete amended release proof, canonical merge, deploy, activation,
+financial baseline or primary change. Keep October behavior unchanged.
+
+20:55 UTC: NO-GO. d829 hosted evidence is reconciled through its 540 browser
+identities (523 pass/17 explicit skips/no retries). Docker R11 independently
+passes all 2,344 native cases/7,032 phases; browsers/final health remain pending.
+Separate source cleanup passes 45 cases/135 phases. Alert 550 is a proven
+dynamic-fixture false positive, now dismissed without deleting the fixture;
+four actual cleanup alerts await a fresh exact-ref analysis. License admission
+is Partially implemented: nonempty coverage exposes existing licenses outside
+the unchanged allowlist. Owner review/replacement is pending, and an audit of
+the host install does not certify the Alpine/musl runtime tree. Full amended
+Docker/CI/main/live remains mandatory. Production still serves 3db at 20:55 UTC;
+no provider activation, financial baseline, primary switch, merge or deployment.
+
+20:27 UTC: NO-GO. d829 hosted native/API/coverage evidence is complete, not its
+running browser/Docker or the amended child. Security's empty license report
+does not cover the shipped workspace. Exact PR-ref review finds five open
+quality instances, missed by the unqualified endpoint; one is a dynamically
+used pytest migration fixture, not unused runtime code. Preserve independent
+proof, correct actual cleanup findings and add strict license-inventory coverage.
+Full amended acceptance and exact production release remain required; no
+provider activation, financial initialization, primary switch or deployment.
+
 19:17 UTC: NO-GO remains. R10 completed failed with a complete native journal
 and no browser execution; its owned resources are absent. Six-module R4
 reports 202 passes and four former-lock controls fail as intended; R3 and

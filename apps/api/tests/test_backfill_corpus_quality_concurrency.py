@@ -410,7 +410,7 @@ def test_money_stop_preserves_transient_continuation(
 def test_money_stop_preserves_existing_daily_and_quota_stops(
     monkeypatch: pytest.MonkeyPatch, concurrency: int, error_type
 ) -> None:
-    _docs, _sessions, _snapshots = _memory_backfill(monkeypatch)
+    _memory_backfill(monkeypatch)
     started: list[str] = []
     initial_window = threading.Barrier(concurrency)
 
