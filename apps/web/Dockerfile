@@ -4,7 +4,7 @@
 #
 # Build context is the repository root so the immutable workspace lockfile is
 # available. Root .dockerignore/.gcloudignore files admit only package metadata
-# and apps/web, keeping both the Docker context and Cloud Build upload narrow.
+# and apps/web plus the explicit builder-only unit fixture dependency closure.
 
 # ---- deps ---------------------------------------------------------
 FROM node:22.14.0-alpine AS deps
@@ -41,8 +41,12 @@ COPY apps/web ./
 # One colocated page test imports this canonical fixture during Next's type
 # check. Keep it in the builder context only; the runner copies no test files.
 COPY tests/fixtures/statutes/structured-schedule-api.json /app/tests/fixtures/statutes/structured-schedule-api.json
-# Colocated sanitizer units use this pure helper during builder type checking.
+# Colocated diagnostic units require their direct and transitive support imports.
+# Admit this explicit closure in both root ignore files; keep it out of the runner.
 COPY tests/e2e/support/prod-failure-diagnostics.ts /app/tests/e2e/support/prod-failure-diagnostics.ts
+COPY tests/e2e/support/bounded-network-evidence.ts /app/tests/e2e/support/bounded-network-evidence.ts
+COPY tests/e2e/support/prod-api-response-evidence.ts /app/tests/e2e/support/prod-api-response-evidence.ts
+COPY tests/e2e/support/cost-controls.ts /app/tests/e2e/support/cost-controls.ts
 
 RUN npm run build
 

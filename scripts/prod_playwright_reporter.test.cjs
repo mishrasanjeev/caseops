@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 const { test } = require("node:test");
 const Reporter = require("./prod_playwright_reporter.cjs");
 const root = path.resolve(__dirname, "..");
@@ -401,7 +402,7 @@ async function diagnostic(attachment) {
   return { evidence: json.suites[0].suites[0].specs[0].tests[0].results[0].networkEvidence, json, xml };
 }
 
-test("reviewed failure-only network snapshot retains exact safe correlators, completion and transport", async () => {
+test("failure snapshots retain safe correlators, API-first duplicates and bounded page overflow", async () => {
   const data = snapshot();
   const { evidence, json, xml } = await diagnostic(attach(data));
   assert.equal(evidence.status, "retained");
@@ -410,7 +411,30 @@ test("reviewed failure-only network snapshot retains exact safe correlators, com
   assert.deepEqual(evidence.snapshot, data);
   assert.equal(json.stats.unexpected, 1);
   assert.match(xml, /name="sanitized-network-evidence" value="retained"/);
+  const api = applicationSnapshot();
+  const page = snapshot();
+  const combined = await diagnostic([attach(api), attach(page)]);
+  assert.equal(combined.evidence.status, "retained");
+  assert.deepEqual(combined.evidence.snapshot.records, [...api.records, ...page.records]);
+  assert.equal(combined.evidence.snapshot.omitted, 2);
+  assert.equal(combined.json.stats.unexpected, 1);
+  assert.match(combined.xml, /name="sanitized-network-evidence" value="retained"/);
+  page.records = Array.from({ length: 64 }, () => page.records[0]);
+  page.drainTimedOut = true;
+  const full = (await diagnostic([attach(api), attach(page)])).evidence;
+  assert.equal(full.status, "retained");
+  assert.equal(full.snapshot.records.length, 64);
+  assert.deepEqual(full.snapshot.records[0], api.records[0]);
+  assert.equal(full.snapshot.omitted, 3);
+  assert.equal(full.snapshot.drainTimedOut, true);
 });
+
+function applicationSnapshot() {
+  const data = snapshot();
+  data.omitted = 0;
+  data.records = [{ ...data.records[0], route: "ip/application" }];
+  return data;
+}
 
 test("same-name malicious extra keys or private enum/correlator values rejected before any write", async () => {
   const bad = [];
@@ -421,6 +445,7 @@ test("same-name malicious extra keys or private enum/correlator values rejected 
     const data = snapshot(); data.records[0][key] = value; bad.push(data);
   }
   const transport = snapshot(); transport.records[1].failureCode = sentinel; bad.push(transport);
+  const trailingId = snapshot(); trailingId.records[0].requestId += "\n"; bad.push(trailingId);
   for (const data of bad) {
     const { evidence } = await diagnostic(attach(data));
     assert.equal(evidence.status, "rejected");
@@ -428,7 +453,7 @@ test("same-name malicious extra keys or private enum/correlator values rejected 
   }
 });
 
-test("paths, wrong types, duplicate names, malformed UTF8/JSON and oversized bodies rejected without file reads", async () => {
+test("paths, wrong types, malformed UTF8/JSON and oversized bodies rejected without file reads", async () => {
   const originalRead = fs.readFileSync;
   try {
     fs.readFileSync = forbidden;
@@ -436,14 +461,28 @@ test("paths, wrong types, duplicate names, malformed UTF8/JSON and oversized bod
       attach(snapshot(), { path: "../../private-legal-body" }), attach(snapshot(), { contentType: "text/plain" }),
       attach(snapshot(), { body: Buffer.alloc(65537, "x") }), attach(snapshot(), { body: Buffer.from([0xff]) }),
       attach(snapshot(), { body: Buffer.from("private-legal-body") }),
-      [attach(snapshot()), attach(snapshot())]]) {
+      [attach(applicationSnapshot()), attach(snapshot(), { body: Buffer.from("private-legal-body") })]]) {
       const { evidence } = await diagnostic(attachment);
       assert.equal(evidence.status, "rejected");
     }
   } finally { fs.readFileSync = originalRead; }
 });
 
+async function duplicateBounds() {
+  const api = applicationSnapshot();
+  const safeDuplicate = await diagnostic([attach(api), attach(api)]);
+  assert.equal(safeDuplicate.evidence.status, "retained");
+  assert.deepEqual(safeDuplicate.evidence.snapshot.records, [...api.records, ...api.records]);
+  const oversized = Buffer.from(JSON.stringify(api).padEnd(32_769));
+  assert.equal((await diagnostic([attach(api, { body: oversized }), attach(api, { body: oversized })])).evidence.reason, "body_bound");
+  const invalid = snapshot(); invalid.rawBody = sentinel;
+  assert.equal((await diagnostic([attach(api), attach(invalid)])).evidence.status, "rejected");
+  const overflow = snapshot(); overflow.omitted = Number.MAX_SAFE_INTEGER;
+  assert.equal((await diagnostic([attach(snapshot()), attach(overflow)])).evidence.reason, "snapshot_schema");
+}
+
 test("network snapshot bounds, exact schema and drains remain strict at 64 records", async () => {
+  await duplicateBounds();
   const data = snapshot(); data.records = Array.from({ length: 64 }, () => data.records[0]);
   data.drainTimedOut = true;
   assert.equal((await diagnostic(attach(data))).evidence.snapshot.records.length, 64);
@@ -455,7 +494,7 @@ test("network snapshot bounds, exact schema and drains remain strict at 64 recor
   }
 });
 
-test("reporter diagnostic allowlists remain identical to the unchanged production diagnostic helper", () => {
+test("reporter allowlists agree with the helper and real offline Playwright retains API-first failures", () => {
   const helper = fs.readFileSync(path.join(root, "tests/e2e/support/prod-failure-diagnostics.ts"), "utf8");
   const reporter = fs.readFileSync(path.join(root, "scripts/prod_playwright_reporter.cjs"), "utf8");
   const strings = (block) => [...block.matchAll(/"([\w:/-]+)"/g)].map((match) => match[1]).sort();
@@ -464,4 +503,74 @@ test("reporter diagnostic allowlists remain identical to the unchanged productio
   assert.deepEqual(set(reporter, "routes"), helperRoutes);
   assert.deepEqual(set(reporter, "problems"), set(helper, "problemTypes"));
   assert.deepEqual(set(reporter, "transports"), [...set(helper, "transportCodes"), "unclassified_transport_failure"].sort());
+  const invocation = `api-response-${process.pid}-${require("node:crypto").randomBytes(4).toString("hex")}`;
+  const directory = path.join(root, "test-results/prod-native-evidence", invocation);
+  const fixtureDirectory = path.join(root, ".tmp", invocation);
+  fs.mkdirSync(directory, { recursive: true });
+  fs.mkdirSync(fixtureDirectory, { recursive: true });
+  const page = snapshot();
+  page.records = Array.from({ length: 64 }, () => page.records[0]);
+  fs.writeFileSync(path.join(fixtureDirectory, "probe.spec.ts"), `
+import { test } from "@playwright/test";
+import { createPatentApplicationWithEvidence } from ${JSON.stringify(path.join(root, "tests/e2e/support/prod-api-response-evidence"))};
+for (const status of [503, 200]) {
+  test("offline API-first response " + status, async ({}, testInfo) => {
+    let bodyReads = 0;
+    const forbiddenBody = async () => { bodyReads++; throw new Error(${JSON.stringify(sentinel)}); };
+    const api = { post: async () => ({ status: () => status,
+      headers: () => status === 503 ? { "content-type": "application/problem+json", "content-length": "1",
+        "content-encoding": "gzip", "x-request-id": "01234567-89ab-cdef-0123-456789abcdef" } : {},
+      body: forbiddenBody, text: forbiddenBody, json: forbiddenBody }) };
+    try {
+      await createPatentApplicationWithEvidence(api as any, testInfo, "https://api.example.invalid", { data: {} });
+    } catch (error) {
+      if (bodyReads !== 0) throw new Error("Diagnostic accessed a decoded response body");
+      await testInfo.attach("sanitized-network-evidence", { contentType: "application/json", body: Buffer.from(JSON.stringify(${JSON.stringify(page)})) });
+      throw error;
+    }
+  });
+}
+`, { flag: "wx" });
+  const configFile = path.join(fixtureDirectory, "playwright.config.cjs");
+  fs.writeFileSync(configFile, `module.exports = { testDir: __dirname, testMatch: "probe.spec.ts", timeout: 30000,
+    outputDir: ${JSON.stringify(path.join(fixtureDirectory, "output"))},
+    workers: 1, retries: 0, reporter: [[${JSON.stringify(path.join(root, "scripts/prod_playwright_reporter.cjs"))}]],
+    use: { trace: "off", screenshot: "off", video: "off" }, projects: [{ name: "offline" }] };`, { flag: "wx" });
+  const env = Object.fromEntries(Object.entries(process.env)
+    .filter(([key]) => /^(?:PATH|PATHEXT|SYSTEMROOT|WINDIR|TEMP|TMP|HOME|USERPROFILE)$/i.test(key)));
+  Object.assign(env, { CASEOPS_EXPECTED_RELEASE_SHA: sha, CASEOPS_PW_EVIDENCE_INVOCATION: invocation,
+    CASEOPS_PW_EVIDENCE_PHASE: "execution", CASEOPS_PW_EVIDENCE_JSON_FILE: path.join(directory, "native-results.json"),
+    CASEOPS_PW_EVIDENCE_JUNIT_FILE: path.join(directory, "native-results.xml") });
+  const result = spawnSync(process.execPath, [path.join(root, "node_modules/@playwright/test/cli.js"),
+    "test", `--config=${configFile}`, "--workers=1", "--retries=0"], { cwd: root, env, encoding: "utf8", timeout: 60000 });
+  fs.writeFileSync(path.join(fixtureDirectory, "child.stdout.log"), result.stdout ?? "", { flag: "wx" });
+  fs.writeFileSync(path.join(fixtureDirectory, "child.stderr.log"), result.stderr ?? "", { flag: "wx" });
+  assert.ifError(result.error);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  const text = fs.readFileSync(path.join(directory, "native-results.json"), "utf8");
+  const native = JSON.parse(text);
+  const journal = fs.readFileSync(path.join(directory, "progress.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+  assert.equal(native.stats.unexpected, 2);
+  assert.equal(native.errors.length, 0);
+  assert.deepEqual(journal.map((row) => row.event), ["invocation_started", "collection", "test_end", "test_end", "session_finished"]);
+  assert.equal(journal.at(-1).status, "failed");
+  for (const suite of native.suites) {
+    const tests = suite.specs ?? suite.suites?.[0]?.specs;
+    for (const spec of tests) {
+      const run = spec.tests[0].results[0];
+      assert.equal(run.retry, 0);
+      assert.equal(run.status, "failed");
+      assert.equal(run.networkEvidence.status, "retained");
+      assert.equal(run.networkEvidence.snapshot.records.length, 64);
+      assert.equal(run.networkEvidence.snapshot.records[0].route, "ip/application");
+      assert.equal(run.networkEvidence.snapshot.records[0].status, spec.title.endsWith("503") ? 503 : 200);
+      assert.equal(run.networkEvidence.snapshot.records[0].problemType, null);
+      assert.equal(run.networkEvidence.snapshot.records[0].requestId,
+        spec.title.endsWith("503") ? "01234567-89ab-cdef-0123-456789abcdef" : null);
+      assert.equal(run.networkEvidence.snapshot.omitted, 3);
+    }
+  }
+  const nativeXml = fs.readFileSync(path.join(directory, "native-results.xml"), "utf8");
+  assert.equal([...nativeXml.matchAll(/<testsuite\b[^>]* tests="1" failures="1" errors="0" skipped="0"/g)].length, 2);
+  assert.ok(![text, nativeXml, JSON.stringify(journal)].some((content) => content.includes(sentinel)));
 });

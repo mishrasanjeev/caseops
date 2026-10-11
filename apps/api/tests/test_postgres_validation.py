@@ -2028,307 +2028,181 @@ def test_ip_delivery_holds_docket_lock_during_final_authorization(
     assert worker_failures == []
 
 
-def test_notification_convergence_backfills_boolean_on_postgres(
-    migration_pg_engine,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """A legacy reminder upgrades with a native PostgreSQL boolean value."""
-    pg_engine = migration_pg_engine
-    from alembic.config import Config
-
+def test_notification_convergence_backfills_boolean_on_postgres(migration_pg_engine):
+    """A pre-feature reminder upgrades with a native PostgreSQL boolean."""
     from alembic import command
-    from caseops_api.core.settings import get_settings
+    from caseops_api.db.models import Company, CompanyMembership, Matter, User
+    from tests.fixtures_historical_migrations import historical_database, insert_historical_fixture
 
-    url = os.environ["CASEOPS_TEST_POSTGRES_URL"].strip()
-    monkeypatch.setenv("CASEOPS_DATABASE_URL", url)
-    get_settings.cache_clear()
-    project_root = Path(__file__).resolve().parents[1]
-    config = Config(str(project_root / "alembic.ini"))
-    config.set_main_option("script_location", str(project_root / "alembic"))
-    config.set_main_option("sqlalchemy.url", url)
+    with historical_database(migration_pg_engine, "20260804_0003") as (pg_engine, config):
+        reminder_id = str(uuid4())
+        hearing_id = str(uuid4())
+        scheduled_for = datetime(2099, 8, 5, 4, 30, tzinfo=UTC)
+        now = datetime.now(UTC)
+        with Session(pg_engine) as session:
+            company_id, user_id, membership_id, matter_id = (str(uuid4()) for _ in range(4))
+            connection = session.connection()
+            insert_historical_fixture(
+                connection,
+                Company,
+                id=company_id,
+                name="Legacy notification firm",
+                slug=company_id,
+                company_type="law_firm",
+                tenant_key=company_id,
+            )
+            insert_historical_fixture(
+                connection,
+                User,
+                id=user_id,
+                email=user_id + "@example.com",
+                full_name="Legacy recipient",
+                password_hash="not-used",
+            )
+            insert_historical_fixture(
+                connection,
+                CompanyMembership,
+                id=membership_id,
+                company_id=company_id,
+                user_id=user_id,
+                role="owner",
+            )
+            insert_historical_fixture(
+                connection,
+                Matter,
+                id=matter_id,
+                company_id=company_id,
+                title="Legacy reminder matter",
+                matter_code="LEGACY-1",
+                status="active",
+                practice_area="litigation",
+                forum_level="high_court",
+            )
+            session.execute(
+                text(
+                    "INSERT INTO matter_hearings "
+                    "(id, matter_id, hearing_on, forum_name, purpose, status, created_at) "
+                    "VALUES (:id, :matter_id, :hearing_on, 'Delhi High Court', "
+                    "'Legacy notification convergence proof', 'scheduled', :created_at)"
+                ),
+                {
+                    "id": hearing_id,
+                    "matter_id": matter_id,
+                    "hearing_on": scheduled_for.date(),
+                    "created_at": now,
+                },
+            )
+            session.execute(
+                text(
+                    "INSERT INTO hearing_reminders "
+                    "(id, company_id, matter_id, hearing_id, recipient_membership_id, "
+                    "recipient_email, channel, scheduled_for, status, attempts, "
+                    "created_at, updated_at) "
+                    "VALUES (:id, :company_id, :matter_id, :hearing_id, :membership_id, "
+                    "'notification-pg@example.com', 'email', :scheduled_for, 'queued', 0, "
+                    ":created_at, :updated_at)"
+                ),
+                {
+                    "id": reminder_id,
+                    "company_id": company_id,
+                    "matter_id": matter_id,
+                    "hearing_id": hearing_id,
+                    "membership_id": membership_id,
+                    "scheduled_for": scheduled_for,
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+            session.commit()
 
-    pg_engine.dispose()
-    command.downgrade(config, "20260804_0003")
+        pg_engine.dispose()
+        command.upgrade(config, "20260804_0004")
 
-    reminder_id = str(uuid4())
-    hearing_id = str(uuid4())
-    scheduled_for = datetime(2099, 8, 5, 4, 30, tzinfo=UTC)
-    now = datetime.now(UTC)
-    with Session(pg_engine) as session:
-        company_id = _seed_company(session)
-        membership_id = _seed_membership(session, company_id)
-        matter_id = _seed_matter(session, company_id)
-        session.execute(
-            text(
-                "INSERT INTO matter_hearings "
-                "(id, matter_id, hearing_on, forum_name, purpose, status, created_at) "
-                "VALUES (:id, :matter_id, :hearing_on, 'Delhi High Court', "
-                "'Legacy notification convergence proof', 'scheduled', :created_at)"
-            ),
-            {
-                "id": hearing_id,
-                "matter_id": matter_id,
-                "hearing_on": scheduled_for.date(),
-                "created_at": now,
-            },
-        )
-        session.execute(
-            text(
-                "INSERT INTO hearing_reminders "
-                "(id, company_id, matter_id, hearing_id, recipient_membership_id, "
-                "recipient_email, channel, scheduled_for, status, attempts, "
-                "created_at, updated_at) "
-                "VALUES (:id, :company_id, :matter_id, :hearing_id, :membership_id, "
-                "'notification-pg@example.com', 'email', :scheduled_for, 'queued', 0, "
-                ":created_at, :updated_at)"
-            ),
-            {
-                "id": reminder_id,
-                "company_id": company_id,
-                "matter_id": matter_id,
-                "hearing_id": hearing_id,
-                "membership_id": membership_id,
-                "scheduled_for": scheduled_for,
-                "created_at": now,
-                "updated_at": now,
-            },
-        )
-        session.commit()
+        with pg_engine.connect() as connection:
+            intent = connection.execute(
+                text(
+                    "SELECT id, critical, destination_version, comparison_status "
+                    "FROM notification_delivery_intents "
+                    "WHERE source_type = 'hearing_reminder' AND source_id = :source_id"
+                ),
+                {"source_id": reminder_id},
+            ).one()
+            lineage_count = connection.execute(
+                text(
+                    "SELECT count(*) FROM hearing_reminder_delivery_intents "
+                    "WHERE hearing_reminder_id = :reminder_id AND intent_id = :intent_id"
+                ),
+                {"reminder_id": reminder_id, "intent_id": intent.id},
+            ).scalar_one()
 
-    pg_engine.dispose()
-    command.upgrade(config, "head")
-
-    with pg_engine.connect() as connection:
-        intent = connection.execute(
-            text(
-                "SELECT id, critical, destination_version, comparison_status "
-                "FROM notification_delivery_intents "
-                "WHERE source_type = 'hearing_reminder' AND source_id = :source_id"
-            ),
-            {"source_id": reminder_id},
-        ).one()
-        lineage_count = connection.execute(
-            text(
-                "SELECT count(*) FROM hearing_reminder_delivery_intents "
-                "WHERE hearing_reminder_id = :reminder_id AND intent_id = :intent_id"
-            ),
-            {"reminder_id": reminder_id, "intent_id": intent.id},
-        ).scalar_one()
-
-    # The module contains another downgrade/re-upgrade regression. Remove this
-    # isolated tenant so that a second upgrade cannot legitimately rediscover
-    # the same legacy reminder and collide with its durable idempotency key.
-    with pg_engine.begin() as connection:
-        connection.execute(
-            text("DELETE FROM companies WHERE id = :company_id"),
-            {"company_id": company_id},
-        )
-
-    assert intent.critical is True
-    assert intent.destination_version == 1
-    assert intent.comparison_status == "legacy_backfilled"
-    assert lineage_count == 1
+        assert intent.critical is True
+        assert intent.destination_version == 1
+        assert intent.comparison_status == "legacy_backfilled"
+        assert lineage_count == 1
 
 
 def test_lifecycle_migration_neutralizes_legacy_children_on_postgres(
     migration_pg_engine,
-    monkeypatch: pytest.MonkeyPatch,
 ):
-    """Upgrade a real legacy terminal row and prove children cannot revive."""
-    pg_engine = migration_pg_engine
-    from alembic.config import Config
-
+    """Upgrade an independently fresh, genuinely pre-feature terminal row."""
     from alembic import command
-    from caseops_api.core.settings import get_settings
-    from caseops_api.db.models import (
-        CalendarEventSync,
-        Company,
-        CompanyMembership,
-        Matter,
-        MatterDeadline,
-        MatterHearing,
-        MatterTask,
-        User,
-        UserCalendarConnection,
-    )
+    from tests.fixtures_historical_migrations import historical_database, seed_legacy_closed_matter
 
-    url = os.environ["CASEOPS_TEST_POSTGRES_URL"].strip()
-    monkeypatch.setenv("CASEOPS_DATABASE_URL", url)
-    get_settings.cache_clear()
-    project_root = Path(__file__).resolve().parents[1]
-    config = Config(str(project_root / "alembic.ini"))
-    config.set_main_option("script_location", str(project_root / "alembic"))
-    config.set_main_option("sqlalchemy.url", url)
+    with historical_database(migration_pg_engine, "20260708_0001") as (pg_engine, config):
+        ids = seed_legacy_closed_matter(pg_engine)
+        matter_id, task_id, deadline_id, hearing_id, calendar_sync_id = (
+            ids[name] for name in ("matter", "task", "deadline", "hearing", "sync")
+        )
+        command.upgrade(config, "20260715_0001")
+        with pg_engine.connect() as connection:
+            matter_row = connection.execute(
+                text(
+                    "SELECT status, is_active, next_hearing_on, next_hearing_source, "
+                    "next_hearing_source_ref_type, next_hearing_source_ref_id, "
+                    "next_hearing_manual_lock FROM matters WHERE id = :id"
+                ),
+                {"id": matter_id},
+            ).one()
+            task_row = connection.execute(
+                text(
+                    "SELECT status, completed_at, cancelled_by_matter_disposal "
+                    "FROM matter_tasks WHERE id = :id"
+                ),
+                {"id": task_id},
+            ).one()
+            deadline_row = connection.execute(
+                text(
+                    "SELECT status, completed_at, cancelled_by_matter_disposal "
+                    "FROM matter_deadlines WHERE id = :id"
+                ),
+                {"id": deadline_id},
+            ).one()
+            hearing_row = connection.execute(
+                text(
+                    "SELECT status, cancelled_by_matter_disposal "
+                    "FROM matter_hearings WHERE id = :id"
+                ),
+                {"id": hearing_id},
+            ).one()
+            calendar_sync_row = connection.execute(
+                text(
+                    "SELECT sync_status, next_attempt_at, dead_letter_reason "
+                    "FROM calendar_event_syncs WHERE id = :id"
+                ),
+                {"id": calendar_sync_id},
+            ).one()
 
-    company_id = str(uuid4())
-    user_id = str(uuid4())
-    membership_id = str(uuid4())
-    matter_id = str(uuid4())
-    task_id = str(uuid4())
-    deadline_id = str(uuid4())
-    hearing_id = str(uuid4())
-    calendar_sync_id = str(uuid4())
-    with Session(pg_engine) as session:
-        session.add_all(
-            [
-                Company(
-                    id=company_id,
-                    name="Legacy PostgreSQL Lifecycle Firm",
-                    slug=f"legacy-pg-lifecycle-{company_id[:8]}",
-                    company_type="law_firm",
-                    tenant_key=company_id,
-                ),
-                User(
-                    id=user_id,
-                    email=f"legacy-pg-lifecycle-{user_id[:8]}@example.com",
-                    full_name="Legacy PostgreSQL Lifecycle Owner",
-                    password_hash="not-used",
-                ),
-            ]
-        )
-        session.commit()
-        session.add_all(
-            [
-                CompanyMembership(
-                    id=membership_id,
-                    company_id=company_id,
-                    user_id=user_id,
-                    role="owner",
-                ),
-                Matter(
-                    id=matter_id,
-                    company_id=company_id,
-                    title="Legacy PostgreSQL closed matter",
-                    matter_code=f"LEGACY-PG-{matter_id[:8].upper()}",
-                    client_name="Legacy Client",
-                    status="disposed",
-                    practice_area="litigation",
-                    forum_level="high_court",
-                    is_active=False,
-                    next_hearing_on=date(2099, 4, 10),
-                    next_hearing_source="manual",
-                    next_hearing_source_ref_type="matter_hearing",
-                    next_hearing_source_ref_id=hearing_id,
-                    next_hearing_manual_lock=True,
-                ),
-            ]
-        )
-        # These models are linked by scalar IDs, not in-memory relationships,
-        # so SQLAlchemy has no unit-of-work edge from each child to the pending
-        # Matter. Persist valid FK parents first; SQLite's permissive insert
-        # ordering must not make an impossible production fixture look green.
-        session.commit()
-        session.add_all(
-            [
-                MatterTask(
-                    id=task_id,
-                    matter_id=matter_id,
-                    title="Legacy PostgreSQL open task",
-                    status="todo",
-                ),
-                MatterDeadline(
-                    id=deadline_id,
-                    matter_id=matter_id,
-                    source="manual",
-                    kind="filing",
-                    title="Legacy PostgreSQL open deadline",
-                    due_on=date(2099, 4, 9),
-                    status="open",
-                ),
-                MatterHearing(
-                    id=hearing_id,
-                    matter_id=matter_id,
-                    hearing_on=date(2099, 4, 10),
-                    forum_name="Delhi High Court",
-                    purpose="Legacy PostgreSQL open hearing",
-                    status="scheduled",
-                ),
-            ]
-        )
-        session.commit()
-        connection = UserCalendarConnection(
-            company_id=company_id,
-            membership_id=membership_id,
-            provider="outlook",
-            status="connected",
-        )
-        session.add(connection)
-        session.commit()
-        session.add(
-            CalendarEventSync(
-                id=calendar_sync_id,
-                company_id=company_id,
-                calendar_connection_id=connection.id,
-                source_type="matter_hearing",
-                source_id=hearing_id,
-                provider_event_id="legacy-pg-provider-event",
-                sync_status="synced",
-            )
-        )
-        session.commit()
-
-    pg_engine.dispose()
-    command.downgrade(config, "20260708_0001")
-    with pg_engine.begin() as connection:
-        connection.execute(
-            text(
-                "UPDATE matters SET status = 'closed', is_active = true, "
-                "next_hearing_on = '2099-04-10', next_hearing_source = 'manual', "
-                "next_hearing_source_ref_type = 'matter_hearing', "
-                "next_hearing_source_ref_id = :hearing_id, "
-                "next_hearing_manual_lock = true WHERE id = :matter_id"
-            ),
-            {"hearing_id": hearing_id, "matter_id": matter_id},
-        )
-    pg_engine.dispose()
-    command.upgrade(config, "head")
-
-    with pg_engine.connect() as connection:
-        matter_row = connection.execute(
-            text(
-                "SELECT status, is_active, next_hearing_on, next_hearing_source, "
-                "next_hearing_source_ref_type, next_hearing_source_ref_id, "
-                "next_hearing_manual_lock FROM matters WHERE id = :id"
-            ),
-            {"id": matter_id},
-        ).one()
-        task_row = connection.execute(
-            text(
-                "SELECT status, completed_at, cancelled_by_matter_disposal "
-                "FROM matter_tasks WHERE id = :id"
-            ),
-            {"id": task_id},
-        ).one()
-        deadline_row = connection.execute(
-            text(
-                "SELECT status, completed_at, cancelled_by_matter_disposal "
-                "FROM matter_deadlines WHERE id = :id"
-            ),
-            {"id": deadline_id},
-        ).one()
-        hearing_row = connection.execute(
-            text("SELECT status, cancelled_by_matter_disposal FROM matter_hearings WHERE id = :id"),
-            {"id": hearing_id},
-        ).one()
-        calendar_sync_row = connection.execute(
-            text(
-                "SELECT sync_status, next_attempt_at, dead_letter_reason "
-                "FROM calendar_event_syncs WHERE id = :id"
-            ),
-            {"id": calendar_sync_id},
-        ).one()
-
-    assert tuple(matter_row) == ("disposed", False, None, "unknown", None, None, False)
-    assert task_row.status == "cancelled"
-    assert task_row.completed_at is not None
-    assert task_row.cancelled_by_matter_disposal is True
-    assert deadline_row.status == "cancelled"
-    assert deadline_row.completed_at is not None
-    assert deadline_row.cancelled_by_matter_disposal is True
-    assert tuple(hearing_row) == ("cancelled", True)
-    assert calendar_sync_row.sync_status == "delete_pending"
-    assert calendar_sync_row.next_attempt_at is not None
-    assert calendar_sync_row.dead_letter_reason == "matter_disposed_delete"
+        assert tuple(matter_row) == ("disposed", False, None, "unknown", None, None, False)
+        assert task_row.status == "cancelled"
+        assert task_row.completed_at is not None
+        assert task_row.cancelled_by_matter_disposal is True
+        assert deadline_row.status == "cancelled"
+        assert deadline_row.completed_at is not None
+        assert deadline_row.cancelled_by_matter_disposal is True
+        assert tuple(hearing_row) == ("cancelled", True)
+        assert calendar_sync_row.sync_status == "delete_pending"
+        assert calendar_sync_row.next_attempt_at is not None
+        assert calendar_sync_row.dead_letter_reason == "matter_disposed_delete"
 
 
 def test_hearing_resync_query_does_not_compare_json_columns_on_postgres(pg_engine):
@@ -3111,87 +2985,90 @@ def test_shared_reliability_downgrade_lock_excludes_postgres_writer(pg_engine):
 
 
 def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(migration_pg_engine):
-    """Alembic must not cross the revision that owns retained evidence."""
-    pg_engine = migration_pg_engine
-
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-
+    """Retained evidence refuses at its owning revision, not moving head."""
     from alembic import command
+    from caseops_api.db.models import Company
+    from tests.fixtures_historical_migrations import historical_database, insert_historical_fixture
 
-    url = os.environ["CASEOPS_TEST_POSTGRES_URL"]
-    project_root = Path(__file__).resolve().parents[1]
-    config = Config(str(project_root / "alembic.ini"))
-    config.set_main_option("script_location", str(project_root / "alembic"))
-    config.set_main_option("sqlalchemy.url", url)
-    now = datetime(2026, 8, 12, 6, 55, tzinfo=UTC)
-    with Session(pg_engine) as seed:
-        company_id = _seed_company(seed)
-        record_id = str(uuid4())
-        seed.execute(
-            text(
-                "INSERT INTO api_idempotency_records "
-                "(id, company_id, actor_scope, http_method, operation, "
-                "idempotency_key, request_hash, state, claim_token, "
-                "claim_generation, claim_expires_at, expires_at, created_at, "
-                "updated_at) VALUES "
-                "(:id, :company_id, 'system:actual-downgrade', 'POST', "
-                "'fixture.actual-downgrade', :key, :request_hash, 'processing', "
-                "'fixture-claim', 1, :claim_expires_at, :expires_at, "
-                ":created_at, :created_at)"
-            ),
-            {
-                "id": record_id,
-                "company_id": company_id,
-                "key": f"actual-downgrade-{record_id}",
-                "request_hash": "e" * 64,
-                "claim_expires_at": now + timedelta(minutes=5),
-                "expires_at": now + timedelta(days=7),
-                "created_at": now,
-            },
-        )
-        seed.commit()
-
-    def schema_snapshot():
-        with pg_engine.connect() as connection:
-            indexes = connection.execute(
+    with historical_database(migration_pg_engine, "20260812_0001") as (pg_engine, config):
+        now = datetime(2026, 8, 12, 6, 55, tzinfo=UTC)
+        with Session(pg_engine) as seed:
+            company_id = str(uuid4())
+            insert_historical_fixture(
+                seed.connection(),
+                Company,
+                id=company_id,
+                name="Retained reliability firm",
+                slug=company_id,
+                company_type="law_firm",
+                tenant_key=company_id,
+            )
+            record_id = str(uuid4())
+            seed.execute(
                 text(
-                    "SELECT c.relname, i.indisvalid, i.indisready, pg_get_indexdef(i.indexrelid) "
-                    "FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
-                    "JOIN pg_namespace n ON n.oid = c.relnamespace "
-                    "WHERE n.nspname = current_schema() ORDER BY c.relname"
-                )
-            ).all()
-            columns = connection.execute(
-                text(
-                    "SELECT table_name, column_name, data_type, is_nullable, column_default "
-                    "FROM information_schema.columns WHERE table_schema = current_schema() "
-                    "ORDER BY table_name, ordinal_position"
-                )
-            ).all()
-            return indexes, columns
+                    "INSERT INTO api_idempotency_records "
+                    "(id, company_id, actor_scope, http_method, operation, "
+                    "idempotency_key, request_hash, state, claim_token, "
+                    "claim_generation, claim_expires_at, expires_at, created_at, "
+                    "updated_at) VALUES "
+                    "(:id, :company_id, 'system:actual-downgrade', 'POST', "
+                    "'fixture.actual-downgrade', :key, :request_hash, 'processing', "
+                    "'fixture-claim', 1, :claim_expires_at, :expires_at, "
+                    ":created_at, :created_at)"
+                ),
+                {
+                    "id": record_id,
+                    "company_id": company_id,
+                    "key": f"actual-downgrade-{record_id}",
+                    "request_hash": "e" * 64,
+                    "claim_expires_at": now + timedelta(minutes=5),
+                    "expires_at": now + timedelta(days=7),
+                    "created_at": now,
+                },
+            )
+            seed.commit()
 
-    before = schema_snapshot()
-    expected_head = ScriptDirectory.from_config(config).get_current_head()
-    try:
-        for _attempt in range(2):
-            with pytest.raises(RuntimeError, match="roll application code forward"):
-                command.downgrade(config, "20260811_0005")
+        def schema_snapshot():
             with pg_engine.connect() as connection:
-                assert (
-                    connection.scalar(text("SELECT version_num FROM alembic_version"))
-                    == expected_head
-                )
-                assert (
-                    connection.scalar(
-                        text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
-                        {"id": record_id},
+                indexes = connection.execute(
+                    text(
+                        "SELECT c.relname, i.indisvalid, i.indisready, "
+                        "pg_get_indexdef(i.indexrelid) "
+                        "FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
+                        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                        "WHERE n.nspname = current_schema() ORDER BY c.relname"
                     )
-                    == 1
-                )
-            assert schema_snapshot() == before
-    finally:
-        command.upgrade(config, "head")
+                ).all()
+                columns = connection.execute(
+                    text(
+                        "SELECT table_name, column_name, data_type, is_nullable, column_default "
+                        "FROM information_schema.columns WHERE table_schema = current_schema() "
+                        "ORDER BY table_name, ordinal_position"
+                    )
+                ).all()
+                return indexes, columns
+
+        before = schema_snapshot()
+        expected_head = "20260812_0001"
+        try:
+            for _attempt in range(2):
+                with pytest.raises(RuntimeError, match="roll application code forward"):
+                    command.downgrade(config, "20260811_0005")
+                with pg_engine.connect() as connection:
+                    assert (
+                        connection.scalar(text("SELECT version_num FROM alembic_version"))
+                        == expected_head
+                    )
+                    assert (
+                        connection.scalar(
+                            text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
+                            {"id": record_id},
+                        )
+                        == 1
+                    )
+                assert schema_snapshot() == before
+        finally:
+            command.upgrade(config, "20260812_0001")
 
 
 def test_shared_outbox_fence_rejects_stale_worker_on_postgres(pg_engine):

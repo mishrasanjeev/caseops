@@ -101,8 +101,10 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
     job = workflow["jobs"]["postgres-validation-shards"]
     matrix = job["strategy"]["matrix"]
-    total = len(matrix["shard"])
+    total = matrix["total_shards"][0]
     steps = job["steps"]
+    assert job["timeout-minutes"] == 12
+    assert total == 8 and matrix["shard"] == list(range(1, total + 1))
     step = next(item for item in steps if item.get("name") == "Pytest -m postgres")
     command = shlex.split(step["run"])
     assert command[:2] == ["uv", "run"]

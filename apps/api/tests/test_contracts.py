@@ -551,7 +551,9 @@ def test_owner_can_reindex_contract_attachment(
     )
     workspace_attachment = workspace_response.json()["attachments"][0]
     assert workspace_attachment["processing_status"] == "indexed"
-    assert workspace_attachment["latest_job"]["status"] == "completed"
+    assert workspace_attachment["latest_job"]["status"] == "completed", (
+        workspace_attachment["latest_job"]["error_message"]
+    )
 
 
 def test_ai_contract_review_uses_uploaded_contract_text_and_playbook_hits(

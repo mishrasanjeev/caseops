@@ -3,6 +3,9 @@
 MIGRATION-LOCK-RISK: acknowledged - the index is on a newly created empty table.
 MIGRATION-ROLLBACK: restore-forward - populated evidence refuses downgrade;
 production application rollback retains this additive financial schema.
+
+The unpublished financial revision follows the document/court execution
+protocols in the combined release; both branches must share one upgrade head.
 """
 
 from collections.abc import Sequence
@@ -12,7 +15,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20261011_0001"
-down_revision = "20260928_0001"
+down_revision = "20261010_0004"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

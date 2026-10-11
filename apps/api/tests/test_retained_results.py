@@ -155,3 +155,33 @@ def test_long_api_coverage_shards_retain_unique_structured_evidence():
         f"apps/api/{xml}",
         f"apps/api/{files}",
     }
+
+
+def test_offline_playwright_evidence_dependencies_follow_the_resolved_shard():
+    workflow = yaml.safe_load(
+        (Path(__file__).resolve().parents[3] / ".github/workflows/ci.yml").read_text()
+    )
+    steps = workflow["jobs"]["api-test-shards"]["steps"]
+    selection = next(step for step in steps if step.get("id") == "shard-files")
+    node = next(
+        step for step in steps if step.get("name") == "Set up offline evidence Node runtime"
+    )
+    install = next(
+        step for step in steps
+        if step.get("name") == "Install offline evidence Playwright dependencies"
+    )
+    execution = next(step for step in steps if step.get("id") == "pytest")
+    assert "python ../../scripts/pytest_shard_plan.py" in selection["run"]
+    assert (
+        '--selected-files .pytest-shard-files --github-output "$GITHUB_OUTPUT"'
+        in selection["run"]
+    )
+    assert "rg " not in selection["run"]
+    assert node["if"] == install["if"] == "steps.shard-files.outputs.requires_playwright == 'true'"
+    assert node["uses"] == "actions/setup-node@v4"
+    assert node["with"]["node-version"] == 22
+    assert install["run"] == "npm ci --ignore-scripts --no-audit --no-fund"
+    assert "working-directory" not in install
+    assert (
+        steps.index(selection) < steps.index(node) < steps.index(install) < steps.index(execution)
+    )

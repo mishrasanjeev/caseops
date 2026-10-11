@@ -42,7 +42,7 @@ from caseops_api.services.ip_patent_priorities import (
 from tests import test_ip_patent_priorities as journeys
 from tests.test_ip_patent_application_postgres import _clone
 from tests.test_ip_patent_applications import _correction, _create
-from tests.test_ip_patent_party_postgres import _alembic, _context
+from tests.test_ip_patent_party_postgres import _context
 from tests.test_postgres_validation import (
     _ensure_migrations,  # noqa: F401
     _seed_membership,
@@ -159,87 +159,114 @@ def test_priority_migration_recovers_interrupted_index_and_preserves_legacy_rela
     client = isolated_postgres_client
     bootstrap, headers, _, parent, child, raw = journeys._fixture(client)
     engine = get_session_factory().kw["bind"]
-    config = _alembic()
-    command.downgrade(config, "20260907_0001")
-    admin = create_engine(engine.url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
-    name = f"priority-index-{uuid4().hex[:12]}"
+    from tests.fixtures_historical_migrations import (
+        assert_fixture_downgrade_refused,
+        historical_database,
+        insert_historical_fixture,
+        replay_fixture_rows,
+    )
+
     original_id = str(uuid4())
-
-    def build_index():
-        with admin.connect() as connection:
-            connection.execute(
-                text("SELECT set_config('application_name', :name, false)"), {"name": name}
-            )
-            try:
-                connection.exec_driver_sql(
-                    "CREATE UNIQUE INDEX CONCURRENTLY uq_ip_relationship_patent_owner "
-                    "ON ip_relationships (id, company_id, source_docket_id, target_docket_id)"
-                )
-            except DBAPIError as exc:
-                return getattr(exc.orig, "sqlstate", None)
-            raise AssertionError("The deliberately interrupted index unexpectedly completed")
-
-    with Session(engine) as writer, ThreadPoolExecutor(max_workers=1) as pool:
-        writer.add(
-            IpRelationship(
-                id=original_id,
-                company_id=bootstrap["company"]["id"],
-                source_docket_id=child["docket_id"],
-                target_docket_id=parent["docket_id"],
-                relationship_kind="legacy_parent",
-                effective_from=date(2026, 9, 1),
-                source="legacy",
-            )
+    legacy_values = dict(
+        id=original_id,
+        company_id=bootstrap["company"]["id"],
+        source_docket_id=child["docket_id"],
+        target_docket_id=parent["docket_id"],
+        relationship_kind="legacy_parent",
+        effective_from=date(2026, 9, 1),
+        source="legacy",
+    )
+    runtime_engine = engine
+    with historical_database(runtime_engine, "20260907_0001") as (engine, config):
+        replay_fixture_rows(
+            runtime_engine,
+            engine,
+            [
+                ("ip_docket_records", {"id": child["docket_id"]}),
+                ("ip_docket_records", {"id": parent["docket_id"]}),
+            ],
         )
-        writer.flush()
-        future = pool.submit(build_index)
-        try:
-            deadline = monotonic() + 8
-            with admin.connect() as control:
-                pending = False
-                while monotonic() < deadline:
-                    pending = control.scalar(
-                        text(
-                            "SELECT NOT indisvalid FROM pg_index "
-                            "WHERE indexrelid = to_regclass('uq_ip_relationship_patent_owner')"
-                        )
+        admin = create_engine(engine.url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
+        name = f"priority-index-{uuid4().hex[:12]}"
+
+        def build_index():
+            with admin.connect() as connection:
+                connection.execute(
+                    text("SELECT set_config('application_name', :name, false)"), {"name": name}
+                )
+                try:
+                    connection.exec_driver_sql(
+                        "CREATE UNIQUE INDEX CONCURRENTLY uq_ip_relationship_patent_owner "
+                        "ON ip_relationships (id, company_id, source_docket_id, target_docket_id)"
                     )
-                    if pending:
-                        break
-                    Event().wait(0.02)
-                assert pending
-                assert control.scalar(
+                except DBAPIError as exc:
+                    return getattr(exc.orig, "sqlstate", None)
+                raise AssertionError("The deliberately interrupted index unexpectedly completed")
+
+        with Session(engine) as writer, ThreadPoolExecutor(max_workers=1) as pool:
+            insert_historical_fixture(writer.connection(), IpRelationship, **legacy_values)
+            future = pool.submit(build_index)
+            try:
+                deadline = monotonic() + 8
+                with admin.connect() as control:
+                    pending = False
+                    while monotonic() < deadline:
+                        pending = control.scalar(
+                            text(
+                                "SELECT NOT indisvalid FROM pg_index "
+                                "WHERE indexrelid = to_regclass('uq_ip_relationship_patent_owner')"
+                            )
+                        )
+                        if pending:
+                            break
+                        Event().wait(0.02)
+                    assert pending
+                    assert control.scalar(
+                        text(
+                            "SELECT pg_cancel_backend(pid) FROM pg_stat_activity "
+                            "WHERE application_name=:name"
+                        ),
+                        {"name": name},
+                    )
+                assert future.result(timeout=8) == "57014"
+                writer.commit()
+            finally:
+                writer.rollback()
+                admin.dispose()
+        for _ in range(2):
+            command.upgrade(config, "20260907_0002")
+            with engine.connect() as connection:
+                assert connection.scalar(
                     text(
-                        "SELECT pg_cancel_backend(pid) FROM pg_stat_activity "
-                        "WHERE application_name=:name"
-                    ),
-                    {"name": name},
+                        "SELECT indisvalid AND indisready FROM pg_index "
+                        "WHERE indexrelid='uq_ip_relationship_patent_owner'::regclass"
+                    )
                 )
-            assert future.result(timeout=8) == "57014"
-            writer.commit()
-        finally:
-            writer.rollback()
-            admin.dispose()
-    for _ in range(2):
-        command.upgrade(config, "head")
-        with engine.connect() as connection:
-            assert connection.scalar(
-                text(
-                    "SELECT indisvalid AND indisready FROM pg_index "
-                    "WHERE indexrelid='uq_ip_relationship_patent_owner'::regclass"
+                assert (
+                    connection.scalar(
+                        text("SELECT source FROM ip_relationships WHERE id=:id"),
+                        {"id": original_id},
+                    )
+                    == "legacy"
                 )
-            )
-            assert (
-                connection.scalar(
-                    text("SELECT source FROM ip_relationships WHERE id=:id"), {"id": original_id}
-                )
-                == "legacy"
-            )
+
+    engine = runtime_engine
+    with Session(engine) as writer:
+        writer.add(IpRelationship(**legacy_values))
+        writer.commit()
     created = journeys._post(client, headers, child, raw)
     assert created.status_code == 201, created.text
-    with pytest.raises(RuntimeError, match="Patent priority evidence exists"):
-        command.downgrade(config, "20260907_0001")
-    command.upgrade(config, "head")
+    assert_fixture_downgrade_refused(
+        engine,
+        "20260907_0002",
+        "20260907_0001",
+        [
+            ("ip_patent_applications", {"id": child["id"]}),
+            ("ip_patent_applications", {"id": parent["id"]}),
+            ("ip_patent_priority_details", {"id": created.json()["id"]}),
+        ],
+        "Patent priority evidence exists",
+    )
     with Session(engine) as session:
         legacy = session.get(IpRelationship, original_id)
         legacy.source = "legacy source correction"

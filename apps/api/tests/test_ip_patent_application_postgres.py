@@ -301,6 +301,11 @@ def test_application_migration_source_ownership_and_retained_downgrade_on_postgr
         version = session.scalar(select(IpPatentApplicationVersion))
         identifier = session.scalar(select(IpPatentApplicationIdentifier))
         identity = session.scalar(select(IpPatentApplicationIdentity))
+        migration_roots = [
+            ("ip_patent_application_versions", {"id": version.id}),
+            ("ip_patent_application_identifiers", {"id": identifier.id}),
+            ("ip_patent_application_identities", {"id": identity.id}),
+        ]
         for model, row, changes in (
             (IpPatentApplicationVersion, version, {"company_id": str(uuid4()), "version": 2}),
             (
@@ -329,9 +334,16 @@ def test_application_migration_source_ownership_and_retained_downgrade_on_postgr
     config.set_main_option("script_location", str(root / "alembic"))
     config.set_main_option("sqlalchemy.url", os.environ["CASEOPS_TEST_POSTGRES_URL"])
     head = ScriptDirectory.from_config(config).get_current_head()
+    from tests.fixtures_historical_migrations import assert_fixture_downgrade_refused
+
+    assert_fixture_downgrade_refused(
+        engine,
+        "20260906_0002",
+        "20260906_0001",
+        migration_roots,
+        "Patent application evidence exists",
+    )
     for _ in range(2):
-        with pytest.raises(RuntimeError, match="Patent application evidence exists"):
-            command.downgrade(config, "20260906_0001")
         command.upgrade(config, "head")
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == head

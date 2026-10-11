@@ -52,7 +52,7 @@ def test_manual_matter_forum_catalog_upgrades_downgrades_and_reupgrades(
     assert before["consumer:ncdrc"]["lineage"] == "Consumer Forum > NCDRC"
     assert "drt:delhi:drt-2" not in before
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260811_0004")
     upgraded = _catalog_rows(database_url)
     assert upgraded["consumer:ncdrc"]["lineage"] == (
         "NCDRC > National Consumer Disputes Redressal Commission"
@@ -63,23 +63,19 @@ def test_manual_matter_forum_catalog_upgrades_downgrades_and_reupgrades(
     assert upgraded["drt:delhi:drt-2"]["name"] == "DRT-2"
     assert upgraded["recovery:delhi:po-court"]["name"] == "PO"
     assert upgraded["company-law:nclt"]["name"] == "NCLT"
-    assert upgraded["tdsat:delhi"]["source_url"] == (
-        "https://www.tdsat.gov.in/Delhi/Delhi.php"
-    )
+    assert upgraded["tdsat:delhi"]["source_url"] == ("https://www.tdsat.gov.in/Delhi/Delhi.php")
 
     command.downgrade(config, "20260811_0003")
     downgraded = _catalog_rows(database_url)
     assert "drt:delhi:drt-2" not in downgraded
     assert "consumer:dcdrc:delhi:dwarka" not in downgraded
     assert downgraded["consumer:ncdrc"]["lineage"] == "Consumer Forum > NCDRC"
-    assert downgraded["consumer:scdrc:11070000"]["lineage"] == (
-        "Consumer Forum > SCDRC > Delhi"
-    )
+    assert downgraded["consumer:scdrc:11070000"]["lineage"] == ("Consumer Forum > SCDRC > Delhi")
     assert downgraded["consumer:dcdrc:11070077"]["lineage"] == (
         "Consumer Forum > DCDRC > Delhi > Central Delhi"
     )
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260811_0004")
     reupgraded = _catalog_rows(database_url)
     assert reupgraded["appellate-tribunal:fema"]["name"] == "FEMA"
     assert reupgraded["consumer:dcdrc:11070077"]["lineage"] == (

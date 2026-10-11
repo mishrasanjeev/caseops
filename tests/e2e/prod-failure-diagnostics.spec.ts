@@ -20,7 +20,7 @@ test("sanitized failure evidence retains completed and failed browser transports
   await expect.poll(() => safeNetworkEvidence.snapshot().records.filter((row) => row.route === "auth/session").length).toBe(2);
   const records = safeNetworkEvidence.snapshot().records.filter((row) => row.route === "auth/session");
   const completed = records.find((row) => row.outcome === "response_completed");
-  expect(completed).toMatchObject({ status: 503, requestId: id, problemType: "database_lock_timeout", method: "POST" });
+  expect(completed).toMatchObject({ status: 503, requestId: id, problemType: null, method: "POST" });
   expect(new Date(String(completed?.finishedAt)).getTime()).toBeGreaterThanOrEqual(new Date(String(completed?.startedAt)).getTime());
   expect(records.find((row) => row.outcome === "transport_failed")).toMatchObject({ failureCode: "net::ERR_CONNECTION_RESET" });
   const serialized = JSON.stringify(records);

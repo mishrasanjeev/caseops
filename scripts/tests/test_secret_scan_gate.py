@@ -527,6 +527,60 @@ class RealGitleaksTests(GitFixture):
         provenance = json.loads((self.root / "evidence/tree-policy-provenance.json").read_text())
         self.assertEqual(provenance["accepted_existing_policy"], 0)
 
+    def reviewed_multiline_checksum_fixture(self):
+        checksum = hashlib.sha256(b"offline-readback-report").hexdigest()
+        text = f"API receipt SHA256:\n`{checksum}`;\n"
+        self.write("record.txt", text)
+        origin = self.commit("reviewed multiline readback checksum")
+        self.write(".gitleaksignore", f"{origin}:record.txt:generic-api-key:1\n")
+        return origin, text, self.commit("exact historical checksum fingerprint")
+
+    def test_real_reviewed_multiline_checksum_preserves_tree_and_history_provenance(
+        self,
+    ):
+        origin, text, head = self.reviewed_multiline_checksum_fixture()
+        result = self.run_scan(head)
+        for boundary in result["boundaries"].values():
+            self.assertGreater(boundary["scanned_bytes"], 0)
+            self.assertTrue(boundary["cleanup_confirmed"])
+        self.assertGreater(result["boundaries"]["history"]["scanned_commits"], 0)
+        provenance = json.loads((self.root / "evidence/tree-policy-provenance.json").read_text())
+        self.assertEqual(provenance["accepted_existing_policy"], 1)
+        self.assertEqual(
+            provenance["findings"],
+            [
+                {
+                    "path": "record.txt",
+                    "rule": "generic-api-key",
+                    "start_line": 1,
+                    "end_line": 2,
+                    "existing_fingerprint": f"{origin}:record.txt:generic-api-key:1",
+                    "accepted_existing_policy": True,
+                    "span_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                }
+            ],
+        )
+        self.assertEqual((self.repo / "record.txt").read_bytes(), text.encode())
+
+    def test_real_changed_multiline_checksum_cannot_inherit_reviewed_fingerprint(self):
+        _, original, _ = self.reviewed_multiline_checksum_fixture()
+        replacement = hashlib.sha256(b"different-unreviewed-readback").hexdigest()
+        self.write("record.txt", f"API receipt SHA256:\n`{replacement}`;\n")
+        head = self.commit("changed second line must fail provenance")
+        with self.assertRaisesRegex(scan.ScanError, "unreviewed findings"):
+            self.run_scan(head)
+        self.assert_incomplete()
+        provenance = json.loads((self.root / "evidence/tree-policy-provenance.json").read_text())
+        self.assertEqual(provenance["accepted_existing_policy"], 0)
+        self.assertEqual(len(provenance["findings"]), 1)
+        finding = provenance["findings"][0]
+        self.assertEqual((finding["start_line"], finding["end_line"]), (1, 2))
+        self.assertNotEqual(finding["span_sha256"], hashlib.sha256(original.encode()).hexdigest())
+        self.assertFalse((self.root / "evidence/history.sarif").exists())
+        receipt = json.loads((self.root / "evidence/tree-receipt.json").read_text())
+        self.assertEqual(receipt["exit_code"], 2)
+        self.assertTrue(receipt["cleanup_confirmed"])
+
 
 class ProvenanceTests(GitFixture):
     def test_new_multiline_suffix_cannot_inherit_reviewed_start_line(self):

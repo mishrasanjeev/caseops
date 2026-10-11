@@ -183,5 +183,31 @@ test.describe("Notice module production workflows", () => {
     await page.getByTestId("notice-filter-reply-status").selectOption("reply_sent");
     await expect(page.getByTestId("matter-notice-row")).toHaveCount(1);
     await expect(page.getByTestId("matter-notice-row")).toContainText("GST demand notice");
+
+    const attachments = await Promise.all([receivedResponse, replyResponse, sentResponse].map(async (response) => {
+      const attachment = await response.json() as { id: string };
+      return attachment.id;
+    }));
+    expect(new Set(attachments).size).toBe(3);
+    await expect.poll(async () => {
+      const response = await page.context().request.get(`${PROD_API_BASE_URL}/api/matters/${matterId}/workspace`);
+      expect(response.status()).toBe(200);
+      const workspace = await response.json() as { attachments: Array<{
+        id: string; processing_status: string; extracted_char_count: number; latest_job: { status: string } | null;
+      }> };
+      return workspace.attachments.filter((row) => attachments.includes(row.id)).map((row) => ({
+        indexed: row.processing_status === "indexed", completed: row.latest_job?.status === "completed",
+        nonempty: row.extracted_char_count > 0,
+      }));
+    }, { timeout: 90_000, intervals: [1_000, 2_000, 5_000] }).toEqual(
+      Array.from({ length: 3 }, () => ({ indexed: true, completed: true, nonempty: true })),
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    await page.getByTestId("notice-filter-query").fill("GST");
+    await page.getByTestId("notice-filter-reply-status").selectOption("reply_sent");
+    await expect(page.getByTestId("matter-notice-row")).toHaveCount(1);
+    await expect(page.getByTestId("matter-notice-row")).toContainText("Reply Sent");
+    await page.getByTestId("notice-sent-tab").click();
+    await expect(page.getByTestId("matter-notice-row")).toContainText("Payment recovery notice");
   });
 });

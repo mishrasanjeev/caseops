@@ -72,6 +72,12 @@ def hold_schedulers_paused(
     for job in effective["jobs"]:
         if job["scheduler_name"] in requested:
             job["desired_state"] = "PAUSED"
+            admission_key = {
+                "caseops-document-processing": "CASEOPS_DOCUMENT_WORKER_ADMISSION_ENABLED",
+                "caseops-court-sync": "CASEOPS_COURT_SYNC_WORKER_ADMISSION_ENABLED",
+            }.get(job["run_job_name"])
+            if admission_key:
+                job["bootstrap"]["environment"][admission_key] = "false"
     return effective
 
 
@@ -121,6 +127,25 @@ def validate_inventory(payload: object) -> list[str]:
             errors.append(f"duplicate run_job_name: {run_job}")
         seen_schedulers.add(scheduler)
         seen_jobs.add(run_job)
+        additional_invokers = job.get("additional_invoker_service_accounts", [])
+        if (
+            not isinstance(additional_invokers, list)
+            or len(additional_invokers) > 4
+            or any(
+                not isinstance(value, str)
+                or not re.fullmatch(
+                    r"[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,61}[a-z0-9]"
+                    r"\.iam\.gserviceaccount\.com",
+                    value,
+                )
+                for value in additional_invokers
+            )
+            or len(set(additional_invokers)) != len(additional_invokers)
+        ):
+            errors.append(
+                f"{label}.additional_invoker_service_accounts must contain at most "
+                "four distinct service accounts"
+            )
         if job["image_policy"] != "release_digest":
             errors.append(f"{label}.image_policy must be release_digest")
         if job["canary_policy"] not in {"manual_safe", "scheduled_execution"}:
@@ -456,7 +481,10 @@ def reconcile(
         scheduler = job["scheduler_name"]
         print(f"converging {scheduler} -> {run_job}", flush=True)
         scheduler_preexists: bool | None = None
-        if scheduler == PRIVATE_PROJECTION_SCHEDULER and job["desired_state"] == "ENABLED":
+        if (
+            scheduler == PRIVATE_PROJECTION_SCHEDULER
+            and job["desired_state"] == "ENABLED"
+        ):
             scheduler_preexists = scheduler_exists(
                 scheduler, project=project, location=location
             )
@@ -466,13 +494,22 @@ def reconcile(
                 )
             prior_state = run_gcloud(
                 [
-                    "scheduler", "jobs", "describe", scheduler,
-                    "--location", location, "--project", project,
+                    "scheduler",
+                    "jobs",
+                    "describe",
+                    scheduler,
+                    "--location",
+                    location,
+                    "--project",
+                    project,
                     "--format=json(state)",
                 ],
                 expect_json=True,
             )
-            if not isinstance(prior_state, dict) or prior_state.get("state") != "ENABLED":
+            if (
+                not isinstance(prior_state, dict)
+                or prior_state.get("state") != "ENABLED"
+            ):
                 raise InventoryError(
                     "private cadence must remain paused until the evidence-checked "
                     "resume command succeeds"
@@ -525,9 +562,28 @@ def reconcile(
                 "--quiet",
             ]
         )
+        for account in job.get("additional_invoker_service_accounts", []):
+            run_gcloud(
+                [
+                    "run",
+                    "jobs",
+                    "add-iam-policy-binding",
+                    run_job,
+                    "--member",
+                    f"serviceAccount:{account}",
+                    "--role",
+                    "roles/run.invoker",
+                    "--region",
+                    region,
+                    "--project",
+                    project,
+                    "--quiet",
+                ]
+            )
         action = (
             "update"
-            if scheduler_preexists is True or (
+            if scheduler_preexists is True
+            or (
                 scheduler_preexists is None
                 and scheduler_exists(scheduler, project=project, location=location)
             )
@@ -740,6 +796,15 @@ def inspect_live(
             ),
         }
         expected_timeout = job["task_timeout_seconds"]
+        checks["additional_invoker_iam"] = all(
+            any(
+                binding.get("role") == "roles/run.invoker"
+                and f"serviceAccount:{account}" in binding.get("members", [])
+                and not binding.get("condition")
+                for binding in policy.get("bindings", [])
+            )
+            for account in job.get("additional_invoker_service_accounts", [])
+        )
         if expected_timeout is not None:
             checks["task_timeout"] = actual_timeout == expected_timeout
         retry = job.get("retry")
@@ -1035,10 +1100,24 @@ def quiesce(
     project: str,
     region: str,
     wait_seconds: int = 180,
+    allow_missing: bool = False,
 ) -> dict[str, Any]:
     job = _selected_job(inventory, scheduler)
     if not 5 <= wait_seconds <= 600:
         raise InventoryError("drain wait must be between 5 and 600 seconds")
+    if allow_missing and not scheduler_exists(
+        scheduler, project=project, location=region
+    ):
+        if run_job_exists(job["run_job_name"], project=project, region=region):
+            raise InventoryError(
+                "missing scheduler has an existing job; cannot certify its drain"
+            )
+        return {
+            "scheduler": scheduler,
+            "absent": True,
+            "drained": True,
+            "observed_executions": [],
+        }
     deadline = time.monotonic() + wait_seconds
 
     # Hosted and Windows gcloud control-plane calls can exceed 30 seconds.
@@ -1527,6 +1606,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--release-sha")
     parser.add_argument("--qa-run-id", type=int)
     parser.add_argument("--wait-seconds", type=int, default=180)
+    parser.add_argument("--allow-missing", action="store_true")
     parser.add_argument(
         "--hold-scheduler-paused",
         action="append",
@@ -1538,6 +1618,8 @@ def main(argv: list[str] | None = None) -> int:
         inventory = load_inventory(args.inventory)
         if args.hold_scheduler_paused and args.command != "reconcile":
             raise InventoryError("--hold-scheduler-paused is valid only for reconcile")
+        if args.allow_missing and args.command != "quiesce":
+            raise InventoryError("--allow-missing is valid only for quiesce")
         if args.command == "validate":
             print(f"scheduler inventory valid: {len(inventory['jobs'])} recurring jobs")
             return 0
@@ -1553,6 +1635,7 @@ def main(argv: list[str] | None = None) -> int:
                     project=project,
                     region=region,
                     wait_seconds=args.wait_seconds,
+                    allow_missing=args.allow_missing,
                 )
             else:
                 if args.scheduler == PRIVATE_PROJECTION_SCHEDULER and (

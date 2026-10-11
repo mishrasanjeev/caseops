@@ -79,7 +79,7 @@ def test_recover_stale_processing_jobs_requeues_stuck_work(client: TestClient) -
         session.commit()
         stale_job_id = stale_job.id
 
-    recovered = recover_stale_document_processing_jobs(stale_after_minutes=5)
+    recovered = recover_stale_document_processing_jobs(stale_after_minutes=15)
     assert recovered >= 1
 
     with session_factory() as session:

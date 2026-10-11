@@ -4,6 +4,7 @@ const routes: Array<[RegExp, string]> = [
   [/^\/api\/matters\/[^/]+\/attachments$/, "matter/attachment"],
   [/^\/api\/notices\/[^/]+\/attachments$/, "notice/attachment"],
   [/^\/api\/ip\/dockets\/[^/]+\/title-interests$/, "ip/title-interest"],
+  [/^\/api\/ip\/patents\/applications$/, "ip/application"],
   [/^\/sign-in\/?$/, "web/sign-in"],
   [/^\/app(?:\/|$)/, "web/app-navigation"],
 ];
@@ -33,7 +34,8 @@ export function diagnosticRoute(rawUrl: string, origins: readonly string[]): str
 }
 
 export function diagnosticRequestId(value: unknown): string | null {
-  return typeof value === "string" && /^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i.test(value)
+  return typeof value === "string" && (value.length === 32 || value.length === 36)
+    && /^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i.test(value)
     ? value : null;
 }
 

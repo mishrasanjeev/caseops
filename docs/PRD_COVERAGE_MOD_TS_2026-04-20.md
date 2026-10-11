@@ -115,6 +115,17 @@ recovery. Source court-write bounds now have three intended RED cases and
 Combined Docker/main/live gates remain open.
 [Investigation](runbooks/MATTER_COURT_WRITE_BOUNDS_2026-10-11.md).
 
+## October 10 Live Certification Failure
+
+Existing document/Matter/IP and release coverage remains partial on deployed
+`3dbf364d`: 341 live identities reconcile as 320 pass/18 unverified skip/3 fail.
+All three mutations are actual 503s; a one-off passing Notice diagnostic is
+not replacement acceptance. Complete worker claims/migration/Docker/CI/live
+proof remains pending. Public 40/40 passes do not invent Google exclusion,
+Calendar consent, privacy approval, licensed identity or license coverage.
+Full evidence, current verdict and required replacement:
+[document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
+
 ## October 10 Summary Gate Repair
 
 Latest October 11 source scope also covers J05/M04, J08/M08, J09/M07,
