@@ -683,6 +683,91 @@ def test_repeated_remote_denial_does_not_accumulate_unprocessed_workdirs(
 
 
 @pytest.mark.parametrize("court", ["hc", "sc"])
+@pytest.mark.parametrize("failure", ["reload", "commit"])
+@pytest.mark.parametrize("deny_at", [1, 2])
+def test_remote_money_stop_finalization_failure_retains_pending_sources(
+    corpus_session, money_boundary, monkeypatch, tmp_path, court, failure, deny_at
+):
+    root = tmp_path / "staging"
+    root.mkdir()
+    install_pdf_parser(monkeypatch, tmp_path)
+    downloads = []
+
+    def download(bucket, key, destination):
+        downloads.append(key)
+        if court == "hc":
+            Path(destination).write_bytes(b"offline retained PDF")
+        else:
+            with tarfile.open(destination, "w") as archive:
+                for index in range(2):
+                    data = b"offline retained PDF"
+                    info = tarfile.TarInfo(f"{index}.pdf")
+                    info.size = len(data)
+                    archive.addfile(info, io.BytesIO(data))
+
+    monkeypatch.setattr(
+        corpus_ingest, "_iter_s3_keys",
+        lambda *args, **kwargs: iter(
+            ["0.pdf", "1.pdf", "2.pdf"] if court == "hc" else ["0.tar", "1.tar"]
+        ),
+    )
+    monkeypatch.setattr(
+        corpus_ingest, "_open_s3_client", lambda: SimpleNamespace(download_file=download)
+    )
+    original_get = corpus_session.get
+    original_commit = corpus_session.commit
+    injected = []
+
+    def denied():
+        return len(money_boundary.reservations) == deny_at
+
+    def reload(entity, ident, **kwargs):
+        if entity is AuthorityIngestionRun and denied():
+            injected.append("reload")
+            raise RuntimeError("Offline failed ingestion-run finalization")
+        return original_get(entity, ident, **kwargs)
+
+    def commit():
+        if denied():
+            injected.append("commit")
+            raise RuntimeError("Offline failed ingestion-run finalization")
+        return original_commit()
+
+    ingest = corpus_ingest.ingest_hc_from_s3 if court == "hc" else corpus_ingest.ingest_sc_from_s3
+    args = dict(
+        year=2026, temp_root=root, embedding_provider=provider("voyage")
+    )
+    if court == "hc":
+        args["batch_size"] = 2
+    money_boundary.deny_at = deny_at
+    with monkeypatch.context() as finalization:
+        finalization.setattr(corpus_session, failure if failure == "commit" else "get",
+                             commit if failure == "commit" else reload)
+        with unmarked_offline_request(), pytest.raises(
+            RuntimeError, match="Offline failed ingestion-run finalization"
+        ):
+            ingest(corpus_session, **args)
+    corpus_session.rollback()
+    assert injected == [failure]
+    assert len(money_boundary.reservations) == deny_at
+    assert len(money_boundary.transports) == deny_at - 1
+    assert len(downloads) == (2 if court == "hc" else 1)
+    documents = list(corpus_session.scalars(select(AuthorityDocument)))
+    assert len(documents) == deny_at - 1
+    corpus_session.rollback()
+    retained = {path: path.read_bytes() for path in root.rglob("*.pdf")}
+    assert len(retained) == 3 - deny_at, list(root.rglob("*"))
+    assert all(data == b"offline retained PDF" for data in retained.values())
+    assert (root / "caseops-corpus-staging").is_dir()
+    with unmarked_offline_request():
+        next_run = ingest(corpus_session, **args)
+    assert next_run.stop_reason == "corpus_staging_pending"
+    assert len(money_boundary.reservations) == deny_at
+    assert len(downloads) == (2 if court == "hc" else 1)
+    assert {path: path.read_bytes() for path in root.rglob("*.pdf")} == retained
+
+
+@pytest.mark.parametrize("court", ["hc", "sc"])
 @pytest.mark.parametrize("over_bytes", [False, True])
 def test_retained_sources_stop_before_remote_sdk_and_preserve_unrelated_directories(
     corpus_session, money_boundary, tmp_path, court, over_bytes

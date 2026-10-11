@@ -107,6 +107,90 @@ resumption; do not infer a global account cap from the API alone.
 
 ## Remaining Gates
 
+### Recovery Checkpoint
+
+PR #533 remains draft and unmerged at `665f2b19b1caaf2fdae508cb0e3e9d620d5bfa27`.
+Independent GitHub readback confirms its CI `38117093547`, Security
+`38117093542`, CodeQL `38117093566` and PR review `38117093539` completed
+successfully. These hosted results do not supersede a failed local gate.
+API and web readback still serve `3dbf364d9834316d181d4a52b2e9b4c7bee431b4`,
+revisions `caseops-api-00488-5sd` / `caseops-web-00465-sk6`.
+
+The prior session recorded a complete second Docker PostgreSQL run on `665f2b19`:
+2,262 collected, 2,261 passed, one failed, zero skipped, 6,786 phase results and
+2,262 JUnit identities, session exit 1. The failing identity was
+`test_compliance_participant_fence_20261010_postgres.py::test_real_downstream_compliance_completes_in_both_lock_orders[text-mutation-manual_sync]`,
+with PostgreSQL 55P03 waiting for the Company row. Browser/reseed phases were
+not reached. The isolated project was reported removed after completion.
+
+On recovery the old checkout, uncommitted court-write amendment, final temporary
+reports and helper container are absent. Their historical counts are retained
+here as the prior session's recorded failure, not independently re-read raw
+artifacts or current acceptance. Committed work was recovered from the same
+branch into `ai-budget-release-recovery-20261011`. Reconstruct and rerun the
+regression and full gates; do not upgrade a claim using inaccessible evidence.
+The original lock timeout remains **Inconclusive**, not an established deadlock
+or proof of CPU starvation. See [court-write investigation](MATTER_COURT_WRITE_BOUNDS_2026-10-11.md).
+
+One original native SQL journal was independently recovered from retained pytest
+storage. Its SHA-256 is
+`1cc97fb78c03919fa17c08bf318acaa712d4e4d28f69a21c9b81963463ab61be`;
+both original and copied bytes agree. It positively retains the 55P03,
+directed Company-row wait and clean contender cleanup, not full-suite counts.
+Recovered path: `.tmp/recovered-docker-r2/failed-compliance-manual-sync-native-sql.jsonl`.
+Fresh unchanged-source original/counterpart replay completed **2/2**, six phases,
+two JUnit identities, no skip/failure, caller and pytest exit 0 in
+`.tmp/recovery-original-lock-r1`. It does not explain the prior timeout or replace
+complete Docker acceptance.
+
+Recovery review found an additional corpus finalization boundary: denied PDFs
+were retained by local ingestion but deleted by the remote driver's `finally`
+when run reload/commit raised before a summary returned. Eight actual-ingest
+controls (HC/SC, reload/commit failure, denial at first/second call) reproduced
+the loss with eight call failures, eight successful setups/teardowns and exit 1
+in `.tmp/corpus-finalization-recovery-red-r1`. The narrow staging-state fix
+passed all three complete affected files: **154 collected/calls passed, 462
+successful phases, 154 JUnit identities, zero skips/failures and both exits 0**
+in `.tmp/corpus-finalization-recovery-green-r1`. Pending bytes, accepted rows,
+bounded provider attempts and blocked restaging are asserted. This is scoped
+local proof, not combined Docker or production certification.
+
+Court recovery harness attempts remain preserved: r1 collected zero (malformed
+JUnit argument), r2 skipped all four (incorrect database environment variable),
+and r3 reproduced update hydration but two siblings stopped on invented ORM
+field assertions. These are not three successful bug reproductions. Corrected
+fixtures must finish actual write and downstream outcomes before work-bound RED.
+
+Corrected court r4 reproduced all three intended hydration failures after real
+outcome and access/lifecycle controls. The narrow writer opt-out then passed
+**68/68** across all three complete PostgreSQL files, 204 successful phases,
+68 JUnit identities, no skips/failures and both exits 0 in
+`.tmp/court-write-recovery-green-r1`. Locked getter work is two queries with no
+unrelated historical ORM materialization at 1/501 retained histories; default
+read hydration and all actual outputs remain. These scoped controls do not
+supersede the earlier full Docker failure or establish its original cause.
+
+Contract review found a shared helper treating financial denial as a transient
+provider error, retrying it and returning 422 with minute-retry advice. The
+narrow correction catches the typed denial on both call boundaries without
+changing caller transaction ownership. Corrected scoped RED r3 has **53
+collected, 24 intended call failures, 29 controls passed**, successful setup/
+teardown, no skips and both exits 1. GREEN r4 has **53/53 passed, 159 successful
+phases, 53 JUnit identities, no skips/failures, both exits 0**, with unchanged
+source hashes and exactly both requested files. Paths:
+`.tmp/contract-denial-recovery-r3red-narrow` / `r4green-narrow`.
+All four actual HTTP workflows preserve accepted rows; helper tests preserve
+uncommitted updates/inserts/deletes and reject cross-tenant access before calls.
+Earlier r1/r2 receipts for an exploratory transaction-release opt-in are
+superseded, not final acceptance. That opt-in was removed: safe transaction
+release needs separate post-provider source/access revalidation and race proof.
+The pre-existing contract transaction-ownership gap remains open.
+
+Fresh recovery raw receipts have also been copied outside the temporary checkout
+to `C:/Users/mishr/OneDrive/Documents/CaseOps/outputs/ai-budget-release-recovery-20261011`.
+This checkpoint preserves failures as well as replacement runs. New combined
+Docker evidence must be retained there too; scoped passes are not its substitute.
+
 The first Docker run at `ab07681ecbd27f9ce110f73ec664ec9c5fe74a5d` was
 intentionally interrupted after independent review found missing corpus-driver
 money-denial halt handling. Its journal retains 2,237 collected identities and

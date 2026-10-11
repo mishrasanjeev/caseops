@@ -1818,6 +1818,7 @@ def _get_matter_model(
     lock_for_update: bool = False,
     lock_for_share: bool = False,
     commit_access_denial: bool = True,
+    load_locked_children: bool = True,
 ) -> Matter:
     if lock_for_update and lock_for_share:
         raise ValueError("Matter lock cannot be both exclusive and shared.")
@@ -1838,7 +1839,7 @@ def _get_matter_model(
     if not matter:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     assert_access(session, context=context, matter=matter, commit_denial=commit_access_denial)
-    if lock_for_update or lock_for_share:
+    if (lock_for_update or lock_for_share) and load_locked_children:
         # The row lock is already held. Populate relationships in a separate,
         # non-locking statement so nullable eager joins never participate in
         # the PostgreSQL lock clause.
@@ -4762,6 +4763,7 @@ def create_matter_court_order(
         context=context,
         matter_id=matter_id,
         lock_for_update=True,
+        load_locked_children=False,
     )
     _assert_matter_not_disposed(matter, operation="add a court order")
 
@@ -4892,6 +4894,7 @@ def update_matter_court_order(
         context=context,
         matter_id=matter_id,
         lock_for_update=True,
+        load_locked_children=False,
     )
     _assert_matter_not_disposed(matter, operation="update a court order")
     order = session.scalar(
@@ -5349,6 +5352,7 @@ def create_matter_court_sync_import(
         context=context,
         matter_id=matter_id,
         lock_for_update=True,
+        load_locked_children=False,
     )
     _assert_matter_not_disposed(matter, operation="import court-sync data")
     sync_run = _persist_court_sync_import(

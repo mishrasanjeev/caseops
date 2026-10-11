@@ -1788,3 +1788,28 @@ requirements when using the fallback.
   as incomplete for that interaction. CI browser success requires an independent
   collected inventory, native per-test outcomes/skip reasons and completion
   bound to its actual checkout, retained even when the browser gate fails.
+- A locked scalar write must not reuse a workspace reader's broad historical
+  hydration unnecessarily. Bound both SQL count and ORM rows with small and
+  large retained histories, preserve default reader hydration and real downstream
+  outputs, and keep Company-first authority locks and original timeout budgets.
+  A filtered client-side SQL timing gap cannot establish server duration,
+  deadlock or CPU starvation; retain an unattributed failure until stronger proof.
+- Temporary release evidence can disappear with an uncommitted checkout.
+  Preserve a durable checkpoint before cleanup and distinguish historical
+  reported counts from independently readable artifacts after recovery. Missing
+  raw evidence requires fresh acceptance, never a reconstructed success claim.
+- A money-denied corpus driver must retain pending source bytes even when
+  ingestion-run reload or final commit raises before returning its summary.
+  Mark owned staging as retained before ingestion begins; clear that state only
+  after a normal, fully consumed return. Prove first-call and partial-batch
+  denial, both finalization failures, unchanged admitted rows and blocked restaging.
+- Recovery test launchers must read the actual fixture environment contract,
+  construct path-bearing arguments before assembling their PowerShell array,
+  and inspect the received arguments. Zero collection, skipped setup and invented
+  ORM fields are harness defects, not a reproduced bug or release acceptance.
+- Financial admission denial is not a transient LLM outage. Catch its typed
+  error before general provider retry at both first-call and retry boundaries,
+  preserve its safe actionable detail and earlier accepted rows, and regress
+  every shared caller. A denial-copy fix must not silently change caller
+  transaction ownership; releasing a read transaction requires fresh access
+  and source validation before any generated output or model-run persistence.

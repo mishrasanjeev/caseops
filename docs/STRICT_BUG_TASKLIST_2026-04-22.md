@@ -1,5 +1,15 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 11 Court-Write Investigation
+
+Native Company lock timeout: **Inconclusive**; no proven deadlock/CPU cause.
+Separate broad retained-history hydration under three court-write locks:
+**Partially fixed**, intended three-case RED and complete 68-case PostgreSQL
+GREEN independently reconciled. Neither hosted green CI nor the removed prior
+temporary artifacts certifies production. Preserve the recorded failed Docker
+R2 and require fresh complete replacement and dated live browser journeys.
+[Investigation](runbooks/MATTER_COURT_WRITE_BOUNDS_2026-10-11.md).
+
 ## October 11 Financial Denial Regressions
 
 **Partially fixed in source; not production-certified.** Independent review
@@ -7,8 +17,13 @@ reproduced continued batch submission, deletion of unprocessed ingest inputs,
 false source quarantine and exhausted summary transport retries after account
 money denial. Candidate amendments distinguish this operational stop from a
 corrupt source or ordinary provider failure. Compliance retains deterministic
-items while explicitly recording a deferred AI phase. Earlier harness/setup
-failures and incomplete Docker evidence remain retained; combined native,
+items while explicitly recording a deferred AI phase. Exploratory contract
+transaction-release receipts remain historical, not
+final acceptance. Additional corpus finalization retention passed all 154
+affected cases; contract typed-denial handling passed all 53 cases after 24
+intended RED failures. Contract transaction ownership is unchanged and its
+post-provider source/access revalidation work remains a separate open gap.
+Earlier harness/setup failures and incomplete Docker evidence remain retained; combined native,
 clean-image Docker, amended CI and exact-serving browser acceptance precede
 closure. [Evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
 

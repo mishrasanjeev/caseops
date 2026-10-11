@@ -56,6 +56,7 @@ from caseops_api.schemas.contracts import (
     PartyClauseItem,
     PartyClauseSourceEvidence,
 )
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
@@ -140,7 +141,7 @@ def _structured_with_retry(
         return payload, completion
     try:
         return _call(provider)
-    except LLMQuotaExhaustedError as exc:
+    except (AiMoneyBudgetError, LLMQuotaExhaustedError) as exc:
         raise provider_failure_http_exception(
             noun="contract intelligence result",
             exc=exc,
@@ -152,7 +153,7 @@ def _structured_with_retry(
         )
         try:
             return _call(provider)
-        except LLMQuotaExhaustedError as retry_exc:
+        except (AiMoneyBudgetError, LLMQuotaExhaustedError) as retry_exc:
             raise provider_failure_http_exception(
                 noun="contract intelligence result",
                 exc=retry_exc,

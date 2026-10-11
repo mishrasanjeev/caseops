@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## October 11 Court-Write Release Recovery
+
+Partially implemented / NO-GO: a shared workspace reader loads unrelated
+retained history under court-write authority locks. Bound SQL and ORM work while
+preserving default reads, lifecycle/ACL checks and real downstream effects.
+The narrow source bound now has three intended RED cases and complete 68-case
+native PostgreSQL GREEN. Corpus finalization retention passed all 154 affected
+cases; complete combined release acceptance remains required.
+The recorded Docker R2 failed one of 2,262 PostgreSQL cases; its original cause
+remains Inconclusive and browser phases did not run. Removed temporary evidence
+requires fresh acceptance, not reconstructed success. Hosted CI is scoped proof.
+[Investigation](runbooks/MATTER_COURT_WRITE_BOUNDS_2026-10-11.md).
+
 ## October 11 Shared AI Money Boundary
 
 Partially implemented / NO-GO until native acceptance and release: tenant

@@ -93,6 +93,8 @@ Financial denial must not become a permanent source-data failure:
 - Title embedding, ingestion and reembedding stop without deleting denied or
   unprocessed inputs. Remote HC/SC staging admits one owned batch per temp root;
   retained work blocks further staging rather than accumulating downloads.
+  Exceptional run reload/commit also retains the owned staging slot; a missing
+  summary is not evidence that pending files were consumed.
   Resume the retained PDFs with the local `--path` workflow after reconciliation;
   remove only confirmed-empty owned workdirs. Do not delete pending sources.
 - A hearing-update summary waits 15 minutes after financial denial without
@@ -103,8 +105,17 @@ Financial denial must not become a permanent source-data failure:
   run is not evidence that the AI phase completed.
 - Predictive classification does not quarantine a valid source or erase its
   earlier accepted classifications solely because financial admission failed.
+- Contract clause/obligation extraction, playbook comparison and party-clause
+  extraction return the safe financial-denial detail without another financial
+  retry. Earlier accepted clauses, obligations and rules remain unchanged.
 
 These are candidate recovery contracts, not production acceptance receipts.
+
+The contract-denial amendment does not change transaction ownership. The
+pre-existing contract helper retains the caller transaction across provider I/O;
+removing it safely requires separate post-provider access/source revalidation
+and races before any model-run or generated-row persistence. Do not add a
+rollback opt-in merely to make a denial test green or discard caller writes.
 
 Missing reconciliation is not a transient provider outage. Repeated clicks or
 an automatic retry cannot resolve it. Obtain current billing evidence, retain

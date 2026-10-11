@@ -1013,6 +1013,8 @@ def ingest_hc_from_s3(
                         overall.errors.append(f"s3:{key}: {exc}")
                         continue
 
+                # A failed finalization can raise after ingestion retained pending PDFs.
+                retain_workdir = True
                 batch_summary = ingest_local_directory(
                     session,
                     directory=workdir,
@@ -1033,11 +1035,11 @@ def ingest_hc_from_s3(
                 overall.errors.extend(batch_summary.errors)
                 if batch_summary.stop_reason:
                     overall.stop_reason = batch_summary.stop_reason
-                    retain_workdir = True
                     logger.warning(
                         "Corpus ingestion stopped; unprocessed PDFs retained at %s", workdir
                     )
                     return overall
+                retain_workdir = False
                 logger.info(
                     "[hc/%s %s] batch %d/%d done — processed=%d inserted=%d "
                     "skipped=%d failed=%d (totals: processed=%d inserted=%d)",
@@ -1124,6 +1126,7 @@ def ingest_sc_from_s3(
                 )
                 continue
 
+            retain_workdir = True
             batch_summary = ingest_local_directory(
                 session,
                 directory=extract_dir,
@@ -1143,9 +1146,9 @@ def ingest_sc_from_s3(
             overall.errors.extend(batch_summary.errors)
             if batch_summary.stop_reason:
                 overall.stop_reason = batch_summary.stop_reason
-                retain_workdir = True
                 logger.warning("Corpus ingestion stopped; unprocessed PDFs retained at %s", workdir)
                 return overall
+            retain_workdir = False
         finally:
             _finish_staging_workdir(workdir, root, retain=retain_workdir)
 

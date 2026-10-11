@@ -22,6 +22,11 @@ first Gemini candidate. Google lists it as generally available, with structured
 output and configurable thinking. That makes it a reasonable cost-sensitive
 candidate, not a certification that its legal answers are correct.
 
+Do not start a managed Gemini 2.5 Flash-Lite migration: Google lists its
+retirement on 20 October 2026. That managed-service date does not establish the
+Developer API's retirement. Gemini 3.5 Flash-Lite is another available evaluation
+candidate, released 21 July 2026, but a newer release is not legal-quality proof.
+
 The model page lists global/US/EU availability, not `asia-south1`. The CaseOps
 deployment region does not establish the model's processing location. Review
 processing, retention, contractual and tenant requirements before sending private
@@ -38,6 +43,7 @@ Official published standard text rates checked on 11 October 2026:
 | --- | ---: | ---: | ---: |
 | GPT-6 Luna, short context | 0.10 | 0.50 | USD 0.0020 |
 | Gemini 3.1 Flash-Lite, global | 0.25 | 1.50 | USD 0.0055 |
+| Gemini 3.5 Flash-Lite, global | 0.30 | 2.50 | USD 0.0080 |
 
 This illustration is arithmetic, not an observed legal request or an INR bill.
 Output includes billable reasoning, not only visible text. Cache, regional,
@@ -90,6 +96,8 @@ and the PRD retrieval benchmark remain independently required.
 ## Source References
 
 - [Google model capabilities and regions](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-lite)
+- [Google managed-model lifecycle](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions)
+- [Google 2.5 Flash-Lite retirement](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/2-5-flash-lite)
 - [Google Cloud managed-model pricing](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing)
 - [Google managed-service data retention](https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/zero-data-retention)
 - [Google spend caps and their limitations](https://docs.cloud.google.com/billing/docs/how-to/budgets-spend-caps)

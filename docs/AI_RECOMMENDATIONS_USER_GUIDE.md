@@ -4,13 +4,13 @@
 
 **Reviewed on 11 October 2026. Source-only documentation, not release acceptance.**
 
-This guide describes the controls implemented in the checkout whose Git HEAD is
+This guide describes the candidate in PR #533, based on
 `dfda0eb3ee3d109f86092962a08d125878b24932`. It was prepared by reading the
 recommendation pages, routes, services, schemas, permission rules, and error
-messages. No browser, test suite, provider call, payment, deployment, or live
-release-identity check was performed for this guide. Source in this shared
-checkout is being updated by the release owner; a new file or local change is
-not evidence that production serves it.
+messages. Source review is not browser, paid-provider or production acceptance.
+The release owner's independent test and serving-identity evidence is recorded
+in [the release ledger](runbooks/AI_BUDGET_RELEASE_2026-10-11.md). A new file,
+local change or green hosted check does not prove that production serves it.
 
 **October continues under the current behavior. Do not pause October AI use
 because of the new budget policy.** The current source implements the shared
@@ -433,9 +433,11 @@ call was run for this guide.
    acceptance, if later separately authorized, must retain a meaningful
    source-backed result and actual account evidence.
 
-No official pricing, privacy approval, comparative legal benchmark, free-tier
-eligibility, or live Gemini paid result was acquired in this source-only task.
-Those are open research/verification requirements, not completed findings.
+The [provider assessment](AI_PROVIDER_BUDGET_GEMINI_ASSESSMENT_2026-10-11.md)
+records dated official pricing and lifecycle sources. It does not establish
+privacy/region approval, comparative legal quality, free-tier eligibility or a
+live paid Gemini result. Those activation requirements remain open; the
+provider's newer release date or lower price is not legal-quality evidence.
 
 ## 10. Administrator Verification Checklist
 
@@ -523,9 +525,8 @@ line numbers identify the inspected source, not a production execution trace.
 | Paid SDK admission outside route-only enforcement | `apps/api/src/caseops_api/services/llm.py`, provider `generate()` implementations; `apps/api/src/caseops_api/services/embeddings.py:76`, `:85` |
 | PRD journey, stories and tests | `docs/PRD_CODEX_2026-04-23.md:980`, `:1443`, `:1576` |
 
-The release owner's provider adapters, budget settings, schema, guard, and
-initializer were being changed during this source-only review. Their line
-numbers, complete caller coverage, and deployed configuration require a fresh
-source/release check before final publication. Source implementation does not
-certify tests, migration execution, reconciled production policy, effective
-activation, unchanged financial accounting, or production deployment.
+Line references describe the inspected candidate; use the release ledger for
+the final accepted commit and serving identities. Source implementation and
+offline provider tests do not certify paid legal quality, reconciled production
+policy or effective account-wide activation. Dormant executors must use the
+same guarded adapters and authoritative database before they resume.

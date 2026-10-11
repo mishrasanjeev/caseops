@@ -1,5 +1,16 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 11 Court-Write Release Gate
+
+J08/M08/US-023/FT-042/043 and M02/SEC-003/004 remain production uncertified.
+Hosted PR #533 success does not close its recorded native 2,261-pass/one-fail
+Docker PostgreSQL gate or unexecuted browser inventory. A fresh bounded-history
+court-write regression and complete replacement are required after checkout
+recovery. Source court-write bounds now have three intended RED cases and
+68-case complete PostgreSQL GREEN; corpus finalization retention passed 154/154.
+Combined Docker/main/live gates remain open.
+[Investigation](runbooks/MATTER_COURT_WRITE_BOUNDS_2026-10-11.md).
+
 ## October 10 Summary Gate Repair
 
 Latest October 11 source scope also covers J05/M04, J08/M08, J09/M07,

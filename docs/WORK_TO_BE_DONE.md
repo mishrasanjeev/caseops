@@ -1,5 +1,15 @@
 # CaseOps  - Work To Be Done
 
+## October 11 Release Recovery
+
+NO-GO: PR #533's hosted CI is green but the recorded local Docker R2 failed
+one of 2,262 PostgreSQL cases before any browser phase. Recover the missing
+checkout/evidence with fresh tests. Court-write hydration is bounded in source,
+with intended RED and 68-case PostgreSQL GREEN; original timeout remains
+Inconclusive until stronger proof. Corpus finalization controls passed 154/154.
+Production remains `3dbf364d`; complete amended Docker/CI/main/live proof is
+required. [Investigation](runbooks/MATTER_COURT_WRITE_BOUNDS_2026-10-11.md).
+
 ## October 11 AI Money And Provider Gate
 
 In progress / not production-certified: shared INR 10,000 paid-AI admission,
