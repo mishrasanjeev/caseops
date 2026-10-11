@@ -139,6 +139,30 @@ resuming it against production credentials.
 
 ## Gemini Evaluation
 
+The owner selected exactly `gemini-3.5-flash-lite` as recommendations fallback,
+not a primary promotion. Candidate routing is opt-in; default activation is off
+and October's existing primary remains unchanged. It can operate only when the
+November-or-later shared money guard applies. Both transport attempts consume
+the same monthly ledger; neither aggregate exhaustion nor upstream credit/quota
+exhaustion qualifies for an availability switch.
+
+Runtime source settings are:
+
+- `CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED=false` by default.
+- `CASEOPS_LLM_RECOMMENDATION_FALLBACK_MODEL=gemini-3.5-flash-lite` is pinned.
+- `CASEOPS_LLM_GEMINI_PROJECT` is required for activation; no browser/API key
+  replaces the managed service's server-side ADC/IAM path.
+- `CASEOPS_LLM_GEMINI_LOCATION=global`; this is not India-only processing.
+
+Do not turn on these settings with an ad hoc production update. First retain
+reviewed processing/retention and tenant requirements, verify billed API/IAM
+readiness without a credit-bearing probe, reconcile an exact
+`gemini:gemini-3.5-flash-lite` price entry and current month baseline, then
+change guarded release configuration with its tests/readback and exact-SHA
+acceptance. No API/IAM activation, legal benchmark or production switch has
+been performed by this candidate. Free-tier credentials are not an exhausted
+budget workaround. Existing Voyage vectors are unchanged.
+
 See [the dated assessment](../AI_PROVIDER_BUDGET_GEMINI_ASSESSMENT_2026-10-11.md).
 Managed endpoint access, regional processing, retention, strict output, legal
 quality and cost parity remain separate acceptance gates. Never replace a paid

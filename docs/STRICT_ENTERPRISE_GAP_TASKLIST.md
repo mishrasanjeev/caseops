@@ -15,6 +15,14 @@ requires fresh acceptance, not reconstructed success. Hosted CI is scoped proof.
 
 ## October 11 Shared AI Money Boundary
 
+Selected fallback amendment: exactly `gemini-3.5-flash-lite`, recommendations
+only, opt-in disabled pending managed global processing/runtime review.
+Financial/quota/policy/refusal/schema/safety fences cannot trigger a switch.
+Current ACL/lifecycle/source state and the actual fallback model policy must
+be rechecked with no transaction retained across transport. Compare legal
+evidence before any primary promotion; replace intentionally interrupted R3
+with full amended acceptance. No live activation is claimed.
+
 Partially implemented / NO-GO until native acceptance and release: tenant
 credits and provider daily caps do not establish a shared money ceiling.
 New account-period admission retains conservative liability before transport,

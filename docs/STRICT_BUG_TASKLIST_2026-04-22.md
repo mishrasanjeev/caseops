@@ -12,6 +12,13 @@ R2 and require fresh complete replacement and dated live browser journeys.
 
 ## October 11 Financial Denial Regressions
 
+Fallback amendment remains **Inconclusive / not production-certified** until
+new native and end-user acceptance: exact owner-selected 3.5 Flash-Lite, native
+strict schema, availability-only recovery and no third transport attempt or
+financial/security/safety bypass. R3 was intentionally interrupted for this
+scope; retain its incomplete evidence. Global activation and comparative legal
+quality remain separate open dependencies, not a reason to call a mock correct.
+
 **Partially fixed in source; not production-certified.** Independent review
 reproduced continued batch submission, deletion of unprocessed ingest inputs,
 false source quarantine and exhausted summary transport retries after account

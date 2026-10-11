@@ -33,7 +33,7 @@ import time
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -237,6 +237,7 @@ def _safe_log_value(value: object, *, limit: int = 160) -> str:
 
 
 class _LLMOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     # Bounds widened 2026-04-28 (BUG-035) — OpenAI extraction model + GPT-5.1 routinely
     # generate longer rationales and 6+ options on richly-described
     # matters; the prior tight bounds tripped pydantic ValidationError
@@ -249,6 +250,7 @@ class _LLMOption(BaseModel):
 
 
 class _LLMAnalysis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     recommendation: str = Field(min_length=1, max_length=5000)
     risk_analysis: list[str] = Field(default_factory=list, max_length=12)
     legal_impact: list[str] = Field(default_factory=list, max_length=12)
@@ -258,6 +260,7 @@ class _LLMAnalysis(BaseModel):
 
 
 class _LLMResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=2, max_length=600)
     options: list[_LLMOption] = Field(min_length=1, max_length=10)
     primary_recommendation_label: str | None = None
@@ -1692,7 +1695,69 @@ def generate_recommendation(
         purpose=f"recommendation:{rec_type}",
     )
 
-    def _invoke(
+    from caseops_api.services.llm_recommendation_fallback import (
+        RecommendationFallbackPlan,
+        recommendation_fallback_enabled,
+    )
+
+    def _revalidate_before_provider() -> None:
+        nonlocal context
+        # Never discard surrounding writes or keep source locks while an ADC
+        # client is constructed. Reload current access and private input before
+        # either attempt, then let structured preflight authorize its real model.
+        if session.new or session.dirty or session.deleted:
+            raise RuntimeError("Recommendation provider preflight has pending writes.")
+        session.rollback()
+        from caseops_api.services.capabilities import membership_has_capability
+        from caseops_api.services.identity import get_session_context
+
+        context = get_session_context(
+            session,
+            _call_context.actor_membership_id,
+            token_issued_at=context.token_issued_at,
+        )
+        if context.company.id != _call_context.tenant_id or not membership_has_capability(
+            session, context.membership, "recommendations:generate",
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Current access does not allow recommendation generation.",
+            )
+        current = _load_matter(session, context=context, matter_id=matter_id)
+        current = require_operational_matter(
+            session, matter=current, operation="generate a recommendation",
+        )
+        current_messages = _build_prompt(
+            rec_type=rec_type,
+            matter=current,
+            authorities=retrieved,
+            objective=objective,
+            matter_intelligence_context=_build_matter_intelligence_context(session, current),
+        )
+        if (
+            current.lifecycle_version != source_lifecycle_version
+            or _prompt_hash(current_messages) != source_prompt_hash
+        ):
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The matter or its source material changed. No recommendation was saved.",
+            )
+        session.rollback()
+
+    fallback_plan = (
+        RecommendationFallbackPlan(
+            started_at=_t0,
+            primary_factory=lambda timeout: build_provider(
+                purpose=PURPOSE_RECOMMENDATIONS, timeout_seconds=timeout,
+            ),
+            revalidate=_revalidate_before_provider,
+        )
+        if provider is None and llm.name == "openai" and recommendation_fallback_enabled()
+        else None
+    )
+
+    def _invoke_one(
         active: LLMProvider, active_messages: list[LLMMessage]
     ) -> tuple[_LLMResponse, LLMCompletion]:
         return generate_structured(
@@ -1706,19 +1771,16 @@ def generate_recommendation(
             release_session_before_provider=True,
         )
 
-    # 2026-04-30: gpt-5.1-only path. The prior hosted LLM→OpenAI extraction model→OpenAI
-    # ladder burned ~3x tokens per click; with hosted LLM credits gone
-    # and the OpenAI bill now the single line item, one primary call is
-    # all we want. LLMProviderError covers quota / 5xx / format / timeout.
-    #
-    # Ram BUG-029 (2026-05-01) — recommendations 502 reopen, GPT-5.1
-    # occasionally returns malformed JSON (~1-2% of long structured
-    # outputs). Without a fallback ladder a single transient format
-    # error puts the user on a 502. Single retry on LLMResponseFormatError
-    # specifically — same provider, same model, same prompt. Most format
-    # errors clear on retry because the model's JSON output is non-
-    # deterministic at temperature > 0. Quota / 5xx / timeout still 502
-    # immediately (retry won't help upstream outages).
+    def _invoke(
+        active: LLMProvider, active_messages: list[LLMMessage]
+    ) -> tuple[_LLMResponse, LLMCompletion]:
+        if fallback_plan is not None:
+            return fallback_plan.run(active_messages, _invoke_one)
+        return _invoke_one(active, active_messages)
+
+    # Preserve October's existing same-model format/safety repair. When the
+    # November availability fallback is enabled, both repairs consume the same
+    # two-attempt deadline; a refusal or invalid answer cannot switch models.
     provider_retry_used = False
     safety_repair_category: str | None = None
     safety_repair_error: str | None = None
@@ -1787,6 +1849,21 @@ def generate_recommendation(
     # the terminal commit makes disposal and recommendation persistence
     # mutually exclusive.
     session.commit()
+    if fallback_plan is not None:
+        _revalidate_before_provider()
+        from caseops_api.services.tenant_ai_policy import is_model_allowed, resolve_tenant_policy
+
+        current_policy = resolve_tenant_policy(session, company_id=context.company.id)
+        if not is_model_allowed(
+            current_policy, purpose=_call_context.purpose, model=completion.model,
+        ):
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "The current AI policy no longer permits this recommendation. No output saved."
+                ),
+            )
     matter = _load_matter(session, context=context, matter_id=matter_id)
     matter = require_operational_matter(
         session,
@@ -1975,6 +2052,7 @@ def generate_recommendation(
             "option_count": len(cleaned_options),
             "verified_citations": total_verified_citations,
             "confidence": confidence,
+            **(fallback_plan.audit_metadata() if fallback_plan is not None else {}),
             "safety_repair": {
                 "attempted": safety_repair_category is not None,
                 "source_category": safety_repair_category,

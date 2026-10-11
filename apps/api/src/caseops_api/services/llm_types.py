@@ -9,6 +9,10 @@ class LLMProviderError(RuntimeError):
     """Raised when a provider call cannot be completed."""
 
 
+class LLMTransientProviderError(LLMProviderError):
+    """Raised only for a temporary transport or non-quota availability failure."""
+
+
 class LLMResponseFormatError(LLMProviderError):
     """Raised when the provider returned text but it did not validate."""
 

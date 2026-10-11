@@ -1813,3 +1813,10 @@ requirements when using the fallback.
   every shared caller. A denial-copy fix must not silently change caller
   transaction ownership; releasing a read transaction requires fresh access
   and source validation before any generated output or model-run persistence.
+- A cross-provider fallback is a fresh legal-data disclosure and spending
+  boundary. Recheck current access, lifecycle, source facts and the actual
+  model's tenant policy; reserve both attempts inside one allowance. Switch
+  only on typed availability failures, never credit/money/policy/schema/safety
+  denials. Share a bounded attempt/deadline budget with output repairs and
+  prove the no-paid marker before construction and dispatch. A stable/newer
+  model or valid JSON cannot establish comparative legal quality.

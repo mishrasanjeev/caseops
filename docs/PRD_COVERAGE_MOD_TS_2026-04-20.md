@@ -2,6 +2,13 @@
 
 ## October 11 Court-Write Release Gate
 
+Additional J09/M07/US-026-028/FT-034-036 and J14/M14 coverage is required for
+the owner's exact `gemini-3.5-flash-lite` fallback selection: native closed
+schema, availability-only routing, current policy/source/lifecycle fencing,
+aggregate reservations and a shared two-attempt deadline. Primary promotion
+and live global activation remain unverified; interrupted Docker R3 is not
+acceptance. [Current evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
 J08/M08/US-023/FT-042/043 and M02/SEC-003/004 remain production uncertified.
 Hosted PR #533 success does not close its recorded native 2,261-pass/one-fail
 Docker PostgreSQL gate or unexecuted browser inventory. A fresh bounded-history

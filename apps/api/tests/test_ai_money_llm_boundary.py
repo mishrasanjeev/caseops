@@ -482,12 +482,19 @@ def test_openai_legacy_fake_object_fallback_reserves_the_actual_default_two_retr
 
 
 @pytest.mark.parametrize("timeout,retries", [(3.5, 0), (None, 4)])
-def test_gemini_reserves_utf8_contents_and_known_constructor_attempts(boundary, timeout, retries):
+def test_gemini_reserves_complete_utf8_request_and_known_constructor_attempts(
+    boundary, timeout, retries
+):
     with _offline_request(boundary):
         _call(_adapter("gemini", timeout=timeout), "gemini")
     wire = boundary.transports[0][1]
-    input_bytes = len(json.dumps(wire["contents"], ensure_ascii=False).encode("utf-8"))
-    assert input_bytes > len(json.dumps(wire["contents"], ensure_ascii=False))
+    utf8_bytes = len(json.dumps(wire, ensure_ascii=False).encode("utf-8"))
+    assert utf8_bytes > len(json.dumps(wire, ensure_ascii=False))
+    input_bytes = len(json.dumps(wire, ensure_ascii=True).encode("utf-8"))
+    assert input_bytes >= utf8_bytes
+    assert wire["config"]["system_instruction"]["parts"] == [
+        {"text": _messages()[0].content}
+    ]
     assert boundary.reservations == [
         dict(
             provider="gemini",
@@ -585,9 +592,11 @@ def test_sdk_error_keeps_the_charge_without_adapter_retry_or_open_admission_tran
     boundary.outcome = outcome
     with _offline_request(boundary), pytest.raises(llm.LLMProviderError) as caught:
         _call(_adapter(mode), mode)
-    assert isinstance(
-        caught.value.__cause__, TimeoutError if outcome == "timeout" else RuntimeError
+    assert type(caught.value) is (
+        llm.LLMTransientProviderError if outcome == "timeout" else llm.LLMProviderError
     )
+    assert caught.value.__cause__ is None and caught.value.__suppress_context__
+    assert "private" not in str(caught.value)
     assert boundary.events == ["reserve", "admitted", mode]
     _assert_charge_retained(boundary)
 

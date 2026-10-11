@@ -424,9 +424,15 @@ def test_native_gemini_default_and_bounded_constructor_attempts_are_fully_reserv
     body = json.loads(state.requests[0].content)
     assert body["generationConfig"]["maxOutputTokens"] == 1024
     contents = [{"role": "user", "parts": [{"text": _messages()[0].content}]}]
+    expected_request = {
+        "model": _MODELS["gemini"],
+        "contents": contents,
+        "config": {"max_output_tokens": 1024, "temperature": 0.7},
+    }
     assert state.reservations[0]["input_bytes"] == (
-        len(json.dumps(contents, ensure_ascii=False).encode("utf-8")) + 4096
+        len(json.dumps(expected_request, ensure_ascii=True).encode("utf-8")) + 4096
     )
+    assert state.reservations[0]["input_bytes"] >= len(state.requests[0].content) + 4096
     _retained(state, attempts)
 
 

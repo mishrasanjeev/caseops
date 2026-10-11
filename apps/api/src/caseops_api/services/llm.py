@@ -41,6 +41,7 @@ from caseops_api.services.llm_types import (
     LLMProviderError,
     LLMQuotaExhaustedError,
     LLMResponseFormatError,
+    LLMTransientProviderError,
     ModelRunWriter,
 )
 
@@ -787,11 +788,31 @@ class OpenAIProvider:
         return wire_bytes
 
     def _raise_call_error(self, exc: Exception) -> NoReturn:
-        if _is_quota_exhausted(exc):
+        body = getattr(exc, "body", None)
+        error = body.get("error", body) if isinstance(body, dict) else None
+        error_code = error.get("code") if isinstance(error, dict) else None
+        if _is_quota_exhausted(exc) or error_code in _QUOTA_EXHAUSTED_MARKERS:
             raise LLMQuotaExhaustedError(
-                f"OpenAI quota exhausted: {exc}",
-            ) from exc
-        raise LLMProviderError(f"OpenAI call failed: {exc}") from exc
+                "OpenAI quota exhausted. Check the provider billing account.",
+            ) from None
+        import httpx
+
+        network_types = tuple(
+            error_type
+            for name in ("APIConnectionError", "APITimeoutError")
+            if isinstance(error_type := getattr(self._openai, name, None), type)
+        )
+        if (
+            isinstance(
+                exc, (TimeoutError, ConnectionError, httpx.TimeoutException, httpx.NetworkError)
+            )
+            or isinstance(exc, network_types)
+            or getattr(exc, "status_code", None) in {408, 429, 500, 502, 503, 504}
+        ):
+            raise LLMTransientProviderError(
+                "OpenAI is temporarily unavailable or the request timed out."
+            ) from None
+        raise LLMProviderError("OpenAI call failed. Check provider configuration.") from None
 
     def generate(
         self,
@@ -899,11 +920,38 @@ class OpenAIProvider:
 
 
 class GeminiProvider:
-    """Thin adapter around google-genai. The hosted path for Gemma 4 family."""
+    """Budget-guarded Google GenAI adapter; routing belongs to the caller."""
 
     name = "gemini"
 
-    def __init__(self, *, model: str, api_key: str, timeout_seconds: float | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str | None = None,
+        project: str | None = None,
+        location: str = "global",
+        timeout_seconds: float | None = None,
+    ) -> None:
+        import math
+
+        if timeout_seconds is not None and (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (float, int))
+            or not math.isfinite(timeout_seconds)
+            or timeout_seconds < 0.001
+        ):
+            raise LLMProviderError("Gemini requires a finite positive timeout of at least 1 ms.")
+        if project is not None and (
+            not isinstance(project, str)
+            or not project.strip()
+            or api_key
+            or not isinstance(location, str)
+            or not location.strip()
+        ):
+            raise LLMProviderError("Gemini requires one explicit credential path and a location.")
+        if project is None and not api_key:
+            raise LLMProviderError("Gemini requires an API key or a managed Google Cloud project.")
         try:
             from google import genai  # type: ignore[import-not-found]
         except ImportError as exc:
@@ -911,15 +959,236 @@ class GeminiProvider:
                 "The 'google-genai' package is not installed. Run "
                 "'uv add google-genai' and set CASEOPS_LLM_PROVIDER=gemini.",
             ) from exc
-        client_options = {}
-        if timeout_seconds is not None:
+        client_options: dict[str, Any] = {}
+        bounded_timeout = (
+            timeout_seconds if timeout_seconds is not None else (60.0 if project else None)
+        )
+        if bounded_timeout is not None:
             client_options["http_options"] = {
-                "timeout": int(timeout_seconds * 1000),
+                "timeout": int(bounded_timeout * 1000),
                 "retry_options": {"attempts": 1},
             }
-        self._client = genai.Client(api_key=api_key, **client_options)
+        if project:
+            client_options.update(vertexai=True, project=project.strip(), location=location.strip())
+            client_options["http_options"]["api_version"] = "v1"
+        else:
+            client_options["api_key"] = api_key
+        try:
+            self._client = genai.Client(**client_options)
+        except Exception:
+            raise LLMProviderError("Gemini client configuration is unavailable.") from None
         self.model = model
-        self._budget_retry_count = 0 if timeout_seconds is not None else 4
+        self._budget_retry_count = 0 if bounded_timeout is not None else 4
+
+    def _request_kwargs(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float,
+        max_tokens: int,
+        schema: type[BaseModel] | None = None,
+    ) -> dict[str, Any]:
+        chat = [
+            message for message in messages if message.role != "system" and message.content.strip()
+        ]
+        if self.model == "gemini-3.5-flash-lite" and chat and chat[-1].role == "assistant":
+            raise LLMProviderError("Gemini 3.5 Flash-Lite does not accept an assistant prefill.")
+        if any(message.role not in {"system", "user", "assistant"} for message in messages):
+            raise LLMProviderError("Gemini received an unsupported message role.")
+        config: dict[str, Any] = {"max_output_tokens": max_tokens}
+        if self.model != "gemini-3.5-flash-lite":
+            config["temperature"] = temperature
+        system, _ = _split_system_and_chat(messages)
+        if system:
+            config["system_instruction"] = {"role": "user", "parts": [{"text": system}]}
+        if schema is not None:
+            config.update(
+                response_mime_type="application/json",
+                response_json_schema=self._strict_json_schema(schema),
+            )
+        return {
+            "model": self.model,
+            "contents": _messages_to_gemini(
+                chat
+                if self.model == "gemini-3.5-flash-lite"
+                else [message for message in messages if message.role != "system"]
+            ),
+            "config": config,
+        }
+
+    @staticmethod
+    def _strict_json_schema(schema: type[BaseModel]) -> dict[str, Any]:
+        contract = schema.model_json_schema()
+
+        def close(node: Any) -> None:
+            if not isinstance(node, dict):
+                raise LLMProviderError("Gemini requires a closed structured response schema.")
+            if not any(
+                key in node for key in ("type", "$ref", "enum", "const", "anyOf", "oneOf", "allOf")
+            ):
+                raise LLMProviderError("Gemini requires a closed structured response schema.")
+            if node.get("type") == "object" or "properties" in node:
+                # An arbitrary mapping cannot be made strict by silently dropping
+                # its values. Fail before reserving spend instead.
+                if "properties" not in node or (
+                    "additionalProperties" in node and node["additionalProperties"] is not False
+                ):
+                    raise LLMProviderError("Gemini requires a closed structured response schema.")
+                node["additionalProperties"] = False
+            # Visit schema nodes, not property-name/description/discriminator maps.
+            for key in ("properties", "$defs", "definitions"):
+                for child in node.get(key, {}).values():
+                    close(child)
+            for key in ("anyOf", "oneOf", "allOf", "prefixItems"):
+                for child in node.get(key, []):
+                    close(child)
+            for key in ("items", "not", "if", "then", "else", "contains"):
+                if key in node:
+                    if isinstance(node[key], list):
+                        for child in node[key]:
+                            close(child)
+                    else:
+                        child = node[key]
+                        close(child)
+
+        close(contract)
+        return contract
+
+    def _raise_call_error(self, exc: Exception) -> NoReturn:
+        import httpx
+        import requests
+
+        code = getattr(exc, "code", None)
+        status_code = code if isinstance(code, int) else getattr(exc, "status_code", None)
+        quota_markers = (
+            "quota exceeded",
+            "exceeded your quota",
+            "quota_exceeded",
+            "quota exhausted",
+            "quotafailure",
+            "billing disabled",
+            "billing_not_active",
+        )
+        if (
+            _is_quota_exhausted(exc)
+            or status_code == 402
+            or any(marker in str(exc).lower() for marker in quota_markers)
+        ):
+            raise LLMQuotaExhaustedError(
+                "Gemini quota exhausted. Check the provider billing account."
+            ) from None
+        if isinstance(
+            exc,
+            (
+                TimeoutError,
+                ConnectionError,
+                httpx.TimeoutException,
+                httpx.NetworkError,
+                requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError,
+            ),
+        ) or (status_code in {408, 429, 500, 502, 503, 504}):
+            raise LLMTransientProviderError(
+                "Gemini is temporarily unavailable or the request timed out."
+            ) from None
+        raise LLMProviderError("Gemini call failed. Check provider configuration.") from None
+
+    def _call(self, kwargs: dict[str, Any]) -> tuple[Any, float]:
+        started = time.perf_counter()
+        admission = reserve_paid_ai_call(
+            provider=self.name,
+            model=self.model,
+            # Include system instructions, exact closed schema and output config.
+            # ASCII escaping is conservative beside the SDK's JSON encoding.
+            input_bytes=len(json.dumps(kwargs, ensure_ascii=True).encode("utf-8")) + 4096,
+            # GenerateContent's cap includes visible and thought tokens:
+            # https://ai.google.dev/gemini-api/docs/generate-content/thinking#token-limits-and-max_output_tokens
+            output_tokens=kwargs["config"]["max_output_tokens"],
+            retry_count=getattr(self, "_budget_retry_count", 4),
+        )
+        assert_paid_ai_dispatch(admission)
+        try:
+            return self._client.models.generate_content(**kwargs), started
+        except Exception as exc:
+            self._raise_call_error(exc)
+
+    def _completion_from_response(
+        self,
+        response: Any,
+        *,
+        started: float,
+        structured: bool = False,
+        text_override: str | None = None,
+    ) -> LLMCompletion:
+        feedback = getattr(response, "prompt_feedback", None)
+        block = getattr(feedback, "block_reason", None)
+        if block and getattr(block, "value", block) != "BLOCKED_REASON_UNSPECIFIED":
+            raise LLMResponseFormatError("Gemini declined the supplied prompt.")
+        candidates = getattr(response, "candidates", None) or []
+        if structured and len(candidates) != 1:
+            raise LLMResponseFormatError("Gemini returned no complete structured candidate.")
+        for candidate in candidates:
+            finish = getattr(candidate, "finish_reason", None)
+            if (
+                (structured and getattr(finish, "value", finish) != "STOP")
+                or (
+                    finish
+                    and getattr(finish, "value", finish)
+                    not in {"STOP", "FINISH_REASON_UNSPECIFIED"}
+                )
+                or getattr(candidate, "refusal", None)
+                or any(
+                    getattr(rating, "blocked", False)
+                    for rating in getattr(candidate, "safety_ratings", None) or []
+                )
+            ):
+                raise LLMResponseFormatError("Gemini did not complete an unrestricted response.")
+        try:
+            text = (
+                text_override
+                if text_override is not None
+                else (getattr(response, "text", "") or "")
+            )
+            usage = getattr(response, "usage_metadata", None)
+            if usage is not None and not any(
+                hasattr(usage, field)
+                for field in (
+                    "prompt_token_count",
+                    "candidates_token_count",
+                    "thoughts_token_count",
+                    "total_token_count",
+                )
+            ):
+                raise ValueError("Invalid usage metadata container.")
+
+            def counter(field: str) -> int:
+                value = getattr(usage, field, None)
+                if value is None:
+                    return 0
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ValueError("Invalid usage counter.")
+                return value
+
+            prompt = counter("prompt_token_count")
+            candidate_tokens = counter("candidates_token_count")
+            thoughts = counter("thoughts_token_count")
+            total = getattr(usage, "total_token_count", None)
+            output = (
+                max(candidate_tokens + thoughts, counter("total_token_count") - prompt, 0)
+                if total is not None
+                else candidate_tokens + thoughts
+            )
+        except (ValueError, TypeError, AttributeError):
+            raise LLMResponseFormatError("Gemini returned unreadable response metadata.") from None
+        return LLMCompletion(
+            text=text,
+            provider=self.name,
+            model=self.model,
+            prompt_tokens=prompt,
+            completion_tokens=output,
+            latency_ms=max(1, int((time.perf_counter() - started) * 1000)),
+            raw=response,
+        )
 
     def generate(
         self,
@@ -928,41 +1197,31 @@ class GeminiProvider:
         temperature: float = 0.2,
         max_tokens: int = 1024,
     ) -> LLMCompletion:
-        contents = _messages_to_gemini(messages)
-        started = time.perf_counter()
-        # Unknown/unreviewed Gemini rates are rejected by the same account
-        # ledger; switching providers is never a budget-exhaustion bypass.
-        admission = reserve_paid_ai_call(
-            provider=self.name,
-            model=self.model,
-            input_bytes=len(json.dumps(contents, ensure_ascii=False).encode("utf-8")) + 4096,
-            output_tokens=max_tokens,
-            retry_count=getattr(self, "_budget_retry_count", 4),
+        kwargs = self._request_kwargs(messages, temperature=temperature, max_tokens=max_tokens)
+        response, started = self._call(kwargs)
+        return self._completion_from_response(response, started=started)
+
+    def generate_structured[T: BaseModel](
+        self,
+        messages: list[LLMMessage],
+        *,
+        schema: type[T],
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+    ) -> LLMCompletion:
+        kwargs = self._request_kwargs(
+            messages, temperature=temperature, max_tokens=max_tokens, schema=schema
         )
-        assert_paid_ai_dispatch(admission)
+        response, started = self._call(kwargs)
+        completion = self._completion_from_response(response, started=started, structured=True)
         try:
-            response = self._client.models.generate_content(
-                model=self.model,
-                contents=contents,
-                config={
-                    "temperature": temperature,
-                    "max_output_tokens": max_tokens,
-                },
-            )
-        except Exception as exc:
-            raise LLMProviderError(f"Gemini call failed: {exc}") from exc
-        elapsed_ms = max(1, int((time.perf_counter() - started) * 1000))
-        text = getattr(response, "text", "") or ""
-        usage = getattr(response, "usage_metadata", None)
-        return LLMCompletion(
-            text=text,
-            provider=self.name,
-            model=self.model,
-            prompt_tokens=int(getattr(usage, "prompt_token_count", 0) or 0),
-            completion_tokens=int(getattr(usage, "candidates_token_count", 0) or 0),
-            latency_ms=elapsed_ms,
-            raw=response,
-        )
+            validated = schema.model_validate_json(completion.text, extra="forbid")
+        except (ValidationError, ValueError, TypeError):
+            raise LLMResponseFormatError(
+                "Gemini returned a value outside the required schema."
+            ) from None
+        completion.text = validated.model_dump_json()
+        return completion
 
 
 def _split_system_and_chat(
@@ -1021,7 +1280,9 @@ def _resolve_model_for_purpose(settings: object, purpose: str | None) -> str:
     return getattr(settings, "llm_model", "") or "caseops-mock-1"
 
 
-def build_provider(purpose: str | None = None) -> LLMProvider:
+def build_provider(
+    purpose: str | None = None, *, timeout_seconds: float | None = None
+) -> LLMProvider:
     settings = get_settings()
     if paid_providers_blocked_for_request():
         # Browser and API regression suites carry a request-scoped marker.
@@ -1030,7 +1291,7 @@ def build_provider(purpose: str | None = None) -> LLMProvider:
         # Keep the configured model identity so tenant allow-lists remain an
         # independently enforced boundary; ModelRun still records provider=mock.
         return MockProvider(model=_resolve_model_for_purpose(settings, purpose))
-    inner = _build_inner_provider(settings, purpose)
+    inner = _build_inner_provider(settings, purpose, timeout_seconds=timeout_seconds)
     # Cassette wrapping is opt-in (off by default). Sprint 11 offline
     # eval: capture once with credentials in `record` mode, replay
     # forever in CI in `replay` mode.
@@ -1043,7 +1304,12 @@ def build_provider(purpose: str | None = None) -> LLMProvider:
     )
 
 
-def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
+def _build_inner_provider(
+    settings: object,
+    purpose: str | None,
+    *,
+    timeout_seconds: float | None = None,
+) -> LLMProvider:
     provider_name = settings.llm_provider.lower()
     model = _resolve_model_for_purpose(settings, purpose)
     if provider_name in {"mock", "noop", "off"}:
@@ -1052,7 +1318,20 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
         raise LLMProviderError(
             "CASEOPS_LLM_PROVIDER='anthropic' is retired; use 'openai'.",
         )
-    if not settings.llm_api_key:
+    if timeout_seconds is not None:
+        import math
+
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (float, int))
+            or not math.isfinite(timeout_seconds)
+            or timeout_seconds < 0.001
+        ):
+            raise LLMProviderError("LLM requires a finite positive timeout of at least 1 ms.")
+    managed_project = (
+        getattr(settings, "llm_gemini_project", None) if provider_name == "gemini" else None
+    )
+    if not settings.llm_api_key and not managed_project:
         raise LLMProviderError(
             f"CASEOPS_LLM_API_KEY must be set when CASEOPS_LLM_PROVIDER={provider_name!r}.",
         )
@@ -1095,17 +1374,26 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
     if provider_name == "openai" and purpose == PURPOSE_METADATA_EXTRACT:
         retries_for_purpose = 0
     if provider_name == "gemini":
+        gemini_options: dict[str, Any] = {
+            "timeout_seconds": timeout_seconds
+            if timeout_seconds is not None
+            else (45.0 if purpose == "case_tracking:update_summary" else None),
+        }
+        if managed_project:
+            gemini_options.update(
+                project=managed_project, location=getattr(settings, "llm_gemini_location", "global")
+            )
         return GeminiProvider(
             model=model or "gemini-2.5-pro",
-            api_key=settings.llm_api_key,
-            timeout_seconds=45.0 if purpose == "case_tracking:update_summary" else None,
+            api_key=None if managed_project else settings.llm_api_key,
+            **gemini_options,
         )
     if provider_name == "openai":
         return OpenAIProvider(
             model=model or "gpt-5.1",
             api_key=settings.llm_api_key,
-            timeout_seconds=timeout_for_purpose,
-            max_retries=retries_for_purpose,
+            timeout_seconds=timeout_seconds if timeout_seconds is not None else timeout_for_purpose,
+            max_retries=0 if timeout_seconds is not None else retries_for_purpose,
         )
     raise LLMProviderError(
         f"Unknown CASEOPS_LLM_PROVIDER value: {provider_name!r}. "

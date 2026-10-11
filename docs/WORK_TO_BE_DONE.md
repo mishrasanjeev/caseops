@@ -12,6 +12,13 @@ required. [Investigation](runbooks/MATTER_COURT_WRITE_BOUNDS_2026-10-11.md).
 
 ## October 11 AI Money And Provider Gate
 
+New scope: owner-selected `gemini-3.5-flash-lite` recommendations fallback,
+not a primary promotion. Default managed activation remains off pending global
+processing/retention and runtime review. Preserve October and share November's
+INR 10,000 ceiling. Docker R3 on `5a66c091` was intentionally interrupted
+(169 passed calls/no completion); replace it after the fallback amendment.
+No old or scoped green result certifies the new tree or live provider.
+
 In progress / not production-certified: shared INR 10,000 paid-AI admission,
 October exemption, model request compatibility, detailed recommendation guide
 and a model-neutral public article. Require complete money/transport/concurrency

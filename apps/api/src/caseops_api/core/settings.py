@@ -1,6 +1,7 @@
 import hmac
 from datetime import datetime
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -388,6 +389,16 @@ class Settings(BaseSettings):
     llm_model_metadata_extract: str | None = Field(default=None)
     llm_model_eval: str | None = Field(default=None)
     llm_api_key: str | None = Field(default=None)
+    # Recommendations-only availability fallback. Live activation requires
+    # reviewed managed-service processing terms, ADC/IAM and reconciled prices.
+    llm_recommendation_fallback_enabled: bool = Field(default=False)
+    llm_recommendation_fallback_model: Literal["gemini-3.5-flash-lite"] = (
+        "gemini-3.5-flash-lite"
+    )
+    llm_gemini_project: str | None = Field(
+        default=None, pattern=r"^[a-z][a-z0-9-]{4,61}[a-z0-9]$"
+    )
+    llm_gemini_location: Literal["global"] = "global"
     # 2026-05-01: $/day cap on Layer 2 corpus metadata extraction
     # (services/corpus_structured.py). Set to 0 or negative to fall
     # back to the hardcoded $20 default. The cap is enforced
@@ -511,6 +522,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 "CASEOPS_AUTH_SECRET must be set to a non-placeholder value when "
                 f"CASEOPS_ENV={self.env!r}.",
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _require_managed_recommendation_fallback_project(self) -> "Settings":
+        if self.llm_recommendation_fallback_enabled and not self.llm_gemini_project:
+            raise ValueError(
+                "Recommendation fallback requires CASEOPS_LLM_GEMINI_PROJECT "
+                "for the paid managed endpoint; an API key is not a substitute."
             )
         return self
 

@@ -14,6 +14,67 @@ or October pause was changed during local implementation.
 
 ## Completed Local Evidence
 
+### Selected Fallback Amendment
+
+The latest owner instruction selects exactly `gemini-3.5-flash-lite` as fallback.
+It is not promoted to primary: no like-for-like legal benchmark establishes an
+advantage over Luna, and official standard token rates are higher. October's
+primary stays unchanged. Recommendations-only opt-in routing and managed native
+structured output are being added; live global processing/retention review,
+API/IAM/ADC, paid-path evidence and the November billing baseline remain open.
+No automated paid call is permitted and budget exhaustion cannot trigger a
+provider switch. Upstream quota/credit exhaustion also remains fail-closed.
+
+Native adapter receipts are retained in `gemini-adapter-*` beside the recovery
+outputs. Initial RED has 100 call failures/14 controls; usage RED has 27 call
+failures/146 controls. The agent's frozen six-file GREEN has 269 passed calls,
+807 phases, no skips and completion exit 0, including 173 native adapter cases.
+An expanded eight-file run remains failed (355 passed/12 failed). Every failure
+was read independently: six contents-only byte expectations and six raw-cause
+expectations predate complete request reservation and exception sanitization.
+The replacement keeps liability, actual SDK attempt and transaction assertions;
+it must rerun both complete historical files, not only the passing adapter file.
+
+Routing RED r1 reproduced four intended HTTP failures with 12 passing controls.
+Exploratory GREEN r1 passed 52 but was not the frozen combined candidate. R2
+retains 19 passed/6 failed calls: four dynamic client fixtures reset the configured
+provider, and two role fixtures incorrectly treated Member as non-generating.
+These are harness errors, not six product reproductions. Activation now follows
+client bootstrap and Viewer supplies the genuine denied-capability case. R3
+completed all four requested recommendation files: 71 passed, 213 phases,
+71 JUnit identities, no skips/failures and exit 0; its four PostgreSQL cases
+were explicitly deselected and still require the native gate. It also proves
+policy revocation during fallback, no third call after malformed/unsafe output,
+retained rejected-model evidence and current actor/access rejection. The larger
+frozen combined run and full amended Docker/CI/live gates remain required.
+
+Combined frozen offline replacement completed all **18 requested files**, with
+591 collected/passed calls, 1,773 successful setup/call/teardown phases, 591
+JUnit identities, no skips/failures/errors, no unknown/missing phase identities
+and caller/session exits 0 in `fallback-combined-frozen-r1`. It includes every
+native adapter and both complete previously failing historical files (61 + 37
+cases), recommendation journeys, event-loop responsiveness, money admission,
+embedding, classification, compliance and contract denial controls. All eight
+PostgreSQL-selected cases were explicitly excluded by `-m 'not postgres'`; this
+is not complete native Docker or production acceptance. Whole API source/test
+Ruff, governance registry/map, change-relative governance, migration preflight
+and diff checks pass. No paid transport or runtime activation occurred.
+
+Docker R3 on `5a66c0910c0d0c6243b18ceb2446a1f23c843fcf` was intentionally
+interrupted to implement this new scope. The retained native journal has 2,266
+collected identities, 169 passed calls, 508 phase reports, zero failed reports
+and **no session completion event**. It is incomplete, not a replacement for
+failed R2. The exact owned pytest process tree was stopped and reaped; only its
+label-verified Docker project/volumes/networks were removed. Results remain at
+`outputs/ai-budget-release-recovery-20261011/docker-r3` in the original checkout.
+The amended tree requires a new full acceptance run and fresh CI.
+
+The separate exact-image `5a66c091` public-content run completed 26 tests with
+zero skipped/flaky/unexpected results. Its inventory, native JSON and inspected
+desktop/mobile screenshots are retained in `docker-public-content-r1` beside
+R3. This is public-content proof for that candidate only, not fallback, whole
+application or production acceptance.
+
 - Python 3.13.14, repository locked API dependencies; incompatible OneDrive
   hardlink installation was retained and replaced by a successful copy-mode sync.
 - Node 22.14.0 fresh production build passed. Earlier Node 24 type checking was

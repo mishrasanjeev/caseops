@@ -32,9 +32,15 @@ execution, not only HTTP routes. Full caller coverage still requires verificatio
 
 There is no verified INR 10,000 budget dashboard, switch, warning threshold, or
 cap-exhaustion recovery button to instruct a user to click. The old proposed
-budget amounts are superseded. Gemini migration or fallback is under evaluation,
-not an authorized production switch. A paid fallback cannot bypass the shared
-ceiling. See Section 9 for the source-implementation and verification boundaries.
+budget amounts are superseded. The owner selected **`gemini-3.5-flash-lite` as
+fallback**, not a new primary. Recommendations-only opt-in fallback through the
+managed Google Cloud endpoint is being implemented; it remains off by default
+until reviewed runtime configuration and acceptance are established. The plan
+is eligible only from November 2026 (IST), while the shared money guard applies
+and is enabled, with an explicit managed project. Selection is not proof of live
+activation. October's existing primary is unchanged, and promotion over Luna
+requires an actual comparative legal benchmark. A paid fallback cannot bypass
+the shared ceiling. See Section 9 for the verification boundaries.
 
 AI Recommendations is **decision support for a lawyer**, not legal advice, a
 prediction of success, a filing, or an automatic instruction to a court or
@@ -341,7 +347,7 @@ permissions, billing, and availability.
 | A capability denial or tenant AI-policy denial | Ask the workspace administrator to verify effective permissions and the recommendation policy. Changing an assistant toggle or using another account is not recovery. |
 | AI token quota exceeded. Contact your workspace admin to adjust the monthly token policy. | Ask an authorized admin to inspect Monthly token governance. Do not equate token quota with an INR ceiling or remove a quota without approved policy. |
 | AI credit balance is insufficient for this action. | Ask a workspace owner/admin to inspect subscription credits and eligible top-ups. A payment screen or checkout redirect alone does not prove credits were granted. |
-| Configured AI provider quota is exhausted; restore or top up provider credits, then retry; no output was saved | The provider account operator must resolve that provider's quota/billing. Buying CaseOps subscription credits alone may not resolve provider-account exhaustion. |
+| Configured AI provider quota is exhausted; restore or top up provider credits, then retry; no output was saved | The provider account operator must resolve that provider's quota/billing. Upstream quota or credit exhaustion never triggers the Gemini fallback. Buying CaseOps subscription credits alone may not resolve provider-account exhaustion. |
 | Authority retrieval is temporarily unavailable | Wait for retrieval recovery; do not classify it as an empty corpus or fabricate supporting sources. Escalate persistent failures. |
 | Provider timeout, temporary upstream error, or connection failure | Wait as directed, inspect the current saved list/audit first, then make at most one deliberate new request after recovery. An interrupted response can have an uncertain outcome. Do not automatically replay a mutation. |
 | AI monthly spending is awaiting reconciliation. No external request was sent. | This refusal is implemented in the future-period guard's source, not verified as a live UI state here. At or after the start month, the operator must reconcile the month's opening spend and pricing policy before paid admission. A missing policy is not an unused allowance. |
@@ -381,7 +387,7 @@ copyable failure receipt. Ask an authorized operator to correlate it. Do not
 send passwords, API keys, session cookies, authorization headers, or unnecessary
 private document content in a support report.
 
-## 9. New Shared Budget And Gemini Evaluation Status
+## 9. Shared Budget And Selected Gemini Fallback
 
 Operators should use the [shared spending reconciliation runbook](runbooks/ai-spending-reconciliation.md)
 for initialization, evidence retention and exhaustion diagnosis. Its conservative
@@ -394,6 +400,13 @@ This section distinguishes **current source implementation** from owner directio
 and **unverified deployment or runtime behavior**. No budget initializer or paid
 call was run for this guide.
 
+The selected fallback is **`gemini-3.5-flash-lite`**, superseding the earlier
+3.1-first evaluation proposal. Its published standard text rates are not cheaper
+than Luna's; the [dated assessment](AI_PROVIDER_BUDGET_GEMINI_ASSESSMENT_2026-10-11.md#price-comparison)
+contains the official rates and illustrative arithmetic, not measured request
+cost or a provider invoice. Neither a cost comparison nor GA availability
+proves better legal results. No primary promotion has been accepted here.
+
 | Item | Status and boundary |
 | --- | --- |
 | October operations | Continue current behavior. The new guard's source bypasses October because the current month is before its configured `2026-11` start, even though enabled defaults to true. No October pause was introduced here. Existing policy/readiness restrictions remain. |
@@ -403,18 +416,58 @@ call was run for this guide.
 | All-provider coverage | Admission is implemented at paid SDK boundaries, not only API routes; the required scope includes jobs and local/CLI callers as well as primary, fallback, retry/repair, embedding/reranking, and any paid retrieval/lookup. Full coverage and supported cost bounds remain verification work; unsupported charge paths must fail closed once the guard applies. No paid provider or execution mode may evade the aggregate cap. Stricter existing provider limits do not create a separate spending allowance. |
 | Budget UI | No INR budget dashboard, warning control, or recovery button was verified. Existing token and subscription-credit screens are not a dashboard for this shared money policy. |
 | Gemini capability in source | An adapter and provider-factory branch exist. That is not proof of configured credentials, privacy approval, sufficient legal quality, cost coverage, full AI-call parity, or production readiness. |
-| Full move to Gemini | Evaluation requested; no production switch authorized or performed. Users do not select a provider from this recommendation page. |
-| Gemini after another provider's quota exhaustion | A prospective availability fallback, subject to authorization and remaining shared capacity. It is not automatically configured or accepted here. |
+| Selected fallback | Exactly `gemini-3.5-flash-lite`; recommendations-only opt-in managed Google Cloud routing, off by default. Eligible only from November 2026 (IST) with the applicable money guard enabled and explicit managed-project configuration. Reviewed runtime activation and deployment remain unverified. Users do not select a provider on this page. |
+| Primary or full migration | No promotion over Luna without an actual like-for-like legal benchmark establishing superiority. Luna is the comparison target, not an assertion about the serving model. Preserve October's existing primary; no full-product Gemini switch is established. |
+| Availability recovery | Typed eligibility is limited to network timeout/connection failure or HTTP 408, non-quota 429, 500, 502, 503 or 504, with current authorization and remaining shared allowance. No other provider failure qualifies. Runtime acceptance remains open. |
+| Refusals that cannot trigger fallback | Upstream quota/credit exhaustion, authentication/configuration failure, financial admission/exhaustion, the no-paid-provider marker, tenant policy, access/lifecycle/source denial, legal-safety refusal and schema/content rejection are never fallback triggers. Switching models must not hide a refused or malformed answer. |
 | Gemini after the shared cap is exhausted | A paid fallback must be denied by the same aggregate cap. Different pricing or a different credential does not replenish the allowance. Do not assume an API tier is free. |
+| Processing location and private data | Google lists global/US/EU availability, not `asia-south1`. Review processing/retention/contractual and tenant requirements before activation. Never send private legal data to a free Gemini/AI Studio API as a budget workaround. |
 | Deployment and paid acceptance | Not checked for this guide. Record exact serving API/web revisions and acceptance separately before describing any new control or provider change as live. |
 
-### Evidence Needed Before Any Gemini Switch
+### Candidate Operator Settings And Request Limits
 
-1. **Legal benchmark:** compare identical approved legal scenarios, full source
-   texts and expected results. Measure citation identity and proposition fidelity,
+These are the release owner's exact candidate settings, **not verified serving
+configuration or an instruction to enable fallback now**:
+
+| Variable | Candidate value and requirement |
+| --- | --- |
+| `CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED` | `false` by default; keep off pending reviewed activation. |
+| `CASEOPS_LLM_RECOMMENDATION_FALLBACK_MODEL` | Pinned to `gemini-3.5-flash-lite`. |
+| `CASEOPS_LLM_GEMINI_PROJECT` | Required only for opt-in; use an explicit managed Google Cloud project with independently verified billing/API/IAM/ADC readiness. |
+| `CASEOPS_LLM_GEMINI_LOCATION` | Pinned to `global`; owner confirmation of location and retention is pending. |
+
+No API or IAM changes were made for this guide. The pending confirmation is not
+approval: the owner has not replied to the Google global endpoint authorization
+request. Keep `CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED=false`; November's
+arrival does not activate fallback automatically. October stays unchanged;
+opting in cannot enable this plan before November or while the applicable shared
+budget guard is disabled.
+
+The routing plan shares **at most two total provider attempts** across primary,
+fallback and existing bounded format/safety repair. SDK retries are **zero**.
+A primary attempt has at most **45 seconds**, a fallback attempt at most **40
+seconds**, each clipped to the remaining **100-second deadline that starts
+before retrieval**. Retrieval/preflight reduce the remaining time. A consumed
+second attempt leaves no third attempt for fallback or repair. These are source
+contract limits, not proven live latency or paid-provider acceptance.
+
+The release-owner checkpoint records **full Docker R3 on `5a66c091` as
+intentionally interrupted** because the fallback scope changed. That gate is
+incomplete. Its earlier 26 public-content Playwright passes and scoped green
+results do not cover the new fallback or certify production. The amended
+candidate needs fresh complete gates and exact live replay before this guide
+can describe it as deployed.
+
+### Evidence Needed Before Activation Or Primary Promotion
+
+1. **Legal benchmark:** compare Luna and the selected fallback on identical
+   approved legal scenarios, full source texts and expected results. Measure
+   citation identity and proposition fidelity,
    contrary holdings, missing-fact handling, unsafe/refusal behavior, and
    structured-output validity. Do not judge quality from a successful HTTP status
-   or a persuasive sample answer.
+   or a persuasive sample answer. Retain exact model/configuration, reviewer
+   findings and actual cost/latency evidence; promotion stays open without a
+   demonstrated comparative advantage, not an invented score.
 2. **Pricing and accounting:** review current official terms and input, output,
    reasoning, cached-token and any auxiliary charges; retain dated evidence.
    Reconcile native usage, currency conversion and conservative reservations
@@ -426,7 +479,15 @@ call was run for this guide.
 4. **Runtime parity:** prove strict-output handling, total deadlines, bounded
    retries, source and lifecycle revalidation, audit/accounting durability,
    cancellation/crash recovery, and no duplicate side effects across callers.
-   Existing adapter presence cannot establish these controls.
+   Existing adapter presence cannot establish these controls. For 3.5, use
+   native GenerateContent JSON-schema output and system instructions; omit
+   deprecated sampling settings and reject prefilled final model turns.
+   [Google's compatibility guidance](https://ai.google.dev/gemini-api/docs/generate-content/whats-new-gemini-3.6#api-changes-and-parameter-updates)
+   is an implementation requirement, not runtime proof. Prove the shared
+   two-attempt maximum, zero SDK retries and remaining-deadline clipping,
+   including overlap with format/safety repair. Preserve upstream quota/credit,
+   auth/configuration, money, policy, safety and schema/content refusals instead
+   of routing them to fallback.
 5. **Release readiness:** validate supported credentials and SDK/runtime,
    purpose-specific policy, migration compatibility and regression coverage;
    use the guarded exact-SHA release process and live replay. A paid human
@@ -437,7 +498,7 @@ The [provider assessment](AI_PROVIDER_BUDGET_GEMINI_ASSESSMENT_2026-10-11.md)
 records dated official pricing and lifecycle sources. It does not establish
 privacy/region approval, comparative legal quality, free-tier eligibility or a
 live paid Gemini result. Those activation requirements remain open; the
-provider's newer release date or lower price is not legal-quality evidence.
+provider's newer release date or a price comparison is not legal-quality evidence.
 
 ## 10. Administrator Verification Checklist
 
@@ -452,6 +513,10 @@ Before circulating this as instructions for a particular production release:
   verified to make the AI return output.
 - [ ] Confirm server-side provider readiness and approved privacy/terms without
   exposing secret values. No model name or API key is needed in user instructions.
+- [ ] Keep recommendations-only Gemini fallback opt-in disabled until its
+  managed endpoint/location, billed-project API access, IAM/ADC, privacy/retention
+  and reviewed runtime settings are proved. Do not broaden it to other AI
+  workflows or promote it to primary without comparative legal evidence.
 - [ ] Distinguish provider-account quota, CaseOps subscription credits, existing
   token quotas, and the source-implemented shared money policy when diagnosing
   a refusal.
@@ -516,6 +581,8 @@ line numbers identify the inspected source, not a production execution trace.
 | Actual admin token controls | `apps/web/components/app/TenantAIPolicyCard.tsx:249` |
 | Actual billing/usage/top-up screens | `apps/web/app/app/admin/billing/page.tsx:354`, `:599`; `apps/web/app/app/admin/billing/usage/page.tsx:239` |
 | Gemini adapter and factory branch, not switch acceptance | `apps/api/src/caseops_api/services/llm.py:863`, `:1048` |
+| Candidate fallback settings and project validation, not live activation | `apps/api/src/caseops_api/core/settings.py`, `llm_recommendation_fallback_enabled`, `llm_recommendation_fallback_model`, `llm_gemini_project`, `llm_gemini_location` |
+| Candidate shared attempt/deadline plan, not runtime acceptance | `apps/api/src/caseops_api/services/llm_recommendation_fallback.py`, `RecommendationFallbackPlan`, `recommendation_fallback_enabled()` |
 | Automated no-paid provider selection | `apps/api/src/caseops_api/services/llm.py`, `build_provider()`; `apps/api/src/caseops_api/core/automated_test_context.py:34` |
 | Default-on guard and November start setting | `apps/api/src/caseops_api/core/settings.py:376`, `:492` |
 | IST start-month condition and missing-policy refusal | `apps/api/src/caseops_api/services/ai_money_budget.py:44`, `:48`, `:112` |
