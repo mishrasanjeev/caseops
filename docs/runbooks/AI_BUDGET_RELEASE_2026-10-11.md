@@ -344,6 +344,48 @@ No production mutation or provider activation occurred. Retain every failed and
 interrupted receipt under the durable recovery directory; replace them with a
 fresh frozen-candidate gate, not a selective rerun presented as full acceptance.
 
+## Native CI Capacity Checkpoint
+
+CI run `38133373299` on `9667ad02` completed cancelled, not green. Native
+PostgreSQL shard 1 reached the existing 12-minute job budget after 571 of its
+576 calls passed. Its 1,713 emitted phases passed, but it has no completion
+event or JUnit. Shards 2, 3 and 4 each completed all 575 selected calls and
+1,725 phases, with exit 0 and matching JUnit. Their canonical 2,301-node
+inventories agree; the selected union contains every node exactly once. The
+aggregate correctly failed. Retained evidence is
+`ci-9667ad02-native-reconciliation.json` and the four individual artifact
+directories. A partial timeout is incomplete, not a successful pytest gate
+or a demonstrated product failure.
+
+All 13 API coverage shards, combined API coverage, web, Ruff, security and
+CodeQL passed. The dependent hosted browser gate skipped; that is not browser
+acceptance. Native shard 2's 11m50s job also had insufficient growth headroom.
+The capacity amendment uses eight native shards and at most four simultaneous
+native runners, without raising the 12-minute timeout, reducing the inventory
+or relaxing aggregate reconciliation. Regression coverage must execute the
+actual workflow launcher configuration and prove complete non-overlapping
+selection, count agreement and the unchanged timeout/concurrency contract.
+The capacity amendment still needs its own current hosted acceptance.
+
+Its local intended RED has 28 collected cases: 27 passing calls and one
+capacity-contract failure, successful setup/teardown and exit 1. Frozen
+bounded GREEN has all 28 shard cases plus the separately collected amended
+deployment contract, 87 passing phases, matching JUnit and both exits 0.
+Source hashes agree. The complete Windows adjacent attempt remains incomplete
+and failing: 201 hardening cases, 183 passing calls, four inspected failures,
+one POSIX-only skip and 13 unfinished. Each failure reports the external
+offline shell allowlist's omitted `seq`; the 900-second bound ended without
+completion/JUnit. This is not clean full coverage. Preserve it and require
+fresh complete hosted coverage of the current files, including POSIX controls.
+Receipt: `ci-shard-capacity-r1/bounded-final-receipt.json`. No production
+deploy behavior, provider fence or unrelated assertion was weakened.
+
+Clean-image Docker R5 remains running at frozen `9667ad02` with no test filter.
+This capacity amendment is being prepared in a separate checkout; it does not
+alter or retroactively certify that gate. The amended release still requires
+current Docker, green hosted CI, canonical merge, guarded deployment and exact
+serving browser acceptance. Production provider configuration is unchanged.
+
 ## User Documents
 
 - [Recommendations user guide](../AI_RECOMMENDATIONS_USER_GUIDE.md)

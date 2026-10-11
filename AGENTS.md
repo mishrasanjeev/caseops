@@ -1836,3 +1836,8 @@ requirements when using the fallback.
 - A model HTTP timeout is not the whole recommendation deadline. Authentication,
   construction and financial admission consume the same absolute allowance;
   reject expired dispatch and results without refunding a potentially paid call.
+- A growing native PostgreSQL inventory needs bounded work per runner and peak
+  concurrency, not a larger job timeout. Reconcile every shard's canonical and
+  selected identities with the exact union and complete results. A timed-out
+  shard with only passing reports but no completion/JUnit remains incomplete;
+  retain that evidence and require a complete replacement before release.

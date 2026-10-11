@@ -250,13 +250,15 @@ jobs:
     # FK ON DELETE SET NULL, JSONB roundtrip, server_default=false,
     # and migrations under batch_alter_table on a real PG dialect.
     # See apps/api/tests/test_postgres_validation.py for what's covered.
-    name: Postgres + pgvector shard ${{ matrix.shard }}/4
+    name: Postgres + pgvector shard ${{ matrix.shard }}/${{ matrix.total_shards }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
-        shard: [1, 2, 3, 4]
+        total_shards: [8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     services:
       postgres:
         # pgvector-on-pg17 image — same backend version as prod Cloud SQL.
@@ -338,7 +340,7 @@ jobs:
           CASEOPS_AUTH_SECRET: pg-validation-secret-at-least-32-bytes
           CASEOPS_TEST_RESULT_JOURNAL: postgres-shard-${{ matrix.shard }}.jsonl
           PYTEST_ADDOPTS: >-
-            -p tests.postgres_sharding --postgres-shard=${{ matrix.shard }} --postgres-shards=4
+            -p tests.postgres_sharding --postgres-shard=${{ matrix.shard }} --postgres-shards=${{ matrix.total_shards }}
             --postgres-inventory=postgres-shard-${{ matrix.shard }}.json
             --junitxml=postgres-shard-${{ matrix.shard }}.xml
         run: uv run python -m pytest -q -m postgres
@@ -376,7 +378,7 @@ jobs:
           merge-multiple: true
       - name: Reconcile complete PostgreSQL acceptance
         working-directory: apps/api
-        run: uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence --total 4
+        run: uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence --total 8
 
   web:
     name: Web (typecheck + vitest + build)

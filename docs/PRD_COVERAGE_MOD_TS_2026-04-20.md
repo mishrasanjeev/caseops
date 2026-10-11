@@ -2,6 +2,14 @@
 
 ## October 11 Court-Write Release Gate
 
+Current native coverage is incomplete on `9667ad02`: shard 1 timed out at
+12 minutes after 571/576 passing calls, with no completion/JUnit. Other native
+shards completed, but the aggregate failed and hosted browser acceptance
+skipped. Capacity regression must keep the complete 2,301-node inventory,
+unchanged timeout and bounded concurrency while lowering work per runner.
+Eight-shard current hosted and exact release acceptance remain required;
+full Docker R5 is still running separately on frozen `9667ad02`.
+
 Additional J09/M07/US-026-028/FT-034-036 and J14/M14 coverage is required for
 the owner's exact `gemini-3.5-flash-lite` fallback selection: native closed
 schema, availability-only routing, current policy/source/lifecycle fencing,

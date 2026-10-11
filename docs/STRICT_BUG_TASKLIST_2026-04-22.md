@@ -2,6 +2,14 @@
 
 ## October 11 Court-Write Investigation
 
+Native CI timeout: **Inconclusive** until the complete capacity replacement
+runs. On `9667ad02`, shard 1 passed 571/576 calls before its 12-minute job
+timeout, with no completion/JUnit and no reported pytest failure. All other
+native shards passed; exact selection covers all 2,301 identities, but the
+aggregate failed and hosted browsers skipped. Reduce per-runner work with
+eight shards/four-runner peak, preserve timeout/assertions and rerun completely.
+Do not call a partial timed-out run a fixed bug or release acceptance.
+
 Native Company lock timeout: **Inconclusive**; no proven deadlock/CPU cause.
 Separate broad retained-history hydration under three court-write locks:
 **Partially fixed**, intended three-case RED and complete 68-case PostgreSQL

@@ -2,6 +2,13 @@
 
 ## October 11 Court-Write Release Recovery
 
+Native CI capacity remains **Partially fixed / NO-GO** pending current hosted
+proof: `9667ad02` shard 1 timed out with 571/576 passing calls and no completion
+or JUnit. Preserve its failed aggregate and skipped hosted browser gate. Use
+eight shards, bounded four-runner peak and the unchanged 12-minute timeout,
+with exact all-node reconciliation; no selective pass certifies this release.
+Frozen full Docker R5 on `9667ad02` is still in progress in a separate checkout.
+
 Partially implemented / NO-GO: a shared workspace reader loads unrelated
 retained history under court-write authority locks. Bound SQL and ORM work while
 preserving default reads, lifecycle/ACL checks and real downstream effects.

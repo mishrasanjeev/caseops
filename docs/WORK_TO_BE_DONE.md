@@ -2,6 +2,13 @@
 
 ## October 11 Release Recovery
 
+Current `9667ad02` hosted gate is NO-GO: native shard 1 timed out at 12 minutes
+after 571/576 passing calls, without completion/JUnit. The other three native
+shards and all API/web/security checks passed, but hosted browser acceptance
+skipped. Retain the incomplete gate; lower native work per runner using eight
+shards with at most four simultaneous runners and unchanged timeout/inventory.
+Fresh amended acceptance remains required. Frozen Docker R5 continues separately.
+
 NO-GO: earlier PR #533 hosted CI was green, but `67fab368` failed PostgreSQL
 shards 1/3/4 and its aggregate; cancelled shard 2's retained native journal also
 completed with one failure. The shared fixture's no-paid
