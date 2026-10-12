@@ -170,6 +170,29 @@
   the gate green. Expired monitoring series are not zero instances, and a
   release handoff must not depend on an unbounded historical polling loop.
 
+## Permanent Organic Growth Instructions
+
+- The owner-authorized Google Search Console account is
+  `sanjeev@orchestrum.in`; the property is `https://caseops.ai/`. Verify the
+  signed-in identity before use. This is an account preference, not a password
+  or authorization to expand Google permissions or buy a connector subscription.
+- Run qualified SEO/AEO work once daily through the existing
+  `caseops-daily-seo-and-aeo` heartbeat. Target law firms, general counsels and
+  solo lawyers; develop global discovery without presenting India-specific
+  court, source, tax or provider coverage as worldwide support. Read the current
+  growth plan, execution guide and dated evidence before choosing the next task.
+- Optimize qualified discovery and durable demo admission, not raw impressions.
+  Use mature dates and equal comparison windows; query/page aggregates need not
+  equal property totals. Never treat a lead's page-source field as proof that
+  it came from organic search, or promise rankings, leads or adoption.
+- Reconcile old SEO issues with exact serving source and live browser evidence
+  before repeating a fix. Separate implemented admission, actual saved lead,
+  notification delivery, reviewed retention and consent. Google's live noindex
+  test is not proof that its stored index has removed the URL. Preserve all
+  prior failed or pending evidence and the owner's server-side-only privacy choice.
+
+## Additional Regression Instructions
+
 - Multi-tenant Docker fixture preparation and inspection must amortize process
   startup without reusing tenant authorization or database sessions. Preserve
   real worker executions, raw persisted snapshots, responsive/source/replay
