@@ -2,6 +2,17 @@
 
 ## October 12 Combined Candidate
 
+QG-SEC-004/J19/M21 context follow-up: native scratch export reproduces 17
+unlisted app/test descendants admitted by parent negations. Extend both SDK
+and Docker synthetic inventories with the complete nine builder inputs, two
+safe web files and all17 sibling canaries. Docker needs six descendant resets;
+each independent removed-reset control must positively admit only its exact
+sibling family. Keep the prior RED and full amended release acceptance open.
+
+The five-case native replacement passes with exact74-file safe inventories and
+all six positive removed-reset controls. Its earlier memory-exhausted failure
+and superseded2ade incomplete native run remain preserved; no main/live claim.
+
 Resumed October 12 IST: complete narrow current native inventory is74 tail
 plus24 court cases,294 phases, zero failures/skips, original identities and
 source bindings preserved. Actual court-import preparation defect has bounded

@@ -2,6 +2,23 @@
 
 ## October 12 Combined Release
 
+13:40 UTC security follow-up: real network-disabled Docker scratch export of
+frozen2ade admits 17 unlisted app/test canaries (91 files versus74 intended),
+while every required builder/material file and prior exclusion survives. This
+proves context widening, not actual credential exposure, SDK upload or runtime
+image inclusion. Add descendant resets for all six reopened ancestors, retain
+the real RED tar, and independently remove each reset in regression controls.
+The original2ade full Docker gate remains frozen; amended source needs fresh
+complete Docker/CI/main/live acceptance before any deployment verdict.
+
+The amended native context replacement passes all five unittest identities,
+including seven real Docker exports (positive plus six independent negative
+controls) and actual SDK traversal. Both synthetic engines retain exactly74
+approved inputs; SDK excludes34 and Docker35 configured canaries. The first
+replacement failed to spawn tools under Windows commit exhaustion; its complete
+errors remain retained separately. Superseded2ade Docker was intentionally
+interrupted, not certified, and all its owned resources were cleaned up.
+
 Resumed release checkpoint, October 12 IST: the old frozen9c local Docker gate
 completed naturally with 2,617/2,623 PostgreSQL passes and six failures, zero
 skips/errors; browsers did not run. Its full RED journal/JUnit/diagnostics and

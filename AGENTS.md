@@ -14,6 +14,9 @@
   A parent negation can admit unintended Docker descendants, while a double
   star can prune SDK traversal. Test exact approved files, private-document
   siblings and environment variants; retain only the reviewed public example.
+  Regress every reopened app/test ancestor, nested fixture/support sibling and
+  retained auth state, not just docs. Remove each descendant reset independently
+  in native Docker negative controls while preserving the complete builder inputs.
   Guard every newly uploaded input against dirty release labeling.
 - Docker context success and Git leaf-ignore checks do not certify gcloud's
   directory traversal. Reconcile the native SDK upload inventory before Cloud

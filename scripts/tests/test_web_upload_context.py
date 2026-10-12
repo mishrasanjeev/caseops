@@ -14,6 +14,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = "license-policy/reviewed-packages.json"
 REVIEW = "docs/security/js-license-compliance-review-2026-10-12.md"
+BUILDER_INPUTS = {
+    "package.json", "package-lock.json", "apps/web/Dockerfile", "apps/web/package.json",
+    "tests/fixtures/statutes/structured-schedule-api.json",
+    *(f"tests/e2e/support/{name}.ts" for name in (
+        "prod-failure-diagnostics", "bounded-network-evidence",
+        "prod-api-response-evidence", "cost-controls",
+    )),
+}
+SAFE_WEB_INPUTS = {"apps/web/app/page.tsx", "apps/web/public/fake-safe.txt"}
+SIBLING_CANARIES = {
+    "apps/api/.env", "apps/api/private-sibling.txt", "apps/api/src/private-sibling.txt",
+    "apps/api/tests/private-sibling.txt", "apps/other-private/canary.txt",
+    "apps/other-private/deep/canary.txt", "tests/auth/canary.json",
+    "tests/auth/deep/state.json", "tests/e2e/.auth/fake-state.json",
+    "tests/e2e/support/deep/unlisted-helper.ts", "tests/e2e/support/unlisted-helper.ts",
+    "tests/e2e/unlisted.spec.ts", "tests/fixtures/statutes/deep/unlisted.json",
+    "tests/fixtures/statutes/unlisted.json", "tests/fixtures/unlisted.json",
+    "tests/other-private/canary.txt", "tests/unlisted.txt",
+}
 
 
 class NativeUploadTests(unittest.TestCase):
@@ -81,15 +100,7 @@ class NativeUploadTests(unittest.TestCase):
         required_operator = {name for name in self.required if name.startswith("license-policy/")}
         self.assertEqual(operator, required_operator)
         self.assertEqual(len(operator), 55)
-        builder = {
-            "package.json", "package-lock.json", "apps/web/Dockerfile", "apps/web/package.json",
-            "tests/fixtures/statutes/structured-schedule-api.json",
-            *(f"tests/e2e/support/{name}.ts" for name in (
-                "prod-failure-diagnostics", "bounded-network-evidence",
-                "prod-api-response-evidence", "cost-controls",
-            )),
-        }
-        self.assertTrue(builder <= present, f"Missing builder inputs: {sorted(builder - present)}")
+        self.assertTrue(BUILDER_INPUTS <= present, f"Missing builder inputs: {sorted(BUILDER_INPUTS - present)}")
 
     def test_real_traversal_includes_records_and_excludes_secret_canaries(self):
         forbidden = {
@@ -102,12 +113,12 @@ class NativeUploadTests(unittest.TestCase):
             "docs/security/private-source.txt", "docs/security/private/source.txt",
             "docs/marketing/private.txt",
         }
-        self.files(self.required | forbidden)
+        self.files(self.required | BUILDER_INPUTS | SAFE_WEB_INPUTS | forbidden | SIBLING_CANARIES)
         example = "apps/web/.env.local.example"
         self.files({example})
         (self.upload / ".gcloudignore").write_bytes((ROOT / ".gcloudignore").read_bytes())
         present = self.discover(self.upload)
-        self.assertEqual(present, self.required | {example})
+        self.assertEqual(present, self.required | BUILDER_INPUTS | SAFE_WEB_INPUTS | {example})
 
     def test_double_star_parent_pruning_is_a_positive_negative_control(self):
         self.files(self.required)
@@ -125,8 +136,6 @@ class NativeUploadTests(unittest.TestCase):
         self.assertFalse(any(name.startswith("license-policy/") for name in present))
 
     def test_docker_context_retains_records_but_excludes_environment_variants(self):
-        docker = shutil.which("docker")
-        self.assertIsNotNone(docker, "Native Docker required; context gate must not skip")
         forbidden = {
             "apps/web/.env", "apps/web/.env.local", "apps/web/.env.production",
             "apps/web/.env.staging", "apps/web/.env.test", "apps/web/.env.production.local",
@@ -138,13 +147,47 @@ class NativeUploadTests(unittest.TestCase):
             "docs/marketing/private.txt",
         }
         example = "apps/web/.env.local.example"
-        self.files(self.required | forbidden | {example})
+        safe = self.required | BUILDER_INPUTS | SAFE_WEB_INPUTS | {example}
+        self.files(safe | forbidden | SIBLING_CANARIES)
+        present = self.docker_context((ROOT / ".dockerignore").read_bytes())
+        self.assertEqual(present, {f"context/{name}" for name in safe})
+
+    def test_docker_parent_resets_exclude_each_reincluded_sibling(self):
+        safe = self.required | BUILDER_INPUTS | SAFE_WEB_INPUTS | {"apps/web/.env.local.example"}
+        self.files(safe | SIBLING_CANARIES)
+        original = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+        controls = {
+            "apps/**": {name for name in SIBLING_CANARIES if name.startswith("apps/")},
+            "tests/**": {
+                "tests/auth/canary.json", "tests/auth/deep/state.json",
+                "tests/other-private/canary.txt", "tests/unlisted.txt",
+            },
+            "tests/fixtures/**": {"tests/fixtures/unlisted.json"},
+            "tests/fixtures/statutes/**": {
+                "tests/fixtures/statutes/unlisted.json", "tests/fixtures/statutes/deep/unlisted.json",
+            },
+            "tests/e2e/**": {"tests/e2e/.auth/fake-state.json", "tests/e2e/unlisted.spec.ts"},
+            "tests/e2e/support/**": {
+                "tests/e2e/support/unlisted-helper.ts", "tests/e2e/support/deep/unlisted-helper.ts",
+            },
+        }
+        self.assertEqual(set().union(*controls.values()), SIBLING_CANARIES)
+        for index, (rule, leaked) in enumerate(controls.items()):
+            with self.subTest(rule=rule):
+                self.assertEqual(original.splitlines().count(rule), 1)
+                changed = original.replace(f"{rule}\n", "")
+                present = self.docker_context(changed.encode("utf-8"), suffix=str(index))
+                self.assertEqual(present, {f"context/{name}" for name in safe | leaked})
+
+    def docker_context(self, contents, *, suffix="positive"):
+        docker = shutil.which("docker")
+        self.assertIsNotNone(docker, "Native Docker required; context gate must not skip")
         ignore = self.upload / ".dockerignore"
-        ignore.write_bytes((ROOT / ".dockerignore").read_bytes())
+        ignore.write_bytes(contents)
         before = hashlib.sha256(ignore.read_bytes()).hexdigest()
         dockerfile = self.directory / "fixture.Dockerfile"
         dockerfile.write_text("FROM scratch\nCOPY . /context/\n", encoding="utf-8")
-        archive = self.directory / "context.tar"
+        archive = self.directory / f"context-{suffix}.tar"
         command = [
             docker, "build", "--network", "none", "--file", str(dockerfile),
             "--output", f"type=tar,dest={archive}", str(self.upload),
@@ -153,9 +196,12 @@ class NativeUploadTests(unittest.TestCase):
             command, capture_output=True, text=True, encoding="utf-8", timeout=60, check=False,
         )
         if self.evidence:
-            (self.evidence / "stdout.txt").write_text(result.stdout, encoding="utf-8")
-            (self.evidence / "stderr.txt").write_text(result.stderr, encoding="utf-8")
-            (self.evidence / "receipt.json").write_text(json.dumps({
+            retained = self.evidence / suffix
+            retained.mkdir(exist_ok=False)
+            (retained / "dockerignore.txt").write_bytes(contents)
+            (retained / "stdout.txt").write_text(result.stdout, encoding="utf-8")
+            (retained / "stderr.txt").write_text(result.stderr, encoding="utf-8")
+            (retained / "receipt.json").write_text(json.dumps({
                 "argv": command, "exit_code": result.returncode,
                 "dockerignore_sha256": before,
                 "scope": (
@@ -167,13 +213,13 @@ class NativeUploadTests(unittest.TestCase):
         self.assertEqual(before, hashlib.sha256(ignore.read_bytes()).hexdigest())
         self.assertLessEqual(archive.stat().st_size, 16 * 1024 * 1024)
         if self.evidence:
-            shutil.copyfile(archive, self.evidence / "context.tar")
+            shutil.copyfile(archive, retained / "context.tar")
         with tarfile.open(archive) as exported:
             members = exported.getmembers()
             self.assertLessEqual(len(members), 256)
             self.assertTrue(all(member.isdir() or member.isfile() for member in members))
             present = {member.name for member in members if member.isfile()}
-        self.assertEqual(present, {f"context/{name}" for name in self.required | {example}})
+        return present
 
 
 if __name__ == "__main__":
