@@ -2,6 +2,14 @@
 
 ## October 12 Integration Checkpoint
 
+18:49 UTC: **NO-GO for production until full amended gates complete.**
+Current contract transport/accounting/strict-response enforcement remains
+**Partially implemented**: all 20 selected native/new strict/wire-cap controls
+and 134 full unit identities pass, but fresh complete affected scope, Docker,
+hosted security/CI, canonical main and live acceptance remain pending. Backup
+and deployment controls pass 281/282 with one unchanged Windows mount skip;
+actual checkpoint/restore/PITR guarantees are not inferred from offline tests.
+
 18:24 UTC: **NO-GO.** Frozen3e Docker completed with 2,631 native passes/two
 failures, all 7,899 phases and no browsers. Contract AI transport/finalization
 and durable rejected-response accounting are **Partially implemented** pending

@@ -2,6 +2,13 @@
 
 ## October 12 Combined Fixes
 
+18:49 UTC: contract AI remains **Partially fixed** pending full release.
+Twenty current native/strict-schema/wire-cap controls and all 134 unit cases
+pass; source-only review and byte-identical public OpenAPI are reconciled.
+Unknown fields are rejected by all eight private models rather than silently
+discarded into empty success. Full amended Docker/CI and exact-live browser
+proof remain required; all earlier failures retain their original verdicts.
+
 18:24 UTC: four contract AI actions are **Partially fixed**, not deployed.
 Owned transaction-free transport and fresh source/access/policy persistence
 passed the prior 474-case focused scope; the subsequent rejected-completion

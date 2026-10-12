@@ -7,6 +7,15 @@
   using the effective wire limit, not a guessed zero or the smaller input cap.
   Native SDK typed counters may coerce Boolean/string wire values into integers;
   prove raw-response admission with the installed SDK, not only fake typed rows.
+- Native strict request schemas do not make permissive response models strict.
+  SDK parsing can discard unknown properties before revalidation and turn them
+  into default-empty success. Close private response roots and every nested
+  item, preserve valid empty results, and prove rejection through actual SDKs.
+- Immutable secret preflight needs a self-contained Git checkout with local
+  `core.autocrlf=false` configured before checkout. Linked worktree common dirs
+  and CRLF policy bytes are setup refusals, never scanner passes. Concurrent
+  acceptance environments must be independently owned; on Windows cloud-file
+  hardlink errors use explicit copy installation and validate the full lock.
 - A Cloud SDK display filter may run after the producer's raw result limit.
   Prove the installed producer/pager behavior before treating an empty filtered
   inventory as quiescence. Use bounded unfiltered identities, reject saturation,

@@ -2,6 +2,23 @@
 
 ## October 12 Combined Release
 
+18:49 UTC replacement checkpoint: all 20 selected strict-response/native retry/
+wire-cap controls pass, including the ten previous failed identities and eight
+new private-model controls. Parent's complete 134-case unit scope also passes.
+Both preserved RED inventories remain unchanged. The current full 561-case
+affected scope, fresh frozen Docker/CI and production release gates are pending;
+no main merge or deployed-fix claim follows from these focused greens.
+
+18:44 UTC: complete current affected scope retained 553 identities/1,659 phases,
+543 passes and ten failed calls. Eight native failures prove unknown contract
+response fields are silently dropped into empty success, preventing expected
+rejection/retry. The narrow correction closes all four private roots and four
+items, keeping valid empty lists and public OpenAPI byte-identical. Two other
+failures are an incorrect fixture floor (4,096 versus the actual 8,192 wire
+limit); keep wire/reservation/receipt equality assertions, correct only that
+expectation. Complete replacement proof remains required. Fresh full backup/
+deployment scope passes 281/282 with one unchanged Windows mount-policy skip.
+
 18:24 UTC checkpoint: frozen `3e56c2cb` Docker02 finished naturally RED at
 16:58 UTC: 2,631 passes and two failures among 2,633 native identities, zero
 skips/errors, all 7,899 phases retained, and no browser execution. Owned

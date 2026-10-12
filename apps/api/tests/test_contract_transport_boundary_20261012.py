@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from fastapi import HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import Column, Integer, MetaData, Table, create_engine, select, text, update
 from sqlalchemy.orm import Session
 
@@ -535,7 +535,7 @@ def test_openai_estimated_usage_uses_actual_effective_wire_cap(
     _assert_sanitized_receipt(receipts[0], estimated=True)
     wire = json.loads(state.requests[0].content)["max_completion_tokens"]
     assert wire == state.reservations[0]["output_tokens"]
-    assert wire == (4096 if model == "gpt-5.1" else 512)
+    assert wire == (8192 if model == "gpt-5.1" else 512)
     assert receipts[0].completion_tokens == wire
 
 
@@ -571,3 +571,51 @@ def test_gemini_invalid_wire_usage_components_charge_conservative_caps(
     _assert_sanitized_receipt(receipts[0], estimated=True)
     assert receipts[0].prompt_tokens == state.reservations[0]["input_bytes"]
     assert receipts[0].completion_tokens == state.reservations[0]["output_tokens"]
+
+
+@pytest.mark.parametrize("model_name", [
+    "_ExtractedClause", "_ClauseExtractionPayload", "_ExtractedObligation",
+    "_ObligationExtractionPayload", "_PlaybookLlmFinding", "_PlaybookComparisonPayload",
+    "_PartyClauseLlmItem", "_PartyClauseExtractionLlmPayload",
+])
+def test_private_contract_llm_models_reject_unknown_properties_without_losing_valid_empty_roots(
+    model_name,
+):
+    items = {
+        "_ExtractedClause": {
+            "clause_type": "payment", "title": "Payment provision",
+            "clause_text": "Acme India must pay Supplier India within thirty days.",
+        },
+        "_ExtractedObligation": {"title": "Payment duty", "description": "Pay in thirty days."},
+        "_PlaybookLlmFinding": {"rule_name": "Payment rule", "status": "matched",
+                                "summary": "Payment source quoted."},
+        "_PartyClauseLlmItem": {"category": "payment", "summary": "Payment source quoted.",
+                               "assigned_party": "first", "snippet": "Pay in thirty days."},
+    }
+    roots = {
+        "_ClauseExtractionPayload": ("clauses", "_ExtractedClause"),
+        "_ObligationExtractionPayload": ("obligations", "_ExtractedObligation"),
+        "_PlaybookComparisonPayload": ("findings", "_PlaybookLlmFinding"),
+        "_PartyClauseExtractionLlmPayload": ("items", "_PartyClauseLlmItem"),
+    }
+    model = getattr(contracts, model_name)
+    field, item_name = roots.get(model_name, (None, model_name))
+    valid = {field: [items[item_name]]} if field else items[item_name]
+    parsed = model.model_validate(valid)
+    assert model.model_validate(parsed.model_dump()) == parsed
+    known_field = field if field else next(iter(valid))
+    with pytest.raises(ValidationError):
+        model.model_validate({**valid, known_field: "not-a-list" if field else {"wrong": "type"}})
+    with pytest.raises(ValidationError) as root_error:
+        model.model_validate({**valid, "unreviewed_extra": True})
+    assert root_error.value.errors(include_input=False)[0]["type"] == "extra_forbidden"
+    assert root_error.value.errors(include_input=False)[0]["loc"] == ("unreviewed_extra",)
+    if field:
+        assert getattr(model.model_validate({field: []}), field) == []
+        assert getattr(model.model_validate({}), field) == []
+        with pytest.raises(ValidationError) as nested_error:
+            model.model_validate({field: [{**items[item_name], "unreviewed_extra": True}]})
+        assert nested_error.value.errors(include_input=False)[0]["type"] == "extra_forbidden"
+        assert nested_error.value.errors(include_input=False)[0]["loc"] == (
+            field, 0, "unreviewed_extra",
+        )

@@ -35,7 +35,7 @@ from datetime import UTC, date, datetime
 from typing import Literal
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -488,6 +488,8 @@ _CLAUSE_TYPE_VOCABULARY = [
 
 
 class _ExtractedClause(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     clause_type: Literal[
         "limitation_of_liability",
         "indemnity",
@@ -513,6 +515,8 @@ class _ExtractedClause(BaseModel):
 
 
 class _ClauseExtractionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     clauses: list[_ExtractedClause] = Field(default_factory=list, max_length=60)
 
 
@@ -639,6 +643,8 @@ def _clause_extraction_messages(text: str) -> list[LLMMessage]:
 
 
 class _ExtractedObligation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: str = Field(min_length=2, max_length=255)
     description: str = Field(default="", max_length=2000)
     due_on_iso: str | None = Field(
@@ -649,6 +655,8 @@ class _ExtractedObligation(BaseModel):
 
 
 class _ObligationExtractionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     obligations: list[_ExtractedObligation] = Field(default_factory=list, max_length=40)
 
 
@@ -910,6 +918,8 @@ def _coerce_severity(value: str) -> Literal["low", "medium", "high"]:
 
 
 class _PlaybookLlmFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     rule_name: str
     status: Literal["matched", "missing", "deviation"]
     found_clause_id: str | None = None
@@ -917,6 +927,8 @@ class _PlaybookLlmFinding(BaseModel):
 
 
 class _PlaybookComparisonPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     findings: list[_PlaybookLlmFinding] = Field(default_factory=list, max_length=60)
 
 
@@ -986,6 +998,8 @@ _PARTY_CONTRACT_TEXT_MAX_CHARS = 30_000
 
 
 class _PartyClauseLlmItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     category: Literal[
         "obligation",
         "indemnity",
@@ -1004,6 +1018,8 @@ class _PartyClauseLlmItem(BaseModel):
 
 
 class _PartyClauseExtractionLlmPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     items: list[_PartyClauseLlmItem] = Field(
         default_factory=list, max_length=_PARTY_CLAUSE_MAX_ITEMS
     )
