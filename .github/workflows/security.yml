@@ -186,10 +186,8 @@ jobs:
           output="$CASEOPS_JS_LICENSE_EVIDENCE/host"
           python3 -B scripts/check_js_license_coverage.py inventory --output "$output"
           packages="$(cat "$output/packages.txt")"
-          allowlist="$(cat "$output/allowlist.txt")"
           license-checker --json --packages "$packages" > "$output/license-report.json"
-          python3 -B scripts/check_js_license_coverage.py verify --output "$output"
-          license-checker --json --packages "$packages" --onlyAllow "$allowlist" > "$output/policy-report.json"
+          python3 -B scripts/check_js_license_coverage.py verify --output "$output" --review-root "$GITHUB_WORKSPACE"
       # Independent of host policy success: inspect the same install-scripts/prune
       # stage copied into the shipped runner. Audit tools mutate only a disposable
       # root container, never the production Dockerfile or /app dependency tree.
@@ -218,6 +216,7 @@ jobs:
           set +e
           docker run --rm -i --user 0 --workdir /app \
             --mount "type=bind,src=$GITHUB_WORKSPACE/scripts/check_js_license_coverage.py,dst=/license-guard/check_js_license_coverage.py,readonly" \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/reviewed-source,readonly" \
             --mount "type=bind,src=$output,dst=/evidence" \
             "$image_id" sh -eu <<'AUDIT' 2>&1 | tee "$output/container.log"
           trap 'status=$?; printf "{\"exit_code\":%s}\n" "$status" > /evidence/container-completion.json' EXIT
@@ -230,11 +229,9 @@ jobs:
           python3 -B /license-guard/check_js_license_coverage.py inventory --root /app \
             --require-platform linux-x64-musl --require-pruned-tree --output /evidence/scan
           packages="$(cat /evidence/scan/packages.txt)"
-          allowlist="$(cat /evidence/scan/allowlist.txt)"
           license-checker --start /app --json --packages "$packages" > /evidence/scan/license-report.json
           python3 -B /license-guard/check_js_license_coverage.py verify --root /app \
-            --require-platform linux-x64-musl --require-pruned-tree --output /evidence/scan
-          license-checker --start /app --json --packages "$packages" --onlyAllow "$allowlist" > /evidence/scan/policy-report.json
+            --require-platform linux-x64-musl --require-pruned-tree --output /evidence/scan --review-root /reviewed-source
           AUDIT
           audit_status=${PIPESTATUS[0]}
           set -e
@@ -298,3 +295,51 @@ jobs:
         run: >-
           uv run --no-project --with PyYAML==6.0.3
           python scripts/check_cloudrun_manifest_secrets.py infra/cloudrun
+
+  license-workspace-lock-policy:
+    name: JS workspace production lock policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.14.0"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+      - name: Test the workspace license gate
+        run: |
+          node --test --test-reporter=tap --test-reporter-destination=license-gate-tests.tap \
+            --test-reporter=junit --test-reporter-destination=license-gate-tests.xml \
+            scripts/production-js-license-gate.test.mjs
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      # This logical lock closure includes absent platform optionals. The
+      # independent Python job inspects the physically shipped musl copies.
+      - name: Check workspace production lock licenses
+        run: |
+          set +e
+          npm ls --package-lock-only --omit=dev --all --long --json \
+            --workspaces --include-workspace-root > license-lock-tree.json 2> license-lock-tree.stderr
+          lock_status=$?
+          npm ls --omit=dev --all --long --json \
+            --workspaces --include-workspace-root > license-installed-tree.json 2> license-installed-tree.stderr
+          installed_status=$?
+          set -e
+          node scripts/production-js-license-gate.mjs \
+            --root . --review-root "$GITHUB_WORKSPACE" --source-sha "$(git rev-parse HEAD)" \
+            --lock-tree license-lock-tree.json --lock-exit "$lock_status" \
+            --installed-tree license-installed-tree.json --installed-exit "$installed_status" \
+            --output license-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: js-license-workspace-lock-report
+          if-no-files-found: error
+          path: |
+            license-report.json
+            license-lock-tree.json
+            license-lock-tree.stderr
+            license-installed-tree.json
+            license-installed-tree.stderr
+            license-gate-tests.tap
+            license-gate-tests.xml

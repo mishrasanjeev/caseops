@@ -1,5 +1,35 @@
 # CaseOps agent instructions
 
+- A documented dependency review is not a global SPDX allowlist waiver. Bind
+  scoped managed-SaaS admission to the exact package/version/expression, npm
+  integrity and original notice/document bytes. Preserve all physical copies
+  and logical platform optionals in reports. Changed or missing evidence and
+  unreviewed identities remain blocked; binary or on-prem distribution needs
+  its own source, relinking and notice review before delivery.
+- A Windows byte-hash reader must open original material with `O_BINARY`.
+  CRT text translation can turn unchanged CRLF licenses into a false mutation
+  report. Regress actual CRLF bytes while preserving descriptor, ancestor,
+  regular-file and post-read identity checks; never normalize originals to
+  hide the failure. Real npm output can omit a redundant native optional marker:
+  accept absence only with exact locked optional identity and complete graph
+  reconciliation, not explicit false/null or an unreviewed copy.
+- A settled mock Query cache is not a delivered React observer update.
+  Regress deferred delivery explicitly, bound notification batches, retain all
+  user-visible assertions and restore scheduler/cache state in failure cleanup.
+  Do not raise timeouts or infer historical host starvation without its evidence.
+- Public license notices must survive the final production image, not merely
+  a source-tree page test. Preserve original copyright/license bytes, copy the
+  public assets into the runner and replay footer, full text, download hashes,
+  noindex and responsive accessibility against the actual serving revision.
+- Independently green branches can create an invalid combined migration graph.
+  Reconcile the candidate's actual single head and complete ancestry before
+  fresh upgrade/downgrade rehearsals. Never transfer individual-branch green
+  results to the merged candidate or rewrite an already deployed migration.
+- A worker's drain batch and recovery batch can have different safety bounds.
+  Exercise the real CLI at each accepted boundary and independently cap recovery
+  with its service-owned limit. Preserve the larger accepted drain batch,
+  disabled admission, once/continuous behavior and no-paid isolation.
+
 - Security workflow success is not license coverage. Reconcile the nonempty
   production dependency inventory against the actual workspace/lockfile graph;
   a root with only development dependencies can emit an empty passing report

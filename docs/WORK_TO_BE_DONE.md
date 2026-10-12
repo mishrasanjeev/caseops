@@ -1,5 +1,52 @@
 # CaseOps  - Work To Be Done
 
+## October 12 Combined Release
+
+01:29 UTC pre-freeze: exact-19 managed-SaaS engineering review is GO with
+documented obligations/caveats, not binary-distribution or production approval.
+The populated registry binds 61 original material/document paths; base14 remains
+unchanged. Fresh Windows coverage passes 124 identities/158 copies/seven scoped
+admissions. Fresh logical coverage passes 166 IDs/200 locations/158 installed/42
+absent optional, with 19 scoped admissions and explicit dev-only extras. Python
+139 cases/417 phases and Node 252 cases pass. Original real-read/graph failures
+are retained; CRLF binary reading and absent-native-marker handling have RED/GREEN
+proof. Operator records preserve canonical paths outside public assets.
+
+The complete original five-module replacement passes 328/331 with three explicit
+environment skips, identical ordered inventory and no selected-source drift.
+All 99 worker cases, four packaging and 32 changed-context cases pass; API Ruff,
+16 static gates and current E2E typecheck pass. Final web R3 passes all 1,279
+identities/200 files; its two observer-delivery fixtures retain original UI
+assertions and deadlines. Earlier failures/incomplete wrapper evidence remain
+open as historical evidence, not reclassified. Fresh public browsers pass the
+previous 29 cases, but the added operator-404 case makes the required inventory
+30 and still needs replay. Stock built assets show all three unchanged font
+families and no native/standalone Sharp-WASM copies, not live/container proof.
+Full new Docker, real musl, hosted CI/security, main and production gates remain
+NO-GO. No production/provider/model/baseline mutation has occurred.
+
+Owner selected complete compliance review; this resolves the earlier unanswered
+review-versus-replacement choice, not the obligations or release gates. All 19
+reported package archives now match their locked npm SRI and original package
+metadata. Original notices and bundled version inventories are retained; scoped
+admission and independent managed-SaaS assessment are in progress. The 14-term
+global allowlist remains unchanged. The actual Windows report covers 124
+identities/158 copies and correctly retains seven pre-review denials; it is not
+Alpine/musl evidence. The amended Python guard passes all 128 cases with retained
+phases and unchanged source pins. Node and actual target-container replay remain
+required. Do not equate this checkpoint with completed licensing or deployment.
+
+Combining PR532/533 exposed two unpublished migration heads; the money revision
+now follows all four worker-protocol revisions. Graph/SQLite checks pass, but
+fresh PostgreSQL upgrade/downgrade and full acceptance are pending. The original
+five-module run remains failed (326 passes, two migration setup failures, three
+skips); its full replacement is running. Documents-only recovery now independently
+caps at five while drain retains 1..100: all 99 owned tests pass. Public notices
+have 11 unit passes; fresh build/browser and final-image download proof are pending.
+Full amended Docker/CI, canonical main, guarded deployment and exact-live replay
+remain NO-GO. Production was last read as 3db on both surfaces; no new deployment,
+financial initialization, model promotion or provider activation has occurred.
+
 ## October 11 Release Recovery
 
 22:12 UTC: narrow workspace repair is independently reviewed with 117 passes/

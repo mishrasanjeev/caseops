@@ -12,6 +12,7 @@ from caseops_api.services.court_sync_jobs import (
     recover_stale_matter_court_sync_jobs,
 )
 from caseops_api.services.document_jobs import (
+    MAX_DOCUMENT_JOB_RECOVERY_BATCH,
     drain_document_processing_jobs,
     enqueue_scheduled_document_reprocessing,
     recover_stale_document_processing_jobs,
@@ -190,7 +191,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.documents_only:
             summary = WorkerRunSummary(
                 recovered_stale_jobs=recover_stale_document_processing_jobs(
-                    stale_after_minutes=15, limit=args.batch_size,
+                    stale_after_minutes=15,
+                    limit=min(args.batch_size, MAX_DOCUMENT_JOB_RECOVERY_BATCH),
                 ),
                 queued_reprocessing_jobs=0,
                 processed_jobs=drain_document_processing_jobs(

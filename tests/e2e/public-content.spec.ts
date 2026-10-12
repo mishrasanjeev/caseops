@@ -1,5 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
+import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+
+import thirdPartyNotices from "../../apps/web/app/third-party-notices/notices.json";
 
 const PUBLIC_SITEMAP_PATHS = [
   "/",
@@ -12,7 +15,7 @@ const PUBLIC_SITEMAP_PATHS = [
   "/solo-lawyers",
 ] as const;
 
-const PUBLIC_CONTENT_PAGES = PUBLIC_SITEMAP_PATHS;
+const PUBLIC_CONTENT_PAGES = [...PUBLIC_SITEMAP_PATHS, "/third-party-notices"] as const;
 
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
@@ -199,6 +202,17 @@ async function checkInternalLinks(
 }
 
 test.describe("Public landing page and user guide", () => {
+  test("operator compliance records remain outside public assets", async ({ request }) => {
+    for (const path of [
+      "/third-party-compliance/docs/security/js-license-compliance-review-2026-10-12.md",
+      "/third-party-compliance/license-policy/reviewed-packages.json",
+      "/license-policy/upstream/LGPL-3.0-or-later.txt",
+    ]) {
+      const response = await request.get(path, { failOnStatusCode: false });
+      expect(response.status(), path).toBe(404);
+    }
+  });
+
   test("every public page has one primary heading and distinct crawl metadata", async ({ page }) => {
     const titles = new Set<string>();
     const descriptions = new Set<string>();
@@ -383,6 +397,74 @@ test.describe("Public landing page and user guide", () => {
   });
 
   for (const viewport of VIEWPORTS) {
+    test(`${viewport.name} third-party notices retain original licenses through free public links`, async ({ page, request }) => {
+      await page.setViewportSize(viewport);
+      const mutations: string[] = [];
+      page.on("request", (response) => {
+        if (!["GET", "HEAD", "OPTIONS"].includes(response.method())) mutations.push(response.method());
+      });
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      const footerLink = page.getByRole("contentinfo").getByRole("link", { name: "Third-party notices", exact: true });
+      await expect(footerLink).toHaveCount(1);
+      await footerLink.scrollIntoViewIfNeeded();
+      await expect(footerLink).toBeVisible();
+      await footerLink.focus();
+      await expect(footerLink).toBeFocused();
+      await footerLink.press("Enter");
+      await expect(page).toHaveURL(/\/third-party-notices$/);
+      expect((await page.reload({ waitUntil: "domcontentloaded" }))?.status()).toBe(200);
+      await expect(page.getByRole("heading", { level: 1, name: "Third-party notices", exact: true })).toBeVisible();
+      await expect(page.locator("main h1")).toHaveCount(1);
+      expect(await page.title()).toContain("Third-party notices");
+      await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, follow");
+      await expect(page.locator('meta[name="googlebot"]')).toHaveAttribute("content", "noindex, follow");
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://caseops.ai/third-party-notices");
+      await expect(page.locator("article form, article input, article textarea")).toHaveCount(0);
+      await expect(page.locator("article details")).toHaveCount(6);
+      for (const component of thirdPartyNotices.components) {
+        const section = page.getByRole("region", { name: component.name, exact: true });
+        await expect(section).toContainText(component.packageName);
+        await expect(section).toContainText(`Version ${component.version}`);
+        for (const notice of component.notices) {
+          const summary = section.locator("summary").filter({ hasText: `Read full ${notice.license} notice` });
+          await summary.scrollIntoViewIfNeeded();
+          await summary.focus();
+          await expect(summary).toBeFocused();
+          await summary.press("Enter");
+          const details = summary.locator("..");
+          await expect(details).toHaveAttribute("open", "");
+          await expect(details.locator("pre")).toBeVisible();
+          expect(await details.locator("pre").textContent()).toBe(notice.text.replace(/\r\n/g, "\n"));
+          const download = section.getByRole("link", { name: `Download ${component.name} ${notice.license} notice`, exact: true });
+          const assetPath = `/third-party-notices/${notice.filename}`;
+          await expect(download).toHaveAttribute("href", assetPath);
+          await expect(download).toHaveAttribute("download", notice.filename);
+          await download.scrollIntoViewIfNeeded();
+          await expect(download).toBeVisible();
+          const box = await download.boundingBox();
+          expect(box).not.toBeNull();
+          expect(box!.x).toBeGreaterThanOrEqual(0);
+          expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 1);
+          expect(new URL(assetPath, page.url()).origin).toBe(new URL(page.url()).origin);
+          const response = await request.get(assetPath);
+          expect(response.status()).toBe(200);
+          expect(response.headers()["content-type"]).toMatch(/text\/plain/i);
+          const bytes = await response.body();
+          expect(createHash("sha256").update(bytes).digest("hex")).toBe(notice.sha256);
+          expect(bytes.toString("utf8")).toBe(notice.text);
+          await summary.scrollIntoViewIfNeeded();
+          await summary.press("Enter");
+          await expect(details).not.toHaveAttribute("open", "");
+        }
+      }
+      const widths = await page.evaluate(() => ({
+        client: document.documentElement.clientWidth,
+        scroll: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+      }));
+      expect(widths.scroll).toBeLessThanOrEqual(widths.client + 1);
+      expect(mutations).toEqual([]);
+    });
+
     test(`${viewport.name} October 11 recommendation article is discoverable, source-qualified and read-only`, async ({
       page,
     }, testInfo) => {

@@ -1,5 +1,24 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 12 Combined Candidate
+
+01:29 UTC: scoped engineering review and actual Windows/logical license admission
+pass with base14 unchanged (139 Python/252 Node cases; 61 material bindings).
+Final web R3 passes all 1,279 identities; source-only worker and packaging/context
+gates pass. Previous 29 public browser outcomes do not certify the new 30-case
+selection or the final image. Full combined Docker/musl/CI/main/live gates remain
+NO-GO; all earlier failed/incomplete evidence is retained. No provider activation,
+financial baseline, primary promotion or production change.
+
+QG-SEC-004: owner chose documented review; exact 19 locked package archives and
+original metadata are retained, not a blanket license waiver. Amended Python
+coverage/wiring has 128 passes; real musl, independent Node and scoped material
+admission remain pending. J19/M21/US-063 public notices have 11 unit passes, not
+served/mobile/container proof. US-001 / UJ36/UJ61 document-only recovery bounds
+have 99 complete passes while preserving drain and policy behavior. J09/M07,
+J14/M14 and complete migration/Docker/CI/main/live acceptance remain NO-GO; no
+production or provider change. Prior failed/incomplete evidence stays retained.
+
 ## October 11 Court-Write Release Gate
 
 22:12 UTC: source-only repair proof is 117 license-focused passes/351 phases,

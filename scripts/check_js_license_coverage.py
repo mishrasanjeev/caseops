@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
 import platform
+import re
+import stat
 import subprocess
 import sys
 
@@ -275,7 +278,132 @@ def check_licenses(values, scanner_package: Path):
     return permitted
 
 
-def verify(root: Path, prepared, report, scanner_package: Path, require_pruned=False):
+def review_material_path(relative):
+    if not isinstance(relative, str) or len(relative.encode("utf-16-le")) > 1024 or re.search(r"[\\:\x00-\x1f\x7f]", relative) or any(not part or part.startswith(".") or part.endswith((".", " ")) for part in relative.split("/")):
+        raise ValueError("Unsafe review material path")
+    if not (relative.startswith(("license-policy/", "apps/web/public/third-party-notices/")) or relative == "docs/security/js-license-compliance-review-2026-10-12.md"):
+        raise ValueError("Unreviewed material path namespace")
+
+
+def review_bytes(root: Path, relative, limit):
+    review_material_path(relative)
+    target = root / relative
+    parents = {}
+    for parent in (root, *target.parents):
+        if parent == root.parent:
+            break
+        if is_directory_link(parent):
+            raise ValueError("Review material path uses a directory link")
+        identity = os.stat(parent, follow_symlinks=False)
+        if not stat.S_ISDIR(identity.st_mode):
+            raise ValueError("Review material parent is not a directory")
+        parents[parent] = identity
+
+    def check_parents():
+        for parent, identity in parents.items():
+            if is_directory_link(parent) or not os.path.samestat(identity, os.stat(parent, follow_symlinks=False)):
+                raise ValueError("Review material directory path changed")
+
+    if is_directory_link(target) or not target.resolve().is_relative_to(root):
+        raise ValueError("Review material path is not contained")
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    descriptor = os.open(target, flags)
+    try:
+        before = os.fstat(descriptor)
+        named = os.stat(target, follow_symlinks=False)
+        check_parents()
+        if not stat.S_ISREG(before.st_mode) or not stat.S_ISREG(named.st_mode) or not os.path.samestat(before, named):
+            raise ValueError("Review material is not one regular file")
+        if before.st_size > limit:
+            raise ValueError("Review material exceeds byte bound")
+        chunks, count = [], 0
+        while True:
+            chunk = os.read(descriptor, min(65536, limit + 1 - count))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            count += len(chunk)
+            if count > limit:
+                raise ValueError("Review material exceeds byte bound")
+        after = os.fstat(descriptor)
+        current = os.stat(target, follow_symlinks=False)
+        check_parents()
+        if not os.path.samestat(after, current) or (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_size, after.st_mtime_ns, after.st_ctime_ns) or count != before.st_size:
+            raise ValueError("Review material changed during read")
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+def reviewed_packages(review_root: Path):
+    if ".." in review_root.parts:
+        raise ValueError("Review root contains parent traversal")
+    if is_directory_link(review_root):
+        raise ValueError("Review root uses a directory link")
+    review_root = review_root.resolve()
+    relative = "license-policy/reviewed-packages.json"
+    if not (review_root / relative).exists():
+        return {}, None
+    raw = review_bytes(review_root, relative, 128 * 1024)
+    data = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object)
+    if not isinstance(data, dict) or set(data) != {"schema_version", "scope", "review_document", "packages"} or type(data["schema_version"]) is not int or data["schema_version"] != 1 or data["scope"] != "managed-saas-only":
+        raise ValueError("Invalid reviewed license contract")
+    entries = data["packages"]
+    if not isinstance(entries, list) or not 1 <= len(entries) <= 32:
+        raise ValueError("Invalid reviewed package bound")
+    materials = {}
+
+    def material(value):
+        if not isinstance(value, dict) or set(value) != {"path", "sha256"} or not isinstance(value["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", value["sha256"]):
+            raise ValueError("Invalid review material")
+        path = value["path"]
+        review_material_path(path)
+        if path in materials and materials[path] != value["sha256"]:
+            raise ValueError("Conflicting review material")
+        materials[path] = value["sha256"]
+        if len(materials) > 64:
+            raise ValueError("Review material count bound exceeded")
+
+    if not isinstance(data["review_document"], dict) or data["review_document"].get("path") != "docs/security/js-license-compliance-review-2026-10-12.md":
+        raise ValueError("Invalid review document path")
+    material(data["review_document"])
+    admitted = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"name", "version", "license", "integrity", "materials"}:
+            raise ValueError("Invalid reviewed package contract")
+        for key, maximum in (("name", 214), ("version", 128), ("license", 2048), ("integrity", 512)):
+            if not isinstance(entry[key], str) or not 1 <= len(entry[key]) <= maximum or re.search(r"[\x00-\x1f\x7f-\x9f]", entry[key]):
+                raise ValueError("Invalid reviewed package field")
+        integrity = entry["integrity"]
+        try:
+            if not integrity.startswith("sha512-"):
+                raise ValueError("Invalid reviewed package integrity")
+            decoded = base64.b64decode(integrity[7:], validate=True)
+            if len(decoded) != 64 or base64.b64encode(decoded).decode("ascii") != integrity[7:]:
+                raise ValueError("Invalid reviewed package integrity")
+        except (ValueError, TypeError) as exc:
+            raise ValueError("Invalid reviewed package integrity") from exc
+        identity = entry["name"] + "@" + entry["version"]
+        if identity in admitted:
+            raise ValueError("Duplicate reviewed package identity")
+        values = entry["materials"]
+        if not isinstance(values, list) or not 1 <= len(values) <= 32:
+            raise ValueError("Invalid review material list")
+        for value in values:
+            material(value)
+        if len({value["path"] for value in values}) != len(values):
+            raise ValueError("Duplicate review material within entry")
+        admitted[identity] = entry
+    # Validate the complete schema and bounds before any declared content read.
+    # Each unique file is revalidated on every invocation, with no approval cache.
+    for path, expected in materials.items():
+        content = review_bytes(review_root, path, 1024 * 1024)
+        if hashlib.sha256(content).hexdigest() != expected:
+            raise ValueError("Review material hash mismatch")
+    return admitted, hashlib.sha256(raw).hexdigest()
+
+
+def verify(root: Path, prepared, report, scanner_package: Path, require_pruned=False, review_root=None):
     mapping(prepared, "prepared inventory")
     if inventory(root, require_pruned=require_pruned) != prepared:
         raise ValueError("Lock, workspace or installed inventory changed after preparation")
@@ -296,11 +424,25 @@ def verify(root: Path, prepared, report, scanner_package: Path, require_pruned=F
         identities.append(identity)
         licenses.append(record["licenses"])
     outcomes = check_licenses(licenses, scanner_package)
-    return {"expected_count": len(expected), "reported_count": len(report), "coverage_exact": True,
+    reviewed, review_sha256 = reviewed_packages(root if review_root is None else review_root)
+    locked = mapping(read_json(root / "package-lock.json"), "package-lock")["packages"]
+    review_admissions = []
+    for index, (identity, expression, allowed) in enumerate(zip(identities, licenses, outcomes)):
+        entry = reviewed.get(identity)
+        if allowed or entry is None or entry["license"] != expression:
+            continue
+        copies = [locked[copy["path"]] for copy in expected[identity]]
+        if all(copy.get("version") == entry["version"] and copy.get("license") == expression and copy.get("integrity") == entry["integrity"] for copy in copies):
+            outcomes[index] = True
+            review_admissions.append({"identity": identity, "license": expression})
+    result = {"expected_count": len(expected), "reported_count": len(report), "coverage_exact": True,
         "installed_path_count": sum(len(copies) for copies in expected.values()), "pruned_tree": require_pruned,
         "inventory_host": prepared["host"], "scope": "Installed-host production dependencies; other target-platform install trees are not certified",
         "allowlist": ALLOWLIST, "denied": [{"identity": identity, "license": license_value}
             for identity, license_value, allowed in zip(identities, licenses, outcomes) if not allowed]}
+    if review_sha256 is not None:
+        result.update(review_policy_sha256=review_sha256, reviewed_admissions=review_admissions)
+    return result
 
 
 def main(argv=None):
@@ -311,6 +453,7 @@ def main(argv=None):
     parser.add_argument("--scanner-package", type=Path, default=os.environ.get("CASEOPS_LICENSE_CHECKER_PACKAGE"))
     parser.add_argument("--require-platform", choices=("linux-x64-musl",))
     parser.add_argument("--require-pruned-tree", action="store_true")
+    parser.add_argument("--review-root", type=Path)
     args = parser.parse_args(argv)
     if args.command == "inventory":
         args.output.mkdir(parents=True, exist_ok=False)
@@ -327,7 +470,7 @@ def main(argv=None):
         if args.scanner_package is None:
             raise ValueError("Pinned scanner package metadata is required")
         report_path = args.output / "license-report.json"
-        result = verify(args.root, read_json(args.output / "inventory.json"), read_json(report_path), args.scanner_package, args.require_pruned_tree)
+        result = verify(args.root, read_json(args.output / "inventory.json"), read_json(report_path), args.scanner_package, args.require_pruned_tree, args.review_root)
         if args.require_platform and result["inventory_host"] != {"os": "linux", "cpu": "x64", "libc": "musl"}:
             raise ValueError("Required audit platform is linux-x64-musl")
         result["report_sha256"] = digest(report_path)

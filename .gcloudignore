@@ -1,6 +1,14 @@
 **
 !package.json
 !package-lock.json
+!license-policy/
+license-policy/**
+!license-policy/reviewed-packages.json
+!license-policy/upstream/
+!license-policy/upstream/**
+!docs/
+!docs/security/
+!docs/security/js-license-compliance-review-2026-10-12.md
 !apps/
 !apps/web/
 !apps/web/**
@@ -24,3 +32,4 @@ apps/web/.env*.local
 apps/web/test-results/
 apps/web/playwright-report/
 apps/web/tsconfig.tsbuildinfo
+license-policy/upstream/**/.*

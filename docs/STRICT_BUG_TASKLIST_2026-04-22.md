@@ -1,5 +1,27 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 12 Combined Fixes
+
+01:29 UTC: source-only license/public packaging remain **Partially fixed** pending
+actual new image and production replay. The exact-19 managed-SaaS review and
+fresh Windows/logical inventories pass without widening base14; Python 139 and
+Node 252 complete controls pass. The two web observer-delivery fixtures are
+**Partially fixed** for release: deterministic RED and complete final 1,279-case
+GREEN retain all UI assertions/deadlines, but do not prove retrospective host
+starvation or a production route defect. Thirty current public cases and full
+new Docker/musl/CI/main/live acceptance remain required. No deployed-fix claim.
+
+License admission and public notices are **Partially fixed**, source-only.
+Owner selected compliance review; exact package acquisition and 128 Python/11
+notice unit passes do not replace independent obligations or real musl/browser
+release acceptance. Global allowlist remains unchanged. Documents-only batch
+recovery is **Partially fixed** pending full release: all 99 CLI/module controls
+pass, recovery caps at five and drain retains 1..100. The combined unpublished
+migration fork is **Partially fixed**: single-head/lineage/SQLite checks pass,
+but fresh PostgreSQL rehearsals and complete replacement acceptance are pending.
+Original preflight cause remains **Inconclusive** until exact-production replay.
+No deployed-fix claim, budget baseline, provider activation or model promotion.
+
 ## October 11 Court-Write Investigation
 
 22:12 UTC: workspace/retention repairs are **Partially fixed**, not deployed.

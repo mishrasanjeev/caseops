@@ -1,5 +1,25 @@
 # Strict Enterprise Gap Tasklist
 
+## October 12 Integration Checkpoint
+
+01:29 UTC: exact-19 managed-SaaS engineering review is GO with caveats; actual
+Windows and logical admission pass with 61 material bindings and unchanged
+base14. Python 139/417 phases and Node 252 cases pass. Final web R3 passes all
+1,279 identities/200 files, with original assertions/deadlines retained. Earlier
+full failures, annotation failure and incomplete source-drift wrapper remain
+preserved. Thirty current public browser cases, actual final image/musl and full
+combined Docker/CI/main/live acceptance still hold release NO-GO. No live change.
+
+NO-GO. Owner licensing choice is now documented review, not unresolved approval
+and not an allowlist waiver. Nineteen package archives are SRI-verified; independent
+managed-SaaS obligations, scoped admission and real musl replay are pending. Python
+guard/wiring has 128 complete passes; public notice units have 11 passes and need
+image-served browser proof. Combined unpublished migration heads are linearized;
+native rehearsals and the complete failed five-module replacement are still due.
+Documents-only recovery/drain boundaries have 99 complete passes. Complete amended
+Docker/CI/main/live proof remains required. No deployment, financial baseline,
+model promotion or provider activation; earlier failures remain preserved.
+
 ## October 11 Exact-Release Checkpoint
 
 22:12 UTC: NO-GO. Independent narrow workspace review verifies 117 focused

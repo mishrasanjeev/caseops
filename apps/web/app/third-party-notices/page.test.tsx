@@ -1,0 +1,107 @@
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+
+import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import sitemap from "@/app/sitemap";
+
+import notices from "./notices.json";
+import ThirdPartyNoticesPage, { metadata } from "./page";
+
+const webRoot = process.cwd();
+const repoRoot = path.resolve(webRoot, "../..");
+const publicRoot = path.join(webRoot, "public/third-party-notices");
+const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+const allNotices = notices.components.flatMap((component) =>
+  component.notices.map((notice) => ({ component, notice })),
+);
+
+describe("third-party license notices", () => {
+  it("has noindex metadata and stays outside the public sitemap", () => {
+    expect(metadata.title).toBe("Third-party notices");
+    expect(metadata.alternates).toEqual({ canonical: "/third-party-notices" });
+    expect(metadata.robots).toEqual({ index: false, follow: true, googleBot: { index: false, follow: true } });
+    expect(metadata.openGraph).toMatchObject({ title: metadata.title, url: "/third-party-notices", description: metadata.description });
+    expect(sitemap().some((entry) => new URL(entry.url).pathname.startsWith("/third-party-notices"))).toBe(false);
+  });
+
+  it("renders one heading, five named components and all six original full notices", () => {
+    render(<ThirdPartyNoticesPage />);
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Third-party notices");
+    const article = screen.getByRole("article");
+    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(5);
+    expect(article.querySelectorAll("details")).toHaveLength(6);
+    for (const { component, notice } of allNotices) {
+      const section = document.getElementById(component.id)!;
+      expect(section).toHaveTextContent(component.packageName);
+      expect(section).toHaveTextContent(`Version ${component.version}`);
+      const link = within(section).getByRole("link", { name: `Download ${component.name} ${notice.license} notice` });
+      expect(link).toHaveAttribute("href", `/third-party-notices/${notice.filename}`);
+      expect(link).toHaveAttribute("download", notice.filename);
+      expect(link).toHaveClass("focus-visible:outline");
+      const detail = Array.from(section.querySelectorAll("details")).find((element) =>
+        element.querySelector("summary")!.textContent === `Read full ${notice.license} notice`,
+      )!;
+      expect(detail.querySelector("pre")!.textContent).toBe(notice.text);
+      expect(detail.querySelector("pre")).toHaveClass("whitespace-pre-wrap");
+    }
+  });
+
+  it("offers one accessible footer link without adding forms or telemetry", () => {
+    render(<ThirdPartyNoticesPage />);
+    const footer = screen.getByRole("contentinfo");
+    const link = within(footer).getByRole("link", { name: "Third-party notices" });
+    expect(link).toHaveAttribute("href", "/third-party-notices");
+    expect(link).toHaveClass("focus-visible:outline");
+    expect(document.querySelectorAll("form, input, textarea")).toHaveLength(0);
+    expect(document.querySelectorAll('script[src*="google-analytics"], script[src*="googletagmanager"]')).toHaveLength(0);
+    expect(screen.getByRole("main")).not.toHaveTextContent(/all licenses (?:approved|compliant)|production image|server image/i);
+  });
+
+  it("binds each notice to the exact installed package name and version", () => {
+    expect(notices.components.map(({ packageName, version }) => [packageName, version])).toEqual([
+      ["@fontsource/atkinson-hyperlegible", "5.2.8"],
+      ["@fontsource/jetbrains-mono", "5.2.8"],
+      ["@fontsource/libre-caslon-text", "5.2.7"],
+      ["nodemailer", "10.0.13"],
+      ["pako", "1.0.11"],
+    ]);
+    for (const component of notices.components) {
+      const installed = JSON.parse(readFileSync(path.join(repoRoot, "node_modules", component.packageName, "package.json"), "utf8"));
+      expect(installed.name).toBe(component.packageName);
+      expect(installed.version).toBe(component.version);
+    }
+  });
+
+  it("keeps an exact notice-file inventory and binds the parent-owned byte-preservation rule", () => {
+    expect(readdirSync(publicRoot).filter((name) => name !== ".gitattributes").sort()).toEqual(allNotices.map(({ notice }) => notice.filename).sort());
+    expect(readFileSync(path.join(repoRoot, ".gitattributes"), "utf8")).toContain("apps/web/public/third-party-notices/** -text");
+  });
+
+  for (const { component, notice } of allNotices) {
+    it(`${component.packageName} ${notice.license} preserves original bytes, authors and full text`, () => {
+      const installed = readFileSync(path.join(repoRoot, "node_modules", component.packageName, notice.sourceFile));
+      let original = installed;
+      if (notice.license === "Zlib") {
+        const start = installed.indexOf(Buffer.from("// (C)"));
+        expect(start).toBeGreaterThan(0);
+        let end = start;
+        while (installed.subarray(end, end + 2).equals(Buffer.from("//"))) {
+          const newline = installed.indexOf(10, end);
+          expect(newline).toBeGreaterThan(end);
+          end = newline + 1;
+        }
+        original = installed.subarray(start, end);
+        expect(original.toString()).toContain("3. This notice may not be removed or altered from any source distribution.");
+      }
+      const download = readFileSync(path.join(publicRoot, notice.filename));
+      expect(download.equals(original)).toBe(true);
+      expect(notice.text).toBe(original.toString("utf8"));
+      expect(notice.sha256).toBe(sha256(original));
+      expect(sha256(download)).toBe(notice.sha256);
+    });
+  }
+});

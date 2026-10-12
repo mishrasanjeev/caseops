@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { defaultScheduler, notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -189,16 +189,56 @@ describe("foreign-associate coordinator workspace", () => {
   });
 
   it("keeps delivery separate from acknowledgement and opens selected source documents", async () => {
-    render(<ForeignAssociatesPage />, { wrapper: wrapper() });
-    await screen.findByText("Liberty IP LLP", { selector: "h2" });
-    expect(screen.getByRole("heading", { name: "Liberty IP LLP" })).toBeVisible();
-    expect(screen.getByText("Delivered")).toBeVisible();
-    expect(screen.getByText("Outstanding")).toBeVisible();
-    expect(screen.getByText("Privileged filing strategy · privileged")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Open source" })).toHaveAttribute(
-      "href",
-      expect.stringContaining("/api/ip/documents/document-1/versions/1/download"),
-    );
+    expect(vi.isFakeTimers()).toBe(false);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const notifications: Array<() => void> = [];
+    notifyManager.setScheduler((callback) => {
+      expect(notifications.length).toBeLessThan(8);
+      notifications.push(callback);
+    });
+    let view: Pick<ReturnType<typeof render>, "unmount"> | undefined;
+    try {
+      view = render(<ForeignAssociatesPage />, { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+      expect(mocks.instructions).toHaveBeenCalledTimes(1);
+      await act(async () => { await mocks.instructions.mock.results[0].value; });
+      expect(client.getQueryState(["ip-foreign-associates", "all"])?.status).toBe("success");
+      expect(mocks.workspace).not.toHaveBeenCalled();
+      expect(notifications).toHaveLength(1);
+      await act(async () => { notifications.splice(0).forEach((callback) => callback()); });
+      expect(mocks.workspace).toHaveBeenCalledTimes(1);
+      await act(async () => { await mocks.workspace.mock.results[0].value; });
+      expect(client.getQueryState(["ip-foreign-associate-workspace", "instruction-1"])?.status).toBe("success");
+      expect(screen.queryByRole("heading", { name: "Liberty IP LLP" })).not.toBeInTheDocument();
+      expect(notifications).toHaveLength(1);
+      console.info("FOREIGN_WORKSPACE_QUERY_DELIVERY_CONTROL", {
+        fakeTimers: vi.isFakeTimers(), instructionStatus: client.getQueryState(["ip-foreign-associates", "all"])?.status,
+        workspaceStatus: client.getQueryState(["ip-foreign-associate-workspace", "instruction-1"])?.status,
+        queuedNotifications: notifications.length, instructionCalls: mocks.instructions.mock.calls.length,
+        workspaceCalls: mocks.workspace.mock.calls.length,
+      });
+      // The list and workspace each have one deferred observer-delivery boundary.
+      await act(async () => { notifications.splice(0).forEach((callback) => callback()); });
+      expect(notifications).toHaveLength(0);
+      await screen.findByText("Liberty IP LLP", { selector: "h2" });
+      expect(screen.getByRole("heading", { name: "Liberty IP LLP" })).toBeVisible();
+      expect(screen.getByText("Delivered")).toBeVisible();
+      expect(screen.getByText("Outstanding")).toBeVisible();
+      expect(screen.getByText("Privileged filing strategy · privileged")).toBeVisible();
+      expect(screen.getByRole("link", { name: "Open source" })).toHaveAttribute(
+        "href",
+        expect.stringContaining("/api/ip/documents/document-1/versions/1/download"),
+      );
+    } finally {
+      try { view?.unmount(); } finally {
+        try { client.clear(); } finally {
+          notifications.length = 0;
+          notifyManager.setScheduler(defaultScheduler);
+        }
+      }
+    }
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
   });
 
   it("schedules the acknowledgement and escalation policy idempotently", async () => {

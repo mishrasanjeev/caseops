@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import importlib.util
+import base64
 import contextlib
 import io
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import subprocess
 import sys
@@ -29,12 +31,20 @@ def identities(suite):
 
 
 def workflow_contract(text):
-    block = text.split("  license-allowlist:\n", 1)[1].split("  openapi-client-drift:", 1)[0]
+    jobs = list(re.finditer(r"^  ([A-Za-z0-9_-]+):\s*$", text, re.MULTILINE))
+    selected = [index for index, job in enumerate(jobs) if job.group(1) == "license-allowlist"]
+    if len(selected) != 1:
+        raise ValueError("License coverage or policy wiring missing")
+    index = selected[0]
+    end = jobs[index + 1].start() if index + 1 < len(jobs) else len(text)
+    block = text[jobs[index].end():end]
     block = "\n".join(line for line in block.splitlines() if not line.lstrip().startswith("#"))
     required = (
         "license-checker@25.0.1", "node-version: \"22\"", "test_js_license_coverage.py -v",
         "scripts/check_js_license_coverage.py inventory", "scripts/check_js_license_coverage.py verify",
-        'license-checker --json --packages "$packages"', '--onlyAllow "$allowlist"',
+        'license-checker --json --packages "$packages"',
+        '--review-root "$GITHUB_WORKSPACE"', '--review-root /reviewed-source',
+        'src=$GITHUB_WORKSPACE,dst=/reviewed-source,readonly',
         'CASEOPS_LICENSE_CHECKER_PACKAGE=', 'if: always()', 'if-no-files-found: error',
         '${{ runner.temp }}/js-license-evidence',
         'npm install --prefix "$audit"', 'export PATH="$audit/node_modules/.bin:$PATH"',
@@ -52,7 +62,7 @@ def workflow_contract(text):
         'audit_status=${PIPESTATUS[0]}', 'exit "$audit_status"',
         'name: js-license-report\n          path: ${{ runner.temp }}/js-license-evidence\n',
     )
-    if any(marker not in block for marker in required) or any(marker in block for marker in ("--production", "--excludePackages", "--excludePrivatePackages", "continue-on-error", "npx", "npm install --prefix /app", "|| true")):
+    if any(marker not in block for marker in required) or any(marker in block for marker in ("--production", "--excludePackages", "--excludePrivatePackages", "--onlyAllow", "continue-on-error", "npx", "npm install --prefix /app", "|| true")):
         raise ValueError("License coverage or policy wiring missing")
 
 
@@ -769,6 +779,264 @@ class WorkspaceLinkTests(LicenseFixture):
         self.assertEqual(result["denied"], [])
 
 
+class ScopedReviewTests(LicenseFixture):
+    def review_fixture(self):
+        self.integrity = "sha512-" + base64.b64encode(b"f" * 64).decode("ascii")
+        self.packages["node_modules/a"].update(license="OFL-1.1", integrity=self.integrity)
+        self.add_package("a", "1.0.0", "OFL-1.1")
+        self.notice = "license-policy/notices/FAKE-NOTICE.txt"
+        self.document = "docs/security/js-license-compliance-review-2026-10-12.md"
+        for path in (self.notice, self.document):
+            target = self.root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"Deterministic FAKE material; not a compliance review.\n")
+        self.policy = {
+            "schema_version": 1,
+            "scope": "managed-saas-only",
+            "review_document": {"path": self.document, "sha256": coverage.digest(self.root / self.document)},
+            "packages": [{"name": "a", "version": "1.0.0", "license": "OFL-1.1",
+                "integrity": self.integrity,
+                "materials": [{"path": self.notice, "sha256": coverage.digest(self.root / self.notice)}]}],
+        }
+        self.save_policy()
+
+    def save_policy(self):
+        self.write("license-policy/reviewed-packages.json", self.policy)
+
+    def test_exact_review_retains_complete_visible_inventory(self):
+        self.review_fixture()
+        result = self.verify(self.report("OFL-1.1"))
+        self.assertEqual(result["expected_count"], 1)
+        self.assertEqual(result["reported_count"], 1)
+        self.assertEqual(result["installed_path_count"], 1)
+        self.assertEqual(result["denied"], [])
+        self.assertEqual(result["reviewed_admissions"], [{"identity": "a@1.0.0", "license": "OFL-1.1"}])
+        self.assertNotIn("OFL-1.1", coverage.ALLOWLIST)
+
+    def test_changed_version_is_not_reviewed(self):
+        self.review_fixture()
+        self.packages["node_modules/a"]["version"] = "2.0.0"
+        self.web["dependencies"]["a"] = "2.0.0"
+        self.packages["apps/web"]["dependencies"]["a"] = "2.0.0"
+        self.add_package("a", "2.0.0", "OFL-1.1")
+        result = self.verify({"a@2.0.0": {"licenses": "OFL-1.1", "path": str(self.root / "node_modules/a")}})
+        self.assertEqual(result["denied"], [{"identity": "a@2.0.0", "license": "OFL-1.1"}])
+
+    def test_changed_expression_is_not_reviewed(self):
+        self.review_fixture()
+        self.packages["node_modules/a"]["license"] = "OFL-1.1 AND GPL-3.0-or-later"
+        self.add_package("a", "1.0.0", "OFL-1.1 AND GPL-3.0-or-later")
+        result = self.verify(self.report("OFL-1.1 AND GPL-3.0-or-later"))
+        self.assertTrue(result["denied"])
+
+    def test_changed_tarball_integrity_is_not_reviewed(self):
+        self.review_fixture()
+        self.packages["node_modules/a"]["integrity"] = "sha512-" + base64.b64encode(b"g" * 64).decode("ascii")
+        result = self.verify(self.report("OFL-1.1"))
+        self.assertTrue(result["denied"])
+
+    def test_unknown_unsupported_identity_is_not_reviewed(self):
+        self.review_fixture()
+        self.packages["node_modules/b"] = {"version": "1.0.0", "license": "OFL-1.1"}
+        self.add_package("b", "1.0.0", "OFL-1.1")
+        result = self.verify({**self.report("OFL-1.1"), "b@1.0.0": {"licenses": "OFL-1.1", "path": str(self.root / "node_modules/b")}})
+        self.assertEqual(result["denied"], [{"identity": "b@1.0.0", "license": "OFL-1.1"}])
+        self.assertEqual(result["expected_count"], 2)
+
+    def test_modified_notice_fails_closed(self):
+        self.review_fixture()
+        (self.root / self.notice).write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "material"):
+            self.verify(self.report("OFL-1.1"))
+
+    def test_original_crlf_notice_bytes_are_not_translated(self):
+        self.review_fixture()
+        original = b"Copyright FAKE original\r\nLicense FAKE original\r\n"
+        (self.root / self.notice).write_bytes(original)
+        self.policy["packages"][0]["materials"][0]["sha256"] = coverage.digest(self.root / self.notice)
+        self.save_policy()
+        self.assertEqual(coverage.review_bytes(self.root, self.notice, 1024), original)
+        self.assertEqual(self.verify(self.report("OFL-1.1"))["denied"], [])
+
+    def test_missing_notice_fails_closed(self):
+        self.review_fixture()
+        (self.root / self.notice).unlink()
+        with self.assertRaises((ValueError, OSError)):
+            self.verify(self.report("OFL-1.1"))
+
+    def test_modified_review_document_fails_closed(self):
+        self.review_fixture()
+        (self.root / self.document).write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "material"):
+            self.verify(self.report("OFL-1.1"))
+
+    def test_empty_material_list_cannot_approve(self):
+        self.review_fixture()
+        self.policy["packages"][0]["materials"] = []
+        self.save_policy()
+        with self.assertRaisesRegex(ValueError, "material"):
+            self.verify(self.report("OFL-1.1"))
+
+    def test_duplicate_review_identity_is_rejected(self):
+        self.review_fixture()
+        self.policy["packages"].append(self.policy["packages"][0])
+        self.save_policy()
+        with self.assertRaisesRegex(ValueError, "Duplicate"):
+            self.verify(self.report("OFL-1.1"))
+
+    def test_extra_review_properties_are_rejected(self):
+        self.review_fixture()
+        self.policy["approve_everything"] = True
+        self.save_policy()
+        with self.assertRaisesRegex(ValueError, "review"):
+            self.verify(self.report("OFL-1.1"))
+
+    def test_private_path_is_rejected_before_hashing(self):
+        self.review_fixture()
+        self.policy["packages"][0]["materials"][0]["path"] = ".env"
+        self.save_policy()
+        (self.root / ".env").write_bytes(b"PRIVATE fake control; must not be read or hashed.")
+        with self.assertRaisesRegex(ValueError, "material path"):
+            self.verify(self.report("OFL-1.1"))
+
+    def forbidden_material_path(self, path):
+        self.review_fixture()
+        self.policy["packages"][0]["materials"][0]["path"] = path
+        self.save_policy()
+        original = coverage.review_bytes
+        def read(root, relative, limit):
+            self.assertEqual(relative, "license-policy/reviewed-packages.json", "Forbidden path must reject before declared content reads")
+            return original(root, relative, limit)
+        with patch.object(coverage, "review_bytes", side_effect=read), self.assertRaisesRegex(ValueError, "material path"):
+            coverage.reviewed_packages(self.root)
+
+    def test_nested_hidden_material_path_is_rejected_before_content(self):
+        self.forbidden_material_path("license-policy/.FAKE-private.txt")
+
+    def test_trailing_dot_material_alias_is_rejected_before_content(self):
+        self.forbidden_material_path("license-policy/notices/FAKE-NOTICE.txt.")
+
+    def test_trailing_space_material_alias_is_rejected_before_content(self):
+        self.forbidden_material_path("license-policy/notices/FAKE-NOTICE.txt ")
+
+    def test_escaped_path_is_rejected(self):
+        self.review_fixture()
+        self.policy["packages"][0]["materials"][0]["path"] = "license-policy/../outside"
+        self.save_policy()
+        with self.assertRaisesRegex(ValueError, "material path"):
+            self.verify(self.report("OFL-1.1"))
+
+    def test_oversized_review_file_is_rejected(self):
+        self.review_fixture()
+        (self.root / "license-policy/reviewed-packages.json").write_bytes(b" " * (128 * 1024 + 1))
+        with self.assertRaisesRegex(ValueError, "bound"):
+            self.verify(self.report("OFL-1.1"))
+
+    def test_supplied_review_root_link_is_rejected_before_resolution(self):
+        self.review_fixture()
+        link = WorkspaceLinkTests.directory_link(self, "review-root-link", self.root)
+        self.addCleanup(link.unlink if link.is_symlink() else link.rmdir)
+        with self.assertRaisesRegex(ValueError, "root.*link"):
+            coverage.reviewed_packages(link)
+
+    def test_supplied_review_root_parent_traversal_is_rejected(self):
+        self.review_fixture()
+        with self.assertRaisesRegex(ValueError, "root.*traversal"):
+            coverage.reviewed_packages(self.root / "node_modules/..")
+
+    def test_notice_cannot_replace_the_review_document(self):
+        self.review_fixture()
+        self.policy["review_document"] = {"path": self.notice, "sha256": coverage.digest(self.root / self.notice)}
+        self.save_policy()
+        with self.assertRaisesRegex(ValueError, "review document"):
+            self.verify(self.report("OFL-1.1"))
+
+    def test_material_directory_link_is_rejected(self):
+        self.review_fixture()
+        link = WorkspaceLinkTests.directory_link(self, "license-policy/notices-link", self.root / "docs/security")
+        self.addCleanup(link.unlink if link.is_symlink() else link.rmdir)
+        self.policy["packages"][0]["materials"][0]["path"] = "license-policy/notices-link/" + Path(self.document).name
+        self.save_policy()
+        with self.assertRaisesRegex(ValueError, "directory link"):
+            self.verify(self.report("OFL-1.1"))
+
+    def test_duplicate_material_within_entry_is_rejected(self):
+        self.review_fixture()
+        entry = self.policy["packages"][0]
+        entry["materials"].append(entry["materials"][0].copy())
+        self.save_policy()
+        with self.assertRaisesRegex(ValueError, "Duplicate.*material"):
+            self.verify(self.report("OFL-1.1"))
+
+    def test_identity_control_characters_are_rejected(self):
+        for key in ("name", "version", "license", "integrity"):
+            self.review_fixture()
+            self.policy["packages"][0][key] += "\n"
+            self.save_policy()
+            with self.assertRaisesRegex(ValueError, "field"):
+                coverage.reviewed_packages(self.root)
+
+    def test_identity_c1_control_characters_are_rejected(self):
+        self.review_fixture()
+        self.policy["packages"][0]["name"] += "\u0085"
+        self.save_policy()
+        with self.assertRaisesRegex(ValueError, "field"):
+            coverage.reviewed_packages(self.root)
+
+    def test_noncanonical_integrity_padding_bits_are_rejected(self):
+        self.review_fixture()
+        self.policy["packages"][0]["integrity"] = self.integrity[:-3] + "h=="
+        self.assertEqual(base64.b64decode(self.policy["packages"][0]["integrity"][7:], validate=True), b"f" * 64)
+        self.save_policy()
+        with self.assertRaisesRegex(ValueError, "integrity"):
+            coverage.reviewed_packages(self.root)
+
+    def test_global_bound_is_checked_before_declared_content(self):
+        self.review_fixture()
+        self.policy["packages"] = [
+            {**self.policy["packages"][0], "name": f"fake-{group}", "materials": [
+                {"path": f"license-policy/fake-{group}-{index}.txt", "sha256": "0" * 64}
+                for index in range(32)
+            ]} for group in range(2)
+        ]
+        self.save_policy()
+        original = coverage.review_bytes
+        def read(root, relative, limit):
+            self.assertEqual(relative, "license-policy/reviewed-packages.json", "Invalid 65-reference policy must not read declared content")
+            return original(root, relative, limit)
+        with patch.object(coverage, "review_bytes", side_effect=read), self.assertRaisesRegex(ValueError, "count bound"):
+            coverage.reviewed_packages(self.root)
+
+    def test_material_parent_replaced_before_open_is_rejected_before_read(self):
+        self.review_fixture()
+        original_directory = self.root / "license-policy/notices"
+        retained_directory = self.root / "license-policy/notices-original"
+        foreign = self.root / "foreign-fake-material"
+        foreign.mkdir()
+        (foreign / Path(self.notice).name).write_bytes((self.root / self.notice).read_bytes())
+        original_open = coverage.os.open
+        original_read = coverage.os.read
+        replaced = False
+        def restore():
+            if replaced:
+                original_directory.unlink() if original_directory.is_symlink() else original_directory.rmdir()
+                retained_directory.rename(original_directory)
+        self.addCleanup(restore)
+        def open_file(path, flags, *args, **kwargs):
+            nonlocal replaced
+            if Path(path) == self.root / self.notice:
+                original_directory.rename(retained_directory)
+                WorkspaceLinkTests.directory_link(self, "license-policy/notices", foreign)
+                replaced = True
+            return original_open(path, flags, *args, **kwargs)
+        def read_file(descriptor, count):
+            self.assertFalse(replaced, "The changed parent must be rejected before content reads")
+            return original_read(descriptor, count)
+        with patch.object(coverage.os, "open", side_effect=open_file), patch.object(coverage.os, "read", side_effect=read_file), self.assertRaisesRegex(ValueError, "directory|path changed"):
+            coverage.reviewed_packages(self.root)
+        self.assertTrue(replaced, "The controlled parent replacement must actually execute")
+
+
 class WiringTests(unittest.TestCase):
     def test_standard_unittest_discovery_covers_entire_module(self):
         loader = unittest.TestLoader()
@@ -828,6 +1096,29 @@ class WiringTests(unittest.TestCase):
         text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "wiring missing"):
             workflow_contract(text.replace('path: ${{ runner.temp }}/js-license-evidence', 'path: ${{ runner.temp }}/js-license-evidence/host'))
+
+    def test_review_root_is_required_on_both_policy_invocations(self):
+        text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
+        for marker in ('--review-root "$GITHUB_WORKSPACE"', '--review-root /reviewed-source'):
+            with self.assertRaisesRegex(ValueError, "wiring missing"):
+                workflow_contract(text.replace(marker, ''))
+
+    def test_review_source_mount_must_be_read_only(self):
+        text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "wiring missing"):
+            workflow_contract(text.replace('dst=/reviewed-source,readonly', 'dst=/reviewed-source'))
+
+    def test_sibling_job_cannot_supply_missing_policy_wiring(self):
+        text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
+        text = text.replace('scripts/check_js_license_coverage.py verify', 'echo omitted')
+        text += '\n  fake-policy:\n    run: python3 scripts/check_js_license_coverage.py verify\n'
+        with self.assertRaisesRegex(ValueError, "wiring missing"):
+            workflow_contract(text)
+
+    def test_duplicate_license_job_is_rejected(self):
+        text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "wiring missing"):
+            workflow_contract(text + '\n  license-allowlist:\n    steps: []\n')
 
 
 if __name__ == "__main__":

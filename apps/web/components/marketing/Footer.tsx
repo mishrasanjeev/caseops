@@ -57,6 +57,16 @@ export function Footer() {
                     </a>
                   </li>
                 ))}
+                {title === "Trust" ? (
+                  <li>
+                    <a
+                      href="/third-party-notices"
+                      className="text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--color-brand-700)]"
+                    >
+                      Third-party notices
+                    </a>
+                  </li>
+                ) : null}
               </ul>
             </div>
           ))}

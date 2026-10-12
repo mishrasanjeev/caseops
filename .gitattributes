@@ -1,3 +1,7 @@
 docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md text eol=lf
 apps/api/src/caseops_api/governance/generated_data_class_projection.py text eol=lf
 *.sh text eol=lf
+apps/web/public/third-party-notices/** -text
+license-policy/** text eol=lf
+license-policy/upstream/** -text whitespace=cr-at-eol
+docs/security/js-license-compliance-review-2026-10-12.md text eol=lf

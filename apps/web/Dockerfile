@@ -67,9 +67,13 @@ RUN addgroup -g 1001 -S nodejs \
 # modules. Switch to standalone in `next.config.js` later for a
 # smaller image.
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next ./.next
-# This project has no /public directory — Next.js serves assets via
-# app/icon.tsx, app/opengraph-image.tsx, app/robots.txt, app/sitemap.xml
-# (file-based conventions). Nothing to copy.
+# Keep distributed font and JavaScript copyright/licence notices reachable.
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./public
+# Operator compliance materials are deliberately outside every public asset root.
+COPY --chown=nextjs:nodejs license-policy/reviewed-packages.json /app/third-party-compliance/license-policy/reviewed-packages.json
+COPY --chown=nextjs:nodejs license-policy/upstream/ /app/third-party-compliance/license-policy/upstream/
+COPY --chown=nextjs:nodejs docs/security/js-license-compliance-review-2026-10-12.md /app/third-party-compliance/docs/security/js-license-compliance-review-2026-10-12.md
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public/third-party-notices /app/third-party-compliance/apps/web/public/third-party-notices
 COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules /app/node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/package.json ./package.json
 
