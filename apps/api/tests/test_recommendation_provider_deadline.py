@@ -318,7 +318,9 @@ def test_expired_policy_preflight_releases_transaction_and_never_admits(
     monkeypatch.setattr(saas_billing, "estimate_ai_credits_for_call", lambda **k: 1)
 
     def preflight(session, **kwargs):
-        session.execute(text("SELECT 1"))
+        from sqlalchemy import select
+
+        session.execute(select(1))
         state.now += 31
 
     monkeypatch.setattr(saas_billing, "assert_ai_credits_available", preflight)

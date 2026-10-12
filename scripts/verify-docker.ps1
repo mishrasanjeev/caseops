@@ -1021,13 +1021,25 @@ try {
         Push-Location $ApiDir
         $PostgresExitCode = 1
         try {
-            $PostgresReport = Join-Path $ResultsDirectory "postgres.xml"
-            & $ApiPython -m pytest -q -m postgres "--junitxml=$PostgresReport"
+            $NativeArguments = @(
+                (Join-Path $RepoRoot "scripts\run_postgres_acceptance.py"),
+                "--api-dir", $ApiDir, "--results-directory", $ResultsDirectory
+            )
+            & $ApiPython @NativeArguments
             $PostgresExitCode = $LASTEXITCODE
             if (-not (Test-Path -LiteralPath $AcceptanceEnvironment.CASEOPS_TEST_RESULT_JOURNAL)) {
                 throw "PostgreSQL validation did not retain its incremental result journal."
             }
             if ($PostgresExitCode -ne 0) { throw "PostgreSQL + pgvector validation failed (exit $PostgresExitCode)." }
+            $DriverCompletion = Join-Path $ResultsDirectory "postgres-driver-completion.json"
+            if (-not (Test-Path -LiteralPath $DriverCompletion -PathType Leaf)) {
+                throw "PostgreSQL validation did not retain complete whole-file driver evidence."
+            }
+            $NativeCompletion = Get-Content -LiteralPath $DriverCompletion -Raw | ConvertFrom-Json
+            if ($NativeCompletion.exit_code -ne 0 -or $NativeCompletion.shards -ne 8 -or
+                -not $NativeCompletion.source_unchanged -or $NativeCompletion.collected -lt 1) {
+                throw "PostgreSQL whole-file driver did not reconcile the full successful inventory."
+            }
         }
         finally {
             Pop-Location

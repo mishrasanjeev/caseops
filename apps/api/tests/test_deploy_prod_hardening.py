@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import fnmatch
 import hashlib
 import json
@@ -793,9 +794,10 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "start worker" in docker_script
     assert '$WorkerStateAfterRestart -ne "running"' in docker_script
     assert '$WorkerStateAfterPlaywright -ne "running"' in docker_script
-    assert docker_script.index("stop --timeout 30 worker") < docker_script.index("-m postgres")
-    assert docker_script.index("-m postgres") < docker_script.index("start worker")
-    assert docker_script.index("-m postgres") < docker_script.index(
+    native_execution = docker_script.index("& $ApiPython @NativeArguments")
+    assert docker_script.index("stop --timeout 30 worker") < native_execution
+    assert native_execution < docker_script.index("start worker")
+    assert native_execution < docker_script.index(
         "PostgreSQL post-rehearsal index health gate failed."
     ) < docker_script.index("start worker")
     assert docker_script.index("start worker") < docker_script.index(
@@ -826,11 +828,49 @@ def _assert_complete_postgres_selection(command: str) -> None:
 
 
 def test_all_postgres_marked_modules_are_selected_locally_and_in_ci() -> None:
-    for path in ("scripts/verify-docker.ps1", ".github/workflows/ci.yml"):
-        lines = _read_repo_text(path).splitlines()
-        commands = [line.strip() for line in lines if "pytest" in line and "-m postgres" in line]
-        assert len(commands) == 1, path
-        _assert_complete_postgres_selection(commands[0])
+    lines = _read_repo_text(".github/workflows/ci.yml").splitlines()
+    commands = [line.strip() for line in lines if "pytest" in line and "-m postgres" in line]
+    assert len(commands) == 1
+    _assert_complete_postgres_selection(commands[0])
+
+    wrapper = _read_repo_text("scripts/verify-docker.ps1")
+    assert wrapper.count("& $ApiPython @NativeArguments") == 1
+    assert '(Join-Path $RepoRoot "scripts\\run_postgres_acceptance.py")' in wrapper
+    assert '"--api-dir", $ApiDir, "--results-directory", $ResultsDirectory' in wrapper
+    tree = ast.parse(_read_repo_text("scripts/run_postgres_acceptance.py"))
+    functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    command = next(
+        node.value for node in ast.walk(functions["execute"])
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "command" for target in node.targets)
+    )
+    assert isinstance(command, ast.List) and len(command.elts) == 8
+    assert ast.unparse(command.elts[0]) == "sys.executable"
+    assert [ast.literal_eval(node) for node in command.elts[1:6]] == [
+        "-m", "pytest", "-q", "-m", "postgres"
+    ]
+    assert ast.unparse(command.elts[6]) == "'--basetemp=' + str(folder / 'fixtures')"
+    assert isinstance(command.elts[7], ast.Starred)
+    assert ast.unparse(command.elts[7].value) == "arguments"
+    calls = [
+        node for node in ast.walk(functions["run"])
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        and node.func.id == "execute"
+    ]
+    assert len(calls) == 2
+    assert ast.literal_eval(calls[0].args[2]) == ["--collect-only"]
+    assert ast.unparse(calls[0].args[0]) == "api"
+    assert ast.unparse(calls[0].args[1]) == "collection"
+    assert ast.unparse(calls[1].args[2]) == (
+        "['--junitxml=' + str(folder / 'results.xml'), *group['files']]"
+    )
+    plan_calls = [
+        node for node in ast.walk(functions["run"])
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        and node.func.id == "plan"
+    ]
+    assert len(plan_calls) == 1
+    assert [ast.unparse(argument) for argument in plan_calls[0].args] == ["identities", "api"]
 
 
 @pytest.mark.parametrize("command", [
@@ -951,7 +991,7 @@ def test_docker_acceptance_restores_release_statutes_after_database_rehearsals()
     assert script.count(seed_command) == 1
     seed_at = script.index(seed_command)
     assert script.index("$ImageRevision -ne $ReleaseSha") < seed_at
-    assert script.index("& $ApiPython -m pytest -q -m postgres") < seed_at
+    assert script.index("& $ApiPython @NativeArguments") < seed_at
     assert script.index('throw "PostgreSQL post-rehearsal index health gate failed."') < seed_at
     assert seed_at < script.index(
         'Assert-CandidateSourceUnchanged -Stage "before browser acceptance"'

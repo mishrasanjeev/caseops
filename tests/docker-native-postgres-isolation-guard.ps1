@@ -51,6 +51,7 @@ foreach ($Name in @("CASEOPS_TEST_POSTGRES_URL", "CASEOPS_DATABASE_URL", "CASEOP
 }
 $InitialLocation = (Get-Location).Path
 $ApiPython = "Invoke-FakePytest"
+$RepoRoot = Join-Path $Work "candidate with spaces"
 $ApiDir = Join-Path $Work "api with spaces"
 [void][IO.Directory]::CreateDirectory($ApiDir)
 $ComposeFile = Join-Path $Work "compose with spaces.yml"
@@ -171,7 +172,11 @@ function Invoke-FakePytest {
     $Arguments = @($args)
     Add-Invocation "pytest" $Arguments
     Assert-Guard ((Get-Location).Path -eq $ApiDir) "Pytest did not run in the candidate API directory."
-    Assert-Guard (($Arguments -join "|") -eq "-m|pytest|-q|-m|postgres|--junitxml=$(Join-Path $ResultsDirectory 'postgres.xml')") "Standard full native selection changed."
+    $ExpectedArguments = @(
+        (Join-Path $RepoRoot "scripts\run_postgres_acceptance.py"),
+        "--api-dir", $ApiDir, "--results-directory", $ResultsDirectory
+    )
+    Assert-Guard (($Arguments -join "|") -ceq ($ExpectedArguments -join "|")) "Standard full native selection changed."
     Assert-Guard ($env:CASEOPS_DATABASE_URL -ceq $env:CASEOPS_TEST_POSTGRES_URL -and
         $env:CASEOPS_DATABASE_URL -cne $env:CASEOPS_E2E_DATABASE_URL) "Native and browser databases overlap."
     $Name = ([Uri]$env:CASEOPS_DATABASE_URL).AbsolutePath.TrimStart('/')
@@ -180,6 +185,8 @@ function Invoke-FakePytest {
     if (-not $script:Case.MissingJournal) {
         [IO.File]::WriteAllText($AcceptanceEnvironment.CASEOPS_TEST_RESULT_JOURNAL, "retained native result evidence")
     }
+    [IO.File]::WriteAllText((Join-Path $ResultsDirectory "postgres-driver-completion.json"),
+        '{"exit_code":0,"shards":8,"collected":2271,"source_unchanged":true}')
     Invoke-FakeFailure "pytest"
 }
 

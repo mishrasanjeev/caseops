@@ -331,41 +331,181 @@ def test_under_quota_check_does_not_hold_policy_row_lock(
 
 def test_contract_structured_ai_helper_records_successful_model_run(
     client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import hashlib
+
+    import httpx
+    import openai
+
+    from caseops_api.db.models import ContractAttachment, ContractClause, DocumentProcessingStatus
+    from caseops_api.db.session import get_db_session
+    from caseops_api.services import contract_intelligence, llm
+    from caseops_api.services.contract_ai_phase import current_contract_ai_phase
+    from tests.test_contract_intelligence import _create_contract
+
     boot = _bootstrap(client, "adp02-contract-run")
+    token = str(boot["access_token"])
     company_id = str(boot["company"]["id"])
     owner_membership_id = _owner_membership_id(company_id)
+    contract_id = _create_contract(client, token)
+    source = "Acme India and Supplier India agree to pay within thirty days."
+    source_hash = hashlib.sha256(source.encode()).hexdigest()
     provider = _CountingProvider()
     factory = get_session_factory()
     with factory() as session:
-        payload, _completion = _structured_with_retry(
-            provider,
-            schema=_ToyPayload,
-            messages=[LLMMessage(role="user", content="contract request")],
-            context=LLMCallContext(
-                tenant_id=company_id,
-                actor_membership_id=owner_membership_id,
-                purpose="metadata_extract",
-            ),
-            temperature=0.0,
-            max_tokens=16,
-            session=session,
-            feature="contract token accounting",
+        with pytest.raises(HTTPException) as denied:
+            _structured_with_retry(
+                provider,
+                schema=_ToyPayload,
+                messages=[LLMMessage(role="user", content="contract request")],
+                context=LLMCallContext(
+                    tenant_id=company_id,
+                    actor_membership_id=owner_membership_id,
+                    purpose="metadata_extract",
+                ),
+                temperature=0.0,
+                max_tokens=16,
+                session=session,
+                feature="contract token accounting",
+            )
+        assert denied.value.status_code == 409
+        assert provider.name == "toy" and provider.calls == 0
+        assert session.scalar(select(ModelRun.id).where(ModelRun.company_id == company_id)) is None
+        attachment = ContractAttachment(
+            contract_id=contract_id,
+            original_filename="offline-governance-source.txt",
+            storage_key=f"contracts/{contract_id}/offline-governance-source.txt",
+            content_type="text/plain",
+            size_bytes=len(source.encode()),
+            sha256_hex=source_hash,
+            processing_status=DocumentProcessingStatus.INDEXED,
+            extracted_char_count=len(source),
+            extracted_text=source,
         )
-        assert payload.ok is True
-        run = session.scalar(
-            select(ModelRun).where(
+        session.add(attachment)
+        session.commit()
+        attachment_id = attachment.id
+    _set_policy(company_id, firm_quota_tokens=50_000, user_quota_tokens=50_000)
+
+    request_sessions, working_sessions, sdk_clients = [], [], []
+    dispatches = []
+    real_generate = contract_intelligence.generate_structured
+    native_openai = openai.OpenAI
+
+    def request_session():
+        with factory() as session:
+            request_sessions.append(session)
+            yield session
+
+    def observe_generate(*args, **kwargs):
+        working_sessions.append(kwargs["session"])
+        return real_generate(*args, **kwargs)
+
+    def transport(request):
+        assert request.method == "POST"
+        assert request.url == "https://contract-governance.invalid/v1/chat/completions"
+        body = json.loads(request.content)
+        assert body["model"] == "gpt-6-luna"
+        assert body["response_format"]["json_schema"]["strict"] is True
+        assert source in json.dumps(body["messages"])
+        assert request_sessions and working_sessions
+        assert not any(session.in_transaction() for session in request_sessions)
+        working = working_sessions[-1]
+        assert not working.in_transaction()
+        phase = current_contract_ai_phase(working)
+        assert phase is not None and phase.snapshot is not None
+        assert (phase.contract_id, phase.company_id, phase.membership_id) == (
+            contract_id, company_id, owner_membership_id,
+        )
+        provider.calls += 1
+        dispatches.append(body)
+        return httpx.Response(200, json={
+            "id": "chatcmpl-offline-governance", "object": "chat.completion", "created": 0,
+            "model": "gpt-6-luna",
+            "choices": [{"index": 0, "finish_reason": "stop", "message": {
+                "role": "assistant", "refusal": None, "content": json.dumps({"clauses": [{
+                    "clause_type": "payment", "title": "Payment within thirty days",
+                    "clause_text": source, "risk_level": "medium",
+                    "rationale": "The supplied source states the payment period.",
+                }]}),
+            }}],
+            "usage": {"prompt_tokens": 8, "completion_tokens": 3, "total_tokens": 11},
+        })
+
+    with httpx.Client(transport=httpx.MockTransport(transport), trust_env=False) as offline_http:
+        assert not offline_http._mounts
+
+        def offline_openai(**kwargs):
+            assert kwargs["api_key"] == "offline"
+            assert request_sessions and not any(s.in_transaction() for s in request_sessions)
+            sdk = native_openai(
+                **kwargs, base_url="https://contract-governance.invalid/v1",
+                http_client=offline_http,
+            )
+            assert sdk._client._transport is offline_http._transport
+            sdk_clients.append(sdk)
+            return sdk
+
+        monkeypatch.setattr(openai, "OpenAI", offline_openai)
+        monkeypatch.setattr(contract_intelligence, "generate_structured", observe_generate)
+        monkeypatch.setattr(contract_intelligence, "build_provider", lambda **_: llm.OpenAIProvider(
+            model="gpt-6-luna", api_key="offline", max_retries=0,
+        ))
+        previous = client.app.dependency_overrides.get(get_db_session)
+        client.app.dependency_overrides[get_db_session] = request_session
+        try:
+            response = client.post(
+                f"/api/ai/contracts/{contract_id}/clauses/extract", headers=_auth(token),
+            )
+            assert response.status_code == 200, response.text
+            assert response.json()["contract_id"] == contract_id
+            assert response.json()["inserted"] == 1
+            with factory() as session:
+                runs = session.scalars(select(ModelRun).where(
+                    ModelRun.company_id == company_id,
+                    ModelRun.actor_membership_id == owner_membership_id,
+                    ModelRun.purpose == "metadata_extract",
+                )).all()
+                assert len(runs) == 1
+                run = runs[0]
+                assert run.status == "ok" and run.provider == "openai"
+                assert run.prompt_tokens == 8
+                assert run.completion_tokens == 3
+                assert run.prompt_hash is not None
+                clause = session.scalar(select(ContractClause).where(
+                    ContractClause.contract_id == contract_id,
+                    ContractClause.created_by_membership_id == owner_membership_id,
+                ))
+                assert clause is not None and clause.clause_text == source
+                retained = session.get(ContractAttachment, attachment_id)
+                assert retained.extracted_text == source and retained.sha256_hex == source_hash
+            usage = client.get("/api/admin/ai-token-governance", headers=_auth(token))
+            assert usage.status_code == 200, usage.text
+            assert usage.json()["firm_used_tokens"] == 11
+            owner_usage = next(row for row in usage.json()["top_users"] if (
+                row["actor_membership_id"] == owner_membership_id
+            ))
+            assert owner_usage["used_tokens"] == 11
+            _set_policy(company_id, firm_quota_tokens=11, user_quota_tokens=11)
+            exhausted = client.post(
+                f"/api/ai/contracts/{contract_id}/clauses/extract", headers=_auth(token),
+            )
+            assert exhausted.status_code == 429, exhausted.text
+        finally:
+            if previous is None:
+                client.app.dependency_overrides.pop(get_db_session, None)
+            else:
+                client.app.dependency_overrides[get_db_session] = previous
+            for sdk in sdk_clients:
+                sdk.close()
+    with factory() as session:
+        assert len(session.scalars(select(ModelRun).where(
                 ModelRun.company_id == company_id,
                 ModelRun.actor_membership_id == owner_membership_id,
                 ModelRun.purpose == "metadata_extract",
-            )
-        )
-        assert run is not None
-        assert run.prompt_tokens == 8
-        assert run.completion_tokens == 3
-        assert run.prompt_hash is not None
-
-    assert provider.calls == 1
+        )).all()) == 1
+    assert provider.calls == 1 and len(dispatches) == 1
 
 
 def test_firm_quota_blocks_before_provider_call_and_redacts_audit(

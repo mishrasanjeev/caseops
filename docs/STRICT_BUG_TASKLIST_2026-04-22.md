@@ -2,6 +2,33 @@
 
 ## October 12 Combined Fixes
 
+Candidate-freeze note: malformed `row_number(1)` has a retained classifier RED
+and a narrow zero-argument correction; the complete current four-module replay
+passes175 cases/525 phases with zero skips. Both interrupted mixed inventories
+(4,329 and1,749 cases) require complete exact-candidate CI/Docker replacement;
+their passing prefixes are not accepted. Verdict stays **Partially fixed**.
+
+20:20 UTC: **Partially fixed/NO-GO**, not deployed. All37 hosted failed API
+calls are individually reconciled. The authenticated accounting replacement
+passes its whole8-case module without weakening the unowned-call fence.
+Native identity correction passes126 cases/378 phases and the original
+20/500-recipient bounds; the failed observer wrapper remains failed evidence,
+separately reconciled from retained COMMIT logs. Driver/deployment scope has
+327 passes and one unchanged Windows POSIX-policy skip. Interrupted broad
+coverage remains incomplete; fresh full exact-head CI/Docker/live Playwright
+must replace it. No fixed product verdict follows from these focused proofs.
+
+19:17 UTC: release remains **Inconclusive/NO-GO**, with no production change.
+The shared provenance guard introduced strategy false positives despite561
+focused passes. All35 hosted failures and a complete48 local RED are retained;
+exact timeout configuration and pure row-number reads now have a narrow source
+correction and48 local passes, **Partially fixed** pending all seven consumers
+and fresh full gates. Current native compliance timing failure remains
+**Inconclusive** for its GC allocation trigger; prompt release preceded a
+measured1.8158s GC pause under the still-held transaction. Fixture email identity
+is **Partially fixed** pending deterministic native persistence/500-recipient
+replay; its constraint failure is not a notification-product reproduction.
+
 18:49 UTC: contract AI remains **Partially fixed** pending full release.
 Twenty current native/strict-schema/wire-cap controls and all 134 unit cases
 pass; source-only review and byte-identical public OpenAPI are reconciled.

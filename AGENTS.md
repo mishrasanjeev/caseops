@@ -1,5 +1,20 @@
 # CaseOps agent instructions
 
+- A shared transaction-provenance change must inventory every provider-boundary
+  caller, not only the four contract routes. Prove exact safe transaction-local
+  configuration and zero-argument structured window reads beside ORM/Core/raw-driver/nested
+  DML rejection. Never clear prior write evidence because a later read is safe.
+  Include indirect policy/deadline preflights. Accounting acceptance must enter
+  the authenticated owned workflow and retain unowned-generation rejection;
+  do not relabel a native provider or allow arbitrary text SQL to repair a fixture.
+- A retained native fixture must not derive a globally unique email from eight
+  UUID characters. Preserve the full identity, force distinct same-prefix UUIDs
+  in regression, prove committed reload and keep exact duplicate rejection.
+  A fixture constraint failure does not reproduce a notification-product bug.
+- Prompt test-oracle release is not a database commit. Bound and retain SQL plus
+  process-GC timing after release before attributing a lock timeout. Fresh-process
+  test partitioning must preserve the complete canonical identity and phase
+  inventory; it may not alter GC, workload, deadlines, assertions or retries.
 - Returned provider output can spend tokens before parsing, refusal, deadline
   or quota rejection. Capture sanitized usage before those boundaries, retain
   both bounded attempts without double counting, and never retry an accounting

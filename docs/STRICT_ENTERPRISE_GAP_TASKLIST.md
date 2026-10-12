@@ -2,6 +2,34 @@
 
 ## October 12 Integration Checkpoint
 
+Candidate-freeze note: independent review tightens the new window allowance
+to zero arguments, with retained RED and current175-case/525-phase replay proof.
+Both interrupted broad/finite scopes
+stay incomplete pending fresh exact-head full CI and Docker reconciliation.
+Shared provenance remains **Partially implemented** for release; **NO-GO**.
+
+20:20 UTC: **NO-GO.** Whole-file native process isolation is **Implemented**
+at the runner/control level (37 driver tests and all27 original wrapper cases
+on both shells); full real native acceptance is still pending. The complete
+328-case offline release scope has327 passes and one original POSIX-only skip.
+Shared provenance and authenticated accounting remain **Partially implemented**
+for release: 7cb CI has37 failures across three fully inspected shards, and
+the mixed broad run was explicitly interrupted, not accepted. Native fixture
+correction has126 complete passes; its observer-only failure remains preserved
+beside independent reconciliation. No cloud backup, restore, deployment,
+financial-baseline or provider-activation claim is made.
+
+19:17 UTC: **NO-GO.** Whole hosted coverage found a shared-provenance regression
+outside the561-case contract scope. Narrow safe-setting/window-read correction
+is **Partially implemented**, with48 local passes but seven-consumer/current
+full gates pending. Superseded7cb Docker is Incomplete with two failed native
+calls, no browsers and cleanup complete. Process-GC overlap explains the current
+long post-release interval but not its allocation trigger or old3e timing.
+Runner-only process isolation and exact phase/identity reconciliation are under
+implementation review, not a timeout/GC waiver. Full-UUID fixture correction
+needs native committed reload and unchanged500-recipient acceptance. No merge,
+deployment, financial baseline, provider activation or recovery-drill claim.
+
 18:49 UTC: **NO-GO for production until full amended gates complete.**
 Current contract transport/accounting/strict-response enforcement remains
 **Partially implemented**: all 20 selected native/new strict/wire-cap controls

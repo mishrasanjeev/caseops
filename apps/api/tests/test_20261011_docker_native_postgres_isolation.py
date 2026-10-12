@@ -116,9 +116,14 @@ def test_standard_gate_keeps_full_native_inventory_and_browser_boundaries() -> N
     main = source.split('$PinnedNodeVersion =', 1)[1]
     assert main.index("stop --timeout 30 worker") < main.index(
         "Invoke-IsolatedNativePostgresGate -Validation {"
-    ) < main.index("& $ApiPython -m pytest -q -m postgres")
-    assert main.count("& $ApiPython -m pytest -q -m postgres") == 1
-    assert '"--junitxml=$PostgresReport"' in main
+    ) < main.index("& $ApiPython @NativeArguments")
+    assert main.count("& $ApiPython @NativeArguments") == 1
+    assert '(Join-Path $RepoRoot "scripts\\run_postgres_acceptance.py")' in main
+    assert '"--api-dir", $ApiDir, "--results-directory", $ResultsDirectory' in main
+    assert 'Join-Path $ResultsDirectory "postgres-driver-completion.json"' in main
+    assert "$NativeCompletion.shards -ne 8" in main
+    assert "-not $NativeCompletion.source_unchanged" in main
+    assert "$NativeCompletion.collected -lt 1" in main
     assert (
         'CASEOPS_TEST_RESULT_JOURNAL = (Join-Path $ResultsDirectory "postgres-results.jsonl")'
     ) in main
@@ -135,7 +140,7 @@ def test_standard_gate_keeps_full_native_inventory_and_browser_boundaries() -> N
     )
     assert main.count(seed) == 1
     assert main.index("$ImageRevision -ne $ReleaseSha") < main.index(seed)
-    assert main.index("& $ApiPython -m pytest -q -m postgres") < main.index(seed)
+    assert main.index("& $ApiPython @NativeArguments") < main.index(seed)
     assert main.index(seed) < main.index("start worker") < main.index(
         'Assert-CandidateSourceUnchanged -Stage "before browser acceptance"'
     )

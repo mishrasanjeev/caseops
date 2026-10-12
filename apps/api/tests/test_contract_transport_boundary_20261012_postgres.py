@@ -19,8 +19,9 @@ import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
-from sqlalchemy import String, create_engine, event, inspect, select, text, update
+from sqlalchemy import String, create_engine, event, func, inspect, literal, select, text, update
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -59,6 +60,12 @@ from caseops_api.services import (
     contract_intelligence,
     llm,
     saas_billing,
+)
+from tests.test_contract_transport_boundary_20261012 import (
+    _UNREVIEWED_TEXT,
+    _assert_reviewed_provider_release,
+    _primitive_call,
+    _reviewed_read_preflight,
 )
 
 pytestmark = pytest.mark.postgres
@@ -195,6 +202,105 @@ def _seed(factory):
         )
         session.commit()
     return state
+
+
+def test_native_reviewed_timeout_and_window_read_allow_clean_provider_boundary(contract_database):
+    with CaseOpsSession(contract_database.engine) as session:
+        assert session.scalar(select(literal(1))) == 1
+        _reviewed_read_preflight(session)
+        assert session.scalar(text("SELECT pg_current_xact_id_if_assigned() IS NULL")) is True
+        assert session.scalar(text("SHOW statement_timeout")) == "1min"
+        # SHOW remains opaque; begin a new clean transaction for the actual release proof.
+        with pytest.raises(RuntimeError, match="contains writes"):
+            session.require_read_only_transaction()
+        session.rollback()
+        assert session.scalar(select(literal(1))) == 1
+        _reviewed_read_preflight(session)
+        session.require_read_only_transaction()
+        _assert_reviewed_provider_release(session)
+
+
+@pytest.mark.parametrize("mode", ["orm-flush", "core", "connection-core", "raw-driver", "dml-cte"])
+def test_native_reviewed_preflight_never_clears_flushed_caller_write(contract_database, mode):
+    factory = sessionmaker(
+        bind=contract_database.engine, class_=CaseOpsSession, expire_on_commit=False,
+    )
+    state = _seed(factory)
+    calls = []
+    with factory() as session:
+        contract = session.get(Contract, state.contract)
+        if mode == "orm-flush":
+            contract.title = "Retained caller mutation"
+            session.flush()
+        elif mode == "raw-driver":
+            session.connection().exec_driver_sql(
+                "UPDATE contracts SET title=%s WHERE id=%s",
+                ("Retained caller mutation", state.contract),
+            )
+        else:
+            statement = update(Contract).where(Contract.id == state.contract).values(
+                title="Retained caller mutation",
+            )
+            if mode == "dml-cte":
+                assert session.scalar(select(statement.returning(Contract.id).cte().c.id)) == (
+                    state.contract
+                )
+            elif mode == "connection-core":
+                session.connection().execute(statement)
+            else:
+                session.execute(statement)
+        assert not session.new and not session.dirty and not session.deleted
+        transaction = session.get_transaction()
+        _reviewed_read_preflight(session)
+        with pytest.raises(RuntimeError, match="^The caller transaction contains writes"):
+            _primitive_call(session, calls)
+        assert calls == []
+        assert session.get_transaction() is transaction and session.in_transaction()
+        assert session.scalar(select(Contract.title).where(Contract.id == state.contract)) == (
+            "Retained caller mutation"
+        )
+        session.rollback()
+    with factory() as session:
+        assert session.scalar(select(Contract.title).where(Contract.id == state.contract)) == (
+            "Offline source contract"
+        )
+
+
+@pytest.mark.parametrize("sql", _UNREVIEWED_TEXT)
+def test_native_unreviewed_text_cannot_release_caller_transaction(contract_database, sql):
+    calls = []
+    with CaseOpsSession(contract_database.engine) as session:
+        try:
+            session.execute(text(sql), {"timeout": "60000"})
+        except DBAPIError:
+            pass
+        transaction = session.get_transaction()
+        with pytest.raises(RuntimeError, match="^The caller transaction contains writes"):
+            _primitive_call(session, calls)
+        assert calls == []
+        assert session.get_transaction() is transaction and session.in_transaction()
+        session.rollback()
+
+
+@pytest.mark.parametrize("mode", ["qualified-window", "unknown-function", "raw-driver"])
+def test_native_qualified_unknown_and_raw_driver_reads_remain_fail_closed(contract_database, mode):
+    calls = []
+    with CaseOpsSession(contract_database.engine) as session:
+        try:
+            if mode == "qualified-window":
+                assert session.scalar(select(func.pg_catalog.row_number().over())) == 1
+            elif mode == "unknown-function":
+                session.scalar(select(func.caseops_unreviewed_read()))
+            else:
+                assert session.connection().exec_driver_sql("SELECT 1").scalar_one() == 1
+        except DBAPIError:
+            assert mode == "unknown-function"
+        transaction = session.get_transaction()
+        with pytest.raises(RuntimeError, match="^The caller transaction contains writes"):
+            _primitive_call(session, calls)
+        assert calls == []
+        assert session.get_transaction() is transaction and session.in_transaction()
+        session.rollback()
 
 
 def _payload(state):

@@ -11,7 +11,19 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import Column, Integer, MetaData, Table, create_engine, select, text, update
+from sqlalchemy import (
+    Column,
+    Integer,
+    MetaData,
+    Table,
+    create_engine,
+    func,
+    literal,
+    select,
+    text,
+    update,
+)
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from caseops_api.api.routes import ai
@@ -27,7 +39,7 @@ from caseops_api.db.models import (
     ContractClause,
     ModelRun,
 )
-from caseops_api.db.session import CaseOpsSession, get_session_factory
+from caseops_api.db.session import CaseOpsSession, _proven_read_statement, get_session_factory
 from caseops_api.schemas.contracts import PartyClauseExtractionRequest
 from caseops_api.services import contract_intelligence as contracts
 from caseops_api.services import llm
@@ -275,6 +287,142 @@ def _primitive_call(session, calls):
         context=llm.LLMCallContext(purpose="offline-provenance"), session=session,
         release_session_before_provider=True,
     )
+
+
+_REVIEWED_TIMEOUT = "SET LOCAL statement_timeout = '60000'"
+_UNREVIEWED_TEXT = (
+    "SET statement_timeout = '60000'",
+    "SET SESSION statement_timeout = '60000'",
+    "SET LOCAL statement_timeout = '60001'",
+    "SET LOCAL statement_timeout = :timeout",
+    "SET LOCAL lock_timeout = '60000'",
+    "SET LOCAL role = 'caseops'",
+    "SET LOCAL statement_timeout = '60000'; UPDATE guard_value SET value=1",
+    "SET LOCAL statement_timeout = '60000';",
+    " SET LOCAL statement_timeout = '60000'",
+    "set local statement_timeout = '60000'",
+    "SELECT 1",
+    "SELECT set_config('statement_timeout', '60000', true)",
+)
+
+
+def _reviewed_read_preflight(session):
+    transaction = session.get_transaction()
+    try:
+        session.execute(text(_REVIEWED_TIMEOUT))
+    except DBAPIError:
+        assert session.get_bind().dialect.name == "sqlite"
+    assert session.get_transaction() is transaction
+    assert session.scalar(select(func.row_number().over(order_by=literal(1)))) == 1
+
+
+def _assert_reviewed_provider_release(session):
+    calls = []
+
+    class Provider:
+        name = "mock"
+        model = "offline-reviewed-read"
+
+        def generate(self, **_kwargs):
+            assert not session.in_transaction()
+            calls.append("out-of-transaction")
+            return llm.LLMCompletion(
+                text='{"ok":true}', provider=self.name, model=self.model,
+                prompt_tokens=7, completion_tokens=9, latency_ms=1,
+            )
+
+    parsed, completion = llm.generate_structured(
+        Provider(), schema=_PrimitiveAnswer, messages=[],
+        context=llm.LLMCallContext(purpose="offline-reviewed-read"), session=session,
+        release_session_before_provider=True,
+    )
+    assert parsed.ok and completion.prompt_tokens == 7 and completion.completion_tokens == 9
+    assert calls == ["out-of-transaction"]
+
+
+@pytest.mark.parametrize("sql", (
+    _REVIEWED_TIMEOUT, "SELECT pg_current_xact_id_if_assigned() IS NULL",
+))
+def test_reviewed_read_classifier_accepts_only_the_two_exact_text_literals(sql):
+    assert _proven_read_statement(text(sql))
+
+
+@pytest.mark.parametrize("sql", _UNREVIEWED_TEXT)
+def test_reviewed_read_classifier_keeps_other_text_fail_closed(sql):
+    assert not _proven_read_statement(text(sql))
+
+
+@pytest.mark.parametrize("expression", [
+    lambda: func.row_number().over(order_by=literal(1)),
+    lambda: func.row_number(1).over(order_by=literal(1)),
+    lambda: func.pg_catalog.row_number().over(order_by=literal(1)),
+    lambda: func.caseops_unreviewed_read(),
+    lambda: func.set_config("statement_timeout", "60000", True),
+], ids=[
+    "reviewed-window", "argument-window", "qualified-window", "unknown-function",
+    "global-config-function",
+])
+def test_reviewed_window_classifier_does_not_admit_qualified_or_unknown_functions(
+    expression, request,
+):
+    assert _proven_read_statement(select(expression())) is (
+        request.node.callspec.id == "reviewed-window"
+    )
+
+
+def test_actual_sqlite_reviewed_timeout_error_and_window_read_allow_clean_transport(tmp_path):
+    engine, table = _primitive_engine(tmp_path)
+    try:
+        with CaseOpsSession(engine) as session:
+            assert session.scalar(select(table.c.value)) == 0
+            _reviewed_read_preflight(session)
+            session.require_read_only_transaction()
+            _assert_reviewed_provider_release(session)
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("mode", ["session-core", "connection-core", "raw-driver"])
+def test_reviewed_timeout_and_window_read_never_clear_existing_caller_write(tmp_path, mode):
+    engine, table = _primitive_engine(tmp_path)
+    calls = []
+    try:
+        with CaseOpsSession(engine) as session:
+            if mode == "session-core":
+                session.execute(update(table).where(table.c.id == 1).values(value=1))
+            elif mode == "connection-core":
+                session.connection().execute(update(table).where(table.c.id == 1).values(value=1))
+            else:
+                session.connection().exec_driver_sql("UPDATE guard_value SET value=1 WHERE id=1")
+            transaction = session.get_transaction()
+            assert not session.new and not session.dirty and not session.deleted
+            _reviewed_read_preflight(session)
+            with pytest.raises(RuntimeError, match="^The caller transaction contains writes"):
+                _primitive_call(session, calls)
+            assert calls == []
+            assert session.get_transaction() is transaction and session.in_transaction()
+            assert session.scalar(select(table.c.value)) == 1
+            session.rollback()
+        with engine.connect() as connection:
+            assert connection.scalar(select(table.c.value)) == 0
+    finally:
+        engine.dispose()
+
+
+def test_raw_driver_reviewed_looking_read_is_still_unclassified_and_cannot_release(tmp_path):
+    engine, _table = _primitive_engine(tmp_path)
+    calls = []
+    try:
+        with CaseOpsSession(engine) as session:
+            assert session.connection().exec_driver_sql("SELECT 1").scalar_one() == 1
+            transaction = session.get_transaction()
+            with pytest.raises(RuntimeError, match="^The caller transaction contains writes"):
+                _primitive_call(session, calls)
+            assert calls == []
+            assert session.get_transaction() is transaction and session.in_transaction()
+            session.rollback()
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.parametrize("mode", ["session-core", "connection-core", "raw-driver"])

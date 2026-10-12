@@ -2,6 +2,60 @@
 
 ## October 12 Combined Release
 
+Candidate-freeze note: independent review found `row_number` must also reject
+arguments. A retained one-case RED proves the gap; the narrow zero-argument
+check passes the complete current transport/strategy/deadline/governance scope:
+175 cases/525 phases, zero failures/skips, `transport-unit-final-09`. The earlier
+44-file/1,749-case finite scope is also explicitly interrupted, not accepted;
+fresh full CI/Docker must reconcile both interrupted inventories. No existing
+timeout, GC policy, provider-cost fence or caller-write assertion was weakened.
+
+20:20 UTC checkpoint: 7cb CI finished RED with 37 failed API calls across
+shards2/5/9; Security and CodeQL are green, not release acceptance. Complete
+failure artifacts distinguish the 35 safe-read false positives from two stale
+test callers. Accounting now exercises the authenticated contract route with
+an invalid-domain native SDK emulator, preserving 8/3 tokens, quota and unowned
+generation rejection (whole governance module8 passes). The deadline fixture
+uses a typed read, not an arbitrary-text waiver; its fresh full module is due.
+
+Current native fixture proof has126 passes/378 phases, including committed
+same-prefix identity and unchanged20/500-recipient notification assertions.
+Its original wrapper failure is preserved: the cursor observer misclassified
+two expected deferred-FK COMMIT errors; independent retained-record validation
+passes161 checks. It does not invent an original source-after or identify the
+historical conflicting user's UUID. Owned resources are cleaned up.
+
+The whole-file native driver and revised wrapper controls pass327 of328
+selected offline cases; the sole existing Windows skip is POSIX mount policy,
+not native acceptance. All27 original isolation cases pass on both shells.
+The mixed broad run is explicitly interrupted after a known failure:4329
+collected,1192 reported identities, no pytest completion or JUnit. Its prefix
+does not certify the release. Fresh exact-candidate full CI and Docker native/
+browser inventories must cover every retained identity. Source/remaining
+seven-caller acceptance is pending; no main merge or production deployment.
+
+19:17 UTC checkpoint: candidate `7cb0c80c` is published in draft PR533 and is
+NOT merged/deployed. All 561 affected cases/1,683 phases and 16 static gates
+pass, but hosted API shard2 exposes 35 strategy failures among48. Complete
+local replay and all35 directed traces prove two safe reads falsely marked as
+writes: the exact existing transaction-local 60,000ms timeout setting and
+`row_number()`. Current narrow classification correction passes all48 strategy
+cases; fresh seven-caller and caller-write-preservation coverage remains due.
+
+Full local 7cb Docker is intentionally interrupted and Incomplete after two
+retained failed calls: court-worker compliance lock timeout and a 500-recipient
+fixture email unique violation. Controller exits1 at19:17:31 UTC and its owned
+stack is cleaned up; no browser execution or full-native pass is claimed.
+Current lock timing proves prompt release, followed by a 1.8158s process-wide
+GC interval while the mutation still holds its transaction. It does not prove
+the triggering allocation or retrospectively explain the uninstrumented3e
+delay. Runner-only fresh-process partitioning is admitted for review, preserving
+canonical collection, all phases, GC behavior, workload and original deadlines.
+The shared membership fixture now retains full UUID emails and a deterministic
+same-prefix regression is prepared; its actual native/500-row replay remains
+pending. The original conflicting stored UUID was not retrieved. Production
+still serves3db on both surfaces; external gaps remain open and release NO-GO.
+
 18:49 UTC replacement checkpoint: all 20 selected strict-response/native retry/
 wire-cap controls pass, including the ten previous failed identities and eight
 new private-model controls. Parent's complete 134-case unit scope also passes.

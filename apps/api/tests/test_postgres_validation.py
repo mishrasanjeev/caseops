@@ -304,7 +304,7 @@ def _seed_membership(
         ),
         {
             "id": user_id,
-            "email": f"notice-pg-{user_id[:8]}@example.com",
+            "email": f"notice-pg-{user_id}@example.com",
             "ts": now,
         },
     )

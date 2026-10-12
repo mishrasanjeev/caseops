@@ -39,7 +39,8 @@ _READ_FUNCTIONS = frozenset({
     "greatest", "json_array_length",
     "jsonb_array_length", "julianday",
     "least", "length", "lower", "max", "min", "now", "nullif", "octet_length", "pg_backend_pid",
-    "pg_current_xact_id_if_assigned", "plainto_tsquery", "round", "strftime", "substr",
+    "pg_current_xact_id_if_assigned", "plainto_tsquery", "round", "row_number",
+    "strftime", "substr",
     "sha256", "substring", "sum", "time", "to_tsvector", "ts_rank", "upper",
 })
 
@@ -111,9 +112,13 @@ def _remember_flushed_writes(session, _flush_context, _instances) -> None:
 
 
 def _proven_read_statement(statement) -> bool:
-    # This exact existing probe observes transaction state; it cannot write.
+    # Exact existing forms only: observe state or bound this transaction's
+    # statements. Neither mutates data; arbitrary SQL/configuration stays denied.
     if isinstance(statement, TextClause):
-        return statement.text == "SELECT pg_current_xact_id_if_assigned() IS NULL"
+        return statement.text in {
+            "SELECT pg_current_xact_id_if_assigned() IS NULL",
+            "SET LOCAL statement_timeout = '60000'",
+        }
     if not isinstance(statement, SelectBase):
         return False
     for node in visitors.iterate(statement):
@@ -126,6 +131,10 @@ def _proven_read_statement(statement) -> bool:
         if isinstance(node, FunctionElement) and (
             str(getattr(node, "name", "")).lower() not in _READ_FUNCTIONS
             or getattr(node, "packagenames", ())
+            or (
+                str(getattr(node, "name", "")).lower() == "row_number"
+                and len(node.clauses) != 0
+            )
         ):
             return False
     return True
