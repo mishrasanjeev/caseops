@@ -2,6 +2,25 @@
 
 ## Release Verdict
 
+### October 12 18:24 UTC Replacement Candidate
+
+**NO-GO pending fresh complete acceptance.** Frozen3e local Docker finished
+with 2,631 native passes/two failures and no browser execution. All failed
+evidence is retained. Passive instrumentation preserves original work/lock
+budgets; historical delays remain Inconclusive, not attributed to logging.
+Four contract AI actions now use owned read/transport/finalize sessions and
+recheck current authentication, capability, source and policy. Sanitized spent
+usage must remain durable even when native parsing, deadline, debit or final
+authorization rejects output; incomplete usage is conservatively estimated and
+labelled, not silently recorded as zero. Fresh SDK/complete affected inventory,
+full Docker and exact-live browser proof are required for this amendment.
+
+Deployment also requires a completed exact-release pre-migration SQL backup
+with bounded unfiltered operation inventory; read-only metadata is not restore
+proof. PITR remains disabled and the recovery drill gap stays open. No merge,
+deployment, paid benchmark, provider activation or financial baseline change.
+October behavior and the prospective INR10,000 policy remain unchanged.
+
 ### October 12 Resumed All-PR Release
 
 Human explicitly requests all open PR fixes, green CI, local workstation Docker

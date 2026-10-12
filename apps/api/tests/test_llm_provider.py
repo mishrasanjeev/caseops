@@ -106,16 +106,18 @@ def test_generate_structured_validates_schema() -> None:
 
 
 def test_generate_structured_release_boundary_applies_without_tenant_id() -> None:
-    class _ReadOnlySession:
-        new: set = set()
-        dirty: set = set()
-        deleted: set = set()
+    from sqlalchemy import create_engine, literal, select
 
-        def __init__(self) -> None:
+    from caseops_api.db.session import CaseOpsSession
+
+    class _ReadOnlySession(CaseOpsSession):
+        def __init__(self, **kwargs) -> None:
+            super().__init__(**kwargs)
             self.rollback_count = 0
 
         def rollback(self) -> None:
             self.rollback_count += 1
+            super().rollback()
 
     class _BoundaryProvider(MockProvider):
         def __init__(self, session: _ReadOnlySession) -> None:
@@ -124,20 +126,26 @@ def test_generate_structured_release_boundary_applies_without_tenant_id() -> Non
 
         def generate(self, messages, **kwargs):  # type: ignore[override]
             assert self.session.rollback_count == 1
+            assert not self.session.in_transaction()
             return super().generate(messages, **kwargs)
 
-    session = _ReadOnlySession()
-    validated, _completion = generate_structured(
-        _BoundaryProvider(session),
-        schema=_Structured,
-        messages=_prompt(structured=True),
-        context=LLMCallContext(purpose="unit-test"),
-        session=session,
-        release_session_before_provider=True,
-    )
-
-    assert isinstance(validated, _Structured)
-    assert session.rollback_count == 1
+    engine = create_engine("sqlite://")
+    try:
+        with _ReadOnlySession(bind=engine) as session:
+            assert session.scalar(select(literal(1))) == 1
+            assert session.in_transaction()
+            validated, _completion = generate_structured(
+                _BoundaryProvider(session),
+                schema=_Structured,
+                messages=_prompt(structured=True),
+                context=LLMCallContext(purpose="unit-test"),
+                session=session,
+                release_session_before_provider=True,
+            )
+            assert isinstance(validated, _Structured)
+            assert session.rollback_count == 1
+    finally:
+        engine.dispose()
 
 
 def test_generate_structured_release_refuses_pending_orm_writes() -> None:

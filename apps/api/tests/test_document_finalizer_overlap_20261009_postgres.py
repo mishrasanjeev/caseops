@@ -7,17 +7,23 @@ runtime file, live service, provider, or transaction fence is replaced.
 
 from __future__ import annotations
 
+import ctypes
+import dis
+import gc
 import json
 import os
 import secrets
 import socket
+import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from hashlib import sha256
 from pathlib import Path
 from threading import Event, Lock, Thread
-from time import monotonic, sleep
+from time import monotonic, monotonic_ns, sleep, time_ns
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -215,6 +221,177 @@ def _seed_finalizer(engine, target):
         }
 
 
+class _Timespec(ctypes.Structure):
+    _fields_ = [("seconds", ctypes.c_long), ("nanoseconds", ctypes.c_long)]
+
+
+class _GcTimingSlot:
+    __slots__ = ("phase", "generation", "mono", "utc", "mono_pointer", "utc_pointer", "next")
+
+    def __init__(self, cell_type):
+        self.phase = self.generation = self.next = None
+        self.mono, self.utc = cell_type(), cell_type()
+        self.mono_pointer, self.utc_pointer = ctypes.byref(self.mono), ctypes.byref(self.utc)
+
+
+class _PassiveOverlapTiming:
+    """Bounded metadata only; callbacks never write evidence or take a Python lock."""
+
+    ACTORS = frozenset(("worker", "login", "mutation", "revocation", "auth"))
+    # Includes setup SELECTs for the existing 500-recipient native fixture.
+    # This bounds evidence retention, not the workflow's asserted query budget.
+    SQL_CAP = 16384
+    GC_CAP = 512
+    TEMPLATE_CAP = 65536
+
+    def __init__(self, *, sql_cap=SQL_CAP, gc_cap=GC_CAP):
+        assert 0 < sql_cap <= self.SQL_CAP and 0 < gc_cap <= self.GC_CAP
+        self.sql_slots = [{} for _ in range(sql_cap)]
+        self.available_sql = deque(self.sql_slots)
+        self.sql_overflow = self.gc_overflow = self.invalid = False
+        self.enabled = False
+        self.critical_pools = 0
+        self.callback = self._gc_callback
+        # PyDLL retains the GIL; native clocks fill cells allocated before registration.
+        # No Python timestamp objects, record containers or counters are built in GC.
+        if os.name == "nt":
+            library = ctypes.PyDLL("kernel32", use_last_error=True)
+            self.mono_clock = library.QueryPerformanceCounter
+            self.utc_clock = library.GetSystemTimePreciseAsFileTime
+            for clock in (self.mono_clock, self.utc_clock):
+                clock.argtypes = [ctypes.POINTER(ctypes.c_longlong)]
+                clock.restype = None
+            frequency = ctypes.c_longlong()
+            get_frequency = library.QueryPerformanceFrequency
+            get_frequency.argtypes = [ctypes.POINTER(ctypes.c_longlong)]
+            get_frequency.restype = ctypes.c_int
+            assert get_frequency(ctypes.byref(frequency)) and frequency.value > 0
+            self.frequency = frequency.value
+            cell_type = ctypes.c_longlong
+        else:
+            clock = ctypes.PyDLL(None).clock_gettime
+            clock.argtypes = [ctypes.c_int, ctypes.POINTER(_Timespec)]
+            clock.restype = None
+            self.mono_clock = partial(clock, ctypes.c_int(time.CLOCK_MONOTONIC))
+            self.utc_clock = partial(clock, ctypes.c_int(time.CLOCK_REALTIME))
+            cell_type = _Timespec
+        self.gc_slots = [_GcTimingSlot(cell_type) for _ in range(gc_cap)]
+        for previous, following in zip(self.gc_slots, self.gc_slots[1:], strict=False):
+            previous.next = following
+        self.next_gc = self.gc_slots[0]
+        self.mono_clock(self.next_gc.mono_pointer)
+        self.utc_clock(self.next_gc.utc_pointer)
+        assert self._gc_ns(self.next_gc)[0] > 0 and self._gc_ns(self.next_gc)[1] > 0
+
+    def _gc_callback(self, phase, info):
+        if not self.enabled:
+            return
+        slot = self.next_gc
+        if slot is None:
+            self.gc_overflow = True
+            return
+        self.next_gc = slot.next
+        try:
+            slot.phase = phase
+            slot.generation = info["generation"]
+            self.mono_clock(slot.mono_pointer)
+            self.utc_clock(slot.utc_pointer)
+        except BaseException:
+            self.invalid = True
+
+    def start(self):
+        assert not self.enabled and self.callback not in gc.callbacks
+        self.enabled = True
+        gc.callbacks.append(self.callback)
+
+    def stop(self):
+        self.enabled = False
+        if self.callback in gc.callbacks:
+            gc.callbacks.remove(self.callback)
+
+    @contextmanager
+    def capture(self):
+        try:
+            self.start()
+            yield self
+        finally:
+            self.stop()
+
+    def begin_select(self, actor, statement, context):
+        if not self.enabled or not statement.lstrip()[:6].upper().startswith(("SELECT", "WITH")):
+            return
+        if context is None or len(statement) > self.TEMPLATE_CAP:
+            self.invalid = True
+            return
+        digest = sha256(statement.encode("utf-8")).hexdigest()
+        try:
+            sample = self.available_sql.popleft()
+        except IndexError:
+            self.sql_overflow = True
+            return
+        sample.update(actor=actor if actor in self.ACTORS else "unlabelled",
+                      template_sha256=digest, utc_started_ns=time_ns(),
+                      mono_started_ns=monotonic_ns(), outcome="incomplete")
+        context.finalizer_passive_select = sample
+
+    def end_select(self, context, *, error=False):
+        sample = getattr(context, "finalizer_passive_select", None)
+        if sample is not None:
+            sample.update(mono_finished_ns=monotonic_ns(), utc_finished_ns=time_ns(),
+                          outcome="error" if error else "ok")
+            context.finalizer_passive_select = None
+
+    def _gc_ns(self, slot):
+        if os.name == "nt":
+            return (slot.mono.value * 1_000_000_000 // self.frequency,
+                    (slot.utc.value - 116444736000000000) * 100)
+        assert 0 <= slot.mono.nanoseconds < 1_000_000_000
+        assert 0 <= slot.utc.nanoseconds < 1_000_000_000
+        return (slot.mono.seconds * 1_000_000_000 + slot.mono.nanoseconds,
+                slot.utc.seconds * 1_000_000_000 + slot.utc.nanoseconds)
+
+    def flush(self, record):
+        assert not self.enabled and self.callback not in gc.callbacks, "Passive capture is active"
+        assert not self.critical_pools, "Passive evidence cannot flush during owned worker timing"
+        samples = [row for row in self.sql_slots if row]
+        incomplete = sum(row["outcome"] == "incomplete" for row in samples)
+        gc_events, started = [], None
+        for slot in self.gc_slots:
+            if slot.phase is None:
+                break
+            mono, utc = self._gc_ns(slot)
+            if slot.phase == "start" and started is None and slot.generation in (0, 1, 2):
+                started = (mono, utc, slot.generation)
+            elif (slot.phase == "stop" and started is not None
+                  and slot.generation == started[2] and mono >= started[0]):
+                gc_events.append({"generation": slot.generation,
+                                  "mono_started_ns": started[0], "mono_finished_ns": mono,
+                                  "utc_started_ns": started[1], "utc_finished_ns": utc,
+                                  "duration_ns": mono - started[0]})
+                started = None
+            else:
+                self.invalid = True
+        complete = not (self.invalid or self.sql_overflow or self.gc_overflow
+                        or incomplete or started is not None)
+        record("passive_timing_summary", complete=complete, select_count=len(samples),
+               gc_count=len(gc_events), sql_cap=len(self.sql_slots),
+               gc_phase_cap=len(self.gc_slots),
+               sql_overflow=self.sql_overflow, gc_overflow=self.gc_overflow,
+               invalid=self.invalid, incomplete_selects=incomplete, unpaired_gc=started is not None,
+               flushed_after_workers=True, gc_scope="process-wide; no actor/thread attribution",
+               clock_limits="Native cells; no zero CPython/ctypes internal-allocation claim",
+               select_scope="Leading SELECT/WITH on fixture engine; cleanup reads excluded",
+               duration_scope="Engine event interval; may include later before-event listeners")
+        for row in samples:
+            output = dict(row)
+            if row["outcome"] != "incomplete":
+                output["duration_ns"] = row["mono_finished_ns"] - row["mono_started_ns"]
+            record("passive_select_timing", **output)
+        for row in gc_events:
+            record("passive_gc_timing", **row)
+        assert complete, "Passive timing evidence is incomplete"
+
+
 class _FinalizerAudit:
     def __init__(self, engine, record):
         self.engine, self.record = engine, record
@@ -224,6 +401,7 @@ class _FinalizerAudit:
         self.boundary = "applied"
         self.pids, self.errors, self.statements = {}, [], {}
         self.statement_counts = {}
+        self.passive = None
         self.all_pids = set()
         self.instance = f"finalizer-{uuid4().hex[:12]}"
         self.names = {role: f"{self.instance}-{role}"
@@ -278,8 +456,12 @@ class _FinalizerAudit:
             # Only statement templates: never parameters, document text or auth bodies.
             self.record("sql_before", role=role, pid=self.pids.get(role), sql=sql,
                         transaction=connection.info.get("finalizer_transaction"))
+        if self.passive is not None:
+            self.passive.begin_select(role, sql, _context)
 
     def after(self, connection, _cursor, sql, parameters, _context, _many):
+        if self.passive is not None:
+            self.passive.end_select(_context)
         role = connection.info.get("finalizer_role")
         started = getattr(_context, "finalizer_sql_started", None)
         if role in self.names and started is not None:
@@ -300,6 +482,9 @@ class _FinalizerAudit:
             assert released, "Actual finalizer SQL boundary was not released"
 
     def error(self, context):
+        passive = getattr(self, "passive", None)
+        if passive is not None:
+            passive.end_select(getattr(context, "execution_context", None), error=True)
         original = context.original_exception
         connection = getattr(context, "connection", None)
         role = connection.info.get("finalizer_role") if connection is not None else None
@@ -318,14 +503,19 @@ class _FinalizerAudit:
             ), {"prefix": self.instance + "-%"}).mappings().all()
             return [dict(row) for row in rows]
 
-    def await_blocker(self, waiter, holder):
+    def await_blocker(self, waiter, holder, *, on_observed=None):
         deadline = monotonic() + 1.5
         while monotonic() < deadline:
             rows = self.snapshot()
             match = next((row for row in rows if row["pid"] == self.pids.get(waiter)), None)
             if match and self.pids.get(holder) in match["blockers"]:
-                self.record("directed_blocker", waiter=waiter, holder=holder, activity=rows)
-                return
+                observed_at = datetime.now(UTC).isoformat()
+                if on_observed is not None:
+                    on_observed()
+                # Evidence output must not delay the caller's verified release.
+                self.record("directed_blocker", waiter=waiter, holder=holder, activity=rows,
+                            observed_at=observed_at, release_signaled=self.release.is_set())
+                return rows
             sleep(0.01)
         self.record("blocker_not_observed", activity=self.snapshot())
         raise AssertionError(f"Actual {waiter} -> {holder} PostgreSQL wait was not observed")
@@ -369,12 +559,16 @@ class _FinalizerAudit:
     def pool(self):
         pool = ThreadPoolExecutor(max_workers=3)
         futures = []
+        if self.passive is not None:
+            self.passive.critical_pools += 1
         try:
             yield pool, futures
         finally:
             self.release.set()
             _, pending = wait(futures, timeout=12)
             pool.shutdown(wait=True, cancel_futures=True)
+            if self.passive is not None:
+                self.passive.critical_pools -= 1
             self.record("contenders_completed", pending=len(pending))
             assert not pending, "Owned contender did not terminate"
 
@@ -447,6 +641,203 @@ def test_finalizer_sql_duration_receipt_omits_private_parameters():
     assert "must-not-be-retained" not in json.dumps(receipts)
 
 
+@pytest.mark.parametrize("legacy_order", [False, True], ids=["release_first", "legacy_negative"])
+def test_verified_blocker_release_is_independent_of_observer_receipt_delay(legacy_order):
+    receipts = []
+    receipt_entered, finish_receipt = Event(), Event()
+
+    def record(kind, **data):
+        receipts.append({"event": kind, **data})
+        receipt_entered.set()
+        assert finish_receipt.wait(8), "Delayed observer was not cleaned up"
+
+    audit = _FinalizerAudit(None, record)
+    audit.pids.update(worker=1, mutation=2)
+    activity = [{"pid": 1, "blockers": [2]}]
+    audit.snapshot = lambda: activity
+
+    def controller():
+        if legacy_order:
+            observed_activity = audit.await_blocker("worker", "mutation")
+            audit.release.set()
+            return observed_activity
+        else:
+            return audit.await_blocker("worker", "mutation", on_observed=audit.release.set)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(controller)
+        try:
+            assert receipt_entered.wait(1.5), "Verified fake blocker was not observed"
+            assert audit.release.is_set() is (not legacy_order)
+            assert not future.done(), "Observer delay was not actually in flight"
+        finally:
+            finish_receipt.set()
+            observed_activity = future.result(timeout=8)
+    assert audit.release.is_set()
+    assert observed_activity is activity
+    assert len(receipts) == 1 and receipts[0]["event"] == "directed_blocker"
+    assert receipts[0]["activity"] == activity
+    assert receipts[0]["waiter"] == "worker" and receipts[0]["holder"] == "mutation"
+    assert receipts[0]["release_signaled"] is (not legacy_order)
+    assert datetime.fromisoformat(receipts[0]["observed_at"]).tzinfo is not None
+
+
+def test_blocker_release_callback_never_runs_without_a_verified_native_edge(monkeypatch):
+    receipts, callbacks = [], []
+    audit = _FinalizerAudit(None, lambda kind, **data: receipts.append({"event": kind, **data}))
+    audit.pids.update(worker=1, mutation=2)
+    audit.snapshot = lambda: [{"pid": 1, "blockers": [3]}]
+    clock = iter((10.0, 10.0, 12.0))
+    monkeypatch.setattr(__name__ + ".monotonic", lambda: next(clock))
+    monkeypatch.setattr(__name__ + ".sleep", lambda _: None)
+
+    def release():
+        callbacks.append("unverified release")
+        audit.release.set()
+
+    with pytest.raises(
+        AssertionError, match="Actual worker -> mutation PostgreSQL wait was not observed",
+    ):
+        audit.await_blocker("worker", "mutation", on_observed=release)
+    assert callbacks == [] and not audit.release.is_set()
+    assert [row["event"] for row in receipts] == ["blocker_not_observed"]
+
+
+def test_passive_select_timing_keeps_only_hash_actor_clocks_and_outcome():
+    receipts = []
+    audit = _FinalizerAudit(None, lambda kind, **data: receipts.append({"event": kind, **data}))
+    audit.passive = _PassiveOverlapTiming(sql_cap=4)
+    connection = SimpleNamespace(info={"finalizer_role": "mutation"})
+    context = SimpleNamespace()
+    sql = "SELECT %(secret)s AS private_source_body"
+    with audit.passive.capture():
+        audit.before(connection, None, sql, {"secret": "raw-auth-token"}, context, False)
+        assert receipts == [], "No passive receipt writes in the DBAPI critical interval"
+        audit.after(connection, None, sql, {}, context, False)
+        audit.passive.begin_select("private-actor-name", "WITH t AS (SELECT 1) SELECT * FROM t",
+                                   context)
+        audit.passive.end_select(context, error=True)
+        audit.passive.begin_select("worker", "UPDATE fake SET x=1", context)
+        assert receipts == []
+    audit.passive.flush(lambda kind, **data: receipts.append({"event": kind, **data}))
+    rows = [row for row in receipts if row["event"] == "passive_select_timing"]
+    assert len(rows) == 2
+    assert rows[0]["template_sha256"] == sha256(sql.encode()).hexdigest()
+    assert [(row["actor"], row["outcome"]) for row in rows] == [
+        ("mutation", "ok"), ("unlabelled", "error"),
+    ]
+    assert all(row["duration_ns"] >= 0 and row["utc_started_ns"] > 0
+               and row["utc_finished_ns"] >= row["utc_started_ns"] for row in rows)
+    assert set(rows[0]) == {"event", "actor", "template_sha256", "utc_started_ns",
+                            "utc_finished_ns", "mono_started_ns", "mono_finished_ns",
+                            "duration_ns", "outcome"}
+    assert not any(value in json.dumps(receipts) for value in
+                   (sql, "raw-auth-token", "private-actor-name", "private_source_body"))
+
+
+@pytest.mark.parametrize("defect", ["sql-overflow", "oversize", "missing-context", "unfinished"])
+def test_passive_select_timing_bounds_fail_closed_without_raw_streams(defect):
+    receipts = []
+    timing = _PassiveOverlapTiming(sql_cap=1)
+    context = SimpleNamespace()
+    with timing.capture():
+        timing.begin_select("worker", "SELECT 1", context)
+        if defect != "unfinished":
+            timing.end_select(context)
+        if defect == "sql-overflow":
+            timing.begin_select("worker", "SELECT private_second", context)
+        elif defect == "oversize":
+            timing.begin_select("worker", "SELECT " + "x" * timing.TEMPLATE_CAP, context)
+        elif defect == "missing-context":
+            timing.begin_select("worker", "SELECT private_third", None)
+    with pytest.raises(AssertionError, match="Passive timing evidence is incomplete"):
+        timing.flush(lambda kind, **data: receipts.append({"event": kind, **data}))
+    summary = receipts[0]
+    assert not summary["complete"] and summary["select_count"] == 1
+    assert len(timing.sql_slots) == 1 and len(timing.available_sql) == 0
+    assert "private_second" not in json.dumps(receipts)
+    assert "private_third" not in json.dumps(receipts)
+    assert timing.callback not in gc.callbacks
+
+
+@pytest.mark.parametrize("body_error", [False, True])
+def test_passive_gc_native_clocks_cleanup_and_deferred_flush(body_error):
+    timing = _PassiveOverlapTiming()
+    original_callbacks = list(gc.callbacks)
+    receipts = []
+    try:
+        with timing.capture():
+            assert gc.callbacks == original_callbacks + [timing.callback]
+            gc.collect(0)
+            assert receipts == []
+            timing.critical_pools = 1
+            with pytest.raises(AssertionError, match="Passive capture is active"):
+                timing.flush(lambda **_: pytest.fail("Must not flush during collection"))
+            timing.critical_pools = 0
+            if body_error:
+                raise ValueError("safe fake body failure")
+    except ValueError as error:
+        assert body_error and str(error) == "safe fake body failure"
+    assert gc.callbacks == original_callbacks
+    assert not timing.enabled
+    timing.flush(lambda kind, **data: receipts.append({"event": kind, **data}))
+    rows = [row for row in receipts if row["event"] == "passive_gc_timing"]
+    assert rows and any(row["generation"] == 0 for row in rows)
+    assert all(row["duration_ns"] >= 0 and row["utc_started_ns"] > 0
+               and row["utc_finished_ns"] >= row["utc_started_ns"] for row in rows)
+    assert receipts[0]["complete"] and receipts[0]["flushed_after_workers"]
+
+
+@pytest.mark.parametrize("defect", ["overflow", "unpaired", "clock-error"])
+def test_passive_gc_bounds_and_callback_failure_are_incomplete(defect):
+    timing = _PassiveOverlapTiming(gc_cap=1)
+    receipts = []
+    original_callbacks = list(gc.callbacks)
+    # Invoke the exact registered callback with reviewed fake metadata, not a GC replay.
+    was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        with timing.capture():
+            if defect == "clock-error":
+                def failed_clock(_pointer):
+                    raise RuntimeError("safe fake clock failure")
+
+                timing.mono_clock = failed_clock
+            timing.callback("start", {"generation": 0})
+            if defect == "overflow":
+                timing.callback("stop", {"generation": 0})
+            assert receipts == []
+    finally:
+        if was_enabled:
+            gc.enable()
+    assert gc.callbacks == original_callbacks
+    with pytest.raises(AssertionError, match="Passive timing evidence is incomplete"):
+        timing.flush(lambda kind, **data: receipts.append({"event": kind, **data}))
+    assert not receipts[0]["complete"] and receipts[0]["unpaired_gc"]
+    assert receipts[0]["gc_overflow"] is (defect == "overflow")
+    assert receipts[0]["invalid"] is (defect == "clock-error")
+    assert "safe fake clock failure" not in json.dumps(receipts)
+
+
+def test_passive_gc_callback_has_no_record_allocation_io_or_lock_calls():
+    callback = _PassiveOverlapTiming._gc_callback
+    instructions = list(dis.get_instructions(callback))
+    assert not any(item.opname.startswith("BUILD_") or item.opname == "BINARY_OP"
+                   for item in instructions)
+    assert set(callback.__code__.co_names) == {
+        "enabled", "next_gc", "gc_overflow", "next", "phase", "generation",
+        "mono_clock", "mono_pointer", "utc_clock", "utc_pointer", "BaseException", "invalid",
+    }
+
+
+def test_passive_flush_rejects_owned_worker_window_even_after_gc_is_removed():
+    timing = _PassiveOverlapTiming()
+    timing.critical_pools = 1
+    with pytest.raises(AssertionError, match="cannot flush during owned worker timing"):
+        timing.flush(lambda **_: pytest.fail("Must not flush before owned workers finish"))
+    assert timing.callback not in gc.callbacks
+
+
 @pytest.fixture
 def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
     monkeypatch.setenv("CASEOPS_ENV", "local")
@@ -508,17 +899,23 @@ def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
                test_sha256=sha256(Path(__file__).read_bytes()).hexdigest(),
                evidence_path=str(evidence_path),
                limitation="Local overlap, not Cloud Run CPU attribution")
+        audit.passive = _PassiveOverlapTiming()
+        audit.passive.start()
         try:
             yield audit
         finally:
             audit.release.set()
+            audit.passive.stop()
             for name, callback in audit.hooks:
                 event.remove(engine, name, callback)
-            remaining = audit.snapshot()
-            locks = audit.retained_locks()
-            record("cleanup", activity=remaining, locks=locks,
-                   all_backend_ids=sorted(audit.all_pids), errors=audit.errors)
-            engine.dispose()
+            try:
+                remaining = audit.snapshot()
+                locks = audit.retained_locks()
+                record("cleanup", activity=remaining, locks=locks,
+                       all_backend_ids=sorted(audit.all_pids), errors=audit.errors)
+            finally:
+                engine.dispose()
+                audit.passive.flush(record)
             assert not remaining, "Owned labelled PostgreSQL transaction leaked"
             assert not locks, "Owned PostgreSQL backend locks leaked"
 
@@ -646,10 +1043,14 @@ def test_actual_finalizer_allows_same_uploader_login_and_releases_company_writer
         audit.require_auth_before_writer = True
         writer = pool.submit(audit.mutate, fixture, mutation)
         futures.append(writer)
-        audit.await_blocker("mutation", "worker")
-        assert not writer.done()
-        audit.record("release_finalizer_after_response", activity=audit.snapshot())
-        audit.release.set()
+        def release_held_finalizer():
+            assert not writer.done()
+            audit.release.set()
+
+        observed_activity = audit.await_blocker(
+            "mutation", "worker", on_observed=release_held_finalizer,
+        )
+        audit.record("release_finalizer_after_response", activity=observed_activity)
         worker.result(timeout=5)
         writer.result(timeout=5)
     _verify_committed(audit, fixture, event_count=2)

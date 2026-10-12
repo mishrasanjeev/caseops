@@ -2,6 +2,72 @@
 
 ## October 12 Combined Release
 
+18:24 UTC checkpoint: frozen `3e56c2cb` Docker02 finished naturally RED at
+16:58 UTC: 2,631 passes and two failures among 2,633 native identities, zero
+skips/errors, all 7,899 phases retained, and no browser execution. Owned
+containers, networks, volumes and controller processes are cleaned up. The
+earlier 16:40 progress below is historical, not the final result.
+
+The native lock-timeout and 8.8866s private invalidation remain historically
+Inconclusive; neither an observer-order correction nor a focused pass explains
+the original delay. Bounded passive timing now retains SQL/GC/transaction phases
+without changing original assertions, lock deadlines or the five-second budget.
+Full replacement timing proof passes 157 native identities/471 phases; the
+private-invalidation instrumentation still needs the full native replay.
+
+Contract transport/source/access fences have 474 focused passes/1,422 phases
+on the previous amendment. Review then found rejected returned completions
+could escape accounting: current source records sanitized spent usage before
+schema/deadline/debit denials, rejects each retained attempt, and uses a
+conservative labelled estimate when native counters are missing/invalid. Fresh
+native SDK and complete affected-suite proof are pending; old 474 is not
+transferred. Route contracts remain byte-identical to frozen3e's OpenAPI dump.
+
+The canonical deployment now requires one completed exact-release SQL backup
+after drains and before migration. Native SDK568 proved filter-after-limit can
+hide older running operations; unfiltered bounded inventory plus a saturation
+rejection replaces that behavior. Missing backup IDs fail closed without a
+history scan or duplicate creation. Read-only snapshot at 18:13 UTC contains
+194 exact-instance terminal operations, not a future drain/backup lease.
+Actual checkpoint creation, full fresh Docker/CI/main/live QA and guarded
+scheduler resume remain NO-GO. The pinned statute compiler check passes with
+4,496 provisions and unchanged bundle hash; Windows test readers explicitly
+use UTF-8. No production/model/provider/financial configuration changed.
+
+16:40 UTC checkpoint: candidate `3e56c2cb` has completely reconciled green CI,
+Security/CodeQL, 2,633 native CI cases, 548 hosted browser cases (531 passes,
+17 explicit skips) and fresh 1,279-case local web acceptance. Local frozen
+Docker02 is still running and contains one real native lock-timeout failure;
+no browser, main merge or production acceptance is inferred from that progress.
+
+The complete original timeline disproves pre-release receipt delay as the cause:
+its intentional pause returned in 0.0558921s, but an unexplained 4.257497s interval
+occurred later before a retained mutation write. A separate observer-order hazard
+has RED/GREEN proof and 145 complete focused local passes with original deadlines
+and assertions. Historical timeout diagnosis remains Inconclusive; fresh complete
+Docker evidence must measure that interval and must preserve the original RED.
+
+Independent active-path review found a P1 on all four contract AI actions:
+retrieval transactions persisted through model work, without fresh source/access
+finalization. The owned read/transport/finalize correction and bounded source/
+policy fences are under regression review in a separate working checkout.
+New `test_contract_transport_boundary_20261012*.py` native SDK/HTTP probes and
+`ram-2026-10-12-prod.spec.ts` cover the four routes; both browser inventories
+discover its two responsive journeys, but discovery is not a passed execution.
+Six source-only mock-schema controls pass locally after retaining an initial
+empty-source fixture failure. These fixes are Partially fixed, not deployed.
+
+Backup metadata is bound to `perfect-period-305406:asia-south1:caseops-db`:
+automated backups enabled, one retained backup, 03:00 UTC start; PITR and log
+archiving are disabled. Latest automated backup completed 03:40:53 UTC on
+October 12. This is not restore proof or a fresh pre-migration checkpoint.
+Six bounded v2 job inventories returned 3,303 terminal executions at 14:52 UTC;
+terminal is not successful and a snapshot is not a drain lease. Future document/
+court executor jobs are absent on the serving old release. First rollout still
+requires real retirement/admission fences, fresh backup and exact-release QA.
+External consent/mapping, invoice opening baseline and recovery-drill gaps stay
+open; no production, provider, financial baseline or AI fallback was changed.
+
 13:40 UTC security follow-up: real network-disabled Docker scratch export of
 frozen2ade admits 17 unlisted app/test canaries (91 files versus74 intended),
 while every required builder/material file and prior exclusion survives. This

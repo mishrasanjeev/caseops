@@ -1,5 +1,29 @@
 # CaseOps agent instructions
 
+- Returned provider output can spend tokens before parsing, refusal, deadline
+  or quota rejection. Capture sanitized usage before those boundaries, retain
+  both bounded attempts without double counting, and never retry an accounting
+  failure. Unknown/invalid counters require a labelled conservative estimate
+  using the effective wire limit, not a guessed zero or the smaller input cap.
+  Native SDK typed counters may coerce Boolean/string wire values into integers;
+  prove raw-response admission with the installed SDK, not only fake typed rows.
+- A Cloud SDK display filter may run after the producer's raw result limit.
+  Prove the installed producer/pager behavior before treating an empty filtered
+  inventory as quiescence. Use bounded unfiltered identities, reject saturation,
+  and retain a known failed operation before validating its full receipt; never
+  recover an unknown create by blindly creating again or scanning all history.
+- A four-route contract AI audit must distinguish read-only retrieval, SDK/ADC
+  construction, every transport attempt, durable usage accounting and fresh
+  authorized persistence. Release only a proven read transaction owned by the
+  workflow; pending, already-flushed Core and raw-Connection caller writes must
+  remain intact. Recheck the original token, actor capability, complete source
+  inventory and current policy after transport. Native-adapter tests and zero-
+  paid browser fixtures are separate evidence, never legal-accuracy proof.
+- A native lock-timeout diagnosis must reconcile the actual blocker, release,
+  subsequent SQL and transaction completion timestamps. A separately reproduced
+  observer-order hazard cannot explain a timeout whose pause already returned.
+  Release immediately after the verified directed edge, keep original deadlines
+  and assertions, and retain bounded passive timings for unexplained intervals.
 - A migration-boundary test must capture the exact single canonical head before
   upgrade, while pinning the retained migration ancestry. Do not confuse a
   boundary revision with the newest head or replace one stale latest-head

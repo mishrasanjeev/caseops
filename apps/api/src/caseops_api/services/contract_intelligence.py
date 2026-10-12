@@ -19,7 +19,7 @@ All three are idempotent:
   extracted rows on the contract before writing new ones (marked via
   ``notes`` prefix ``[auto] ``) so reruns don't compound, but manually
   authored rows survive.
-- compare_playbook is pure-function (no writes).
+- compare_playbook returns ephemeral findings, with durable model/usage evidence.
 
 Also shipped: ``install_default_playbook_rules`` one-shot that seeds
 the 15-rule default Indian commercial playbook onto a contract's
@@ -39,6 +39,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     Contract,
     ContractClause,
@@ -58,6 +60,7 @@ from caseops_api.schemas.contracts import (
 )
 from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.contract_ai_phase import current_contract_ai_phase
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
     PURPOSE_RECOMMENDATIONS,
@@ -72,6 +75,20 @@ from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
+
+
+def _contract_provider(session: Session, *, purpose: str):
+    phase = current_contract_ai_phase(session)
+    if phase is not None:
+        phase.release_for_provider_factory()
+    elif (
+        get_settings().llm_provider not in {"mock", "noop", "off"}
+        and not paid_providers_blocked_for_request()
+    ):
+        raise HTTPException(
+            409, detail="Use the authenticated contract workflow for model generation.",
+        )
+    return build_provider(purpose=purpose)
 
 
 def _prompt_hash(messages: list[LLMMessage]) -> str:
@@ -90,23 +107,28 @@ def _write_model_run(
     completion,
     context: LLMCallContext,
     messages: list[LLMMessage],
-) -> None:
-    session.add(
-        ModelRun(
-            company_id=context.tenant_id,
-            matter_id=context.matter_id,
-            actor_membership_id=context.actor_membership_id,
-            purpose=context.purpose,
-            provider=completion.provider,
-            model=completion.model,
-            prompt_hash=_prompt_hash(messages),
-            prompt_tokens=completion.prompt_tokens,
-            completion_tokens=completion.completion_tokens,
-            latency_ms=completion.latency_ms,
-            status="ok",
-        )
+    run_status: str = "ok",
+) -> ModelRun:
+    run = ModelRun(
+        company_id=context.tenant_id,
+        matter_id=context.matter_id,
+        actor_membership_id=context.actor_membership_id,
+        purpose=context.purpose,
+        provider=completion.provider,
+        model=completion.model,
+        prompt_hash=_prompt_hash(messages),
+        prompt_tokens=completion.prompt_tokens,
+        completion_tokens=completion.completion_tokens,
+        latency_ms=completion.latency_ms,
+        status=run_status,
+        error="usage_estimated" if (
+            isinstance(getattr(completion, "raw", None), dict)
+            and completion.raw.get("usage_estimated") is True
+        ) else None,
     )
+    session.add(run)
     session.flush()
+    return run
 
 
 def _structured_with_retry(
@@ -127,17 +149,39 @@ def _structured_with_retry(
     already calling. One same-model retry covers the transient-blip
     case without doubling tokens on the happy path.
     """
+    phase = current_contract_ai_phase(session)
+    if phase is None and session is not None and provider.name != "mock":
+        raise HTTPException(
+            409, detail="Use the authenticated contract workflow for model generation.",
+        )
+
     def _call(p):
+        if phase is not None:
+            phase.before_attempt()
+
+        def account(completion):
+            run = _write_model_run(
+                session, completion=completion, context=context, messages=messages,
+                run_status="output_pending",
+            )
+            phase.pending_model_run_id = run.id
+            phase.pending_model_run_ids.append(run.id)
+            session.commit()
+
         payload, completion = generate_structured(
             p, schema=schema, messages=messages, context=context,
             temperature=temperature, max_tokens=max_tokens, session=session,
+            release_session_before_provider=phase is not None,
+            on_completion_accounted=account if phase is not None else None,
         )
-        _write_model_run(
-            session,
-            completion=completion,
-            context=context,
-            messages=messages,
-        )
+        if phase is not None:
+            phase.finalize(purpose=context.purpose, model=p.model)
+            run = session.get(ModelRun, phase.pending_model_run_id)
+            run.status = "ok"
+        else:
+            _write_model_run(
+                session, completion=completion, context=context, messages=messages,
+            )
         return payload, completion
     try:
         return _call(provider)
@@ -147,6 +191,8 @@ def _structured_with_retry(
             exc=exc,
         ) from exc
     except LLMProviderError as exc:
+        if phase is not None:
+            phase.reject_pending_runs()
         logger.warning(
             "%s: provider failed (%s: %s); retrying once",
             feature, type(exc).__name__, exc,
@@ -499,7 +545,6 @@ def extract_clauses(
             "PDF or DOCX first.",
         )
 
-    provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
     messages = _clause_extraction_messages(text)
     call_context = LLMCallContext(
         purpose=PURPOSE_METADATA_EXTRACT,
@@ -507,6 +552,7 @@ def extract_clauses(
         matter_id=None,
         actor_membership_id=context.membership.id if context.membership else None,
     )
+    provider = _contract_provider(session, purpose=PURPOSE_METADATA_EXTRACT)
     payload, completion = _structured_with_retry(
         provider,
         schema=_ClauseExtractionPayload,
@@ -630,7 +676,6 @@ def extract_obligations(
             "PDF or DOCX first.",
         )
 
-    provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
     messages = _obligation_extraction_messages(text, contract)
     call_context = LLMCallContext(
         purpose=PURPOSE_METADATA_EXTRACT,
@@ -638,6 +683,7 @@ def extract_obligations(
         matter_id=None,
         actor_membership_id=context.membership.id if context.membership else None,
     )
+    provider = _contract_provider(session, purpose=PURPOSE_METADATA_EXTRACT)
     payload, completion = _structured_with_retry(
         provider,
         schema=_ObligationExtractionPayload,
@@ -755,8 +801,8 @@ def compare_playbook(
 ) -> PlaybookComparisonResult:
     """Match each ContractPlaybookRule against the contract's clauses.
 
-    Does not write to the DB — the caller persists a finding as a clause
-    flag or obligation if they want it tracked. Matching is done by the
+    Does not write clauses or rules; model/usage evidence is retained. The
+    caller persists a finding as a clause flag or obligation if needed. Matching is done by the
     LLM, not regex, so a clause that *covers* the rule's topic via
     different language is still identified as ``matched`` or ``deviation``.
     """
@@ -783,7 +829,6 @@ def compare_playbook(
             model="none",
         )
 
-    provider = build_provider(purpose=PURPOSE_RECOMMENDATIONS)
     messages = _playbook_messages(rules, clauses)
     call_context = LLMCallContext(
         purpose=PURPOSE_RECOMMENDATIONS,
@@ -791,6 +836,7 @@ def compare_playbook(
         matter_id=None,
         actor_membership_id=context.membership.id if context.membership else None,
     )
+    provider = _contract_provider(session, purpose=PURPOSE_RECOMMENDATIONS)
     payload, completion = _structured_with_retry(
         provider,
         schema=_PlaybookComparisonPayload,
@@ -1117,7 +1163,6 @@ def extract_party_clauses(
             ),
         )
 
-    provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
     messages = _party_extraction_messages(
         contract=contract, text=corpus.text, payload=payload,
     )
@@ -1127,6 +1172,7 @@ def extract_party_clauses(
         matter_id=None,
         actor_membership_id=context.membership.id if context.membership else None,
     )
+    provider = _contract_provider(session, purpose=PURPOSE_METADATA_EXTRACT)
     llm_payload, completion = _structured_with_retry(
         provider,
         schema=_PartyClauseExtractionLlmPayload,
@@ -1225,6 +1271,10 @@ def extract_party_clauses(
 def _load_contract(
     session: Session, *, context: SessionContext, contract_id: str
 ) -> Contract:
+    phase = current_contract_ai_phase(session)
+    if phase is not None:
+        contract, _ = phase.load_source()
+        return contract
     contract = session.scalar(
         select(Contract)
         .where(Contract.id == contract_id)

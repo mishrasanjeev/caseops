@@ -2,6 +2,17 @@
 
 ## October 12 Combined Fixes
 
+18:24 UTC: four contract AI actions are **Partially fixed**, not deployed.
+Owned transaction-free transport and fresh source/access/policy persistence
+passed the prior 474-case focused scope; the subsequent rejected-completion
+accounting amendment requires its own fresh native SDK/complete-scope proof.
+Two responsive dated browser journeys are standard-discovered, not executed.
+Frozen3e full Docker ended with 2,631 passes/two native failures and no browser
+run. The original lock-timeout and private-invalidation delay remain
+**Inconclusive**; bounded passive timing retains every original assertion and
+deadline. Preserve all failed evidence and require fresh exact-source Docker,
+green CI, canonical merge and production Playwright before any fixed verdict.
+
 Resumed October 12 IST: court preparation is **Partially fixed** with complete
 24-case native proof and independent review; two-SQL getters, zero historical
 materialization, original ACL/lifecycle/hash/replay controls, exact unlocked/

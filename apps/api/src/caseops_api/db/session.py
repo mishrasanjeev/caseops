@@ -4,8 +4,13 @@ from collections.abc import AsyncGenerator
 from threading import Lock
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.sql import visitors
+from sqlalchemy.sql.dml import UpdateBase
+from sqlalchemy.sql.elements import ColumnClause, TextClause
+from sqlalchemy.sql.functions import FunctionElement
+from sqlalchemy.sql.selectable import SelectBase
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db import models
@@ -25,9 +30,33 @@ _EngineCacheKey = tuple[str, int, int, int, int, int, int, int]
 _ENGINE_CACHE: dict[_EngineCacheKey, Engine] = {}
 _SQLITE_WRITE_LOCK = Lock()
 _SQLITE_WRITE_LOCK_HELD_KEY = "caseops_sqlite_write_lock_held"
+_WRITTEN_TRANSACTION_KEY = "caseops_written_transaction"
+_CONNECTION_OWNER_KEY = "caseops_transaction_owner"
+_OWNED_CONNECTIONS_KEY = "caseops_owned_connection_info"
+_READ_FUNCTIONS = frozenset({
+    "abs", "avg", "char_length", "coalesce", "count", "current_date", "current_timestamp",
+    "convert_to", "date", "date_trunc", "datetime", "distinct", "encode", "extract",
+    "greatest", "json_array_length",
+    "jsonb_array_length", "julianday",
+    "least", "length", "lower", "max", "min", "now", "nullif", "octet_length", "pg_backend_pid",
+    "pg_current_xact_id_if_assigned", "plainto_tsquery", "round", "strftime", "substr",
+    "sha256", "substring", "sum", "time", "to_tsvector", "ts_rank", "upper",
+})
 
 
 class CaseOpsSession(Session):
+    def require_read_only_transaction(self) -> None:
+        if isinstance(self.get_bind(), Connection) or self.in_nested_transaction():
+            raise RuntimeError(
+                "The caller owns an external or nested transaction; cannot release it.",
+            )
+        transaction = self.get_transaction()
+        if (
+            self.new or self.dirty or self.deleted
+            or (transaction is not None and self.info.get(_WRITTEN_TRANSACTION_KEY) is transaction)
+        ):
+            raise RuntimeError("The caller transaction contains writes and cannot be released.")
+
     def _uses_sqlite_bind(self) -> bool:
         bind = self.get_bind()
         engine = getattr(bind, "engine", bind)
@@ -73,6 +102,72 @@ class CaseOpsSession(Session):
             super().close()
         finally:
             self._release_sqlite_write_lock()
+
+
+@event.listens_for(CaseOpsSession, "before_flush")
+def _remember_flushed_writes(session, _flush_context, _instances) -> None:
+    if session.new or session.dirty or session.deleted:
+        session.info[_WRITTEN_TRANSACTION_KEY] = session.get_transaction()
+
+
+def _proven_read_statement(statement) -> bool:
+    # This exact existing probe observes transaction state; it cannot write.
+    if isinstance(statement, TextClause):
+        return statement.text == "SELECT pg_current_xact_id_if_assigned() IS NULL"
+    if not isinstance(statement, SelectBase):
+        return False
+    for node in visitors.iterate(statement):
+        if isinstance(node, (UpdateBase, TextClause)):
+            return False
+        if isinstance(node, ColumnClause) and node.is_literal and node.name not in {
+            "1", "*", "NULL", "true", "false",
+        }:
+            return False
+        if isinstance(node, FunctionElement) and (
+            str(getattr(node, "name", "")).lower() not in _READ_FUNCTIONS
+            or getattr(node, "packagenames", ())
+        ):
+            return False
+    return True
+
+
+def _connection_owner(connection):
+    owner = connection.info.get(_CONNECTION_OWNER_KEY)
+    if owner is not None and owner[0].get_transaction() is owner[1]:
+        return owner[0]
+    return None
+
+
+@event.listens_for(Engine, "before_execute")
+def _remember_connection_writes(connection, statement, _multiparams, _params, _options) -> None:
+    session = _connection_owner(connection)
+    if session is not None and not _proven_read_statement(statement):
+        session.info[_WRITTEN_TRANSACTION_KEY] = session.get_transaction()
+
+
+@event.listens_for(Engine, "before_cursor_execute")
+def _remember_driver_writes(connection, _cursor, _sql, _params, context, _many) -> None:
+    session = _connection_owner(connection)
+    if session is not None and context.compiled is None:
+        # exec_driver_sql bypasses SQLAlchemy's structured statement tree.
+        session.info[_WRITTEN_TRANSACTION_KEY] = session.get_transaction()
+
+
+@event.listens_for(CaseOpsSession, "after_begin")
+def _track_connection_owner(session, _transaction, connection) -> None:
+    owner = (session, session.get_transaction())
+    information = connection.info
+    information[_CONNECTION_OWNER_KEY] = owner
+    session.info.setdefault(_OWNED_CONNECTIONS_KEY, []).append((information, owner))
+
+
+@event.listens_for(CaseOpsSession, "after_transaction_end")
+def _forget_ended_writes(session, transaction) -> None:
+    if transaction.parent is None:
+        session.info.pop(_WRITTEN_TRANSACTION_KEY, None)
+        for information, owner in session.info.pop(_OWNED_CONNECTIONS_KEY, ()):
+            if information.get(_CONNECTION_OWNER_KEY) is owner:
+                information.pop(_CONNECTION_OWNER_KEY, None)
 
 
 def _configure_sqlite_connection(dbapi_connection: object, _connection_record: object) -> None:

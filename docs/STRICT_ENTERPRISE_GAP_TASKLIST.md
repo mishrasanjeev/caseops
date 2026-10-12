@@ -2,6 +2,17 @@
 
 ## October 12 Integration Checkpoint
 
+18:24 UTC: **NO-GO.** Frozen3e Docker completed with 2,631 native passes/two
+failures, all 7,899 phases and no browsers. Contract AI transport/finalization
+and durable rejected-response accounting are **Partially implemented** pending
+the current complete native SDK inventory and full Docker/CI/live replay. Prior
+474 focused passes do not certify the new accounting amendment. Original
+native timeout/performance causes remain Inconclusive; passive timing does not
+raise deadlines or waive work bounds. Exact-release pre-migration backup is
+**Partially implemented**: SDK568 bounded unfiltered compatibility is proven,
+but actual guarded creation/readback and recovery drill are not. PITR remains
+OFF. Route OpenAPI is byte-identical; no production/provider/budget mutation.
+
 Resumed October 12 IST: old9c Docker is completed RED, not merely a prefix:
 2,617 passes/six failures among2,623, no native skips/errors, no browser execution.
 Full current narrow replacements are 74 tail +24 court native passes, 294

@@ -220,6 +220,7 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   "${API_SOURCE_DIR}" "apps/web" package.json package-lock.json \
   .dockerignore .gcloudignore "license-policy" \
   "docs/security/js-license-compliance-review-2026-10-12.md" \
+  "scripts/deploy-prod.sh" "scripts/pre_migration_backup.py" "scripts/scheduler_inventory.py" \
   "tests/fixtures/statutes/structured-schedule-api.json" \
   "tests/e2e/support/prod-failure-diagnostics.ts" \
   "tests/e2e/support/bounded-network-evidence.ts" \
@@ -367,6 +368,14 @@ fi
 API_DIGEST=$(resolve_image_digest "${API_IMAGE}")
 API_IMMUTABLE_IMAGE="${REGISTRY}/caseops-api@${API_DIGEST}"
 echo "  immutable api image=${API_IMMUTABLE_IMAGE}"
+
+# A daily snapshot is not a checkpoint for this migration. Creation happens once;
+# unknown/pending outcomes stop here and retain their operation/description.
+assert_current_main "pre-backup mutation gate"
+echo "--- require fresh pre-migration SQL backup ---"
+python scripts/pre_migration_backup.py --project "${PROJECT}" --region "${REGION}" \
+  --instance caseops-db --release-sha "${HEAD_SHA}"
+assert_current_main "post-backup pre-migration gate"
 
 # Step 2 — converge, read back and execute the migrate-job. Idempotent when
 # alembic is already at head; mandatory when there's a pending migration.

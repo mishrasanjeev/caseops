@@ -635,10 +635,10 @@ def _run_downstream_overlap(audit, monkeypatch, path, first, source, *, upload_o
                         transaction=selected_boundary["transaction"],
                     )
                 proceed.set()
-            audit.await_blocker("mutation" if first == "worker" else "worker", first)
+            audit.await_blocker("mutation" if first == "worker" else "worker", first,
+                                on_observed=audit.release.set)
             audit.record("compliance_boundary_release_requested", **selected_boundary)
             audit.record("release_compliance_after_blocker", first=first)
-            audit.release.set()
             worker.result(10)
             mutation.result(10)
     finally:

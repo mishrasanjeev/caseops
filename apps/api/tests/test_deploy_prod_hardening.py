@@ -1904,6 +1904,7 @@ def _run_deploy_with_fakes(
     artifact_describe_failures: int = 0,
     rate_identity_mode: str = "ok",
     document_worker_mode: str = "ok",
+    backup_mode: str = "ok",
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -2319,6 +2320,15 @@ if [[ "${1:-}" == "scripts/document_worker_release.py" ]]; then
   printf '%s\\n' '{"schema_version":1,"admission_disabled":true}'
   exit 0
 fi
+if [[ "${1:-}" == "scripts/pre_migration_backup.py" ]]; then
+  printf '%s\\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+  if [[ "${FAKE_BACKUP_MODE:-ok}" != "ok" ]]; then
+    printf '%s\\n' 'Backup checkpoint failed closed.' >&2
+    exit 60
+  fi
+  printf '%s\\n' '{"event":"backup_completed","backup_id":"fake-only-123"}'
+  exit 0
+fi
 if [[ "${1:-}" == "scripts/reconcile_rate_identity_edge.py" ]]; then
   printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
   if [[ "${FAKE_RATE_IDENTITY_MODE}" == "${2:-}" ]]; then
@@ -2432,6 +2442,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
                 separators=(",", ":"),
             ),
             "FAKE_GCLOUD_LOG": _bash_path(gcloud_log),
+            "FAKE_BACKUP_MODE": backup_mode,
             "FAKE_GIT_FETCH_COUNT": _bash_path(tmp_path / "git-fetch-count"),
             "FAKE_GIT_STATUS": git_status,
             "FAKE_MAIN_DRIFT_AFTER_FETCHES": str(main_drift_after_fetches or 0),
@@ -3036,36 +3047,48 @@ def test_deploy_prod_rejects_invalid_private_projection_scheduler_hold(
         ),
         (
             3,
+            "scheduler_inventory.py quiesce",
+            "pre_migration_backup.py",
+            "pre-backup mutation gate",
+        ),
+        (
+            4,
+            "pre_migration_backup.py",
+            "run jobs update caseops-migrate-job",
+            "post-backup pre-migration gate",
+        ),
+        (
+            5,
             "run jobs update caseops-ip-qa-bootstrap",
             "run deploy caseops-api",
             "final pre-route gate",
         ),
         (
-            4,
+            6,
             "run jobs update caseops-ip-qa-bootstrap",
             "reconcile_rate_identity_edge.py prepare",
             "before-purpose-edge-reconciliation",
         ),
         (
-            5,
+            7,
             "reconcile_rate_identity_edge.py prepare",
             "run deploy caseops-api",
             "after-purpose-edge-reconciliation",
         ),
         (
-            6,
+            8,
             "run deploy caseops-web",
             "reconcile_rate_identity_edge.py verify",
             "before-effective-purpose-edge-proof",
         ),
         (
-            7,
+            9,
             "run deploy caseops-web",
             "run jobs execute caseops-ip-qa-bootstrap",
             "post-route pre-certification gate",
         ),
         (
-            8,
+            10,
             "run jobs execute caseops-ip-qa-bootstrap",
             "scheduler_inventory.py resume",
             "pre-provider-scheduler-resume gate",
@@ -3099,6 +3122,21 @@ def test_deploy_prod_fails_closed_when_main_advances_during_release(
         assert forbidden_call not in calls
     assert "gh workflow run prod-verify.yml" not in calls
     assert "=== deploy-prod.sh — DONE" not in result.stdout
+
+
+@pytest.mark.parametrize("mode", ["failed", "unknown", "pending"])
+def test_deploy_refuses_migration_and_routing_without_backup_completion(tmp_path, mode):
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", backup_mode=mode)
+    assert result.returncode != 0
+    assert "Backup checkpoint failed closed." in result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert "builds submit" in calls and calls.count("pre_migration_backup.py") == 1
+    for forbidden in (
+        "run jobs update caseops-migrate-job", "run jobs execute caseops-migrate-job",
+        "run deploy caseops-api", "services update-traffic", "scheduler_inventory.py resume",
+        "gh workflow run prod-verify.yml",
+    ):
+        assert forbidden not in calls
 
 
 def test_deploy_prod_does_not_repeat_a_successful_current_generation_qa_bootstrap(

@@ -21,7 +21,7 @@ import json
 import logging
 import re
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, NoReturn
@@ -51,6 +51,54 @@ from caseops_api.services.llm_types import (
 logger = logging.getLogger(__name__)
 
 _provider_deadline: ContextVar[float | None] = ContextVar("llm_provider_deadline", default=None)
+_completion_receipt: ContextVar[Callable[[LLMCompletion], None] | None] = ContextVar(
+    "llm_completion_receipt", default=None,
+)
+
+
+class LLMUsageAccountingError(RuntimeError):
+    """Accounting failure is not a retryable provider failure."""
+
+
+def _observe_completion(completion: LLMCompletion) -> None:
+    observer = _completion_receipt.get()
+    if observer is not None:
+        try:
+            observer(LLMCompletion(
+                text="", provider=completion.provider, model=completion.model,
+                prompt_tokens=completion.prompt_tokens,
+                completion_tokens=completion.completion_tokens,
+                latency_ms=completion.latency_ms,
+                raw={"usage_estimated": isinstance(getattr(completion, "raw", None), dict)
+                     and completion.raw.get("usage_estimated") is True},
+            ))
+        except Exception:
+            raise LLMUsageAccountingError(
+                "AI usage accounting failed; no output was accepted.",
+            ) from None
+
+
+def _observe_native_usage(provider, usage, *, started, input_bytes, max_tokens) -> None:
+    if _completion_receipt.get() is None:
+        return
+    estimated = False
+    try:
+        prompt, output = usage()
+        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0
+               for value in (prompt, output)):
+            raise ValueError("Invalid usage counters.")
+    except (ValueError, TypeError, KeyError, AttributeError):
+        # Unknown usage is conservatively charged to the bounded request, never
+        # invented as actual zero tokens or retained with a rejected response body.
+        prompt = input_bytes
+        output = max_tokens
+        estimated = True
+    _observe_completion(LLMCompletion(
+        text="", provider=provider.name, model=provider.model,
+        prompt_tokens=prompt, completion_tokens=output,
+        latency_ms=max(1, int((time.perf_counter() - started) * 1000)),
+        raw={"usage_estimated": estimated},
+    ))
 
 
 def provider_time_remaining(deadline: float | None = None) -> float | None:
@@ -152,7 +200,10 @@ class MockProvider:
         started = time.perf_counter()
         joined = "\n".join(m.content for m in messages)
         lowered = joined.lower()
-        if "untrusted_authority_sources:" in lowered and "issue_summary" in lowered:
+        contract_response = _mock_contract_response(messages)
+        if contract_response is not None:
+            text = contract_response
+        elif "untrusted_authority_sources:" in lowered and "issue_summary" in lowered:
             text = _mock_intelligent_review_response(joined)
         elif "workspace_assistant_qa" in lowered:
             text = _mock_workspace_assistant_response(joined)
@@ -193,6 +244,40 @@ def _estimate_call_tokens(messages: list[LLMMessage], max_tokens: int) -> int:
 def _mock_plain_response(prompt: str) -> str:
     digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
     return f"mock-ack::{digest}"
+
+
+def _mock_contract_response(messages: list[LLMMessage]) -> str | None:
+    """Minimal source-only fixtures, not paid-model or legal-quality evidence."""
+    if not messages or messages[0].role != "system":
+        return None
+    system = messages[0].content
+    if system.startswith("You compare a firm's playbook rules against clauses already "):
+        # The canonical service supplies every reviewed rule's missing finding;
+        # the emulator must not fabricate matches or responsive clause IDs.
+        return '{"findings":[]}'
+    prefixes = (
+        "You extract legal clauses from commercial contracts ",
+        "You extract operational obligations from commercial contracts.",
+        "You extract source-backed, party-specific contract items from ",
+    )
+    if not system.startswith(prefixes):
+        return None
+    prompt = messages[-1].content
+    source = (_extract_between(prompt, "=== CONTRACT TEXT ===\n", "\n=== END ===") or "").strip()
+    excerpt = next((line.strip()[:280] for line in source.splitlines() if line.strip()), "")
+    if system.startswith(prefixes[0]):
+        rows = [{"clause_type": "other", "title": "Offline source excerpt",
+                 "clause_text": excerpt, "risk_level": "low",
+                 "rationale": "Deterministic offline fixture, not legal advice."}]
+        return json.dumps({"clauses": rows if len(excerpt) >= 10 else []})
+    if system.startswith(prefixes[1]):
+        rows = [{"title": "Offline source duty", "description": excerpt,
+                 "due_on_iso": None, "priority": "medium"}]
+        return json.dumps({"obligations": rows if excerpt else []})
+    rows = [{"category": "obligation", "summary": "Offline source excerpt",
+             "assigned_party": "ambiguous", "ambiguity_reason": "Offline fixture needs review.",
+             "snippet": excerpt, "locator": None}]
+    return json.dumps({"items": rows if excerpt else []})
 
 
 def _mock_intelligent_review_response(prompt: str) -> str:
@@ -938,11 +1023,28 @@ class OpenAIProvider:
         if remaining is not None:
             kwargs["timeout"] = remaining
         try:
-            response = self._client.chat.completions.create(**kwargs)
+            raw_api = getattr(self._client.chat.completions, "with_raw_response", None)
+            if _completion_receipt.get() is not None and raw_api is not None:
+                raw = raw_api.create(**kwargs)
+
+                def usage():
+                    counters = raw.http_response.json()["usage"]
+                    return counters["prompt_tokens"], counters["completion_tokens"]
+
+                _observe_native_usage(self, usage, started=started, input_bytes=input_bytes,
+                                      max_tokens=kwargs["max_completion_tokens"])
+                response = raw.parse()
+            else:
+                response = self._client.chat.completions.create(**kwargs)
+        except LLMUsageAccountingError:
+            raise
         except Exception as exc:
             # A per-attempt transport timeout can still use the shared fallback budget.
             provider_time_remaining()
             self._raise_call_error(exc)
+        _observe_native_usage(self, lambda: (
+            response.usage.prompt_tokens, response.usage.completion_tokens,
+        ), started=started, input_bytes=input_bytes, max_tokens=kwargs["max_completion_tokens"])
         provider_time_remaining(getattr(self, "_deadline", None))
         completion = self._completion_from_response(response, started=started)
         provider_time_remaining(getattr(self, "_deadline", None))
@@ -988,10 +1090,25 @@ class OpenAIProvider:
         if remaining is not None:
             kwargs["timeout"] = remaining
         try:
-            response = self._client.chat.completions.parse(
-                **kwargs,
-                response_format=schema,
-            )
+            raw_api = getattr(self._client.chat.completions, "with_raw_response", None)
+            if _completion_receipt.get() is not None and callable(getattr(raw_api, "parse", None)):
+                raw = raw_api.parse(**kwargs, response_format=schema)
+
+                def usage():
+                    counters = raw.http_response.json()["usage"]
+                    return counters["prompt_tokens"], counters["completion_tokens"]
+
+                _observe_native_usage(self, usage, started=started, input_bytes=input_bytes,
+                                      max_tokens=kwargs["max_completion_tokens"])
+                response = raw.parse()
+            else:
+                response = self._client.chat.completions.parse(**kwargs, response_format=schema)
+                _observe_native_usage(self, lambda: (
+                    response.usage.prompt_tokens, response.usage.completion_tokens,
+                ), started=started, input_bytes=input_bytes,
+                   max_tokens=kwargs["max_completion_tokens"])
+        except LLMUsageAccountingError:
+            raise
         except (
             self._openai.LengthFinishReasonError,
             self._openai.ContentFilterFinishReasonError,
@@ -1220,6 +1337,9 @@ class GeminiProvider:
     def _call(self, kwargs: dict[str, Any]) -> tuple[Any, float]:
         started = time.perf_counter()
         provider_time_remaining(getattr(self, "_deadline", None))
+        raw_receipt = _completion_receipt.get() is not None
+        if raw_receipt:
+            kwargs["config"]["should_return_http_response"] = True
         input_bytes = len(json.dumps(kwargs, ensure_ascii=True).encode("utf-8")) + 4096
         provider_time_remaining(getattr(self, "_deadline", None))
         admission = reserve_paid_ai_call(
@@ -1245,6 +1365,50 @@ class GeminiProvider:
         except Exception as exc:
             provider_time_remaining()
             self._raise_call_error(exc)
+
+        body = None
+        if raw_receipt:
+            try:
+                body = json.loads(response.sdk_http_response.body)
+            except (AttributeError, ValueError, TypeError):
+                pass
+
+        def usage():
+            # The SDK's typed counters coerce bool/string values into integers.
+            # Observe only wire counters before constructing the typed response.
+            counters = body["usageMetadata"]
+
+            def count(value):
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ValueError("Invalid usage counter.")
+                return value
+
+            prompt = count(counters["promptTokenCount"])
+            candidate = counters.get("candidatesTokenCount")
+            thoughts = counters.get("thoughtsTokenCount")
+            total = counters.get("totalTokenCount")
+            if total is not None:
+                output = count(total) - prompt
+                components = sum(
+                    count(value) for value in (candidate, thoughts) if value is not None
+                )
+                if output < 0 or components > output:
+                    raise ValueError("Inconsistent usage counters.")
+            else:
+                output = count(candidate) + count(thoughts)
+            return prompt, output
+
+        _observe_native_usage(self, usage, started=started, input_bytes=input_bytes,
+                              max_tokens=kwargs["config"]["max_output_tokens"])
+        if raw_receipt:
+            from google.genai import types
+
+            try:
+                response = types.GenerateContentResponse.model_validate(body)
+            except (ValidationError, ValueError, TypeError):
+                raise LLMResponseFormatError(
+                    "Gemini returned unreadable response metadata.",
+                ) from None
         provider_time_remaining(getattr(self, "_deadline", None))
         return response, started
 
@@ -1594,6 +1758,7 @@ def generate_structured[T: BaseModel](
     temperature: float = 0.1,
     max_tokens: int = 2048,
     on_model_run: ModelRunWriter | None = None,
+    on_completion_accounted: Callable[[LLMCompletion], None] | None = None,
     session: Any | None = None,
     release_session_before_provider: bool = False,
 ) -> tuple[T, LLMCompletion]:
@@ -1672,10 +1837,23 @@ def generate_structured[T: BaseModel](
         # boundary; silently rolling those writes back here would corrupt the
         # surrounding workflow.  The check also makes the opt-in useful for
         # system/background calls whose context intentionally has no tenant ID.
+        guard = getattr(session, "require_read_only_transaction", None)
+        if callable(guard):
+            guard()
         if session.new or session.dirty or session.deleted:
             raise RuntimeError(
                 "Cannot release the database session before an LLM provider "
                 "call while ORM writes are pending."
+            )
+        if not callable(guard):
+            from sqlalchemy.orm import Session
+
+            from caseops_api.services.matter_write_fence import require_read_only_upload_session
+
+            if not isinstance(session, Session):
+                raise RuntimeError("The provider boundary requires proven read-only provenance.")
+            require_read_only_upload_session(
+                session, detail="The provider boundary cannot release caller-owned writes.",
             )
         # Preflight is intentionally read-only on the success path. Do not
         # leave its transaction open across a provider deadline: SQLite can
@@ -1684,19 +1862,27 @@ def generate_structured[T: BaseModel](
         session.rollback()
     provider_time_remaining()
     native_generate = getattr(provider, "generate_structured", None)
-    if callable(native_generate):
-        completion = native_generate(
-            messages=messages,
-            schema=schema,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-    else:
-        completion = provider.generate(
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+    observed = False
+
+    def account(completion):
+        nonlocal observed
+        if not observed and on_completion_accounted is not None:
+            on_completion_accounted(completion)
+            observed = True
+
+    token = _completion_receipt.set(account if on_completion_accounted is not None else None)
+    try:
+        if callable(native_generate):
+            completion = native_generate(
+                messages=messages, schema=schema, temperature=temperature, max_tokens=max_tokens,
+            )
+        else:
+            completion = provider.generate(
+                messages=messages, temperature=temperature, max_tokens=max_tokens,
+            )
+        _observe_completion(completion)
+    finally:
+        _completion_receipt.reset(token)
     provider_time_remaining()
     if on_model_run is not None:
         try:
