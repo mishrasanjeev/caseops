@@ -32,6 +32,7 @@ import pytest
 import uvicorn
 from fastapi import HTTPException
 from sqlalchemy import create_engine, event, func, select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -63,6 +64,7 @@ from caseops_api.db.session import get_db_session
 from caseops_api.main import create_application
 from caseops_api.schemas.matters import MatterLifecycleStatusRequest, MatterUpdateRequest
 from caseops_api.services import (
+    court_sync_jobs,
     document_jobs,
     document_processing,
     identity,
@@ -559,18 +561,130 @@ class _FinalizerAudit:
     def pool(self):
         pool = ThreadPoolExecutor(max_workers=3)
         futures = []
+        observer_error = None
         if self.passive is not None:
             self.passive.critical_pools += 1
         try:
             yield pool, futures
+        except BaseException as error:
+            observer_error = error
+            raise
         finally:
             self.release.set()
-            _, pending = wait(futures, timeout=12)
-            pool.shutdown(wait=True, cancel_futures=True)
-            if self.passive is not None:
-                self.passive.critical_pools -= 1
-            self.record("contenders_completed", pending=len(pending))
-            assert not pending, "Owned contender did not terminate"
+            try:
+                try:
+                    _, pending = wait(futures, timeout=12)
+                finally:
+                    try:
+                        pool.shutdown(wait=True, cancel_futures=True)
+                    finally:
+                        if self.passive is not None:
+                            self.passive.critical_pools -= 1
+                assert len(futures) <= 64, "Contender evidence inventory exceeds its bound"
+                self.record(
+                    "contenders_completed", pending=len(pending),
+                    observer_failed=observer_error is not None,
+                    future_outcomes=[_finalizer_future_outcome(future, index)
+                                     for index, future in enumerate(futures)],
+                )
+                assert not pending, "Owned contender did not terminate"
+            except BaseException:
+                if observer_error is None:
+                    raise
+                # Cleanup evidence must not replace the original failed oracle.
+                try:
+                    self.record("contender_cleanup_failed", observer_failed=True)
+                except BaseException:
+                    pass
+
+
+def _finalizer_future_outcome(future, index):
+    row = {"index": index}
+    if future.cancelled():
+        return {**row, "status": "cancelled"}
+    if not future.done():
+        return {**row, "status": "pending"}
+    error = future.exception()
+    if error is None:
+        return {**row, "status": "completed"}
+    row.update(status="error", error_kind="exception" if isinstance(error, Exception) else
+               "base_exception")
+    if isinstance(error, DBAPIError):
+        code = getattr(error.orig, "sqlstate", None)
+        valid = isinstance(code, str) and len(code) == 5 and all(
+            character in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" for character in code
+        )
+        row.update(error_kind="database_error", sqlstate=code if valid else None)
+    return row
+
+
+class _FinalizerJournal:
+    RECORD_CAP = 65536
+    BYTE_CAP = 64 * 1024 * 1024
+
+    def __init__(self, stream, path, nodeid):
+        self.stream, self.path, self.nodeid = stream, path, nodeid
+        self.lock = Lock()
+        self.digest = sha256()
+        self.records = self.bytes = 0
+        self.completed = False
+        self.record_cap, self.byte_cap = self.RECORD_CAP, self.BYTE_CAP
+        self.incomplete_reasons = set()
+
+    def _write(self, kind, data):
+        try:
+            line = json.dumps({"event": kind, "time": datetime.now(UTC).isoformat(),
+                               **data}, default=str) + "\n"
+        except BaseException:
+            self.incomplete_reasons.add("serialization_error")
+            raise
+        encoded = line.encode("utf-8")
+        if self.records >= self.record_cap:
+            self.incomplete_reasons.add("record_cap")
+            raise AssertionError("Native evidence record cap exceeded")
+        if self.bytes + len(encoded) > self.byte_cap:
+            self.incomplete_reasons.add("byte_cap")
+            raise AssertionError("Native evidence byte cap exceeded")
+        try:
+            written = self.stream.write(line)
+            if written != len(line):
+                raise OSError("Native evidence short write")
+            self.stream.flush()
+        except BaseException:
+            self.incomplete_reasons.add("io_error")
+            raise
+        self.digest.update(encoded)
+        self.records += 1
+        self.bytes += len(encoded)
+
+    def record(self, kind, **data):
+        with self.lock:
+            assert not self.completed, "Native evidence is already completed"
+            assert "io_error" not in self.incomplete_reasons, "Native evidence is incomplete"
+            if kind == "contender_cleanup_failed":
+                self.incomplete_reasons.add(kind)
+            self._write(kind, data)
+
+    def complete(self):
+        with self.lock:
+            assert not self.completed, "Native evidence is already completed"
+            try:
+                # A failed I/O operation may have partially written unaccounted bytes.
+                assert "io_error" not in self.incomplete_reasons, "Native evidence is incomplete"
+                complete = not self.incomplete_reasons
+                self._write(
+                    "native_evidence_complete" if complete else "native_evidence_incomplete",
+                    {
+                        "nodeid": self.nodeid, "evidence_path": str(self.path),
+                        "payload_sha256": self.digest.hexdigest(), "payload_records": self.records,
+                        "payload_bytes": self.bytes, "complete": complete,
+                        "incomplete_reasons": sorted(self.incomplete_reasons),
+                        "record_cap": self.record_cap, "byte_cap": self.byte_cap,
+                    },
+                )
+                assert complete, "Native evidence is incomplete"
+            finally:
+                self.completed = True
 
 
 def _finalizer_evidence_path(directory: Path, nodeid: str) -> Path:
@@ -862,13 +976,9 @@ def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
     directory = Path(os.environ.get("CASEOPS_FINALIZER_EVIDENCE_DIR", str(tmp_path)))
     directory.mkdir(parents=True, exist_ok=True)
     evidence_path = _finalizer_evidence_path(directory, request.node.nodeid)
-    lock = Lock()
-    with evidence_path.open("x", encoding="utf-8") as stream:
-        def record(kind, **data):
-            with lock:
-                stream.write(json.dumps({"event": kind, "time": datetime.now(UTC).isoformat(),
-                                         **data}, default=str) + "\n")
-                stream.flush()
+    with evidence_path.open("x", encoding="utf-8", newline="\n") as stream:
+        journal = _FinalizerJournal(stream, evidence_path, request.node.nodeid)
+        record = journal.record
 
         # NullPool prevents another contender borrowing a labelled committed backend.
         engine = create_engine(pg_engine.url, poolclass=NullPool)
@@ -897,6 +1007,8 @@ def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
                    Path(private_retrieval.__file__).read_bytes()).hexdigest(),
                matters_sha256=sha256(Path(matters.__file__).read_bytes()).hexdigest(),
                test_sha256=sha256(Path(__file__).read_bytes()).hexdigest(),
+               node_source_sha256=sha256(Path(request.node.path).read_bytes()).hexdigest(),
+               court_sync_jobs_sha256=sha256(Path(court_sync_jobs.__file__).read_bytes()).hexdigest(),
                evidence_path=str(evidence_path),
                limitation="Local overlap, not Cloud Run CPU attribution")
         audit.passive = _PassiveOverlapTiming()
@@ -915,7 +1027,10 @@ def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
                        all_backend_ids=sorted(audit.all_pids), errors=audit.errors)
             finally:
                 engine.dispose()
-                audit.passive.flush(record)
+                try:
+                    audit.passive.flush(record)
+                finally:
+                    journal.complete()
             assert not remaining, "Owned labelled PostgreSQL transaction leaked"
             assert not locks, "Owned PostgreSQL backend locks leaked"
 

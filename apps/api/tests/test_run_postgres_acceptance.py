@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -106,6 +108,13 @@ with journal.open("x") as stream:
         stream.flush()
 if fault == "source_drift" and not collect:
     Path(config["source_path"]).write_text("Changed fake source after child invocation")
+if config.get("make_fixture"):
+    base = Path(next(arg.split("=", 1)[1] for arg in args if arg.startswith("--basetemp=")))
+    target = (base / "test_an_ip_docket_event_locks_0" / "documents" /
+              "00000000-0000-4000-8000-000000000001" / "ip-documents" /
+              "00000000-0000-4000-8000-000000000002" / "original-document.bin")
+    target.parent.mkdir(parents=True)
+    target.write_bytes(bytes(range(256)) + b"\r\n\x00\xff")
 sys.exit(code)
 """
 
@@ -163,17 +172,18 @@ def fake_native(tmp_path, monkeypatch):
     monkeypatch.setenv("CASEOPS_DATABASE_URL", "fake-owned-native-db")
     monkeypatch.setenv("CASEOPS_E2E_DATABASE_URL", "fake-browser-db")
 
-    def run(fault=None):
+    def run(fault=None, *, output_dir=None, make_fixture=False):
         config.write_text(
             json.dumps(
                 {
                     "identities": identities,
                     "fault": fault,
                     "source_path": str(api / "tests/test_native_00.py"),
+                    "make_fixture": make_fixture,
                 }
             )
         )
-        output = tmp_path / "evidence with spaces"
+        output = output_dir or tmp_path / "evidence with spaces"
         return driver.run(api, output), output
 
     return run, tmp_path / "evidence with spaces", calls, identities, api
@@ -194,7 +204,14 @@ def test_complete_fresh_whole_file_processes_preserve_every_identity_and_drive_a
         folder = output / f"postgres-processes/child-{group['shard']:02}"
         received = json.loads((folder / "received.json").read_text())
         assert received["args"] == command[1:] and received["owner_removed"]
-        assert "--basetemp=" + str(folder / "fixtures") in command
+        workspace = json.loads((folder / "runtime-workspace.json").read_text())
+        assert "--basetemp=" + str(Path(workspace["runtime"]) / "fixtures") in command
+        retained = json.loads((folder / "runtime-retention.json").read_text())
+        assert retained["complete"] and retained["files"]
+        for row in retained["files"]:
+            target = driver.native_path(Path(row["destination_path"]))
+            assert target.read_bytes() == (folder / row["relative_path"]).read_bytes()
+            assert hashlib.sha256(target.read_bytes()).hexdigest() == row["sha256"]
         completion = json.loads((folder / "process-completion.json").read_text())
         assert completion["natural_completion"] and completion["reaped"]
         result = driver.journal(folder / "results.jsonl")
@@ -379,6 +396,12 @@ def test_external_interruption_reaps_child_and_never_claims_natural_completion(
             calls.append(("terminate", None))
 
     monkeypatch.setattr(driver.subprocess, "Popen", lambda *args, **kwargs: Interrupted())
+
+    def terminate(process):
+        process.terminate()
+        process.wait(timeout=5)
+
+    monkeypatch.setattr(driver, "terminate_owned_process", terminate)
     with pytest.raises(KeyboardInterrupt):
         driver.execute(api, folder, ["tests/test_native.py"])
     assert calls == [("wait", None), ("terminate", None), ("wait", 5)]
@@ -387,3 +410,244 @@ def test_external_interruption_reaps_child_and_never_claims_natural_completion(
         "natural_completion": False,
         "reaped": True,
     }
+
+
+def test_complete_runtime_retention_preserves_long_binary_and_empty_directory_paths(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    relative = Path("fixtures/test_original_fixture_name") / ("nested" * 14) / "original.bin"
+    original = driver.native_path(source / relative)
+    original.parent.mkdir(parents=True)
+    data = bytes(range(256)) + b"\r\n\x00\xff" * 37
+    original.write_bytes(data)
+    driver.native_path(source / "empty-original-directory").mkdir()
+    destination = tmp_path / ("long-destination-" * 6) / ("long-original-evidence-" * 5)
+    driver.native_path(destination).mkdir(parents=True)
+    assert len(str(destination / relative)) > 260
+    result = driver.retain_runtime(source, destination)
+    assert result["complete"]
+    assert result["directories"] == sorted(
+        [
+            "empty-original-directory",
+            "fixtures",
+            "fixtures/test_original_fixture_name",
+            "fixtures/test_original_fixture_name/" + "nested" * 14,
+        ]
+    )
+    assert len(result["files"]) == 1
+    row = result["files"][0]
+    assert row["relative_path"] == relative.as_posix()
+    assert row["bytes"] == len(data) and row["sha256"] == hashlib.sha256(data).hexdigest()
+    assert driver.native_path(destination / relative).read_bytes() == data
+    assert driver.native_path(destination / "empty-original-directory").is_dir()
+    assert (
+        json.loads(driver.native_path(destination / "runtime-retention.json").read_bytes())
+        == result
+    )
+    assert not driver.native_path(destination / "runtime-retention.pending").exists()
+
+
+@pytest.mark.parametrize("fault", ["copy", "changed", "bound", "empty", "overwrite"])
+def test_runtime_retention_fails_closed_and_keeps_original_bytes(tmp_path, monkeypatch, fault):
+    source, destination = tmp_path / "original", tmp_path / "retained"
+    source.mkdir()
+    destination.mkdir()
+    original = source / "original.bin"
+    if fault != "empty":
+        original.write_bytes(b"original\x00\r\nbytes")
+    if fault == "copy":
+        real_open = Path.open
+
+        def fail_open(path, *args, **kwargs):
+            if path == driver.native_path(destination / "original.bin"):
+                raise OSError("deterministic destination IO refusal")
+            return real_open(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", fail_open)
+    elif fault == "changed":
+        inventory = driver.fixture_inventory
+        calls = []
+
+        def changed(path):
+            calls.append(path)
+            if len(calls) == 2:
+                original.write_bytes(b"changed-original")
+            return inventory(path)
+
+        monkeypatch.setattr(driver, "fixture_inventory", changed)
+    elif fault == "bound":
+        monkeypatch.setattr(driver, "MAX_RETAIN_BYTES", 1)
+    elif fault == "overwrite":
+        (destination / "original.bin").write_bytes(b"earlier failed evidence")
+    with pytest.raises((OSError, ValueError)):
+        driver.retain_runtime(source, destination)
+    assert not (destination / "runtime-retention.json").exists()
+    if fault not in {"empty", "changed"}:
+        assert original.read_bytes() == b"original\x00\r\nbytes"
+    if fault == "overwrite":
+        assert (destination / "original.bin").read_bytes() == b"earlier failed evidence"
+
+
+def test_actual_short_runtime_avoids_long_evidence_fixture_argument(fake_native):
+    run, output, calls, _ids, _api = fake_native
+    long_output = output / ("long-destination-" * 6) / ("long-original-evidence-" * 5)
+    assert len(str(long_output)) > 260
+    assert run(output_dir=long_output, make_fixture=True)[0] == 0
+    for command in calls:
+        fixture = next(arg.split("=", 1)[1] for arg in command if arg.startswith("--basetemp="))
+        assert not Path(fixture).is_relative_to(long_output)
+        if os.name == "nt":
+            assert len(fixture) <= 100
+    work = driver.native_path(long_output / "postgres-processes")
+    for folder in [work / "collection", *sorted(work.glob("child-*"))]:
+        receipt = json.loads((folder / "runtime-retention.json").read_bytes())
+        originals = [
+            r for r in receipt["files"] if r["relative_path"].endswith("original-document.bin")
+        ]
+        assert len(originals) == 1 and len(originals[0]["destination_path"]) > 260
+        row = originals[0]
+        assert row["bytes"] == 260
+        assert (
+            driver.native_path(Path(row["destination_path"])).read_bytes()
+            == bytes(range(256)) + b"\r\n\x00\xff"
+        )
+
+
+def test_retention_failure_never_starts_another_child_and_preserves_runtime(
+    fake_native, monkeypatch
+):
+    run, output, calls, _ids, _api = fake_native
+
+    def refused(*args):
+        raise OSError("deterministic native evidence copy failure")
+
+    monkeypatch.setattr(driver, "retain_runtime", refused)
+    with pytest.raises(OSError, match="evidence copy failure"):
+        run()
+    assert len(calls) == 1 and not (output / "postgres-driver-completion.json").exists()
+    folder = output / "postgres-processes/collection"
+    incomplete = json.loads((folder / "retention-incomplete.json").read_bytes())
+    assert incomplete["complete"] is False and incomplete["preserved"] is True
+    runtime = Path(incomplete["runtime"])
+    assert runtime.is_dir() and (runtime / "results.jsonl").is_file()
+
+
+def test_runtime_reparse_directory_is_rejected_without_copying_outside(tmp_path):
+    source, target, destination = tmp_path / "source", tmp_path / "outside", tmp_path / "retained"
+    for path in (source, target, destination):
+        path.mkdir()
+    (target / "not-runtime.bin").write_bytes(b"outside-original")
+    link = source / "linked-outside"
+    if os.name == "nt":
+        result = subprocess.run(
+            [os.environ["COMSPEC"], "/d", "/c", "mklink", "/J", str(link), str(target)],
+            capture_output=True,
+            check=False,
+            timeout=5,
+        )
+        assert result.returncode == 0, "Owned junction fixture creation failed"
+    else:
+        link.symlink_to(target, target_is_directory=True)
+    with pytest.raises(ValueError, match="Reparse point"):
+        driver.retain_runtime(source, destination)
+    assert not (destination / "runtime-retention.json").exists()
+    assert not (destination / "linked-outside/not-runtime.bin").exists()
+    assert (target / "not-runtime.bin").read_bytes() == b"outside-original"
+
+
+@pytest.mark.parametrize("fault", ["outside", "identity", "marker", "extra"])
+def test_owned_cleanup_refuses_changed_creation_containment_or_bytes(tmp_path, fault):
+    root = tmp_path / "captured-temp-root"
+    root.mkdir()
+    workspace = root / "copg-original"
+    workspace.mkdir()
+    owner = workspace / "original-owner.json"
+    owner.write_bytes(b"exclusive-original-owner")
+    ownership = {
+        "temp_root_identity": driver.directory_identity(root),
+        "workspace_identity": driver.directory_identity(workspace),
+    }
+    expected = driver.fixture_inventory(workspace)
+    if fault == "outside":
+        other = tmp_path / "unrelated-temp-root"
+        other.mkdir()
+        root = other
+    elif fault == "identity":
+        ownership["workspace_identity"]["inode"] += 1
+    elif fault == "marker":
+        owner.write_bytes(b"changed-owner")
+    else:
+        (workspace / "not-retained-original.bin").write_bytes(b"new-original-bytes")
+    with pytest.raises(ValueError, match="cleanup identity or inventory changed"):
+        driver.cleanup_workspace(workspace, root, ownership, expected)
+    assert workspace.is_dir() and owner.is_file()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Actual Windows native descendant termination contract")
+def test_windows_interruption_reaps_actual_python_descendant_and_retains_partial_files(
+    tmp_path,
+    monkeypatch,
+):
+    import ctypes
+
+    api, folder = tmp_path / "api", tmp_path / "evidence"
+    api.mkdir()
+    folder.mkdir()
+    pid_file = tmp_path / "descendant.json"
+    program = tmp_path / "parent.py"
+    program.write_text(
+        "import json,os,subprocess,sys,threading\n"
+        "from pathlib import Path\n"
+        "child=subprocess.Popen([sys.executable,'-c',"
+        "'import threading;threading.Event().wait(60)'])\n"
+        "Path(os.environ['CASEOPS_TEST_RESULT_JOURNAL']).write_bytes("
+        "b'partial original journal\\r\\n\\x00')\n"
+        f"Path({str(pid_file)!r}).write_text(json.dumps({{'parent':os.getpid(),'child':child.pid}}))\n"
+        "threading.Event().wait(60)\n",
+        encoding="utf-8",
+    )
+    real_popen = subprocess.Popen
+    handles = []
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+    kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+
+    def launch(command, **kwargs):
+        if command[0] == "taskkill":
+            return real_popen(command, **kwargs)
+        process = real_popen([sys.executable, str(program)], **kwargs)
+        original_wait = process.wait
+        calls = []
+
+        def wait(timeout=None):
+            if not calls:
+                calls.append("interrupt")
+                deadline = time.monotonic() + 5
+                while not pid_file.exists():
+                    assert time.monotonic() < deadline
+                    time.sleep(0.02)
+                ids = json.loads(pid_file.read_bytes())
+                assert ids["child"] != ids["parent"]
+                for pid in {process.pid, ids["parent"], ids["child"]}:
+                    handle = kernel.OpenProcess(0x100000, 0, pid)
+                    assert handle
+                    handles.append(handle)
+                raise KeyboardInterrupt
+            return original_wait(timeout=timeout)
+
+        process.wait = wait
+        return process
+
+    monkeypatch.setattr(driver.subprocess, "Popen", launch)
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            driver.execute(api, folder, ["tests/test_native.py"])
+        assert all(kernel.WaitForSingleObject(handle, 5000) == 0 for handle in handles)
+        assert (folder / "results.jsonl").read_bytes() == b"partial original journal\r\n\x00"
+        assert json.loads((folder / "runtime-retention.json").read_bytes())["complete"]
+        assert not (folder / "process-completion.json").exists()
+    finally:
+        for handle in handles:
+            kernel.CloseHandle(handle)

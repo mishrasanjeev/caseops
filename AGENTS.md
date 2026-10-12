@@ -1,5 +1,14 @@
 # CaseOps agent instructions
 
+- Native pytest fixtures need independently owned short runtime paths; evidence
+  may still have long Windows paths. Retain every original name and binary byte
+  with verified source/destination inventories and atomic completion before
+  scoped cleanup. Publish the live incremental-journal location from the start;
+  failed or interrupted retention must preserve its original workspace.
+- A missing directed blocker is not proof of a product race. Retain bounded
+  SQL/PID/transaction/GC journals and sanitized contender outcomes on failure,
+  upload them even when CI fails, and preserve every original deadline and
+  assertion. Logs from other tests cannot supply the missing attribution.
 - A shared transaction-provenance change must inventory every provider-boundary
   caller, not only the four contract routes. Prove exact safe transaction-local
   configuration and zero-argument structured window reads beside ORM/Core/raw-driver/nested

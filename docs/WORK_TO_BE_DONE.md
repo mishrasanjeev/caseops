@@ -2,6 +2,35 @@
 
 ## October 12 Combined Release
 
+Replacement-freeze proof: the corrected runner passes51 unit controls and252
+real PostgreSQL cases/756 phases, including all84 original failed identities.
+Complete retained bytes include55 Windows paths over260 characters and33 real
+document-storage files. The original RED and both stopped runs remain intact.
+Full wrapper/deploy/backup/runner scope passes341 of342 cases; the sole unchanged
+skip is POSIX mount policy on Windows. Bounded sanitized future/journal controls
+pass24 units and127 native cases/381 phases, including the exact court-worker
+node's actual PID/token/Company blocking edge. Historical hosted cause remains
+Inconclusive; observability is not a speculative product fix. New frozen full
+CI/Docker/browser/live acceptance remains required before merge/deployment.
+
+October13 IST recovery checkpoint: published4eda remains **NO-GO**, not merged
+or deployed. Its full hosted API coverage is green; native shard3 has356
+passes/one failed directed-blocker proof among357, with every phase retained.
+The hosted artifact omitted native SQL/PID/future journals, so the cause is
+Inconclusive. Bounded failure evidence/upload correction is under native replay;
+no deadline, assertion or production-runtime waiver is authorized.
+
+Local4eda Docker is stopped and Incomplete: first native child completed357
+cases/1,071 phases (273 passes/84 failed calls); the second has17 complete
+passing identities but no completion. All84 full failures are inspected:
+82 expose long Windows fixture paths; two absent blocking edges remain
+Inconclusive without retained future exceptions. The runner now needs short
+owned runtime storage and verified complete long-path evidence retention.
+All owned Docker resources are removed; browser inventory550 was discovered,
+not executed. Canonical native inventory is2,853, not an accepted result.
+Both pinned secret boundaries, all16 control-plane gates and actual19-package
+musl packaging pass on4eda; none substitutes for full replacement acceptance.
+
 Candidate-freeze note: independent review found `row_number` must also reject
 arguments. A retained one-case RED proves the gap; the narrow zero-argument
 check passes the complete current transport/strategy/deadline/governance scope:

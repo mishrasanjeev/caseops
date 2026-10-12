@@ -849,9 +849,15 @@ def test_all_postgres_marked_modules_are_selected_locally_and_in_ci() -> None:
     assert [ast.literal_eval(node) for node in command.elts[1:6]] == [
         "-m", "pytest", "-q", "-m", "postgres"
     ]
-    assert ast.unparse(command.elts[6]) == "'--basetemp=' + str(folder / 'fixtures')"
+    assert ast.unparse(command.elts[6]) == "'--basetemp=' + str(runtime / 'fixtures')"
     assert isinstance(command.elts[7], ast.Starred)
-    assert ast.unparse(command.elts[7].value) == "arguments"
+    assert ast.unparse(command.elts[7].value) == "forwarded"
+    forwarding = next(
+        node for node in ast.walk(functions["execute"])
+        if isinstance(node, ast.For) and ast.unparse(node.target) == "argument"
+    )
+    assert ast.unparse(forwarding.iter) == "arguments"
+    assert ast.unparse(forwarding.body[-1]) == "forwarded.append(argument)"
     calls = [
         node for node in ast.walk(functions["run"])
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)

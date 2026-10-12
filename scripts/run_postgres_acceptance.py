@@ -6,8 +6,11 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -16,11 +19,162 @@ from xml.etree import ElementTree as ET
 SHARDS = 8
 MAX_BYTES = 256 * 1024 * 1024
 MAX_LINE = 16 * 1024 * 1024
+MAX_RETAIN_FILES = 100_000
+MAX_RETAIN_BYTES = 16 * 1024**3
+
+
+def native_path(path: Path) -> Path:
+    """Use extended-path IO for evidence, never for the pytest fixture argument."""
+    value = str(path.absolute())
+    if os.name != "nt" or value.startswith("\\\\?\\"):
+        return Path(value)
+    if value.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + value[2:])
+    return Path("\\\\?\\" + value)
 
 
 def save(path: Path, value) -> None:
-    with path.open("x", encoding="utf-8") as stream:
+    with native_path(path).open("x", encoding="utf-8") as stream:
         json.dump(value, stream, indent=2)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def fixture_inventory(root: Path) -> dict:
+    files, directories, total = {}, [], 0
+    pending = [(native_path(root), "")]
+    while pending:
+        directory, relative = pending.pop()
+        metadata = directory.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or getattr(metadata, "st_file_attributes", 0) & 0x400:
+            raise ValueError("Reparse point in native runtime evidence")
+        with os.scandir(directory) as entries:
+            for entry in sorted(entries, key=lambda item: item.name):
+                name = relative + entry.name
+                info = entry.stat(follow_symlinks=False)
+                if entry.is_symlink() or getattr(info, "st_file_attributes", 0) & 0x400:
+                    raise ValueError("Reparse point in native runtime evidence")
+                if stat.S_ISDIR(info.st_mode):
+                    if len(files) + len(directories) >= MAX_RETAIN_FILES:
+                        raise ValueError("Native runtime evidence retention bound exceeded")
+                    directories.append(name)
+                    pending.append((Path(entry.path), name + "/"))
+                    continue
+                if not stat.S_ISREG(info.st_mode):
+                    raise ValueError("Nonregular native runtime evidence")
+                total += info.st_size
+                if len(files) + len(directories) >= MAX_RETAIN_FILES or total > MAX_RETAIN_BYTES:
+                    raise ValueError("Native runtime evidence retention bound exceeded")
+                hashed = hashlib.sha256()
+                with Path(entry.path).open("rb") as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b""):
+                        hashed.update(block)
+                files[name] = {"bytes": info.st_size, "sha256": hashed.hexdigest()}
+    if not files:
+        raise ValueError("Empty native runtime evidence inventory")
+    return {"files": files, "directories": sorted(directories)}
+
+
+def retain_runtime(source: Path, destination: Path) -> dict:
+    """Retain complete binary bytes before publishing the completion manifest."""
+    before = fixture_inventory(source)
+    for name in before["directories"]:
+        native_path(destination / name).mkdir(parents=True, exist_ok=True)
+    for name, record in before["files"].items():
+        original = native_path(source / name)
+        retained = native_path(destination / name)
+        retained.parent.mkdir(parents=True, exist_ok=True)
+        hashed, size = hashlib.sha256(), 0
+        with original.open("rb") as src, retained.open("xb") as dst:
+            for block in iter(lambda: src.read(1024 * 1024), b""):
+                dst.write(block)
+                hashed.update(block)
+                size += len(block)
+            dst.flush()
+            os.fsync(dst.fileno())
+        if {"bytes": size, "sha256": hashed.hexdigest()} != record:
+            raise ValueError("Native runtime bytes changed during retention")
+        with retained.open("rb") as stream:
+            actual = hashlib.file_digest(stream, "sha256").hexdigest()
+        if retained.stat().st_size != size or actual != record["sha256"]:
+            raise ValueError("Retained native runtime bytes differ")
+    if fixture_inventory(source) != before:
+        raise ValueError("Native runtime inventory changed during retention")
+    receipt = {
+        "complete": True,
+        "source": str(source),
+        "destination": str(destination),
+        "directories": before["directories"],
+        "files": [
+            {
+                "relative_path": name,
+                "source_path": str(source / name),
+                "destination_path": str(destination / name),
+                **row,
+            }
+            for name, row in sorted(before["files"].items())
+        ],
+    }
+    pending = native_path(destination / "runtime-retention.pending")
+    final = native_path(destination / "runtime-retention.json")
+    save(pending, receipt)
+    if os.name == "nt":
+        # Windows rename rejects an existing target. POSIX link is also exclusive.
+        pending.rename(final)
+    else:
+        os.link(pending, final)
+        pending.unlink()
+    return receipt
+
+
+def terminate_owned_process(process: subprocess.Popen) -> None:
+    if os.name == "nt":
+        result = subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True,
+            check=False,
+            timeout=5,
+        )
+        if result.returncode:
+            raise ValueError("Owned native process tree termination unconfirmed")
+        process.wait(timeout=5)
+    else:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+
+def directory_identity(path: Path) -> dict:
+    metadata = native_path(path).lstat()
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or stat.S_ISLNK(metadata.st_mode)
+        or getattr(metadata, "st_file_attributes", 0) & 0x400
+    ):
+        raise ValueError("Owned runtime directory identity is unsafe")
+    return {
+        "device": metadata.st_dev,
+        "inode": metadata.st_ino,
+        "birthtime_ns": getattr(metadata, "st_birthtime_ns", None),
+    }
+
+
+def cleanup_workspace(workspace: Path, root: Path, ownership: dict, expected: dict) -> None:
+    resolved_root, resolved_workspace = root.resolve(), workspace.resolve()
+    if (
+        resolved_workspace.parent != resolved_root
+        or not resolved_workspace.is_relative_to(resolved_root)
+        or workspace.parent != root
+        or not workspace.name.startswith("copg-")
+        or directory_identity(root) != ownership["temp_root_identity"]
+        or directory_identity(workspace) != ownership["workspace_identity"]
+        or fixture_inventory(workspace) != expected
+    ):
+        raise ValueError("Owned runtime cleanup identity or inventory changed; retained")
+    shutil.rmtree(native_path(resolved_workspace))
 
 
 def source_snapshot(root: Path) -> dict:
@@ -44,9 +198,7 @@ def source_snapshot(root: Path) -> dict:
     files = {}
     for name in sorted(paths[:-1]):
         relative = PurePosixPath(name)
-        if relative.is_absolute() or any(
-            part in {".", ".."} for part in relative.parts
-        ):
+        if relative.is_absolute() or any(part in {".", ".."} for part in relative.parts):
             raise ValueError("Invalid candidate source path")
         path = root / name
         if not path.is_file() or path.resolve().is_relative_to(root) is False:
@@ -106,10 +258,7 @@ def journal(path: Path, *, collect: bool = False) -> dict:
     if len(identities) != len(set(identities)):
         raise ValueError("Duplicate collected identity")
     reports = [row for row in rows if row["event"] == "test_report"]
-    if (
-        rows[1].get("event") != "collection"
-        or type(rows[-1].get("exitstatus")) is not int
-    ):
+    if rows[1].get("event") != "collection" or type(rows[-1].get("exitstatus")) is not int:
         raise ValueError("Malformed collection order or completion status")
     if collect and (reports or rows[-1]["exitstatus"] != 0):
         raise ValueError("Canonical collection failed or executed tests")
@@ -135,16 +284,47 @@ def plan(identities: list[str], api: Path) -> list[dict]:
         loads[target] += len(modules[module])
     groups = []
     for index, assigned in enumerate(assignments, 1):
-        selected = [
-            identity for identity in identities if module_path(identity) in assigned
-        ]
+        selected = [identity for identity in identities if module_path(identity) in assigned]
         files = list(dict.fromkeys(module_path(identity) for identity in selected))
         groups.append({"shard": index, "files": files, "nodeids": selected})
     return groups
 
 
 def execute(api: Path, folder: Path, arguments: list[str]) -> int:
-    env = dict(os.environ, CASEOPS_TEST_RESULT_JOURNAL=str(folder / "results.jsonl"))
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    root_identity = directory_identity(temp_root)
+    workspace = Path(tempfile.mkdtemp(prefix="copg-", dir=temp_root))
+    runtime = workspace / folder.name
+    ownership = {
+        "temp_root": str(temp_root),
+        "temp_root_identity": root_identity,
+        "workspace_identity": directory_identity(workspace),
+    }
+    marker = workspace / ".caseops-runtime-owner.json"
+    save(marker, {"workspace": str(workspace), "evidence_destination": str(folder), **ownership})
+    marker_bytes = marker.read_bytes()
+    save(
+        folder / "runtime-workspace.json",
+        {
+            "workspace": str(workspace),
+            "runtime": str(runtime),
+            "evidence_destination": str(folder),
+            "incremental_journal": str(runtime / "results.jsonl"),
+            "owner_marker_sha256": hashlib.sha256(marker_bytes).hexdigest(),
+            **ownership,
+        },
+    )
+    if os.name == "nt" and len(str(runtime / "fixtures")) > 100:
+        raise ValueError("Native runtime fixture workspace is not short enough")
+    runtime.mkdir()
+    forwarded = []
+    for argument in arguments:
+        if argument.startswith("--junitxml="):
+            if native_path(Path(argument.split("=", 1)[1])) != native_path(folder / "results.xml"):
+                raise ValueError("Unexpected native JUnit destination")
+            argument = "--junitxml=" + str(runtime / "results.xml")
+        forwarded.append(argument)
+    env = dict(os.environ, CASEOPS_TEST_RESULT_JOURNAL=str(runtime / "results.jsonl"))
     env.pop("CASEOPS_TEST_RESULT_JOURNAL_OWNER_PID", None)
     command = [
         sys.executable,
@@ -153,37 +333,34 @@ def execute(api: Path, folder: Path, arguments: list[str]) -> int:
         "-q",
         "-m",
         "postgres",
-        "--basetemp=" + str(folder / "fixtures"),
-        *arguments,
+        "--basetemp=" + str(runtime / "fixtures"),
+        *forwarded,
     ]
     save(
-        folder / "started.json",
+        runtime / "started.json",
         {"command": command, "started_at": datetime.now(UTC).isoformat()},
     )
     with (
-        (folder / "stdout.txt").open("xb") as stdout,
-        (folder / "stderr.txt").open("xb") as stderr,
+        (runtime / "stdout.txt").open("xb") as stdout,
+        (runtime / "stderr.txt").open("xb") as stderr,
     ):
-        process = subprocess.Popen(
-            command, cwd=api, env=env, stdout=stdout, stderr=stderr
-        )
+        process = subprocess.Popen(command, cwd=api, env=env, stdout=stdout, stderr=stderr)
         try:
             code = process.wait()
         except BaseException:
             if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
+                terminate_owned_process(process)
             save(
-                folder / "interrupted.json",
+                runtime / "interrupted.json",
                 {"natural_completion": False, "reaped": True},
             )
+            # Close logs before retaining every partial fixture and phase journal.
+            stdout.close()
+            stderr.close()
+            retain_runtime(runtime, folder)
             raise
     save(
-        folder / "process-completion.json",
+        runtime / "process-completion.json",
         {
             "exit_code": code,
             "completed_at": datetime.now(UTC).isoformat(),
@@ -192,6 +369,36 @@ def execute(api: Path, folder: Path, arguments: list[str]) -> int:
             "reaped": True,
         },
     )
+    try:
+        retained = retain_runtime(runtime, folder)
+    except (OSError, ValueError):
+        save(
+            folder / "retention-incomplete.json",
+            {"complete": False, "runtime": str(runtime), "preserved": True},
+        )
+        raise
+    if code == 0:
+        # Only the uniquely created runtime is removed, after all bytes verify.
+        expected = {
+            "files": {
+                marker.name: {
+                    "bytes": len(marker_bytes),
+                    "sha256": hashlib.sha256(marker_bytes).hexdigest(),
+                },
+                **{
+                    runtime.name + "/" + row["relative_path"]: {
+                        "bytes": row["bytes"],
+                        "sha256": row["sha256"],
+                    }
+                    for row in retained["files"]
+                },
+            },
+            "directories": sorted(
+                [runtime.name, *[runtime.name + "/" + name for name in retained["directories"]]]
+            ),
+        }
+        cleanup_workspace(workspace, temp_root, ownership, expected)
+        save(folder / "runtime-cleanup.json", {"workspace": str(workspace), "removed": True})
     return code
 
 
@@ -200,9 +407,7 @@ def reconcile(folder: Path, expected: list[str], code: int) -> tuple[dict, ET.El
     if result["nodeids"] != expected:
         raise ValueError("Child ordered collection differs from canonical subset")
     if code not in (0, 1) or type(result["exit"]) is not int or result["exit"] != code:
-        raise ValueError(
-            "Child process and journal completion disagree or are incomplete"
-        )
+        raise ValueError("Child process and journal completion disagree or are incomplete")
     phases = defaultdict(list)
     for report in result["reports"]:
         if report.get("nodeid") not in expected or report.get("outcome") not in {
@@ -224,9 +429,7 @@ def reconcile(folder: Path, expected: list[str], code: int) -> tuple[dict, ET.El
     for identity in expected:
         rows = phases[identity]
         setup_failed = rows[0].get("when") == "setup" and rows[0]["outcome"] == "failed"
-        required = (
-            ["setup", "teardown"] if setup_failed else ["setup", "call", "teardown"]
-        )
+        required = ["setup", "teardown"] if setup_failed else ["setup", "call", "teardown"]
         if [row.get("when") for row in rows] != required:
             raise ValueError("Wrong, duplicate or incomplete test phases")
         statuses[identity] = (
@@ -249,8 +452,7 @@ def reconcile(folder: Path, expected: list[str], code: int) -> tuple[dict, ET.El
         raise ValueError("Unexpected JUnit structure")
     suite = root[0]
     if any(
-        child.tag not in {"testcase", "properties", "system-out", "system-err"}
-        for child in suite
+        child.tag not in {"testcase", "properties", "system-out", "system-err"} for child in suite
     ):
         raise ValueError("Unexpected JUnit suite member")
     cases = list(suite.findall("testcase"))
@@ -263,9 +465,7 @@ def reconcile(folder: Path, expected: list[str], code: int) -> tuple[dict, ET.El
         name = parts[-1] + bracket + parameters
         if (case.get("classname"), case.get("name")) != (classname, name):
             raise ValueError("Unexpected or reordered JUnit identity")
-        problems = [
-            child.tag for child in case if child.tag in {"skipped", "failure", "error"}
-        ]
+        problems = [child.tag for child in case if child.tag in {"skipped", "failure", "error"}]
         if any(
             child.tag
             not in {
@@ -295,12 +495,10 @@ def reconcile(folder: Path, expected: list[str], code: int) -> tuple[dict, ET.El
 
 
 def run(api: Path, output: Path) -> int:
-    api, output = api.resolve(), output.resolve()
+    api, output = api.resolve(), native_path(output.resolve())
     root = api.parent.parent
     if os.environ.get("PYTEST_ADDOPTS", "").strip():
-        raise ValueError(
-            "Native acceptance cannot inherit pytest selection or retry options"
-        )
+        raise ValueError("Native acceptance cannot inherit pytest selection or retry options")
     targets = [
         output / name
         for name in (
@@ -326,9 +524,7 @@ def run(api: Path, output: Path) -> int:
     code = execute(api, collection, ["--collect-only"])
     unchanged()
     if code:
-        raise ValueError(
-            "Canonical PostgreSQL collection did not complete successfully"
-        )
+        raise ValueError("Canonical PostgreSQL collection did not complete successfully")
     identities = journal(collection / "results.jsonl", collect=True)["nodeids"]
     groups = plan(identities, api)
     save(work / "inventory.json", {"canonical": identities, "groups": groups})
@@ -338,18 +534,14 @@ def run(api: Path, output: Path) -> int:
         folder = work / f"child-{group['shard']:02}"
         folder.mkdir()
         save(folder / "inventory.json", group)
-        code = execute(
-            api, folder, ["--junitxml=" + str(folder / "results.xml"), *group["files"]]
-        )
+        code = execute(api, folder, ["--junitxml=" + str(folder / "results.xml"), *group["files"]])
         unchanged()
         try:
             result, suite = reconcile(folder, group["nodeids"], code)
             results[group["shard"]] = result
             suites.append(suite)
             if code:
-                faults.append(
-                    {"shard": group["shard"], "kind": "complete_test_failure"}
-                )
+                faults.append({"shard": group["shard"], "kind": "complete_test_failure"})
         except (
             ValueError,
             KeyError,
@@ -376,16 +568,10 @@ def run(api: Path, output: Path) -> int:
     save(work / "source-after.json", baseline)
     save(work / "faults.json", faults)
     if len(results) != SHARDS:
-        raise ValueError(
-            "Native evidence incomplete; all available child evidence retained"
-        )
-    seen = [
-        identity for group in groups for identity in results[group["shard"]]["nodeids"]
-    ]
+        raise ValueError("Native evidence incomplete; all available child evidence retained")
+    seen = [identity for group in groups for identity in results[group["shard"]]["nodeids"]]
     if Counter(seen) != Counter(identities):
-        raise ValueError(
-            "Native child union does not equal canonical collection exactly once"
-        )
+        raise ValueError("Native child union does not equal canonical collection exactly once")
     reports = defaultdict(list)
     for result in results.values():
         for report in result["reports"]:
@@ -407,9 +593,7 @@ def run(api: Path, output: Path) -> int:
         for identity in identities:
             for report in reports[identity]:
                 stream.write(json.dumps(report) + "\n")
-        stream.write(
-            json.dumps({"event": "session_finished", "exitstatus": exit_code}) + "\n"
-        )
+        stream.write(json.dumps({"event": "session_finished", "exitstatus": exit_code}) + "\n")
     xml = work / "combined-junit.pending"
     xml_root = ET.Element("testsuites")
     xml_root.extend(suites)

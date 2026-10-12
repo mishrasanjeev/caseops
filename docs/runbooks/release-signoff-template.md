@@ -114,6 +114,15 @@ reset or clone. Retain `postgres-processes/` with each child's collection,
 incremental phases, JUnit, stdout/stderr, fixtures and natural completion.
 Existing workloads, GC policy, assertions and deadlines remain unchanged.
 
+Each invocation uses a short, exclusive runtime workspace on Windows. While
+it is active, read its `runtime-workspace.json` to locate the live incremental
+journal. On completion or confirmed interruption, every original file and
+empty directory is retained under the child evidence folder using long-path
+binary IO. Require its atomic `runtime-retention.json`, exact source/destination
+hashes and bounded inventory. Failed or interrupted workspaces stay intact;
+successful cleanup must recheck ownership, directory identity and containment.
+Do not shorten stored filenames or accept a copied subset as complete evidence.
+
 `postgres-results.jsonl`, `postgres.xml` and
 `postgres-driver-completion.json` are combined driver products, not one pytest
 process. Require the exact canonical union, all phases, zero skips/retries,

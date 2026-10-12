@@ -2,6 +2,22 @@
 
 ## October 12 Combined Fixes
 
+Replacement-freeze proof: **Partially fixed**, pending full release. Current
+runner has51 unit and252 native passes, covering every one of the84 prior
+failed identities without shortening stored names. Full hardening scope is
+341 passes/one unchanged Windows skip. Bounded future/journal evidence has24
+unit and127 native passes; the historical hosted blocker cause stays
+Inconclusive. All failed evidence remains retained; no deployed-fix closure.
+
+October13 IST: **Partially fixed/NO-GO**, not deployed.4eda's hosted API gates
+are green, but a complete native shard has one missing-blocker failure without
+its SQL/PID/future evidence; root cause is **Inconclusive**. Local Docker's
+first357-case child is complete RED (273/84), with82 path failures and two
+Inconclusive observer failures. The second child is interrupted; no browser
+execution occurred. Short native runtime/verified long-path retention and
+failure-outcome diagnostics are under correction, not accepted. Preserve all
+failed/interrupted evidence and require fresh full exact-candidate gates.
+
 Candidate-freeze note: malformed `row_number(1)` has a retained classifier RED
 and a narrow zero-argument correction; the complete current four-module replay
 passes175 cases/525 phases with zero skips. Both interrupted mixed inventories

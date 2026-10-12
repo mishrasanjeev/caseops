@@ -2,6 +2,22 @@
 
 ## October 12 Integration Checkpoint
 
+Replacement-freeze proof: retention is **Implemented** at the focused native
+boundary (51 controls,252 real PG cases, complete long-path binary receipts).
+Failure observability is **Implemented** in source with24 unit/127 native
+passes and bounded hash-bound journals. Full hardening has341 passes and one
+original Windows POSIX-policy skip. Release is still **NO-GO** until fresh
+complete CI/Docker/main/live gates; historical hosted cause is not inferred.
+
+October13 IST: **NO-GO.**4eda's API coverage, Security,16 static gates and actual
+musl package bindings pass, but CI native3 failed a directed-blocker assertion.
+Missing retained native/future evidence prevents product attribution. Native
+runner retention is **Partially implemented** after82 actual Windows path
+failures in its complete first child; two other observer failures remain
+Inconclusive. The remainder was interrupted and browsers never executed.
+Diagnostics and short-runtime/long-evidence correction need actual native
+replay and complete replacement acceptance. Production remains unchanged.
+
 Candidate-freeze note: independent review tightens the new window allowance
 to zero arguments, with retained RED and current175-case/525-phase replay proof.
 Both interrupted broad/finite scopes

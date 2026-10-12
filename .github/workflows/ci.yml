@@ -353,6 +353,7 @@ jobs:
           CASEOPS_ENV: ci
           CASEOPS_AUTH_SECRET: pg-validation-secret-at-least-32-bytes
           CASEOPS_TEST_RESULT_JOURNAL: postgres-shard-${{ matrix.shard }}.jsonl
+          CASEOPS_FINALIZER_EVIDENCE_DIR: postgres-shard-${{ matrix.shard }}-native
           PYTEST_ADDOPTS: >-
             -p tests.postgres_sharding --postgres-shard=${{ matrix.shard }} --postgres-shards=${{ matrix.total_shards }}
             --postgres-inventory=postgres-shard-${{ matrix.shard }}.json
@@ -368,6 +369,7 @@ jobs:
             apps/api/postgres-shard-${{ matrix.shard }}.json
             apps/api/postgres-shard-${{ matrix.shard }}.xml
             apps/api/postgres-shard-${{ matrix.shard }}.jsonl
+            apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl
           if-no-files-found: error
           retention-days: 14
 
