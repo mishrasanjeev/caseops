@@ -1,5 +1,19 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 12 Public Acquisition Evidence
+
+J19/M21/US-063, FT-094..096, NFT-023 and SEC-031: current serving `3dbf364d`
+public SEO inventory is exactly 40/40 passed, zero skipped/retried, with native
+JSON/JUnit identity reconciliation. The first 23-case run is a subset, not 63
+unique cases. Read-only coverage proves canonical content, seven public-page
+links/metadata, mobile accessibility, qualified CTA entry forms and no client
+analytics or lead submission. It does not prove live lead delivery, retained
+production admission, reviewed retention, organic conversion, customer adoption
+or whole-product acceptance. GSC live noindex works; stored removal remains
+pending. Permanent account/cadence and three-persona growth work are retained in
+the [execution guide](marketing/GSC_QUALIFIED_GROWTH_EXECUTION_2026-10-12.md)
+and [daily evidence](marketing/SEO_DAILY_LOG.md). No production redeploy.
+
 ## October 10 Summary Gate Repair
 
 The summary gate repair on `a8979a41` has complete scoped local proof:
