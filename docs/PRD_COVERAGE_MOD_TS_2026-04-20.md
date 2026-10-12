@@ -2,6 +2,12 @@
 
 ## October 12 Combined Candidate
 
+October13: J09/M07, J14/M14, UJ36/UJ61 and QG-SEC-004 remain **NO-GO** for
+release. dd7 full local native inventory completed with one failed recovery
+assertion and no browsers; hosted artifact drift and CodeQL552 need new-head
+proof. Exact results and scope corrections are recorded in
+`docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`; no deployed-fix closure.
+
 QG-SEC-004/J19/M21 context follow-up: native scratch export reproduces 17
 unlisted app/test descendants admitted by parent negations. Extend both SDK
 and Docker synthetic inventories with the complete nine builder inputs, two

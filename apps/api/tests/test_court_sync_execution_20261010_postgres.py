@@ -308,8 +308,8 @@ def test_native_transport_winner_is_retained_without_import(court_audit, monkeyp
         assert rows["source_reference"] == "changed-source"
 
 
-def test_native_recovery_skips_locked_claim_and_respects_batch(court_audit):
-    audit, fixture, _sessions, _run = court_audit
+def test_native_recovery_skips_locked_claim_and_respects_batch(isolated_court_audit):
+    audit, fixture, _sessions, _run = isolated_court_audit
     with Session(audit.engine) as session:
         job = session.get(MatterCourtSyncJob, fixture["court_job_id"])
         job.status = "processing"
@@ -336,6 +336,87 @@ def test_native_recovery_skips_locked_claim_and_respects_batch(court_audit):
         assert job.status == "queued" and job.started_at is None
         assert job.requested_by_membership_id == fixture["actor_id"]
         assert job.source_reference == "retained-source"
+
+
+def test_native_global_recovery_skips_locked_claim_without_starving_unlocked_jobs(
+    isolated_court_audit,
+):
+    audit, fixture, _sessions, _run = isolated_court_audit
+    unrelated = [_seed_finalizer(audit.engine, "matter") for _ in range(2)]
+    stale = datetime.now(UTC) - timedelta(minutes=30)
+    locked_started = stale - timedelta(minutes=1)
+    with Session(audit.engine) as session:
+        locked = session.get(MatterCourtSyncJob, fixture["court_job_id"])
+        locked.status, locked.started_at = "processing", locked_started
+        unlocked = [
+            MatterCourtSyncJob(
+                company_id=other["company_id"], matter_id=other["matter_id"],
+                requested_by_membership_id=other["actor_id"],
+                source="local-emulator", source_reference="unrelated-retained-source",
+                status="processing", started_at=stale,
+            )
+            for other in unrelated
+        ]
+        session.add_all(unlocked)
+        session.commit()
+        unlocked_ids = sorted(job.id for job in unlocked)
+        all_ids = sorted([locked.id, *unlocked_ids])
+        assert len({locked.company_id, *(job.company_id for job in unlocked)}) == 3
+
+    def states():
+        with Session(audit.engine) as reader:
+            jobs = list(reader.scalars(
+                select(MatterCourtSyncJob)
+                .where(MatterCourtSyncJob.id.in_(all_ids)).order_by(MatterCourtSyncJob.id)
+            ))
+            assert [job.id for job in jobs] == all_ids
+            return {
+                job.id: {"status": job.status, "started_at": job.started_at,
+                         "actor": job.requested_by_membership_id,
+                         "source_reference": job.source_reference}
+                for job in jobs
+            }
+
+    initial = states()
+    audit.record("court_global_skip_locked_inventory", locked_id=fixture["court_job_id"],
+                 unlocked_ids=unlocked_ids, initial_started_at={
+                     job_id: row["started_at"].isoformat() for job_id, row in initial.items()
+                 })
+    with audit.session("revocation") as holder:
+        held = holder.scalar(
+            select(MatterCourtSyncJob).where(MatterCourtSyncJob.id == fixture["court_job_id"])
+            .with_for_update(of=MatterCourtSyncJob)
+        )
+        assert held is not None and held.id == fixture["court_job_id"]
+        for index, unlocked_id in enumerate(unlocked_ids, 1):
+            recovered = court_sync_jobs.recover_stale_matter_court_sync_jobs(
+                stale_after_minutes=15, limit=1,
+            )
+            assert recovered == 1
+            current = states()
+            assert current[fixture["court_job_id"]] == initial[fixture["court_job_id"]]
+            assert [job_id for job_id in unlocked_ids if current[job_id]["status"] == "queued"] == (
+                unlocked_ids[:index]
+            )
+            assert current[unlocked_id]["started_at"] is None
+            for job_id in unlocked_ids[index:]:
+                assert current[job_id] == initial[job_id]
+            audit.record("court_global_skip_locked_batch", recovered=recovered, limit=1,
+                         locked_id=held.id, queued_ids=unlocked_ids[:index])
+        assert court_sync_jobs.recover_stale_matter_court_sync_jobs(
+            stale_after_minutes=15, limit=1,
+        ) == 0
+        assert states()[fixture["court_job_id"]] == initial[fixture["court_job_id"]]
+    assert court_sync_jobs.recover_stale_matter_court_sync_jobs(
+        stale_after_minutes=15, limit=1,
+    ) == 1
+    final = states()
+    assert all(row["status"] == "queued" and row["started_at"] is None for row in final.values())
+    assert all(final[job_id]["actor"] == initial[job_id]["actor"] for job_id in all_ids)
+    assert all(final[job_id]["source_reference"] == initial[job_id]["source_reference"]
+               for job_id in all_ids)
+    audit.record("court_global_skip_locked_after_release", recovered=1, queued_ids=all_ids,
+                 actor_and_source_preserved=True)
 
 
 def test_native_adapter_does_not_hold_company_authority_lock(court_audit, monkeypatch):
@@ -412,8 +493,8 @@ def test_native_production_dispatch_preserves_queue_without_postresponse_work(
     assert rows["orders"] == ["Admitted independent court job"]
 
 
-def test_native_expired_claim_cannot_import_before_recovery(court_audit, monkeypatch):
-    audit, fixture, sessions, run = court_audit
+def test_native_expired_claim_cannot_import_before_recovery(isolated_court_audit, monkeypatch):
+    audit, fixture, sessions, run = isolated_court_audit
     claim_time = datetime.now(UTC) - timedelta(days=1)
     with Session(audit.engine) as session:
         job = session.get(MatterCourtSyncJob, fixture["court_job_id"])
@@ -429,8 +510,8 @@ def test_native_expired_claim_cannot_import_before_recovery(court_audit, monkeyp
                 .limit(26)
             )
         )
-    # The owned gate retains preceding tenants. Isolate the recovery window,
-    # rather than assuming a global LIMIT 1 will select this fixture's claim.
+    # Freeze the claim/recovery window inside this independently migrated child.
+    # Keep explicit eligibility checks before applying the global LIMIT 1.
     assert not existing_stale
     audit.record(
         "court_expiry_fixture_window",

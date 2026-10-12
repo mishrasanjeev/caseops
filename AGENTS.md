@@ -616,6 +616,14 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- A global maintenance return count describes every eligible row, not only
+  the current test's tenant or locked fixture. Use an independently migrated,
+  connection-disabled-template child for zero/exact-count recovery assertions;
+  never delete retained claims or narrow production recovery to make them pass.
+  Prove a locked stale claim stays unchanged while bounded recovery advances
+  through distinct unlocked stale claims, and retain the observed job identities
+  and lock/update evidence when diagnosing shared-suite interference.
+
 - Release wrapper fakes must exercise the real CLI caller as well as the
   downstream guard. Docker Compose may return a bare or abbreviated image handle;
   retain the inspected canonical image ID after exact revision validation.

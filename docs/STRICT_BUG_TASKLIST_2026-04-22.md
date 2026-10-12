@@ -2,11 +2,18 @@
 
 ## October 12 Combined Fixes
 
+October13 final-candidate checkpoint: **Partially fixed / NO-GO**, not deployed.
+The complete dd7 local native run has one global recovery assertion failure;
+its full evidence is retained and product attribution is not presumed.
+Prepared CI artifact and decoder clarity corrections have focused full-module
+proof, not whole-release or live proof. See
+`docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`; browser acceptance is still unrun.
+
 Replacement-freeze proof: **Partially fixed**, pending full release. Current
 runner has51 unit and252 native passes, covering every one of the84 prior
 failed identities without shortening stored names. Full hardening scope is
 341 passes/one unchanged Windows skip. Bounded future/journal evidence has24
-unit and127 native passes; the historical hosted blocker cause stays
+unit and127 selected passes (103 PG-marked/24 pure); the historical blocker cause stays
 Inconclusive. All failed evidence remains retained; no deployed-fix closure.
 
 October13 IST: **Partially fixed/NO-GO**, not deployed.4eda's hosted API gates

@@ -2,10 +2,18 @@
 
 ## October 12 Integration Checkpoint
 
+October13 final-candidate checkpoint: release remains **NO-GO / Partially
+implemented**. Complete dd7 Docker native gate has2,852 passes/one failed
+global recovery assertion; browsers are unexecuted. Hosted CI artifact drift
+and CodeQL552 require fresh amended-head proof. Scope/receipts and the exact
+127-case mixed observability clarification are in
+`docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`. No production control waiver.
+
 Replacement-freeze proof: retention is **Implemented** at the focused native
 boundary (51 controls,252 real PG cases, complete long-path binary receipts).
-Failure observability is **Implemented** in source with24 unit/127 native
-passes and bounded hash-bound journals. Full hardening has341 passes and one
+Failure observability is **Implemented** in source with24 unit and127 selected
+passes (103 PG-marked/24 pure) and bounded hash-bound journals.
+Full hardening has341 passes and one
 original Windows POSIX-policy skip. Release is still **NO-GO** until fresh
 complete CI/Docker/main/live gates; historical hosted cause is not inferred.
 

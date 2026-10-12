@@ -2,13 +2,21 @@
 
 ## October 12 Combined Release
 
+October13 final-candidate checkpoint: dd7 local native acceptance naturally
+completed2,853 identities/8,559 phases with one failed global recovery assertion.
+Browser acceptance did not run; hosted CI also failed one artifact expectation.
+CodeQL552 is under a narrow decoder clarity correction, not dismissed.
+See `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md` for current proof and remaining
+full gates. **NO-GO**; no main merge, production deploy or scheduler resume.
+
 Replacement-freeze proof: the corrected runner passes51 unit controls and252
 real PostgreSQL cases/756 phases, including all84 original failed identities.
 Complete retained bytes include55 Windows paths over260 characters and33 real
 document-storage files. The original RED and both stopped runs remain intact.
 Full wrapper/deploy/backup/runner scope passes341 of342 cases; the sole unchanged
 skip is POSIX mount policy on Windows. Bounded sanitized future/journal controls
-pass24 units and127 native cases/381 phases, including the exact court-worker
+pass24 units and127 selected cases/381 phases (103 PG-marked and24 pure),
+including the exact court-worker
 node's actual PID/token/Company blocking edge. Historical hosted cause remains
 Inconclusive; observability is not a speculative product fix. New frozen full
 CI/Docker/browser/live acceptance remains required before merge/deployment.

@@ -47,6 +47,10 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
         ]
         journal = _render_postgres_matrix(step["env"]["CASEOPS_TEST_RESULT_JOURNAL"], shard, total)
         assert journal == f"postgres-shard-{shard}.jsonl"
+        native = _render_postgres_matrix(
+            step["env"]["CASEOPS_FINALIZER_EVIDENCE_DIR"], shard, total,
+        )
+        assert native == f"postgres-shard-{shard}-native"
     upload = next(item for item in job["steps"]
                   if item.get("name") == "Upload exact PostgreSQL collection and results")
     assert upload["if"] == "always()"
@@ -54,7 +58,7 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     assert upload["with"]["path"].splitlines() == [
         f"apps/api/postgres-shard-${{{{ matrix.shard }}}}.{extension}"
         for extension in ("json", "xml", "jsonl")
-    ]
+    ] + ["apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl"]
     aggregate = workflow["jobs"]["postgres-validation"]
     assert aggregate["needs"] == ["postgres-validation-shards"]
     assert aggregate["if"] == "always() && !cancelled()"

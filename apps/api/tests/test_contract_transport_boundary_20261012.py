@@ -721,6 +721,61 @@ def test_gemini_invalid_wire_usage_components_charge_conservative_caps(
     assert receipts[0].completion_tokens == state.reservations[0]["output_tokens"]
 
 
+@pytest.mark.parametrize("damage", ["missing-http-response", "missing-body", "malformed-body"])
+def test_gemini_raw_body_decoder_failure_accounts_before_sanitized_format_error(
+    completion_native_boundary, monkeypatch, caplog, damage,
+):
+    from google.genai import models, types
+
+    state = completion_native_boundary
+    receipts = []
+    native_responses = []
+    prior_receipts = []
+    native_generate = models.Models.generate_content
+
+    def damage_returned_sdk_response(model_client, **kwargs):
+        response = native_generate(model_client, **kwargs)
+        assert kwargs["config"]["should_return_http_response"] is True
+        assert isinstance(response, types.GenerateContentResponse)
+        assert isinstance(response.sdk_http_response, types.HttpResponse)
+        assert json.loads(response.sdk_http_response.body)["usageMetadata"] == {
+            "promptTokenCount": 5, "candidatesTokenCount": 7, "totalTokenCount": 12,
+        }
+        native_responses.append(response)
+        # Damage metadata only after the real SDK returns from the offline transport.
+        if damage == "missing-http-response":
+            response.sdk_http_response = None
+        elif damage == "missing-body":
+            response.sdk_http_response.body = None
+        else:
+            assert damage == "malformed-body"
+            response.sdk_http_response.body = '{"private-decoder-body-sentinel":'
+        return response
+
+    monkeypatch.setattr(models.Models, "generate_content", damage_returned_sdk_response)
+    prior_observer = prior_receipts.append
+    token = llm._completion_receipt.set(prior_observer)
+    try:
+        with pytest.raises(llm.LLMResponseFormatError) as caught:
+            _completion_adapter_call(state, "gemini", receipts.append, max_tokens=321)
+        assert llm._completion_receipt.get() is prior_observer
+    finally:
+        llm._completion_receipt.reset(token)
+    assert len(receipts) == len(state.requests) == len(state.receipts) == len(native_responses) == 1
+    assert prior_receipts == []
+    _assert_sanitized_receipt(receipts[0], estimated=True)
+    assert receipts[0].prompt_tokens == state.reservations[0]["input_bytes"] > 5
+    wire = json.loads(state.requests[0].content)
+    assert receipts[0].completion_tokens == state.reservations[0]["output_tokens"] == 321
+    assert wire["generationConfig"]["maxOutputTokens"] == 321
+    assert str(caught.value) == "Gemini returned unreadable response metadata."
+    assert caught.value.__cause__ is None and caught.value.__suppress_context__ is True
+    for private in ("private-native-sentinel", "private-decoder-body-sentinel"):
+        assert private not in repr(caught.value)
+        assert private not in caplog.text
+    assert all(not session.in_transaction() for session in state.sessions)
+
+
 @pytest.mark.parametrize("model_name", [
     "_ExtractedClause", "_ClauseExtractionPayload", "_ExtractedObligation",
     "_ObligationExtractionPayload", "_PlaybookLlmFinding", "_PlaybookComparisonPayload",

@@ -1371,7 +1371,8 @@ class GeminiProvider:
             try:
                 body = json.loads(response.sdk_http_response.body)
             except (AttributeError, ValueError, TypeError):
-                pass
+                # Keep conservative accounting ahead of the typed response-format error.
+                body = None
 
         def usage():
             # The SDK's typed counters coerce bool/string values into integers.
