@@ -1833,7 +1833,7 @@ def _get_matter_model(
     else:
         matter = session.scalar(
             select(Matter)
-            .options(*_matter_loader_options())
+            .options(*(_matter_loader_options() if load_locked_children else ()))
             .where(Matter.id == matter_id, Matter.company_id == context.company.id)
         )
     if not matter:
@@ -5446,6 +5446,7 @@ def create_matter_court_sync_import(
     session.rollback()
     matter = _get_matter_model(
         session, context=context, matter_id=matter_id, commit_access_denial=False,
+        load_locked_children=False,
     )
     prepared_compliance = _prepare_court_sync_import(
         session, matter=matter, source=payload.source.strip(),

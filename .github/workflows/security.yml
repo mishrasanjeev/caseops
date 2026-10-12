@@ -343,3 +343,24 @@ jobs:
             license-installed-tree.stderr
             license-gate-tests.tap
             license-gate-tests.xml
+
+  web-upload-context:
+    name: Native Cloud Build web upload context
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
+        with:
+          version: "568.0.0"
+      - name: Verify native upload inventory without credentials or uploads
+        env:
+          CASEOPS_WEB_UPLOAD_EVIDENCE: ${{ runner.temp }}/web-upload-context
+        run: python3 -B -m unittest discover -s scripts/tests -p test_web_upload_context.py -v
+      - name: Retain native upload and exclusion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-upload-context-native
+          path: ${{ runner.temp }}/web-upload-context
+          if-no-files-found: error

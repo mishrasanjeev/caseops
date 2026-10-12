@@ -7,10 +7,42 @@ import shlex
 from pathlib import Path, PurePosixPath
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
 REVIEW = "docs/security/js-license-compliance-review-2026-10-12.md"
 REGISTRY = "license-policy/reviewed-packages.json"
+
+
+def test_security_runs_and_retains_the_native_upload_gate():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/security.yml").read_text())
+    job = workflow["jobs"]["web-upload-context"]
+    assert job["timeout-minutes"] == 5
+    steps = job["steps"]
+    sdk = next(
+        step for step in steps
+        if step.get("uses", "").startswith("google-github-actions/setup-gcloud@")
+    )
+    assert sdk["uses"] == (
+        "google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f"
+    )
+    assert sdk["with"]["version"] == "568.0.0"
+    runs = [step for step in steps if "run" in step]
+    assert len(runs) == 1
+    assert shlex.split(runs[0]["run"]) == [
+        "python3", "-B", "-m", "unittest", "discover", "-s", "scripts/tests",
+        "-p", "test_web_upload_context.py", "-v",
+    ]
+    assert runs[0]["env"] == {
+        "CASEOPS_WEB_UPLOAD_EVIDENCE": "${{ runner.temp }}/web-upload-context",
+    }
+    artifact = steps[-1]
+    assert artifact["uses"] == "actions/upload-artifact@v4"
+    assert artifact["if"] == "always()"
+    assert artifact["with"] == {
+        "name": "web-upload-context-native", "path": "${{ runner.temp }}/web-upload-context",
+        "if-no-files-found": "error",
+    }
 
 
 @pytest.mark.parametrize("name", [".dockerignore", ".gcloudignore"])
@@ -23,11 +55,19 @@ def test_compliance_context_is_narrow_and_blocks_hidden_material(name):
         "!license-policy/upstream/**", "!docs/", "!docs/security/", f"!{REVIEW}",
     }
     assert "license-policy/upstream/**/.*" in lines
+    reset = "license-policy/*" if name == ".gcloudignore" else "license-policy/**"
     assert (
         lines.index("!license-policy/")
-        < lines.index("license-policy/**")
+        < lines.index(reset)
         < lines.index(f"!{REGISTRY}")
     )
+    suffix = "*" if name == ".gcloudignore" else "**"
+    assert (
+        lines.index("!docs/") < lines.index(f"docs/{suffix}")
+        < lines.index("!docs/security/") < lines.index(f"docs/security/{suffix}")
+        < lines.index(f"!{REVIEW}")
+    )
+    assert lines.index("apps/web/.env*") < lines.index("!apps/web/.env.local.example")
 
 
 def test_runner_retains_public_notices_and_nonpublic_operator_materials():

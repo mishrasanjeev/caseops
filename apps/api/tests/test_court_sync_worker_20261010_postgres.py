@@ -105,8 +105,12 @@ def test_native_marker_is_restored_through_adapter_and_import_and_reset(
     inner_calls = []
     original = court_sync_jobs._persist_court_sync_import
 
-    def inner_provider(_settings, _purpose):
+    def inner_provider(_settings, _purpose, *, timeout_seconds=None):
+        assert _purpose == "metadata_extract" and timeout_seconds is None
         inner_calls.append("deterministic construction")
+        audit.record(
+            "court_provider_constructed", purpose=_purpose, timeout_seconds=timeout_seconds,
+        )
         return llm.MockProvider(model="local")
 
     monkeypatch.setattr(llm, "_build_inner_provider", inner_provider)
@@ -157,6 +161,33 @@ def test_native_marker_is_restored_through_adapter_and_import_and_reset(
         assert rows["runs"] == (0 if failure else 1)
     finally:
         reset_provider_replay_request(replay)
+        reset_automated_test_request(token)
+
+
+@pytest.mark.parametrize("timeout_seconds", [None, 0.125])
+def test_native_provider_fixture_keeps_explicit_timeout_contract(
+    court_audit, monkeypatch, timeout_seconds,
+):
+    audit, _fixture, _sessions, _run = court_audit
+    provider = llm.MockProvider(model="local")
+    received = []
+
+    def inner_provider(_settings, purpose, *, timeout_seconds):
+        received.append((purpose, timeout_seconds))
+        return provider
+
+    monkeypatch.setattr(llm, "_build_inner_provider", inner_provider)
+    token = set_automated_test_request(None)
+    try:
+        actual = llm.build_provider(
+            purpose="metadata_extract", timeout_seconds=timeout_seconds,
+        )
+        assert actual is provider
+        assert received == [("metadata_extract", timeout_seconds)]
+        audit.record(
+            "court_timeout_contract", purpose="metadata_extract", timeout_seconds=timeout_seconds,
+        )
+    finally:
         reset_automated_test_request(token)
 
 

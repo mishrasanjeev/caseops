@@ -2,6 +2,74 @@
 
 ## Release Verdict
 
+### October 12 Resumed All-PR Release
+
+Human explicitly requests all open PR fixes, green CI, local workstation Docker
+E2E, canonical-main merge and production deploy. Old frozen9c local gate now
+completed naturally with2,617 passes/six failed PostgreSQL calls among2,623,
+zero skips/errors and no browser execution; retain its complete RED evidence.
+Current narrow tail74/court24 replacements pass all294 phases with exact
+inventory/source/cleanup proof and independent review. Native context, scoped
+licensing and dirty-release tests retain their prior successful bounds/caveats.
+
+Freeze the combined source including docs PR534, run actual tracked-tree/history
+secret preflight, complete new Docker/CI/browser inventory, merge canonical main
+and deploy via its guarded exact SHA. Narrow greens and current public3db
+40-case acceptance cannot replace those release gates. **NO-GO until complete.**
+October behavior, global processing/retention consent, selected fallback OFF,
+INR10,000 prospective cap and invoice-baseline reconciliation stay unchanged.
+No paid benchmark, new primary promotion or fabricated financial total.
+
+### October 12 03:32 UTC Actual Context And Preparation Findings
+
+**NO-GO remains.** Exact-19 scoped managed-SaaS review is complete with its
+stated obligations, not a global license/distribution waiver. Final independent
+Node252/native4/static5 controls pass. SDK/Docker contexts retain required62
+inputs; synthetic safe sets include only the reviewed public example, with
+17/18 private canaries excluded. The scratch Docker export uses no RUN, registry
+pull, image/container or network. Native Git proves dirty inputs are rejected:
+242/243 full controls pass, with the unchanged Windows mount-policy skip.
+
+Frozen9c CI failed six PostgreSQL calls among2,623 identities; its browser job
+never ran. Its Docker prefix is failed/incomplete, never certified. Old staged
+public30 passes bind an OCI-unavailable image and cannot certify these new
+filters or source. Retain complete old reports and every superseded input pin.
+
+Correcting a lock-phase assertion exposed real unbounded preparation hydration:
+501 historical rows/relations were loaded before court-import external work.
+The narrow repair honors the bounded-load opt-out on the unlocked getter while
+keeping default rich reads and final authority reacquisition. Preserve original
+two-SQL/history/replay/denial assertions, plus former-behavior and missing-fence
+negative controls. Complete final module/source review and full fresh exact
+Docker/CI/main/live acceptance are mandatory. Do not promote fixture/setup
+failures or stale expected heads into product diagnoses; capture the current
+canonical head before upgrade and retain every worker ancestor.
+
+No merge/deploy, financial initialization or provider/model activation. October
+behavior is unchanged; selected fallback remains OFF pending separate consent.
+
+### October 12 02:21 UTC Native Upload Correction
+
+Frozen 9c Security/CodeQL completed successfully with tree-bound actual
+host/musl/logical inventories, unchanged base14 and no new open scan findings.
+Its local runner retains all 61 original materials/document and exact public
+notices. Full Docker acceptance remains running; production still serves 3db.
+
+**NO-GO:** native gcloud 568 discovery omits all 55 operator records because
+`license-policy/**` prunes their parent. Docker and direct Git leaf checks did
+not expose this defect. The separate `license-policy/*` correction has three
+complete native passes covering 62 upload paths, builder closure, secret/cache
+canaries and the old-glob negative control. Keep the original RED and the
+expanded-fixture count/setup failure. The new Security job pins the SDK and
+retains native evidence without credentials, uploads or provider calls.
+
+Before release, require the current native job, a build from its actual staged
+inventory, full new exact Docker/CI/security acceptance, canonical current main,
+guarded deployment and live public notice/download/operator-404 replay. Earlier
+candidate green results do not certify this amended context. No provider/model
+activation, paid benchmark or financial initialization; October remains
+unchanged and the selected fallback remains OFF pending separate consent.
+
 ### October 12 01:29 UTC Combined Pre-Freeze
 
 Owner-selected compliance review is complete for exact-19 stock managed-SaaS

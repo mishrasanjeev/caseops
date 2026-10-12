@@ -2,6 +2,38 @@
 
 ## October 12 Combined Fixes
 
+Resumed October 12 IST: court preparation is **Partially fixed** with complete
+24-case native proof and independent review; two-SQL getters, zero historical
+materialization, original ACL/lifecycle/hash/replay controls, exact unlocked/
+locked boundaries and unchanged rich readers pass at1/501 history. The four
+tail fixture/head errors have a complete 74-case native replacement, not a
+product-code waiver. Old9c local Docker ended RED (2,617 passes/six failures,
+no browser execution); retain its complete evidence. Context/privacy/dirty
+fences remain Partially fixed until the frozen combined candidate passes full
+Docker/CI and exact-production Playwright. No deployed-fix closure yet.
+
+03:32 UTC: context/privacy and dirty-release fencing are **Partially fixed**,
+not deployed. Actual native4/static5/Node252 pass; native Git dirty guards pass
+242/243 with one original Windows skip. SDK/Docker canary failures retain their
+FAKE-only classification. Six frozen-9c PostgreSQL calls failed; browsers were
+not run. New complete replacements are mandatory, not an old-green transfer.
+Court-import preparation hydration is a real defect, **Partially fixed** by the
+narrow bounded-load opt-out; no query-budget increase or historical-load waiver.
+Default read contracts and fresh persistence locks must retain positive proof.
+Upload admission/worker/request-principal versus system-creator evidence and
+future-safe captured-head/ancestry regressions are still under final acceptance.
+Guarded production/live Playwright remain required for deployed-fix closure.
+
+02:21 UTC: license packaging remains **Partially fixed**, not deployed. Native
+SDK discovery reproduces all 55 operator files missing from Cloud Build input;
+the separate narrow filter correction passes three native cases (62 paths,
+builder closure, secret/cache exclusions and old-glob negative control).
+Git leaf-ignore success was incomplete traversal proof, not the reproduction.
+Expanded-fixture count failure remains retained as setup-only evidence. 9c
+hosted Security/CodeQL and its actual local image pass; full 9c Docker is still
+running and cannot certify the changed child. Fresh child review/full gates,
+canonical main, guarded deployment and exact-live Playwright remain required.
+
 01:29 UTC: source-only license/public packaging remain **Partially fixed** pending
 actual new image and production replay. The exact-19 managed-SaaS review and
 fresh Windows/logical inventories pass without widening base14; Python 139 and

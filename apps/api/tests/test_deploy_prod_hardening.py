@@ -1885,6 +1885,7 @@ def _run_deploy_with_fakes(
     tmp_path: Path,
     *arguments: str,
     git_status: str = "",
+    native_status_root: Path | None = None,
     curl_mode: str = "ok",
     traffic_mode: str = "ok",
     expected_tag: str = "abcdef1",
@@ -1922,6 +1923,10 @@ if [[ "$1" == "fetch" ]]; then
   exit 0
 fi
 if [[ "$1" == "status" ]]; then
+  if [[ -n "${FAKE_NATIVE_GIT:-}" ]]; then
+    printf '%s\n' "$@" > "${FAKE_NATIVE_GIT_STATUS_ARGS}"
+    exec "${FAKE_NATIVE_GIT}" -C "${FAKE_NATIVE_GIT_STATUS_ROOT}" "$@"
+  fi
   if [[ -n "${FAKE_GIT_STATUS:-}" ]]; then
     printf '%s\n' "${FAKE_GIT_STATUS}"
   fi
@@ -2349,6 +2354,20 @@ exec "${FAKE_REAL_PYTHON}" "$@"
     )
     release_sha = "abcdef1234567890abcdef1234567890abcdef12"
     env = os.environ.copy()
+    env["FAKE_NATIVE_GIT"] = ""
+    if native_status_root is not None:
+        assert native_status_root.resolve().is_relative_to(tmp_path.resolve())
+        native_git = shutil.which("git")
+        assert native_git is not None
+        env = {key: value for key, value in env.items() if not key.startswith("GIT_")}
+        env.update({
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_TERMINAL_PROMPT": "0",
+            "FAKE_NATIVE_GIT": _bash_path(Path(native_git)),
+            "FAKE_NATIVE_GIT_STATUS_ROOT": _bash_path(native_status_root),
+            "FAKE_NATIVE_GIT_STATUS_ARGS": _bash_path(tmp_path / "native-status-args.txt"),
+        })
     fingerprint_json = _a0_fingerprint_json()
     fingerprint_log_json = json.dumps(
         [
@@ -2490,7 +2509,11 @@ exec "${FAKE_REAL_PYTHON}" "$@"
     command = [
         _find_working_bash(),
         "-c",
-        'export PATH="$1:$PATH"; shift; bash scripts/deploy-prod.sh "$@"',
+        'export PATH="$1:$PATH"; '
+        'for cli in git gcloud gh curl sleep python; do '
+        'selected=$(command -v "$cli"); '
+        '[[ "$selected" == "$1/$cli" && -x "$selected" ]] || exit 99; '
+        'done; shift; bash scripts/deploy-prod.sh "$@"',
         "deploy-test",
         _bash_path(fake_bin),
         *arguments,
@@ -3450,3 +3473,118 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
     assert result.returncode != 0, result.stdout + result.stderr
     assert expected_message in result.stdout
     assert "=== deploy-prod.sh — DONE" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("case", "mutation_path", "mutation", "reject"),
+    [
+        ("clean", None, None, False),
+        ("unrelated-doc", "docs/unrelated-note.md", "modify", False),
+        ("registry", "license-policy/reviewed-packages.json", "modify", True),
+        ("upstream", "license-policy/upstream/fake-package/LICENSE.txt", "modify", True),
+        ("review-doc", "docs/security/js-license-compliance-review-2026-10-12.md",
+         "modify", True),
+        ("statute-fixture", "tests/fixtures/statutes/structured-schedule-api.json",
+         "modify", True),
+        ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts", "modify", True),
+        ("network-evidence", "tests/e2e/support/bounded-network-evidence.ts", "modify", True),
+        ("api-evidence", "tests/e2e/support/prod-api-response-evidence.ts", "modify", True),
+        ("cost-controls", "tests/e2e/support/cost-controls.ts", "modify", True),
+        ("new-upstream", "license-policy/upstream/new-package/LICENSE.txt", "new", True),
+        ("deleted-review", "docs/security/js-license-compliance-review-2026-10-12.md",
+         "delete", True),
+    ],
+    ids=lambda value: value if isinstance(value, str) else None,
+)
+def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
+    tmp_path: Path,
+    case: str,
+    mutation_path: str | None,
+    mutation: str | None,
+    reject: bool,
+) -> None:
+    native_git = shutil.which("git")
+    assert native_git is not None, "Real local Git is required, not a canned dirty status"
+    repository = tmp_path / "native-status"
+    repository.mkdir()
+    empty_hooks = tmp_path / "empty-hooks"
+    empty_hooks.mkdir()
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    env.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
+                "GIT_TERMINAL_PROMPT": "0"})
+    git_commands = []
+
+    def git(*arguments: str) -> subprocess.CompletedProcess[str]:
+        command = [native_git, "-c", f"core.hooksPath={empty_hooks}",
+                   "-c", "core.autocrlf=false", "-c", "core.longpaths=true",
+                   "-c", "commit.gpgsign=false", "-c", "user.name=Offline fixture",
+                   "-c", "user.email=fixture@example.invalid", "-C", str(repository),
+                   *arguments]
+        result = subprocess.run(command, env=env, capture_output=True, text=True,
+                                check=False, timeout=10)
+        git_commands.append({"argv": command, "exit_code": result.returncode,
+                             "stdout": result.stdout, "stderr": result.stderr})
+        assert result.returncode == 0, result.stdout + result.stderr
+        return result
+
+    git("init", "--quiet")
+    initial_paths = {
+        "apps/api/main.py", "apps/web/package.json", "package.json", "package-lock.json",
+        ".dockerignore", ".gcloudignore", "docs/unrelated-note.md",
+        *(row[1] for row in [
+            ("registry", "license-policy/reviewed-packages.json"),
+            ("upstream", "license-policy/upstream/fake-package/LICENSE.txt"),
+            ("review", "docs/security/js-license-compliance-review-2026-10-12.md"),
+            ("fixture", "tests/fixtures/statutes/structured-schedule-api.json"),
+            ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts"),
+            ("network", "tests/e2e/support/bounded-network-evidence.ts"),
+            ("api", "tests/e2e/support/prod-api-response-evidence.ts"),
+            ("cost", "tests/e2e/support/cost-controls.ts"),
+        ]),
+    }
+    for relative in initial_paths:
+        target = repository / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("FAKE offline dirty-path fixture; not licensed material.\n")
+    git("add", ".")
+    git("commit", "--quiet", "-m", "Offline context fixture baseline")
+    assert git("status", "--porcelain", "--untracked-files=all").stdout == ""
+    if mutation_path is not None:
+        target = repository / mutation_path
+        if mutation == "delete":
+            target.unlink()
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("FAKE changed offline fixture bytes.\n")
+    actual_status = git("status", "--porcelain", "--untracked-files=all").stdout
+    assert (mutation_path in actual_status) if mutation_path else actual_status == ""
+
+    result = _run_deploy_with_fakes(tmp_path, native_status_root=repository)
+    status_arguments = (tmp_path / "native-status-args.txt").read_text().splitlines()
+    assert status_arguments[:4] == ["status", "--porcelain", "--untracked-files=all", "--"]
+    filtered = git(*status_arguments).stdout
+    calls = tmp_path / "gcloud.log"
+    evidence = os.environ.get("CASEOPS_DEPLOY_NATIVE_EVIDENCE")
+    if evidence:
+        directory = Path(evidence) / case
+        directory.mkdir(parents=True, exist_ok=False)
+        (directory / "receipt.json").write_text(json.dumps({
+            "case": case, "mutation_path": mutation_path, "mutation": mutation,
+            "expected_rejection": reject, "native_git_commands": git_commands,
+            "actual_full_status": actual_status, "actual_guard_arguments": status_arguments,
+            "actual_filtered_status": filtered, "deploy_exit_code": result.returncode,
+            "fake_cloud_calls_exist": calls.exists(),
+            "scope": "Only isolated native Git init/add/commit/status; all release CLI calls fake",
+        }, indent=2), encoding="utf-8")
+        (directory / "deploy.stdout").write_text(result.stdout, encoding="utf-8")
+        (directory / "deploy.stderr").write_text(result.stderr, encoding="utf-8")
+    if reject:
+        assert mutation_path in filtered
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "build context is dirty" in result.stdout
+        assert not calls.exists(), "Dirty uploaded bytes must stop before any fake cloud call"
+    else:
+        assert filtered == ""
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "DONE abcdef1" in result.stdout
+        assert calls.is_file()

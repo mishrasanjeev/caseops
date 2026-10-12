@@ -17,6 +17,8 @@ from uuid import uuid4
 
 import pytest
 from alembic.config import Config
+from alembic.script import ScriptDirectory
+from alembic.util import CommandError
 from sqlalchemy import ColumnDefault, MetaData, Table, create_engine, event, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, registry, sessionmaker
@@ -24,6 +26,7 @@ from sqlalchemy.orm import Session, registry, sessionmaker
 from alembic import command
 from caseops_api.core.automated_test_context import (
     NO_PAID_PROVIDERS_VALUE,
+    paid_providers_blocked_for_request,
     reset_automated_test_request,
     set_automated_test_request,
 )
@@ -53,7 +56,7 @@ from caseops_api.services.compliance_tail_protocol import (
     bind_compliance_run_context,
 )
 from caseops_api.services.llm import LLMCompletion, LLMProviderError
-from tests.test_compliance_participant_fence_20261010_postgres import _mutate, _seed
+from tests.test_compliance_participant_fence_20261010_postgres import _mutate, _seed, _UploadPhase
 from tests.test_document_worker_claims_20261010_postgres import _parsed, _worker
 from tests.test_matter_writer_admission_postgres import _fixture
 from tests.test_postgres_validation import _ip_race_context
@@ -61,6 +64,12 @@ from tests.test_postgres_validation import _ip_race_context
 pytestmark = pytest.mark.postgres
 _TEXT = "The parties shall comply within two weeks from today."
 _DATED_TEXT = "The parties shall comply by 24 October 2026."
+_RETAINED_ANCESTRY = (
+    ("20261011_0001", "20261010_0004"),
+    ("20261010_0004", "20261010_0003"),
+    ("20261010_0003", "20261010_0002"),
+    ("20261010_0002", "20261010_0001"),
+)
 _TAIL_TABLES = (
     "matter_compliance_extraction_runs",
     "matter_compliance_items",
@@ -85,15 +94,83 @@ _TAIL_TABLES = (
 )
 
 
+def _capture_current_head(cfg):
+    scripts = ScriptDirectory.from_config(cfg)
+    current_head = scripts.get_current_head()
+    assert current_head is not None, "A canonical migration head is required"
+    for revision, expected_parent in _RETAINED_ANCESTRY:
+        retained = scripts.get_revision(revision)
+        assert retained is not None
+        assert retained.down_revision == expected_parent, (
+            f"{revision} must retain parent {expected_parent}"
+        )
+    ancestors = {revision.revision for revision in scripts.iterate_revisions(current_head, "base")}
+    assert {revision for revision, _ in _RETAINED_ANCESTRY} <= ancestors
+    return current_head
+
+
+@pytest.mark.parametrize(
+    "variant",
+    ["future_descendant", "fork", "missing_worker_ancestor", "missing_worker_root", "empty"],
+)
+def test_captured_head_accepts_future_descendant_and_rejects_invalid_graph(tmp_path, variant):
+    versions = tmp_path / "versions"
+    versions.mkdir()
+    revisions = [("20261010_0001", None)] + [
+        (revision, parent) for revision, parent in reversed(_RETAINED_ANCESTRY)
+    ]
+    if variant == "future_descendant":
+        revisions.append(("test_future_0001", "20261011_0001"))
+    elif variant == "fork":
+        revisions.extend([
+            ("test_future_0001", "20261011_0001"),
+            ("test_future_0002", "20261011_0001"),
+        ])
+    elif variant in {"missing_worker_ancestor", "missing_worker_root"}:
+        missing_revision, bypass_revision, bypass_parent = (
+            ("20261010_0003", "20261010_0004", "20261010_0002")
+            if variant == "missing_worker_ancestor"
+            else ("20261010_0001", "20261010_0002", None)
+        )
+        revisions = [
+            (revision, bypass_parent if revision == bypass_revision else parent)
+            for revision, parent in revisions if revision != missing_revision
+        ]
+    else:
+        revisions = []
+    for revision, parent in revisions:
+        (versions / f"{revision}.py").write_text(
+            f"revision = {revision!r}\ndown_revision = {parent!r}\n"
+            "branch_labels = None\ndepends_on = None\n",
+            encoding="utf-8",
+        )
+    cfg = Config()
+    cfg.set_main_option("script_location", str(tmp_path))
+    if variant == "future_descendant":
+        assert _capture_current_head(cfg) == "test_future_0001"
+    elif variant == "fork":
+        with pytest.raises(CommandError, match="multiple heads"):
+            _capture_current_head(cfg)
+    elif variant in {"missing_worker_ancestor", "missing_worker_root"}:
+        with pytest.raises(
+            AssertionError, match=f"{bypass_revision} must retain parent {missing_revision}"
+        ):
+            _capture_current_head(cfg)
+    else:
+        with pytest.raises(AssertionError, match="canonical migration head is required"):
+            _capture_current_head(cfg)
+
+
 @pytest.fixture
 def tail_database(pg_engine, monkeypatch):
+    cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    cfg.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "alembic"))
+    current_head = _capture_current_head(cfg)
     name = "compliance_tail_" + uuid4().hex
     url = pg_engine.url.set(database=name)
     with pg_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as admin:
         admin.execute(text(f'CREATE DATABASE "{name}"'))
     engine, mapper = create_engine(url), registry()
-    cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-    cfg.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "alembic"))
     monkeypatch.setenv("CASEOPS_DATABASE_URL", url.render_as_string(hide_password=False))
     monkeypatch.setenv("CASEOPS_ENV", "local")
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
@@ -134,7 +211,10 @@ def tail_database(pg_engine, monkeypatch):
             session.flush()
             fixture.order = order.id
             session.commit()
-        database = SimpleNamespace(engine=engine, cfg=cfg, fixture=fixture, legacy_run=LegacyRun)
+        database = SimpleNamespace(
+            engine=engine, cfg=cfg, fixture=fixture, legacy_run=LegacyRun,
+            current_head=current_head,
+        )
         yield database
     finally:
         try:
@@ -669,16 +749,32 @@ def test_current_actual_manual_and_court_callers_keep_marker(tail_database, monk
     def scoped_session(_role):
         return Session(database.engine)
 
-    audit = SimpleNamespace(engine=database.engine, session=scoped_session)
+    observations = []
+
+    def record(event_name, **fields):
+        assert paid_providers_blocked_for_request()
+        observations.append({"event": event_name, **fields})
+
+    audit = SimpleNamespace(
+        engine=database.engine, session=scoped_session, record=record, pids={}
+    )
+    upload = _UploadPhase(audit) if path == "attachment_upload" else None
     fixture = _seed(audit)
-    _provider(compliance_extraction, monkeypatch)
+
+    def marked_provider():
+        assert paid_providers_blocked_for_request()
+
+    calls = _provider(
+        compliance_extraction, monkeypatch,
+        callback=marked_provider if upload is not None else None,
+    )
     with Session(audit.engine) as session:
         attachment = session.get(MatterAttachment, fixture["attachment_id"])
         attachment.processing_status, attachment.extracted_text = "indexed", _TEXT
         session.commit()
     token = set_automated_test_request(NO_PAID_PROVIDERS_VALUE)
     try:
-        _mutate(audit, fixture, path, monkeypatch)
+        _mutate(audit, fixture, path, monkeypatch, upload)
     finally:
         reset_automated_test_request(token)
     with Session(audit.engine) as session:
@@ -690,6 +786,69 @@ def test_current_actual_manual_and_court_callers_keep_marker(tail_database, monk
             )
         )
         assert runs and all(run.persistence_protocol == COMPLIANCE_TAIL_PROTOCOL for run in runs)
+        if upload is None:
+            return
+        assert upload.initial_ended and upload.storage_complete.is_set()
+        assert {row["event"] for row in observations} >= {
+            "upload_initial_transaction_ended", "upload_storage_entered", "upload_storage_complete"
+        }
+        uploaded = list(session.scalars(select(MatterAttachment).where(
+            MatterAttachment.matter_id == fixture["matter_id"],
+            MatterAttachment.id != fixture["attachment_id"],
+        )))
+        assert len(uploaded) == 1
+        attachment = uploaded[0]
+        uploaded_id = attachment.id
+        assert attachment.linked_court_order_id == fixture["order_id"]
+        assert attachment.document_type == "order_judgment"
+        assert attachment.uploaded_by_membership_id == fixture["actor_id"]
+        assert attachment.sha256_hex == hashlib.sha256(b"Local source order document").hexdigest()
+        upload_runs = [run for run in runs if run.attachment_id == uploaded_id]
+        assert len(upload_runs) == 1
+        assert upload_runs[0].source_type == "manual_upload"
+        assert upload_runs[0].trigger == "attachment_processed"
+        assert upload_runs[0].status == "skipped"
+        assert upload_runs[0].skip_reason == "text_extraction_pending"
+        assert upload_runs[0].created_by_membership_id == fixture["actor_id"]
+        jobs = list(session.scalars(select(DocumentProcessingJob).where(
+            DocumentProcessingJob.attachment_id == uploaded_id,
+        )))
+        assert len(jobs) == 1 and jobs[0].no_paid_providers is True
+        assert jobs[0].requested_by_membership_id == fixture["actor_id"]
+        job_id = jobs[0].id
+        assert calls == []
+    _worker(monkeypatch, database.engine, lambda *_: _parsed(_TEXT))
+    assert document_jobs.run_document_processing_job(job_id) is True
+    assert calls == ["native-only"]
+    with Session(database.engine) as session:
+        job = session.get(DocumentProcessingJob, job_id)
+        attachment = session.get(MatterAttachment, uploaded_id)
+        assert job.status == "completed" and job.no_paid_providers is True
+        assert job.requested_by_membership_id == fixture["actor_id"]
+        assert attachment.uploaded_by_membership_id == fixture["actor_id"]
+        assert attachment.extracted_text == _TEXT
+        assert attachment.sha256_hex == hashlib.sha256(b"Local source order document").hexdigest()
+        completed_runs = list(session.scalars(select(MatterComplianceExtractionRun).where(
+            MatterComplianceExtractionRun.attachment_id == uploaded_id,
+            MatterComplianceExtractionRun.status == "completed",
+        )))
+        assert len(completed_runs) == 1
+        run = completed_runs[0]
+        assert run.source_type == "manual_upload" and run.trigger == "attachment_processed"
+        assert run.persistence_protocol == COMPLIANCE_TAIL_PROTOCOL
+        assert run.source_hash == hashlib.sha256(_TEXT.encode()).hexdigest()
+        assert run.created_by_membership_id is None
+        assert list(session.scalars(select(MatterComplianceItem).where(
+            MatterComplianceItem.extraction_run_id == run.id,
+        )))
+        print(json.dumps({
+            "event": "actual_upload_tail_proof", "attachment_id": uploaded_id,
+            "job_id": job_id, "job_no_paid_providers": job.no_paid_providers,
+            "uploaded_body_sha256": attachment.sha256_hex,
+            "extracted_source_sha256": run.source_hash,
+            "persistence_protocol": run.persistence_protocol,
+            "provider": "deterministic-native-emulator",
+        }))
 
 
 def test_tail_context_does_not_leak_across_commit_or_rollback(tail_database, monkeypatch):
@@ -926,7 +1085,10 @@ def test_native_populated_downgrade_preserves_legacy_metadata_and_guard(tail_dat
         command.downgrade(database.cfg, "20261010_0003")
     assert _snapshot(database) == before
     with database.engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261010_0004"
+        assert (
+            connection.scalar(text("SELECT version_num FROM alembic_version"))
+            == database.current_head
+        )
 
 
 def test_native_empty_explicit_downgrade_then_upgrade_restores_fence(tail_database):
@@ -1001,7 +1163,10 @@ def test_native_downgrade_lock_timeout_retains_protocol_and_uncommitted_insert(
         session.commit()
         assert run.persistence_protocol == COMPLIANCE_TAIL_PROTOCOL
     with database.engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261010_0004"
+        assert (
+            connection.scalar(text("SELECT version_num FROM alembic_version"))
+            == database.current_head
+        )
     after = _snapshot(database)
     assert len(after["matter_compliance_extraction_runs"]) == 1
     after["matter_compliance_extraction_runs"] = []

@@ -2,6 +2,71 @@
 
 ## October 12 Combined Release
 
+Resumed release checkpoint, October 12 IST: the old frozen9c local Docker gate
+completed naturally with 2,617/2,623 PostgreSQL passes and six failures, zero
+skips/errors; browsers did not run. Its full RED journal/JUnit/diagnostics and
+controller completion are retained. Complete narrow replacement proof now has
+74 tail cases/222 phases and 24 court cases/72 phases, zero failures/skips,
+with original inventories, positive upload/worker provenance, captured migration
+head/ancestry, exact final locks and rich default readers preserved. Court
+preparation now materializes zero history and both getters remain two SQL;
+operation/replay work is equal at histories1/501. Independent review passes.
+These are Partially fixed pending full fresh frozen Docker/CI/main/live proof,
+not a transfer of the old image's RED or prior staged public green.
+
+Human explicitly requests all open PRs integrated, green CI, local workstation
+Docker end-to-end acceptance, canonical merge and guarded production deployment.
+Combine the reviewed #531/#532/#533 runtime with green docs-only #534, preserving
+its daily GSC/account/privacy instructions and dated history. External consent,
+sender/retention/provider mappings, selected fallback activation and financial
+invoice reconciliation are unchanged. No new paid probe or monthly baseline.
+
+03:32 UTC: owner-selected exact-19 licensing review is complete for stock
+managed-SaaS use with its stated obligations/caveats and unchanged base14.
+Final independent local coverage passes 252 Node, four native SDK/Docker and
+five static packaging cases. Native contexts retain all 62 approved inputs;
+synthetic contexts contain exactly 63 safe files including the reviewed public
+example, excluding 17 SDK and 18 Docker private/environment canaries. Original
+canary failures remain retained, not evidence of an actual credential leak.
+The adjacent deploy dirty-input omission is repaired: original 231 controls
+plus 12 native Git controls yield 242 passes/one unchanged Windows skip. Ten
+individual RED cases proved omitted registry/material/document/builder inputs.
+
+Frozen 9c CI is FAILED: 9,990 API identities pass/skip as recorded; native
+2,623 identities contain six failed calls and the hosted browser never ran.
+The incomplete local Docker run retains its failures; neither Security GO nor
+30 old staged-image browser passes certify the amended source. The three stale
+downgrade expectations now capture the canonical head with retained ancestry;
+the upload fixture exercises real admission/worker/source/marker boundaries.
+Background execution must preserve its intentional null creator and the
+original upload/requesting principal separately.
+
+Correcting the court lock probe exposed a real preparation performance defect:
+it hydrated 501 unrelated historical rows/relations before external work.
+The narrow source correction honors the existing bounded-load opt-out for
+unlocked preparation, preserves default rich reads and reacquires final locks.
+Complete final native replacements, independent source review, fresh combined
+Docker/CI, canonical main and exact-live verification remain pending/NO-GO.
+No production/model/provider/financial-baseline change has occurred.
+
+02:21 UTC: the frozen 9c candidate's hosted Security/CodeQL gates are complete:
+139 Python and 252 Node controls, actual host/musl 129 IDs/163 copies, logical
+166 IDs/200 locations and zero policy denials/new open scan findings. Main and
+PR-ref findings are reconciled separately; historical dismissals remain visible.
+The actual local final image retains all 61 material bindings and original
+public assets. Its full Docker PostgreSQL/browser gate is still running.
+
+Native gcloud 568 discovery exposed a distinct release blocker: the old
+`license-policy/**` reset prunes all 55 operator paths despite passing Docker
+and direct Git leaf checks. A separate child changes only this reset to `/*`.
+Three native regressions now pass, including all 62 required upload paths
+(registry plus 61 materials/document), builder closure, secret/cache canaries
+and the old-glob negative control. The expanded fixture's earlier 61-versus-62
+setup failure is retained, not a product diagnosis. A pinned SDK Security job
+runs without credentials or uploads and always retains discovery receipts.
+Child review/full fresh gates, canonical-main merge and live replay remain
+NO-GO; no production/model/provider/baseline change has occurred.
+
 01:29 UTC pre-freeze: exact-19 managed-SaaS engineering review is GO with
 documented obligations/caveats, not binary-distribution or production approval.
 The populated registry binds 61 original material/document paths; base14 remains

@@ -1,5 +1,26 @@
 # CaseOps agent instructions
 
+- A migration-boundary test must capture the exact single canonical head before
+  upgrade, while pinning the retained migration ancestry. Do not confuse a
+  boundary revision with the newest head or replace one stale latest-head
+  literal with another. Prove valid future descendants, forks and missing
+  ancestors without rewriting production migration history.
+- Correcting a preparation-versus-persistence lock probe must not waive its
+  workload bounds. Prove unlocked preparation and fresh final writer locks,
+  then measure every getter's SQL and historical materialization. An unlocked
+  getter can still eagerly load hundreds of unrelated children. Preserve the
+  default rich read contract when adding a bounded preparation path.
+- Native SDK and Docker ignore engines need independent traversal proof.
+  A parent negation can admit unintended Docker descendants, while a double
+  star can prune SDK traversal. Test exact approved files, private-document
+  siblings and environment variants; retain only the reviewed public example.
+  Guard every newly uploaded input against dirty release labeling.
+- Docker context success and Git leaf-ignore checks do not certify gcloud's
+  directory traversal. Reconcile the native SDK upload inventory before Cloud
+  Build: public notices, every hash-bound operator record and builder dependency
+  must survive, while secret/cache canaries remain excluded. Keep an isolated,
+  unauthenticated SDK regression with the broken parent glob as a negative
+  control; a newly corrected context requires fresh exact-release gates.
 - A documented dependency review is not a global SPDX allowlist waiver. Bind
   scoped managed-SaaS admission to the exact package/version/expression, npm
   integrity and original notice/document bytes. Preserve all physical copies

@@ -2,6 +2,40 @@
 
 ## October 12 Integration Checkpoint
 
+Resumed October 12 IST: old9c Docker is completed RED, not merely a prefix:
+2,617 passes/six failures among2,623, no native skips/errors, no browser execution.
+Full current narrow replacements are 74 tail +24 court native passes, 294
+phases, zero failures/skips, independently reviewed and cleanup-complete.
+The court-import preparation hydration defect is repaired without raising
+budgets or changing default-rich readers; full fresh candidate acceptance is
+still NO-GO. Native context/dirty/licensing gates retain their earlier scoped
+proof and caveats. Combine all four PRs, then require green exact-head CI,
+complete local Docker browser/native inventories, current-main guarded release,
+exact live verification and serial quiescent projection cadences before closure.
+
+03:32 UTC: NO-GO for release. Final scoped context/wiring proof is 252 Node,
+four native and five static passes; exact63 safe synthetic files exclude SDK17/
+Docker18 private canaries. Native dirty-release fencing passes 242/243 with one
+original Windows-only skip, all231 original controls retained. No global license
+waiver or actual-secret-exposure claim. Frozen 9c CI failed six of2,623 native
+cases and never ran browsers; complete amended acceptance cannot inherit it.
+The corrected preparation lock probe exposed real 501-row historical hydration.
+Minimal bounded-read source repair preserves rich defaults/final locks and needs
+complete fresh replacements/source review/full Docker/main/live proof. Retain
+all stale-head/upload/keyword/observer failures and superseded source evidence.
+No deployment, model/provider activation or financial initialization.
+
+02:21 UTC: NO-GO for release. 9c hosted Security/CodeQL, actual host/musl and
+logical inventories pass with exact tree binding and unchanged base14; full
+Docker acceptance remains running. Its local image carries the original public
+notices/nonpublic materials, but native gcloud prunes all 55 operator files.
+The separate single-star context correction has three full SDK passes with
+62 required paths, builder closure and secret/cache/old-glob controls. Direct
+Git leaf checks had missed this traversal defect; the failed expanded-fixture
+setup is preserved separately. Pinned unauthenticated native CI evidence is now
+required. Review and complete new exact gates/main/live remain mandatory; no
+production, financial, model or provider mutation.
+
 01:29 UTC: exact-19 managed-SaaS engineering review is GO with caveats; actual
 Windows and logical admission pass with 61 material bindings and unchanged
 base14. Python 139/417 phases and Node 252 cases pass. Final web R3 passes all

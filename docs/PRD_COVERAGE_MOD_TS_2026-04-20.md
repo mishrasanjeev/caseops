@@ -2,6 +2,31 @@
 
 ## October 12 Combined Candidate
 
+Resumed October 12 IST: complete narrow current native inventory is74 tail
+plus24 court cases,294 phases, zero failures/skips, original identities and
+source bindings preserved. Actual court-import preparation defect has bounded
+positive/negative/history/lock/default-reader proof. Old9c full local native
+gate is completed RED (2,623 cases/six failures), not browser or new-source
+coverage. Full frozen combined Docker/CI/main/live remains NO-GO; all four
+open PRs must be reconciled without widening privacy, legal-source, provider
+or license policy. Dated prior failures remain historical evidence.
+
+03:32 UTC: scoped QG-SEC-004 context/wiring passes Node252/native4/static5;
+the native dirty-Git fence passes 242/243 with one retained Windows skip. These
+do not certify the uncommitted combined candidate. Frozen 9c CI fails six native
+calls and has no browser execution. UJ36/UJ61 preparation hydration has genuine
+501-history RED and a bounded-load repair preserving rich read defaults/final
+locks; complete new native/browser/source review and Docker/CI/main/live proof
+remain pending. Keep all historical failures, no-paid and source/privacy fences.
+
+02:21 UTC: QG-SEC-004/J19/M21 native gcloud discovery now requires every one of
+62 reviewed input paths and builder closure, with secret/cache exclusions and
+the broken parent-glob negative control. Three SDK cases pass in the separate
+child; 9c hosted Security/CodeQL and actual local image evidence pass but cannot
+certify this changed context. Full Docker remains running; fresh child/full
+release/main/live gates are still NO-GO. Base14, historical failed evidence,
+October behavior, financial baseline and Gemini-off consent fence are preserved.
+
 01:29 UTC: scoped engineering review and actual Windows/logical license admission
 pass with base14 unchanged (139 Python/252 Node cases; 61 material bindings).
 Final web R3 passes all 1,279 identities; source-only worker and packaging/context

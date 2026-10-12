@@ -376,6 +376,7 @@ class _CourtProbe:
         self.audit, self.fixture, self.observer = audit, fixture, observer
         self.statements, self.getters = [], []
         self.materialized, self.historical_materialized = Counter(), Counter()
+        self.held_locks = []
         self.current_getter = None
         self.history_keys = {
             (model.__tablename__, row_id)
@@ -428,23 +429,48 @@ class _CourtProbe:
                     session.scalar(statement)
                 assert getattr(blocked.value.orig, "sqlstate", None) == "55P03"
                 session.rollback()
+            self.held_locks.append(model.__tablename__)
             self.audit.record("court_actual_lock_held", table=model.__tablename__, sqlstate="55P03")
+
+    def assert_preparation_locks_released(self):
+        for model, identity in (
+            (Company, self.fixture.company_id),
+            (Matter, self.fixture.matter_id),
+        ):
+            with Session(self.observer) as session:
+                session.execute(text("SET LOCAL lock_timeout = '2s'"))
+                session.execute(text("SET LOCAL statement_timeout = '10s'"))
+                acquired = session.scalar(
+                    select(model.id)
+                    .where(model.id == identity)
+                    .with_for_update(of=model, nowait=True)
+                )
+                assert acquired == identity
+                session.rollback()
+            self.audit.record("court_preparation_lock_released", table=model.__tablename__)
 
     @contextmanager
     def getter(self, kwargs):
         assert self.current_getter is None, "Unexpected nested getter invalidates the probe"
         row = {
             "sql": [],
+            "statement_start": len(self.statements),
             "orm_loads": Counter(),
             "lock_for_update": kwargs.get("lock_for_update", False),
             "lock_for_share": kwargs.get("lock_for_share", False),
             "load_locked_children": kwargs.get("load_locked_children", True),
+            "boundary": (
+                "persistence"
+                if kwargs.get("lock_for_update") or kwargs.get("lock_for_share")
+                else "preparation"
+            ),
         }
         self.current_getter = row
         try:
             yield
         finally:
             self.current_getter = None
+            row["statement_end"] = len(self.statements)
             self.getters.append(row)
             self.audit.record(
                 "court_getter_complete",
@@ -454,6 +480,9 @@ class _CourtProbe:
                 load_locked_children=row["load_locked_children"],
                 lock_for_update=row["lock_for_update"],
                 lock_for_share=row["lock_for_share"],
+                boundary=row["boundary"],
+                statement_start=row["statement_start"],
+                statement_end=row["statement_end"],
             )
 
     @contextmanager
@@ -490,9 +519,28 @@ def court_audit(finalizer_audit, _ensure_migrations, monkeypatch):
         probe = session.info.get("court_bounds_probe")
         if probe is None:
             return original(session, **kwargs)
+        if not (kwargs.get("lock_for_update") or kwargs.get("lock_for_share")):
+            # Match the locked probe's ready transaction/context. Retain every
+            # setup statement in the operation, outside the parent-getter window.
+            setup_start = len(probe.statements)
+            session.connection()
+            context = kwargs["context"]
+            identities = (context.company.id, context.membership.id, context.user.id)
+            assert identities[0] == probe.fixture.company_id
+            assert identities[1] == probe.fixture.actor_id
+            probe.audit.record(
+                "court_getter_context_ready",
+                statement_start=setup_start,
+                statement_end=len(probe.statements),
+                statement_count=len(probe.statements) - setup_start,
+            )
+            assert len(probe.statements) - setup_start <= 7
         with probe.getter(kwargs):
             result = original(session, **kwargs)
-        probe.assert_locks_held()
+        if kwargs.get("lock_for_update") or kwargs.get("lock_for_share"):
+            probe.assert_locks_held()
+        else:
+            probe.assert_preparation_locks_released()
         return result
 
     monkeypatch.setattr(matters, "_get_matter_model", traced)
@@ -572,14 +620,33 @@ def _assert_company_first(probe, *, membership_fence=True):
     if membership_fence:
         assert any("FOR UPDATE OF company_memberships" in sql for sql in locks[:parent_index])
         assert any("FOR UPDATE OF users" in sql for sql in locks[:parent_index])
-    for row in probe.getters:
-        assert row["lock_for_update"] or row["lock_for_share"]
+    locked_getters = [
+        row for row in probe.getters if row["lock_for_update"] or row["lock_for_share"]
+    ]
+    assert locked_getters, "No final parent authority fence was observed"
+    for row in locked_getters:
         parent_locks = [
             sql
             for sql in row["sql"]
             if ("FOR UPDATE OF matters" in sql or "FOR SHARE OF matters" in sql)
         ]
         assert len(parent_locks) == 1 and " JOIN " not in parent_locks[0].upper()
+    for row in probe.getters:
+        if row["boundary"] == "preparation":
+            assert not any(" FOR " in sql.upper() for sql in row["sql"])
+            reacquired = [
+                sql for sql in probe.statements[row["statement_end"]:] if " FOR " in sql.upper()
+            ]
+            assert reacquired and "FOR NO KEY UPDATE OF companies" in reacquired[0]
+            final_parent_index = next(
+                index for index, sql in enumerate(reacquired) if "FOR UPDATE OF matters" in sql
+            )
+            assert final_parent_index > 0
+            assert any(
+                "FOR UPDATE OF company_memberships" in sql
+                for sql in reacquired[:final_parent_index]
+            )
+            assert any("FOR UPDATE OF users" in sql for sql in reacquired[:final_parent_index])
 
 
 def _assert_outcomes(audit, fixture, path, result, *, replay=False):
@@ -967,18 +1034,35 @@ def test_court_write_getter_does_not_hydrate_unrelated_history(court_audit, path
             "total_sql": len(probe.statements),
             "getter_sql": [len(row["sql"]) for row in probe.getters],
             "getter_orm_loads": [dict(row["orm_loads"]) for row in probe.getters],
+            "getter_boundaries": [row["boundary"] for row in probe.getters],
             "historical_orm_loads": dict(probe.historical_materialized),
         }
         for probe in measured
     ]
     audit.record("court_bound_comparison", path=path, measurements=receipts)
-    assert all(len(probe.getters) == 1 for probe in measured), receipts
-    assert all(len(probe.getters[0]["sql"]) == 2 for probe in measured), receipts
-    assert all(not probe.getters[0]["load_locked_children"] for probe in measured), receipts
+    boundaries = (
+        ["preparation", "persistence"]
+        if path == "create_matter_court_sync_import"
+        else ["persistence"]
+    )
+    assert all(
+        [row["boundary"] for row in probe.getters] == boundaries for probe in measured
+    ), receipts
+    assert all(
+        len(row["sql"]) == 2
+        for probe in measured
+        for row in probe.getters
+    ), {"court_getter_sql_budget": receipts}
+    assert all(
+        not row["load_locked_children"]
+        for probe in measured
+        for row in probe.getters
+        if row["boundary"] == "persistence"
+    ), receipts
     assert all(not probe.historical_materialized for probe in measured), receipts
     assert all(
         not (
-            set(probe.getters[0]["orm_loads"])
+            set(row["orm_loads"])
             - {
                 "matters",
                 "company_memberships",
@@ -986,6 +1070,7 @@ def test_court_write_getter_does_not_hydrate_unrelated_history(court_audit, path
             }
         )
         for probe in measured
+        for row in probe.getters
     ), receipts
     for attempt in range(1 if path == "create_matter_court_order" else 2):
         assert len(measured[attempt].statements) == len(
@@ -1029,4 +1114,130 @@ def test_default_locked_getter_retains_child_hydration(court_audit):
                 }
                 session.rollback()
             _assert_history_retained(audit, fixture)
+    assert audit.errors == []
+
+
+def test_former_eager_preparation_is_rejected_by_court_bounds(court_audit, monkeypatch):
+    audit, _observer = court_audit
+    original = matters._get_matter_model
+    record = audit.record
+    comparisons = []
+
+    def formerly_eager(session, **kwargs):
+        if not (kwargs.get("lock_for_update") or kwargs.get("lock_for_share")):
+            kwargs["load_locked_children"] = True
+        return original(session, **kwargs)
+
+    def retain(event_name, **values):
+        if event_name == "court_bound_comparison":
+            comparisons.append(values)
+        return record(event_name, **values)
+
+    monkeypatch.setattr(matters, "_get_matter_model", formerly_eager)
+    monkeypatch.setattr(audit, "record", retain)
+    with pytest.raises(AssertionError, match="court_getter_sql_budget"):
+        test_court_write_getter_does_not_hydrate_unrelated_history(
+            court_audit, "create_matter_court_sync_import",
+        )
+    assert len(comparisons) == 1
+    rows = comparisons[0]["measurements"]
+    assert [row["history_size"] for row in rows] == [1, 1, 501, 501]
+    for row in rows:
+        assert row["getter_sql"][0] > 2 and row["getter_sql"][1] == 2
+        assert row["historical_orm_loads"] == {
+            model.__tablename__: row["history_size"] for model in _HISTORY_MODELS
+        }
+    audit.record("court_former_eager_negative_complete", measurements=rows)
+
+
+def test_missing_final_parent_lock_is_rejected_by_native_probe(court_audit, monkeypatch):
+    audit, observer = court_audit
+    fixture = _seed_history(audit, 1)
+    with Session(audit.engine) as check:
+        baseline = _outcome_snapshot(check, fixture)
+        parent_before = _row_hashes(check, Matter, [fixture.matter_id])
+
+    def missing_lock(*, company_id, matter_id, shared):
+        assert shared is False
+        return select(Matter).where(Matter.id == matter_id, Matter.company_id == company_id)
+
+    monkeypatch.setattr(matters, "_matter_lock_statement", missing_lock)
+    with audit.session("mutation") as session:
+        context = _ip_race_context(
+            session, company_id=fixture.company_id, membership_id=fixture.actor_id,
+        )
+        probe = _CourtProbe(audit, fixture, observer)
+        with probe.measure(session):
+            lock_matter_private_authority(session, company_id=fixture.company_id)
+            with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE") as rejected:
+                matters._get_matter_model(
+                    session, context=context, matter_id=fixture.matter_id,
+                    lock_for_update=True, load_locked_children=False,
+                )
+            assert type(rejected.value) is pytest.fail.Exception
+            assert str(rejected.value) == f"DID NOT RAISE {DBAPIError!r}"
+        session.rollback()
+    assert len(probe.getters) == 1 and probe.getters[0]["boundary"] == "persistence"
+    assert probe.held_locks == ["companies"]
+    assert not any("FOR UPDATE OF matters" in sql for sql in probe.statements)
+    assert not probe.historical_materialized and audit.errors == []
+    _assert_history_retained(audit, fixture)
+    with Session(audit.engine) as check:
+        assert _outcome_snapshot(check, fixture) == baseline
+        assert _row_hashes(check, Matter, [fixture.matter_id]) == parent_before
+    audit.record(
+        "court_missing_final_lock_negative_complete", missing_lock="matters",
+        no_durable_writes=True, observed_held_locks=probe.held_locks,
+        failure_type=type(rejected.value).__name__, failure_message=str(rejected.value),
+    )
+
+
+def test_default_readers_keep_rich_workspace_dto(court_audit, monkeypatch):
+    audit, observer = court_audit
+    fields = {
+        MatterTask: "tasks", MatterNote: "notes", MatterHearing: "hearings",
+        MatterActivity: "activity", MatterCauseListEntry: "cause_list_entries",
+        MatterCourtOrder: "court_orders", MatterCourtSyncRun: "court_sync_runs",
+        MatterCourtSyncJob: "court_sync_jobs", MatterAttachment: "attachments",
+    }
+    original = matters._get_matter_model
+
+    def explicit_full(session, **kwargs):
+        kwargs["load_locked_children"] = True
+        return original(session, **kwargs)
+
+    for history_size in (1, 501):
+        fixture = _seed_history(audit, history_size)
+        for reader in (matters.get_matter, matters.get_matter_workspace):
+            outputs = []
+            for explicit in (False, True):
+                with monkeypatch.context() as patch:
+                    if explicit:
+                        patch.setattr(matters, "_get_matter_model", explicit_full)
+                    with audit.session("mutation") as session:
+                        context = _ip_race_context(
+                            session, company_id=fixture.company_id, membership_id=fixture.actor_id,
+                        )
+                        probe = _CourtProbe(audit, fixture, observer)
+                        with probe.measure(session):
+                            result = reader(session, context=context, matter_id=fixture.matter_id)
+                        assert len(probe.getters) == 1
+                        assert probe.getters[0]["load_locked_children"] is True
+                        assert dict(probe.historical_materialized) == {
+                            model.__tablename__: history_size for model in _HISTORY_MODELS
+                        }
+                        payload = result.model_dump(mode="json")
+                        if reader is matters.get_matter_workspace:
+                            for model, field in fields.items():
+                                assert set(fixture.history_ids[model]) <= {
+                                    row["id"] for row in payload[field]
+                                }
+                        outputs.append(payload)
+            assert outputs[0] == outputs[1]
+            audit.record(
+                "court_default_reader_dto_complete", reader=reader.__name__,
+                history_size=history_size, dto_sha256=_digest(outputs[0]),
+                default_equals_explicit_full=True,
+            )
+        _assert_history_retained(audit, fixture)
     assert audit.errors == []

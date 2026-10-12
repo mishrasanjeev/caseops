@@ -7,7 +7,9 @@ license-policy/**
 !license-policy/upstream/
 !license-policy/upstream/**
 !docs/
+docs/**
 !docs/security/
+docs/security/**
 !docs/security/js-license-compliance-review-2026-10-12.md
 !apps/
 !apps/web/
@@ -29,6 +31,8 @@ apps/web/coverage/
 apps/web/.env
 apps/web/.env.local
 apps/web/.env*.local
+apps/web/.env*
+!apps/web/.env.local.example
 apps/web/test-results/
 apps/web/playwright-report/
 apps/web/tsconfig.tsbuildinfo
