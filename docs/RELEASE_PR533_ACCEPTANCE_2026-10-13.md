@@ -8,6 +8,38 @@ The owner requires green CI, complete exact-candidate workstation Docker
 acceptance, canonical-main merge, guarded production deployment and live replay.
 Scoped results below do not replace those gates.
 
+## Passive Evidence Capacity Checkpoint
+
+Published `faff06c9` has a RED CI run 38369998534. Its native shard 6 passed
+all 362 test calls, but the former-eager court-history negative test failed
+teardown because the timing recorder exhausted 512 GC-phase cells. The exact
+source-bound native record has 1,062 SELECT samples, `gc_overflow: true`, no SQL
+overflow, invalid or unfinished sample, no unpaired GC phase and no leaked
+backend/lock. The complete hashed envelope does not waive incomplete timing.
+Hosted browser execution was blocked. The full local R8 run remains separate.
+
+Only the test recorder's finite metadata ceiling changes to 4,096 cells; the
+callback, production GC policy, locks, deadlines, query budgets and complete
+evidence assertion are unchanged. A deterministic 600-phase control fails on
+the old buffer. The new default-bound overflow control still fails closed and
+retains exactly its bounded count without changing GC callbacks or policy.
+
+The complete affected two-module PostgreSQL replacement has 37 passes and
+111 phases, zero skips/failures and exact collection/JUnit agreement. Source
+bytes are unchanged during the run, all parent processes are reaped and owned
+resources removed. The original large-history fixture records 257 GC events
+(514 phase cells), 1,062 SELECTs and complete passive evidence under the new
+ceiling. This is local observer proof, not a production GC-causality or latency
+claim. Ruff and whitespace checks pass. The first attempted control run skipped
+both cases because the PostgreSQL URL was absent; it remains incomplete evidence,
+not a RED or a passing reproduction.
+
+Evidence: `ci-faff06c9-reconciliation-01/failed-native6-full-inspection-01` and
+`recommendation-authority-read-plan-02/finalizer-gc-capacity-native-red-02` /
+`finalizer-gc-capacity-native-green-03`. The old hosted failure and local R8
+baseline remain retained. Final amended-tree full CI/Docker, main merge, guarded
+deployment and live replay remain mandatory; nothing is merged or deployed.
+
 ## Authority Read Correction
 
 The shared indexed-text, embedding-availability and vector-prefilter queries

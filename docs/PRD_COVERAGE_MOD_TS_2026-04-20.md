@@ -2,6 +2,13 @@
 
 ## October 12 Combined Candidate
 
+October 13 passive evidence checkpoint: faff hosted native has a teardown
+GC-recorder overflow despite 362 passing calls in that shard. The bounded
+metadata correction passes both complete affected modules: 37 tests/111 phases,
+no skips, original 514-phase evidence and default-bound rejection retained.
+No production GC/query/deadline change. Full fresh gates remain **NO-GO**;
+see `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
 October 13 PostgreSQL strategy checkpoint: J09/M07/QG-SEC-004 stay **NO-GO**.
 ba has green CI and 2,854 fresh native passes, but actual Docker strategy returns
 500 from shared unproven authority reads. Both artifact-retention boundaries

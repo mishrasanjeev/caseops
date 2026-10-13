@@ -2,6 +2,13 @@
 
 ## October 12 Integration Checkpoint
 
+October 13 passive evidence checkpoint: **NO-GO**. faff hosted native has one
+observer-overflow teardown error after 362 passing calls in that shard. The
+finite evidence-buffer correction has 37 native passes/111 phases and strict
+over-bound rejection, with production GC/locking/deadlines unchanged. Full
+fresh release/live gates remain; no backup/provider/latency closure follows.
+Evidence: `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
 October 13 PostgreSQL strategy checkpoint: **Partially implemented / NO-GO**.
 The ba full Docker browser gate exposes a strategy 500 from shared authority
 read provenance, despite green hosted/native companions. Real unchanged-image

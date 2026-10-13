@@ -2,6 +2,13 @@
 
 ## October 12 Combined Fixes
 
+October 13 passive evidence checkpoint: **Partially fixed / NO-GO**. faff CI's
+native teardown correctly rejects a 512-cell GC-recorder overflow. The bounded
+observer correction passes 37 complete affected PostgreSQL tests/111 phases,
+including the original 514-phase fixture and fail-closed maximum controls.
+Skipped initial setup stays incomplete; full fresh CI/Docker and deployed proof
+remain required. `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md` records evidence.
+
 October 13 PostgreSQL strategy checkpoint: BUG-004 is **Not fixed** on actual
 Docker ba, despite green hosted CI and native acceptance. The request returns
 500 at the read-only provider boundary after shared authority retrieval emits

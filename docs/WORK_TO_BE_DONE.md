@@ -2,6 +2,14 @@
 
 ## October 12 Combined Release
 
+October 13 passive evidence checkpoint: **NO-GO**. faff CI failed on a bounded
+GC-observer overflow in teardown, not a failed court-history call. The recorder
+correction passes both complete affected native modules (37 tests/111 phases)
+and retains strict capacity/pairing guards. The original fixture exceeds the
+old 512-phase buffer. No production GC, lock or workload-budget change is made.
+Full amended-tree CI/Docker and deployed replay remain;
+see `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
 October 13 PostgreSQL strategy checkpoint: **NO-GO**. ba has green hosted CI,
 2,854 fresh local native passes and working real browser artifact retention,
 but actual Docker strategy generation returns 500. Shared authority retrieval

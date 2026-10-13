@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A complete native journal envelope is not complete passive timing evidence.
+  Reconcile the recorder's overflow, pairing and unfinished-read flags as well
+  as every pytest phase. Size finite evidence buffers for the actual bounded
+  fixture workload, retain a deterministic over-old-bound regression and prove
+  the new maximum still fails closed. Never change production GC settings,
+  locking, deadlines or workload assertions to make an observer overflow pass.
 - Authority retrieval must remain proven read-only under the actual PostgreSQL
   request-session class before an AI transport call. Exercise exact-name,
   empty-vector and vector-hit paths; SQLite or mocked retrieval cannot close

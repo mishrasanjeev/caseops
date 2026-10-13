@@ -243,7 +243,9 @@ class _PassiveOverlapTiming:
     # Includes setup SELECTs for the existing 500-recipient native fixture.
     # This bounds evidence retention, not the workflow's asserted query budget.
     SQL_CAP = 16384
-    GC_CAP = 512
+    # CI exhausted 512 phase cells during the existing repeated 501-row negative
+    # fixture. Bound metadata separately from GC policy and keep overflow fatal.
+    GC_CAP = 4096
     TEMPLATE_CAP = 65536
 
     def __init__(self, *, sql_cap=SQL_CAP, gc_cap=GC_CAP):
@@ -900,6 +902,58 @@ def test_passive_gc_native_clocks_cleanup_and_deferred_flush(body_error):
     assert all(row["duration_ns"] >= 0 and row["utc_started_ns"] > 0
                and row["utc_finished_ns"] >= row["utc_started_ns"] for row in rows)
     assert receipts[0]["complete"] and receipts[0]["flushed_after_workers"]
+
+
+def test_passive_gc_retains_large_fixture_window_without_changing_gc_policy():
+    timing = _PassiveOverlapTiming()
+    callbacks = list(gc.callbacks)
+    policy = (gc.isenabled(), gc.get_threshold())
+    receipts = []
+    # Exact native-clock callback, with deterministic metadata rather than a GC replay.
+    # Do not register it: ambient collection must not alter this known phase inventory.
+    timing.enabled = True
+    try:
+        for _ in range(300):
+            timing.callback("start", {"generation": 0})
+            timing.callback("stop", {"generation": 0})
+        assert receipts == []
+    finally:
+        timing.enabled = False
+    timing.flush(lambda kind, **data: receipts.append({"event": kind, **data}))
+    summary = receipts[0]
+    assert summary["complete"] and not summary["gc_overflow"]
+    assert summary["gc_count"] == 300
+    rows = [row for row in receipts if row["event"] == "passive_gc_timing"]
+    assert len(rows) == 300
+    assert all(row["duration_ns"] >= 0 and row["utc_started_ns"] > 0 for row in rows)
+    assert all(left["mono_finished_ns"] <= right["mono_started_ns"]
+               for left, right in zip(rows, rows[1:], strict=False))
+    assert gc.callbacks == callbacks and (gc.isenabled(), gc.get_threshold()) == policy
+
+
+def test_passive_gc_default_capacity_still_fails_closed_at_its_finite_bound():
+    timing = _PassiveOverlapTiming()
+    cap = len(timing.gc_slots)
+    callbacks = list(gc.callbacks)
+    policy = (gc.isenabled(), gc.get_threshold())
+    receipts = []
+    timing.enabled = True
+    try:
+        for _ in range(cap // 2 + 1):
+            timing.callback("start", {"generation": 0})
+            timing.callback("stop", {"generation": 0})
+        assert receipts == []
+    finally:
+        timing.enabled = False
+    with pytest.raises(AssertionError, match="Passive timing evidence is incomplete"):
+        timing.flush(lambda kind, **data: receipts.append({"event": kind, **data}))
+    summary = receipts[0]
+    assert not summary["complete"] and summary["gc_overflow"]
+    assert not summary["unpaired_gc"] and not summary["invalid"]
+    assert summary["gc_phase_cap"] == cap == timing.GC_CAP
+    assert summary["gc_count"] == cap // 2
+    assert len(receipts) == cap // 2 + 1 and timing.next_gc is None
+    assert gc.callbacks == callbacks and (gc.isenabled(), gc.get_threshold()) == policy
 
 
 @pytest.mark.parametrize("defect", ["overflow", "unpaired", "clock-error"])
