@@ -48,12 +48,11 @@ type ImportRow = {
 };
 type ImportResult = {
   job: { id: string; status: string; total_rows: number; committed_rows: number; failed_rows: number;
-    preview_token: string | null }; rows: ImportRow[];
+    preview_token: string | null; version: number; recovery_available: boolean;
+    valid_rows: number; invalid_rows: number; commit_batch_size: number; source_sha256: string }; rows: ImportRow[];
 };
 
-for (const width of [1280, 393]) {
-  test(`source-tolerant portfolio import, duplicate skip and renewal alert at ${width}px`, async ({ page, request, baseURL }) => {
-    test.setTimeout(180_000);
+async function preparePortfolio(page: Page, request: APIRequestContext, baseURL: string | undefined, width: number) {
     const web = new URL(baseURL ?? required("CASEOPS_WEB_BASE_URL"));
     const api = new URL(process.env.PROD_API_BASE_URL ?? (loopback(web)
       ? `http://${web.hostname}:${process.env.CASEOPS_E2E_API_PORT ?? "8000"}`
@@ -108,6 +107,13 @@ for (const width of [1280, 393]) {
     await page.locator("#password").fill(credentials.password);
     await page.getByRole("button", { name: /^Sign in$/ }).click();
     await page.waitForURL(/\/app(?:[/?]|$)/);
+    return { web, api, local, run, headers, release };
+}
+
+for (const width of [1280, 393]) {
+  test(`source-tolerant portfolio import, duplicate skip and renewal alert at ${width}px`, async ({ page, request, baseURL }) => {
+    test.setTimeout(180_000);
+    const { web, api, local, run, headers, release } = await preparePortfolio(page, request, baseURL, width);
     // Actual Excel datetime cells, independently pinned to this synthetic fixture.
     const nativeName = `ip13-native-${run}.xlsx`;
     const nativeMark = `Synthetic native Excel date ${run}`;
@@ -181,7 +187,8 @@ for (const width of [1280, 393]) {
       .toEqual([9, 36]);
     await page.reload();
     await page.getByRole("button", { name: new RegExp(nativeName.replace(".xlsx", "\\.xlsx")) }).click();
-    await expect(page.getByText(/1 created; 0 linked; 0 skipped/)).toBeVisible();
+    await expect(page.getByRole("region", { name: `Review ${nativeName}`, exact: true })
+      .getByText(/1 created; 0 linked; 0 skipped/)).toBeVisible();
     await page.goto(`${web.origin}/app/ip/portfolio`);
     await page.getByPlaceholder("Mark, application number, opposition number").fill(nativeMark);
     await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
@@ -247,6 +254,11 @@ for (const width of [1280, 393]) {
     expect(preview.job.total_rows).toBe(5);
     expect(preview.rows[1].reconciliation_decision).toBe("skip");
     expect(preview.rows[0].normalized.class_numbers).toEqual([9, 36, 42]);
+    expect(preview.rows[0].normalized._source_values).toEqual(Object.fromEntries(
+      sourceHeaders.map((header, index) => [header, positive[index]]),
+    ));
+    expect(preview.rows[3].normalized._warnings).toContainEqual({ field: "application_date", code: "invalid_optional_date" });
+    expect(preview.rows[3].normalized.application_date).toBeUndefined();
     expect(preview.rows.every(row => row.created_docket_id === null)).toBe(true);
     const before = await request.get(`${api.origin}/api/ip/portfolio`, { headers, params: { query: number } });
     expect(before.status()).toBe(200);
@@ -256,8 +268,30 @@ for (const width of [1280, 393]) {
     await expect(page.getByRole("option", { name: "Create separate record", exact: true })).toHaveCount(0);
     await page.getByRole("option", { name: "Skip row", exact: true }).click();
     await page.getByText("Source column mapping", { exact: true }).click();
-    await expect(page.getByText("Applicant Name(s): applicant_name (canonical)", { exact: true })).toBeVisible();
+    const expectedMappings = [
+      ["S.No.", "source_reference", "source metadata"], ["Trademark", "mark_text", "canonical"],
+      ["Trademark Image", "image_reference", "source metadata"], ["Application Date", "application_date", "canonical"],
+      ["Renewal Due Date", "renewal_due_date", "canonical"], ["Applicant Name(s)", "applicant_name", "canonical"],
+      ["Class", "class_number", "canonical"], ["Application No.", "application_number", "canonical"],
+      ["Status", "source_status", "source metadata"], ["Comment", "comment", "source metadata"],
+      ["Takeover request", "takeover_request", "source metadata"], ["Name Change request", "name_change_request", "source metadata"],
+      ["Address Change request", "address_change_request", "source metadata"], ["Internal Remarks", "internal_remarks", "source metadata"],
+    ];
+    for (const [source, target, handling] of expectedMappings) {
+      await expect(page.getByText(`${source}: ${target} (${handling})`, { exact: true })).toBeVisible();
+    }
     await expect(page.getByText("Extra column: Unmapped (unmapped)", { exact: true })).toBeVisible();
+    await expect(page.getByRole("row").filter({ has: page.getByText(`${number}-C`, { exact: true }) })
+      .getByText("application_date: invalid optional date", { exact: true })).toBeVisible();
+    const rawSource = page.getByRole("region", { name: `Review ip13-${run}.csv`, exact: true })
+      .getByRole("row").filter({ has: page.getByRole("cell", { name: "1", exact: true }) }).locator("details");
+    await rawSource.getByText("Source values", { exact: true }).click();
+    await expect(rawSource.locator("dl > div")).toHaveCount(sourceHeaders.length);
+    for (const [index, header] of sourceHeaders.entries()) {
+      const cell = rawSource.locator("dl > div").filter({ has: page.getByText(header, { exact: true }) });
+      await expect(cell.locator("dt")).toBeVisible();
+      await expect(cell.locator("dd")).toHaveText(positive[index]);
+    }
     await expect(page.getByRole("button", { name: "Commit to portfolio", exact: true })).toBeEnabled();
     const committed = page.waitForResponse(response => new URL(response.url()).pathname === `/api/ip/imports/${preview.job.id}/commit`);
     await page.getByRole("button", { name: "Commit to portfolio", exact: true }).click();
@@ -279,7 +313,8 @@ for (const width of [1280, 393]) {
     const replayed = await explicitReplay.json();
     expect(replayed.replayed).toBe(true);
     expect(replayed.rows).toEqual(saved.rows);
-    await expect(page.getByText(/3 created; 0 linked; 2 skipped \(1 duplicates\); .*0 failed\./)).toBeVisible();
+    await expect(page.getByRole("region", { name: `Review ip13-${run}.csv`, exact: true })
+      .getByText(/3 created; 0 linked; 2 skipped \(1 duplicates\); .*0 failed\./)).toBeVisible();
     await page.reload();
     await page.getByRole("button", { name: new RegExp(`ip13-${run}\\.csv`) }).click();
     await expect(page.getByRole("heading", { name: `Review ip13-${run}.csv`, exact: true })).toBeVisible();
@@ -344,7 +379,24 @@ for (const width of [1280, 393]) {
       const currentRow = (await portfolio.json()).rows.find((row: { docket_id: string }) => row.docket_id === docketId);
       expect(currentRow.source_renewal_due_on).toBe(nextDue);
       expect(currentRow.source_renewal_alert_status).toBe(nextDue ? "queued" : null);
-      await page.reload();
+      await page.goto(`${web.origin}/app/ip/portfolio`);
+      await page.getByPlaceholder("Mark, application number, opposition number").fill(number);
+      await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
+      await expect(sourceRow).toBeVisible();
+      if (nextDue) {
+        await expect(sourceRow.getByText(nextDue, { exact: true })).toBeVisible();
+        await expect(sourceRow.getByText(due, { exact: true })).toHaveCount(0);
+        await expect(sourceRow.getByText("Alert: queued", { exact: true })).toBeVisible();
+        await page.reload();
+        await page.getByPlaceholder("Mark, application number, opposition number").fill(number);
+        await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
+        await expect(sourceRow.getByText(nextDue, { exact: true })).toBeVisible();
+      } else {
+        await expect(sourceRow.getByText(correctedDue, { exact: true })).toHaveCount(0);
+        await expect(sourceRow.getByText("Alert: queued", { exact: true })).toHaveCount(0);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      await page.goto(`${web.origin}/app/ip/portfolio/imports`);
       await page.getByRole("button", { name: new RegExp(`ip13-${run}\\.csv`) }).click();
     }
     const immutableSource = await request.get(`${api.origin}/api/ip/imports/${preview.job.id}`, { headers });
@@ -357,6 +409,128 @@ for (const width of [1280, 393]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
     if (local) await test.info().attach(`ip-import-${width}px`, { body: await page.screenshot(), contentType: "image/png" });
     await release(request);
+  });
+
+  test(`acknowledged 50-row batches recover from keyless history at ${width}px`, async ({ page, request, baseURL }) => {
+    test.setTimeout(180_000);
+    const { web, api, run, headers, release } = await preparePortfolio(page, request, baseURL, width);
+    const filename = `ip13-batches-${run}.csv`;
+    const prefix = `IP13 batch ${run}`;
+    const numbers = Array.from({ length: 101 }, (_, index) => `${run}-${index + 1}`);
+    const content = csv([["Trademark", "Application No.", "Jurisdiction", "Office"],
+      ...numbers.map((number, index) => [`${prefix} ${index + 1}`, number, "IN", "IP India"])]);
+    await page.goto(`${web.origin}/app/ip/portfolio/imports`);
+    await page.getByLabel("CSV or XLSX file").setInputFiles({ name: filename, mimeType: "text/csv", buffer: content });
+    const uploaded = page.waitForResponse(response => new URL(response.url()).pathname === "/api/ip/imports/upload"
+      && response.request().method() === "POST");
+    await page.getByRole("button", { name: "Validate file", exact: true }).click();
+    const upload = await uploaded;
+    expect(upload.status(), await upload.text()).toBe(201);
+    const preview = await upload.json() as ImportResult;
+    expect(preview.job.total_rows).toBe(101);
+    expect(preview.job.valid_rows).toBe(101);
+    expect(preview.job.invalid_rows).toBe(0);
+    expect(preview.rows.every(row => row.created_docket_id === null)).toBe(true);
+    expect(preview.rows.every(row => !row.normalized.application_date && !row.normalized.renewal_due_date
+      && !row.normalized.applicant_name && !(row.normalized.class_numbers as unknown[])?.length)).toBe(true);
+    expect(preview.rows.every(row => (row.normalized._warnings as Array<{ field: string; code: string }>).some(
+      warning => warning.field === "applicant_name" && warning.code === "source_incomplete_draft",
+    ))).toBe(true);
+    const key = randomUUID();
+    await page.evaluate(({ id, key }) => sessionStorage.setItem(`ip-import-commit:${id}`, key), { id: preview.job.id, key });
+    // Only an acknowledged successful server batch is resumed; no failed mutation is retried.
+    const first = await request.post(`${api.origin}/api/ip/imports/${preview.job.id}/commit`, {
+      headers, data: { preview_token: preview.job.preview_token, idempotency_key: key },
+    });
+    expect(first.status(), await first.text()).toBe(202);
+    const staged = await first.json() as ImportResult;
+    expect(staged.job.status).toBe("staged");
+    expect(staged.job.committed_rows).toBe(50);
+    expect(staged.job.failed_rows).toBe(0);
+    expect(staged.job.commit_batch_size).toBe(50);
+    expect(staged.job.recovery_available).toBe(true);
+    expect(staged.rows.filter(row => row.commit_status === "pending")).toHaveLength(51);
+    const originalIds = staged.rows.slice(0, 50).map(row => row.created_docket_id);
+    expect(originalIds.every(Boolean)).toBe(true);
+    const health = await request.get(`${api.origin}/api/health`, { headers: noPaidProviderHeaders });
+    expect(health.status()).toBe(200);
+    await page.evaluate(() => sessionStorage.clear());
+    await page.reload();
+    await page.getByRole("button", { name: new RegExp(filename.replace(".csv", "\\.csv")) }).click();
+    await expect(page.getByRole("heading", { name: `Review ${filename}`, exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Commit to portfolio", exact: true })).toBeEnabled();
+    expect(await page.evaluate(id => sessionStorage.getItem(`ip-import-commit:${id}`), preview.job.id)).toBeNull();
+    const continuationRequests: Array<{ pathname: string; marker: string; body: Record<string, unknown> }> = [];
+    const transportFailures: string[] = [];
+    const continuations: Array<Promise<{ status: number; body: ImportResult }>> = [];
+    const matches = (operation: import("@playwright/test").Request) => operation.method() === "POST"
+      && new URL(operation.url()).pathname.startsWith(`/api/ip/imports/${preview.job.id}/`);
+    const observeRequest = (operation: import("@playwright/test").Request) => {
+      if (!matches(operation)) return;
+      continuationRequests.push({ pathname: new URL(operation.url()).pathname,
+        marker: operation.headers()["x-caseops-automated-test"], body: operation.postDataJSON() as Record<string, unknown> });
+    };
+    const observeFailure = (operation: import("@playwright/test").Request) => {
+      if (matches(operation)) transportFailures.push(operation.failure()?.errorText ?? "unknown transport failure");
+    };
+    const observeResponse = (response: import("@playwright/test").Response) => {
+      if (!matches(response.request())) return;
+      continuations.push(response.json().then(body => ({ status: response.status(), body })));
+    };
+    page.on("request", observeRequest);
+    page.on("requestfailed", observeFailure);
+    page.on("response", observeResponse);
+    try {
+      await page.getByRole("button", { name: "Commit to portfolio", exact: true }).click();
+      await expect(page.getByRole("region", { name: `Review ${filename}`, exact: true })
+        .getByText(/101 created; 0 linked; 0 skipped \(0 duplicates\); 101 with warnings; 0 failed\./)).toBeVisible();
+      const results = await Promise.all(continuations);
+      expect(transportFailures).toEqual([]);
+      expect(results.map(result => result.status)).toEqual([202, 200]);
+      expect(results.map(result => result.body.job.committed_rows)).toEqual([100, 101]);
+      expect(continuationRequests.map(item => item.pathname)).toEqual([
+        `/api/ip/imports/${preview.job.id}/resume`, `/api/ip/imports/${preview.job.id}/resume`,
+      ]);
+      expect(continuationRequests.map(item => item.marker)).toEqual(["no-paid-providers", "no-paid-providers"]);
+      expect(continuationRequests.map(item => item.body)).toEqual([
+        { expected_job_version: staged.job.version, preview_token: staged.job.preview_token },
+        { expected_job_version: results[0].body.job.version, preview_token: results[0].body.job.preview_token },
+      ]);
+      const saved = results[1].body;
+      expect(saved.job.status).toBe("committed");
+      expect(saved.job.source_sha256).toBe(preview.job.source_sha256);
+      expect(saved.rows.every(row => row.commit_status === "committed")).toBe(true);
+      expect(new Set(saved.rows.map(row => row.created_docket_id)).size).toBe(101);
+      expect(saved.rows.slice(0, 50).map(row => row.created_docket_id)).toEqual(originalIds);
+      expect(await page.evaluate(id => sessionStorage.getItem(`ip-import-commit:${id}`), preview.job.id)).toBeNull();
+      await page.reload();
+      await page.getByRole("button", { name: new RegExp(filename.replace(".csv", "\\.csv")) }).click();
+      await expect(page.getByRole("region", { name: `Review ${filename}`, exact: true })
+        .getByText(/101 created; 0 linked; 0 skipped \(0 duplicates\); 101 with warnings; 0 failed\./)).toBeVisible();
+      const retained = await request.get(`${api.origin}/api/ip/imports/${preview.job.id}`, { headers });
+      expect(retained.status()).toBe(200);
+      expect((await retained.json()).rows).toEqual(saved.rows);
+      const portfolio = await request.get(`${api.origin}/api/ip/portfolio`, { headers, params: { query: prefix, limit: 200 } });
+      expect(portfolio.status()).toBe(200);
+      const persisted = (await portfolio.json()).rows as Array<{ docket_id: string; application_numbers: string[] }>;
+      expect(persisted).toHaveLength(101);
+      expect(persisted.map(row => row.docket_id).sort()).toEqual(saved.rows.map(row => row.created_docket_id).sort());
+      expect(persisted.flatMap(row => row.application_numbers).sort()).toEqual([...numbers].sort());
+      await page.goto(`${web.origin}/app/ip/portfolio`);
+      await page.getByPlaceholder("Mark, application number, opposition number").fill(numbers[100]);
+      await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
+      await expect(page.getByRole("link", { name: `${prefix} 101`, exact: true })).toBeVisible();
+      await page.reload();
+      await page.getByPlaceholder("Mark, application number, opposition number").fill(numbers[100]);
+      await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
+      await expect(page.getByRole("link", { name: `${prefix} 101`, exact: true })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      await release(request);
+    } finally {
+      page.off("request", observeRequest);
+      page.off("requestfailed", observeFailure);
+      page.off("response", observeResponse);
+    }
   });
 }
 

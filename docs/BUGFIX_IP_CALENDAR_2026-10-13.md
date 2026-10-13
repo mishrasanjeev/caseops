@@ -276,3 +276,32 @@ verification and two clean post-QA private-maintenance runs remain required.
 Automated provider traffic remains prohibited; test-legal is the only authorized
 production write tenant. GBA remains read-only and external consent/data gaps
 stay open. No production lead submission or guessed legal-source content.
+
+## October 14 Acceptance Review Follow-Up
+
+Exact d2e447e4 hosted native receipts reconcile 2,913 passing identities and
+8,739 passing phases with zero failures, errors or skips. All 149 authority
+admission cases pass. Hosted Web, Security and CodeQL pass; full browser CI
+and local Docker are still incomplete. Production remains 3dbf364d on both
+surfaces. These outcomes do not certify the subsequent browser-test amendments.
+
+A separate review found genuine acceptance omissions, not reproduced product
+defects: week/day clicks had no content assertions; small imports never reached
+continuation or storage-loss recovery; the corrected renewal date was cleared
+before its visible Portfolio reload; and month-only dialog instructions were
+unqualified. The original review is retained in
+`release-guide-browser-review-01/README.md`, including its partial matrix.
+
+The dated journeys now assert persisted day/week hearing identities and timing,
+all fourteen source mappings and original cell values, invalid-date warnings,
+the visible corrected date before withdrawal, and a 101-row history recovery.
+The latter retains one acknowledged 50-row server result, clears session storage,
+then proves creator-owned resume202/resume200, exact progress, unchanged original
+IDs, all 101 persisted canonical records and responsive visible reload. It does
+not retry a failed mutation, mock an API response or make a paid provider call.
+The guide qualifies date-number and overflow dialogs as month-view controls.
+
+These changes remain pending execution on a new frozen candidate and the exact
+production release. Test source, static review and type checking are not browser
+acceptance. Native reminder dispatch and month-end arithmetic retain their own
+evidence; a visible queued alert is not a delivered external notification.

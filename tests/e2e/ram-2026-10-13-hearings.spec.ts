@@ -2,11 +2,19 @@ import { expect, request, test, type APIRequestContext, type Page } from "@playw
 import { noPaidProviderHeaders } from "./support/cost-controls";
 
 type Matter = { id: string; status: string; updated_at: string; court_name: string;
+  matter_code: string; title: string;
   forum_catalog_entry_id: string; forum_district: string | null; forum_city: string | null };
+type HearingSource = {
+  id: string; matter_id: string; hearing_on: string; purpose: string;
+  time_status: "exact" | "session"; hearing_time: string | null;
+  session_label: string | null; timezone: string;
+};
 type Event = {
-  id: string; kind: string; occurs_on: string; matter_id: string;
+  id: string; kind: string; occurs_on: string; matter_id: string; title: string;
+  matter_code: string; matter_title: string;
   court_label: string | null; court_identity: string | null;
   forum_display_order: number | null; hearing_time: string | null;
+  time_status: string | null; session_label: string | null; timezone: string | null;
 };
 type Forum = { id: string; forum_type: string; forum_level: string; name: string;
   district: string | null; display_order: number };
@@ -33,10 +41,12 @@ const run = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)
 const now = new Date();
 const day = (n: number) => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${n}`;
 const dates = [day(15), day(16)];
+const sessionDate = day(17);
 let api: APIRequestContext;
 let auth: Record<string, string>;
 const matters: Matter[] = [];
 const expectedCourt = new Map<string, { label: string; identity: string; order: number }>();
+const expectedHearings = new Map<string, HearingSource>();
 
 async function status(response: { status(): number; text(): Promise<string> }, value: number) {
   expect(response.status(), response.status() === value ? "" : await response.text()).toBe(value);
@@ -51,6 +61,39 @@ async function signIn(page: Page) {
   await page.getByRole("button", { name: /^Sign in$/ }).click();
   await status(await signed, 200);
   await page.waitForURL(/\/app(?:[/?]|$)/);
+}
+
+function sourceTimeLabel(source: HearingSource): string {
+  return source.time_status === "exact"
+    ? `${source.hearing_time!.slice(0, 5)} ${source.timezone}` : source.session_label!;
+}
+
+async function selectDay(page: Page, target: string) {
+  const tab = page.getByRole("tab", { name: /^day$/i });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+  const currentPane = page.locator('[data-testid^="calendar-day-pane-"]');
+  await expect(currentPane).toHaveCount(1);
+  const current = (await currentPane.getAttribute("data-testid"))?.replace("calendar-day-pane-", "");
+  expect(current).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  const currentTime = Date.parse(`${current}T00:00:00Z`);
+  const difference = (Date.parse(`${target}T00:00:00Z`) - currentTime) / 86_400_000;
+  expect(Number.isInteger(difference)).toBe(true);
+  expect(Math.abs(difference), "Date navigation is bounded, not a request retry").toBeLessThanOrEqual(62);
+  const direction = Math.sign(difference);
+  for (let step = 1; step <= Math.abs(difference); step++) {
+    await page.getByRole("button", { name: direction > 0 ? "Next" : "Previous", exact: true }).click();
+    const expectedDate = new Date(currentTime + step * direction * 86_400_000).toISOString().slice(0, 10);
+    await expect(page.getByTestId(`calendar-day-pane-${expectedDate}`)).toBeVisible();
+  }
+  const selected = page.getByTestId(`calendar-day-pane-${target}`);
+  await expect(selected).toBeVisible();
+  const date = new Date(`${target}T00:00:00Z`);
+  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(date);
+  const month = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" }).format(date);
+  await expect(page.getByTestId("calendar-month-label"))
+    .toHaveText(`${weekday}, ${date.getUTCDate()} ${month} ${date.getUTCFullYear()}`);
+  return selected;
 }
 
 test.describe.serial("October 13 court Calendar acceptance", () => {
@@ -110,7 +153,43 @@ test.describe.serial("October 13 court Calendar acceptance", () => {
             time_status: "exact", hearing_time: time, timezone: "Asia/Kolkata",
           } });
           await status(hearing, 200);
+          const stored = await hearing.json() as HearingSource;
+          const source: HearingSource = {
+            id: stored.id, matter_id: matter.id, hearing_on: date, purpose: `Next hearing ${run}`,
+            time_status: "exact", hearing_time: time, session_label: null, timezone: "Asia/Kolkata",
+          };
+          expect(stored.id).toBeTruthy();
+          expect(stored).toMatchObject(source);
+          expectedHearings.set(`hearing:${stored.id}`, source);
         }
+      }
+      if (index === 0) {
+        const hearing = await api.post(`${origin}/api/matters/${matter.id}/hearings`, { headers: auth, data: {
+          hearing_on: sessionDate, forum_name: forum!.name, purpose: `Session hearing ${run}`,
+          time_status: "session", session_label: `Afternoon session ${run}`, timezone: "Asia/Kolkata",
+        } });
+        await status(hearing, 200);
+        const stored = await hearing.json() as HearingSource;
+        const source: HearingSource = {
+          id: stored.id, matter_id: matter.id, hearing_on: sessionDate, purpose: `Session hearing ${run}`,
+          time_status: "session", hearing_time: null,
+          session_label: `Afternoon session ${run}`, timezone: "Asia/Kolkata",
+        };
+        expect(stored.id).toBeTruthy();
+        expect(stored).toMatchObject(source);
+        expectedHearings.set(`hearing:${stored.id}`, source);
+      }
+    }
+    expect(expectedHearings.size).toBe(17);
+    for (const matter of matters) {
+      const response = await api.get(`${origin}/api/matters/${matter.id}/workspace`, { headers: auth });
+      await status(response, 200);
+      const workspace = await response.json() as { matter: Matter; hearings: HearingSource[] };
+      expect(workspace.matter).toMatchObject({ id: matter.id, matter_code: matter.matter_code, title: matter.title });
+      const expected = [...expectedHearings.values()].filter(source => source.matter_id === matter.id);
+      expect(workspace.hearings.map(hearing => hearing.id).sort()).toEqual(expected.map(source => source.id).sort());
+      for (const source of expected) {
+        expect(workspace.hearings.find(hearing => hearing.id === source.id)).toMatchObject(source);
       }
     }
   });
@@ -199,9 +278,72 @@ test.describe.serial("October 13 court Calendar acceptance", () => {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       // These controls must still work and Google connection state remains readable.
       await expect(page.getByTestId("calendar-google-panel")).toBeVisible();
-      await page.getByTestId("calendar-view-week").click();
-      await page.getByTestId("calendar-view-day").click();
+      const persisted = await api.get(`${origin}/api/calendar/events`, {
+        headers: auth, params: { from: dates[0], to: sessionDate },
+      });
+      await status(persisted, 200);
+      const viewEvents = (await persisted.json()).events as Event[];
+      const fixtureEvents = viewEvents.filter(event => matters.some(matter => matter.id === event.matter_id));
+      expect(fixtureEvents.map(event => event.id).sort()).toEqual([...expectedHearings.keys()].sort());
+      for (const event of fixtureEvents) {
+        const source = expectedHearings.get(event.id)!;
+        const matter = matters.find(matter => matter.id === source.matter_id)!;
+        expect(event).toMatchObject({
+          kind: "hearing", occurs_on: source.hearing_on, matter_id: source.matter_id,
+          title: source.purpose, matter_code: matter.matter_code, matter_title: matter.title,
+          court_label: expectedCourt.get(matter.id)!.label,
+          court_identity: expectedCourt.get(matter.id)!.identity,
+          hearing_time: source.hearing_time, time_status: source.time_status,
+          session_label: source.session_label, timezone: source.timezone,
+        });
+      }
+      for (const date of [...dates, sessionDate]) {
+        const expected = viewEvents.filter(event => event.occurs_on === date);
+        const dayPane = await selectDay(page, date);
+        await expect(dayPane.locator('[data-testid^="calendar-event-"]')).toHaveCount(expected.length);
+        expect(await dayPane.locator('[data-testid^="calendar-event-"]').evaluateAll(nodes =>
+          nodes.map(node => node.getAttribute("data-testid"))))
+          .toEqual(expected.map(event => `calendar-event-${event.id}`));
+        for (const event of expected.filter(event => expectedHearings.has(event.id))) {
+          const source = expectedHearings.get(event.id)!;
+          const matter = matters.find(matter => matter.id === source.matter_id)!;
+          const court = expectedCourt.get(matter.id)!;
+          const link = dayPane.getByTestId(`calendar-event-${event.id}`);
+          await expect(link).toBeVisible();
+          await expect(link).toHaveAttribute("href", `/app/matters/${source.matter_id}/hearings`);
+          await expect(link).toContainText(matter.matter_code);
+          await expect(link).toContainText(matter.title);
+          const sections = link.locator(":scope > div > div");
+          await expect(sections).toHaveCount(2);
+          await expect(sections.nth(0).getByText(court.label, { exact: true })).toBeVisible();
+          await expect(sections.nth(1).getByText(court.identity, { exact: true })).toBeVisible();
+          await expect(sections.nth(1).getByText(sourceTimeLabel(source), { exact: true })).toBeVisible();
+        }
+        const weekTab = page.getByRole("tab", { name: /^week$/i });
+        await weekTab.click();
+        await expect(weekTab).toHaveAttribute("aria-selected", "true");
+        const weekDay = page.getByTestId(`calendar-week-day-${date}`);
+        await expect(weekDay).toBeVisible();
+        await expect(weekDay.locator('[data-testid^="calendar-event-"]')).toHaveCount(expected.length);
+        expect(await weekDay.locator('[data-testid^="calendar-event-"]').evaluateAll(nodes =>
+          nodes.map(node => node.getAttribute("data-testid"))))
+          .toEqual(expected.map(event => `calendar-event-${event.id}`));
+        for (const event of expected.filter(event => expectedHearings.has(event.id))) {
+          const source = expectedHearings.get(event.id)!;
+          const matter = matters.find(matter => matter.id === source.matter_id)!;
+          const court = expectedCourt.get(matter.id)!;
+          const link = weekDay.getByTestId(`calendar-event-${event.id}`);
+          await expect(link).toBeVisible();
+          await expect(link.getByText(court.label, { exact: true })).toBeVisible();
+          await expect(link).toHaveAttribute("href", `/app/matters/${source.matter_id}/hearings`);
+          // Compact week chips retain full timing/identity in title, not visible card text.
+          await expect(link).toHaveAttribute("title", ["Hearing or listing", court.identity,
+            matter.matter_code, matter.title, source.purpose, sourceTimeLabel(source)].join(" · "));
+        }
+      }
       await page.getByTestId("calendar-view-month").click();
+      await expect(page.getByTestId("calendar-view-month")).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByTestId(`calendar-month-day-${sessionDate}`)).toBeVisible();
     });
   }
 });

@@ -1,5 +1,13 @@
 # CaseOps agent instructions
 
+- Audit acceptance coverage before freezing a release candidate. A mode-switch
+  click does not prove its dated contents; assert persisted identities and time
+  in every changed Calendar view. An import under its batch limit cannot prove
+  continuation or browser-storage loss: retain an acknowledged partial result,
+  remove the client claim key, reopen creator-owned history and prove exact
+  server-owned continuation, original row identities and terminal reload.
+  Source-date correction must be visibly verified before clearing the date.
+
 - An import admission change must inventory every service/HTTP fixture and
   every native security race caller, not only import-page tests. Directly
   seeded companies do not inherit bootstrap workspace context. Preserve a

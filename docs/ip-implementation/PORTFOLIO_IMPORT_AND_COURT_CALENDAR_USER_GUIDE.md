@@ -122,13 +122,13 @@ provider workflows. This import does not enable them or certify them.
 3. Hearings on one date use the existing catalog display order, then known
    time and stable Matter/event ties. Tasks and other deadlines keep their
    existing relative ordering.
-4. Select a date number to inspect all that date's events and full identities,
-   including those initially visible in a narrow calendar cell.
-5. Select **+N more** to inspect exactly the hidden events for that date.
-   The count equals the hidden collection. Links retain the relevant Matter
-   or work-area destination.
-6. Close the dialog or press Escape; focus returns to its trigger. Reopening
-   does not duplicate events or change the current calendar view.
+4. In month view, select a date number to inspect all that date's events and
+   full identities, including those initially visible in a narrow calendar cell.
+5. In month view, select **+N more** to inspect exactly the hidden events for
+   that date. The count equals the hidden collection. Links retain the relevant
+   Matter or work-area destination.
+6. Close the month-view dialog or press Escape; focus returns to its trigger.
+   Reopening does not duplicate events or change the current calendar view.
 
 Exact hearing times retain their timezone; session-only timings retain the
 stored session, and unpublished time is not replaced with midnight. Missing
