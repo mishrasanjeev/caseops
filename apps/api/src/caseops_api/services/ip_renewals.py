@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from calendar import monthrange
 from collections import Counter
+from copy import deepcopy
 from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    AuditEvent,
     Communication,
     CompanyMembership,
     IpClientInstruction,
@@ -21,15 +25,21 @@ from caseops_api.db.models import (
     IpDocument,
     IpDocumentLink,
     IpDocumentVersion,
+    IpIdentifier,
+    IpImportRow,
     IpRenewalTerm,
     IpResponsibilityAssignment,
+    IpTrademarkParticularVersion,
+    IpWorkspaceConfiguration,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
+    TrademarkApplication,
 )
 from caseops_api.schemas.ip_renewals import (
     IpClientInstructionAcknowledgeRequest,
     IpClientInstructionCreateRequest,
     IpClientInstructionRecord,
+    IpPortfolioRenewalDateUpdateRequest,
     IpRenewalDeadlineSummary,
     IpRenewalFeeSummary,
     IpRenewalFoundationContract,
@@ -88,6 +98,357 @@ def _now() -> datetime:
 
 def _aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def portfolio_renewal_alert_at(due_on: date, *, timezone: str) -> datetime:
+    """One calendar month earlier, clamping the day in the preceding month."""
+    year, month = (due_on.year - 1, 12) if due_on.month == 1 else (due_on.year, due_on.month - 1)
+    alert_on = date(year, month, min(due_on.day, monthrange(year, month)[1]))
+    return datetime.combine(alert_on, time(9), tzinfo=ZoneInfo(timezone)).astimezone(UTC)
+
+
+def _portfolio_source(representation: dict) -> dict:
+    value = representation.get("portfolio_import")
+    return value if isinstance(value, dict) else {}
+
+
+def portfolio_source_renewal_details(
+    session: Session,
+    *,
+    company_id: str,
+    docket_ids: list[str],
+) -> dict[str, dict]:
+    """Hydrate only the already-authorized portfolio page, not import history."""
+    result = {}
+    if not docket_ids:
+        return result
+    for docket_id, representation, version_id in session.execute(
+        select(
+            IpDocketRecord.id,
+            IpTrademarkParticularVersion.representation_json,
+            IpTrademarkParticularVersion.id,
+        )
+        .join(
+            IpTrademarkParticularVersion,
+            and_(
+                IpTrademarkParticularVersion.docket_id == IpDocketRecord.id,
+                IpTrademarkParticularVersion.company_id == IpDocketRecord.company_id,
+                IpTrademarkParticularVersion.version == IpDocketRecord.current_version,
+            ),
+        )
+        .where(IpDocketRecord.company_id == company_id, IpDocketRecord.id.in_(docket_ids))
+    ):
+        raw = _portfolio_source(representation).get("renewal_due_date")
+        if raw:
+            try:
+                due_on = date.fromisoformat(raw)
+            except (TypeError, ValueError):
+                continue
+            result[docket_id] = {"source_renewal_due_on": due_on, "_version_id": version_id}
+    keys = {data["_version_id"]: docket_id for docket_id, data in result.items()}
+    if keys:
+        for source_id, status, scheduled_for in session.execute(
+            select(
+                NotificationDeliveryIntent.source_id,
+                NotificationDeliveryIntent.status,
+                NotificationDeliveryIntent.scheduled_for,
+            ).where(
+                NotificationDeliveryIntent.company_id == company_id,
+                NotificationDeliveryIntent.source_type == "ip_trademark_particular_version",
+                NotificationDeliveryIntent.source_id.in_(keys),
+                NotificationDeliveryIntent.event_type == "renewal_source_date_1month",
+            )
+        ):
+            result[keys[source_id]].update(
+                {
+                    "source_renewal_alert_status": str(status),
+                    "source_renewal_alert_at": scheduled_for,
+                }
+            )
+    for data in result.values():
+        data.pop("_version_id", None)
+    return result
+
+
+def imported_renewal_reminder_is_current(
+    session: Session,
+    *,
+    intent: NotificationDeliveryIntent,
+) -> bool:
+    """Source predicate for the shared delivery owner's pre-dispatch fence.
+
+    This is not lifecycle or recipient authorization; those remain the shared
+    owner's responsibility. A correction/removal of the source date denies
+    this retained intent rather than interpreting it as a legal renewal.
+    """
+    if (
+        intent.source_type != "ip_trademark_particular_version"
+        or intent.event_type != "renewal_source_date_1month"
+    ):
+        return False
+    pair = session.execute(
+        select(IpTrademarkParticularVersion)
+        .select_from(IpTrademarkParticularVersion)
+        .join(
+            IpDocketRecord,
+            and_(
+                IpDocketRecord.company_id == IpTrademarkParticularVersion.company_id,
+                IpDocketRecord.id == intent.ip_docket_id,
+                IpTrademarkParticularVersion.docket_id == IpDocketRecord.id,
+                IpTrademarkParticularVersion.version == IpDocketRecord.current_version,
+            ),
+        )
+        .where(
+            IpTrademarkParticularVersion.id == intent.source_id,
+            IpTrademarkParticularVersion.company_id == intent.company_id,
+        )
+    ).scalar_one_or_none()
+    if pair is None:
+        return False
+    source = _portfolio_source(pair.representation_json)
+    return bool(
+        _imported_source_row(
+            session, company_id=intent.company_id, docket_id=intent.ip_docket_id, source=source
+        )
+        and source.get("renewal_due_date") == (intent.metadata_json or {}).get("source_due_on")
+        and source.get("renewal_due_date")
+        and intent.schedule_source_type == "ip_portfolio_renewal"
+        and intent.schedule_source_id == intent.ip_docket_id
+    )
+
+
+def _imported_source_row(session: Session, *, company_id: str, docket_id: str, source: dict):
+    row_id = source.get("source_row_id")
+    if not isinstance(row_id, str) or len(row_id) != 36:
+        return None
+    return session.scalar(
+        select(IpImportRow).where(
+            IpImportRow.company_id == company_id,
+            IpImportRow.id == row_id,
+            select(AuditEvent.id)
+            .where(
+                AuditEvent.company_id == company_id,
+                AuditEvent.action == "ip_docket.source_materialized",
+                AuditEvent.target_type == "ip_import_row",
+                AuditEvent.target_id == IpImportRow.id,
+                AuditEvent.ip_docket_id == docket_id,
+            )
+            .exists(),
+        )
+    )
+
+
+def schedule_imported_renewal_reminder(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    row_id: str,
+    normalized: dict,
+) -> NotificationDeliveryIntent | None:
+    """Internal source-date reminder, not a verified registration/renewal term.
+
+    The canonical delivery owner rechecks tenant, recipient ACL and lifecycle
+    at dispatch. No provider, client message or legal deadline is created here.
+    The caller commits this intent atomically with its imported application.
+    """
+    docket = _docket(session, context, docket_id, write=True)
+    version = session.scalar(
+        select(IpTrademarkParticularVersion).where(
+            IpTrademarkParticularVersion.company_id == context.company.id,
+            IpTrademarkParticularVersion.docket_id == docket.id,
+            IpTrademarkParticularVersion.version == docket.current_version,
+        )
+    )
+    source = _portfolio_source(version.representation_json) if version else {}
+    if source.get("source_row_id") != row_id or not _imported_source_row(
+        session,
+        company_id=context.company.id,
+        docket_id=docket.id,
+        source=source,
+    ):
+        return None
+    raw_due = normalized.get("renewal_due_date")
+    if not raw_due or raw_due != source.get("renewal_due_date"):
+        return None
+    try:
+        due_on = date.fromisoformat(raw_due)
+    except (TypeError, ValueError):
+        return None
+    configuration = session.scalar(
+        select(IpWorkspaceConfiguration).where(
+            IpWorkspaceConfiguration.company_id == context.company.id,
+        )
+    )
+    timezone = configuration.timezone if configuration is not None else context.company.timezone
+    now = _now()
+    if due_on < now.astimezone(ZoneInfo(timezone)).date():
+        return None
+    scheduled_for = max(portfolio_renewal_alert_at(due_on, timezone=timezone), now)
+    # The import row is provenance, not the facts of a corrected current version.
+    mark_text = version.representation_json.get("text")
+    label = mark_text if isinstance(mark_text, str) and mark_text else docket.title
+    classes = ", ".join(str(scope["class_number"]) for scope in version.classes_json or [])
+    applicants = ", ".join(
+        party["name"] for party in version.parties_json or [] if party.get("role") == "applicant"
+    )
+    application_number = session.scalar(
+        select(IpIdentifier.raw_value)
+        .join(
+            TrademarkApplication,
+            and_(
+                TrademarkApplication.id == IpIdentifier.application_id,
+                TrademarkApplication.company_id == IpIdentifier.company_id,
+                TrademarkApplication.docket_id == IpIdentifier.docket_id,
+            ),
+        )
+        .where(
+            IpIdentifier.company_id == context.company.id,
+            IpIdentifier.docket_id == docket.id,
+            IpIdentifier.identifier_kind == "application",
+            IpIdentifier.is_primary.is_(True),
+            IpIdentifier.effective_until.is_(None),
+            IpIdentifier.superseded_by_identifier_id.is_(None),
+        )
+        .order_by(IpIdentifier.created_at.desc(), IpIdentifier.id.desc())
+        .limit(1)
+    )
+    days_remaining = (due_on - scheduled_for.astimezone(ZoneInfo(timezone)).date()).days
+    intent = enqueue_notification_delivery_intent(
+        session,
+        context=context,
+        recipient_membership=context.membership,
+        channel="in_app",
+        event_type="renewal_source_date_1month",
+        source_type="ip_trademark_particular_version",
+        source_id=version.id,
+        ip_docket=docket,
+        title="Trademark renewal due soon",
+        body=(
+            f"{label}; "
+            f"application {application_number or 'not recorded'}; "
+            f"classes {classes or 'not recorded'}; "
+            f"applicant {applicants or 'not recorded'}. "
+            f"Source renewal date {due_on.isoformat()} (not a verified legal deadline). "
+            f"{days_remaining} days remaining on the alert date. "
+            f"/app/ip?docket={docket.id}"
+        ),
+        scheduled_for=scheduled_for,
+        schedule_source_type="ip_portfolio_renewal",
+        schedule_source_id=docket.id,
+    )
+    intent.metadata_json = {**(intent.metadata_json or {}), "source_due_on": due_on.isoformat()}
+    return intent
+
+
+def synchronize_imported_renewal_reminder(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+) -> None:
+    """Canonical-version hook: pending intents cannot survive a source edit."""
+    version = session.scalar(
+        select(IpTrademarkParticularVersion).where(
+            IpTrademarkParticularVersion.company_id == context.company.id,
+            IpTrademarkParticularVersion.docket_id == docket_id,
+            IpTrademarkParticularVersion.version
+            == select(IpDocketRecord.current_version)
+            .where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.id == docket_id,
+            )
+            .scalar_subquery(),
+        )
+    )
+    source = _portfolio_source(version.representation_json) if version else {}
+    # Cancel even when a canonical correction removes the entire source metadata.
+    cancel_pending_notification_intents(
+        session,
+        company_id=context.company.id,
+        schedule_source_type="ip_portfolio_renewal",
+        schedule_source_id=docket_id,
+        cancellation_reason="source_date_or_version_superseded",
+    )
+    row = _imported_source_row(
+        session, company_id=context.company.id, docket_id=docket_id, source=source
+    )
+    if row is None:
+        return
+    # A delivered alert for an unchanged source date must not be sent twice.
+    already_delivered = session.scalar(
+        select(NotificationDeliveryIntent.id)
+        .where(
+            NotificationDeliveryIntent.company_id == context.company.id,
+            NotificationDeliveryIntent.schedule_source_type == "ip_portfolio_renewal",
+            NotificationDeliveryIntent.schedule_source_id == docket_id,
+            NotificationDeliveryIntent.status == NotificationDeliveryStatus.DELIVERED,
+            NotificationDeliveryIntent.metadata_json["source_due_on"].as_string()
+            == source.get("renewal_due_date"),
+        )
+        .limit(1)
+    )
+    if already_delivered is None:
+        schedule_imported_renewal_reminder(
+            session,
+            context=context,
+            docket_id=docket_id,
+            row_id=row.id,
+            normalized={"renewal_due_date": source.get("renewal_due_date")},
+        )
+
+
+def update_imported_renewal_date(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    payload: IpPortfolioRenewalDateUpdateRequest,
+):
+    from caseops_api.schemas.ip_imports import IpImportDocketVersionCreateRequest
+    from caseops_api.services.ip_operations import append_ip_docket_version
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+    lock_private_authority_writer(session, company_id=context.company.id)
+    docket = _docket(session, context, docket_id, write=True)
+    version = session.scalar(
+        select(IpTrademarkParticularVersion).where(
+            IpTrademarkParticularVersion.company_id == context.company.id,
+            IpTrademarkParticularVersion.docket_id == docket.id,
+            IpTrademarkParticularVersion.version == docket.current_version,
+        )
+    )
+    source = _portfolio_source(version.representation_json) if version else {}
+    if not _imported_source_row(
+        session, company_id=context.company.id, docket_id=docket.id, source=source
+    ):
+        raise _conflict("ip_portfolio_source_missing", "This record has no imported source date.")
+    representation = deepcopy(version.representation_json)
+    representation["portfolio_import"]["renewal_due_date"] = (
+        payload.renewal_due_date.isoformat() if payload.renewal_due_date else None
+    )
+    representation["portfolio_import"]["date_correction"] = {
+        "reason": payload.reason,
+        "previous_due_date": source.get("renewal_due_date"),
+        "previous_version": docket.current_version,
+    }
+    return append_ip_docket_version(
+        session,
+        context=context,
+        docket_id=docket.id,
+        payload=IpImportDocketVersionCreateRequest(
+            expected_current_version=payload.expected_current_version,
+            form_key=version.form_key,
+            form_version=version.form_version,
+            mark_kind=version.mark_kind,
+            representation=representation,
+            classes=version.classes_json,
+            parties=version.parties_json,
+            use_priority=version.use_priority_json,
+            agent=version.agent_json,
+            filing_manifest=version.filing_manifest_json,
+        ),
+    )
 
 
 def _conflict(code: str, message: str) -> HTTPException:
@@ -305,9 +666,7 @@ def _resolve_transition_fee(
 
     if proposed_cost_item_id is not None and proposed_cost_item_id not in lineage_ids:
         code = (
-            "ip_renewal_fee_replacement_mismatch"
-            if corrected
-            else "ip_renewal_evidence_immutable"
+            "ip_renewal_fee_replacement_mismatch" if corrected else "ip_renewal_evidence_immutable"
         )
         message = (
             "Select the active replacement recorded by the fee correction lineage."
@@ -677,8 +1036,7 @@ def list_renewal_portfolio(
             latest_versions,
             and_(
                 latest_versions.c.term_id == IpClientInstruction.renewal_term_id,
-                latest_versions.c.latest_version
-                == IpClientInstruction.instruction_version,
+                latest_versions.c.latest_version == IpClientInstruction.instruction_version,
             ),
         )
     instructions = list(

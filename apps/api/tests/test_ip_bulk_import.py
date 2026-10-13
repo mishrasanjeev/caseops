@@ -34,6 +34,8 @@ def _row(number: int, **overrides) -> dict:
         "class_number": 9,
         "applicant_name": "Imported Applicant LLP",
         "specification": "Downloadable software",
+        "jurisdiction": "IN",
+        "office": "IP India",
     }
     values.update(overrides)
     return {"row_number": number, "values": values}
@@ -114,22 +116,30 @@ def test_uj02_invalid_rows_are_reported_and_skipped(client: TestClient) -> None:
     )
     assert staged.status_code == 201, staged.text
     body = staged.json()
-    assert (body["job"]["valid_rows"], body["job"]["invalid_rows"]) == (1, 2)
+    assert (body["job"]["valid_rows"], body["job"]["invalid_rows"]) == (2, 1)
 
     by_number = {row["row_number"]: row for row in body["rows"]}
     assert by_number[2]["validation_status"] == "invalid"
     assert {e["code"] for e in by_number[2]["errors"]} == {"out_of_range"}
-    assert by_number[3]["validation_status"] == "invalid"
-    assert {e["field"] for e in by_number[3]["errors"]} == {"applicant_name"}
+    assert by_number[3]["validation_status"] == "valid"
+    assert "applicant_name" not in by_number[3]["normalized"]
+    assert {"field": "applicant_name", "code": "source_incomplete_draft"} in (
+        by_number[3]["normalized"]["_warnings"]
+    )
 
     committed = _commit(
         client, headers, body["job"]["id"], body["job"]["preview_token"]
     ).json()
-    assert committed["job"]["committed_rows"] == 1
+    assert committed["job"]["committed_rows"] == 2
     after = {row["row_number"]: row for row in committed["rows"]}
     assert after[1]["commit_status"] == "committed"
     assert after[2]["commit_status"] == "skipped"
-    assert after[3]["commit_status"] == "skipped"
+    assert after[3]["commit_status"] == "committed"
+    missing_applicant = client.get(
+        f"/api/ip/dockets/{after[3]['created_docket_id']}", headers=headers,
+    ).json()
+    assert missing_applicant["status"] == "draft"
+    assert missing_applicant["current_particulars"]["parties_json"] == []
 
 
 def test_uj02_exc01_expired_preview_requires_revalidation(client: TestClient) -> None:
@@ -253,7 +263,7 @@ def test_uj02_exc03_recovers_crash_after_docket_commit_before_row_outcome(
     job_id = body["job"]["id"]
     preview_token = body["job"]["preview_token"]
     row_id = body["rows"][0]["id"]
-    real_create = ip_imports.create_ip_docket
+    real_create = ip_imports._materialize_import_row
     created_ids: list[str] = []
 
     class SimulatedWorkerCrash(RuntimeError):
@@ -266,7 +276,7 @@ def test_uj02_exc03_recovers_crash_after_docket_commit_before_row_outcome(
         # but the staging-row outcome has not yet been written.
         raise SimulatedWorkerCrash("worker exited after canonical commit")
 
-    monkeypatch.setattr(ip_imports, "create_ip_docket", commit_then_crash)
+    monkeypatch.setattr(ip_imports, "_materialize_import_row", commit_then_crash)
     with pytest.raises(SimulatedWorkerCrash):
         _commit(
             client,
@@ -294,7 +304,7 @@ def test_uj02_exc03_recovers_crash_after_docket_commit_before_row_outcome(
         )
         assert provenance is not None
 
-    monkeypatch.setattr(ip_imports, "create_ip_docket", real_create)
+    monkeypatch.setattr(ip_imports, "_materialize_import_row", real_create)
     recovered = _commit(
         client,
         headers,

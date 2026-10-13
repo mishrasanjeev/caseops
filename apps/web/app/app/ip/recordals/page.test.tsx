@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { defaultScheduler, notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -246,26 +246,81 @@ describe("post-registration workspace", () => {
 
   it("requires an approver-reviewed immutable Registry snapshot for acceptance", async () => {
     const user = userEvent.setup();
-    render(<RecordalsPage />, { wrapper: wrapper() });
-    await screen.findByRole("heading", { name: "Record transaction" });
-    await user.selectOptions(screen.getByLabelText("Transaction"), "accepted");
-    await user.type(screen.getByLabelText("Reason"), "Registry acceptance reviewed against the executed deed.");
-    await user.type(screen.getByLabelText("Evidence references"), "registry:acceptance:TM-10001");
-    await user.selectOptions(screen.getByLabelText("Confirmed Registry snapshot"), "snapshot-1");
-    await user.type(screen.getByLabelText("Registry-recorded date"), "2026-08-25");
-    await user.click(screen.getByText("Client instruction, instrument, affected scope, and Registry evidence reviewed"));
-    await user.click(screen.getByRole("button", { name: "Record accepted" }));
+    expect(vi.isFakeTimers()).toBe(false);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const notifications: Array<() => void> = [];
+    notifyManager.setScheduler((callback) => {
+      expect(notifications.length).toBeLessThan(8);
+      notifications.push(callback);
+    });
+    let view: ReturnType<typeof render> | undefined;
+    try {
+      view = render(<QueryClientProvider client={client}><RecordalsPage /></QueryClientProvider>);
+      expect(mocks.recordals).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await client.getQueryCache().find({ queryKey: ["ip", "recordals", "", ""], exact: true })!.promise;
+      });
+      expect(client.getQueryState(["ip", "recordals", "", ""])?.status).toBe("success");
+      expect(mocks.workspace).not.toHaveBeenCalled();
+      expect(notifications.length).toBeGreaterThan(0);
+      expect(screen.queryByRole("heading", { name: "Record transaction" })).not.toBeInTheDocument();
+      console.info("RECORDAL_QUERY_DELIVERY_CONTROL", {
+        phase: "list",
+        cacheStatus: client.getQueryState(["ip", "recordals", "", ""])?.status,
+        queuedNotifications: notifications.length,
+        listCalls: mocks.recordals.mock.calls.length,
+        workspaceCalls: mocks.workspace.mock.calls.length,
+      });
+      await act(async () => { notifications.splice(0).forEach((callback) => callback()); });
+      expect(mocks.workspace).toHaveBeenCalledTimes(1);
+      expect(mocks.workspace).toHaveBeenCalledWith("recordal-1");
+      const queryKey = ["ip", "recordals", "recordal-1", "workspace"];
+      const query = client.getQueryCache().find({ queryKey, exact: true });
+      expect(query?.promise).toBeDefined();
+      await act(async () => { await query!.promise; });
+      expect(client.getQueryState(queryKey)?.status).toBe("success");
+      expect(notifications.length).toBeGreaterThan(0);
+      expect(screen.queryByRole("heading", { name: "Record transaction" })).not.toBeInTheDocument();
+      console.info("RECORDAL_QUERY_DELIVERY_CONTROL", {
+        phase: "workspace", cacheStatus: client.getQueryState(queryKey)?.status,
+        queuedNotifications: notifications.length, listCalls: mocks.recordals.mock.calls.length,
+        workspaceCalls: mocks.workspace.mock.calls.length,
+      });
+      await act(async () => { notifications.splice(0).forEach((callback) => callback()); });
+      expect(notifications).toHaveLength(0);
+      expect(mocks.dockets).not.toHaveBeenCalled();
+      expect(mocks.documents).not.toHaveBeenCalled();
+      notifyManager.setScheduler(defaultScheduler);
+      await screen.findByRole("heading", { name: "Record transaction" });
+      await user.selectOptions(screen.getByLabelText("Transaction"), "accepted");
+      await user.type(screen.getByLabelText("Reason"), "Registry acceptance reviewed against the executed deed.");
+      await user.type(screen.getByLabelText("Evidence references"), "registry:acceptance:TM-10001");
+      await user.selectOptions(screen.getByLabelText("Confirmed Registry snapshot"), "snapshot-1");
+      await user.type(screen.getByLabelText("Registry-recorded date"), "2026-08-25");
+      await user.click(screen.getByText("Client instruction, instrument, affected scope, and Registry evidence reviewed"));
+      await user.click(screen.getByRole("button", { name: "Record accepted" }));
 
-    await waitFor(() => expect(mocks.transaction).toHaveBeenCalledWith(expect.objectContaining({
-      recordalId: "recordal-1",
-      expectedVersion: 3,
-      expectedLifecycleVersion: 4,
-      transactionKind: "accepted",
-      sourceUrl: "https://ipindia.gov.in/fixture/TM-10001",
-      registrySnapshotId: "snapshot-1",
-      registryRecordedOn: "2026-08-25",
-      details: expect.objectContaining({ client_registry_conflict_reviewed: true }),
-    })));
+      await waitFor(() => expect(mocks.transaction).toHaveBeenCalledWith(expect.objectContaining({
+        recordalId: "recordal-1",
+        expectedVersion: 3,
+        expectedLifecycleVersion: 4,
+        transactionKind: "accepted",
+        sourceUrl: "https://ipindia.gov.in/fixture/TM-10001",
+        registrySnapshotId: "snapshot-1",
+        registryRecordedOn: "2026-08-25",
+        details: expect.objectContaining({ client_registry_conflict_reviewed: true }),
+      })));
+    } finally {
+      try { view?.unmount(); } finally {
+        try { client.clear(); } finally {
+          notifications.length = 0;
+          notifyManager.setScheduler(defaultScheduler);
+        }
+      }
+    }
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
   });
 
   it("renders the selected recordal before corpus-wide catalogs resolve", async () => {

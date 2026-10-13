@@ -1,5 +1,38 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 13 Canonical Release Checkpoint
+
+The earlier four-PR batch is merged as main
+`30e7229368de013123e9a48db2b19230829ddac2`, tree
+`88cf5e4c9a59ea8ad721e69cf2efe7784e5081e0`, identical to accepted `51ecde9c`.
+Its complete workstation Docker gate has 2,898 native passes and 540 browser
+passes plus ten explicit skips, natural exit zero and sealed artifact/cleanup
+reconciliation. Candidate CI/Security/CodeQL passed. Main Security and CodeQL
+passed; main CI is in progress. This supersedes earlier merge/local-gate
+checkpoints below, not their retained failed evidence. Production is still
+`3dbf364d`; no new deployed closure or scheduler resume is claimed.
+
+New October 13 IP/Calendar changes are a separate, uncommitted scope. Actual
+production preview reproduces native Excel datetime upload 500 on serving
+3dbf, request `ip-native-date-prod-7a0ae37155884f198720b24eda3006b8`; native
+baseline establishes JSON serialization cause. Scoped corrections remain
+Partially fixed pending fresh Docker/full CI and exact-production browser
+replay. Historical reopening cause remains Inconclusive. See
+`docs/BUGFIX_IP_CALENDAR_2026-10-13.md` and
+`docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
+## October 13 IP And Calendar Specifications
+
+New owner scope is tracked separately in `docs/BUGFIX_IP_CALENDAR_2026-10-13.md`.
+Calendar overflow is a confirmed dead plain-text div; prior coverage checked
+presence only. Court metadata/time was omitted and title-only order ignored
+the catalog. Corrections have 16 page, 13 API and two real PostgreSQL passes,
+but Docker and deployed dated browser acceptance remain pending: **Partially
+fixed**, not closed. IP upload's historical transport cause and historical
+Matter reopening remain **Inconclusive**. A bounded production read finds seven
+recent disposed records still disposed, not proof about every prior incident.
+The earlier frozen #533 gate cannot certify new source bytes.
+
 ## October 12 Combined Fixes
 
 October 13 passive evidence checkpoint: **Partially fixed / NO-GO**. faff CI's

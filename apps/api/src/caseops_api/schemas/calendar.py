@@ -13,7 +13,7 @@ filter / kind filter / search box be pure-client.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -112,6 +112,13 @@ class CalendarEventRecord(BaseModel):
     # in the same day. e.g. "Bombay HC, Justice Patel" for a hearing,
     # "High" for a task priority.
     detail: str | None = None
+    court_label: str | None = None
+    court_identity: str | None = None
+    forum_display_order: int | None = None
+    hearing_time: time | None = None
+    time_status: Literal["exact", "session", "time_not_published"] | None = None
+    session_label: str | None = None
+    timezone: str | None = None
 
 
 class CalendarEventListResponse(BaseModel):

@@ -817,8 +817,68 @@ describe("CalendarPage", () => {
     // links — the cap is enforced at render time.
     expect(screen.queryByTestId("calendar-event-hearing:overflow-3")).toBeNull();
     expect(screen.queryByTestId("calendar-event-hearing:overflow-4")).toBeNull();
-    // Use 'within' so the linter doesn't flag the import as unused.
-    void within;
+    const user = userEvent.setup();
+    const trigger = screen.getByRole("button", { name: `Show 2 more events on ${today}` });
+    await user.click(trigger);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getAllByRole("link")).toHaveLength(2);
+    for (const index of [3, 4]) {
+      expect(within(dialog).getByTestId(`calendar-event-hearing:overflow-${index}`))
+        .toHaveAttribute("href", `/app/matters/m${index}/hearings`);
+      expect(dialog).toHaveTextContent(`Overflow matter ${index}`);
+    }
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(trigger).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: `View all events on ${today}` }));
+    expect(within(screen.getByRole("dialog")).getAllByRole("link")).toHaveLength(5);
+  });
+
+  it("shows canonical court identity in month, week and day without inventing missing data", async () => {
+    const today = isoToday();
+    fetchCalendarEventsMock.mockResolvedValue({
+      range_from: today, range_to: today,
+      events: [{
+        id: "hearing:court", kind: "hearing", display_type: "hearing",
+        occurs_on: today, title: "Next hearing", matter_id: "court-matter",
+        matter_code: "COURT-1", matter_title: "Court identity matter",
+        court_label: "HC - Allahabad High Court, Lucknow Bench",
+        court_identity: "Allahabad High Court, Lucknow Bench, Court 7",
+        hearing_time: "10:30:00", timezone: "Asia/Kolkata",
+      }],
+    });
+    const user = userEvent.setup();
+    render(withClient(<CalendarPage />));
+    const chip = await screen.findByTestId("calendar-event-hearing:court");
+    expect(chip).toHaveTextContent("HC - Allahabad High Court, Lucknow Bench");
+    expect(chip).toHaveAttribute("title", expect.stringContaining("Court 7"));
+    for (const view of ["week", "day"]) {
+      await user.click(screen.getByTestId(`calendar-view-${view}`));
+      expect(screen.getByTestId("calendar-event-hearing:court"))
+        .toHaveTextContent("HC - Allahabad High Court, Lucknow Bench");
+    }
+    expect(screen.getByTestId("calendar-event-hearing:court"))
+      .toHaveTextContent("10:30 Asia/Kolkata");
+  });
+
+  it("retains a stored hearing session without inventing an exact time", async () => {
+    const today = isoToday();
+    fetchCalendarEventsMock.mockResolvedValue({range_from: today, range_to: today, events: [{
+      id: "hearing:session", kind: "hearing", occurs_on: today, title: "Session hearing",
+      matter_id: "m1", matter_code: "SESSION-1", matter_title: "Session matter",
+      hearing_time: null, time_status: "session", session_label: "Afternoon",
+      timezone: "Asia/Kolkata",
+    }]});
+    const user = userEvent.setup();
+    render(withClient(<CalendarPage />));
+    const chip = await screen.findByTestId("calendar-event-hearing:session");
+    expect(chip).toHaveAttribute("title", expect.stringContaining("Afternoon"));
+    await user.click(screen.getByTestId("calendar-view-day"));
+    expect(screen.getByTestId("calendar-event-hearing:session")).toHaveTextContent("Afternoon");
+    expect(screen.getByTestId("calendar-event-hearing:session")).not.toHaveTextContent("00:00");
   });
 
   // BUG-039 (Hari 2026-05-09): the bulk sync button only renders

@@ -1356,6 +1356,31 @@ def process_notification_delivery_intent(
         session.flush()
         return _delivery_result(intent)
     if (
+        intent.event_type == "renewal_source_date_1month"
+        or intent.schedule_source_type == "ip_portfolio_renewal"
+        or intent.source_type == "ip_trademark_particular_version"
+    ):
+        # The docket and intent are locked; check the immutable current source
+        # before either internal materialization or an external dispatch claim.
+        from caseops_api.services.ip_renewals import imported_renewal_reminder_is_current
+
+        if not imported_renewal_reminder_is_current(session, intent=intent):
+            intent.status = NotificationDeliveryStatus.BLOCKED
+            intent.dead_letter_reason = "ip_portfolio_renewal_source_stale"
+            intent.last_error_redacted = "Imported renewal source date or version changed."
+            intent.failed_at = _now()
+            intent.next_attempt_at = None
+            session.add(intent)
+            _record_delivery_event(
+                session,
+                intent=intent,
+                event_type="delivery_source_blocked",
+                status_value=str(intent.status),
+                error=intent.last_error_redacted,
+            )
+            session.flush()
+            return _delivery_result(intent)
+    if (
         intent.status == NotificationDeliveryStatus.RETRY_SCHEDULED
         and intent.next_attempt_at is not None
         and intent.next_attempt_at > _now()

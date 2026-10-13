@@ -248,6 +248,28 @@ jobs:
           CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
         run: bash "$RUNNER_TEMP/caseops-prod-playwright" tester --config=playwright.prod-ram.config.ts --project=tester-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester
 
+      - name: Run release-owned test-legal portfolio and Calendar regressions
+        if: matrix.suite == 'tester'
+        env:
+          CASEOPS_RAM_PROD_SLUG: test-legal
+          CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
+          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: |
+          if [ ! -f tests/e2e/ram-2026-10-13-hearings.spec.ts ]; then
+            if ! git merge-base --is-ancestor HEAD 30e7229368de013123e9a48db2b19230829ddac2; then
+              echo "::error::Newer exact serving release is missing required October 13 acceptance."
+              exit 1
+            fi
+            echo "::notice::Exact serving release predates October 13 acceptance; this is not new-feature certification."
+            exit 0
+          fi
+          test -n "$CASEOPS_RAM_PROD_PASSWORD"
+          test -f tests/e2e/ram-2026-10-13-ip-portfolio.spec.ts
+          bash "$RUNNER_TEMP/caseops-prod-playwright" test-legal-write-oct13 --config=playwright.prod-ram.config.ts --project=test-legal-write-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-write-oct13
+
       - name: Run legacy QA production regressions
         if: matrix.suite == 'legacy'
         env:
@@ -456,7 +478,13 @@ jobs:
         run: |
           set -euo pipefail
           case "$SUITE" in
-            tester|legacy|test-legal-readonly) required=("$SUITE") ;;
+            tester)
+              required=(tester)
+              if [[ -f tests/e2e/ram-2026-10-13-hearings.spec.ts ]]; then
+                required+=(test-legal-write-oct13)
+              fi
+              ;;
+            legacy|test-legal-readonly) required=("$SUITE") ;;
             supporting)
               required=(notice)
               if [[ "$HISTORICAL_A0" == true ]]; then required+=(ip-a0); fi

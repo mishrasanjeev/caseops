@@ -1,5 +1,52 @@
 # CaseOps agent instructions
 
+- A dedicated advisory transaction can expire while the application commits
+  import rows on another connection. Do not raise the idle timeout. Use explicit
+  session-owned autocommit claims, prove current ownership and release, bound
+  successful requests into acknowledged batches and retain creator-authorized
+  recovery without retrying failed mutations. Native acceptance must exercise
+  a thousand real rows, not only a preview or a small mock.
+- SQLite's Bearer-cookie fixture wrapper can hide a mixed-identity native test.
+  Authenticate cross-tenant probes in separate clients; preserve production's
+  cookie-first policy. Native console encoding failures do not erase structured
+  failures: retain original binary output and complete journal/JUnit identities,
+  and never decode unused console bytes merely to obtain an exit status.
+- Source-import acceptance must complete native XLSX commit and canonical reload,
+  not only preview. Freeze the reviewed derived workspace context through commit;
+  a changed default requires a new preview. Explicit separate-record decisions
+  may override cautious identifier-less suggestions, never exact identifiers.
+- Reminder cancellation is not a dispatch fence. Resolve the current source
+  version/date and current message facts under the existing authoritative lock;
+  prove stale retained intents produce zero delivery and corrected ones deliver
+  current facts. Creator-authorized import recovery must survive lost browser
+  storage, and commit candidate materialization must have a total-work bound.
+
+- A local browser origin does not authorize a bootstrap against a separately
+  configured remote API. Verify both origins, reject mixed targets and
+  credential-bearing URLs before any request, and verify exact API/web release
+  identity before authentication or fixture creation. Production mutations use
+  only the explicitly authorized test tenant and retain the no-paid marker.
+- Saved-calendar acceptance must compare identity and priority with the chosen
+  catalog and persisted Matter, not only with the Calendar response that may
+  itself be wrong. Preserve exact, session-only and unpublished timing; prove
+  ties and mobile access to the full identity of initially visible events.
+- Every executed release-owned browser invocation needs a required native
+  receipt. Adding a green workflow step without adding it to reconciliation can
+  hide absent or incomplete evidence. Keep scheduled read-only and dispatched
+  mutation steps separately scoped even when their display names are equal.
+
+- Calendar overflow acceptance must open the real control and reconcile the
+  exact date's visible and hidden event identities, links, keyboard dismissal
+  and focus return. Text-presence coverage missed a dead `+N more` div. Resolve
+  court identity from stored Matter/catalog fields in one joined read, retain
+  hearing time and use the catalog's display order; never infer a bench or
+  region from free text or introduce a Calendar-only hierarchy.
+- Optional import-source columns do not authorize inventing canonical legal
+  identities. Preserve source values and warnings, classify unusable rows and
+  prove preview/commit/history/reload plus identifier-less duplicate boundaries
+  before relaxing admission. A one-month business alert is calendar arithmetic,
+  not a fixed thirty-day legal deadline or evidence of provider delivery.
+
 - A complete native journal envelope is not complete passive timing evidence.
   Reconcile the recorder's overflow, pairing and unfinished-read flags as well
   as every pytest phase. Size finite evidence buffers for the actual bounded

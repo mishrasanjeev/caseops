@@ -1,5 +1,37 @@
 # Strict Enterprise Gap Tasklist
 
+## October 13 Canonical Release Checkpoint
+
+The earlier four-PR batch is merged as main
+`30e7229368de013123e9a48db2b19230829ddac2`, tree
+`88cf5e4c9a59ea8ad721e69cf2efe7784e5081e0`, identical to accepted `51ecde9c`.
+Its complete workstation Docker gate has 2,898 native passes and 540 browser
+passes plus ten explicit skips, natural exit zero and sealed artifact/cleanup
+reconciliation. Candidate CI/Security/CodeQL passed. Main Security and CodeQL
+passed; main CI is in progress. This supersedes earlier merge/local-gate
+checkpoints below, not their retained failed evidence. Production is still
+`3dbf364d`; no new deployed closure or scheduler resume is claimed.
+
+New October 13 IP/Calendar changes are a separate, uncommitted scope. Actual
+production preview reproduces native Excel datetime upload 500 on serving
+3dbf, request `ip-native-date-prod-7a0ae37155884f198720b24eda3006b8`; native
+baseline establishes JSON serialization cause. Scoped corrections remain
+Partially fixed pending fresh Docker/full CI and exact-production browser
+replay. Historical reopening cause remains Inconclusive. See
+`docs/BUGFIX_IP_CALENDAR_2026-10-13.md` and
+`docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
+## October 13 Import And Calendar Acceptance Gap
+
+**Partially implemented / NO-GO**: Calendar presence-only tests missed a dead
+overflow div, and API omission prevented source-backed court/time rendering.
+The new joined read and accessible hidden-event list have scoped local proof,
+not new-image or deployed proof. IP optional-column/partial-import/renewal scope
+must preserve canonical identity, permissions, bounded work and delivery truth.
+Historical reopening cause remains Inconclusive without identifying the
+reported persisted record. `docs/BUGFIX_IP_CALENDAR_2026-10-13.md` owns evidence;
+no prior frozen-candidate acceptance is transferred to this scope.
+
 ## October 12 Integration Checkpoint
 
 October 13 passive evidence checkpoint: **NO-GO**. faff hosted native has one

@@ -7,6 +7,7 @@ runtime file, live service, provider, or transaction fence is replaced.
 
 from __future__ import annotations
 
+import builtins
 import ctypes
 import dis
 import gc
@@ -294,14 +295,20 @@ class _PassiveOverlapTiming:
         if slot is None:
             self.gc_overflow = True
             return
-        self.next_gc = slot.next
+        # Local completion cannot clear an independent SQL-recorder invalid mark.
+        recording_complete = False
         try:
+            self.next_gc = slot.next
             slot.phase = phase
             slot.generation = info["generation"]
             self.mono_clock(slot.mono_pointer)
             self.utc_clock(slot.utc_pointer)
-        except BaseException:
-            self.invalid = True
+            recording_complete = True
+        except Exception:
+            return
+        finally:
+            if not recording_complete:
+                self.invalid = True
 
     def start(self):
         assert not self.enabled and self.callback not in gc.callbacks
@@ -360,6 +367,7 @@ class _PassiveOverlapTiming:
         samples = [row for row in self.sql_slots if row]
         incomplete = sum(row["outcome"] == "incomplete" for row in samples)
         gc_events, started = [], None
+        complete = False
         for slot in self.gc_slots:
             if slot.phase is None:
                 break
@@ -888,7 +896,9 @@ def test_passive_gc_native_clocks_cleanup_and_deferred_flush(body_error):
             assert receipts == []
             timing.critical_pools = 1
             with pytest.raises(AssertionError, match="Passive capture is active"):
-                timing.flush(lambda **_: pytest.fail("Must not flush during collection"))
+                timing.flush(
+                    lambda *_args, **_kwargs: pytest.fail("Must not flush during collection"),
+                )
             timing.critical_pools = 0
             if body_error:
                 raise ValueError("safe fake body failure")
@@ -994,15 +1004,18 @@ def test_passive_gc_callback_has_no_record_allocation_io_or_lock_calls():
                    for item in instructions)
     assert set(callback.__code__.co_names) == {
         "enabled", "next_gc", "gc_overflow", "next", "phase", "generation",
-        "mono_clock", "mono_pointer", "utc_clock", "utc_pointer", "BaseException", "invalid",
+        "mono_clock", "mono_pointer", "utc_clock", "utc_pointer", "Exception", "invalid",
     }
+    assert callback.__globals__.get("Exception", builtins.Exception) is builtins.Exception
 
 
 def test_passive_flush_rejects_owned_worker_window_even_after_gc_is_removed():
     timing = _PassiveOverlapTiming()
     timing.critical_pools = 1
     with pytest.raises(AssertionError, match="cannot flush during owned worker timing"):
-        timing.flush(lambda **_: pytest.fail("Must not flush before owned workers finish"))
+        timing.flush(
+            lambda *_args, **_kwargs: pytest.fail("Must not flush before owned workers finish"),
+        )
     assert timing.callback not in gc.callbacks
 
 

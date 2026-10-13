@@ -1087,6 +1087,9 @@ def append_ip_docket_version(
     )
     session.flush()
     source_version = private_source_version(docket)
+    from caseops_api.services.ip_renewals import synchronize_imported_renewal_reminder
+
+    synchronize_imported_renewal_reminder(session, context=context, docket_id=docket.id)
     if source_version != previous_source_version:
         from caseops_api.services.private_retrieval import (
             propagate_private_source_change_if_indexed,

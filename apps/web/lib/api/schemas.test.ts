@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calendarEventRecord,
   googleWorkspaceReadinessTestResponse,
   googleWorkspaceTenantConfigurationResponse,
   outlookReadinessTestResponse,
@@ -13,6 +14,32 @@ import {
   providerOperationRecord,
   providerOperationResponseClasses,
 } from "@/lib/api/schemas";
+
+describe("Calendar court metadata contract", () => {
+  const base = {
+    id: "hearing:1", kind: "hearing", display_type: "hearing",
+    occurs_on: "2026-10-15", title: "Next hearing", matter_id: "matter-1",
+    matter_code: "CAL-1", matter_title: "Calendar contract", status: "scheduled",
+    ip_docket_id: null, detail: "Stored venue",
+  };
+
+  it("preserves the complete canonical API court and time payload", () => {
+    const record = {
+      ...base, court_label: "HC - Stored High Court, Stored Bench",
+      court_identity: "Stored High Court, Stored Bench, Court 7",
+      forum_display_order: 20, hearing_time: "10:30:00", timezone: "Asia/Kolkata",
+      time_status: "exact", session_label: null,
+    };
+    expect(calendarEventRecord.parse(record)).toEqual(record);
+  });
+
+  it("does not invent court data when reading a legacy or nullable response", () => {
+    expect(calendarEventRecord.parse(base).court_label).toBeUndefined();
+    const record = { ...base, court_label: null, court_identity: null,
+      forum_display_order: null, hearing_time: null, timezone: null };
+    expect(calendarEventRecord.parse(record)).toEqual(record);
+  });
+});
 
 describe("connector readiness mixed-revision compatibility", () => {
   it("accepts an older Outlook API response but forces machine readiness blocked", () => {

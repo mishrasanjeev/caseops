@@ -2206,6 +2206,13 @@ export const calendarEventRecord = z.object({
   status: z.string().nullable().optional(),
   ip_docket_id: z.string().nullable().optional(),
   detail: z.string().nullable().optional(),
+  court_label: z.string().nullable().optional(),
+  court_identity: z.string().nullable().optional(),
+  forum_display_order: z.number().int().nullable().optional(),
+  hearing_time: z.string().nullable().optional(),
+  time_status: z.enum(["exact", "session", "time_not_published"]).nullable().optional(),
+  session_label: z.string().nullable().optional(),
+  timezone: z.string().nullable().optional(),
 });
 
 export const calendarEventListResponse = z.object({

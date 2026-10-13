@@ -81,8 +81,7 @@ def create_application() -> FastAPI:
     application.add_middleware(CSRFMiddleware)
     # Resolve identity/scheme before CSRF and SlowAPI, with CORS outside errors.
     application.add_middleware(RateIdentityMiddleware)
-    application.add_middleware(
-        CORSMiddleware,
+    cors_options = dict(
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
@@ -90,6 +89,7 @@ def create_application() -> FastAPI:
         expose_headers=["Content-Disposition", "X-CaseOps-Checksum", "X-Request-ID"],
         max_age=CORS_PREFLIGHT_MAX_AGE_SECONDS,
     )
+    application.add_middleware(CORSMiddleware, **cors_options)
     application.add_middleware(RequestContextMiddleware)
 
     @application.exception_handler(RateLimitExceeded)
@@ -105,7 +105,9 @@ def create_application() -> FastAPI:
     # RFC 7807 — HTTPException + RequestValidationError get reshaped
     # into application/problem+json with a stable `type` slug so the
     # frontend can render context-aware recovery copy.
-    register_problem_handlers(application)
+    register_problem_handlers(
+        application, cors_policy=CORSMiddleware(application, **cors_options)
+    )
 
     register_api_routes(application)
     logging.getLogger(__name__).info(

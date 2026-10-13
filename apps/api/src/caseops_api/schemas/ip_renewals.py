@@ -18,9 +18,7 @@ RenewalState = Literal[
     "completed",
     "cancelled",
 ]
-InstructionDecision = Literal[
-    "renew", "do_not_renew", "defer", "clarification_required"
-]
+InstructionDecision = Literal["renew", "do_not_renew", "defer", "clarification_required"]
 InstructionStatus = Literal[
     "pending", "accepted", "rejected", "clarification_required", "superseded"
 ]
@@ -37,6 +35,22 @@ RenewalAction = Literal[
     "resolve_overdue_term",
     "none",
 ]
+
+
+class IpPortfolioRenewalDateUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_current_version: int = Field(ge=1)
+    renewal_due_date: date | None
+    reason: str = Field(min_length=5, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def meaningful_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 5:
+            raise ValueError("A correction reason is required.")
+        return value
 
 
 def _as_aware(value: datetime) -> datetime:

@@ -663,7 +663,13 @@ for (const operation of ["growth", "truncation", "same-size rewrite", "changed l
         changed = true;
         if (operation === "growth") fs.appendFileSync(target, "x");
         if (operation === "truncation") fs.truncateSync(target, 1);
-        if (operation === "same-size rewrite") { fs.writeFileSync(target, "x".repeat(Number(lstat(target).size))); fs.utimesSync(target, new Date(0), new Date(1_000)); }
+        if (operation === "same-size rewrite") {
+          const writer = open(target, "r+");
+          try {
+            fs.writeFileSync(writer, "x".repeat(Number(fs.fstatSync(writer).size)));
+            fs.futimesSync(writer, new Date(0), new Date(1_000));
+          } finally { close(writer); }
+        }
         if (operation === "read failure") throw new Error("fake_material_io_error");
       }
       return read(fd, ...args);
