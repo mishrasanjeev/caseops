@@ -2297,6 +2297,12 @@ requirements when using the fallback.
   changed-history secret preflight before costly acceptance. Independently
   verify reported artifact checksums against immutable bytes; allow only an
   exact reviewed historical fingerprint, never path, rule or all-hash suppression.
+- Before costly acceptance, replay every prerequisite command in the current CI
+  contract group, including change gates against canonical origin/main. An
+  extracted transport still carries the original governed payload. Register its
+  actual owner/boundary, regenerate the human map and runtime projection, and
+  prove unchanged policy plus the change gate; standalone map validation or
+  local Ruff cannot certify commands the hosted shell never reached.
 - Break workflow import cycles at their actual shared read-only policy or
   transport boundary, not by duplicating authorization or hiding local imports.
   Preserve guard/source/sender bodies, API contracts and lock order; inventory

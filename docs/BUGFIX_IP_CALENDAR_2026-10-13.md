@@ -414,3 +414,29 @@ The complete amended dependency/export/sender modules pass115 identities and
 pins and natural exit0. Evidence: export570-service-complete-20261014-01/
 reconciliation.json. This proves the new declaration and retained callable/DAG
 contracts locally, not actual hosted alert closure or whole-release acceptance.
+
+## Governance Change-Gate Omission
+
+Exact ec035cf4 hosted CI38470077953 failed API job115547412945 before Ruff:
+the canonical-base data-governance change gate rejected the new SendGrid
+transport without a map update. Standalone map validation passed, but projection,
+guide, migration and later validation commands were not reached. The complete
+job log and exact merge/tree binding are retained in ci-ec035cf4-reconciliation-01/
+failures/GOVERNANCE.md. This is not a Ruff diagnostic or a native race failure.
+
+I missed the complete local control-plane command inventory before freezing
+this candidate. Running focused lint/tests did not catch the missing governed
+owner declaration. That omission cost another acceptance attempt and must not
+be hidden by the preceding passing native scope or empty CodeQL inventory.
+The original ec Docker run is superseded/incomplete; its completed first native
+shard and partial second shard remain separate evidence, not a release pass.
+
+The existing connector-and-payment-provider-held-records class now references
+the unchanged sender and both caller owners. The latest note states its exact
+wire data and unchanged upstream safeguards, with no new class, retention,
+policy approval, external request or activation. Both generated views are
+regenerated; runtime changes are only the reviewed-map fingerprint/projection
+identity, not admitted classes, schema, handlers or policy. A regression proves
+the truthful reference and continued change-gate refusal without map review.
+Complete current CI contract commands, fresh source-bound tests, CI/Docker,
+canonical merge, guarded deployment and exact live acceptance still remain.
