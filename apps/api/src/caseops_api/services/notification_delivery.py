@@ -446,10 +446,17 @@ def _recipient_still_permitted(
             if not primary_grant_exists:
                 return False
             if intent.source_type == "portal_publication":
-                from caseops_api.services.portal_ip import portal_publication_is_available
+                from caseops_api.services.portal_publication_visibility import (
+                    load_publication_visibility,
+                    publication_is_available,
+                    publication_target_is_current,
+                )
 
-                if not portal_publication_is_available(
+                visibility = load_publication_visibility(
                     session, portal_user=portal_user, publication_id=intent.source_id
+                )
+                if visibility is None or not publication_is_available(
+                    visibility, portal_user=portal_user, now=_now(),
                 ):
                     return False
                 publication_targets = session.execute(
@@ -471,14 +478,8 @@ def _recipient_still_permitted(
                 if not publication_targets:
                     return False
                 return all(
-                    grant.revoked_at is None
-                    and (grant.expires_at is None or _as_utc(grant.expires_at) > now)
-                    and docket.company_id == intent.company_id
-                    and docket.is_active
-                    and not docket.archived_by_matter_disposal
-                    and docket.current_version == target.docket_version
-                    and docket.lifecycle_version == target.lifecycle_version
-                    and docket.access_policy_version == target.access_policy_version
+                    docket.company_id == intent.company_id
+                    and publication_target_is_current(target, grant, docket, now=now)
                     for target, grant, docket in publication_targets
                 )
             return True
@@ -1362,7 +1363,7 @@ def process_notification_delivery_intent(
     ):
         # The docket and intent are locked; check the immutable current source
         # before either internal materialization or an external dispatch claim.
-        from caseops_api.services.ip_renewals import imported_renewal_reminder_is_current
+        from caseops_api.services.ip_portfolio_source import imported_renewal_reminder_is_current
 
         if not imported_renewal_reminder_is_current(session, intent=intent):
             intent.status = NotificationDeliveryStatus.BLOCKED
@@ -1463,7 +1464,7 @@ def process_notification_delivery_intent(
             _ensure_in_app_fallback(session, intent=intent, context=context)
             return _delivery_result(intent)
 
-        from caseops_api.services.communications import _send_via_sendgrid
+        from caseops_api.services.sendgrid_transport import _send_via_sendgrid
 
         recipient_name = (
             str(recipient_user.full_name or "CaseOps user")

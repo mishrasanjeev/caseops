@@ -66,6 +66,13 @@ from caseops_api.services.notification_delivery import (
     cancel_pending_notification_intents,
     enqueue_notification_delivery_intent,
 )
+from caseops_api.services.portal_publication_visibility import (
+    load_publication_visibility,
+    publication_access_state,
+    publication_grant_is_active,
+    publication_is_available,
+    publication_target_is_current,
+)
 from caseops_api.services.session_context import SessionContext
 
 _CLIENT_REPORT_KINDS = {
@@ -128,11 +135,7 @@ def _scope(grant: MatterPortalGrant) -> PortalIpScope:
 
 
 def _grant_is_active(grant: MatterPortalGrant, *, now: datetime | None = None) -> bool:
-    current = now or _now()
-    return bool(
-        grant.revoked_at is None
-        and (grant.expires_at is None or _aware(grant.expires_at) > current)
-    )
+    return publication_grant_is_active(grant, now=now or _now())
 
 
 def _active_grant_statement(*, portal_user_id: str, docket_id: str | None = None):
@@ -964,15 +967,7 @@ def _publication_targets(
             docket_title=(
                 docket.title if general_ip_disclosure_allowed(docket) else "Restricted IP record"
             ),
-            current=bool(
-                _grant_is_active(grant, now=now)
-                and general_ip_disclosure_allowed(docket)
-                and docket.is_active
-                and not docket.archived_by_matter_disposal
-                and docket.current_version == target.docket_version
-                and docket.lifecycle_version == target.lifecycle_version
-                and docket.access_policy_version == target.access_policy_version
-            ),
+            current=publication_target_is_current(target, grant, docket, now=now),
         )
         for target, grant, docket in rows
     ]
@@ -1012,15 +1007,7 @@ def _publication_targets_for_ids(
                     if general_ip_disclosure_allowed(docket)
                     else "Restricted IP record"
                 ),
-                current=bool(
-                    _grant_is_active(grant, now=now)
-                    and general_ip_disclosure_allowed(docket)
-                    and docket.is_active
-                    and not docket.archived_by_matter_disposal
-                    and docket.current_version == target.docket_version
-                    and docket.lifecycle_version == target.lifecycle_version
-                    and docket.access_policy_version == target.access_policy_version
-                ),
+                current=publication_target_is_current(target, grant, docket, now=now),
             )
         )
     return grouped
@@ -1048,11 +1035,6 @@ def _publication_record(
         else _publication_targets(session, publication=publication)
     )
     now = _now()
-    scheduled = bool(
-        publication.status == "scheduled"
-        and publication.scheduled_for is not None
-        and _aware(publication.scheduled_for) > now
-    )
     artifact = (
         loaded_artifact
         if dependencies_loaded
@@ -1093,31 +1075,16 @@ def _publication_record(
             document_ids={document.id} if document is not None else set(),
         )
     )
-    document_current = bool(
-        publication.document_version_id is None
-        or (
-            version is not None
-            and document is not None
-            and document.company_id == portal_user.company_id
-            and version.company_id == portal_user.company_id
-            and version.document_id == document.id
-            and version.version == document.current_version
-            and not document.is_privileged
-            and document.confidentiality == "internal"
-            and document.id in disclosable_document_ids
-            and version.state in {"approved", "filed", "served", "accepted"}
-        )
+    access_state = publication_access_state(
+        publication=publication,
+        portal_user=portal_user,
+        targets_current=[target.current for target in targets],
+        version=version,
+        document=document,
+        disclosable_document_ids=disclosable_document_ids,
+        now=now,
     )
-    current = bool(targets) and all(target.current for target in targets) and document_current
-    access_state = (
-        "revoked"
-        if publication.status == "revoked"
-        else "scheduled"
-        if scheduled
-        else "available"
-        if current
-        else "review_required"
-    )
+    scheduled = access_state == "scheduled"
     intent = (
         loaded_intent
         if dependencies_loaded
@@ -1171,14 +1138,12 @@ def _publication_record(
 def portal_publication_is_available(
     session: Session, *, portal_user: PortalUser, publication_id: str
 ) -> bool:
-    publication = session.scalar(select(PortalPublication).where(
-        PortalPublication.id == publication_id,
-        PortalPublication.company_id == portal_user.company_id,
-        PortalPublication.portal_user_id == portal_user.id,
-    ))
-    return publication is not None and _publication_record(
-        session, publication=publication, portal_user=portal_user, record_access=False
-    ).access_state == "available"
+    visibility = load_publication_visibility(
+        session, portal_user=portal_user, publication_id=publication_id,
+    )
+    return visibility is not None and publication_is_available(
+        visibility, portal_user=portal_user, now=_now(),
+    )
 
 
 def list_portal_publications(

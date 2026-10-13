@@ -405,6 +405,7 @@ from caseops_api.services.ip_operations import (
     review_ip_evidence_candidate,
     save_ip_docket_queue,
     sign_off_ip_control_review,
+    update_imported_renewal_date,
     verify_ip_deadline_incident,
 )
 from caseops_api.services.ip_opposition_applicant import (
@@ -470,7 +471,6 @@ from caseops_api.services.ip_renewals import (
     renewal_foundation_contract,
     schedule_renewal_instruction_reminders,
     transition_renewal_term,
-    update_imported_renewal_date,
 )
 from caseops_api.services.ip_reports import (
     ip_report_foundation_contract,

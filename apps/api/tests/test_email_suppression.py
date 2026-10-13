@@ -501,6 +501,9 @@ def test_notification_worker_suppresses_linked_hearing_reminders(
             "caseops_api.services.communications._send_via_sendgrid",
             _unexpected_send,
         )
+        monkeypatch.setattr(
+            "caseops_api.services.sendgrid_transport._send_via_sendgrid", _unexpected_send,
+        )
 
         with factory() as session:
             get_settings.cache_clear()  # type: ignore[attr-defined]

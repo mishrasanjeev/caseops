@@ -6,6 +6,7 @@ import path from "node:path";
 import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { noPaidProviderHeaders } from "./support/cost-controls";
 
 const PASSWORD = "PortfolioWorkflow2026!";
 
@@ -173,6 +174,7 @@ async function seedPortfolio(api: APIRequestContext, headers: Record<string, str
     },
   );
   expect(oppositionResponse.status(), await oppositionResponse.text()).toBe(201);
+  return docket.id as string;
 }
 
 async function signIn(page: Page, slug: string, email: string): Promise<void> {
@@ -186,10 +188,12 @@ async function signIn(page: Page, slug: string, email: string): Promise<void> {
 
 test("IPLF-030B completes UJ-04 normal and exception workflow", async ({ page }) => {
   test.setTimeout(180_000);
-  const api = await request.newContext();
+  expect(["localhost", "127.0.0.1", "[::1]"].includes(new URL(apiBaseUrl).hostname),
+    "Synthetic bootstrap and entitlement writes are loopback-only").toBe(true);
+  const api = await request.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
   const tenant = await bootstrap(api);
   const headers = await enableWorkspace(api, tenant);
-  await seedPortfolio(api, headers);
+  const existingDocketId = await seedPortfolio(api, headers);
 
   await signIn(page, tenant.slug, tenant.email);
   await page.goto("/app/ip/portfolio");
@@ -231,20 +235,58 @@ test("IPLF-030B completes UJ-04 normal and exception workflow", async ({ page })
       "ASTER DEVICE,ASTER DEVICE,9,Aster Products Private Limited,TM / 2026 / 00421,Downloadable legal software,Rao Trademark Agents,IN,Trade Marks Registry Mumbai",
     ].join("\n")),
   });
+  const uploaded = page.waitForResponse(response => new URL(response.url()).pathname === "/api/ip/imports/upload"
+    && response.request().method() === "POST");
   await page.getByRole("button", { name: "Validate file" }).click();
+  const upload = await uploaded;
+  expect(upload.status(), await upload.text()).toBe(201);
+  const preview = await upload.json();
+  expect(preview.job.total_rows).toBe(2);
+  expect(preview.rows[1].reconciliation_decision).toBe("skip");
+  expect(preview.rows[1].duplicate_candidates.some((candidate: { docket_id: string }) =>
+    candidate.docket_id === existingDocketId)).toBe(true);
   await expect(page.getByRole("heading", { name: "Review iplf-030b-register.csv" })).toBeVisible();
-  await expect(page.getByText("1 duplicate rows still need a decision.")).toBeVisible();
+  await expect(page.getByLabel("Decision for row 2")).toHaveText("Skip row");
+  await expect(page.getByRole("button", { name: "Commit to portfolio", exact: true })).toBeEnabled();
+  await expect(page.getByText("Eligible rows will be committed; duplicate and unusable rows will be skipped.", { exact: true })).toBeVisible();
 
   await page.getByLabel("Decision for row 2").click();
   await page.getByRole("option", { name: "Link existing docket" }).click();
   await page.getByLabel("Existing docket for row 2").click();
   await page.getByRole("option", { name: "Aster Device" }).click();
+  const reconciled = page.waitForResponse(response => new URL(response.url()).pathname ===
+    `/api/ip/imports/${preview.job.id}/reconcile` && response.request().method() === "POST");
   await page.getByRole("button", { name: "Save duplicate decisions" }).click();
-  await expect(page.getByText("All rows are ready for a controlled commit.")).toBeVisible();
+  const reconciliation = await reconciled;
+  expect(reconciliation.status(), await reconciliation.text()).toBe(200);
+  const resolved = await reconciliation.json();
+  expect(resolved.rows[1].reconciliation_decision).toBe("link_existing");
+  expect(resolved.rows[1].reconciled_target_docket_id).toBe(existingDocketId);
+  await expect(page.getByRole("button", { name: "Commit to portfolio", exact: true })).toBeEnabled();
+  const committed = page.waitForResponse(response => new URL(response.url()).pathname ===
+    `/api/ip/imports/${preview.job.id}/commit` && response.request().method() === "POST");
   await page.getByRole("button", { name: "Commit to portfolio" }).click();
+  const commit = await committed;
+  expect(commit.status(), await commit.text()).toBe(200);
+  const saved = await commit.json();
+  expect(saved.job.committed_rows).toBe(2);
+  expect(saved.job.failed_rows).toBe(0);
+  expect(saved.rows[0].created_docket_id).toBeTruthy();
+  expect(saved.rows[0].created_docket_id).not.toBe(existingDocketId);
+  expect(saved.rows[1].created_docket_id).toBeNull();
+  expect(saved.rows[1].reconciled_target_docket_id).toBe(existingDocketId);
+  expect(saved.rows.map((row: { commit_status: string }) => row.commit_status)).toEqual(["committed", "committed"]);
   await expect(
-    page.getByLabel("Review iplf-030b-register.csv").getByText("2 rows committed; 0 failed."),
+    page.getByRole("region", { name: "Review iplf-030b-register.csv", exact: true })
+      .getByText("1 created; 1 linked; 0 skipped (0 duplicates); 0 with warnings; 0 failed.", { exact: true }),
   ).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: /iplf-030b-register\.csv/ }).click();
+  await expect(page.getByRole("region", { name: "Review iplf-030b-register.csv", exact: true })
+    .getByText("1 created; 1 linked; 0 skipped (0 duplicates); 0 with warnings; 0 failed.", { exact: true })).toBeVisible();
+  const retained = await api.get(`${apiBaseUrl}/api/ip/imports/${preview.job.id}`, { headers });
+  expect(retained.status(), await retained.text()).toBe(200);
+  expect((await retained.json()).rows).toEqual(saved.rows);
 
   await page.locator("#main").getByRole("link", { name: "Portfolio", exact: true }).click();
   await page.getByLabel("Search marks and registry numbers").fill("TM / 2026 / 00991");

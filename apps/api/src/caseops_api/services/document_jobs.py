@@ -990,7 +990,7 @@ def _process_ip_document_version_job(session: Session, job: DocumentProcessingJo
         )
         if targets:
             from caseops_api.services.identity import get_session_context
-            from caseops_api.services.ip_operations import _lock_ip_writer_context
+            from caseops_api.services.ip_docket_access import _lock_ip_writer_context
 
             context = get_session_context(session, version.uploaded_by_membership_id)
             if context.company.id != job.company_id:

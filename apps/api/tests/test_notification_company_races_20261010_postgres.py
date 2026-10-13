@@ -165,6 +165,7 @@ def test_company_disable_and_external_claim_have_native_winner_order(
         return True, provider_id, None
 
     monkeypatch.setattr(communications, "_send_via_sendgrid", send)
+    monkeypatch.setattr("caseops_api.services.sendgrid_transport._send_via_sendgrid", send)
 
     def pause_company(connection, _cursor, sql, _parameters, _context, _many):
         if (winner == "claim" and connection.info.get("finalizer_role") == "worker"
@@ -264,6 +265,9 @@ def test_in_app_delivery_does_not_add_a_company_or_employee_lock(finalizer_audit
         raise AssertionError("In-app delivery attempted external transport")
 
     monkeypatch.setattr(communications, "_send_via_sendgrid", forbidden_transport)
+    monkeypatch.setattr(
+        "caseops_api.services.sendgrid_transport._send_via_sendgrid", forbidden_transport,
+    )
 
     def hold_company():
         with audit.session("revocation") as session:

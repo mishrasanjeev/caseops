@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A successful scanner job is not an empty finding inventory. Query the exact
+  candidate's code-scanning ref and reconcile every open alert before release;
+  recheck canonical main after merge. Optional review steps skipped by a key
+  guard are not completed reviews. Break genuine service dependency cycles at
+  shared access/provenance boundaries without changing guards or hiding imports.
+
 - Audit acceptance coverage before freezing a release candidate. A mode-switch
   click does not prove its dated contents; assert persisted identities and time
   in every changed Calendar view. An import under its batch limit cannot prove
@@ -2287,3 +2293,8 @@ requirements when using the fallback.
   changed-history secret preflight before costly acceptance. Independently
   verify reported artifact checksums against immutable bytes; allow only an
   exact reviewed historical fingerprint, never path, rule or all-hash suppression.
+- Break workflow import cycles at their actual shared read-only policy or
+  transport boundary, not by duplicating authorization or hiding local imports.
+  Preserve guard/source/sender bodies, API contracts and lock order; inventory
+  every caller and mock binding, and replay native authorization and delivery.
+  A compatibility alias does not redirect another module's later monkeypatch.

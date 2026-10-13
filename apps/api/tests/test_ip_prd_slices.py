@@ -1199,6 +1199,7 @@ def test_notification_external_cutover_uses_only_durable_intent_and_webhook(
         "caseops_api.services.communications._send_via_sendgrid",
         fake_send,
     )
+    monkeypatch.setattr("caseops_api.services.sendgrid_transport._send_via_sendgrid", fake_send)
     with get_session_factory()() as session:
         membership = session.scalar(select(CompanyMembership))
         assert membership is not None

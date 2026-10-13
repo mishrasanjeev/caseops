@@ -305,3 +305,82 @@ These changes remain pending execution on a new frozen candidate and the exact
 production release. Test source, static review and type checking are not browser
 acceptance. Native reminder dispatch and month-end arithmetic retain their own
 evidence; a visible queued alert is not a delivered external notification.
+
+## Code-Scanning Gate Correction
+
+On ed856074, CodeQL's three analysis jobs passed, but the exact PR535 merge ref
+still had open findings567 (an exported metadata constant) and568/569 (the new
+Ops/Renewals cycle). No zero-findings or release claim is made from job success.
+The adjacent notification-delivery/source-predicate back edge is also included
+in the audit. Codex review's successful workflow skipped its actual review and
+transcript steps after its key guard; this is not a completed automated review.
+
+The source correction makes the import parser's existing exports explicit,
+extracts the unchanged docket/actor guards into a neutral access module, and
+extracts unchanged read-only source/provenance checks into a neutral source
+module. Source-date correction stays with canonical docket version writes;
+renewals and delivery no longer import each other's workflow owner. Existing
+guard aliases remain available to all current callers. Query predicates,
+capabilities, lock order, error details, source-date history and stale-intent
+cancellation are not relaxed. New AST/dependency and export controls accompany
+the existing PostgreSQL and browser workflows.
+
+This integration correction is not release-certified yet. It requires
+complete source-bound scoped replacements, fresh full CI/Docker, actual empty
+candidate alert inventory, canonical main and the guarded/live release gates.
+Earlier frozen acceptance attempts remain incomplete or failed; no old result
+certifies this later service-boundary change.
+
+## Hosted Browser Reconciliation
+
+CI38450575816 on immutable ed856074 completed with 556 app cases: 534 passed,
+two failed and20 skipped. All identities, zero-retry attempts, both JUnit files,
+native receipts, complete individual errors and skip reasons are reconciled in
+`ci-ed856074-browser-readonly-01/HANDOFF.md`. Both Calendar widths pass on that
+CI checkout only. The IP desktop test fails before date-correction acceptance;
+its three later serial cases do not execute and remain unverified.
+
+The historical IPLF-030B journey expects an obsolete unresolved-duplicate
+default and old commit copy. Its corrected journey positively proves default
+Skip, explicit linking to the seeded docket, the distinct created docket,
+1-created/1-linked counts and retained reload. The new IP journey queried one
+exact application number but expected both same-mark rows; it now searches the
+shared mark and asserts each exact application number and its saved docket href.
+Neither finding justifies changing duplicate policy or identifier search.
+The original failed assertions and full source-bound CI receipts remain intact.
+
+Current seven-module source replacement completes109 cases:98 passed,11 explicit
+native-environment skips,316 ordered phases, exact JUnit and all seven files,
+nine unchanged source pins and natural exit0. This includes IP imports, current
+source reminders, renewals and locked capability/coverage controls, not native
+or deployed acceptance. New dependency controls retained the transitive Portal
+and then Communications/document-processing back edges as RED until their
+actual shared boundaries are corrected. No DAG assertion is relaxed.
+
+## Shared Boundary Replacement Status
+
+The directed Ops/Renewals/Delivery controls now pass after moving the exact
+SendGrid sender to a neutral transport leaf. Communications retains its existing
+alias; all fifteen existing sender mocks across six files additionally patch
+the new delivery binding. The original sender AST, payload, timeout20, claim,
+admission and ambiguous-acceptance behavior remain unchanged. The complete
+101-case sender/caller replacement passes303 phases; its three DAG controls
+pass separately. Evidence: sendgrid-transport-boundary-20261014-01/README.md.
+These are local, deterministic checks, not paid delivery or native acceptance.
+
+Portal and notification availability now share read-only current-source policy;
+the original DTO enrichment and access audit remain with Portal. Twenty-eight
+complete DTO/JSON parity vectors pass using fake sessions, not persisted native
+rows. Fresh original HTTP journeys must also run through the isolated migrated
+PostgreSQL fixture, alongside complete authority149 and notification races.
+The new native adapter delegates sixteen cases to the unchanged original HTTP
+assertions and real clock/monkeypatch fixtures. It asserts PostgreSQL and the
+no-paid marker, without overriding the application or shared fixture policy.
+Its source and Ruff checks do not constitute native execution evidence.
+Earlier partial runs and all three dependency RED cohorts remain preserved.
+
+The user cannot identify the allegedly reopened Matter. LIFE13-01 therefore
+remains Inconclusive; neither an eight-record read nor a passing synthetic
+dispose/reopen regression establishes its historical cause. No lifecycle fence
+has been weakened. Fresh live fingerprints on October14 still serve3dbf364d on
+both API and web. PR535 has not been merged or deployed.

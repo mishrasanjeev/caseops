@@ -338,9 +338,15 @@ for (const width of [1280, 393]) {
       }
     }
     await page.goto(`${web.origin}/app/ip/portfolio`);
-    await page.getByPlaceholder("Mark, application number, opposition number").fill(number);
+    await page.getByPlaceholder("Mark, application number, opposition number").fill(mark);
     await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
     await expect(page.getByRole("link", { name: mark, exact: true })).toHaveCount(2);
+    for (const index of [0, 2]) {
+      const row = (width >= 768 ? page.getByRole("row") : page.getByRole("article"))
+        .filter({ has: page.getByText(String(saved.rows[index].normalized.application_number), { exact: true }) });
+      await expect(row.getByRole("link", { name: mark, exact: true }))
+        .toHaveAttribute("href", `/app/ip?docket=${saved.rows[index].created_docket_id}`);
+    }
     const sourceRow = (width >= 768 ? page.getByRole("row") : page.getByRole("article"))
       .filter({ has: page.getByText(number, { exact: true }) });
     await expect(sourceRow.getByText(due, { exact: true })).toBeVisible();

@@ -8,11 +8,12 @@ The earlier four-PR batch is merged as main
 Its complete workstation Docker gate has 2,898 native passes and 540 browser
 passes plus ten explicit skips, natural exit zero and sealed artifact/cleanup
 reconciliation. Candidate CI/Security/CodeQL passed. Main Security and CodeQL
-passed; main CI is in progress. This supersedes earlier merge/local-gate
+passed; main CI38399405530 also completed successfully. This supersedes earlier merge/local-gate
 checkpoints below, not their retained failed evidence. Production is still
 `3dbf364d`; no new deployed closure or scheduler resume is claimed.
 
-New October 13 IP/Calendar changes are a separate, uncommitted scope. Actual
+The October 13 IP/Calendar scope is draft PR535, with subsequent acceptance
+corrections under review and fresh whole-candidate gates required. Actual
 production preview reproduces native Excel datetime upload 500 on serving
 3dbf, request `ip-native-date-prod-7a0ae37155884f198720b24eda3006b8`; native
 baseline establishes JSON serialization cause. Scoped corrections remain

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from calendar import monthrange
 from collections import Counter
-from copy import deepcopy
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -13,7 +12,6 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
-    AuditEvent,
     Communication,
     CompanyMembership,
     IpClientInstruction,
@@ -26,7 +24,6 @@ from caseops_api.db.models import (
     IpDocumentLink,
     IpDocumentVersion,
     IpIdentifier,
-    IpImportRow,
     IpRenewalTerm,
     IpResponsibilityAssignment,
     IpTrademarkParticularVersion,
@@ -39,7 +36,6 @@ from caseops_api.schemas.ip_renewals import (
     IpClientInstructionAcknowledgeRequest,
     IpClientInstructionCreateRequest,
     IpClientInstructionRecord,
-    IpPortfolioRenewalDateUpdateRequest,
     IpRenewalDeadlineSummary,
     IpRenewalFeeSummary,
     IpRenewalFoundationContract,
@@ -57,6 +53,14 @@ from caseops_api.schemas.ip_renewals import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
+from caseops_api.services.ip_docket_access import _docket_or_404
+from caseops_api.services.ip_portfolio_source import (
+    _imported_source_row,
+    _portfolio_source,
+)
+from caseops_api.services.ip_portfolio_source import (
+    imported_renewal_reminder_is_current as imported_renewal_reminder_is_current,
+)
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.notification_delivery import (
     cancel_pending_notification_intents,
@@ -105,11 +109,6 @@ def portfolio_renewal_alert_at(due_on: date, *, timezone: str) -> datetime:
     year, month = (due_on.year - 1, 12) if due_on.month == 1 else (due_on.year, due_on.month - 1)
     alert_on = date(year, month, min(due_on.day, monthrange(year, month)[1]))
     return datetime.combine(alert_on, time(9), tzinfo=ZoneInfo(timezone)).astimezone(UTC)
-
-
-def _portfolio_source(representation: dict) -> dict:
-    value = representation.get("portfolio_import")
-    return value if isinstance(value, dict) else {}
 
 
 def portfolio_source_renewal_details(
@@ -168,74 +167,6 @@ def portfolio_source_renewal_details(
     for data in result.values():
         data.pop("_version_id", None)
     return result
-
-
-def imported_renewal_reminder_is_current(
-    session: Session,
-    *,
-    intent: NotificationDeliveryIntent,
-) -> bool:
-    """Source predicate for the shared delivery owner's pre-dispatch fence.
-
-    This is not lifecycle or recipient authorization; those remain the shared
-    owner's responsibility. A correction/removal of the source date denies
-    this retained intent rather than interpreting it as a legal renewal.
-    """
-    if (
-        intent.source_type != "ip_trademark_particular_version"
-        or intent.event_type != "renewal_source_date_1month"
-    ):
-        return False
-    pair = session.execute(
-        select(IpTrademarkParticularVersion)
-        .select_from(IpTrademarkParticularVersion)
-        .join(
-            IpDocketRecord,
-            and_(
-                IpDocketRecord.company_id == IpTrademarkParticularVersion.company_id,
-                IpDocketRecord.id == intent.ip_docket_id,
-                IpTrademarkParticularVersion.docket_id == IpDocketRecord.id,
-                IpTrademarkParticularVersion.version == IpDocketRecord.current_version,
-            ),
-        )
-        .where(
-            IpTrademarkParticularVersion.id == intent.source_id,
-            IpTrademarkParticularVersion.company_id == intent.company_id,
-        )
-    ).scalar_one_or_none()
-    if pair is None:
-        return False
-    source = _portfolio_source(pair.representation_json)
-    return bool(
-        _imported_source_row(
-            session, company_id=intent.company_id, docket_id=intent.ip_docket_id, source=source
-        )
-        and source.get("renewal_due_date") == (intent.metadata_json or {}).get("source_due_on")
-        and source.get("renewal_due_date")
-        and intent.schedule_source_type == "ip_portfolio_renewal"
-        and intent.schedule_source_id == intent.ip_docket_id
-    )
-
-
-def _imported_source_row(session: Session, *, company_id: str, docket_id: str, source: dict):
-    row_id = source.get("source_row_id")
-    if not isinstance(row_id, str) or len(row_id) != 36:
-        return None
-    return session.scalar(
-        select(IpImportRow).where(
-            IpImportRow.company_id == company_id,
-            IpImportRow.id == row_id,
-            select(AuditEvent.id)
-            .where(
-                AuditEvent.company_id == company_id,
-                AuditEvent.action == "ip_docket.source_materialized",
-                AuditEvent.target_type == "ip_import_row",
-                AuditEvent.target_id == IpImportRow.id,
-                AuditEvent.ip_docket_id == docket_id,
-            )
-            .exists(),
-        )
-    )
 
 
 def schedule_imported_renewal_reminder(
@@ -398,59 +329,6 @@ def synchronize_imported_renewal_reminder(
         )
 
 
-def update_imported_renewal_date(
-    session: Session,
-    *,
-    context: SessionContext,
-    docket_id: str,
-    payload: IpPortfolioRenewalDateUpdateRequest,
-):
-    from caseops_api.schemas.ip_imports import IpImportDocketVersionCreateRequest
-    from caseops_api.services.ip_operations import append_ip_docket_version
-    from caseops_api.services.private_retrieval import lock_private_authority_writer
-
-    lock_private_authority_writer(session, company_id=context.company.id)
-    docket = _docket(session, context, docket_id, write=True)
-    version = session.scalar(
-        select(IpTrademarkParticularVersion).where(
-            IpTrademarkParticularVersion.company_id == context.company.id,
-            IpTrademarkParticularVersion.docket_id == docket.id,
-            IpTrademarkParticularVersion.version == docket.current_version,
-        )
-    )
-    source = _portfolio_source(version.representation_json) if version else {}
-    if not _imported_source_row(
-        session, company_id=context.company.id, docket_id=docket.id, source=source
-    ):
-        raise _conflict("ip_portfolio_source_missing", "This record has no imported source date.")
-    representation = deepcopy(version.representation_json)
-    representation["portfolio_import"]["renewal_due_date"] = (
-        payload.renewal_due_date.isoformat() if payload.renewal_due_date else None
-    )
-    representation["portfolio_import"]["date_correction"] = {
-        "reason": payload.reason,
-        "previous_due_date": source.get("renewal_due_date"),
-        "previous_version": docket.current_version,
-    }
-    return append_ip_docket_version(
-        session,
-        context=context,
-        docket_id=docket.id,
-        payload=IpImportDocketVersionCreateRequest(
-            expected_current_version=payload.expected_current_version,
-            form_key=version.form_key,
-            form_version=version.form_version,
-            mark_kind=version.mark_kind,
-            representation=representation,
-            classes=version.classes_json,
-            parties=version.parties_json,
-            use_priority=version.use_priority_json,
-            agent=version.agent_json,
-            filing_manifest=version.filing_manifest_json,
-        ),
-    )
-
-
 def _conflict(code: str, message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT,
@@ -467,8 +345,6 @@ def _assert_reference_unchanged(*, current: str | None, proposed: str | None, la
 
 
 def _docket(session: Session, context: SessionContext, docket_id: str, *, write: bool):
-    from caseops_api.services.ip_operations import _docket_or_404
-
     return _docket_or_404(
         session,
         context=context,

@@ -43,6 +43,7 @@ def local_sender(monkeypatch):
         return True, "local-provider-event", None
 
     monkeypatch.setattr(communications, "_send_via_sendgrid", send)
+    monkeypatch.setattr("caseops_api.services.sendgrid_transport._send_via_sendgrid", send)
     return calls
 
 
