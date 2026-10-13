@@ -1,5 +1,18 @@
 # CaseOps agent instructions
 
+- An import admission change must inventory every service/HTTP fixture and
+  every native security race caller, not only import-page tests. Directly
+  seeded companies do not inherit bootstrap workspace context. Preserve a
+  missing-context negative, provide explicit reviewed synthetic context in
+  positive fixtures and retain their actual preview errors before diagnosis.
+  Observe the real advisory primitive and dedicated backend PID; keep exact
+  blocker/NOWAIT/deadline proofs. A foreign creator must remain denied rather
+  than weakening access to satisfy an obsolete success expectation.
+- A new release-owned browser invocation changes both the required native
+  receipts and exact workflow-invocation inventory. Reconcile all test consumers
+  of that workflow, preserving every earlier invocation and negative guard;
+  passing the main workflow contract module alone missed the second inventory.
+
 - A dedicated advisory transaction can expire while the application commits
   import rows on another connection. Do not raise the idle timeout. Use explicit
   session-owned autocommit claims, prove current ownership and release, bound

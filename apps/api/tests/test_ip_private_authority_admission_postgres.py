@@ -28,6 +28,7 @@ from caseops_api.db.models import (
     IpDocumentLink,
     IpDocumentTaxonomyEntry,
     IpDocumentVersion,
+    IpImportRow,
     Matter,
     MatterAccessGrant,
     MatterAccessLevel,
@@ -226,6 +227,8 @@ def _fixture(engine, mutation, same_actor):
                                 "class_number": 9,
                                 "applicant_name": "Fixture Client",
                                 "matter_id": matter_id,
+                                "jurisdiction": "IN",
+                                "office": "IP India",
                             },
                         }
                         for number in (1, 2)
@@ -233,6 +236,13 @@ def _fixture(engine, mutation, same_actor):
                 ),
             )
             assert import_plan.job.valid_rows == 2
+            assert all(
+                row.normalized["jurisdiction"] == "IN"
+                and row.normalized["office"] == "IP India"
+                and row.normalized["_source_values"]["jurisdiction"] == "IN"
+                and row.normalized["_source_values"]["office"] == "IP India"
+                for row in import_plan.rows
+            )
             if mutation == "import-resume":
                 job = session.get(BulkImportJob, import_plan.job.id)
                 job.status = "staged"
@@ -775,6 +785,58 @@ def test_specialist_admission_retains_authorization_and_company_flags(
             )
 
 
+def test_import_authority_fixture_missing_context_remains_ineligible(pg_engine, registered_intake):
+    data = _fixture(pg_engine, "create", True)
+    with Session(pg_engine) as session:
+        context = _ip_race_context(
+            session, company_id=data["company"], membership_id=data["actor"]
+        )
+        before = set(session.scalars(
+            select(IpDocketRecord.id).where(IpDocketRecord.company_id == data["company"])
+        ))
+        plan = ip_imports.create_ip_import_job(
+            session,
+            context=context,
+            payload=IpImportJobCreateRequest(
+                filename="unreviewed-context.csv",
+                rows=[{"row_number": 1, "values": {
+                    "title": "Unreviewed import context",
+                    "mark_text": "UNREVIEWED CONTEXT",
+                    "class_number": 9,
+                    "applicant_name": "Fixture Client",
+                    "matter_id": data["matter"],
+                }}],
+            ),
+        )
+        assert plan.job.valid_rows == 0 and plan.job.invalid_rows == 1
+        assert plan.rows[0].errors == [
+            {"field": "jurisdiction", "code": "workspace_context_required"},
+            {"field": "office", "code": "workspace_context_required"},
+        ]
+        assert "jurisdiction" not in plan.rows[0].normalized
+        assert "office" not in plan.rows[0].normalized
+        with pytest.raises(HTTPException) as denied:
+            ip_imports.commit_ip_import_job(
+                session,
+                context=context,
+                job_id=plan.job.id,
+                payload=IpImportCommitRequest(
+                    preview_token=plan.job.preview_token, idempotency_key=str(uuid4())
+                ),
+            )
+        assert denied.value.status_code == 409
+        assert denied.value.detail["code"] == "ip_import_no_eligible_rows"
+        session.rollback()
+        assert set(session.scalars(
+            select(IpDocketRecord.id).where(IpDocketRecord.company_id == data["company"])
+        )) == before
+        assert set(session.scalars(
+            select(PrivateProjectionEvent.id).where(
+                PrivateProjectionEvent.company_id == data["company"]
+            )
+        )) == data["events"]
+
+
 @pytest.mark.parametrize("autoflush", [False, True], ids=["production", "autoflush"])
 @pytest.mark.parametrize("same_actor", [True, False], ids=["same-actor", "different-actor"])
 def test_ip_import_advisory_waiter_owns_no_authority_or_actor_lock(
@@ -783,19 +845,22 @@ def test_ip_import_advisory_waiter_owns_no_authority_or_actor_lock(
     data = _fixture(pg_engine, "import", same_actor)
     thread = local()
     acquired, resume = Event(), Event()
-    waiter_pid = []
+    waiter_pid, owner_pid = [], []
     observer = create_engine(pg_engine.url, poolclass=NullPool)
 
     def before(conn, cursor, statement, parameters, execution_context, many):
-        if "pg_advisory_xact_lock" in statement:
-            cursor.execute("SET LOCAL statement_timeout = '15s'")
-            if getattr(thread, "role", None) == "waiter":
+        if "SELECT pg_advisory_lock(" in statement:
+            assert conn.connection.driver_connection.autocommit is True
+            cursor.execute("SET statement_timeout = '15s'")
+            if getattr(thread, "role", None) == "owner" and not acquired.is_set():
+                owner_pid.append(conn.connection.driver_connection.info.backend_pid)
+            if getattr(thread, "role", None) == "waiter" and not resume.is_set():
                 waiter_pid.append(conn.connection.driver_connection.info.backend_pid)
 
     def after(conn, cursor, statement, parameters, execution_context, many):
         if (
             getattr(thread, "role", None) == "owner"
-            and "pg_advisory_xact_lock" in statement
+            and "SELECT pg_advisory_lock(" in statement
             and not acquired.is_set()
         ):
             acquired.set()
@@ -828,7 +893,7 @@ def test_ip_import_advisory_waiter_owns_no_authority_or_actor_lock(
                         waiting = (
                             conn.execute(
                                 text(
-                                    "SELECT query, pg_blocking_pids(pid) AS blockers "
+                                    "SELECT pid, query, pg_blocking_pids(pid) AS blockers "
                                     "FROM pg_stat_activity "
                                     "WHERE pid = ANY(:pids) AND wait_event_type='Lock'"
                                 ),
@@ -841,8 +906,11 @@ def test_ip_import_advisory_waiter_owns_no_authority_or_actor_lock(
                         break
                     sleep(0.01)
                 assert (
-                    waiting and waiting["blockers"] and "pg_advisory_xact_lock" in waiting["query"]
+                    waiting and waiting["blockers"] and "pg_advisory_lock(" in waiting["query"]
                 )
+                assert waiting["pid"] in waiter_pid
+                assert waiting["blockers"] == owner_pid
+                assert waiting["pid"] != owner_pid[0]
                 with Session(observer) as probe:
                     for model, row_id in (
                         (Company, data["company"]),
@@ -861,13 +929,33 @@ def test_ip_import_advisory_waiter_owns_no_authority_or_actor_lock(
                         )
             finally:
                 resume.set()
-            assert owner.result(timeout=20) == waiter.result(timeout=20)
+            owner_result = owner.result(timeout=20)
+            if same_actor:
+                assert owner_result == waiter.result(timeout=20)
+            else:
+                with pytest.raises(HTTPException) as denied:
+                    waiter.result(timeout=20)
+                assert denied.value.status_code == 404
+                assert denied.value.detail == "Import job not found."
     finally:
         resume.set()
         event.remove(pg_engine, "before_cursor_execute", before)
         event.remove(pg_engine, "after_cursor_execute", after)
         observer.dispose()
     with Session(pg_engine) as verify:
+        job = verify.get(BulkImportJob, data["import_plan"].job.id)
+        assert job.status == "committed"
+        assert job.committed_rows == 2 and job.failed_rows == 0
+        rows = list(verify.scalars(select(IpImportRow).where(
+            IpImportRow.company_id == data["company"], IpImportRow.job_id == job.id
+        )))
+        assert len(rows) == 2 and all(row.commit_status == "committed" for row in rows)
+        created = {row.created_docket_id for row in rows}
+        assert len(created) == 2 and owner_result in created
+        assert set(verify.scalars(select(IpDocketRecord.id).where(
+            IpDocketRecord.company_id == data["company"],
+            IpDocketRecord.title.in_(["Imported authority 1", "Imported authority 2"]),
+        ))) == created
         events = list(
             verify.scalars(
                 select(PrivateProjectionEvent).where(

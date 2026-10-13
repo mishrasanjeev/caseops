@@ -457,12 +457,8 @@ def test_uj54_exc04_imported_data_never_silently_fills_a_declaration(
 ) -> None:
     """IPLF-UJ-54-EXC-04 — bulk import leaves declarations unasserted.
 
-    Scope note: this proves the declaration guarantee only. A separate defect
-    found while writing this test -- that ``create_ip_docket`` auto-finalizes
-    the first particulars version, so an imported record is marked approved
-    with no authorized reviewer contrary to TM-DATA-14 -- is recorded in the
-    IPLF-039A evidence document rather than asserted here. Locking the current
-    auto-approval behaviour into a test would entrench it.
+    Source-incomplete imports also remain unapproved until reviewed, rather
+    than preserving the historical automatic-finalization defect.
     """
 
     headers, token = _actor(client)
@@ -481,6 +477,8 @@ def test_uj54_exc04_imported_data_never_silently_fills_a_declaration(
                         "mark_text": "IMPORTED DECLARATION MARK",
                         "class_number": 9,
                         "applicant_name": "Imported Applicant LLP",
+                        "jurisdiction": "IN",
+                        "office": "IP India",
                         # A source column that looks like a priority claim.
                         "claim_priority": "yes",
                         "use_since": "2020-01-01",
@@ -490,6 +488,9 @@ def test_uj54_exc04_imported_data_never_silently_fills_a_declaration(
         },
     )
     assert staged.status_code == 201, staged.text
+    assert staged.json()["job"]["valid_rows"] == 1
+    assert staged.json()["rows"][0]["normalized"]["jurisdiction"] == "IN"
+    assert staged.json()["rows"][0]["normalized"]["office"] == "IP India"
     job = staged.json()["job"]
 
     committed = client.post(
@@ -504,6 +505,7 @@ def test_uj54_exc04_imported_data_never_silently_fills_a_declaration(
     created = client.get(f"/api/ip/dockets/{docket_id}", headers=headers)
     assert created.status_code == 200, created.text
     particulars = created.json()["current_particulars"]
+    assert particulars["finalized_at"] is None
 
     # The import carried priority-looking columns; no declaration was asserted.
     assert particulars["use_priority_json"] is None

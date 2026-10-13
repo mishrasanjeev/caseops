@@ -181,6 +181,50 @@ reported Matter and persisted audit, historical causation remains Inconclusive.
 
 ## Do Not Close
 
+PR535 head `7ec007c8` is draft and not deployed. Its complete CI38427578467
+finished red: all eight native shards and API coverage shards11/12 failed;
+the other eleven API shards and full Web passed. Security38427578388 and
+CodeQL38427578420 passed. Browser/staging gates skipped after the failed
+prerequisites and are not acceptance. All native shards were independently
+inspected/reconciled: 2,912 unique tests, 2,888 passes and24 failed calls,
+8,736 phases. Each failed authority fixture stops before its intended race.
+Source-bound receipts are indexed in
+`ci-7ec007c8-native1-readonly-01/aggregate-saved-receipts/README.md`.
+
+A separately fresh native RED retains the actual preview DTO: both original
+authority rows are rejected only for jurisdiction/office
+`workspace_context_required`. No original assertion or validator was changed
+for diagnosis. Positive fixtures now supply explicit synthetic reviewed context;
+a new negative proves missing context still cannot create dockets or events.
+The waiter observer now matches session-owned advisory acquisition, real
+autocommit/backend PIDs, exact blocker and every original NOWAIT/deadline proof.
+The first complete149-case native replay has147 passes/two failures: the
+different actor correctly receives creator-only404 at the final obsolete
+success expectation. Both failed reports remain retained. The test now requires
+that exact denial, same-actor success and owner-only committed rows/dockets/
+events; complete replacement is pending, not silently accepted.
+
+`ip-private-authority-current149-native-02` is the complete replacement:
+149 identities/447 passing ordered phases, zero skips/failures/errors, exact
+collection/JUnit agreement and731 unchanged scoped source pins. The owned
+controller and test processes completed naturally and resources were removed.
+All earlier failed phases and setup attempts remain retained. This proves the
+complete affected module, not the whole amended candidate or live production.
+
+The API11 failure is a separately proven exact-list drift: the second workflow
+test omitted `test-legal-write-oct13`. API12's own unchanged HTTP RED independently
+confirms its declaration fixture's missing context, not a transferred native
+diagnosis. Both complete amended modules pass128 identities/384 phases, no
+skips/failures/XML errors, natural exit0. All declaration/nonfabrication and
+workflow negative assertions remain, plus unapproved import/source-context
+proof. These scoped source receipts are not fresh full CI/Docker or deployment.
+
+Docker r1 stopped before acceptance on a PyPI dependency response-body timeout;
+no app or browser outcome is inferred. All owned resources were removed. r2 is
+the unchanged frozen7ec replay with a successful web image and slow API dependency
+downloads; it cannot certify the later test-amended tree. Preserve both attempts
+and complete a new exact-candidate gate after source/fixture reconciliation.
+
 Latest scoped API replay `final-scoped-api-02` completed naturally with 142
 collected identities, 128 passes and 14 PostgreSQL-only skips. The skips are
 not passes; native counterparts and the complete new-image gate must still
