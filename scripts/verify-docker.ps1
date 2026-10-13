@@ -354,6 +354,9 @@ function Invoke-CandidatePlaywright {
                 $Queue.Enqueue($Root)
                 while ($Queue.Count) {
                     $Directory = [IO.DirectoryInfo]::new((& $IoPath $Queue.Dequeue()))
+                    if ([int]$Directory.Attributes -eq -1) {
+                        throw "Artifact directory metadata is unavailable."
+                    }
                     if ($Directory.Attributes -band [IO.FileAttributes]::ReparsePoint) {
                         throw "Artifact retention refuses reparse points."
                     }
@@ -361,6 +364,9 @@ function Invoke-CandidatePlaywright {
                         FullName = (& $NormalPath $Directory.FullName); PSIsContainer = $true
                     })
                     foreach ($Item in $Directory.GetFileSystemInfos()) {
+                        if ([int]$Item.Attributes -eq -1) {
+                            throw "Artifact entry metadata is unavailable."
+                        }
                         if ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
                             throw "Artifact retention refuses reparse points."
                         }
@@ -383,8 +389,10 @@ function Invoke-CandidatePlaywright {
             $IoPath = {
                 param([string]$Path)
                 if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
-                    if ($Path.StartsWith('\\')) { return '\\?\UNC\' + $Path.Substring(2) }
-                    return '\\?\' + $Path
+                    $NativePath = $Path.Replace('/', '\')
+                    if ($NativePath.StartsWith('\\?\')) { return $NativePath }
+                    if ($NativePath.StartsWith('\\')) { return '\\?\UNC\' + $NativePath.Substring(2) }
+                    return '\\?\' + $NativePath
                 }
                 return $Path
             }

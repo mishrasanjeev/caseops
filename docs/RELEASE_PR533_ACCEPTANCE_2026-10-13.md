@@ -8,6 +8,59 @@ The owner requires green CI, complete exact-candidate workstation Docker
 acceptance, canonical-main merge, guarded production deployment and live replay.
 Scoped results below do not replace those gates.
 
+## Windows Artifact Checkpoint
+
+Candidate `ce19933ded0b25e84e22ab93f1b16f4081c2536a`, tree
+`f9b6ceec2d809589ac43ac0970019887da75ec34`, has fresh green hosted CI
+38331705227 on actual merge `77a2c664d16d925f4d5a4e683a72c1806b425b05`:
+7,598 API passes, 2,857 explained skips, 2,854 native PostgreSQL passes,
+1,280 web log-reported passes and 533 browser passes with 17 explained skips.
+Security and CodeQL completed on the same tree; current PR open alerts are
+zero, without dismissal. Hosted web per-case reports are not uploaded.
+
+Fresh R6 Docker native acceptance completed at `2026-10-13T03:23:05Z`:
+2,854 passes, 8,562 phases, zero skips/retries/faults and unchanged source.
+All 4,351 historical obligations reconcile; all 84 original failures now pass.
+The current Company-first disposal journal proves successful post-provider
+Company/Membership/User/Matter locks and zero generated rows, not a timeout-only
+rejection. The separate hosted lock-timeout observation remains unattributed;
+the fixture's assertions alone do not guarantee timeout-free reacquisition.
+
+Whole R6 Docker acceptance nevertheless failed at `03:48:47Z`. Desktop shard
+1 recorded 272 passes and one missing-merchant skip, but its artifact retention
+failed before copying. Desktop shard 2 and mobile, 277 cases, did not execute.
+The actual report uses `C:/...` paths. Prefixing those as `\\?\C:/...` creates
+an invalid Windows native path; .NET's `Attributes=-1` sentinel falsely trips
+the reparse bitmask. Exact unchanged-helper replay reproduces this under the
+controller's PowerShell 7.6.5. The real retained root is not a reparse point.
+Moving only the evidence destination cannot fix this source-path defect.
+
+Normalize native Windows separators before prefixing and reject unavailable
+metadata explicitly. Preserve actual junction/ancestor rejection, source and
+destination byte/hash checks, atomic manifest publication, original deadlines
+and complete collection. Four real-report-format Windows regressions reproduce
+the old failure; the complete 50-case Windows retention module passes after
+the correction, including long paths and negative controls. These are offline
+fake-CLI controls, not another completed browser run or provider acceptance.
+The device-prefixed output rejection is Windows-only, with an explicit Linux
+skip; normal forward-slash and junction controls still run on both platforms.
+The final four-module Windows wrapper/summary run has 127 passes, 381 phases,
+all four requested modules collected and zero skips; Ruff and diff checks pass.
+An intermediate four-failure run is preserved: two invented extended-path
+admission expectations conflicted with the unchanged containment policy, and
+two new ancestor fixtures checked the wrong retained directory. The corrected
+tests retain the policy and positively check the actual junction target.
+
+Evidence: `ci-ce19933d-reconciliation-01`, `docker-ce19933d-01`,
+`docker-ce19933d-native-independent-reconciliation-01`,
+`docker-ce19933d-browser-reconciliation-01`, `front-ce19933d-01` and
+`retention-forward-slash-20261013-01` under the retained release output root.
+The two original contract journeys separately pass on pinned Node 22 at all
+nine widths, with actual cropped PNGs. None of these results transfers full
+Docker acceptance to the amended tree. Fresh complete gates, canonical merge,
+guarded deployment, exact-live replay and clean projection cadence remain
+mandatory. No production merge, backup, deployment or scheduler resume occurred.
+
 ## Current Browser Finding
 
 The later candidate `6fc6c97fbe9dbf2afd053883afb7088881b75031`

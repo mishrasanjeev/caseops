@@ -2,6 +2,14 @@
 
 ## October 12 Integration Checkpoint
 
+October13 Windows artifact checkpoint: release is **Partially implemented /
+NO-GO**. ce hosted CI and fresh 2,854-case native acceptance pass, but artifact
+retention stopped Docker after 272 browser passes/one skip, leaving 277 unexecuted.
+Normalize real forward-slash Windows report paths and reject unavailable
+metadata separately; retain junction, containment, complete-tree and hash
+controls. 50 offline Windows tests pass; fresh amended-tree full gates and live
+release proof remain. See `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
 October13 browser checkpoint: responsive contract navigation is **Partially
 implemented / NO-GO** after a real393px tab/panel overlap. Complete6fc browser
 evidence has one failure among550; all non-browser CI jobs passed. Current

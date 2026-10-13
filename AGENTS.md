@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Real Playwright reports normalize Windows paths to forward slashes. Convert
+  separators before adding an extended-path prefix; an invalid native path can
+  return `Attributes=-1`, not a real reparse tag. Retain unavailable-metadata
+  rejection, junction/ancestor fences and complete byte/hash inventories. Cover
+  the actual report format and long paths on both Windows PowerShell runtimes;
+  a passed browser shard with failed artifact retention is incomplete acceptance.
 - Native pytest fixtures need independently owned short runtime paths; evidence
   may still have long Windows paths. Retain every original name and binary byte
   with verified source/destination inventories and atomic completion before

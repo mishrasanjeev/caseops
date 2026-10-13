@@ -2,6 +2,13 @@
 
 ## October 12 Combined Candidate
 
+October13 Windows artifact checkpoint: QG-SEC-004/J10/M09 stay **NO-GO** despite
+green ce hosted CI and 2,854 local native passes. First Docker browser shard has
+272 passes/one skip; artifact retention failed and 277 cases did not run.
+Normalize actual forward-slash Windows report paths without relaxing reparse,
+containment or byte/hash checks. 50 offline controls pass; fresh full amended-tree
+and production gates remain. See `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
 October13: J10/M09/FT-051/052 adds the actual393px wrapped-tab overlap and
 all-trigger containment/hit-test regression. Complete6fc browser CI is RED
 (532 pass/17 skip/one failure), despite green non-browser jobs and current

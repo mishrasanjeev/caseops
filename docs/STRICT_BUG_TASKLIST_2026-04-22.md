@@ -2,6 +2,14 @@
 
 ## October 12 Combined Fixes
 
+October13 Windows artifact checkpoint: **Partially fixed / NO-GO**. ce hosted
+CI is green and fresh Docker native has 2,854 passes, but retention failed after
+272 browser passes/one skip; 277 cases remain unexecuted. The real report's
+forward-slash Windows path becomes an invalid extended path, not a true reparse
+point. Correct normalization and retain all safety fences; 50 offline Windows
+controls pass. Complete amended-tree Docker and live replay remain required.
+Evidence and preserved failures: `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
 October13 browser checkpoint: contract mobile navigation is **Not fixed**
 in the accepted source/live surface. Complete6fc CI reproduced a393px Playbook
 tab covered by the Obligations panel (532 pass/17 skip/one failure). Root and

@@ -2,6 +2,14 @@
 
 ## October 12 Combined Release
 
+October13 Windows artifact checkpoint: ce has green complete hosted CI and
+2,854 fresh local native passes, but Docker stopped after its first browser
+shard (272 pass/one skip); 277 cases did not run. Real forward-slash report paths
+became invalid extended Windows paths and falsely triggered reparse rejection.
+Correct normalization without weakening fences; 50 offline Windows controls
+pass. Fresh amended-tree gates and production remain **NO-GO**. See
+`docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`; all failed evidence is preserved.
+
 October13 browser checkpoint:6fc has green API/coverage/native/web jobs but
 complete browser RED (550 cases:532 pass/17 skip/one393px layout failure).
 Fix contract wrapping height and prove all tab hit targets before a fresh

@@ -24,7 +24,9 @@ const fs = require('fs');
 const path = require('path');
 const args = process.argv.slice(2);
 const root = process.cwd();
-const mode = process.env.RETENTION_CASE;
+const requestedMode = process.env.RETENTION_CASE;
+const forwardSlashes = requestedMode.startsWith('forward-slash-');
+const mode = forwardSlashes ? requestedMode.slice('forward-slash-'.length) : requestedMode;
 const output = path.join(root, mode === 'custom-output' ? 'custom-results/deep' :
   mode === 'ancestor-reparse' ? 'linked-parent/results' : 'test-results');
 if (mode === 'ancestor-reparse') {
@@ -44,6 +46,12 @@ const config = {
   rootDir: path.join(root, 'tests/e2e'),
   projects: [{ name: project, testDir: path.join(root, 'tests/e2e'), outputDir: output }],
 };
+if (forwardSlashes) {
+  config.projects[0].outputDir = output.replace(/\\/g, '/');
+}
+if (mode === 'extended-output') {
+  config.projects[0].outputDir = '\\\\?\\' + output;
+}
 if (mode === 'custom-output') config.projects.push({name: 'not-invoked',
   testDir: path.join(root, 'tests/e2e'), outputDir: path.join(root, 'absent-unused')});
 if (mode === 'multiple-output') config.projects.push({name: 'secondary',
@@ -93,7 +101,9 @@ const attachments = originals.map((name, index) => {
   const saved = path.join(unit, 'attachments', name);
   fs.copyFileSync(path.join(unit, name), saved);
   return {name, contentType: name.endsWith('.png') ? 'image/png' : 'text/plain',
-    path: index % 2 ? path.relative(root, saved) : saved};
+    path: forwardSlashes ?
+      (index % 2 ? path.relative(root, saved) : saved).replace(/\\/g, '/') :
+      index % 2 ? path.relative(root, saved) : saved};
 });
 if (mode === 'missing-attachment') attachments[0].path = path.join(unit, 'missing.json');
 if (mode === 'escape-attachment') attachments[0].path = path.join(root, '../outside.json');
@@ -140,6 +150,13 @@ foreach ($Name in @(
     }, $true))
     if ($Found.Count -ne 1) { throw "Expected exactly one $Name" }
     $Text = $Found[0].Extent.Text
+    if ($Name -eq 'Invoke-CandidatePlaywright' -and $Case -eq 'missing-metadata') {
+        $Enumeration = '$Directory.GetFileSystemInfos()'
+        if (-not $Text.Contains($Enumeration)) { throw 'Missing native enumeration boundary' }
+        $Missing = '@($Directory.GetFileSystemInfos()) + [IO.FileInfo]::new(' +
+            '(& $IoPath (Join-Path $RepoRoot ''missing-observed-entry'')))'
+        $Text = $Text.Replace($Enumeration, $Missing)
+    }
     if ($Name -eq 'Invoke-CandidatePlaywright' -and
         $Case -in @('copy-error', 'corrupt-copy', 'changed-source', 'changed-inventory')) {
         $NativeCopy = '[IO.File]::Copy((& $IoPath $Item.FullName), (& $IoPath $Target), $false)'
@@ -275,7 +292,10 @@ def _run(tmp_path: Path, shell: str, case: str):
 
 
 @pytest.mark.parametrize("shell", SHELLS)
-@pytest.mark.parametrize("case", ["success", "long-source"])
+@pytest.mark.parametrize(
+    "case",
+    ["success", "long-source", "forward-slash-output", "forward-slash-long-source"],
+)
 def test_serial_invocations_retain_complete_bound_artifacts(
     tmp_path: Path, shell: str, case: str
 ) -> None:
@@ -309,7 +329,7 @@ def test_serial_invocations_retain_complete_bound_artifacts(
             assert _hash(retained) == file["sha256"]
             assert file["relative_path"].startswith("test-results/")
             assert file["retained_path"] == "payload/" + file["relative_path"]
-        if case == "long-source":
+        if case.endswith("long-source"):
             assert max(len(file["original_path"]) for file in manifest["files"]) > 260
             assert (
                 max(len(str(payload / file["retained_path"])) for file in manifest["files"]) > 260
@@ -348,9 +368,19 @@ def test_serial_invocations_retain_complete_bound_artifacts(
         ("missing-attachment", "attachment"),
         ("escape-attachment", "attachment"),
         ("escape-output", "output directory"),
+        pytest.param(
+            "extended-output",
+            "output directory",
+            marks=pytest.mark.skipif(
+                os.name != "nt", reason="Native Windows extended-path admission requires Windows"
+            ),
+        ),
         ("missing-output", "output directory"),
         ("linked-output", "reparse"),
         ("ancestor-reparse", "reparse"),
+        ("forward-slash-linked-output", "reparse"),
+        ("forward-slash-ancestor-reparse", "reparse"),
+        ("missing-metadata", "metadata is unavailable"),
         ("changed-source", "source bytes changed"),
         ("changed-inventory", "source inventory changed"),
     ],
@@ -372,10 +402,12 @@ def test_retention_rejection_stops_next_invocation_and_preserves_failure(
     failure = _read(next(evidence.glob("*.retention-failed.json")))
     assert failure["event"] == "artifact_retention_failed"
     assert failure["release_sha"] == "1" * 40
-    assert (tmp_path / "candidate/test-results").exists() or case in {
-        "missing-output",
-        "ancestor-reparse",
-    }
+    if case in {"ancestor-reparse", "forward-slash-ancestor-reparse"}:
+        assert (tmp_path / "candidate/parent-target/results").is_dir()
+        link = tmp_path / "candidate/linked-parent"
+        assert link.is_symlink() or link.is_junction()
+    else:
+        assert (tmp_path / "candidate/test-results").exists() or case == "missing-output"
 
 
 @pytest.mark.parametrize("shell", SHELLS)
