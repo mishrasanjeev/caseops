@@ -1,6 +1,6 @@
 # Backup and restore runbook
 
-**Owner:** platform oncall · **Last reviewed:** 2026-06-13 · **Maps to:** BG-043
+**Owner:** platform oncall · **Last reviewed:** 2026-10-12 · **Maps to:** BG-043
 
 This runbook covers the two things the business actually needs to
 survive: recovery from accidental data loss, and proof-to-auditor
@@ -68,15 +68,39 @@ ready until all of the following are complete:
 
 ### Postgres (managed, GCP staging + prod)
 
-- Cloud SQL automated backups: **retained 30 days**, **daily snapshot
-  at 02:00 UTC**, **point-in-time recovery enabled** (WAL retention 7
-  days). These are configured on the Cloud SQL instance — verify via
-  `gcloud sql instances describe caseops-pg-prod --format="value(settings.backupConfiguration)"`.
-- WAL / binary logs go to the same instance; PITR window is the full
-  retention window.
-- Cross-region replica: **one read replica** in a second region. Used
-  for analytics offload AND warm standby. Promotion drill runs
-  quarterly (see §"Restore drill").
+- The October 12 production metadata snapshot binds the instance to
+  `perfect-period-305406:asia-south1:caseops-db`, PostgreSQL 17, RUNNABLE.
+  Automated STANDARD backups are enabled, daily start **03:00 UTC**, with
+  **one retained backup** (COUNT, not thirty days).
+- **PITR and replication-log archiving are disabled.** Configured seven-day
+  log retention is not evidence of enabled recovery. The latest returned
+  automated backup `1791774000000` completed successfully at
+  `2026-10-12T03:40:53.765Z`; this snapshot does not certify a restore or RPO/RTO.
+- No cross-region replica identity or promotion drill was verified. Do not
+  invent a replica name, change routing or promote an unrelated instance.
+- Before each migration, refresh exact-instance metadata and require a completed
+  on-demand checkpoint after build/main/drain checks. Keep its operation ID
+  separate from its backup ID and retain unknown outcomes without blind retry.
+  `scripts/pre_migration_backup.py` is the canonical deployment's fail-closed
+  checkpoint between the post-build worker drains and migration, with current-main
+  verification before and after it. The helper does not enable PITR or certify
+  a restore. Release approval must not substitute a morning automated snapshot.
+- The preflight reads unfiltered instance operations with a 1,000-row total cap
+  and rejects saturation, malformed identities/status and any unfinished row.
+  SDK568 applies display filters after producer limits; a filtered empty result
+  is not proof of quiescence. A missing completed operation backup ID stops
+  admission without a history scan. Retain the known safe operation/description
+  on failure and reconcile it before deciding whether creation is safe again.
+
+Read-only inventory:
+
+```text
+gcloud sql instances describe caseops-db --project=perfect-period-305406 --format="json(name,region,state,connectionName,databaseVersion,settings.backupConfiguration)"
+gcloud sql backups list --instance=caseops-db --project=perfect-period-305406 --limit=5 --format="json(id,instance,status,type,description,location,startTime,endTime)"
+```
+
+Backup creation and any isolated restore are separate admitted operations, not
+consequences of this inventory. Never restore into `caseops-db` as a rehearsal.
 
 ### Postgres (local / founder-stage)
 
@@ -108,15 +132,15 @@ Enable on the prod bucket (`caseops-documents-prod`):
 
 ### Scenario 1: a tenant accidentally deleted a matter
 
-1. Confirm the deletion in the audit trail:
-   `SELECT * FROM audit_events WHERE target_type='matter' AND action='matter.archived' AND target_id=:id;`
-   (CaseOps uses soft-delete for matters — this should recover via
-   `UPDATE matters SET is_active=true WHERE id=:id;` inside a
-   transaction. No actual deletion happens without a tenant-purge
-   job.)
-2. For matters that were genuinely hard-deleted via the tenant-purge
-   CLI, restore from the nearest PITR window using Cloud SQL point-
-   in-time recovery.
+1. Establish the exact persisted lifecycle and authorized audit history through
+   read-only access. Distinguish disposal from an explicit audited reopening.
+   Never repair a Matter by changing `is_active` or status directly in SQL.
+2. If the user intends to reopen a disposed Matter, use the dedicated lifecycle
+   workflow with its current concurrency token and acknowledgement. Preserve
+   neutralized operational children; reopening must not resurrect them.
+3. For genuine hard deletion, stop and establish an approved recovery plan from
+   a verified backup. PITR is not currently enabled. Prove an isolated restore,
+   compatible forward migration and write-loss analysis before production cutover.
 
 ### Scenario 2: a tenant's documents bucket is corrupted
 
@@ -132,27 +156,28 @@ Enable on the prod bucket (`caseops-documents-prod`):
 
 ### Scenario 3: Postgres instance is dead
 
-1. Promote the cross-region read replica:
-   `gcloud sql instances promote-replica caseops-pg-replica-<region>`.
-2. Update the Cloud Run service secret
-   `caseops-database-url:latest` to point at the promoted instance.
-3. Roll the Cloud Run service — the new task picks up the new URL
-   via Secret Manager.
-4. Post-incident: create a new replica in the dead region so the
-   instance is no longer a single region.
+1. Establish the failed exact instance and latest successful backup; no verified
+   cross-region promotion target is currently documented.
+2. Restore only into an explicitly isolated compatible target under an approved
+   incident plan. Validate retained data, schema/index health, tenant isolation,
+   lifecycle/audit invariants and forward migration before any routing decision.
+3. Secret rotation and Cloud Run cutover require the guarded release protocol,
+   correct executor generations, fresh readback and write-loss/downtime analysis.
+   Old image routing alone cannot reverse database or admission migrations.
 
 ## Restore drill (quarterly)
 
-The drill proves the RTO is actually 1 hour. Run it on the last
-Friday of each quarter. Checklist:
+The drill measures RTO against the one-hour target; no current drill establishes
+that target as achieved. Plan quarterly. Checklist:
 
 1. Pick a **recent** snapshot (< 24 h old) — old snapshots have
    operational risk of matching prod; fresh snapshots prove the
    backup pipeline is live.
-2. Restore the snapshot to a **brand-new Cloud SQL instance** named
-   `caseops-pg-drill-YYYYMMDD`.
-3. Promote the corresponding cross-region replica to a second new
-   instance; prove both paths work.
+2. Establish an isolated compatible drill target and the source backup's exact
+   ID, instance and project. For instance-level numeric backups, the target must
+   already exist; do not assume restore creates it.
+3. Rehearse backup restore and compatible forward migration. Replica promotion
+   is an additional scenario only after its actual configuration is established.
 4. Point a throwaway Cloud Run revision at each restored DB. Exercise:
    - `caseops-ingest-corpus` picks up the existing corpus (no duplicates).
    - Bootstrap a new tenant — confirms migrations are current.

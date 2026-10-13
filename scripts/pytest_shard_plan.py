@@ -224,12 +224,31 @@ def write_shard_file(
     return selected
 
 
+def write_ci_dependency_output(selected_files: Path, github_output: Path) -> bool:
+    """Read the admitted inventory without assuming extra runner executables."""
+    files = selected_files.read_text(encoding="utf-8").splitlines()
+    if not files or len(files) != len(set(files)) or any(
+        not name.startswith("tests/") or not name.endswith(".py")
+        or name != name.strip() or "\\" in name or ":" in name
+        or any(part in (".", "..") for part in PurePosixPath(name).parts)
+        for name in files
+    ):
+        raise ValueError("The selected pytest inventory must be nonempty, unique and canonical")
+    required = "tests/test_prod_playwright_evidence.py" in files
+    with github_output.open("a", encoding="utf-8", newline="\n") as output:
+        output.write(f"requires_playwright={str(required).lower()}\n")
+    print(f"Offline Playwright dependencies required: {required}; selected files: {len(files)}")
+    return required
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--test-root", type=Path, required=True)
-    parser.add_argument("--total-shards", type=int, required=True)
-    parser.add_argument("--shard", type=int, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--selected-files", type=Path)
+    parser.add_argument("--github-output", type=Path)
+    parser.add_argument("--test-root", type=Path)
+    parser.add_argument("--total-shards", type=int)
+    parser.add_argument("--shard", type=int)
+    parser.add_argument("--output", type=Path)
     parser.add_argument(
         "--isolated-file",
         action="append",
@@ -240,6 +259,15 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+    plan_args = (args.test_root, args.total_shards, args.shard, args.output)
+    if args.selected_files is not None or args.github_output is not None:
+        if (args.selected_files is None or args.github_output is None
+                or any(value is not None for value in plan_args) or args.isolated_file):
+            parser.error("Dependency mode requires only --selected-files and --github-output")
+        write_ci_dependency_output(args.selected_files, args.github_output)
+        return
+    if any(value is None for value in plan_args):
+        parser.error("Shard planning requires --test-root, --total-shards, --shard and --output")
     write_shard_file(
         test_root=args.test_root,
         total_shards=args.total_shards,

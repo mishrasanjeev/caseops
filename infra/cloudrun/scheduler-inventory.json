@@ -298,6 +298,94 @@
         "memory": "1Gi",
         "max_retries": 1
       }
+    },
+    {
+      "scheduler_name": "caseops-document-processing-cadence",
+      "run_job_name": "caseops-document-processing",
+      "schedule": "* * * * *",
+      "time_zone": "Asia/Kolkata",
+      "desired_state": "ENABLED",
+      "task_timeout_seconds": 600,
+      "image_policy": "release_digest",
+      "canary_policy": "scheduled_execution",
+      "additional_invoker_service_accounts": ["caseops-runtime@perfect-period-305406.iam.gserviceaccount.com"],
+      "bootstrap": {
+        "command": ["caseops-document-worker"],
+        "args": ["--documents-only", "--once", "--batch-size=5", "--skip-migrations"],
+        "environment": {
+          "CASEOPS_ENV": "cloud",
+          "CASEOPS_AUTO_MIGRATE": "false",
+          "CASEOPS_DOCUMENT_STORAGE_BACKEND": "gcs",
+          "CASEOPS_DOCUMENT_STORAGE_GCS_BUCKET": "caseops-prod-documents",
+          "CASEOPS_DOCUMENT_WORKER_ADMISSION_PROTOCOL_VERSION": "1",
+          "CASEOPS_DOCUMENT_WORKER_ADMISSION_ENABLED": "true",
+          "CASEOPS_GCP_PROJECT_ID": "perfect-period-305406",
+          "CASEOPS_LLM_PROVIDER": "openai",
+          "CASEOPS_LLM_MODEL": "gpt-5.1",
+          "CASEOPS_COMPLIANCE_AI_EXTRACTION_ENABLED": "false",
+          "CASEOPS_COMPLIANCE_AI_EXTRACTION_AUTO_RUN_ENABLED": "false",
+          "CASEOPS_DB_STATEMENT_TIMEOUT_MS": "60000",
+          "CASEOPS_DB_LOCK_TIMEOUT_MS": "5000",
+          "CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS": "60000",
+          "CASEOPS_EMBEDDING_PROVIDER": "voyage",
+          "CASEOPS_EMBEDDING_MODEL": "voyage-4-large",
+          "CASEOPS_EMBEDDING_DIMENSIONS": "1024",
+          "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS": "caseops-qa;caseops-ip-qa;test-legal"
+        },
+        "secrets": {
+          "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+          "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest",
+          "CASEOPS_LLM_API_KEY": "caseops-openai-api-key:latest",
+          "CASEOPS_EMBEDDING_API_KEY": "caseops-voyage-api-key:latest"
+        },
+        "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
+        "cpu": "2",
+        "memory": "4Gi",
+        "max_retries": 0
+      }
+    },
+    {
+      "scheduler_name": "caseops-court-sync-cadence",
+      "run_job_name": "caseops-court-sync",
+      "schedule": "* * * * *",
+      "time_zone": "Asia/Kolkata",
+      "desired_state": "ENABLED",
+      "task_timeout_seconds": 600,
+      "image_policy": "release_digest",
+      "canary_policy": "scheduled_execution",
+      "additional_invoker_service_accounts": ["caseops-runtime@perfect-period-305406.iam.gserviceaccount.com"],
+      "bootstrap": {
+        "command": ["caseops-court-sync-worker"],
+        "args": ["--once", "--batch-size=3", "--skip-migrations"],
+        "environment": {
+          "CASEOPS_ENV": "cloud",
+          "CASEOPS_AUTO_MIGRATE": "false",
+          "CASEOPS_GCP_PROJECT_ID": "perfect-period-305406",
+          "CASEOPS_LLM_PROVIDER": "openai",
+          "CASEOPS_LLM_MODEL": "gpt-5.1",
+          "CASEOPS_COMPLIANCE_AI_EXTRACTION_ENABLED": "false",
+          "CASEOPS_COMPLIANCE_AI_EXTRACTION_AUTO_RUN_ENABLED": "false",
+          "CASEOPS_DB_STATEMENT_TIMEOUT_MS": "60000",
+          "CASEOPS_DB_LOCK_TIMEOUT_MS": "5000",
+          "CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS": "60000",
+          "CASEOPS_COURT_SYNC_WORKER_ADMISSION_PROTOCOL_VERSION": "1",
+          "CASEOPS_COURT_SYNC_WORKER_ADMISSION_ENABLED": "true",
+          "CASEOPS_COURT_SYNC_WORKER_BATCH_SIZE": "3",
+          "CASEOPS_COURT_SYNC_STALE_AFTER_MINUTES": "15",
+          "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS": "caseops-qa;caseops-ip-qa;test-legal"
+        },
+        "secrets": {
+          "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+          "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest",
+          "CASEOPS_LLM_API_KEY": "caseops-openai-api-key:latest"
+        },
+        "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
+        "cpu": "2",
+        "memory": "4Gi",
+        "max_retries": 0
+      }
     }
   ],
   "legacy_schedulers_to_pause": [

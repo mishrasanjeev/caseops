@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `50eb582a30b2da45c59df5bb678a21b275c9cd95b9a2030057054ba07a19822e`
-- SQL tables: `335`
-- SQL columns: `5329`
-- ORM indexes: `1761`
-- Alembic/raw index declarations: `1545`
+- Canonical map SHA-256: `6e5ba34a2bd68b95dfe50877a4ed74c209fdcaf31c1e6e8cc0136fde5dc4b453`
+- SQL tables: `337`
+- SQL columns: `5346`
+- ORM indexes: `1766`
+- Alembic/raw index declarations: `1550`
 - Non-SQL data classes: `12`
 
 ## Boundary
@@ -32,6 +32,8 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `agent_tool_calls` | `platform_operational_reference` | 9 | `registry_fail_closed` |
 | `ai_feedback_items` | `tenant_operational_record` | 21 | `registry_fail_closed` |
 | `ai_governance_approvals` | `tenant_operational_record` | 16 | `registry_fail_closed` |
+| `ai_provider_spend_admissions` | `billing_provider_evidence` | 6 | `registry_fail_closed` |
+| `ai_provider_spend_months` | `billing_provider_evidence` | 8 | `registry_fail_closed` |
 | `api_idempotency_records` | `tenant_operational_record` | 20 | `registry_fail_closed` |
 | `assistant_action_previews` | `tenant_operational_record` | 23 | `registry_fail_closed` |
 | `assistant_citations` | `tenant_operational_record` | 14 | `registry_fail_closed` |
@@ -110,7 +112,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `custom_roles` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `data_retention_policies` | `tenant_operational_record` | 9 | `registry_fail_closed` |
 | `data_retention_versions` | `tenant_operational_record` | 27 | `registry_fail_closed` |
-| `document_processing_jobs` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
+| `document_processing_jobs` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `domain_consumer_effects` | `tenant_operational_record` | 21 | `registry_fail_closed` |
 | `domain_outbox_events` | `tenant_operational_record` | 36 | `registry_fail_closed` |
 | `draft_reviews` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
@@ -251,11 +253,11 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_bulk_update_operations` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
 | `matter_cause_list_entries` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `matter_client_assignments` | `tenant_restricted_legal_content` | 6 | `registry_fail_closed` |
-| `matter_compliance_extraction_runs` | `tenant_restricted_legal_content` | 19 | `registry_fail_closed` |
+| `matter_compliance_extraction_runs` | `tenant_restricted_legal_content` | 20 | `registry_fail_closed` |
 | `matter_compliance_items` | `tenant_restricted_legal_content` | 30 | `registry_fail_closed` |
 | `matter_conflict_checks` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `matter_court_orders` | `public_or_licensed_legal_reference` | 18 | `registry_fail_closed` |
-| `matter_court_sync_jobs` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
+| `matter_court_sync_jobs` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
 | `matter_court_sync_runs` | `public_or_licensed_legal_reference` | 10 | `registry_fail_closed` |
 | `matter_deadlines` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
 | `matter_file_qa_entries` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |

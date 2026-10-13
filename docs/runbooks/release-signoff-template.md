@@ -98,6 +98,39 @@
 
 ## Test Inventory and Results
 
+### Local Native Docker Gate
+
+Run `scripts/verify-docker.ps1` from a clean, exact-candidate checkout with an
+independently owned Python environment. Its native gate creates one separate
+empty PostgreSQL database, migrates and seeds it from the inspected candidate
+image, then invokes `scripts/run_postgres_acceptance.py` through an explicit
+PowerShell argument array. Browser data and independent migration rehearsals
+remain separate. Do not invoke the driver against production.
+
+The driver retains the complete ordered `-m postgres --collect-only` inventory
+and partitions actual whole files into eight deterministic, serial fresh
+processes. Every child uses the same native database; there is no per-child
+reset or clone. Retain `postgres-processes/` with each child's collection,
+incremental phases, JUnit, stdout/stderr, fixtures and natural completion.
+Existing workloads, GC policy, assertions and deadlines remain unchanged.
+
+Each invocation uses a short, exclusive runtime workspace on Windows. While
+it is active, read its `runtime-workspace.json` to locate the live incremental
+journal. On completion or confirmed interruption, every original file and
+empty directory is retained under the child evidence folder using long-path
+binary IO. Require its atomic `runtime-retention.json`, exact source/destination
+hashes and bounded inventory. Failed or interrupted workspaces stay intact;
+successful cleanup must recheck ownership, directory identity and containment.
+Do not shorten stored filenames or accept a copied subset as complete evidence.
+
+`postgres-results.jsonl`, `postgres.xml` and
+`postgres-driver-completion.json` are combined driver products, not one pytest
+process. Require the exact canonical union, all phases, zero skips/retries,
+unchanged source, matching exit/JUnit outcomes and completion hashes. A failed
+child remains failed even if other children pass. Missing or interrupted
+evidence is incomplete; preserve it and require a complete replacement before
+browser/release certification. Discovery alone is not browser execution.
+
 | Boundary | Exact command / run | Tests selected | Passed | Failed | Skipped | Evidence |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
 | Focused unit / integration | | | | | | |

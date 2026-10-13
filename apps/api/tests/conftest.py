@@ -15,6 +15,13 @@ from caseops_api.main import create_application
 pytest_plugins = ["tests.fixtures_postgres_client", "tests.retained_results"]
 
 
+@pytest.fixture(autouse=True)
+def _isolate_ai_money_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Offline adapter fixtures must not acquire a real account allowance when
+    # the calendar advances. Financial tests explicitly enable their own ledger.
+    monkeypatch.setenv("CASEOPS_AI_MONEY_BUDGET_ENABLED", "false")
+
+
 # Autouse fixture — defense against suite-order leakage.
 #
 # Monkeypatch restores environment variables at test teardown, but it does

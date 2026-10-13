@@ -192,6 +192,13 @@ export default async function LegalMatterManagementIndiaPage() {
                   review <a className="font-medium underline underline-offset-4" href="/pricing">current plans</a>,
                   or <a className="font-medium underline underline-offset-4" href="/demo/resource">request a guided walkthrough</a>.
                 </p>
+                <p className="mt-4 leading-relaxed">
+                  For a closer look at review, read{" "}
+                  <a className="font-medium underline underline-offset-4" href="/resources/source-grounded-legal-recommendations">
+                    Source-grounded recommendations for law firms
+                  </a>: a practical path from matter context and citations to an authorized
+                  lawyer&apos;s decision, with source and access limitations kept visible.
+                </p>
               </section>
 
               <section id="questions" className="scroll-mt-24">

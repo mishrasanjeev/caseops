@@ -508,7 +508,7 @@ export default function ContractDetailPage() {
       </Card>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="flex flex-wrap gap-1">
+        <TabsList className="flex h-auto w-full min-w-0 flex-wrap justify-start gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="attachments">
             Attachments ({attachments.length})

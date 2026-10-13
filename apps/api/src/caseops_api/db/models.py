@@ -31,6 +31,10 @@ from sqlalchemy import (
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
+from caseops_api.db.ai_spend_models import (  # noqa: F401
+    AiProviderSpendAdmission,
+    AiProviderSpendMonth,
+)
 from caseops_api.db.base import Base
 from caseops_api.db.index_coverage import ensure_foreign_key_indexes
 from caseops_api.db.ip_specialist_models import (  # noqa: F401
@@ -5361,6 +5365,7 @@ class MatterComplianceExtractionRun(Base):
     )
     source_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     trigger: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    persistence_protocol: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(
         String(24),
         nullable=False,
@@ -5721,6 +5726,10 @@ class MatterNextHearingSuggestion(Base):
 
 class MatterCourtSyncJob(Base):
     __tablename__ = "matter_court_sync_jobs"
+    __table_args__ = (
+        Index("ix_matter_court_sync_jobs_queue", "status", "queued_at", "updated_at", "id"),
+        Index("ix_matter_court_sync_jobs_recovery", "status", "started_at", "id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -5750,6 +5759,9 @@ class MatterCourtSyncJob(Base):
         String(24),
         nullable=False,
         default=MatterCourtSyncJobStatus.QUEUED,
+    )
+    no_paid_providers: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true(),
     )
     imported_cause_list_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     imported_order_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -10050,6 +10062,10 @@ class ContractAttachmentChunk(Base):
 
 class DocumentProcessingJob(Base):
     __tablename__ = "document_processing_jobs"
+    __table_args__ = (
+        Index("ix_document_processing_jobs_queue", "status", "queued_at", "id"),
+        Index("ix_document_processing_jobs_recovery", "status", "started_at", "id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -10071,6 +10087,9 @@ class DocumentProcessingJob(Base):
         default=DocumentProcessingJobStatus.QUEUED,
     )
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    no_paid_providers: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true(),
+    )
     processed_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     queued_at: Mapped[datetime] = mapped_column(

@@ -202,6 +202,8 @@ def _print_summary(summary: IngestionSummary, *, header: str) -> None:
     print(f"  failed           : {summary.failed_files}")
     print(f"  inserted_docs    : {summary.inserted_documents}")
     print(f"  inserted_chunks  : {summary.inserted_chunks}")
+    if summary.stop_reason:
+        print(f"  stopped          : {summary.stop_reason}")
     if summary.errors:
         print(f"  first error      : {summary.errors[0]}")
 
@@ -214,6 +216,7 @@ def _accumulate(total: IngestionSummary, add: IngestionSummary) -> IngestionSumm
     total.inserted_documents += add.inserted_documents
     total.inserted_chunks += add.inserted_chunks
     total.errors.extend(add.errors)
+    total.stop_reason = add.stop_reason or total.stop_reason
     return total
 
 
@@ -241,9 +244,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  reembedded_chunks : {summary.reembedded_chunks}")
         print(f"  skipped_chunks    : {summary.skipped_chunks}")
         print(f"  failed_chunks     : {summary.failed_chunks}")
+        if summary.stop_reason:
+            print(f"  stopped           : {summary.stop_reason}")
         if summary.errors:
             print(f"  first error       : {summary.errors[0]}")
-        return 1 if summary.failed_chunks else 0
+        return 1 if summary.failed_chunks or summary.stop_reason else 0
 
     if not args.court:
         print("error: --court is required (hc|sc) for ingestion", file=sys.stderr)
@@ -330,9 +335,11 @@ def main(argv: list[str] | None = None) -> int:
                     summary,
                     header=f"Ingested {args.court}/year={year} from {args.path}",
                 )
-            if summary.failed_files:
+            if summary.failed_files or summary.stop_reason:
                 failed_any = True
             _accumulate(overall, summary)
+            if summary.stop_reason:
+                break
 
     if len(years) > 1:
         _print_summary(

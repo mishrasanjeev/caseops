@@ -213,6 +213,27 @@ def test_document_workflow_has_explicit_complete_public_exports() -> None:
                 } <= expected, path
 
 
+def test_upload_target_helpers_have_one_owner_without_a_worker_workflow_cycle(
+    dependency_graph: dict[str, set[str]],
+) -> None:
+    from caseops_api.services import ip_document_targets, ip_document_workflow
+
+    assert SERVICE_PREFIX + "ip_document_workflow" not in dependency_graph[
+        SERVICE_PREFIX + "document_jobs"
+    ]
+    assert _route(
+        dependency_graph, SERVICE_PREFIX + "ip_document_targets",
+        SERVICE_PREFIX + "ip_document_workflow",
+    ) is None
+    for name in (
+        "_target_docket_id", "_upload_target_lifecycles",
+        "_upload_document_targets", "_lock_upload_targets",
+    ):
+        function = getattr(ip_document_targets, name)
+        assert function.__module__ == SERVICE_PREFIX + "ip_document_targets"
+        assert getattr(ip_document_workflow, name) is function
+
+
 def test_private_access_helpers_have_leaf_ownership() -> None:
     helpers = {"_active_grant_window", "_active_ip_subject_match", "_active_wall_window"}
     facade = ast.parse((SRC / "caseops_api/services/matter_access.py").read_text())

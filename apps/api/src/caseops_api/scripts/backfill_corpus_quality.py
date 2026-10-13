@@ -46,6 +46,7 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import AuthorityDocument
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.corpus_ingest import (
     _derive_title,
     _guess_decision_date,
@@ -65,6 +66,8 @@ from caseops_api.services.llm import (
 # uses this to drain in-flight workers and exit cleanly without
 # marking docs as ordinary failures.
 _STOP_SIGNAL = "DAILY_CAP_REACHED"
+_AI_MONEY_STOP_SIGNAL = "AI_MONEY_DENIED"
+EXIT_AI_MONEY_DENIED = 2
 
 logger = logging.getLogger("caseops.backfill")
 
@@ -520,12 +523,19 @@ def _structured_pass(
         "standard": {"done": 0, "cost_usd": 0.0, "candidates": len(standard_bucket)},
         "failures": 0,
         "quality_low": 0,
+        "stop_reason": None,
     }
 
     totals_lock = threading.Lock()
+    money_stop = threading.Event()
+
+    def _mark_money_stop() -> None:
+        with totals_lock:
+            money_stop.set()
+            totals["stop_reason"] = "ai_money_denied"
 
     def _run_bucket(bucket: list[AuthorityDocument], tier: str) -> bool:
-        """Returns True if the bucket finished, False if budget was hit."""
+        """Returns False on a local budget or operational admission stop."""
         if concurrency <= 1:
             return _run_bucket_sequential(bucket, tier)
         return _run_bucket_concurrent(bucket, tier)
@@ -543,6 +553,12 @@ def _structured_pass(
                 summary = extract_and_persist_structured(
                     session, document=doc, tier=tier,
                 )
+            except AiMoneyBudgetError:
+                _mark_money_stop()
+                session.rollback()
+                logger.warning("shared AI money admission denied; stopping %s tier", tier)
+                _emit_budget_snapshot(totals)
+                return False
             except (LLMDailyCapReachedError, LLMQuotaExhaustedError) as exc:
                 # Hard stop signal — daily cap reached, or upstream
                 # provider rejected with insufficient_quota /
@@ -598,14 +614,23 @@ def _structured_pass(
         doc_ids = [doc.id for doc in bucket]
 
         def _process(doc_id: str) -> object | None:
+            if money_stop.is_set():
+                return _AI_MONEY_STOP_SIGNAL
             with SessionFactory() as worker_session:
                 doc = worker_session.get(AuthorityDocument, doc_id)
                 if doc is None:
                     return None
+                if money_stop.is_set():
+                    return _AI_MONEY_STOP_SIGNAL
                 try:
                     summary = extract_and_persist_structured(
                         worker_session, document=doc, tier=tier,
                     )
+                except AiMoneyBudgetError:
+                    _mark_money_stop()
+                    worker_session.rollback()
+                    logger.warning("shared AI money admission denied; stopping %s tier", tier)
+                    return _AI_MONEY_STOP_SIGNAL
                 except (LLMDailyCapReachedError, LLMQuotaExhaustedError) as exc:
                     # Hard stop signal — daily cap reached, or
                     # upstream provider quota exhausted. Surface to
@@ -636,11 +661,21 @@ def _structured_pass(
         idx = 0
         in_flight: dict[object, str] = {}
         with ThreadPoolExecutor(max_workers=concurrency) as ex:
+            def _submit_next() -> bool:
+                nonlocal idx
+                # A worker publishes the halt under this same submission lock.
+                with totals_lock:
+                    if money_stop.is_set() or idx >= len(doc_ids):
+                        return False
+                    fut = ex.submit(_process, doc_ids[idx])
+                    in_flight[fut] = doc_ids[idx]
+                    idx += 1
+                    return True
+
             # prime the pool
-            while idx < min(concurrency, len(doc_ids)):
-                fut = ex.submit(_process, doc_ids[idx])
-                in_flight[fut] = doc_ids[idx]
-                idx += 1
+            for _ in range(min(concurrency, len(doc_ids))):
+                if not _submit_next():
+                    break
 
             while in_flight:
                 # wait for at least one completion
@@ -649,6 +684,9 @@ def _structured_pass(
                 doc_id = in_flight.pop(fut)
                 try:
                     summary = fut.result()
+                except AiMoneyBudgetError:
+                    _mark_money_stop()
+                    summary = _AI_MONEY_STOP_SIGNAL
                 except Exception:
                     logger.exception(
                         "worker raised for %s (tier=%s)", doc_id, tier,
@@ -656,7 +694,7 @@ def _structured_pass(
                     summary = "FAILED"
 
                 with totals_lock:
-                    if summary == _STOP_SIGNAL:
+                    if summary in (_STOP_SIGNAL, _AI_MONEY_STOP_SIGNAL):
                         # Hard stop: do NOT count toward failures and
                         # do NOT advance done. The flag is set so the
                         # block below drains in-flight without
@@ -677,12 +715,14 @@ def _structured_pass(
                             )
                     done_count = totals[tier]["done"]
                     over_budget = totals["spent_usd"] >= budget_usd
-                    stop_signal = summary == _STOP_SIGNAL
+                    stop_signal = summary == _STOP_SIGNAL or money_stop.is_set()
                     if done_count and done_count % 10 == 0:
                         rate = done_count / max(time.time() - t0, 1e-6)
                         last_model = (
                             summary.model
-                            if summary not in (None, "FAILED", _STOP_SIGNAL)
+                            if summary not in (
+                                None, "FAILED", _STOP_SIGNAL, _AI_MONEY_STOP_SIGNAL,
+                            )
                             else "?"
                         )
                         logger.info(
@@ -697,9 +737,10 @@ def _structured_pass(
                     if stop_signal:
                         logger.warning(
                             "stop signal received on %s tier "
-                            "(daily cap or upstream quota); "
-                            "draining in-flight (submitted=%d, in_flight=%d)",
-                            tier, idx, len(in_flight),
+                            "(shared AI money, daily cap or upstream quota); "
+                            "draining in-flight "
+                            "(submitted=%d, in_flight=%d, unsubmitted=%d)",
+                            tier, idx, len(in_flight), len(doc_ids) - idx,
                         )
                     else:
                         logger.warning(
@@ -712,6 +753,9 @@ def _structured_pass(
                         pending_id = in_flight.pop(pending_fut)
                         try:
                             pending_summary = pending_fut.result()
+                        except AiMoneyBudgetError:
+                            _mark_money_stop()
+                            continue
                         except Exception:
                             logger.exception(
                                 "drain worker raised for %s", pending_id,
@@ -719,7 +763,7 @@ def _structured_pass(
                             with totals_lock:
                                 totals["failures"] += 1
                             continue
-                        if pending_summary == _STOP_SIGNAL:
+                        if pending_summary in (_STOP_SIGNAL, _AI_MONEY_STOP_SIGNAL):
                             # In-flight worker also hit the cap — same
                             # treatment as above: don't count, don't fail.
                             continue
@@ -734,10 +778,7 @@ def _structured_pass(
                     return False
 
                 # submit next if any remain
-                if idx < len(doc_ids):
-                    fut = ex.submit(_process, doc_ids[idx])
-                    in_flight[fut] = doc_ids[idx]
-                    idx += 1
+                _submit_next()
 
         _emit_budget_snapshot(totals)
         return True
@@ -829,6 +870,9 @@ def run(
                     f"total=${totals['spent_usd']:.2f} "
                     f"failures={totals['failures']} quality_low={totals['quality_low']}\n"
                 )
+                if totals.get("stop_reason") == "ai_money_denied":
+                    sys.stdout.write("structured-pass stopped: stop_reason=ai_money_denied\n")
+                    return EXIT_AI_MONEY_DENIED
     return 0
 
 

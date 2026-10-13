@@ -20,7 +20,23 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
 
     assert scheduler_inventory.validate_inventory(inventory) == []
-    assert len(inventory["jobs"]) == 9
+    assert len(inventory["jobs"]) == 11
+    document_job = next(
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-document-processing"
+    )
+    assert document_job["schedule"] == "* * * * *"
+    assert document_job["task_timeout_seconds"] == 600
+    assert document_job["bootstrap"]["command"] == ["caseops-document-worker"]
+    assert document_job["bootstrap"]["args"] == [
+        "--documents-only",
+        "--once",
+        "--batch-size=5",
+        "--skip-migrations",
+    ]
+    assert document_job["bootstrap"]["max_retries"] == 0
+    assert document_job["additional_invoker_service_accounts"] == [
+        "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com"
+    ]
     assert {job["run_job_name"] for job in inventory["jobs"]} == {
         "caseops-legal-update-sync",
         "caseops-case-tracking-poll",
@@ -31,6 +47,8 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         "caseops-db-index-health",
         "caseops-ip-journal-watch",
         "caseops-judge-mapping-refresh",
+        "caseops-document-processing",
+        "caseops-court-sync",
     }
     authority_job = next(
         job
@@ -139,6 +157,76 @@ def test_release_hold_rejects_an_unknown_scheduler() -> None:
             inventory,
             ["invented-private-projection-scheduler"],
         )
+
+
+@pytest.mark.parametrize("job_name, admission_key, protocol_key", [
+    ("caseops-document-processing", "CASEOPS_DOCUMENT_WORKER_ADMISSION_ENABLED",
+     "CASEOPS_DOCUMENT_WORKER_ADMISSION_PROTOCOL_VERSION"),
+    ("caseops-court-sync", "CASEOPS_COURT_SYNC_WORKER_ADMISSION_ENABLED",
+     "CASEOPS_COURT_SYNC_WORKER_ADMISSION_PROTOCOL_VERSION"),
+])
+def test_execution_release_hold_disables_only_its_worker_admission(
+    job_name, admission_key, protocol_key,
+) -> None:
+    canonical = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    held = scheduler_inventory.hold_schedulers_paused(
+        canonical,
+        [job_name + "-cadence"],
+    )
+    original = next(
+        job for job in canonical["jobs"] if job["run_job_name"] == job_name
+    )
+    effective = next(
+        job for job in held["jobs"] if job["run_job_name"] == job_name
+    )
+    assert (
+        original["bootstrap"]["environment"][admission_key] == "true"
+    )
+    assert (
+        effective["bootstrap"]["environment"][admission_key]
+        == "false"
+    )
+    assert (
+        effective["bootstrap"]["environment"][protocol_key]
+        == "1"
+    )
+    assert effective["desired_state"] == "PAUSED" and original["desired_state"] == "ENABLED"
+    assert [job for job in held["jobs"] if job["run_job_name"] != job_name] == [
+        job for job in canonical["jobs"] if job["run_job_name"] != job_name
+    ]
+
+
+def test_court_worker_contract_is_bounded_and_contains_no_court_provider_secrets() -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    job = next(row for row in inventory["jobs"] if row["run_job_name"] == "caseops-court-sync")
+    assert job["schedule"] == "* * * * *" and job["task_timeout_seconds"] == 600
+    assert job["bootstrap"]["command"] == ["caseops-court-sync-worker"]
+    assert job["bootstrap"]["args"] == ["--once", "--batch-size=3", "--skip-migrations"]
+    assert job["bootstrap"]["max_retries"] == 0
+    assert job["bootstrap"]["environment"]["CASEOPS_COURT_SYNC_STALE_AFTER_MINUTES"] == "15"
+    assert set(job["bootstrap"]["secrets"]) == {
+        "CASEOPS_DATABASE_URL", "CASEOPS_AUTH_SECRET", "CASEOPS_LLM_API_KEY",
+    }
+
+
+@pytest.mark.parametrize("job_name", ["caseops-document-processing", "caseops-court-sync"])
+def test_independent_worker_configuration_preserves_api_provider_and_transaction_policy(
+    job_name,
+) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    job = next(row for row in inventory["jobs"] if row["run_job_name"] == job_name)
+    environment = job["bootstrap"]["environment"]
+    assert environment["CASEOPS_LLM_PROVIDER"] == "openai"
+    assert environment["CASEOPS_LLM_MODEL"] == "gpt-5.1"
+    assert environment["CASEOPS_COMPLIANCE_AI_EXTRACTION_ENABLED"] == "false"
+    assert environment["CASEOPS_COMPLIANCE_AI_EXTRACTION_AUTO_RUN_ENABLED"] == "false"
+    assert environment["CASEOPS_DB_STATEMENT_TIMEOUT_MS"] == "60000"
+    assert environment["CASEOPS_DB_LOCK_TIMEOUT_MS"] == "5000"
+    assert environment["CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS"] == "60000"
+    assert job["bootstrap"]["secrets"]["CASEOPS_LLM_API_KEY"] == "caseops-openai-api-key:latest"
+    assert environment["CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS"] == (
+        "caseops-qa;caseops-ip-qa;test-legal"
+    )
 
 
 def test_inventory_rejects_duplicate_owners_and_mutable_image_policy() -> None:
@@ -587,31 +675,49 @@ def test_reconcile_grants_each_job_invoker_before_its_scheduler(monkeypatch) -> 
 
     _reconcile_through_exit_codes(monkeypatch, inventory, calls)
 
-    assert len(inventory["jobs"]) == 9
+    assert len(inventory["jobs"]) == 11
     for job in inventory["jobs"]:
         run_job = job["run_job_name"]
         job_write = next(
             index
             for index, call in enumerate(calls)
-            if call[:2] == ["run", "jobs"] and call[2] in {"create", "update"}
+            if call[:2] == ["run", "jobs"]
+            and call[2] in {"create", "update"}
             and call[3] == run_job
         )
         grant = calls.index(
             [
-                "run", "jobs", "add-iam-policy-binding", run_job,
-                "--member", member, "--role", "roles/run.invoker",
-                "--region", inventory["location"],
-                "--project", inventory["production_project"],
+                "run",
+                "jobs",
+                "add-iam-policy-binding",
+                run_job,
+                "--member",
+                member,
+                "--role",
+                "roles/run.invoker",
+                "--region",
+                inventory["location"],
+                "--project",
+                inventory["production_project"],
                 "--quiet",
             ]
         )
         scheduler_write = next(
             index
             for index, call in enumerate(calls)
-            if call[:2] == ["scheduler", "jobs"] and call[2] in {"create", "update"}
+            if call[:2] == ["scheduler", "jobs"]
+            and call[2] in {"create", "update"}
             and call[3:5] == ["http", job["scheduler_name"]]
         )
         assert job_write < grant < scheduler_write, run_job
+        for account in job.get("additional_invoker_service_accounts", []):
+            extra_grant = next(
+                index
+                for index, call in enumerate(calls)
+                if call[:4] == ["run", "jobs", "add-iam-policy-binding", run_job]
+                and call[call.index("--member") + 1] == f"serviceAccount:{account}"
+            )
+            assert job_write < extra_grant < scheduler_write
 
 
 def test_reconcile_stops_before_any_scheduler_write_when_an_invoker_grant_fails(
@@ -663,7 +769,11 @@ def test_gcloud_runner_resolves_windows_command_shim(monkeypatch) -> None:
     assert calls == [[r"C:\Cloud SDK\bin\gcloud.CMD", "--version"]]
 
 
-def test_quiesce_allows_slow_control_plane_calls_without_skipping_drain(monkeypatch) -> None:
+@pytest.mark.parametrize("allow_missing", [False, True])
+def test_quiesce_allows_slow_control_plane_calls_without_skipping_drain(
+    monkeypatch,
+    allow_missing,
+) -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
     scheduler = "caseops-case-tracking-poll-1800-ist"
     job_name = "caseops-case-tracking-poll"
@@ -692,6 +802,7 @@ def test_quiesce_allows_slow_control_plane_calls_without_skipping_drain(monkeypa
 
     monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
     monkeypatch.setattr(scheduler_inventory, "_list_job_executions_v2", fake_executions)
+    monkeypatch.setattr(scheduler_inventory, "scheduler_exists", lambda *a, **k: True)
     monkeypatch.setattr(scheduler_inventory.time, "sleep", lambda _seconds: None)
 
     result = scheduler_inventory.quiesce(
@@ -700,6 +811,7 @@ def test_quiesce_allows_slow_control_plane_calls_without_skipping_drain(monkeypa
         project=inventory["production_project"],
         region=inventory["location"],
         wait_seconds=300,
+        allow_missing=allow_missing,
     )
 
     assert result["state"] == "PAUSED"
@@ -708,6 +820,141 @@ def test_quiesce_allows_slow_control_plane_calls_without_skipping_drain(monkeypa
     assert len(scans) == 2
     assert len(calls) == 4  # token, pause, and two verified state samples
     assert all(timeout == 90 for _, timeout in calls)
+
+
+@pytest.mark.parametrize(
+    "accounts",
+    [None, ["invalid"], ["same@example.test"] * 2, [{}], ["x"] * 5],
+)
+def test_inventory_rejects_invalid_additional_invoker_accounts(accounts) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    inventory["jobs"][-1]["additional_invoker_service_accounts"] = accounts
+    assert any(
+        "additional_invoker_service_accounts" in error
+        for error in scheduler_inventory.validate_inventory(inventory)
+    )
+
+
+@pytest.mark.parametrize("job_exists", [False, True])
+@pytest.mark.parametrize("job_name", ["caseops-document-processing", "caseops-court-sync"])
+def test_first_execution_release_allows_absence_only_when_both_resources_are_missing(
+    monkeypatch,
+    job_exists,
+    job_name,
+) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    calls = []
+    monkeypatch.setattr(scheduler_inventory, "scheduler_exists", lambda *a, **k: False)
+    monkeypatch.setattr(scheduler_inventory, "run_job_exists", lambda *a, **k: job_exists)
+    monkeypatch.setattr(scheduler_inventory, "run_gcloud", lambda *a, **k: calls.append(a))
+    kwargs = dict(
+        scheduler=job_name + "-cadence",
+        project=inventory["production_project"],
+        region=inventory["location"],
+        wait_seconds=600,
+        allow_missing=True,
+    )
+    if job_exists:
+        with pytest.raises(scheduler_inventory.InventoryError, match="cannot certify its drain"):
+            scheduler_inventory.quiesce(inventory, **kwargs)
+    else:
+        assert scheduler_inventory.quiesce(inventory, **kwargs) == {
+            "scheduler": kwargs["scheduler"],
+            "absent": True,
+            "drained": True,
+            "observed_executions": [],
+        }
+    assert not calls
+
+
+@pytest.mark.parametrize("wait_seconds", [0, 4, 601])
+@pytest.mark.parametrize("job_name", ["caseops-document-processing", "caseops-court-sync"])
+def test_allow_missing_cannot_bypass_execution_drain_budget(
+    monkeypatch, wait_seconds, job_name,
+) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    monkeypatch.setattr(
+        scheduler_inventory,
+        "scheduler_exists",
+        lambda *a, **k: pytest.fail("probe before budget validation"),
+    )
+    with pytest.raises(scheduler_inventory.InventoryError, match="between 5 and 600"):
+        scheduler_inventory.quiesce(
+            inventory,
+            scheduler=job_name + "-cadence",
+            project=inventory["production_project"],
+            region=inventory["location"],
+            wait_seconds=wait_seconds,
+            allow_missing=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "condition, accepted", [("missing", False), ("conditional", False), ("unconditional", True)]
+)
+@pytest.mark.parametrize("job_name", ["caseops-document-processing", "caseops-court-sync"])
+def test_execution_live_readback_requires_unconditional_runtime_invoker(
+    monkeypatch,
+    condition,
+    accepted,
+    job_name,
+):
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    job = next(row for row in inventory["jobs"] if row["run_job_name"] == job_name)
+    inventory["jobs"] = [job]
+    expected_image = "registry.example/api@sha256:" + "a" * 64
+    binding = {
+        "role": "roles/run.invoker",
+        "members": [
+            "serviceAccount:caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        ],
+    }
+    if condition == "conditional":
+        binding["condition"] = {"expression": "false"}
+    bindings = [] if condition == "missing" else [binding]
+
+    def fake_gcloud(arguments, *, expect_json=False):
+        assert expect_json
+        if arguments[:3] == ["scheduler", "jobs", "describe"]:
+            return {
+                "state": job["desired_state"],
+                "schedule": job["schedule"],
+                "timeZone": job["time_zone"],
+                "httpTarget": {
+                    "uri": scheduler_inventory.scheduler_uri(
+                        inventory["production_project"],
+                        inventory["location"],
+                        job["run_job_name"],
+                    ),
+                    "oauthToken": {"serviceAccountEmail": inventory["invoker_service_account"]},
+                },
+            }
+        if arguments[:3] == ["run", "jobs", "get-iam-policy"]:
+            return {"bindings": bindings}
+        assert arguments[:3] == ["run", "jobs", "describe"]
+        return {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "template": {
+                            "spec": {
+                                "containers": [{"image": expected_image}],
+                                "timeoutSeconds": 600,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+    monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
+    errors, _ = scheduler_inventory.inspect_live(
+        inventory,
+        project=inventory["production_project"],
+        region=inventory["location"],
+        expected_image=expected_image,
+    )
+    assert (f"{job['scheduler_name']}: additional_invoker_iam drift" not in errors) == accepted
 
 
 def test_existence_probe_distinguishes_not_found_from_control_plane_failure(

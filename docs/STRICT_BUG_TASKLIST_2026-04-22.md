@@ -1,5 +1,362 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 12 Combined Fixes
+
+October 13 passive evidence checkpoint: **Partially fixed / NO-GO**. faff CI's
+native teardown correctly rejects a 512-cell GC-recorder overflow. The bounded
+observer correction passes 37 complete affected PostgreSQL tests/111 phases,
+including the original 514-phase fixture and fail-closed maximum controls.
+Skipped initial setup stays incomplete; full fresh CI/Docker and deployed proof
+remain required. `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md` records evidence.
+
+October 13 PostgreSQL strategy checkpoint: BUG-004 is **Not fixed** on actual
+Docker ba, despite green hosted CI and native acceptance. The request returns
+500 at the read-only provider boundary after shared authority retrieval emits
+unproven SQL forms. Correct those forms, keep caller writes/index bounds/source
+rules protected, and replay the actual PostgreSQL and dated browser boundaries.
+Three serial cases/four mobile cases remain unexecuted; no deployed closure.
+Full evidence: `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
+The new structured-read correction is **Partially fixed**: 42 real PostgreSQL
+and 299 adjacent unit passes cover the actual session/HTTP and protected-write
+boundaries. Original dated Docker and exact-release production replay remain
+required before any deployed bug closure.
+
+October13 Windows artifact checkpoint: **Partially fixed / NO-GO**. ce hosted
+CI is green and fresh Docker native has 2,854 passes, but retention failed after
+272 browser passes/one skip; 277 cases remain unexecuted. The real report's
+forward-slash Windows path becomes an invalid extended path, not a true reparse
+point. Correct normalization and retain all safety fences; 50 offline Windows
+controls pass. Complete amended-tree Docker and live replay remain required.
+Evidence and preserved failures: `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
+October13 browser checkpoint: contract mobile navigation is **Not fixed**
+in the accepted source/live surface. Complete6fc CI reproduced a393px Playbook
+tab covered by the Obligations panel (532 pass/17 skip/one failure). Root and
+stronger regression are recorded in `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+Current source correction is not closure before full Docker/CI/live replay.
+
+October13 final-candidate checkpoint: **Partially fixed / NO-GO**, not deployed.
+The complete dd7 local native run has one global recovery assertion failure;
+its full evidence is retained and product attribution is not presumed.
+Prepared CI artifact and decoder clarity corrections have focused full-module
+proof, not whole-release or live proof. See
+`docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`; browser acceptance is still unrun.
+
+Replacement-freeze proof: **Partially fixed**, pending full release. Current
+runner has51 unit and252 native passes, covering every one of the84 prior
+failed identities without shortening stored names. Full hardening scope is
+341 passes/one unchanged Windows skip. Bounded future/journal evidence has24
+unit and127 selected passes (103 PG-marked/24 pure); the historical blocker cause stays
+Inconclusive. All failed evidence remains retained; no deployed-fix closure.
+
+October13 IST: **Partially fixed/NO-GO**, not deployed.4eda's hosted API gates
+are green, but a complete native shard has one missing-blocker failure without
+its SQL/PID/future evidence; root cause is **Inconclusive**. Local Docker's
+first357-case child is complete RED (273/84), with82 path failures and two
+Inconclusive observer failures. The second child is interrupted; no browser
+execution occurred. Short native runtime/verified long-path retention and
+failure-outcome diagnostics are under correction, not accepted. Preserve all
+failed/interrupted evidence and require fresh full exact-candidate gates.
+
+Candidate-freeze note: malformed `row_number(1)` has a retained classifier RED
+and a narrow zero-argument correction; the complete current four-module replay
+passes175 cases/525 phases with zero skips. Both interrupted mixed inventories
+(4,329 and1,749 cases) require complete exact-candidate CI/Docker replacement;
+their passing prefixes are not accepted. Verdict stays **Partially fixed**.
+
+20:20 UTC: **Partially fixed/NO-GO**, not deployed. All37 hosted failed API
+calls are individually reconciled. The authenticated accounting replacement
+passes its whole8-case module without weakening the unowned-call fence.
+Native identity correction passes126 cases/378 phases and the original
+20/500-recipient bounds; the failed observer wrapper remains failed evidence,
+separately reconciled from retained COMMIT logs. Driver/deployment scope has
+327 passes and one unchanged Windows POSIX-policy skip. Interrupted broad
+coverage remains incomplete; fresh full exact-head CI/Docker/live Playwright
+must replace it. No fixed product verdict follows from these focused proofs.
+
+19:17 UTC: release remains **Inconclusive/NO-GO**, with no production change.
+The shared provenance guard introduced strategy false positives despite561
+focused passes. All35 hosted failures and a complete48 local RED are retained;
+exact timeout configuration and pure row-number reads now have a narrow source
+correction and48 local passes, **Partially fixed** pending all seven consumers
+and fresh full gates. Current native compliance timing failure remains
+**Inconclusive** for its GC allocation trigger; prompt release preceded a
+measured1.8158s GC pause under the still-held transaction. Fixture email identity
+is **Partially fixed** pending deterministic native persistence/500-recipient
+replay; its constraint failure is not a notification-product reproduction.
+
+18:49 UTC: contract AI remains **Partially fixed** pending full release.
+Twenty current native/strict-schema/wire-cap controls and all 134 unit cases
+pass; source-only review and byte-identical public OpenAPI are reconciled.
+Unknown fields are rejected by all eight private models rather than silently
+discarded into empty success. Full amended Docker/CI and exact-live browser
+proof remain required; all earlier failures retain their original verdicts.
+
+18:24 UTC: four contract AI actions are **Partially fixed**, not deployed.
+Owned transaction-free transport and fresh source/access/policy persistence
+passed the prior 474-case focused scope; the subsequent rejected-completion
+accounting amendment requires its own fresh native SDK/complete-scope proof.
+Two responsive dated browser journeys are standard-discovered, not executed.
+Frozen3e full Docker ended with 2,631 passes/two native failures and no browser
+run. The original lock-timeout and private-invalidation delay remain
+**Inconclusive**; bounded passive timing retains every original assertion and
+deadline. Preserve all failed evidence and require fresh exact-source Docker,
+green CI, canonical merge and production Playwright before any fixed verdict.
+
+Resumed October 12 IST: court preparation is **Partially fixed** with complete
+24-case native proof and independent review; two-SQL getters, zero historical
+materialization, original ACL/lifecycle/hash/replay controls, exact unlocked/
+locked boundaries and unchanged rich readers pass at1/501 history. The four
+tail fixture/head errors have a complete 74-case native replacement, not a
+product-code waiver. Old9c local Docker ended RED (2,617 passes/six failures,
+no browser execution); retain its complete evidence. Context/privacy/dirty
+fences remain Partially fixed until the frozen combined candidate passes full
+Docker/CI and exact-production Playwright. No deployed-fix closure yet.
+
+03:32 UTC: context/privacy and dirty-release fencing are **Partially fixed**,
+not deployed. Actual native4/static5/Node252 pass; native Git dirty guards pass
+242/243 with one original Windows skip. SDK/Docker canary failures retain their
+FAKE-only classification. Six frozen-9c PostgreSQL calls failed; browsers were
+not run. New complete replacements are mandatory, not an old-green transfer.
+Court-import preparation hydration is a real defect, **Partially fixed** by the
+narrow bounded-load opt-out; no query-budget increase or historical-load waiver.
+Default read contracts and fresh persistence locks must retain positive proof.
+Upload admission/worker/request-principal versus system-creator evidence and
+future-safe captured-head/ancestry regressions are still under final acceptance.
+Guarded production/live Playwright remain required for deployed-fix closure.
+
+02:21 UTC: license packaging remains **Partially fixed**, not deployed. Native
+SDK discovery reproduces all 55 operator files missing from Cloud Build input;
+the separate narrow filter correction passes three native cases (62 paths,
+builder closure, secret/cache exclusions and old-glob negative control).
+Git leaf-ignore success was incomplete traversal proof, not the reproduction.
+Expanded-fixture count failure remains retained as setup-only evidence. 9c
+hosted Security/CodeQL and its actual local image pass; full 9c Docker is still
+running and cannot certify the changed child. Fresh child review/full gates,
+canonical main, guarded deployment and exact-live Playwright remain required.
+
+01:29 UTC: source-only license/public packaging remain **Partially fixed** pending
+actual new image and production replay. The exact-19 managed-SaaS review and
+fresh Windows/logical inventories pass without widening base14; Python 139 and
+Node 252 complete controls pass. The two web observer-delivery fixtures are
+**Partially fixed** for release: deterministic RED and complete final 1,279-case
+GREEN retain all UI assertions/deadlines, but do not prove retrospective host
+starvation or a production route defect. Thirty current public cases and full
+new Docker/musl/CI/main/live acceptance remain required. No deployed-fix claim.
+
+License admission and public notices are **Partially fixed**, source-only.
+Owner selected compliance review; exact package acquisition and 128 Python/11
+notice unit passes do not replace independent obligations or real musl/browser
+release acceptance. Global allowlist remains unchanged. Documents-only batch
+recovery is **Partially fixed** pending full release: all 99 CLI/module controls
+pass, recovery caps at five and drain retains 1..100. The combined unpublished
+migration fork is **Partially fixed**: single-head/lineage/SQLite checks pass,
+but fresh PostgreSQL rehearsals and complete replacement acceptance are pending.
+Original preflight cause remains **Inconclusive** until exact-production replay.
+No deployed-fix claim, budget baseline, provider activation or model promotion.
+
+## October 11 Court-Write Investigation
+
+22:12 UTC: workspace/retention repairs are **Partially fixed**, not deployed.
+Independent narrow workspace review verifies 117 cases/351 phases, 107 standard
+units and current-guard actual musl R2. Complete 129-identity/163-copy coverage
+correctly blocks eight policy entries pending owner disposition. Retention has
+38 Windows passes/114 phases, with long-path and both-shell coverage; independent
+review, Linux/current full amended acceptance remain required. All earlier
+38 failed retention calls are classified and preserved; R11's actual missing
+Drive evidence remains open. Ruff/16 static gates pass. Production still serves
+3db at 22:08:49 UTC; original preflight cause stays **Inconclusive**, no live fix
+or primary-promotion claim. Global processing/retention consent remains pending.
+
+21:47 UTC: license coverage remains **Partially fixed**: the real pruned musl
+step reconciles 129 identities/163 copies and exits 1 for eight policy denials;
+owner review/replacement is open. A workspace link's actual target/manifest
+binding is **Not fixed** in the reviewed 103-case source. R11 browser retention
+is **Not fixed**: 28 cleared path attachments include actual Drive process and
+seven-unit transcript evidence. All 540 browser outcomes reconcile (530 passes,
+10 explicit skips/no failures or retries); 2,344 native passes and final health/
+cleanup do not replace missing bytes. Narrow repairs and full amended gates
+remain required. Original preflight cause stays **Inconclusive**. No merge,
+production fix, Gemini activation or primary-promotion claim.
+
+20:55 UTC license coverage: **Partially fixed**, source-only. Strict nonempty
+inventory exposes existing licenses outside the unchanged policy; owner review
+or replacement is pending. Host-platform proof is not Alpine/musl runtime
+coverage. The CodeQL cleanup independently passes 45 cases/135 phases, but four
+actual findings need a new exact-ref scan. Alert 550 is a proven dynamic-fixture
+false positive, dismissed with current native evidence; the fixture is retained.
+d829 hosted 540 browser identities reconcile (523 pass/17 skips/no retries),
+and frozen Docker R11 passes 2,344 native cases/7,032 phases. Docker browsers,
+final health and complete amended gates remain pending. Original preflight
+latency cause is still **Inconclusive**. Production serves 3db at 20:55 UTC;
+no deployed-fix, Gemini activation or primary-promotion claim follows.
+
+20:27 UTC security coverage: **Not fixed**. The successful d829 license job
+retained an empty report, and the unqualified alert listing missed five open
+PR-ref quality instances. Four test-code findings have source-only cleanup;
+the migration fixture has actual four-case hosted native use and requires
+independent false-positive review, not deletion. Full license admission and
+focused regression are pending in the separate child. d829 hosted native/API
+acceptance cannot certify this amendment or its running full Docker/browser.
+No production fix, provider activation or primary-promotion claim follows.
+
+19:17 UTC replacement: **Partially fixed** at the test/evidence boundary only.
+Complete six-module R4 reports 202 passes and the four old-lock susceptibility
+cases still fail intentionally; R3's exact-receipt failure remains retained.
+Twenty-eight offline browser controls persist selected sanitized files and
+reject private/oversized output, with no retries/skips. Ruff/typecheck/static
+gates pass. Full new Docker, hosted uploaded bytes and exact-live acceptance
+remain pending; R10's original preflight cause remains **Inconclusive**.
+No product closure, global Gemini activation or production deployment claim.
+[Evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
+R10 actor-safety fixture and hosted subprocess retention: **Not fixed**.
+Eight setup errors reject the independently migrated native database; no body
+assertions ran. The complete hosted browser artifact omits three required
+diagnostic attachments despite green CI. Guard/retention amendments preserve
+security, deadlines and all failed evidence; complete replacement is required.
+
+R10 native failures: **Inconclusive** for product closure. Auth/writer timing
+coupling and upload preflight/final-admission mismatch are separately proven
+fixture defects. Corrections are unverified; the original preflight latency
+cause remains unknown. Retain complete native receipts and all failure phases,
+preserve two-second lock/eight-second Event deadlines and require full replay.
+No production fix or common-cause claim follows from a corrected fixture.
+
+47 CI header-expression drift: **Not fixed in this release yet**. One complete
+API call failed a stale literal assertion; its setup/teardown passed and hosted
+browser execution skipped. Explicit helper binding/marker and inherited-config
+checks plus negative controls and resolved headers need complete replacement.
+No paid transport, deployment or fixed production claim follows from this.
+
+R8's introduced wrapper image-ID defect is reproduced separately; native and
+browser tests did not run. Caller controls pass, but product closure remains
+Inconclusive pending the full replacement and exact-production journeys.
+
+Latest gate: **Inconclusive** for product/root-cause closure. bf2 CI passed;
+its exact Docker R7 native stage passed all 2,301 cases, but five browser cases
+failed (two poll subprocesses, selection, Drive isolation, demo replay).
+Desktop inventories reconcile 490 passes / five failures / 12 skips; four
+mobile cases and final health are unrun. Retain failed evidence. Database
+isolation and fixture/transport amendments are not production fixes until
+complete amended Docker/CI and exact live journeys pass.
+[Current checkpoint](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
+Native CI timeout: **Inconclusive** until the complete capacity replacement
+runs. On `9667ad02`, shard 1 passed 571/576 calls before its 12-minute job
+timeout, with no completion/JUnit and no reported pytest failure. All other
+native shards passed; exact selection covers all 2,301 identities, but the
+aggregate failed and hosted browsers skipped. Reduce per-runner work with
+eight shards/four-runner peak, preserve timeout/assertions and rerun completely.
+Do not call a partial timed-out run a fixed bug or release acceptance.
+
+Native Company lock timeout: **Inconclusive**; no proven deadlock/CPU cause.
+Separate broad retained-history hydration under three court-write locks:
+**Partially fixed**, intended three-case RED and complete 68-case PostgreSQL
+GREEN independently reconciled. Neither hosted green CI nor the removed prior
+temporary artifacts certifies production. Preserve the recorded failed Docker
+R2 and require fresh complete replacement and dated live browser journeys.
+[Investigation](runbooks/MATTER_COURT_WRITE_BOUNDS_2026-10-11.md).
+
+## October 11 Financial Denial Regressions
+
+Fallback amendment remains **Inconclusive / not production-certified** until
+new native and end-user acceptance: exact owner-selected 3.5 Flash-Lite, native
+strict schema, availability-only recovery and no third transport attempt or
+financial/security/safety bypass. R3 was intentionally interrupted for this
+scope; retain its incomplete evidence. Global activation and comparative legal
+quality remain separate open dependencies, not a reason to call a mock correct.
+Independent review additionally reproduced stale authority body/version/access
+acceptance and a late credential refresh escaping the shared deadline.
+Both are **Inconclusive / not production-certified** until their amendments,
+complete replacement inventory and exact live user-visible proof. Local source
+corrections must not supersede `67fab368`'s failed CI or interrupted R4.
+The amendment captures original retrieval metadata and excerpt hashes, checks
+current source bytes under bounded work, retains final-save source locks, and
+bounds managed authentication/admission as well as SDK transport. Four intended
+metadata RED cases also reproduced stale title/summary/citation/source labels.
+These are source corrections; deployed end-user proof is still missing.
+Frozen affected/adjacent proof is 762 passed/24 files, including 39 PostgreSQL
+cases, zero skips and 2,286 reconciled phases. Verdict remains **Inconclusive**
+for deployed end-user behavior until full current release/browser evidence.
+
+**Partially fixed in source; not production-certified.** Independent review
+reproduced continued batch submission, deletion of unprocessed ingest inputs,
+false source quarantine and exhausted summary transport retries after account
+money denial. Candidate amendments distinguish this operational stop from a
+corrupt source or ordinary provider failure. Compliance retains deterministic
+items while explicitly recording a deferred AI phase. Exploratory contract
+transaction-release receipts remain historical, not
+final acceptance. Additional corpus finalization retention passed all 154
+affected cases; contract typed-denial handling passed all 53 cases after 24
+intended RED failures. Contract transaction ownership is unchanged and its
+post-provider source/access revalidation work remains a separate open gap.
+Earlier harness/setup failures and incomplete Docker evidence remain retained; combined native,
+clean-image Docker, amended CI and exact-serving browser acceptance precede
+closure. [Evidence](runbooks/AI_BUDGET_RELEASE_2026-10-11.md).
+
+## October 11 Browser Contract Repair
+
+NO-GO. Full5f hosted browser evidence is490 pass/17 unverified skip/five fail,
+all512 identities retained. `91486e85` corrects only two specs' exact badge
+text and explicit nullable no-body diagnostics; no assertion weakening or
+product-logic change. Both reindex sequences still need complete replay.
+Docker307 R3's623 passed calls are an interrupted prefix without completion
+or JUnit, not full PG acceptance. Fresh corrected-source Docker/CI and exact
+production proof remain required; serving3db and open dependencies are
+unchanged. [Evidence](bugfix-document-worker-production-2026-10-10.md).
+
+## October 11 Container Input Regression
+
+Candidate `19f12ec8` integrates the reviewed builder/context fix and twenty
+regressions. Fresh owned-runtime Main replay completes557 passes/one known
+POSIX-only skip, with stable source/dependency hashes. Earlier5f API/PG native
+replacement has9,074 unique passes, two opt-in/platform skips and all six
+previous PG failures passing. Do not upgrade #527: new-source full Docker/CI
+and exact serving-production replay still have not completed.
+
+#527 remains Not fixed on serving `3dbf364d`. `5f4e70a8` completes 528 local
+passes/one unverified POSIX skip and fresh zero-result SARIF, but the real
+Docker web build fails before PG/browser tests: two new shared helpers and
+their import closure are absent from its narrow builder context. Preserve
+that failure, repair builder/context admission without suppressing types,
+and gate the actual web builder in CI. Require independent frozen-runtime
+local replay, complete final-image Docker and exact production acceptance;
+source-tree build success is not a deployed fix. See
+[evidence and limits](bugfix-document-worker-production-2026-10-10.md).
+
+## October 10 Live Certification Failure
+
+#527 is Not fixed on deployed main `3dbf364d`: the full 341-identity production
+run completes 320 passes, 18 unverified skips and three failures. All three
+actual mutation responses are 503 with corroborating Company lock timeouts;
+historical holder attribution is unknown. Fresh Notice 2/2 is diagnostic only.
+Queue/execution repair is in progress; no production closure or cadence resume.
+Clean candidate `e0fc0044` passes the complete scoped actor/compliance/governance
+r18 inventory (120 cases, 360 phases, zero skips) and all 12 control-plane
+commands. Retained-chunk API reindex replacement passes 19 cases; PostgreSQL
+interleavings, full Docker, hosted CI/SARIF and live browser proof remain open.
+Full evidence, current verdict and required replacement:
+[document execution and production certification](bugfix-document-worker-production-2026-10-10.md).
+
+Later draft `1d5eb65b` remains NO-GO: complete hosted API has 6,468 passes,
+2,513 unverified skips and seven failures across 8,988 identities. All four
+PostgreSQL shards are genuinely interrupted at the unchanged deadline, with
+449 identities not started and no final XML/completion. Portable conditional
+dependency selection, eight-shard controls and restore-forward downgrade
+units pass complete local r20 (76/76); new native rollback/race fixtures,
+full Docker, fresh CodeQL note 540 and exact production replay remain open at
+that historical checkpoint.
+
+Integrated checkpoint `9b524ab6` completes all 109 changed unit/SQLite cases
+and 327 phases without skips/errors; refreshed control-plane commands pass.
+Its actual three-language SARIF has zero findings and alert540 is fixed,
+not dismissed. Fresh CI38071812851 still has PostgreSQL failures under full
+native review; two legacy fixtures stop before the database guard because
+their positive deadline precondition is absent. No Docker/live closure follows
+unit or static proof. #527 remains Not fixed on serving `3dbf364d`.
+
 ## October 10 Summary Gate Repair
 
 Summary browser acceptance remains Inconclusive; #527 remains not fixed in

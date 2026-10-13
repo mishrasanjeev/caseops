@@ -282,7 +282,9 @@ def test_release_orders_provider_drain_hold_and_resume():
     script = (guard.REPO_ROOT / "scripts/deploy-prod.sh").read_text(encoding="utf-8")
     assert script.index("scheduler_inventory.py quiesce") < script.index("# Step 2")
     assert (
-        "SCHEDULER_HOLD_ARGS=(--hold-scheduler-paused caseops-case-tracking-poll-1800-ist)"
+        "SCHEDULER_HOLD_ARGS=(--hold-scheduler-paused caseops-case-tracking-poll-1800-ist\n"
+        "  --hold-scheduler-paused caseops-document-processing-cadence\n"
+        "  --hold-scheduler-paused caseops-court-sync-cadence)"
         in script
     )
     assert script.index("pre-provider-scheduler-resume gate") > script.index(

@@ -11,8 +11,10 @@ from time import perf_counter
 from typing import get_args
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, literal_column, or_, select, text
+from sqlalchemy import Float, String, Text, cast, func, literal, or_, select, table, text
+from sqlalchemy import column as core_column
 from sqlalchemy.orm import Session, defer, raiseload
+from sqlalchemy.types import UserDefinedType
 
 from caseops_api.core.redaction import redact_provider_error
 
@@ -73,6 +75,22 @@ from caseops_api.services.retrieval_normalisers import build_query_variants
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
+
+
+class _PostgresVector(UserDefinedType):
+    cache_ok = True
+
+    def get_col_spec(self, **_kwargs):
+        return "vector"
+
+
+# The migrated PostgreSQL vector column intentionally is not in the portable ORM.
+_PG_AUTHORITY_CHUNKS = table(
+    AuthorityDocumentChunk.__tablename__,
+    core_column("id", String),
+    core_column("authority_document_id", String),
+    core_column("embedding_vector", _PostgresVector()),
+)
 
 # Request-supplied values are never interpolated into logs; the search mode
 # is logged through this fixed label table built from its declared literal.
@@ -1300,6 +1318,25 @@ def search_authority_catalog(
             score=adjusted_score,
             matched_terms=result.matched_terms,
         )
+        frozen = best_by_document[document.id]
+        # Non-serialized lineage belongs to the same loaded edition/chunks that
+        # produced this result; a later reread must not relabel an old excerpt.
+        frozen._grounding_lineage = (
+            document.id,
+            document.title,
+            document.case_reference,
+            document.summary,
+            document.source_reference,
+            document.source_version,
+            document.content_hash,
+            document.source_access_state,
+            document.legal_review_status,
+            document.updated_at,
+        )
+        frozen._grounding_chunks = tuple(
+            (chunk.id, chunk.chunk_index, hashlib.sha256(chunk.content.encode("utf-8")).hexdigest())
+            for chunk in chunks_by_document.get(document.id, [])
+        )
 
     results = sorted(best_by_document.values(), key=lambda item: item.score, reverse=True)
     # Optional rerank pass (CASEOPS_RERANK_ENABLED=true). Over-fetch the
@@ -1631,8 +1668,10 @@ def _authority_mode_filter_clause(search_mode: str, query: str):
 
 def _indexed_search_text(*columns):
     """Match the immutable expression used by the production GIN indexes."""
-    empty = literal_column("''")
-    separator = literal_column("' '")
+    # Inline these fixed constants after compilation so generic prepared plans
+    # retain the exact indexed expression without unproven SQL literal columns.
+    empty = literal("", literal_execute=True)
+    separator = literal(" ", literal_execute=True)
     expression = func.coalesce(columns[0], empty)
     for column in columns[1:]:
         expression = expression + separator + func.coalesce(column, empty)
@@ -1863,6 +1902,7 @@ def _exact_name_match_document_ids(
     if document_type is not None:
         filters.append(AuthorityDocument.document_type == document_type)
 
+    read_only_before = _authority_read_can_release(session)
     try:
         ids = list(
             session.scalars(
@@ -1870,6 +1910,8 @@ def _exact_name_match_document_ids(
             )
         )
     except Exception:
+        if not read_only_before or not _authority_read_can_release(session):
+            raise
         session.rollback()
         return []
 
@@ -1885,6 +1927,17 @@ def _exact_name_match_document_ids(
     if len(ids) > broad_cap:
         ids = ids[:limit]
     return ids
+
+
+def _authority_read_can_release(session: Session) -> bool:
+    guard = getattr(session, "require_read_only_transaction", None)
+    if not callable(guard):
+        return False
+    try:
+        guard()
+    except RuntimeError:
+        return False
+    return True
 
 
 def _pg_embedding_scope_available(
@@ -1908,17 +1961,17 @@ def _pg_embedding_scope_available(
     except Exception:
         return False
 
-    from sqlalchemy import text
-
+    read_only_before = _authority_read_can_release(session)
     try:
         probe = session.execute(
-            text(
-                "SELECT 1 FROM authority_document_chunks "
-                "WHERE embedding_vector IS NOT NULL "
-                "LIMIT 1"
-            )
+            select(literal(1))
+            .select_from(_PG_AUTHORITY_CHUNKS)
+            .where(_PG_AUTHORITY_CHUNKS.c.embedding_vector.is_not(None))
+            .limit(1)
         ).first()
     except Exception:
+        if not read_only_before or not _authority_read_can_release(session):
+            raise
         session.rollback()
         return False
     return probe is not None
@@ -1957,7 +2010,6 @@ def _pg_prefilter_document_hits(
     """
     if not query_vector:
         return None
-    from sqlalchemy import text
 
     court_contains = _normalize_court_filter(court_name)
     court_contains = court_contains.casefold() if court_contains else None
@@ -1975,42 +2027,59 @@ def _pg_prefilter_document_hits(
     # candidate set. chunk_limit overfetches by 30x so a narrow forum /
     # court filter still has material to dedup down to `limit`.
     chunk_limit = max(limit * 30, 1000)
-    try:
-        rows = session.execute(
-            text(
-                "WITH top_chunks AS ("
-                " SELECT c.authority_document_id AS id, c.id AS chunk_id, "
-                "        c.embedding_vector <=> cast(:q as vector) AS dist"
-                " FROM authority_document_chunks c "
-                " WHERE c.embedding_vector IS NOT NULL "
-                " ORDER BY c.embedding_vector <=> cast(:q as vector) "
-                " LIMIT :chunk_limit"
-                "), filtered AS ("
-                " SELECT tc.id, tc.chunk_id, tc.dist AS distance "
-                " FROM top_chunks tc "
-                " JOIN authority_documents d ON d.id = tc.id "
-                " WHERE (cast(:forum as text) IS NULL OR d.forum_level = :forum) "
-                " AND (cast(:court_contains as text) IS NULL "
-                "OR position(:court_contains in lower(coalesce(d.court_name, ''))) > 0) "
-                " AND (cast(:dtype as text) IS NULL OR d.document_type = :dtype)"
-                "), ranked AS ("
-                " SELECT id, chunk_id, distance, "
-                " row_number() OVER (PARTITION BY id ORDER BY distance) AS doc_rank "
-                " FROM filtered"
-                ") "
-                "SELECT id, chunk_id FROM ranked WHERE doc_rank = 1 "
-                "ORDER BY distance LIMIT :limit"
+    chunks = _PG_AUTHORITY_CHUNKS.alias("c")
+    documents = AuthorityDocument.__table__.alias("d")
+    distance = chunks.c.embedding_vector.op("<=>", return_type=Float)(
+        cast(literal(vec_literal), _PostgresVector())
+    )
+    top_chunks = (
+        select(
+            chunks.c.authority_document_id.label("id"), chunks.c.id.label("chunk_id"),
+            distance.label("dist"),
+        )
+        .where(chunks.c.embedding_vector.is_not(None))
+        .order_by(distance)
+        .limit(chunk_limit)
+        .cte("top_chunks")
+    )
+    forum_value = cast(literal(forum_level, Text), Text)
+    court_value = cast(literal(court_contains, Text), Text)
+    document_type_value = cast(literal(document_type, Text), Text)
+    court_pattern = (
+        f"%{_escape_sql_like(court_contains)}%" if court_contains is not None else None
+    )
+    filtered = (
+        select(top_chunks.c.id, top_chunks.c.chunk_id, top_chunks.c.dist.label("distance"))
+        .join(documents, documents.c.id == top_chunks.c.id)
+        .where(
+            or_(forum_value.is_(None), documents.c.forum_level == forum_value),
+            or_(
+                court_value.is_(None),
+                func.lower(func.coalesce(documents.c.court_name, literal("", literal_execute=True)))
+                .like(literal(court_pattern, Text), escape="\\"),
             ),
-            {
-                "q": vec_literal,
-                "forum": forum_level,
-                "court_contains": court_contains,
-                "dtype": document_type,
-                "limit": limit,
-                "chunk_limit": chunk_limit,
-            },
-        ).all()
+            or_(document_type_value.is_(None), documents.c.document_type == document_type_value),
+        )
+        .cte("filtered")
+    )
+    ranked = select(
+        filtered.c.id, filtered.c.chunk_id, filtered.c.distance,
+        func.row_number().over(
+            partition_by=filtered.c.id, order_by=filtered.c.distance,
+        ).label("doc_rank"),
+    ).cte("ranked")
+    statement = (
+        select(ranked.c.id, ranked.c.chunk_id)
+        .where(ranked.c.doc_rank == 1)
+        .order_by(ranked.c.distance)
+        .limit(limit)
+    )
+    read_only_before = _authority_read_can_release(session)
+    try:
+        rows = session.execute(statement).all()
     except Exception:
+        if not read_only_before or not _authority_read_can_release(session):
+            raise
         session.rollback()
         return None
     return [

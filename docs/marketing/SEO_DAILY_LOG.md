@@ -6,6 +6,108 @@ mark unavailable or processing fields rather than treating them as zero.
 Do not count an indexing request, directory prospect, or owned link as organic
 traffic, a backlink, or a conversion.
 
+## 2026-10-12 IST - Direct GSC And Qualified Growth
+
+### Account, Schedule And Release
+
+- Human requested daily qualified acquisition for law firms, general counsels
+  and solo lawyers with global discovery. Direct Google Search Console visibly
+  identifies `sanjeev@orchestrum.in` and the `https://caseops.ai/` property.
+  Both attempted GSC Wizard reads returned subscription-required; no purchase,
+  account creation, new consent or broader permission was attempted.
+- Existing automation `caseops-daily-seo-and-aeo` was PAUSED. It is now ACTIVE;
+  preserved its all-days 07:30 schedule and thread destination. Its permanent
+  prompt names this account, all three personas, truthful international scope,
+  privacy-first attribution, direct-browser fallback and quiet-on-unchanged work.
+- Fresh origin/main fetch: `dfda0eb3ee3d109f86092962a08d125878b24932`.
+  Before/after browser gates, both serving surfaces remained
+  `3dbf364d9834316d181d4a52b2e9b4c7bee431b4`, API `00488-5sd`, web `00465-sk6`.
+  Read-only tests ran from its clean exact-release checkout, not the dirty
+  newer integration candidate. No production or scheduler mutation occurred.
+
+### Direct Search Console Observations
+
+Web, custom **2026-10-03 through 2026-10-09**, seven complete reported days;
+last performance update displayed four hours ago. No country/device/query
+filter when property totals were read. The earlier October 3-4 sample is not
+an equal-length comparison and is not reported as a growth percentage.
+
+| Observation | Result |
+| --- | --- |
+| Property total | 0 clicks, 57 impressions, 0% CTR, average position 4.6. |
+| Complete visible query table | Seven rows, 25 impressions: `caseops` 18; `case ops`, `ops case`, `case ops ia` one each; one CNR review-queue query one; two irrelevant finance-related rows three combined. All zero clicks. Not the full query universe or qualified demand. |
+| Complete page table | Home 33; guide 26; matter-management resource 5; solo 4; law-firms 4; pricing 3. Six rows, 75 page impressions, zero clicks. These are page-aggregated, not the property total of 57. No general-counsels row is not proof it is unindexed. |
+| Complete device table | Desktop 47 impressions; mobile 10. Zero clicks. |
+| Complete country table, both pages reconciled | US 21, India 13, Brazil 7, Pakistan 5, Poland 2; Malaysia, Hong Kong, Canada, Japan, Paraguay, France, Israel, Mexico and Italy one each. 14 countries, 57 impressions, zero clicks; not evidence of international product-market fit. |
+| Aggregate indexing report | Still updated October 4: 8 indexed, 4 not indexed; noindex 1, robots-blocked 1, crawled-not-indexed 2. Not a count of eight approved public pages. |
+| Law-firms URL inspection | Indexed; smartphone crawl October 5, 12:04:29 PM as displayed; fetch successful, crawl/index allowed; sitemap found, declared and Google-selected canonical agree. |
+| General-counsels URL inspection | Indexed; smartphone crawl October 11, 9:25:17 AM as displayed; fetch successful, crawl/index allowed; sitemap found, canonical agreement. |
+| Solo-lawyers URL inspection | Indexed; smartphone crawl October 11, 11:55:20 AM as displayed; fetch successful, crawl/index allowed; sitemap found, canonical agreement. |
+| Sign-in stored index | Still on Google / indexed though robots-blocked. This is the retained indexing result, not current crawl policy. |
+| Sign-in LIVE TEST | October 12, 9:34-9:35 AM as displayed: successful smartphone fetch, crawl allowed, indexing disallowed by detected robots-meta noindex; declared canonical is `/sign-in`. No request indexing, removal or Validate Fix sent. |
+| Submitted sitemap | Success; seven discovered pages, submitted October 4, last read October 11. No unchanged resubmission. |
+| Core Web Vitals | Updated October 10; insufficient last-90-day usage for desktop and mobile. No field score asserted. |
+| Manual actions / security | Both: no issues detected. |
+| External links | Still processing. No independently verified backlink count. |
+
+### Live Regression And Stale-Issue Reconciliation
+
+- First full release-owned public-content run: 23 collected/passed, zero skips,
+  retries or errors. Complete public SEO config next: **40 collected/passed**
+  across three files, zero skips, retries or errors. The earlier 23 are a subset,
+  not 63 unique tests. JSON selected identities match executed identities and
+  JUnit reports 40 tests/zero failures/errors/skips. Source hashes and both
+  serving identities still agree after completion.
+- Scope: seven canonical HTML pages, metadata/H1/canonicals, internal links,
+  FAQ/JSON-LD parity, sitemap, crawlable sign-in noindex plus adjacent account
+  exclusions, desktop/360px accessibility; fourteen responsive CTA/copy journeys,
+  two unsupported demo-source negatives and FAQ interaction. CTA forms remain
+  usable, analytics scripts/requests/cookies absent, and lead submissions zero.
+- #513 remains OPEN but its original code diagnosis is stale: exact serving
+  homepage admission validates the backend-saved id/status before acceptance;
+  persona CTAs now reach forms rather than mailto-only lead paths. Read-only
+  proof does not certify a new saved production lead, actual notification,
+  notification-worker cadence or reviewed retention. The visible privacy notice
+  says outbound notification and automated deletion await approval. Its proposed
+  90-day expiry is not an active retention guarantee. No synthetic lead sent.
+- #515 remains OPEN for ledger reconciliation. Exact serving copy already
+  qualifies pilot/commercial/response/provider/AI claims, and all current bounded
+  public-copy tests pass. Do not confuse this with universal correctness,
+  commercial promises or full product release certification.
+- #521 remains OPEN for Google's stored-index exclusion. PR #522 is MERGED
+  (October 10, `a369f791`); deployed correction and successful Google LIVE TEST
+  do not establish completed deindexing. No duplicate patch or PR was created.
+- Paid provider, Google/merchant/sender consent and broader acceptance gaps were
+  not altered. The active integration/release task is separate and remains
+  uncertified; no docs-only production deploy was launched.
+
+### Executed Work And Next Action
+
+Permanent account/cadence instructions, this dated record, and the detailed
+persona/lead/AEO execution guide are saved in the initially clean existing SEO
+worktree on `codex/seo-qualified-growth-20261012` from current canonical main.
+These are documentation, not a new deployed website. The existing automation is
+already updated in the app; documentation publication must not compete with
+the in-progress release. No invented testimonial, mass keyword page, purchased
+link, new directory account or unsolicited pitch was published.
+
+Next: reconcile complete #513 acceptance with the current release and obtain
+the retained sender/privacy/retention decisions before claiming delivery or
+organic conversions; monitor sign-in exclusion. Build one evidence-rich workflow
+asset only after its source/provider proof and serving revision are available.
+Prioritize existing persona pages using the actual buyer questions in the
+execution guide; no measured qualified keyword opportunity is claimed yet.
+
+Evidence: `C:/Users/mishr/OneDrive/Documents/CaseOps/outputs/seo-daily-20261012/`:
+`serving-public-01/`, `serving-seo-01/`, `public-reconciliation.json`, source pins,
+before/after identities, complete JSON/JUnit, console and browser screenshots.
+Google observations above were read directly through its authorized browser;
+there is no invented connector export. Sources were rechecked October 12:
+[AI features](https://developers.google.com/search/docs/appearance/ai-features),
+[helpful content](https://developers.google.com/search/docs/fundamentals/creating-helpful-content),
+[noindex](https://developers.google.com/search/docs/crawling-indexing/block-indexing),
+[spam policies](https://developers.google.com/search/docs/essentials/spam-policies).
+
 ## 2026-10-09 IST - Existing PR #522 Sidecar
 
 ### Scope and source

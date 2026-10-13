@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -40,6 +41,7 @@ from caseops_api.schemas.matter_file_qa import (
     MatterFileQAResponse,
 )
 from caseops_api.services.briefing import generate_matter_brief
+from caseops_api.services.contract_ai_phase import run_contract_ai_operation
 from caseops_api.services.contract_intelligence import (
     compare_playbook,
     extract_clauses,
@@ -73,6 +75,20 @@ ContractEditor = Annotated[
 ContractRuleManager = Annotated[
     SessionContext, Depends(require_capability("contracts:manage_rules"))
 ]
+
+
+def _contract_authenticator(request: Request):
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    credentials = (
+        HTTPAuthorizationCredentials(scheme=scheme, credentials=token)
+        if scheme.lower() == "bearer" and token else None
+    )
+
+    def authenticate(session):
+        return get_current_context(request, credentials, session)
+
+    return authenticate
 
 
 @router.post(
@@ -229,14 +245,16 @@ async def generate_current_company_contract_review(
     summary="Auto-extract clauses from the contract's uploaded text",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def extract_current_company_contract_clauses(
+def extract_current_company_contract_clauses(
     request: Request,
     contract_id: str,
     context: ContractEditor,
     session: DbSession,
 ) -> ClauseExtractionResponse:
-    result = extract_clauses(session, context=context, contract_id=contract_id)
-    session.commit()
+    result = run_contract_ai_operation(
+        session, context=context, contract_id=contract_id, capability="contracts:edit",
+        authenticate=_contract_authenticator(request), operation=extract_clauses,
+    )
     return ClauseExtractionResponse(
         contract_id=result.contract_id,
         inserted=result.inserted,
@@ -266,18 +284,18 @@ async def extract_current_company_contract_clauses(
     ),
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def extract_current_company_contract_clauses_by_party(
+def extract_current_company_contract_clauses_by_party(
     request: Request,
     contract_id: str,
     payload: PartyClauseExtractionRequest,
     context: AIGenerator,
     session: DbSession,
 ) -> PartyClauseExtractionResponse:
-    response = extract_party_clauses(
-        session, context=context, contract_id=contract_id, payload=payload,
+    return run_contract_ai_operation(
+        session, context=context, contract_id=contract_id, capability="ai:generate",
+        authenticate=_contract_authenticator(request), operation=extract_party_clauses,
+        arguments={"payload": payload},
     )
-    session.commit()
-    return response
 
 
 @router.post(
@@ -286,14 +304,16 @@ async def extract_current_company_contract_clauses_by_party(
     summary="Auto-extract obligations (payments, notices, renewals) from the contract",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def extract_current_company_contract_obligations(
+def extract_current_company_contract_obligations(
     request: Request,
     contract_id: str,
     context: ContractEditor,
     session: DbSession,
 ) -> ObligationExtractionResponse:
-    result = extract_obligations(session, context=context, contract_id=contract_id)
-    session.commit()
+    result = run_contract_ai_operation(
+        session, context=context, contract_id=contract_id, capability="contracts:edit",
+        authenticate=_contract_authenticator(request), operation=extract_obligations,
+    )
     return ObligationExtractionResponse(
         contract_id=result.contract_id,
         inserted=result.inserted,
@@ -328,13 +348,16 @@ async def install_default_playbook(
     summary="Compare extracted clauses against this contract's playbook rules",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def compare_contract_playbook(
+def compare_contract_playbook(
     request: Request,
     contract_id: str,
     context: AIGenerator,
     session: DbSession,
 ) -> PlaybookComparisonResponse:
-    result = compare_playbook(session, context=context, contract_id=contract_id)
+    result = run_contract_ai_operation(
+        session, context=context, contract_id=contract_id, capability="ai:generate",
+        authenticate=_contract_authenticator(request), operation=compare_playbook,
+    )
     return PlaybookComparisonResponse(
         contract_id=result.contract_id,
         findings=[

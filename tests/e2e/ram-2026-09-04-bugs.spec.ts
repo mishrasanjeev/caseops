@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { fixtureProcessEvidence } from "./support/fixture-process";
 
 import {
   expect,
@@ -102,7 +103,7 @@ async function signIn(page: Page): Promise<void> {
   await page.waitForURL(/\/app(?:[/?]|$)/);
 }
 
-function runDockerPoll(): void {
+async function runDockerPoll(): Promise<void> {
   const project = envOr("CASEOPS_E2E_DOCKER_PROJECT", "");
   const composeFile = envOr("CASEOPS_E2E_DOCKER_COMPOSE_FILE", "");
   if (!project || !composeFile) {
@@ -110,6 +111,8 @@ function runDockerPoll(): void {
       "Docker project and compose file are required for the local poll.",
     );
   }
+  const startedAt = new Date().toISOString();
+  const started = performance.now();
   const result = spawnSync(
     "docker",
     [
@@ -126,9 +129,11 @@ function runDockerPoll(): void {
     ],
     { cwd: repoRoot, encoding: "utf8", timeout: 120_000 },
   );
-  if (result.status !== 0) {
+  const evidence = fixtureProcessEvidence(result, startedAt, performance.now() - started);
+  await test.info().attach("legacy-hearing-poll-process", { body: evidence, contentType: "application/json" });
+  if (result.error || result.status !== 0) {
     throw new Error(
-      `Case-tracking poll failed (${result.status}).\n${result.stdout}\n${result.stderr}`,
+      `Case-tracking poll failed: ${evidence}`,
     );
   }
 }
@@ -233,7 +238,7 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
     )).toHaveLength(0);
 
     if (identityMode === "case-number") {
-      runDockerPoll();
+      await runDockerPoll();
       const blockedMatter = await api.get(`${API_BASE_URL}/api/matters/${original.id}`, {
         headers: headers(),
       });
@@ -261,7 +266,7 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
       await page.getByTestId("matter-search-link-submit").click();
       await expect(page.getByTestId("matter-search-linked")).toBeVisible();
     }
-    runDockerPoll();
+    await runDockerPoll();
     if (identityMode === "backfill-bound") {
       const firstRead = await api.get(`${API_BASE_URL}/api/matters/${original.id}`, {
         headers: headers(),
@@ -273,7 +278,7 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
       });
       await expectStatus(firstBookmarks, 200, "first page creates no guessed tracking identity");
       expect((await firstBookmarks.json()).bookmarks).toHaveLength(0);
-      runDockerPoll();
+      await runDockerPoll();
     }
 
     const read = await api.get(`${API_BASE_URL}/api/matters/${original.id}`, {

@@ -1,5 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
+import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+
+import thirdPartyNotices from "../../apps/web/app/third-party-notices/notices.json";
 
 const PUBLIC_SITEMAP_PATHS = [
   "/",
@@ -8,10 +11,11 @@ const PUBLIC_SITEMAP_PATHS = [
   "/law-firms",
   "/pricing",
   "/resources/legal-matter-management-india",
+  "/resources/source-grounded-legal-recommendations",
   "/solo-lawyers",
 ] as const;
 
-const PUBLIC_CONTENT_PAGES = PUBLIC_SITEMAP_PATHS;
+const PUBLIC_CONTENT_PAGES = [...PUBLIC_SITEMAP_PATHS, "/third-party-notices"] as const;
 
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
@@ -198,6 +202,17 @@ async function checkInternalLinks(
 }
 
 test.describe("Public landing page and user guide", () => {
+  test("operator compliance records remain outside public assets", async ({ request }) => {
+    for (const path of [
+      "/third-party-compliance/docs/security/js-license-compliance-review-2026-10-12.md",
+      "/third-party-compliance/license-policy/reviewed-packages.json",
+      "/license-policy/upstream/LGPL-3.0-or-later.txt",
+    ]) {
+      const response = await request.get(path, { failOnStatusCode: false });
+      expect(response.status(), path).toBe(404);
+    }
+  });
+
   test("every public page has one primary heading and distinct crawl metadata", async ({ page }) => {
     const titles = new Set<string>();
     const descriptions = new Set<string>();
@@ -382,6 +397,191 @@ test.describe("Public landing page and user guide", () => {
   });
 
   for (const viewport of VIEWPORTS) {
+    test(`${viewport.name} third-party notices retain original licenses through free public links`, async ({ page, request }) => {
+      await page.setViewportSize(viewport);
+      const mutations: string[] = [];
+      page.on("request", (response) => {
+        if (!["GET", "HEAD", "OPTIONS"].includes(response.method())) mutations.push(response.method());
+      });
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      const footerLink = page.getByRole("contentinfo").getByRole("link", { name: "Third-party notices", exact: true });
+      await expect(footerLink).toHaveCount(1);
+      await footerLink.scrollIntoViewIfNeeded();
+      await expect(footerLink).toBeVisible();
+      await footerLink.focus();
+      await expect(footerLink).toBeFocused();
+      await footerLink.press("Enter");
+      await expect(page).toHaveURL(/\/third-party-notices$/);
+      expect((await page.reload({ waitUntil: "domcontentloaded" }))?.status()).toBe(200);
+      await expect(page.getByRole("heading", { level: 1, name: "Third-party notices", exact: true })).toBeVisible();
+      await expect(page.locator("main h1")).toHaveCount(1);
+      expect(await page.title()).toContain("Third-party notices");
+      await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, follow");
+      await expect(page.locator('meta[name="googlebot"]')).toHaveAttribute("content", "noindex, follow");
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://caseops.ai/third-party-notices");
+      await expect(page.locator("article form, article input, article textarea")).toHaveCount(0);
+      await expect(page.locator("article details")).toHaveCount(6);
+      for (const component of thirdPartyNotices.components) {
+        const section = page.getByRole("region", { name: component.name, exact: true });
+        await expect(section).toContainText(component.packageName);
+        await expect(section).toContainText(`Version ${component.version}`);
+        for (const notice of component.notices) {
+          const summary = section.locator("summary").filter({ hasText: `Read full ${notice.license} notice` });
+          await summary.scrollIntoViewIfNeeded();
+          await summary.focus();
+          await expect(summary).toBeFocused();
+          await summary.press("Enter");
+          const details = summary.locator("..");
+          await expect(details).toHaveAttribute("open", "");
+          await expect(details.locator("pre")).toBeVisible();
+          expect(await details.locator("pre").textContent()).toBe(notice.text.replace(/\r\n/g, "\n"));
+          const download = section.getByRole("link", { name: `Download ${component.name} ${notice.license} notice`, exact: true });
+          const assetPath = `/third-party-notices/${notice.filename}`;
+          await expect(download).toHaveAttribute("href", assetPath);
+          await expect(download).toHaveAttribute("download", notice.filename);
+          await download.scrollIntoViewIfNeeded();
+          await expect(download).toBeVisible();
+          const box = await download.boundingBox();
+          expect(box).not.toBeNull();
+          expect(box!.x).toBeGreaterThanOrEqual(0);
+          expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 1);
+          expect(new URL(assetPath, page.url()).origin).toBe(new URL(page.url()).origin);
+          const response = await request.get(assetPath);
+          expect(response.status()).toBe(200);
+          expect(response.headers()["content-type"]).toMatch(/text\/plain/i);
+          const bytes = await response.body();
+          expect(createHash("sha256").update(bytes).digest("hex")).toBe(notice.sha256);
+          expect(bytes.toString("utf8")).toBe(notice.text);
+          await summary.scrollIntoViewIfNeeded();
+          await summary.press("Enter");
+          await expect(details).not.toHaveAttribute("open", "");
+        }
+      }
+      const widths = await page.evaluate(() => ({
+        client: document.documentElement.clientWidth,
+        scroll: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+      }));
+      expect(widths.scroll).toBeLessThanOrEqual(widths.client + 1);
+      expect(mutations).toEqual([]);
+    });
+
+    test(`${viewport.name} October 11 recommendation article is discoverable, source-qualified and read-only`, async ({
+      page,
+    }, testInfo) => {
+      const pathname = "/resources/source-grounded-legal-recommendations";
+      const title = "Source-grounded recommendations for law firms";
+      await page.setViewportSize(viewport);
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      const entry = page.locator(`footer a[href="${pathname}"]`);
+      await expect(entry).toHaveCount(1);
+      await entry.scrollIntoViewIfNeeded();
+      await expect(entry).toBeVisible();
+      await entry.click();
+      await expect(page).toHaveURL(new RegExp(`${pathname}$`));
+
+      const response = await page.reload({ waitUntil: "domcontentloaded" });
+      expect(response?.status()).toBe(200);
+      const nonce = response?.headers()["content-security-policy"]?.match(/script-src[^;]*'nonce-([^']+)'/)?.[1];
+      expect(nonce, "article JSON-LD must use the request CSP nonce").toBeTruthy();
+      await expect(page.locator("main h1")).toHaveText(title);
+      await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `https://caseops.ai${pathname}`);
+      await expect(page.locator('meta[property="og:type"]')).toHaveAttribute("content", "article");
+      const description = await page.locator('meta[name="description"]').getAttribute("content");
+      const jsonLd = page.locator("#source-grounded-recommendations-article-jsonld");
+      const article = JSON.parse((await jsonLd.textContent())!) as Record<string, unknown>;
+      expect(article).toMatchObject({
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: title,
+        description,
+        mainEntityOfPage: `https://caseops.ai${pathname}`,
+        inLanguage: "en-IN",
+      });
+      await expect(page.locator("main > header")).toContainText(String(description));
+      expect(await jsonLd.evaluate((element) => (element as HTMLScriptElement).nonce)).toBe(nonce);
+
+      const contents = page.getByRole("navigation", { name: "On this page" });
+      const targets = await page.locator("article > section[id]").evaluateAll(
+        (sections) => sections.map((section) => `#${section.id}`),
+      );
+      expect(await contents.locator("a").evaluateAll(
+        (links) => links.map((link) => link.getAttribute("href")),
+      )).toEqual(targets);
+      expect(new Set(targets).size).toBe(targets.length);
+      for (const link of await contents.getByRole("link").all()) {
+        await link.scrollIntoViewIfNeeded();
+        await expect(link).toBeVisible();
+        const box = await link.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 1);
+      }
+      await contents.getByRole("link", { name: "The workflow", exact: true }).click();
+      await expect(page).toHaveURL(/#workflow$/);
+      const workflow = page.locator("#workflow");
+      await expect(workflow.getByRole("heading", { level: 2 })).toBeVisible();
+      await expect(workflow.locator("ol > li")).toHaveCount(5);
+      await expect(workflow).toContainText("assumptions and missing facts");
+      await expect(workflow).toContainText("generation may be refused");
+      await expect(workflow).toContainText("Recording a decision is not a court filing");
+
+      const review = page.locator("#source-checks");
+      await review.scrollIntoViewIfNeeded();
+      await expect(review.getByRole("heading", { level: 2 })).toBeVisible();
+      await expect(review).toContainText("Generated output can contain legal or factual errors");
+      await expect(review).toContainText("The lawyer must verify each authority, quotation and material fact");
+      await expect(review).toContainText("A confidence label is not a probability of winning a case");
+      for (const paragraph of await review.locator("p").all()) {
+        await paragraph.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "auto" }));
+        await expect(paragraph).toBeVisible();
+        const box = await paragraph.boundingBox();
+        const navigation = await page.getByRole("banner").boundingBox();
+        expect(box).not.toBeNull();
+        expect(navigation).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 1);
+        expect(box!.y).toBeGreaterThanOrEqual(navigation!.y + navigation!.height);
+        expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 1);
+      }
+      await testInfo.attach("recommendation-review-limitations", {
+        body: await review.screenshot(), contentType: "image/png",
+      });
+
+      const access = page.locator("#controlled-access");
+      await access.scrollIntoViewIfNeeded();
+      await expect(access.getByRole("heading", { level: 2 })).toBeVisible();
+      await expect(access).toContainText("ethical wall");
+      await expect(access).toContainText("Tenant AI policy and available source coverage");
+      await expect(page.locator("#team-checklist ul > li")).toHaveCount(5);
+      await expect(page.locator("article form, article input, article textarea")).toHaveCount(0);
+      await expect(page.locator('article a[href^="/demo"]')).toHaveCount(0);
+      await expect(page.locator('script[src*="googletagmanager"], script[src*="google-analytics"]')).toHaveCount(0);
+      const copy = `${await page.locator("main").innerText()} ${await jsonLd.textContent()}`;
+      expect(copy).not.toMatch(/\b(?:gpt[\w.-]*|claude|gemini|llama|mistral|deepseek|qwen|voyage[\w.-]*|bge[\w.-]*)\b/i);
+      expect(copy).not.toMatch(/hallucination[- ]free|guaranteed (?:win|success|outcome)|100% (?:accuracy|correctness)|\u20b9|\$\d/i);
+
+      const widths = await page.evaluate(() => ({
+        client: document.documentElement.clientWidth,
+        scroll: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+      }));
+      expect(widths.scroll, `article overflows at ${viewport.width}px`).toBeLessThanOrEqual(widths.client + 1);
+      const guide = page.locator("article").getByRole("link", { name: "product guide", exact: true });
+      await guide.scrollIntoViewIfNeeded();
+      await expect(guide).toBeVisible();
+      await guide.click();
+      await expect(page).toHaveURL(/\/guide$/);
+      await expect(page.getByRole("heading", { level: 1, name: /how to run your practice on caseops/i })).toBeVisible();
+
+      await page.goto("/resources/legal-matter-management-india", { waitUntil: "domcontentloaded" });
+      const related = page.locator("article").getByRole("link", { name: title, exact: true });
+      await related.scrollIntoViewIfNeeded();
+      await expect(related).toBeVisible();
+      await related.click();
+      await expect(page).toHaveURL(new RegExp(`${pathname}$`));
+      await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
+    });
+
     test(`${viewport.name} September 10 guide and sales copy preserve source and provider limits`, async ({
       page,
     }, testInfo) => {
@@ -417,6 +617,30 @@ test.describe("Public landing page and user guide", () => {
       await testInfo.attach("licensed-provider-claims", {
         body: await sourceControls.screenshot(), contentType: "image/png",
       });
+      await page.goto("/solo-lawyers", { waitUntil: "domcontentloaded" });
+      const soloCopy = await page.locator("main").innerText();
+      expect(soloCopy).not.toMatch(
+        /Five tools\. Five logins|work of five people before 10|removes the administrative half|No surprise modals|one working day|one-working-day/i,
+      );
+      const soloTerms = page.getByText("No pilot price is locked by submitting a request.", { exact: false });
+      await soloTerms.scrollIntoViewIfNeeded();
+      await expect(soloTerms).toBeVisible();
+      await expect(soloTerms).toContainText("Agree any pilot duration and commercial terms");
+      const soloContact = page.getByText("Availability and response timing are confirmed separately.", { exact: false });
+      await soloContact.scrollIntoViewIfNeeded();
+      await expect(soloContact).toBeVisible();
+      await testInfo.attach("solo-pilot-qualifications", {
+        body: await soloContact.screenshot(), contentType: "image/png",
+      });
+      await page.goto("/general-counsels", { waitUntil: "domcontentloaded" });
+      const gcTerms = page.getByText("Any walkthrough, sample workspace, security review and pilot terms require separate confirmation.", { exact: false });
+      await gcTerms.scrollIntoViewIfNeeded();
+      await expect(gcTerms).toBeVisible();
+      await page.goto("/law-firms", { waitUntil: "domcontentloaded" });
+      const firmTerms = page.getByText("Request a walkthrough or discuss a law-firm pilot.", { exact: false });
+      await firmTerms.scrollIntoViewIfNeeded();
+      await expect(firmTerms).toBeVisible();
+      await expect(firmTerms).toContainText("Scheduling, supported");
     });
 
     test(`${viewport.name} public pages have no overflow or serious accessibility issues`, async ({

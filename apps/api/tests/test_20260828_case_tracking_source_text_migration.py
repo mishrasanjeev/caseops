@@ -55,25 +55,19 @@ def test_case_tracking_source_text_migration_round_trip_and_index_health(
     get_settings.cache_clear()
     clear_engine_cache()
     config = _config()
-    current_head = _current_head(config)
-
     command.upgrade(config, PREVIOUS_HEAD)
     command.upgrade(config, MIGRATION_HEAD)
     engine = create_engine(database_url, future=True)
     try:
         inspector = inspect(engine)
-        columns = {
-            str(column["name"])
-            for column in inspector.get_columns("tracked_case_updates")
-        }
+        columns = {str(column["name"]) for column in inspector.get_columns("tracked_case_updates")}
         assert {
             "source_text",
             "source_text_sha256",
             "source_text_truncated",
         } <= columns
         constraints = {
-            str(row["name"])
-            for row in inspector.get_check_constraints("tracked_case_updates")
+            str(row["name"]) for row in inspector.get_check_constraints("tracked_case_updates")
         }
         assert "ck_tracked_case_update_source_text_hash" in constraints
         with engine.connect() as connection:
@@ -83,30 +77,54 @@ def test_case_tracking_source_text_migration_round_trip_and_index_health(
     finally:
         engine.dispose()
 
+    command.downgrade(config, PREVIOUS_HEAD)
+    engine = create_engine(database_url, future=True)
+    try:
+        columns = {
+            str(column["name"]) for column in inspect(engine).get_columns("tracked_case_updates")
+        }
+        assert "source_text" not in columns
+    finally:
+        engine.dispose()
+
+    command.upgrade(config, MIGRATION_HEAD)
+    engine = create_engine(database_url, future=True)
+    try:
+        assert {
+            "source_text",
+            "source_text_sha256",
+            "source_text_truncated",
+        } <= {str(column["name"]) for column in inspect(engine).get_columns("tracked_case_updates")}
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(text("SELECT version_num FROM alembic_version")) == MIGRATION_HEAD
+            )
+    finally:
+        engine.dispose()
+
+
+def test_case_tracking_source_text_full_head_fresh_index_health(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = f"sqlite+pysqlite:///{(tmp_path / 'source-text-head.db').as_posix()}"
+    monkeypatch.setenv("CASEOPS_ENV", "e2e")
+    monkeypatch.setenv("CASEOPS_DATABASE_URL", database_url)
+    get_settings.cache_clear()
+    clear_engine_cache()
+    config = _config()
+    current_head = _current_head(config)
     command.upgrade(config, current_head)
     engine = create_engine(database_url, future=True)
     try:
         with engine.connect() as connection:
             health = build_index_health_report(connection)
             assert health["status"] == "ok", health
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                current_head
+            assert (
+                connection.scalar(text("SELECT version_num FROM alembic_version")) == current_head
             )
     finally:
         engine.dispose()
-
-    command.downgrade(config, PREVIOUS_HEAD)
-    engine = create_engine(database_url, future=True)
-    try:
-        columns = {
-            str(column["name"])
-            for column in inspect(engine).get_columns("tracked_case_updates")
-        }
-        assert "source_text" not in columns
-    finally:
-        engine.dispose()
-
-    command.upgrade(config, current_head)
 
 
 def test_case_tracking_source_text_downgrade_refuses_retained_evidence(

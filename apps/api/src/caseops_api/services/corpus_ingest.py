@@ -22,6 +22,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import tarfile
 import tempfile
 from collections.abc import Iterator
@@ -43,9 +44,12 @@ from caseops_api.db.models import (
     AuthorityIngestionStatus,
 )
 from caseops_api.services.embeddings import (
+    EmbeddingMoneyBudgetError,
     EmbeddingProvider,
     build_provider,
 )
+from caseops_api.services.matter_write_fence import require_read_only_upload_session
+from caseops_api.services.security import _as_aware
 from caseops_api.services.text_chunking import chunk_text as _chunk_text
 
 if TYPE_CHECKING:
@@ -133,6 +137,7 @@ class IngestionSummary:
     inserted_documents: int = 0
     inserted_chunks: int = 0
     errors: list[str] = field(default_factory=list)
+    stop_reason: str | None = None
 
 
 @dataclass
@@ -407,6 +412,19 @@ def persist_judgment(
     embedding_provider: EmbeddingProvider,
     chunk_target_size: int = MAX_CHUNK_CHARS,
 ) -> tuple[AuthorityDocument, list[AuthorityDocumentChunk]]:
+    require_read_only_upload_session(
+        session, detail="Corpus embedding requires a session without caller-owned writes."
+    )
+    chunks_text = _chunk_text(parsed.document_text, target_size=chunk_target_size)
+    header = _build_title_header(parsed)
+    has_header = bool(header)
+    if chunks_text and has_header:
+        # Case-name queries need a dedicated metadata target beside the judgment prose.
+        chunks_text = [header, *chunks_text]
+
+    # Provider I/O precedes every source insert/flush and owns no database transaction.
+    session.rollback()
+    embed_result = embedding_provider.embed(chunks_text) if chunks_text else None
     document = AuthorityDocument(
         source=parsed.source,
         adapter_name=parsed.adapter_name,
@@ -426,22 +444,9 @@ def persist_judgment(
     session.add(document)
     session.flush()
 
-    chunks_text = _chunk_text(parsed.document_text, target_size=chunk_target_size)
-    if not chunks_text:
+    if embed_result is None:
         return document, []
 
-    # Prepend a synthetic metadata chunk carrying title + case reference
-    # + court + decision date. Case-name queries ("Wahid v. State of
-    # NCT of Delhi") are short and proper-noun heavy; without a
-    # dedicated target chunk, cosine similarity hunts through prose that
-    # mentions "state" and "bail" and finds weak matches. This chunk is
-    # the target.
-    header = _build_title_header(parsed)
-    has_header = bool(header)
-    if has_header:
-        chunks_text = [header, *chunks_text]
-
-    embed_result = embedding_provider.embed(chunks_text)
     chunk_rows: list[AuthorityDocumentChunk] = []
     for idx, (content, vector) in enumerate(zip(chunks_text, embed_result.vectors, strict=False)):
         chunk = AuthorityDocumentChunk(
@@ -614,6 +619,9 @@ def ingest_local_directory(
     fallback anyway. Files without a recognisable ``_<LANG>.pdf`` suffix
     pass through (HC convention).
     """
+    require_read_only_upload_session(
+        session, detail="Corpus ingestion requires a session without caller-owned writes."
+    )
     embedder = embedding_provider or build_provider()
     summary = IngestionSummary()
     pdfs = sorted(p for p in directory.rglob("*.pdf") if p.is_file())
@@ -631,7 +639,7 @@ def ingest_local_directory(
 
     run = AuthorityIngestionRun(
         adapter_name="corpus-ingest",
-        status=AuthorityIngestionStatus.COMPLETED,
+        status=AuthorityIngestionStatus.FAILED,
         source="ecourts-hc" if forum_level == "high_court" else "ecourts-sc",
         started_at=datetime.now(UTC),
         completed_at=datetime.now(UTC),
@@ -641,7 +649,10 @@ def ingest_local_directory(
         imported_document_count=0,
     )
     session.add(run)
-    session.flush()
+    # Commit only this driver's run marker before transport; no caller writes are admitted.
+    session.commit()
+    run_id = run.id
+    session.rollback()
 
     for path in pdfs:
         try:
@@ -684,6 +695,11 @@ def ingest_local_directory(
             summary.inserted_documents += 1
             summary.inserted_chunks += len(chunks)
             summary.processed_files += 1
+        except EmbeddingMoneyBudgetError:
+            session.rollback()
+            summary.stop_reason = "ai_money_budget_denied"
+            logger.warning("Corpus ingestion stopped: AI money budget denied further submission.")
+            break
         except IntegrityError as exc:
             session.rollback()
             if _is_duplicate_canonical_key_error(exc):
@@ -702,9 +718,15 @@ def ingest_local_directory(
             summary.errors.append(f"{path.name}: {exc}")
             logger.exception("Failed to ingest %s", path.name)
         finally:
-            if delete_after:
+            if delete_after and summary.stop_reason is None:
                 path.unlink(missing_ok=True)
 
+    run = session.get(AuthorityIngestionRun, run_id, populate_existing=True)
+    run.status = (
+        AuthorityIngestionStatus.FAILED
+        if summary.stop_reason
+        else AuthorityIngestionStatus.COMPLETED
+    )
     run.completed_at = datetime.now(UTC)
     run.imported_document_count = summary.inserted_documents
     run.summary = (
@@ -713,7 +735,8 @@ def ingest_local_directory(
         f"inserted_docs={summary.inserted_documents} "
         f"inserted_chunks={summary.inserted_chunks} "
         f"skipped={summary.skipped_files} "
-        f"failed={summary.failed_files}"
+        f"failed={summary.failed_files} "
+        f"stop_reason={summary.stop_reason or 'none'}"
     )
     session.commit()
     return summary
@@ -782,6 +805,115 @@ def _dir_size_mb(path: Path) -> float:
     return _bytes_to_mb(total)
 
 
+_STAGING_SLOT = "caseops-corpus-staging"
+# Bound local inventory work to twice the configured maximum HC batch (500).
+_STAGING_SCAN_LIMIT = 1000
+
+
+def _staging_inventory(root: Path, max_bytes: int) -> tuple[int, int, int]:
+    """Count only owned staging candidates; never follow links or read file bodies."""
+    candidates = files = total_bytes = inspected = 0
+    pending = [(root, False)]
+    while pending:
+        directory, owned = pending.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                inspected += 1
+                if inspected > _STAGING_SCAN_LIMIT:
+                    raise ValueError("staging inventory entry bound exceeded")
+                if not owned and not (
+                    entry.name == _STAGING_SLOT
+                    or entry.name.startswith(("caseops-hc-", "caseops-sc-"))
+                ):
+                    continue
+                if not owned:
+                    candidates += 1
+                info = entry.stat(follow_symlinks=False)
+                if stat.S_ISLNK(info.st_mode) or (
+                    getattr(info, "st_file_attributes", 0)
+                    & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+                ):
+                    raise ValueError("staging inventory contains an alias")
+                path = Path(entry.path)
+                if not path.resolve().is_relative_to(root):
+                    raise ValueError("staging inventory escaped its root")
+                if stat.S_ISDIR(info.st_mode):
+                    pending.append((path, True))
+                elif stat.S_ISREG(info.st_mode):
+                    files += 1
+                    total_bytes += info.st_size
+                    if total_bytes > max_bytes:
+                        raise ValueError("staging inventory byte bound exceeded")
+                else:
+                    raise ValueError("staging inventory contains an unsupported entry")
+    return candidates, files, total_bytes
+
+
+def _staging_available(root: Path, max_workdir_mb: int, summary: IngestionSummary) -> bool:
+    try:
+        candidates, files, retained_bytes = _staging_inventory(
+            root, max_workdir_mb * 1024 * 1024
+        )
+    except (OSError, ValueError):
+        summary.stop_reason = "corpus_staging_unavailable"
+        detail = (
+            "Corpus staging inventory could not be safely bounded. Preserve retained sources; "
+            "inspect the configured temp root before resuming."
+        )
+    else:
+        if not candidates:
+            return True
+        summary.stop_reason = "corpus_staging_pending"
+        detail = (
+            f"Corpus staging has {candidates} pending candidate(s), {files} file(s), "
+            f"{retained_bytes} bytes. Wait for active ingestion or resume retained PDFs "
+            "with --path after billing recovery; clear only confirmed-empty owned workdirs."
+        )
+    summary.errors.append(detail)
+    logger.warning("%s", detail)
+    return False
+
+
+def _create_staging_workdir(
+    root: Path, prefix: str, max_workdir_mb: int, summary: IngestionSummary
+) -> Path | None:
+    if not _staging_available(root, max_workdir_mb, summary):
+        return None
+    slot = root / _STAGING_SLOT
+    try:
+        # Atomic mkdir admits only one remote batch under a root, including HC versus SC.
+        slot.mkdir()
+    except FileExistsError:
+        summary.stop_reason = "corpus_staging_pending"
+        summary.errors.append("Corpus staging is already occupied; no new source was downloaded.")
+        return None
+    try:
+        return Path(tempfile.mkdtemp(prefix=prefix, dir=str(slot)))
+    except OSError:
+        slot.rmdir()  # Only the empty slot this call created; never recursive cleanup.
+        raise
+
+
+def _finish_staging_workdir(workdir: Path, root: Path, *, retain: bool) -> None:
+    if retain:
+        return
+    slot = root / _STAGING_SLOT
+    # Recursive cleanup is restricted to this call's direct, non-aliased mkdtemp child.
+    if (
+        slot.resolve() != slot
+        or workdir.resolve() != workdir
+        or workdir.parent != slot
+        or not workdir.name.startswith(("caseops-hc-", "caseops-sc-"))
+    ):
+        logger.warning("Corpus staging cleanup refused an unexpected path; sources retained.")
+        return
+    shutil.rmtree(workdir, ignore_errors=True)
+    try:
+        slot.rmdir()
+    except OSError:
+        pass  # Nonempty/crashed work is retained and blocks the next remote admission.
+
+
 def ingest_hc_from_s3(
     session: Session,
     *,
@@ -803,14 +935,22 @@ def ingest_hc_from_s3(
     logs tell you where you are.
 
     Downloads one batch at a time, ingests, and deletes the batch before
-    moving on. Respects a workstation disk cap so we never hold more than
-    ``max_workdir_mb`` megabytes of PDFs on disk.
+    moving on. The per-batch disk cap is soft; retained work blocks fresh
+    staging under the same root until the original PDFs are resumed locally.
     """
+    require_read_only_upload_session(
+        session, detail="Corpus staging requires a session without caller-owned writes."
+    )
+    session.rollback()
     settings = get_settings()
     batch_size = batch_size or settings.corpus_ingest_batch_size
     max_workdir_mb = max_workdir_mb or settings.corpus_ingest_max_workdir_mb
     root = Path(temp_root or settings.corpus_ingest_temp_root or tempfile.gettempdir())
     root.mkdir(parents=True, exist_ok=True)
+    root = root.resolve()
+    overall = IngestionSummary()
+    if not _staging_available(root, max_workdir_mb, overall):
+        return overall
     embedder = embedding_provider or build_provider()
 
     client = _open_s3_client()
@@ -822,8 +962,6 @@ def ingest_hc_from_s3(
         ]
     else:
         scopes = [(f"data/pdf/year={year}/", None, None)]
-
-    overall = IngestionSummary()
 
     for scope_prefix, scope_code, scope_display in scopes:
         keys = list(
@@ -846,7 +984,10 @@ def ingest_hc_from_s3(
             range(0, len(keys), batch_size), start=1
         ):
             batch = keys[batch_start : batch_start + batch_size]
-            workdir = Path(tempfile.mkdtemp(prefix="caseops-hc-", dir=str(root)))
+            workdir = _create_staging_workdir(root, "caseops-hc-", max_workdir_mb, overall)
+            if workdir is None:
+                return overall
+            retain_workdir = False
             logger.info(
                 "[hc/%s %s] batch %d/%d — %d keys staged",
                 year,
@@ -872,6 +1013,8 @@ def ingest_hc_from_s3(
                         overall.errors.append(f"s3:{key}: {exc}")
                         continue
 
+                # A failed finalization can raise after ingestion retained pending PDFs.
+                retain_workdir = True
                 batch_summary = ingest_local_directory(
                     session,
                     directory=workdir,
@@ -890,6 +1033,13 @@ def ingest_hc_from_s3(
                 overall.inserted_documents += batch_summary.inserted_documents
                 overall.inserted_chunks += batch_summary.inserted_chunks
                 overall.errors.extend(batch_summary.errors)
+                if batch_summary.stop_reason:
+                    overall.stop_reason = batch_summary.stop_reason
+                    logger.warning(
+                        "Corpus ingestion stopped; unprocessed PDFs retained at %s", workdir
+                    )
+                    return overall
+                retain_workdir = False
                 logger.info(
                     "[hc/%s %s] batch %d/%d done — processed=%d inserted=%d "
                     "skipped=%d failed=%d (totals: processed=%d inserted=%d)",
@@ -905,7 +1055,7 @@ def ingest_hc_from_s3(
                     overall.inserted_documents,
                 )
             finally:
-                shutil.rmtree(workdir, ignore_errors=True)
+                _finish_staging_workdir(workdir, root, retain=retain_workdir)
         # scope code is informational; keep lint quiet in case it is unused
         _ = scope_code
 
@@ -924,10 +1074,18 @@ def ingest_sc_from_s3(
     language_suffixes: tuple[str, ...] | None = None,
 ) -> IngestionSummary:
     """Stream Supreme Court tarballs for a year, extract + ingest + delete."""
+    require_read_only_upload_session(
+        session, detail="Corpus staging requires a session without caller-owned writes."
+    )
+    session.rollback()
     settings = get_settings()
     max_workdir_mb = max_workdir_mb or settings.corpus_ingest_max_workdir_mb
     root = Path(temp_root or settings.corpus_ingest_temp_root or tempfile.gettempdir())
     root.mkdir(parents=True, exist_ok=True)
+    root = root.resolve()
+    overall = IngestionSummary()
+    if not _staging_available(root, max_workdir_mb, overall):
+        return overall
     embedder = embedding_provider or build_provider()
 
     client = _open_s3_client()
@@ -936,11 +1094,13 @@ def ingest_sc_from_s3(
         _iter_s3_keys(client, bucket=SC_BUCKET, prefix=prefix, suffix=".tar", limit=limit)
     )
 
-    overall = IngestionSummary()
     overall.total_files = len(keys)
 
     for key in keys:
-        workdir = Path(tempfile.mkdtemp(prefix="caseops-sc-", dir=str(root)))
+        workdir = _create_staging_workdir(root, "caseops-sc-", max_workdir_mb, overall)
+        if workdir is None:
+            return overall
+        retain_workdir = False
         try:
             tar_path = workdir / Path(key).name
             try:
@@ -966,6 +1126,7 @@ def ingest_sc_from_s3(
                 )
                 continue
 
+            retain_workdir = True
             batch_summary = ingest_local_directory(
                 session,
                 directory=extract_dir,
@@ -983,8 +1144,13 @@ def ingest_sc_from_s3(
             overall.inserted_documents += batch_summary.inserted_documents
             overall.inserted_chunks += batch_summary.inserted_chunks
             overall.errors.extend(batch_summary.errors)
+            if batch_summary.stop_reason:
+                overall.stop_reason = batch_summary.stop_reason
+                logger.warning("Corpus ingestion stopped; unprocessed PDFs retained at %s", workdir)
+                return overall
+            retain_workdir = False
         finally:
-            shutil.rmtree(workdir, ignore_errors=True)
+            _finish_staging_workdir(workdir, root, retain=retain_workdir)
 
     return overall
 
@@ -1067,6 +1233,20 @@ class ReembedSummary:
     skipped_chunks: int = 0
     failed_chunks: int = 0
     errors: list[str] = field(default_factory=list)
+    stop_reason: str | None = None
+
+
+def _reembed_source_identity(chunk: AuthorityDocumentChunk) -> tuple:
+    return (
+        chunk.id,
+        chunk.authority_document_id,
+        chunk.chunk_index,
+        chunk.content,
+        chunk.embedding_model,
+        chunk.embedding_dimensions,
+        chunk.embedding_json,
+        _as_aware(chunk.embedded_at),
+    )
 
 
 def reembed_corpus(
@@ -1089,6 +1269,9 @@ def reembed_corpus(
     Returns counters, not rows, so the CLI can print a summary without
     loading the whole table.
     """
+    require_read_only_upload_session(
+        session, detail="Corpus reembedding requires a session without caller-owned writes."
+    )
     provider = embedding_provider or build_provider()
     target = target_model or provider.model
     summary = ReembedSummary()
@@ -1124,11 +1307,34 @@ def reembed_corpus(
             break
         last_id = chunks[-1].id
         summary.scanned_chunks += len(chunks)
+        captured = [_reembed_source_identity(chunk) for chunk in chunks]
+        session.rollback()
         try:
-            embed_result = provider.embed([c.content for c in chunks])
+            embed_result = provider.embed([source[3] for source in captured])
+        except EmbeddingMoneyBudgetError:
+            summary.stop_reason = "ai_money_budget_denied"
+            logger.warning("Corpus reembedding stopped: AI money budget denied further submission.")
+            break
         except Exception as exc:  # pragma: no cover — provider-level failure path
             summary.failed_chunks += len(chunks)
             summary.errors.append(f"embed batch failed: {exc!r}")
+            continue
+
+        chunks = list(
+            session.scalars(
+                select(AuthorityDocumentChunk)
+                .where(AuthorityDocumentChunk.id.in_([source[0] for source in captured]))
+                .order_by(AuthorityDocumentChunk.id)
+                .execution_options(populate_existing=True)
+                .with_for_update()
+            )
+        )
+        if [_reembed_source_identity(chunk) for chunk in chunks] != captured:
+            session.rollback()
+            summary.failed_chunks += len(captured)
+            summary.errors.append(
+                "Source chunks changed during embedding; vectors were not replaced."
+            )
             continue
 
         for chunk, vector in zip(chunks, embed_result.vectors, strict=False):

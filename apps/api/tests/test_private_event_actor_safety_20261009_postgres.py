@@ -1,5 +1,6 @@
 """Actor/event safety regressions using only unique loopback PostgreSQL fixtures."""
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -10,6 +11,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select, text, update
+from sqlalchemy.engine import make_url
 
 from caseops_api.core.security import hash_password
 from caseops_api.core.settings import get_settings
@@ -46,12 +48,63 @@ from tests.test_postgres_validation import _ensure_migrations  # noqa: F401
 pytestmark = pytest.mark.postgres
 
 
+def _assert_owned_review_database(url, settings):
+    assert url.host in {"127.0.0.1", "localhost"}, "Expected an owned review loopback database"
+    assert settings.env in {"local", "test", "ci", "development"}, (
+        "Expected owned review environment"
+    )
+    assert url.drivername == "postgresql+psycopg", "Expected owned review PostgreSQL driver"
+    assert not url.query, "Expected an owned review database without routing overrides"
+    if url.database in {"caseops", "caseops_test", "caseops_issues", "postgres"}:
+        return
+    assert re.fullmatch(r"caseops_native_[0-9a-f]{12}_[0-9a-f]{12}", url.database or ""), (
+        "Expected a bounded owned review native database"
+    )
+    assert make_url(settings.database_url) == url, "Expected exact owned review configured database"
+
+
+@pytest.mark.parametrize("database", ["caseops", "caseops_test", "caseops_issues", "postgres",
+                                     "caseops_native_111111111111_aaaaaaaaaaaa"])
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost"])
+def test_owned_review_database_accepts_existing_and_exact_isolated_names(database, host):
+    from types import SimpleNamespace
+
+    value = f"postgresql+psycopg://caseops:caseops@{host}:5433/{database}"
+    _assert_owned_review_database(make_url(value), SimpleNamespace(env="local", database_url=value))
+
+
+@pytest.mark.parametrize(
+    "value,environment,configured",
+    [
+        ("postgresql+psycopg://caseops:caseops@remote.example:5433/caseops", "local", None),
+        ("postgresql+psycopg://caseops:caseops@127.0.0.1:5433/caseops", "production", None),
+        ("postgresql+psycopg://caseops:caseops@127.0.0.1:5433/legal_production", "local", None),
+        ("postgresql+psycopg://caseops:caseops@127.0.0.1:5433/caseops_native_unbounded",
+         "local", None),
+        ("postgresql+psycopg://caseops:caseops@127.0.0.1:5433/caseops_native_11111111111_aaaaaaaaaaaa",
+         "local", None),
+        ("postgresql+psycopg://caseops:caseops@127.0.0.1:5433/caseops_native_111111111111_AAAAAAAAAAAA",
+         "local", None),
+        ("postgresql+psycopg://caseops:caseops@127.0.0.1:5433/caseops?host=remote.example",
+         "local", None),
+        ("postgresql://caseops:caseops@127.0.0.1:5433/caseops", "local", None),
+        ("postgresql+psycopg://caseops:caseops@127.0.0.1:5433/caseops_native_111111111111_aaaaaaaaaaaa",
+         "local", "postgresql+psycopg://caseops:caseops@127.0.0.1:5433/caseops"),
+    ],
+)
+def test_owned_review_database_rejects_unsafe_or_mismatched_targets(value, environment, configured):
+    from types import SimpleNamespace
+
+    with pytest.raises(AssertionError, match="owned review"):
+        _assert_owned_review_database(
+            make_url(value), SimpleNamespace(env=environment, database_url=configured or value),
+        )
+
+
 @pytest.fixture
 def review_owned(pg_engine, monkeypatch):
     url = pg_engine.url
-    assert url.host in {"127.0.0.1", "localhost"}
-    assert get_settings().env in {"local", "test", "ci", "development"}
-    assert url.database in {"caseops", "caseops_test", "caseops_issues", "postgres"}
+    _assert_owned_review_database(url, get_settings())
     monkeypatch.setenv("CASEOPS_ENV", "local")
     monkeypatch.setenv("CASEOPS_AUTH_SECRET", "review-only-secret-not-for-production-20261009")
     get_settings.cache_clear()

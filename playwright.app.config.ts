@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+import { localTransportHeaders } from "./tests/e2e/support/cost-controls";
 import { apiBaseUrl, apiPort, e2eEnv, repoRoot } from "./tests/e2e/support/env";
 
 const browserExecutableCandidates = [
@@ -59,6 +59,8 @@ export default defineConfig({
     /ram-2026-09-21-bugfixes\.spec\.ts/,
     /ram-2026-09-24-prod\.spec\.ts/,
     /ram-2026-10-08-prod\.spec\.ts$/,
+    /ram-2026-10-10-prod\.spec\.ts$/,
+    /ram-2026-10-12-prod\.spec\.ts$/,
     /ram-2026-10-08-notices\.spec\.ts$/,
     /ram-2026-10-08-drive\.spec\.ts$/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,
@@ -93,7 +95,8 @@ export default defineConfig({
   globalSetup: path.join("tests", "e2e", "global-setup.ts"),
   reporter: [["list"]],
   use: {
-    extraHTTPHeaders: noPaidProviderHeaders,
+    // Do not retain stale Next.js sockets across slow local fixture processes.
+    extraHTTPHeaders: localTransportHeaders(webBaseUrl),
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
     baseURL: webBaseUrl,

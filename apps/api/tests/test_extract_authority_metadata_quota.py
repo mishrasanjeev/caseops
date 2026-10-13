@@ -11,7 +11,8 @@ from sqlalchemy import select
 from caseops_api.db.models import AuthorityDocument, ModelRun
 from caseops_api.db.session import get_session_factory
 from caseops_api.scripts import extract_authority_metadata as mod
-from caseops_api.services.llm import LLMQuotaExhaustedError
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
+from caseops_api.services.llm import LLMProviderError, LLMQuotaExhaustedError
 
 
 class _Provider:
@@ -308,3 +309,156 @@ def test_provider_canary_cli_flag_reaches_fail_closed_run(
 
     assert exit_code == mod.EXIT_PROVIDER_CANARY_FAILED
     assert arguments[0]["provider_canary"] is True
+
+
+def _memory_metadata(monkeypatch: pytest.MonkeyPatch, count: int = 20):
+    docs = {
+        f"money-doc-{index}": AuthorityDocument(
+            id=f"money-doc-{index}",
+            title="Retained judgment",
+            document_text="Judgment text " * 30,
+            neutral_citation=None,
+            case_reference=None,
+            structured_version=None,
+        )
+        for index in range(count)
+    }
+    audit_rows: list[ModelRun] = []
+    commits: list[bool] = []
+
+    class MemorySession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def get(self, model, doc_id):
+            assert model is AuthorityDocument
+            return docs.get(doc_id)
+
+        def add(self, row):
+            audit_rows.append(row)
+
+        def flush(self):
+            return None
+
+        def commit(self):
+            commits.append(True)
+
+    monkeypatch.setattr(mod, "get_session_factory", lambda: MemorySession)
+    monkeypatch.setattr(mod, "_fetch_targets", lambda **_kwargs: list(docs))
+    monkeypatch.setattr(mod, "_layer2_daily_cap_usd", lambda: 0.0)
+    return docs, audit_rows, commits
+
+
+@pytest.mark.parametrize("concurrency", [1, 4])
+@pytest.mark.parametrize("entrypoint", ["run", "cli"])
+def test_money_stop_bounds_admission_and_leaves_unsubmitted_remainder(
+    monkeypatch: pytest.MonkeyPatch, concurrency: int, entrypoint: str
+) -> None:
+    docs, audit_rows, commits = _memory_metadata(monkeypatch)
+    started: list[str] = []
+    lock = threading.Lock()
+    initial_window = threading.Barrier(concurrency)
+
+    class DeniedProvider(_Provider):
+        def generate(self, *_args, **_kwargs):
+            with lock:
+                started.append(threading.current_thread().name)
+                ordinal = len(started)
+            if ordinal <= concurrency:
+                initial_window.wait(timeout=5)
+            raise AiMoneyBudgetError("shared allowance unavailable")
+
+    monkeypatch.setattr(mod, "build_provider", lambda **_kwargs: DeniedProvider())
+    if entrypoint == "cli":
+        exit_code = mod.main(["--concurrency", str(concurrency)])
+    else:
+        exit_code = mod.run(
+            limit=None, concurrency=concurrency, force=False, only_missing="any"
+        )
+
+    assert exit_code == 5  # Distinct from daily cap, upstream quota and canary.
+    assert len(started) == concurrency
+    assert len(docs) - len(started) == 20 - concurrency
+    assert audit_rows == []
+    assert commits == []
+    assert mod._stats["llm_error"] == 0
+    assert mod._stats["ai_money_denied"] == concurrency
+    assert all(doc.neutral_citation is None for doc in docs.values())
+    assert all(doc.structured_version is None for doc in docs.values())
+
+
+def test_money_stop_worker_short_circuits_without_a_document_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    docs, audit_rows, commits = _memory_metadata(monkeypatch, 2)
+    calls: list[bool] = []
+
+    class DeniedProvider(_Provider):
+        def generate(self, *_args, **_kwargs):
+            calls.append(True)
+            raise AiMoneyBudgetError("missing reviewed month")
+
+    mod._reset_run_state()
+    first, second = docs
+    provider = DeniedProvider()
+    outcome = mod._extract_one(first, provider)
+    pending = mod._extract_one(second, provider)
+
+    assert outcome == {"ok": False, "reason": "ai_money_denied"}
+    assert pending == {"ok": False, "reason": "ai_money_halt"}
+    assert calls == [True]
+    assert audit_rows == []
+    assert commits == []
+    assert mod._stats["llm_error"] == 0
+    assert docs[first].title == docs[second].title == "Retained judgment"
+
+
+def test_money_stop_escaped_worker_is_nonzero_and_next_run_resets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started: list[str] = []
+
+    def denied(doc_id, _provider):
+        started.append(doc_id)
+        raise AiMoneyBudgetError("unknown exact model price")
+
+    exit_code = _run_with_fakes(
+        monkeypatch, ids=["first", "unsubmitted"], concurrency=1, extract_one=denied
+    )
+    assert exit_code == 5
+    assert started == ["first"]
+
+    def admitted(doc_id, _provider):
+        started.append(doc_id)
+        return {"ok": True, "updated": False}
+
+    next_exit = _run_with_fakes(
+        monkeypatch, ids=["next-run"], concurrency=1, extract_one=admitted
+    )
+    assert next_exit == 0
+    assert started == ["first", "next-run"]
+
+
+@pytest.mark.parametrize("concurrency", [1, 4])
+def test_money_stop_does_not_change_transient_provider_continuation(
+    monkeypatch: pytest.MonkeyPatch, concurrency: int
+) -> None:
+    docs, audit_rows, commits = _memory_metadata(monkeypatch, 9)
+    calls: list[bool] = []
+
+    class TransientProvider(_Provider):
+        def generate(self, *_args, **_kwargs):
+            calls.append(True)
+            raise LLMProviderError("deterministic temporary outage")
+
+    monkeypatch.setattr(mod, "build_provider", lambda **_kwargs: TransientProvider())
+    exit_code = mod.run(
+        limit=None, concurrency=concurrency, force=False, only_missing="any"
+    )
+
+    assert exit_code == 0
+    assert len(calls) == len(docs) == len(audit_rows) == len(commits) == 9
+    assert mod._stats["llm_error"] == 9

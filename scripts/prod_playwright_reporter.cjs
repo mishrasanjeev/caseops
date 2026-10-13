@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "..");
 const limit = 64 * 1024 * 1024;
 const diagnosticLimit = 64 * 1024;
 const routes = new Set(["auth/session", "matter/bulk-update", "matter/attachment", "notice/attachment",
-  "ip/title-interest", "web/sign-in", "web/app-navigation"]);
+  "ip/title-interest", "ip/application", "web/sign-in", "web/app-navigation"]);
 const problems = new Set(["database_lock_timeout", "database_busy", "database_unavailable", "invalid_token",
   "missing_bearer_token", "rate_limited", "capability_required", "role_required", "step_up_required",
   "mfa_enrollment_required", "validation_error"]);
@@ -28,13 +28,8 @@ function timestamp(value) {
   return Number.isFinite(date.getTime()) && date.toISOString() === value;
 }
 
-function networkEvidence(attachments) {
-  if (!Array.isArray(attachments) || attachments.length > 256) return { status: "rejected", reason: "attachment_inventory" };
-  const selected = attachments.filter((item) => item.name === "sanitized-network-evidence");
-  if (!selected.length) return { status: "absent" };
+function networkAttachment(attachment) {
   const reject = (reason) => ({ status: "rejected", reason });
-  if (selected.length !== 1) return reject("duplicate_diagnostic");
-  const attachment = selected[0];
   // The existing diagnostic fixture supplies a public TestResult Buffer.
   // Reject paths outright: no file read/copy, symlink or arbitrary path channel.
   if (attachment.contentType !== "application/json" || attachment.path !== undefined) return reject("type_or_path");
@@ -57,10 +52,34 @@ function networkEvidence(attachments) {
     if (!exact(row, keys) || !routes.has(row.route) || typeof row.method !== "string" || !/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(row.method)
       || !timestamp(row.startedAt) || (row.outcome === "pending_at_test_end" ? row.finishedAt !== null : !timestamp(row.finishedAt))) return reject("record_schema");
     if (row.outcome === "response_completed" && (!Number.isInteger(row.status) || row.status < 100 || row.status > 599
-      || (row.requestId !== null && (typeof row.requestId !== "string" || !/^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i.test(row.requestId)))
+      || (row.requestId !== null && (typeof row.requestId !== "string" || ![32, 36].includes(row.requestId.length)
+        || !/^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i.test(row.requestId)))
       || (row.problemType !== null && !problems.has(row.problemType)))) return reject("response_schema");
     if (row.outcome === "transport_failed" && !transports.has(row.failureCode)) return reject("transport_schema");
   }
+  return { status: "retained", name: "sanitized-network-evidence", contentType: "application/json", snapshot };
+}
+
+function networkEvidence(attachments) {
+  if (!Array.isArray(attachments) || attachments.length > 256) return { status: "rejected", reason: "attachment_inventory" };
+  const selected = attachments.filter((item) => item.name === "sanitized-network-evidence");
+  if (!selected.length) return { status: "absent" };
+  const snapshot = { schemaVersion: 1, drainTimedOut: false, omitted: 0, records: [] };
+  let bytes = 0;
+  // API assertions attach before page teardown. Preserve that order without
+  // multiplying either the original byte budget or the 64-record budget.
+  for (const attachment of selected) {
+    const evidence = networkAttachment(attachment);
+    if (evidence.status !== "retained") return evidence;
+    bytes += attachment.body.length;
+    if (bytes > diagnosticLimit) return { status: "rejected", reason: "body_bound" };
+    const available = 64 - snapshot.records.length;
+    snapshot.records.push(...evidence.snapshot.records.slice(0, available));
+    snapshot.omitted += evidence.snapshot.omitted + Math.max(0, evidence.snapshot.records.length - available);
+    if (!Number.isSafeInteger(snapshot.omitted)) return { status: "rejected", reason: "snapshot_schema" };
+    snapshot.drainTimedOut ||= evidence.snapshot.drainTimedOut;
+  }
+  if (Buffer.byteLength(JSON.stringify(snapshot), "utf8") > diagnosticLimit) return { status: "rejected", reason: "body_bound" };
   return { status: "retained", name: "sanitized-network-evidence", contentType: "application/json", snapshot };
 }
 

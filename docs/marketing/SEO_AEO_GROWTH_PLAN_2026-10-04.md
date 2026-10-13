@@ -1,7 +1,52 @@
 # CaseOps Organic Discovery Plan
 
-Date: 2026-10-04 IST. Updated: 2026-10-09 IST. Owner: CaseOps.
+Date: 2026-10-04 IST. Updated: 2026-10-12 IST. Owner: CaseOps.
 Scope: public `caseops.ai` pages only.
+
+## Current Checkpoint: October 12
+
+The permanent Search Console account preference is `sanjeev@orchestrum.in`,
+verified directly in the browser today. The existing daily heartbeat is ACTIVE
+again on its saved daily 07:30 schedule; it had been PAUSED. GSC Wizard's
+subscription is unavailable, so use the authorized native console without
+purchasing a connector or expanding access.
+
+The owner's expanded objective is qualified discovery and adoption by law
+firms, general counsels and solo lawyers globally. Start with verified workflows
+and the existing persona pages; India-specific courts, statutes, GST, sources
+and providers remain explicitly scoped. Worldwide product/legal coverage,
+rankings and customer adoption are not promised.
+
+The fixed mature October 3-9 Web window reports 57 impressions, zero clicks,
+0% CTR and average position 4.6. The visible queries do not establish qualified
+buyer demand. This is a seven-day initial baseline, not a growth claim against
+the earlier two-day sample. All three persona URLs are indexed with matching
+canonicals; general counsels have no row in the current page-performance table.
+See the detailed [execution guide](GSC_QUALIFIED_GROWTH_EXECUTION_2026-10-12.md)
+for the persona intent map, weekly priorities, qualification funnel and daily SOP.
+
+Production API/web still serve `3dbf364d9834316d181d4a52b2e9b4c7bee431b4`;
+canonical main is `dfda0eb3ee3d109f86092962a08d125878b24932`. The complete
+release-owned read-only public SEO gate passed 40/40, zero skips or retries,
+with source/identity/inventory reconciliation. No leads were submitted.
+The live release already implements durable-admission routes and qualified
+persona copy from PR #528; the historical descriptions of those missing code
+paths below are superseded, not erased. #513 remains open for independently
+reconciled admission/notification/privacy/retention evidence, not because the
+old fire-and-forget homepage route is still serving. #515's bounded browser
+copy checks pass, but no customer, commercial or global-coverage claim follows.
+
+PR #522 merged October 10. Sign-in's crawl-policy correction is live, and
+Google's October 12 live test detects noindex after a successful permitted
+crawl. Its stored index still reports the old indexed-but-blocked result:
+#521 remains open until that separate exclusion is observed. The sitemap is
+Success with seven discovered pages, last read October 11; it was not resubmitted.
+External links still process; field Core Web Vitals lack sufficient usage data.
+No manual actions or Search Console security issues were detected.
+
+No runtime changes, provider activation, main advance or production deployment
+were made by this audit. Ongoing release certification remains separate.
+Historical dated checkpoints below retain their original scope and limitations.
 
 ## Outcome and evidence bar
 

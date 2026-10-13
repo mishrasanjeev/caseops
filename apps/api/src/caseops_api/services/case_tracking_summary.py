@@ -31,6 +31,7 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.domain_outbox import (
     ConsumerEffectClaimOutcome,
@@ -42,6 +43,7 @@ from caseops_api.services.domain_outbox import (
     complete_consumer_effect,
     complete_outbox_event,
     enqueue_domain_event,
+    fail_consumer_effect,
     record_outbox_failure,
 )
 from caseops_api.services.idempotency import canonical_json_sha256
@@ -69,6 +71,7 @@ EVENT_TYPE = "case_tracking.update_summary_requested"
 CONSUMER = "case-tracking-update-summary"
 PURPOSE = "case_tracking:update_summary"
 LEASE = timedelta(minutes=5)
+FINANCIAL_ADMISSION_COOLDOWN = timedelta(minutes=15)
 
 
 class SummaryRequest(BaseModel):
@@ -385,6 +388,35 @@ def _messages(tracked_case: TrackedCase, update: TrackedCaseUpdate) -> list[LLMM
     ]
 
 
+def _defer_financial_admission(session: Session, *, claim: OutboxClaim, effect_args: dict) -> None:
+    now = datetime.now(UTC)
+    reason = "summary_financial_admission_deferred"
+    # A money denial precedes transport. Release only this owned outbox retry
+    # count, never money reservations or earlier uncertain transport attempts.
+    # Consumer attempts remain a positive, monotonic count of durable claims.
+    effect = fail_consumer_effect(
+        session, **effect_args, last_error_redacted=reason, now=now,
+    )
+    event = session.get(DomainOutboxEvent, claim.event_id)
+    if event is None or event.attempts != claim.attempts or event.attempts < 1:
+        raise StaleOutboxLeaseError("Summary financial deferral lost its attempt fence.")
+    if (
+        event.event_type != EVENT_TYPE
+        or event.schema_version != 1
+        or event.expected_consumers_json != [CONSUMER]
+        or effect.consumer_name != CONSUMER
+    ):
+        raise StaleOutboxLeaseError("Financial deferral requires the sole summary consumer.")
+    event.attempts -= 1
+    record_outbox_failure(
+        session,
+        claim=claim,
+        last_error_redacted=reason,
+        retry_at=now + FINANCIAL_ADMISSION_COOLDOWN,
+        now=now,
+    )
+
+
 def run_update_summary(claim: OutboxClaim, *, provider: LLMProvider | None = None) -> None:
     """Consume one committed claim, persisting usage independently of delivery."""
     factory = get_session_factory()
@@ -550,6 +582,13 @@ def run_update_summary(claim: OutboxClaim, *, provider: LLMProvider | None = Non
                 session.commit()
         except (StaleOutboxLeaseError, StaleConsumerEffectLeaseError):
             session.rollback()
+        except AiMoneyBudgetError:
+            session.rollback()
+            try:
+                _defer_financial_admission(session, claim=claim, effect_args=effect_args)
+                session.commit()
+            except (StaleOutboxLeaseError, StaleConsumerEffectLeaseError):
+                session.rollback()
         except (LLMProviderError, SummaryPublicationContended, ValueError, ValidationError) as exc:
             session.rollback()
             retryable = isinstance(exc, (LLMProviderError, SummaryPublicationContended))

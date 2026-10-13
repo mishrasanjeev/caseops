@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { defaultScheduler, notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -454,15 +454,56 @@ describe("IpDocketPage", () => {
   });
 
   it("renders the authorized empty state and working create form", async () => {
-    render(withClient(<IpDocketPage />));
+    expect(vi.isFakeTimers()).toBe(false);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const notifications: Array<() => void> = [];
+    notifyManager.setScheduler((callback) => {
+      expect(notifications.length).toBeLessThan(8);
+      notifications.push(callback);
+    });
+    let view: Pick<ReturnType<typeof render>, "unmount"> | undefined;
+    try {
+      view = render(<QueryClientProvider client={client}><IpDocketPage /></QueryClientProvider>);
+      expect(fetchIpWorkspaceReadinessMock).toHaveBeenCalledTimes(1);
+      await act(async () => { await fetchIpWorkspaceReadinessMock.mock.results[0].value; });
+      expect(client.getQueryState(["ip", "readiness"])?.status).toBe("success");
+      expect(screen.getByText("Checking IP workspace readiness…")).toBeVisible();
+      expect(fetchIpDocketsMock).not.toHaveBeenCalled();
+      expect(notifications).toHaveLength(1);
+      await act(async () => { notifications.splice(0).forEach((callback) => callback()); });
+      expect(fetchIpDocketsMock).toHaveBeenCalledTimes(1);
+      await act(async () => { await fetchIpDocketsMock.mock.results[0].value; });
+      expect(client.getQueryState(["ip", "dockets"])?.status).toBe("success");
+      expect(screen.getByText("Loading IP docket…")).toBeVisible();
+      expect(notifications).toHaveLength(1);
+      console.info("IP_EMPTY_QUERY_DELIVERY_CONTROL", {
+        fakeTimers: vi.isFakeTimers(), readinessStatus: client.getQueryState(["ip", "readiness"])?.status,
+        docketStatus: client.getQueryState(["ip", "dockets"])?.status,
+        queuedNotifications: notifications.length, readinessCalls: fetchIpWorkspaceReadinessMock.mock.calls.length,
+        docketCalls: fetchIpDocketsMock.mock.calls.length,
+      });
+      // Settled fixtures are not delivered observer updates; flush that boundary in act.
+      await act(async () => { notifications.splice(0).forEach((callback) => callback()); });
+      expect(notifications).toHaveLength(0);
 
-    expect(await screen.findByText("No IP records yet")).toBeInTheDocument();
-    const create = screen.getByRole("button", { name: "New trademark" });
-    expect(create).toBeVisible();
-    fireEvent.click(create);
-    expect(screen.getByRole("heading", { name: "New trademark application" })).toBeVisible();
-    expect(screen.getByLabelText("Word mark")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Create application" })).toBeDisabled();
+      expect(await screen.findByText("No IP records yet")).toBeInTheDocument();
+      const create = screen.getByRole("button", { name: "New trademark" });
+      expect(create).toBeVisible();
+      fireEvent.click(create);
+      expect(screen.getByRole("heading", { name: "New trademark application" })).toBeVisible();
+      expect(screen.getByLabelText("Word mark")).toBeVisible();
+      expect(screen.getByRole("button", { name: "Create application" })).toBeDisabled();
+    } finally {
+      try { view?.unmount(); } finally {
+        try { client.clear(); } finally {
+          notifications.length = 0;
+          notifyManager.setScheduler(defaultScheduler);
+        }
+      }
+    }
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
   });
 
   it("keeps a deep-linked docket focused instead of starting the full portfolio request", async () => {

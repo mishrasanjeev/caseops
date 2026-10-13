@@ -13,6 +13,7 @@ from alembic import command
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AccessReviewCampaign,
+    AccessReviewDecision,
     Company,
     CompanyMembership,
     IpDocketRecord,
@@ -209,9 +210,15 @@ def test_pg_campaign_evidence_cannot_be_rewritten_or_deleted(isolated_postgres_c
     owner, reviewer, campaign, _ = journey.setup_review(isolated_postgres_client)
     reviewed = journey.decide(isolated_postgres_client, reviewer, campaign)
     assert reviewed.status_code == 200, reviewed.text
+    with get_session_factory()() as session:
+        opened = session.get(AccessReviewCampaign, campaign["id"])
+        reviewed_fixture = {
+            column.name: getattr(opened, column.name) for column in opened.__table__.c
+        }
+        assert reviewed_fixture["status"] == "open" and reviewed_fixture["finalized_at"] is None
     assert journey.finalize(isolated_postgres_client, owner, reviewed.json()).status_code == 200
     with get_session_factory()() as session:
-        url = session.get_bind().url.render_as_string(hide_password=False)
+        engine = session.get_bind()
         for sql in (
             "UPDATE access_review_campaigns SET title='forged'",
             "UPDATE access_review_campaigns SET status='open', version=version+1",
@@ -223,14 +230,22 @@ def test_pg_campaign_evidence_cannot_be_rewritten_or_deleted(isolated_postgres_c
                 session.execute(text(sql))
             session.rollback()
         assert session.get(AccessReviewCampaign, campaign["id"]).status == "finalized"
-    monkeypatch.setenv("CASEOPS_DATABASE_URL", url)
-    get_settings.cache_clear()
-    config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
-    try:
-        with pytest.raises(RuntimeError, match="roll forward"):
-            command.downgrade(config, "20260909_0003")
-    finally:
-        get_settings.cache_clear()
+        assert session.scalar(
+            select(AccessReviewDecision.id).where(
+                AccessReviewDecision.campaign_id == campaign["id"]
+            )
+        )
+    from tests.fixtures_historical_migrations import (
+        assert_retained_downgrade_refused,
+        historical_database,
+        replay_finalized_access_review,
+    )
+
+    with historical_database(engine, "20260910_0001") as (dated_engine, config):
+        copied = replay_finalized_access_review(engine, dated_engine, reviewed_fixture)
+        assert_retained_downgrade_refused(
+            dated_engine, config, "20260910_0001", "20260909_0003", copied, "roll forward"
+        )
 
 
 def test_independently_fresh_migration_empty_rollback_and_reupgrade(pg_engine, monkeypatch):

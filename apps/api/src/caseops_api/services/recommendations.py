@@ -33,8 +33,8 @@ import time
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel, Field
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.core.settings import get_settings
@@ -42,6 +42,7 @@ from caseops_api.db.models import (
     AuditResult,
     AuthorityCitation,
     AuthorityDocument,
+    AuthorityDocumentChunk,
     Judge,
     Matter,
     MatterActivity,
@@ -237,6 +238,7 @@ def _safe_log_value(value: object, *, limit: int = 160) -> str:
 
 
 class _LLMOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     # Bounds widened 2026-04-28 (BUG-035) — OpenAI extraction model + GPT-5.1 routinely
     # generate longer rationales and 6+ options on richly-described
     # matters; the prior tight bounds tripped pydantic ValidationError
@@ -249,6 +251,7 @@ class _LLMOption(BaseModel):
 
 
 class _LLMAnalysis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     recommendation: str = Field(min_length=1, max_length=5000)
     risk_analysis: list[str] = Field(default_factory=list, max_length=12)
     legal_impact: list[str] = Field(default_factory=list, max_length=12)
@@ -258,6 +261,7 @@ class _LLMAnalysis(BaseModel):
 
 
 class _LLMResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=2, max_length=600)
     options: list[_LLMOption] = Field(min_length=1, max_length=10)
     primary_recommendation_label: str | None = None
@@ -275,6 +279,108 @@ class RetrievedAuthority:
     text: str
     aliases: tuple[str, ...] = ()
     rerank_explanation: str | None = None
+    authority_document_id: str | None = None
+    grounding_lineage: tuple[object, ...] | None = None
+    grounding_chunks: tuple[tuple[str, int, str], ...] = ()
+
+
+def _authority_grounding_state(
+    session: Session, authorities: list[RetrievedAuthority], *, lock_sources: bool = False
+) -> str:
+    ids = sorted({item.authority_document_id for item in authorities if item.authority_document_id})
+    if len(ids) > 6 or any(not item.authority_document_id for item in authorities):
+        raise HTTPException(409, "Authority source identities cannot be revalidated.")
+    if not ids:
+        return hashlib.sha256(b"[]").hexdigest()
+
+    # Scalar reads bypass the ORM identity map. PostgreSQL hashes source bytes
+    # in place instead of copying entire judgments into the request again.
+    postgres = session.get_bind().dialect.name == "postgresql"
+
+    def digest(column, max_bytes):
+        if not postgres:
+            return column
+        return case(
+            (func.octet_length(column) > max_bytes, "source-exceeds-byte-bound"),
+            else_=func.encode(
+                func.sha256(func.convert_to(func.coalesce(column, ""), "UTF8")),
+                "hex",
+            ),
+        )
+
+    body = digest(AuthorityDocument.document_text, 8 * 1024 * 1024)
+    content = digest(AuthorityDocumentChunk.content, 64 * 1024)
+    document_query = (
+        select(
+            AuthorityDocument.id,
+            AuthorityDocument.title,
+            AuthorityDocument.case_reference,
+            AuthorityDocument.summary,
+            AuthorityDocument.source_reference,
+            AuthorityDocument.source_version,
+            AuthorityDocument.content_hash,
+            AuthorityDocument.source_access_state,
+            AuthorityDocument.legal_review_status,
+            AuthorityDocument.updated_at,
+            body,
+        )
+        .where(AuthorityDocument.id.in_(ids))
+        .order_by(AuthorityDocument.id)
+    )
+    if lock_sources:
+        document_query = document_query.with_for_update(of=AuthorityDocument)
+    documents = session.execute(document_query).all()
+    if len(documents) != len(ids):
+        raise HTTPException(409, "An authority source is no longer available. No output was saved.")
+    chunk_query = (
+        select(
+            AuthorityDocumentChunk.authority_document_id,
+            AuthorityDocumentChunk.id,
+            AuthorityDocumentChunk.chunk_index,
+            content,
+        )
+        .where(AuthorityDocumentChunk.authority_document_id.in_(ids))
+        .order_by(AuthorityDocumentChunk.authority_document_id, AuthorityDocumentChunk.chunk_index)
+        .limit(4097)
+    )
+    if lock_sources:
+        chunk_query = chunk_query.with_for_update(of=AuthorityDocumentChunk)
+    chunks = session.execute(chunk_query).all()
+    if len(chunks) > 4096:
+        raise HTTPException(503, "Authority source revalidation exceeded its bounded work budget.")
+
+    def fingerprint(row, max_bytes):
+        values = list(row)
+        if not postgres:
+            raw = (values[-1] or "").encode("utf-8")
+            if len(raw) > max_bytes:
+                raise HTTPException(503, "Authority source revalidation exceeded its byte budget.")
+            values[-1] = hashlib.sha256(raw).hexdigest()
+        elif values[-1] == "source-exceeds-byte-bound":
+            raise HTTPException(503, "Authority source revalidation exceeded its byte budget.")
+        return values
+
+    document_values = [fingerprint(row, 8 * 1024 * 1024) for row in documents]
+    chunk_values = [fingerprint(row, 64 * 1024) for row in chunks]
+    by_document = {row[0]: tuple(row[:10]) for row in document_values}
+    by_chunk = {row[1]: (row[2], row[3]) for row in chunk_values}
+    for authority in authorities:
+        if (
+            authority.grounding_lineage is not None
+            and by_document[authority.authority_document_id] != authority.grounding_lineage
+        ) or any(
+            by_chunk.get(chunk_id) != (index, content_hash)
+            for chunk_id, index, content_hash in authority.grounding_chunks
+        ):
+            raise HTTPException(409, "The authority edition changed. No recommendation was saved.")
+    return hashlib.sha256(
+        json.dumps(
+            [document_values, chunk_values],
+            default=str,
+            ensure_ascii=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -749,11 +855,12 @@ def _gather_authorities_with_trace(
             RetrievedAuthority(
                 identifier=identifier,
                 text=text,
+                authority_document_id=result.authority_document_id,
+                grounding_lineage=result._grounding_lineage,
+                grounding_chunks=result._grounding_chunks,
                 aliases=tuple(dict.fromkeys(aliases)),
                 rerank_explanation=(
-                    explanations.get(result.authority_document_id)
-                    if explanations
-                    else None
+                    explanations.get(result.authority_document_id) if explanations else None
                 ),
             )
         )
@@ -1692,7 +1799,80 @@ def generate_recommendation(
         purpose=f"recommendation:{rec_type}",
     )
 
-    def _invoke(
+    from caseops_api.services.llm_recommendation_fallback import (
+        RecommendationFallbackPlan,
+        recommendation_fallback_enabled,
+    )
+
+    use_fallback_plan = (
+        provider is None and llm.name == "openai" and recommendation_fallback_enabled()
+    )
+    if use_fallback_plan and any(item.grounding_lineage is None for item in retrieved):
+        raise HTTPException(409, "Authority edition evidence is missing. No model was called.")
+    source_grounding_state = (
+        _authority_grounding_state(session, retrieved) if use_fallback_plan else None
+    )
+
+    def _revalidate_before_provider() -> None:
+        nonlocal context
+        # Never discard surrounding writes or keep source locks while an ADC
+        # client is constructed. Reload current access and private input before
+        # either attempt, then let structured preflight authorize its real model.
+        if session.new or session.dirty or session.deleted:
+            raise RuntimeError("Recommendation provider preflight has pending writes.")
+        session.rollback()
+        from caseops_api.services.capabilities import membership_has_capability
+        from caseops_api.services.identity import get_session_context
+
+        context = get_session_context(
+            session,
+            _call_context.actor_membership_id,
+            token_issued_at=context.token_issued_at,
+        )
+        if context.company.id != _call_context.tenant_id or not membership_has_capability(
+            session, context.membership, "recommendations:generate",
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Current access does not allow recommendation generation.",
+            )
+        current = _load_matter(session, context=context, matter_id=matter_id)
+        current = require_operational_matter(
+            session, matter=current, operation="generate a recommendation",
+        )
+        current_messages = _build_prompt(
+            rec_type=rec_type,
+            matter=current,
+            authorities=retrieved,
+            objective=objective,
+            matter_intelligence_context=_build_matter_intelligence_context(session, current),
+        )
+        if (
+            current.lifecycle_version != source_lifecycle_version
+            or _prompt_hash(current_messages) != source_prompt_hash
+            or _authority_grounding_state(session, retrieved) != source_grounding_state
+        ):
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The matter or its source material changed. No recommendation was saved.",
+            )
+        session.rollback()
+
+    fallback_plan = (
+        RecommendationFallbackPlan(
+            started_at=_t0,
+            primary_factory=lambda timeout: build_provider(
+                purpose=PURPOSE_RECOMMENDATIONS,
+                timeout_seconds=timeout,
+            ),
+            revalidate=_revalidate_before_provider,
+        )
+        if use_fallback_plan
+        else None
+    )
+
+    def _invoke_one(
         active: LLMProvider, active_messages: list[LLMMessage]
     ) -> tuple[_LLMResponse, LLMCompletion]:
         return generate_structured(
@@ -1706,19 +1886,16 @@ def generate_recommendation(
             release_session_before_provider=True,
         )
 
-    # 2026-04-30: gpt-5.1-only path. The prior hosted LLM→OpenAI extraction model→OpenAI
-    # ladder burned ~3x tokens per click; with hosted LLM credits gone
-    # and the OpenAI bill now the single line item, one primary call is
-    # all we want. LLMProviderError covers quota / 5xx / format / timeout.
-    #
-    # Ram BUG-029 (2026-05-01) — recommendations 502 reopen, GPT-5.1
-    # occasionally returns malformed JSON (~1-2% of long structured
-    # outputs). Without a fallback ladder a single transient format
-    # error puts the user on a 502. Single retry on LLMResponseFormatError
-    # specifically — same provider, same model, same prompt. Most format
-    # errors clear on retry because the model's JSON output is non-
-    # deterministic at temperature > 0. Quota / 5xx / timeout still 502
-    # immediately (retry won't help upstream outages).
+    def _invoke(
+        active: LLMProvider, active_messages: list[LLMMessage]
+    ) -> tuple[_LLMResponse, LLMCompletion]:
+        if fallback_plan is not None:
+            return fallback_plan.run(active_messages, _invoke_one)
+        return _invoke_one(active, active_messages)
+
+    # Preserve October's existing same-model format/safety repair. When the
+    # November availability fallback is enabled, both repairs consume the same
+    # two-attempt deadline; a refusal or invalid answer cannot switch models.
     provider_retry_used = False
     safety_repair_category: str | None = None
     safety_repair_error: str | None = None
@@ -1787,6 +1964,21 @@ def generate_recommendation(
     # the terminal commit makes disposal and recommendation persistence
     # mutually exclusive.
     session.commit()
+    if fallback_plan is not None:
+        _revalidate_before_provider()
+        from caseops_api.services.tenant_ai_policy import is_model_allowed, resolve_tenant_policy
+
+        current_policy = resolve_tenant_policy(session, company_id=context.company.id)
+        if not is_model_allowed(
+            current_policy, purpose=_call_context.purpose, model=completion.model,
+        ):
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "The current AI policy no longer permits this recommendation. No output saved."
+                ),
+            )
     matter = _load_matter(session, context=context, matter_id=matter_id)
     matter = require_operational_matter(
         session,
@@ -1803,14 +1995,22 @@ def generate_recommendation(
             ),
         )
 
-    current_retrieved, _current_bench_trace = _gather_authorities_with_trace(
-        session,
-        query=_build_retrieval_query(matter, rec_type, objective=objective),
-        forum_level=matter.forum_level,
-        matter=matter,
-        context=context,
-        enable_bench_citation_rerank=(rec_type == "authority"),
-    )
+    if fallback_plan is not None:
+        # Keep current source locks until persistence; new chunks need the
+        # parent FK lock. Do not rerun an external embedder under these locks.
+        current_grounding = _authority_grounding_state(session, retrieved, lock_sources=True)
+        if current_grounding != source_grounding_state:
+            raise HTTPException(409, "Authority sources changed. No recommendation was saved.")
+        current_retrieved = retrieved
+    else:
+        current_retrieved, _current_bench_trace = _gather_authorities_with_trace(
+            session,
+            query=_build_retrieval_query(matter, rec_type, objective=objective),
+            forum_level=matter.forum_level,
+            matter=matter,
+            context=context,
+            enable_bench_citation_rerank=(rec_type == "authority"),
+        )
     current_intelligence_context = _build_matter_intelligence_context(session, matter)
     current_messages = _build_prompt(
         rec_type=rec_type,
@@ -1975,6 +2175,7 @@ def generate_recommendation(
             "option_count": len(cleaned_options),
             "verified_citations": total_verified_citations,
             "confidence": confidence,
+            **(fallback_plan.audit_metadata() if fallback_plan is not None else {}),
             "safety_repair": {
                 "attempted": safety_repair_category is not None,
                 "source_category": safety_repair_category,

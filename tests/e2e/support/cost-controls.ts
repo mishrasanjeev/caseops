@@ -4,6 +4,13 @@ export const noPaidProviderHeaders = {
   "X-CaseOps-Automated-Test": "no-paid-providers",
 } as const;
 
+export function localTransportHeaders(baseUrl: string): Record<string, string> {
+  const origin = new URL(baseUrl);
+  const local = origin.protocol === "http:"
+    && ["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname);
+  return { ...noPaidProviderHeaders, ...(local ? { Connection: "close" } : {}) };
+}
+
 /**
  * Opt-in for automated verification of a provider search that must be observed
  * in production. The API answers it from a checked-in verification fixture's

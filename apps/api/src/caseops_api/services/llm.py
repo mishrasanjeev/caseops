@@ -19,13 +19,22 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, NoReturn
 
 from pydantic import BaseModel, ValidationError
 
 from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
 from caseops_api.core.settings import get_settings
+from caseops_api.services.ai_money_budget import (
+    AiMoneyBudgetError,
+    assert_paid_ai_dispatch,
+    reserve_paid_ai_call,
+)
 from caseops_api.services.llm_types import (
     LLMCallContext,
     LLMCompletion,
@@ -35,10 +44,136 @@ from caseops_api.services.llm_types import (
     LLMProviderError,
     LLMQuotaExhaustedError,
     LLMResponseFormatError,
+    LLMTransientProviderError,
     ModelRunWriter,
 )
 
 logger = logging.getLogger(__name__)
+
+_provider_deadline: ContextVar[float | None] = ContextVar("llm_provider_deadline", default=None)
+_completion_receipt: ContextVar[Callable[[LLMCompletion], None] | None] = ContextVar(
+    "llm_completion_receipt", default=None,
+)
+
+
+class LLMUsageAccountingError(RuntimeError):
+    """Accounting failure is not a retryable provider failure."""
+
+
+def _observe_completion(completion: LLMCompletion) -> None:
+    observer = _completion_receipt.get()
+    if observer is not None:
+        try:
+            observer(LLMCompletion(
+                text="", provider=completion.provider, model=completion.model,
+                prompt_tokens=completion.prompt_tokens,
+                completion_tokens=completion.completion_tokens,
+                latency_ms=completion.latency_ms,
+                raw={"usage_estimated": isinstance(getattr(completion, "raw", None), dict)
+                     and completion.raw.get("usage_estimated") is True},
+            ))
+        except Exception:
+            raise LLMUsageAccountingError(
+                "AI usage accounting failed; no output was accepted.",
+            ) from None
+
+
+def _observe_native_usage(provider, usage, *, started, input_bytes, max_tokens) -> None:
+    if _completion_receipt.get() is None:
+        return
+    estimated = False
+    try:
+        prompt, output = usage()
+        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0
+               for value in (prompt, output)):
+            raise ValueError("Invalid usage counters.")
+    except (ValueError, TypeError, KeyError, AttributeError):
+        # Unknown usage is conservatively charged to the bounded request, never
+        # invented as actual zero tokens or retained with a rejected response body.
+        prompt = input_bytes
+        output = max_tokens
+        estimated = True
+    _observe_completion(LLMCompletion(
+        text="", provider=provider.name, model=provider.model,
+        prompt_tokens=prompt, completion_tokens=output,
+        latency_ms=max(1, int((time.perf_counter() - started) * 1000)),
+        raw={"usage_estimated": estimated},
+    ))
+
+
+def provider_time_remaining(deadline: float | None = None) -> float | None:
+    current = _provider_deadline.get()
+    effective = (
+        min(current, deadline)
+        if current is not None and deadline is not None
+        else (current if current is not None else deadline)
+    )
+    if effective is None:
+        return None
+    remaining = effective - time.perf_counter()
+    if remaining < 0.001:
+        raise LLMProviderError("The recommendation provider deadline has elapsed.")
+    return remaining
+
+
+@contextmanager
+def provider_deadline(deadline: float) -> Iterator[None]:
+    """Carry one absolute attempt deadline through factories and policy preflight."""
+    import math
+
+    if not math.isfinite(deadline):
+        raise LLMProviderError("The recommendation provider deadline is invalid.")
+    current = _provider_deadline.get()
+    token = _provider_deadline.set(min(current, deadline) if current is not None else deadline)
+    try:
+        provider_time_remaining()
+        yield
+    finally:
+        _provider_deadline.reset(token)
+
+
+def _managed_credentials_before_deadline(deadline: float) -> Any:
+    import google.auth
+    import requests
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+
+    class BoundedRequest(Request):
+        def __call__(self, *args: Any, timeout: float | None = None, **kwargs: Any) -> Any:
+            if paid_providers_blocked_for_request():
+                raise AiMoneyBudgetError("Automated verification cannot call paid AI providers.")
+            remaining = provider_time_remaining(deadline)
+            bounded = remaining if timeout is None else min(timeout, remaining)
+            try:
+                return super().__call__(*args, timeout=bounded, **kwargs)
+            finally:
+                provider_time_remaining(deadline)
+
+    if paid_providers_blocked_for_request():
+        raise AiMoneyBudgetError("Automated verification cannot call paid AI providers.")
+    provider_time_remaining(deadline)
+    try:
+        with requests.Session() as session:
+            request = BoundedRequest(session=session)
+            credentials, _ = google.auth.default(
+                request=request, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            provider_time_remaining(deadline)
+            if not credentials.valid:
+                credentials.refresh(request)
+            provider_time_remaining(deadline)
+            if not credentials.token:
+                raise LLMProviderError("Managed AI credentials are unavailable.")
+            # A token-only public credential cannot perform a hidden SDK refresh.
+            return Credentials(
+                token=credentials.token,
+                quota_project_id=getattr(credentials, "quota_project_id", None),
+            )
+    except (AiMoneyBudgetError, LLMProviderError):
+        raise
+    except Exception:
+        provider_time_remaining(deadline)
+        raise LLMProviderError("Managed AI credentials are unavailable.") from None
 
 
 class MockProvider:
@@ -65,7 +200,10 @@ class MockProvider:
         started = time.perf_counter()
         joined = "\n".join(m.content for m in messages)
         lowered = joined.lower()
-        if "untrusted_authority_sources:" in lowered and "issue_summary" in lowered:
+        contract_response = _mock_contract_response(messages)
+        if contract_response is not None:
+            text = contract_response
+        elif "untrusted_authority_sources:" in lowered and "issue_summary" in lowered:
             text = _mock_intelligent_review_response(joined)
         elif "workspace_assistant_qa" in lowered:
             text = _mock_workspace_assistant_response(joined)
@@ -106,6 +244,40 @@ def _estimate_call_tokens(messages: list[LLMMessage], max_tokens: int) -> int:
 def _mock_plain_response(prompt: str) -> str:
     digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
     return f"mock-ack::{digest}"
+
+
+def _mock_contract_response(messages: list[LLMMessage]) -> str | None:
+    """Minimal source-only fixtures, not paid-model or legal-quality evidence."""
+    if not messages or messages[0].role != "system":
+        return None
+    system = messages[0].content
+    if system.startswith("You compare a firm's playbook rules against clauses already "):
+        # The canonical service supplies every reviewed rule's missing finding;
+        # the emulator must not fabricate matches or responsive clause IDs.
+        return '{"findings":[]}'
+    prefixes = (
+        "You extract legal clauses from commercial contracts ",
+        "You extract operational obligations from commercial contracts.",
+        "You extract source-backed, party-specific contract items from ",
+    )
+    if not system.startswith(prefixes):
+        return None
+    prompt = messages[-1].content
+    source = (_extract_between(prompt, "=== CONTRACT TEXT ===\n", "\n=== END ===") or "").strip()
+    excerpt = next((line.strip()[:280] for line in source.splitlines() if line.strip()), "")
+    if system.startswith(prefixes[0]):
+        rows = [{"clause_type": "other", "title": "Offline source excerpt",
+                 "clause_text": excerpt, "risk_level": "low",
+                 "rationale": "Deterministic offline fixture, not legal advice."}]
+        return json.dumps({"clauses": rows if len(excerpt) >= 10 else []})
+    if system.startswith(prefixes[1]):
+        rows = [{"title": "Offline source duty", "description": excerpt,
+                 "due_on_iso": None, "priority": "medium"}]
+        return json.dumps({"obligations": rows if excerpt else []})
+    rows = [{"category": "obligation", "summary": "Offline source excerpt",
+             "assigned_party": "ambiguous", "ambiguity_reason": "Offline fixture needs review.",
+             "snippet": excerpt, "locator": None}]
+    return json.dumps({"items": rows if excerpt else []})
 
 
 def _mock_intelligent_review_response(prompt: str) -> str:
@@ -629,11 +801,13 @@ class OpenAIProvider:
     Defaults to ``gpt-5.1`` and fails closed when its configured credentials
     or model are unavailable; CaseOps does not silently cross providers.
 
-    Two model-family quirks worth knowing:
+    Model-family quirks worth knowing:
 
     - ``gpt-5.x`` reasoning models reject any temperature other than
       the default. We omit the parameter entirely for ``gpt-5*`` so the
       wire request never carries it.
+    - ``gpt-6-luna`` uses low reasoning without temperature, but preserves
+      the caller's completion-token ceiling rather than the legacy floor.
     - The Chat Completions API now prefers ``max_completion_tokens``
       over the legacy ``max_tokens``. We send the new field; the SDK
       maps it correctly for older models too.
@@ -668,6 +842,11 @@ class OpenAIProvider:
         timeout_seconds: float = 60.0,
         max_retries: int = 2,
     ) -> None:
+        current = _provider_deadline.get()
+        self._deadline = (
+            min(current, time.perf_counter() + timeout_seconds) if current is not None else None
+        )
+        provider_time_remaining(self._deadline)
         try:
             import openai  # type: ignore[import-not-found]
         except ImportError as exc:
@@ -679,14 +858,23 @@ class OpenAIProvider:
         self._client = openai.OpenAI(
             api_key=api_key,
             timeout=timeout_seconds,
-            max_retries=max_retries,
+            max_retries=0 if self._deadline is not None else max_retries,
         )
+        provider_time_remaining(self._deadline)
         self._openai = openai
         self.model = model
+        self._budget_retry_count = 0 if self._deadline is not None else max_retries
 
     def _model_rejects_temperature(self) -> bool:
         name = (self.model or "").lower()
-        return any(name.startswith(p) for p in self._NO_TEMPERATURE_PREFIXES)
+        return self._is_luna_model() or any(
+            name.startswith(p) for p in self._NO_TEMPERATURE_PREFIXES
+        )
+
+    def _is_luna_model(self) -> bool:
+        name = (self.model or "").lower()
+        # Match only Luna and date-shaped snapshots, not unreviewed siblings.
+        return re.fullmatch(r"gpt-6-luna(?:-[0-9]{4}-[0-9]{2}-[0-9]{2})?", name) is not None
 
     def _is_reasoning_model(self) -> bool:
         name = (self.model or "").lower()
@@ -726,7 +914,7 @@ class OpenAIProvider:
         }
         if not self._model_rejects_temperature():
             kwargs["temperature"] = temperature
-        if self._is_reasoning_model():
+        if self._is_reasoning_model() or self._is_luna_model():
             kwargs["reasoning_effort"] = "low"
         return kwargs
 
@@ -754,12 +942,48 @@ class OpenAIProvider:
             raw=response,
         )
 
+    def _budget_input_bytes(
+        self, kwargs: dict[str, Any], schema: type[BaseModel] | None = None
+    ) -> int:
+        wire_bytes = len(json.dumps(kwargs, ensure_ascii=False).encode("utf-8")) + 4096
+        if schema is not None and not paid_providers_blocked_for_request():
+            # This public SDK helper uses the same strict schema conversion as
+            # parse(). Raw Pydantic schema bytes omit required-field/ref expansion.
+            try:
+                contract = self._openai.pydantic_function_tool(schema)
+                wire_bytes += len(json.dumps(contract, ensure_ascii=False).encode("utf-8"))
+            except Exception as exc:
+                raise AiMoneyBudgetError(
+                    "AI structured request cost cannot be bounded. No external request was sent."
+                ) from exc
+        return wire_bytes
+
     def _raise_call_error(self, exc: Exception) -> NoReturn:
-        if _is_quota_exhausted(exc):
+        body = getattr(exc, "body", None)
+        error = body.get("error", body) if isinstance(body, dict) else None
+        error_code = error.get("code") if isinstance(error, dict) else None
+        if _is_quota_exhausted(exc) or error_code in _QUOTA_EXHAUSTED_MARKERS:
             raise LLMQuotaExhaustedError(
-                f"OpenAI quota exhausted: {exc}",
-            ) from exc
-        raise LLMProviderError(f"OpenAI call failed: {exc}") from exc
+                "OpenAI quota exhausted. Check the provider billing account.",
+            ) from None
+        import httpx
+
+        network_types = tuple(
+            error_type
+            for name in ("APIConnectionError", "APITimeoutError")
+            if isinstance(error_type := getattr(self._openai, name, None), type)
+        )
+        if (
+            isinstance(
+                exc, (TimeoutError, ConnectionError, httpx.TimeoutException, httpx.NetworkError)
+            )
+            or isinstance(exc, network_types)
+            or getattr(exc, "status_code", None) in {408, 429, 500, 502, 503, 504}
+        ):
+            raise LLMTransientProviderError(
+                "OpenAI is temporarily unavailable or the request timed out."
+            ) from None
+        raise LLMProviderError("OpenAI call failed. Check provider configuration.") from None
 
     def generate(
         self,
@@ -768,6 +992,7 @@ class OpenAIProvider:
         temperature: float = 0.2,
         max_tokens: int = 1024,
     ) -> LLMCompletion:
+        provider_time_remaining(getattr(self, "_deadline", None))
         kwargs = self._request_kwargs(
             messages,
             temperature=temperature,
@@ -783,11 +1008,47 @@ class OpenAIProvider:
         # stress-matter probe (BUG-024 grounding) hit a 110s client
         # timeout post-deploy.
         started = time.perf_counter()
+        provider_time_remaining(getattr(self, "_deadline", None))
+        input_bytes = self._budget_input_bytes(kwargs)
+        provider_time_remaining(getattr(self, "_deadline", None))
+        admission = reserve_paid_ai_call(
+            provider=self.name,
+            model=self.model,
+            input_bytes=input_bytes,
+            output_tokens=kwargs["max_completion_tokens"],
+            retry_count=getattr(self, "_budget_retry_count", 2),
+        )
+        assert_paid_ai_dispatch(admission)
+        remaining = provider_time_remaining(getattr(self, "_deadline", None))
+        if remaining is not None:
+            kwargs["timeout"] = remaining
         try:
-            response = self._client.chat.completions.create(**kwargs)
+            raw_api = getattr(self._client.chat.completions, "with_raw_response", None)
+            if _completion_receipt.get() is not None and raw_api is not None:
+                raw = raw_api.create(**kwargs)
+
+                def usage():
+                    counters = raw.http_response.json()["usage"]
+                    return counters["prompt_tokens"], counters["completion_tokens"]
+
+                _observe_native_usage(self, usage, started=started, input_bytes=input_bytes,
+                                      max_tokens=kwargs["max_completion_tokens"])
+                response = raw.parse()
+            else:
+                response = self._client.chat.completions.create(**kwargs)
+        except LLMUsageAccountingError:
+            raise
         except Exception as exc:
+            # A per-attempt transport timeout can still use the shared fallback budget.
+            provider_time_remaining()
             self._raise_call_error(exc)
-        return self._completion_from_response(response, started=started)
+        _observe_native_usage(self, lambda: (
+            response.usage.prompt_tokens, response.usage.completion_tokens,
+        ), started=started, input_bytes=input_bytes, max_tokens=kwargs["max_completion_tokens"])
+        provider_time_remaining(getattr(self, "_deadline", None))
+        completion = self._completion_from_response(response, started=started)
+        provider_time_remaining(getattr(self, "_deadline", None))
+        return completion
 
     def generate_structured[T: BaseModel](
         self,
@@ -807,29 +1068,62 @@ class OpenAIProvider:
         provider outage.
         """
 
+        provider_time_remaining(getattr(self, "_deadline", None))
         kwargs = self._request_kwargs(
             messages,
             temperature=temperature,
             max_tokens=max_tokens,
         )
         started = time.perf_counter()
+        provider_time_remaining(getattr(self, "_deadline", None))
+        input_bytes = self._budget_input_bytes(kwargs, schema)
+        provider_time_remaining(getattr(self, "_deadline", None))
+        admission = reserve_paid_ai_call(
+            provider=self.name,
+            model=self.model,
+            input_bytes=input_bytes,
+            output_tokens=kwargs["max_completion_tokens"],
+            retry_count=getattr(self, "_budget_retry_count", 2),
+        )
+        assert_paid_ai_dispatch(admission)
+        remaining = provider_time_remaining(getattr(self, "_deadline", None))
+        if remaining is not None:
+            kwargs["timeout"] = remaining
         try:
-            response = self._client.chat.completions.parse(
-                **kwargs,
-                response_format=schema,
-            )
+            raw_api = getattr(self._client.chat.completions, "with_raw_response", None)
+            if _completion_receipt.get() is not None and callable(getattr(raw_api, "parse", None)):
+                raw = raw_api.parse(**kwargs, response_format=schema)
+
+                def usage():
+                    counters = raw.http_response.json()["usage"]
+                    return counters["prompt_tokens"], counters["completion_tokens"]
+
+                _observe_native_usage(self, usage, started=started, input_bytes=input_bytes,
+                                      max_tokens=kwargs["max_completion_tokens"])
+                response = raw.parse()
+            else:
+                response = self._client.chat.completions.parse(**kwargs, response_format=schema)
+                _observe_native_usage(self, lambda: (
+                    response.usage.prompt_tokens, response.usage.completion_tokens,
+                ), started=started, input_bytes=input_bytes,
+                   max_tokens=kwargs["max_completion_tokens"])
+        except LLMUsageAccountingError:
+            raise
         except (
             self._openai.LengthFinishReasonError,
             self._openai.ContentFilterFinishReasonError,
             json.JSONDecodeError,
             ValidationError,
         ) as exc:
+            provider_time_remaining(getattr(self, "_deadline", None))
             raise LLMResponseFormatError(
                 f"OpenAI:{self.model} did not complete the required structured response."
             ) from exc
         except Exception as exc:
+            provider_time_remaining()
             self._raise_call_error(exc)
 
+        provider_time_remaining(getattr(self, "_deadline", None))
         choice = response.choices[0] if getattr(response, "choices", None) else None
         message = getattr(choice, "message", None)
         parsed = getattr(message, "parsed", None)
@@ -843,19 +1137,53 @@ class OpenAIProvider:
             raise LLMResponseFormatError(
                 f"OpenAI:{self.model} returned a parsed value outside the required schema."
             ) from exc
-        return self._completion_from_response(
+        provider_time_remaining(getattr(self, "_deadline", None))
+        completion = self._completion_from_response(
             response,
             started=started,
             text_override=validated.model_dump_json(),
         )
+        provider_time_remaining(getattr(self, "_deadline", None))
+        return completion
 
 
 class GeminiProvider:
-    """Thin adapter around google-genai. The hosted path for Gemma 4 family."""
+    """Budget-guarded Google GenAI adapter; routing belongs to the caller."""
 
     name = "gemini"
 
-    def __init__(self, *, model: str, api_key: str, timeout_seconds: float | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str | None = None,
+        project: str | None = None,
+        location: str = "global",
+        timeout_seconds: float | None = None,
+    ) -> None:
+        import math
+
+        current = _provider_deadline.get()
+        constructor_started = time.perf_counter()
+        self._deadline = current
+        provider_time_remaining(current)
+        if timeout_seconds is not None and (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (float, int))
+            or not math.isfinite(timeout_seconds)
+            or timeout_seconds < 0.001
+        ):
+            raise LLMProviderError("Gemini requires a finite positive timeout of at least 1 ms.")
+        if project is not None and (
+            not isinstance(project, str)
+            or not project.strip()
+            or api_key
+            or not isinstance(location, str)
+            or not location.strip()
+        ):
+            raise LLMProviderError("Gemini requires one explicit credential path and a location.")
+        if project is None and not api_key:
+            raise LLMProviderError("Gemini requires an API key or a managed Google Cloud project.")
         try:
             from google import genai  # type: ignore[import-not-found]
         except ImportError as exc:
@@ -863,14 +1191,305 @@ class GeminiProvider:
                 "The 'google-genai' package is not installed. Run "
                 "'uv add google-genai' and set CASEOPS_LLM_PROVIDER=gemini.",
             ) from exc
-        client_options = {}
-        if timeout_seconds is not None:
+        client_options: dict[str, Any] = {}
+        bounded_timeout = (
+            timeout_seconds if timeout_seconds is not None else (60.0 if project else None)
+        )
+        if current is not None:
+            self._deadline = min(
+                current, constructor_started + (bounded_timeout or provider_time_remaining(current))
+            )
+            bounded_timeout = provider_time_remaining(self._deadline)
+        if bounded_timeout is not None:
             client_options["http_options"] = {
-                "timeout": int(timeout_seconds * 1000),
+                "timeout": int(bounded_timeout * 1000),
                 "retry_options": {"attempts": 1},
             }
-        self._client = genai.Client(api_key=api_key, **client_options)
+        if project:
+            client_options.update(vertexai=True, project=project.strip(), location=location.strip())
+            client_options["http_options"]["api_version"] = "v1"
+            if self._deadline is not None:
+                client_options["credentials"] = _managed_credentials_before_deadline(self._deadline)
+        else:
+            client_options["api_key"] = api_key
+        try:
+            self._client = genai.Client(**client_options)
+        except Exception:
+            provider_time_remaining(self._deadline)
+            raise LLMProviderError("Gemini client configuration is unavailable.") from None
+        provider_time_remaining(self._deadline)
         self.model = model
+        self._budget_retry_count = 0 if bounded_timeout is not None else 4
+
+    def _request_kwargs(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float,
+        max_tokens: int,
+        schema: type[BaseModel] | None = None,
+    ) -> dict[str, Any]:
+        chat = [
+            message for message in messages if message.role != "system" and message.content.strip()
+        ]
+        if self.model == "gemini-3.5-flash-lite" and chat and chat[-1].role == "assistant":
+            raise LLMProviderError("Gemini 3.5 Flash-Lite does not accept an assistant prefill.")
+        if any(message.role not in {"system", "user", "assistant"} for message in messages):
+            raise LLMProviderError("Gemini received an unsupported message role.")
+        config: dict[str, Any] = {"max_output_tokens": max_tokens}
+        if self.model != "gemini-3.5-flash-lite":
+            config["temperature"] = temperature
+        system, _ = _split_system_and_chat(messages)
+        if system:
+            config["system_instruction"] = {"role": "user", "parts": [{"text": system}]}
+        if schema is not None:
+            config.update(
+                response_mime_type="application/json",
+                response_json_schema=self._strict_json_schema(schema),
+            )
+        return {
+            "model": self.model,
+            "contents": _messages_to_gemini(
+                chat
+                if self.model == "gemini-3.5-flash-lite"
+                else [message for message in messages if message.role != "system"]
+            ),
+            "config": config,
+        }
+
+    @staticmethod
+    def _strict_json_schema(schema: type[BaseModel]) -> dict[str, Any]:
+        contract = schema.model_json_schema()
+
+        def close(node: Any) -> None:
+            if not isinstance(node, dict):
+                raise LLMProviderError("Gemini requires a closed structured response schema.")
+            if not any(
+                key in node for key in ("type", "$ref", "enum", "const", "anyOf", "oneOf", "allOf")
+            ):
+                raise LLMProviderError("Gemini requires a closed structured response schema.")
+            if node.get("type") == "object" or "properties" in node:
+                # An arbitrary mapping cannot be made strict by silently dropping
+                # its values. Fail before reserving spend instead.
+                if "properties" not in node or (
+                    "additionalProperties" in node and node["additionalProperties"] is not False
+                ):
+                    raise LLMProviderError("Gemini requires a closed structured response schema.")
+                node["additionalProperties"] = False
+            # Visit schema nodes, not property-name/description/discriminator maps.
+            for key in ("properties", "$defs", "definitions"):
+                for child in node.get(key, {}).values():
+                    close(child)
+            for key in ("anyOf", "oneOf", "allOf", "prefixItems"):
+                for child in node.get(key, []):
+                    close(child)
+            for key in ("items", "not", "if", "then", "else", "contains"):
+                if key in node:
+                    if isinstance(node[key], list):
+                        for child in node[key]:
+                            close(child)
+                    else:
+                        child = node[key]
+                        close(child)
+
+        close(contract)
+        return contract
+
+    def _raise_call_error(self, exc: Exception) -> NoReturn:
+        import httpx
+        import requests
+
+        code = getattr(exc, "code", None)
+        status_code = code if isinstance(code, int) else getattr(exc, "status_code", None)
+        quota_markers = (
+            "quota exceeded",
+            "exceeded your quota",
+            "quota_exceeded",
+            "quota exhausted",
+            "quotafailure",
+            "billing disabled",
+            "billing_not_active",
+        )
+        if (
+            _is_quota_exhausted(exc)
+            or status_code == 402
+            or any(marker in str(exc).lower() for marker in quota_markers)
+        ):
+            raise LLMQuotaExhaustedError(
+                "Gemini quota exhausted. Check the provider billing account."
+            ) from None
+        if isinstance(
+            exc,
+            (
+                TimeoutError,
+                ConnectionError,
+                httpx.TimeoutException,
+                httpx.NetworkError,
+                requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError,
+            ),
+        ) or (status_code in {408, 429, 500, 502, 503, 504}):
+            raise LLMTransientProviderError(
+                "Gemini is temporarily unavailable or the request timed out."
+            ) from None
+        raise LLMProviderError("Gemini call failed. Check provider configuration.") from None
+
+    def _call(self, kwargs: dict[str, Any]) -> tuple[Any, float]:
+        started = time.perf_counter()
+        provider_time_remaining(getattr(self, "_deadline", None))
+        raw_receipt = _completion_receipt.get() is not None
+        if raw_receipt:
+            kwargs["config"]["should_return_http_response"] = True
+        input_bytes = len(json.dumps(kwargs, ensure_ascii=True).encode("utf-8")) + 4096
+        provider_time_remaining(getattr(self, "_deadline", None))
+        admission = reserve_paid_ai_call(
+            provider=self.name,
+            model=self.model,
+            # Include system instructions, exact closed schema and output config.
+            # ASCII escaping is conservative beside the SDK's JSON encoding.
+            input_bytes=input_bytes,
+            # GenerateContent's cap includes visible and thought tokens:
+            # https://ai.google.dev/gemini-api/docs/generate-content/thinking#token-limits-and-max_output_tokens
+            output_tokens=kwargs["config"]["max_output_tokens"],
+            retry_count=getattr(self, "_budget_retry_count", 4),
+        )
+        assert_paid_ai_dispatch(admission)
+        remaining = provider_time_remaining(getattr(self, "_deadline", None))
+        if remaining is not None:
+            kwargs["config"]["http_options"] = {
+                "timeout": int(remaining * 1000),
+                "retry_options": {"attempts": 1},
+            }
+        try:
+            response = self._client.models.generate_content(**kwargs)
+        except Exception as exc:
+            provider_time_remaining()
+            self._raise_call_error(exc)
+
+        body = None
+        if raw_receipt:
+            try:
+                body = json.loads(response.sdk_http_response.body)
+            except (AttributeError, ValueError, TypeError):
+                # Keep conservative accounting ahead of the typed response-format error.
+                body = None
+
+        def usage():
+            # The SDK's typed counters coerce bool/string values into integers.
+            # Observe only wire counters before constructing the typed response.
+            counters = body["usageMetadata"]
+
+            def count(value):
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ValueError("Invalid usage counter.")
+                return value
+
+            prompt = count(counters["promptTokenCount"])
+            candidate = counters.get("candidatesTokenCount")
+            thoughts = counters.get("thoughtsTokenCount")
+            total = counters.get("totalTokenCount")
+            if total is not None:
+                output = count(total) - prompt
+                components = sum(
+                    count(value) for value in (candidate, thoughts) if value is not None
+                )
+                if output < 0 or components > output:
+                    raise ValueError("Inconsistent usage counters.")
+            else:
+                output = count(candidate) + count(thoughts)
+            return prompt, output
+
+        _observe_native_usage(self, usage, started=started, input_bytes=input_bytes,
+                              max_tokens=kwargs["config"]["max_output_tokens"])
+        if raw_receipt:
+            from google.genai import types
+
+            try:
+                response = types.GenerateContentResponse.model_validate(body)
+            except (ValidationError, ValueError, TypeError):
+                raise LLMResponseFormatError(
+                    "Gemini returned unreadable response metadata.",
+                ) from None
+        provider_time_remaining(getattr(self, "_deadline", None))
+        return response, started
+
+    def _completion_from_response(
+        self,
+        response: Any,
+        *,
+        started: float,
+        structured: bool = False,
+        text_override: str | None = None,
+    ) -> LLMCompletion:
+        feedback = getattr(response, "prompt_feedback", None)
+        block = getattr(feedback, "block_reason", None)
+        if block and getattr(block, "value", block) != "BLOCKED_REASON_UNSPECIFIED":
+            raise LLMResponseFormatError("Gemini declined the supplied prompt.")
+        candidates = getattr(response, "candidates", None) or []
+        if structured and len(candidates) != 1:
+            raise LLMResponseFormatError("Gemini returned no complete structured candidate.")
+        for candidate in candidates:
+            finish = getattr(candidate, "finish_reason", None)
+            if (
+                (structured and getattr(finish, "value", finish) != "STOP")
+                or (
+                    finish
+                    and getattr(finish, "value", finish)
+                    not in {"STOP", "FINISH_REASON_UNSPECIFIED"}
+                )
+                or getattr(candidate, "refusal", None)
+                or any(
+                    getattr(rating, "blocked", False)
+                    for rating in getattr(candidate, "safety_ratings", None) or []
+                )
+            ):
+                raise LLMResponseFormatError("Gemini did not complete an unrestricted response.")
+        try:
+            text = (
+                text_override
+                if text_override is not None
+                else (getattr(response, "text", "") or "")
+            )
+            usage = getattr(response, "usage_metadata", None)
+            if usage is not None and not any(
+                hasattr(usage, field)
+                for field in (
+                    "prompt_token_count",
+                    "candidates_token_count",
+                    "thoughts_token_count",
+                    "total_token_count",
+                )
+            ):
+                raise ValueError("Invalid usage metadata container.")
+
+            def counter(field: str) -> int:
+                value = getattr(usage, field, None)
+                if value is None:
+                    return 0
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ValueError("Invalid usage counter.")
+                return value
+
+            prompt = counter("prompt_token_count")
+            candidate_tokens = counter("candidates_token_count")
+            thoughts = counter("thoughts_token_count")
+            total = getattr(usage, "total_token_count", None)
+            output = (
+                max(candidate_tokens + thoughts, counter("total_token_count") - prompt, 0)
+                if total is not None
+                else candidate_tokens + thoughts
+            )
+        except (ValueError, TypeError, AttributeError):
+            raise LLMResponseFormatError("Gemini returned unreadable response metadata.") from None
+        return LLMCompletion(
+            text=text,
+            provider=self.name,
+            model=self.model,
+            prompt_tokens=prompt,
+            completion_tokens=output,
+            latency_ms=max(1, int((time.perf_counter() - started) * 1000)),
+            raw=response,
+        )
 
     def generate(
         self,
@@ -879,31 +1498,34 @@ class GeminiProvider:
         temperature: float = 0.2,
         max_tokens: int = 1024,
     ) -> LLMCompletion:
-        contents = _messages_to_gemini(messages)
-        started = time.perf_counter()
-        try:
-            response = self._client.models.generate_content(
-                model=self.model,
-                contents=contents,
-                config={
-                    "temperature": temperature,
-                    "max_output_tokens": max_tokens,
-                },
-            )
-        except Exception as exc:
-            raise LLMProviderError(f"Gemini call failed: {exc}") from exc
-        elapsed_ms = max(1, int((time.perf_counter() - started) * 1000))
-        text = getattr(response, "text", "") or ""
-        usage = getattr(response, "usage_metadata", None)
-        return LLMCompletion(
-            text=text,
-            provider=self.name,
-            model=self.model,
-            prompt_tokens=int(getattr(usage, "prompt_token_count", 0) or 0),
-            completion_tokens=int(getattr(usage, "candidates_token_count", 0) or 0),
-            latency_ms=elapsed_ms,
-            raw=response,
+        kwargs = self._request_kwargs(messages, temperature=temperature, max_tokens=max_tokens)
+        response, started = self._call(kwargs)
+        completion = self._completion_from_response(response, started=started)
+        provider_time_remaining(getattr(self, "_deadline", None))
+        return completion
+
+    def generate_structured[T: BaseModel](
+        self,
+        messages: list[LLMMessage],
+        *,
+        schema: type[T],
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+    ) -> LLMCompletion:
+        kwargs = self._request_kwargs(
+            messages, temperature=temperature, max_tokens=max_tokens, schema=schema
         )
+        response, started = self._call(kwargs)
+        completion = self._completion_from_response(response, started=started, structured=True)
+        try:
+            validated = schema.model_validate_json(completion.text, extra="forbid")
+        except (ValidationError, ValueError, TypeError):
+            raise LLMResponseFormatError(
+                "Gemini returned a value outside the required schema."
+            ) from None
+        completion.text = validated.model_dump_json()
+        provider_time_remaining(getattr(self, "_deadline", None))
+        return completion
 
 
 def _split_system_and_chat(
@@ -962,7 +1584,9 @@ def _resolve_model_for_purpose(settings: object, purpose: str | None) -> str:
     return getattr(settings, "llm_model", "") or "caseops-mock-1"
 
 
-def build_provider(purpose: str | None = None) -> LLMProvider:
+def build_provider(
+    purpose: str | None = None, *, timeout_seconds: float | None = None
+) -> LLMProvider:
     settings = get_settings()
     if paid_providers_blocked_for_request():
         # Browser and API regression suites carry a request-scoped marker.
@@ -971,7 +1595,7 @@ def build_provider(purpose: str | None = None) -> LLMProvider:
         # Keep the configured model identity so tenant allow-lists remain an
         # independently enforced boundary; ModelRun still records provider=mock.
         return MockProvider(model=_resolve_model_for_purpose(settings, purpose))
-    inner = _build_inner_provider(settings, purpose)
+    inner = _build_inner_provider(settings, purpose, timeout_seconds=timeout_seconds)
     # Cassette wrapping is opt-in (off by default). Sprint 11 offline
     # eval: capture once with credentials in `record` mode, replay
     # forever in CI in `replay` mode.
@@ -984,7 +1608,12 @@ def build_provider(purpose: str | None = None) -> LLMProvider:
     )
 
 
-def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
+def _build_inner_provider(
+    settings: object,
+    purpose: str | None,
+    *,
+    timeout_seconds: float | None = None,
+) -> LLMProvider:
     provider_name = settings.llm_provider.lower()
     model = _resolve_model_for_purpose(settings, purpose)
     if provider_name in {"mock", "noop", "off"}:
@@ -993,7 +1622,20 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
         raise LLMProviderError(
             "CASEOPS_LLM_PROVIDER='anthropic' is retired; use 'openai'.",
         )
-    if not settings.llm_api_key:
+    if timeout_seconds is not None:
+        import math
+
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (float, int))
+            or not math.isfinite(timeout_seconds)
+            or timeout_seconds < 0.001
+        ):
+            raise LLMProviderError("LLM requires a finite positive timeout of at least 1 ms.")
+    managed_project = (
+        getattr(settings, "llm_gemini_project", None) if provider_name == "gemini" else None
+    )
+    if not settings.llm_api_key and not managed_project:
         raise LLMProviderError(
             f"CASEOPS_LLM_API_KEY must be set when CASEOPS_LLM_PROVIDER={provider_name!r}.",
         )
@@ -1036,17 +1678,26 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
     if provider_name == "openai" and purpose == PURPOSE_METADATA_EXTRACT:
         retries_for_purpose = 0
     if provider_name == "gemini":
+        gemini_options: dict[str, Any] = {
+            "timeout_seconds": timeout_seconds
+            if timeout_seconds is not None
+            else (45.0 if purpose == "case_tracking:update_summary" else None),
+        }
+        if managed_project:
+            gemini_options.update(
+                project=managed_project, location=getattr(settings, "llm_gemini_location", "global")
+            )
         return GeminiProvider(
             model=model or "gemini-2.5-pro",
-            api_key=settings.llm_api_key,
-            timeout_seconds=45.0 if purpose == "case_tracking:update_summary" else None,
+            api_key=None if managed_project else settings.llm_api_key,
+            **gemini_options,
         )
     if provider_name == "openai":
         return OpenAIProvider(
             model=model or "gpt-5.1",
             api_key=settings.llm_api_key,
-            timeout_seconds=timeout_for_purpose,
-            max_retries=retries_for_purpose,
+            timeout_seconds=timeout_seconds if timeout_seconds is not None else timeout_for_purpose,
+            max_retries=0 if timeout_seconds is not None else retries_for_purpose,
         )
     raise LLMProviderError(
         f"Unknown CASEOPS_LLM_PROVIDER value: {provider_name!r}. "
@@ -1108,6 +1759,7 @@ def generate_structured[T: BaseModel](
     temperature: float = 0.1,
     max_tokens: int = 2048,
     on_model_run: ModelRunWriter | None = None,
+    on_completion_accounted: Callable[[LLMCompletion], None] | None = None,
     session: Any | None = None,
     release_session_before_provider: bool = False,
 ) -> tuple[T, LLMCompletion]:
@@ -1130,6 +1782,7 @@ def generate_structured[T: BaseModel](
     a schema-valid response. The caller must revalidate mutable source state
     before persisting the result.
     """
+    provider_time_remaining()
     estimated_billing_credits = 0
     if session is not None and context.tenant_id:
         from caseops_api.services.tenant_ai_policy import (
@@ -1185,30 +1838,53 @@ def generate_structured[T: BaseModel](
         # boundary; silently rolling those writes back here would corrupt the
         # surrounding workflow.  The check also makes the opt-in useful for
         # system/background calls whose context intentionally has no tenant ID.
+        guard = getattr(session, "require_read_only_transaction", None)
+        if callable(guard):
+            guard()
         if session.new or session.dirty or session.deleted:
             raise RuntimeError(
                 "Cannot release the database session before an LLM provider "
                 "call while ORM writes are pending."
+            )
+        if not callable(guard):
+            from sqlalchemy.orm import Session
+
+            from caseops_api.services.matter_write_fence import require_read_only_upload_session
+
+            if not isinstance(session, Session):
+                raise RuntimeError("The provider boundary requires proven read-only provenance.")
+            require_read_only_upload_session(
+                session, detail="The provider boundary cannot release caller-owned writes.",
             )
         # Preflight is intentionally read-only on the success path. Do not
         # leave its transaction open across a provider deadline: SQLite can
         # otherwise retain a reader that delays a writer, while PostgreSQL can
         # terminate an idle transaction and retains every acquired row lock.
         session.rollback()
+    provider_time_remaining()
     native_generate = getattr(provider, "generate_structured", None)
-    if callable(native_generate):
-        completion = native_generate(
-            messages=messages,
-            schema=schema,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-    else:
-        completion = provider.generate(
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+    observed = False
+
+    def account(completion):
+        nonlocal observed
+        if not observed and on_completion_accounted is not None:
+            on_completion_accounted(completion)
+            observed = True
+
+    token = _completion_receipt.set(account if on_completion_accounted is not None else None)
+    try:
+        if callable(native_generate):
+            completion = native_generate(
+                messages=messages, schema=schema, temperature=temperature, max_tokens=max_tokens,
+            )
+        else:
+            completion = provider.generate(
+                messages=messages, temperature=temperature, max_tokens=max_tokens,
+            )
+        _observe_completion(completion)
+    finally:
+        _completion_receipt.reset(token)
+    provider_time_remaining()
     if on_model_run is not None:
         try:
             on_model_run(completion, context, messages)
@@ -1268,6 +1944,7 @@ def generate_structured[T: BaseModel](
             f"not match the expected schema. violations={violations} "
             f"keys={preview_keys!r}",
         ) from exc
+    provider_time_remaining()
     if session is not None and context.tenant_id and estimated_billing_credits > 0:
         from caseops_api.services.saas_billing import (
             debit_ai_credits,

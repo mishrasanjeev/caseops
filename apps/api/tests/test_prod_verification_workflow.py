@@ -12,25 +12,71 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_every_playwright_config_blocks_paid_provider_requests() -> None:
-    helper = (REPO_ROOT / "tests/e2e/support/cost-controls.ts").read_text(encoding="utf-8")
-    assert '"X-CaseOps-Automated-Test": "no-paid-providers"' in helper
-
+def _assert_playwright_provider_marker(name: str, config: str, helper: str) -> None:
     inherited = {
         "playwright.app.self-hosted.config.ts",
         "playwright.docker.config.ts",
     }
+    if name in inherited:
+        assert 'from "./playwright.app.config"' in config
+        assert "...appConfig" in config
+        return
+    assert 'from "./tests/e2e/support/cost-controls"' in config
+    if name in {"playwright.app.config.ts", "playwright.config.ts"}:
+        assert 'import { localTransportHeaders }' in config
+        assert "extraHTTPHeaders: localTransportHeaders(webBaseUrl)" in config
+        assert '"X-CaseOps-Automated-Test": "no-paid-providers"' in helper
+        assert (
+            'return { ...noPaidProviderHeaders, ...(local ? { Connection: "close" } : {}) };'
+        ) in helper
+    else:
+        assert "extraHTTPHeaders: noPaidProviderHeaders" in config
+
+
+def test_every_playwright_config_blocks_paid_provider_requests() -> None:
+    helper = (REPO_ROOT / "tests/e2e/support/cost-controls.ts").read_text(encoding="utf-8")
+    assert '"X-CaseOps-Automated-Test": "no-paid-providers"' in helper
+    inherited = {"playwright.app.self-hosted.config.ts", "playwright.docker.config.ts"}
     explicitly_nonbillable = {"playwright.provider-nonbillable-live.config.ts"}
     configs = sorted(REPO_ROOT.glob("playwright*.config.ts"))
     assert {path.name for path in configs} >= inherited | explicitly_nonbillable
     for config_path in configs:
         config = config_path.read_text(encoding="utf-8")
-        if config_path.name in inherited:
-            assert 'from "./playwright.app.config"' in config
-            assert "...appConfig" in config
-            continue
-        assert 'from "./tests/e2e/support/cost-controls"' in config
-        assert "extraHTTPHeaders: noPaidProviderHeaders" in config
+        _assert_playwright_provider_marker(config_path.name, config, helper)
+
+
+@pytest.mark.parametrize(
+    ("name", "target", "old", "replacement"),
+    [
+        ("playwright.app.config.ts", "config", "localTransportHeaders(webBaseUrl)", "{}"),
+        ("playwright.config.ts", "config", "import { localTransportHeaders }", "import {}"),
+        ("playwright.docker.config.ts", "config", "...appConfig", "...{}"),
+        (
+            "playwright.app.self-hosted.config.ts", "config",
+            "./playwright.app.config", "./unreviewed",
+        ),
+        (
+            "playwright.prod-ram.config.ts", "config",
+            "extraHTTPHeaders: noPaidProviderHeaders", "extraHTTPHeaders: {}",
+        ),
+        ("playwright.app.config.ts", "helper", "...noPaidProviderHeaders,", ""),
+        ("playwright.config.ts", "helper", '"no-paid-providers"', '"paid-providers"'),
+    ],
+)
+def test_provider_marker_guard_rejects_missing_or_unreviewed_headers(
+    name: str, target: str, old: str, replacement: str
+) -> None:
+    config = (REPO_ROOT / name).read_text(encoding="utf-8")
+    helper = (REPO_ROOT / "tests/e2e/support/cost-controls.ts").read_text(encoding="utf-8")
+    _assert_playwright_provider_marker(name, config, helper)
+    original = config if target == "config" else helper
+    assert old in original
+    changed = original.replace(old, replacement)
+    with pytest.raises(AssertionError):
+        _assert_playwright_provider_marker(
+            name, changed if target == "config" else config,
+            changed if target == "helper" else helper,
+        )
 
 
 def test_live_provider_config_is_nonbillable_bounded_and_explicitly_opted_in() -> None:

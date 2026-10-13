@@ -2,6 +2,7 @@
 
 from datetime import UTC, date, datetime, timedelta
 from threading import Event
+from time import monotonic
 
 import pytest
 from fastapi import HTTPException
@@ -907,8 +908,13 @@ def test_post_index_source_or_reopen_winner_retains_index_and_rejects_stale_extr
         ):
             # Index finalization also takes Company. Only pause the downstream phase.
             if session_stage.is_set():
+                audit.record("post_index_company_boundary", winner=winner, source=source)
                 audit.entered.set()
-                assert audit.release.wait(8)
+                started = monotonic()
+                released = audit.release.wait(8)
+                audit.record("post_index_company_pause_returned", released=released,
+                             held_seconds=monotonic() - started)
+                assert released
 
     session_stage = Event()
 
@@ -970,6 +976,7 @@ def test_post_index_source_or_reopen_winner_retains_index_and_rejects_stale_extr
                             reason="Controlled native reopening winner.",
                         ),
                     )
+            audit.record("release_post_index_after_winner", winner=winner, source=source)
             audit.release.set()
             worker.result(10)
     finally:

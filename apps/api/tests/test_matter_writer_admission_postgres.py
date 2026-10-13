@@ -902,10 +902,14 @@ def test_matter_worker_missing_legacy_actor_is_explicit(pg_engine, monkeypatch, 
 
 @pytest.mark.parametrize("autoflush", [False, True])
 def test_matter_worker_rejects_cross_tenant_event_actor(pg_engine, monkeypatch, race):
+    from tests.fixtures_document_jobs import (
+        legacy_document_processing_receipt as _legacy_receipt_fixture,
+    )
+
     fixture = _fixture(pg_engine)
     with Session(pg_engine) as seed:
         foreign_actor = _seed_membership(seed, _seed_company(seed), role="admin")
-        seed.get(DocumentProcessingJob, fixture.job).requested_by_membership_id = foreign_actor
+        _legacy_receipt_fixture(seed, fixture.job, requested_by_membership_id=foreign_actor)
         seed.commit()
     _provider(monkeypatch, race, fixture)
     race.submit("worker", lambda: document_jobs.run_document_processing_job(fixture.job)).result(15)
@@ -930,6 +934,10 @@ def test_matter_worker_rejects_cross_tenant_event_actor(pg_engine, monkeypatch, 
 def test_worker_retained_membership_fks_precede_source(
     pg_engine, monkeypatch, race, first, active, retained
 ):
+    from tests.fixtures_document_jobs import (
+        legacy_document_processing_receipt as _legacy_receipt_fixture,
+    )
+
     source = "matter" if retained == "matter-uploader" else "ip"
     fixture = _fixture(pg_engine, source, active=active)
     with Session(pg_engine) as seed:
@@ -940,16 +948,13 @@ def test_worker_retained_membership_fks_precede_source(
                 MatterAttachment, fixture.attachment
             ).uploaded_by_membership_id = historical_actor
         elif retained == "ip-requester":
-            seed.get(
-                DocumentProcessingJob, fixture.job
-            ).requested_by_membership_id = historical_actor
+            _legacy_receipt_fixture(seed, fixture.job, requested_by_membership_id=historical_actor)
         else:
             seed.get(
                 IpDocumentVersion, fixture.target_id
             ).locked_by_membership_id = historical_actor
-            seed.get(
-                DocumentProcessingJob, fixture.job
-            ).requested_by_membership_id = _seed_membership(seed, fixture.company, role="member")
+            requester = _seed_membership(seed, fixture.company, role="member")
+            _legacy_receipt_fixture(seed, fixture.job, requested_by_membership_id=requester)
         seed.commit()
     _provider(monkeypatch, race, fixture)
     source_table = "matter_attachments" if source == "matter" else "ip_document_versions"

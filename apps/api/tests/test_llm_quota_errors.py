@@ -36,6 +36,26 @@ def test_quota_error_is_subclass_of_provider_error() -> None:
 
 
 @pytest.mark.parametrize(
+    "detail",
+    [
+        "The shared monthly AI budget is exhausted. No external request was sent.",
+        "AI monthly spending is awaiting reconciliation. No external request was sent.",
+        "AI pricing for this workflow is not reconciled. No external request was sent.",
+    ],
+)
+def test_money_denial_http_copy_is_not_a_transient_provider_retry(detail: str) -> None:
+    from caseops_api.services.ai_money_budget import AiMoneyBudgetError
+    from caseops_api.services.llm_http import provider_failure_http_exception
+
+    response = provider_failure_http_exception(
+        noun="recommendation", exc=AiMoneyBudgetError(detail)
+    )
+    assert response.status_code == 503
+    assert response.detail == detail
+    assert "retry in a minute" not in response.detail
+
+
+@pytest.mark.parametrize(
     "exc",
     [
         _StatusErr(402, "Payment Required"),

@@ -1,6 +1,7 @@
 import hmac
 from datetime import datetime
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -102,16 +103,32 @@ class Settings(BaseSettings):
     document_storage_gcs_bucket: str | None = Field(default=None)
     document_storage_gcs_prefix: str = Field(default="documents")
     gcp_project_id: str | None = Field(default=None)
+    document_processing_dispatch_mode: Literal["local_background", "cloud_run_job"] = (
+        "local_background"
+    )
+    document_processing_run_region: str = Field(
+        default="asia-south1", pattern=r"^[a-z]+-[a-z]+[0-9]$"
+    )
+    document_processing_run_job: str = Field(
+        default="caseops-document-processing", pattern=r"^[a-z][a-z0-9-]{0,62}$"
+    )
     max_attachment_size_bytes: int = Field(default=25 * 1024 * 1024)
     tesseract_command: str | None = Field(default=None)
     document_worker_poll_interval_seconds: int = Field(default=10, ge=1)
     document_worker_batch_size: int = Field(default=5, ge=1)
-    document_processing_stale_after_minutes: int = Field(default=15, ge=1)
+    document_worker_admission_protocol_version: Literal[0, 1] = 0
+    document_worker_admission_enabled: bool | None = None
+    document_processing_stale_after_minutes: int = Field(default=15, ge=15)
     document_retry_after_hours: int = Field(default=6, ge=0)
     document_reindex_after_hours: int = Field(default=168, ge=0)
     document_reprocessing_batch_size: int = Field(default=10, ge=1)
     court_sync_worker_batch_size: int = Field(default=3, ge=1)
     court_sync_stale_after_minutes: int = Field(default=15, ge=1)
+    court_sync_dispatch_mode: Literal["local_background", "cloud_run_job"] = "local_background"
+    court_sync_run_region: str = Field(default="asia-south1", pattern=r"^[a-z]+-[a-z]+[0-9]$")
+    court_sync_run_job: str = Field(default="caseops-court-sync", pattern=r"^[a-z][a-z0-9-]{0,62}$")
+    court_sync_worker_admission_protocol_version: Literal[0, 1] = 0
+    court_sync_worker_admission_enabled: bool | None = None
     pine_labs_env: str = Field(default="disabled")
     pine_labs_api_base_url: str | None = Field(default=None)
     pine_labs_client_id: str | None = Field(default=None)
@@ -370,6 +387,13 @@ class Settings(BaseSettings):
     ai_route_rate_limit_per_minute: int = Field(default=30, ge=1)
 
     llm_provider: str = Field(default="mock")
+    # October continues unchanged by owner instruction. The shared money gate
+    # starts only in an explicitly configured period; missing reconciliation
+    # then blocks transport rather than inventing a zero opening balance.
+    ai_money_budget_enabled: bool = Field(default=True)
+    ai_money_budget_start_month: str = Field(
+        default="2026-11", pattern=r"^\d{4}-(0[1-9]|1[0-2])$"
+    )
     # Fallback model when a purpose-specific one is not set. Per-purpose
     # routing lets operators use an OpenAI reasoning model for legal drafting
     # and a smaller OpenAI model for bounded extraction work.
@@ -381,6 +405,16 @@ class Settings(BaseSettings):
     llm_model_metadata_extract: str | None = Field(default=None)
     llm_model_eval: str | None = Field(default=None)
     llm_api_key: str | None = Field(default=None)
+    # Recommendations-only availability fallback. Live activation requires
+    # reviewed managed-service processing terms, ADC/IAM and reconciled prices.
+    llm_recommendation_fallback_enabled: bool = Field(default=False)
+    llm_recommendation_fallback_model: Literal["gemini-3.5-flash-lite"] = (
+        "gemini-3.5-flash-lite"
+    )
+    llm_gemini_project: str | None = Field(
+        default=None, pattern=r"^[a-z][a-z0-9-]{4,61}[a-z0-9]$"
+    )
+    llm_gemini_location: Literal["global"] = "global"
     # 2026-05-01: $/day cap on Layer 2 corpus metadata extraction
     # (services/corpus_structured.py). Set to 0 or negative to fall
     # back to the hardcoded $20 default. The cap is enforced
@@ -482,6 +516,10 @@ class Settings(BaseSettings):
     otel_service_name: str = Field(default="caseops-api")
 
     @property
+    def effective_ai_money_budget_enabled(self) -> bool:
+        return self.ai_money_budget_enabled
+
+    @property
     def effective_docs_enabled(self) -> bool:
         """Resolve the docs flag with an env-aware default. Local/dev
         get docs ON by default; non-local envs get docs OFF unless the
@@ -500,6 +538,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 "CASEOPS_AUTH_SECRET must be set to a non-placeholder value when "
                 f"CASEOPS_ENV={self.env!r}.",
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _require_managed_recommendation_fallback_project(self) -> "Settings":
+        if self.llm_recommendation_fallback_enabled and not self.llm_gemini_project:
+            raise ValueError(
+                "Recommendation fallback requires CASEOPS_LLM_GEMINI_PROJECT "
+                "for the paid managed endpoint; an API key is not a substitute."
             )
         return self
 

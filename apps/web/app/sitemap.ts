@@ -14,6 +14,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/general-counsels",
     "/solo-lawyers",
     "/resources/legal-matter-management-india",
+    "/resources/source-grounded-legal-recommendations",
   ];
   return paths.map((path) => ({ url: `${base}${path}` }));
 }

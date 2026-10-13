@@ -239,7 +239,7 @@ class StatuteCompilerBoundaryTests(unittest.TestCase):
 
 class RealTableReconciliationTests(unittest.TestCase):
     def test_both_real_schedules_reconcile_pinned_cells_and_notes(self):
-        documents = json.loads(compiler.DOCUMENTS.read_text())["documents"]
+        documents = json.loads(compiler.DOCUMENTS.read_text(encoding="utf-8"))["documents"]
         for act, logical, physical in [("ndps-1985", 162, 164), ("specific-relief-1963", 5, 5)]:
             spec = next(row for row in documents if row["statute_id"] == act)
             with compiler.pdfplumber.open(compiler.PDF_ROOT / spec["file"]) as pdf:
@@ -250,7 +250,7 @@ class RealTableReconciliationTests(unittest.TestCase):
     def test_changed_ndps_continuation_cannot_silently_merge_chemical_cells(self):
         spec = next(
             row
-            for row in json.loads(compiler.DOCUMENTS.read_text())["documents"]
+            for row in json.loads(compiler.DOCUMENTS.read_text(encoding="utf-8"))["documents"]
             if row["statute_id"] == "ndps-1985"
         )
         layout = deepcopy(spec["structured_tables"]["schedule"][0])

@@ -22,9 +22,7 @@ def _matter_columns(database_url: str) -> dict[str, dict[str, object]]:
         with engine.connect() as connection:
             return {
                 str(row["name"]): dict(row)
-                for row in connection.execute(
-                    text("PRAGMA table_info(matters)")
-                ).mappings()
+                for row in connection.execute(text("PRAGMA table_info(matters)")).mappings()
             }
     finally:
         engine.dispose()
@@ -46,7 +44,7 @@ def test_court_forum_number_migration_upgrades_downgrades_and_reupgrades(
     command.upgrade(config, "20260717_0002")
     assert "court_forum_number" not in _matter_columns(database_url)
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260723_0001")
     upgraded = _matter_columns(database_url)["court_forum_number"]
     assert str(upgraded["type"]).upper() == "VARCHAR(120)"
     assert upgraded["notnull"] == 0
@@ -54,7 +52,7 @@ def test_court_forum_number_migration_upgrades_downgrades_and_reupgrades(
     command.downgrade(config, "20260717_0002")
     assert "court_forum_number" not in _matter_columns(database_url)
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260723_0001")
     assert "court_forum_number" in _matter_columns(database_url)
 
     get_settings.cache_clear()

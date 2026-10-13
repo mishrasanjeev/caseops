@@ -199,7 +199,7 @@ def test_voyage_provider_uses_bounded_zero_retry_client_for_queries(
 
     assert len(result.vectors) == 1
     assert constructor_calls == [
-        {},
+        {"max_retries": 0},
         {"max_retries": 0, "timeout": 3.5},
     ]
     assert tokenize_calls == 0

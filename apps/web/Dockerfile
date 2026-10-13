@@ -4,7 +4,7 @@
 #
 # Build context is the repository root so the immutable workspace lockfile is
 # available. Root .dockerignore/.gcloudignore files admit only package metadata
-# and apps/web, keeping both the Docker context and Cloud Build upload narrow.
+# and apps/web plus the explicit builder-only unit fixture dependency closure.
 
 # ---- deps ---------------------------------------------------------
 FROM node:22.14.0-alpine AS deps
@@ -41,8 +41,12 @@ COPY apps/web ./
 # One colocated page test imports this canonical fixture during Next's type
 # check. Keep it in the builder context only; the runner copies no test files.
 COPY tests/fixtures/statutes/structured-schedule-api.json /app/tests/fixtures/statutes/structured-schedule-api.json
-# Colocated sanitizer units use this pure helper during builder type checking.
+# Colocated diagnostic units require their direct and transitive support imports.
+# Admit this explicit closure in both root ignore files; keep it out of the runner.
 COPY tests/e2e/support/prod-failure-diagnostics.ts /app/tests/e2e/support/prod-failure-diagnostics.ts
+COPY tests/e2e/support/bounded-network-evidence.ts /app/tests/e2e/support/bounded-network-evidence.ts
+COPY tests/e2e/support/prod-api-response-evidence.ts /app/tests/e2e/support/prod-api-response-evidence.ts
+COPY tests/e2e/support/cost-controls.ts /app/tests/e2e/support/cost-controls.ts
 
 RUN npm run build
 
@@ -63,9 +67,13 @@ RUN addgroup -g 1001 -S nodejs \
 # modules. Switch to standalone in `next.config.js` later for a
 # smaller image.
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next ./.next
-# This project has no /public directory — Next.js serves assets via
-# app/icon.tsx, app/opengraph-image.tsx, app/robots.txt, app/sitemap.xml
-# (file-based conventions). Nothing to copy.
+# Keep distributed font and JavaScript copyright/licence notices reachable.
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./public
+# Operator compliance materials are deliberately outside every public asset root.
+COPY --chown=nextjs:nodejs license-policy/reviewed-packages.json /app/third-party-compliance/license-policy/reviewed-packages.json
+COPY --chown=nextjs:nodejs license-policy/upstream/ /app/third-party-compliance/license-policy/upstream/
+COPY --chown=nextjs:nodejs docs/security/js-license-compliance-review-2026-10-12.md /app/third-party-compliance/docs/security/js-license-compliance-review-2026-10-12.md
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public/third-party-notices /app/third-party-compliance/apps/web/public/third-party-notices
 COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules /app/node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/package.json ./package.json
 

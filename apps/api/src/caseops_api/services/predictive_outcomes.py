@@ -29,6 +29,7 @@ from caseops_api.db.models import (
     PredictiveOutcomeAggregateSnapshot,
     PredictiveOutcomeClassification,
 )
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.authority_sources import list_predictive_aggregate_authority_source_keys
 from caseops_api.services.llm import (
     LLMCallContext,
@@ -253,9 +254,7 @@ def classify_authority_document(
     text = _usable_authority_text(document)
     if text is None:
         return []
-    if force:
-        _delete_source_classifications(session, "authority_document", document.id)
-    elif only_unclassified and _source_already_classified(
+    if not force and only_unclassified and _source_already_classified(
         session, "authority_document", document.id
     ):
         return []
@@ -286,6 +285,8 @@ def classify_authority_document(
             source=source,
             provider=provider,
         )
+        if force:
+            _delete_source_classifications(session, "authority_document", document.id)
         if error is not None:
             return [_store_quarantine(session, source, model_run_id, error)]
         return _store_candidates(
@@ -295,6 +296,8 @@ def classify_authority_document(
             method="llm",
             model_run_id=model_run_id,
         )
+    if force:
+        _delete_source_classifications(session, "authority_document", document.id)
     return _store_candidates(session, source, candidates, method="deterministic")
 
 
@@ -311,9 +314,9 @@ def classify_matter_court_order(
     text = _usable_order_text(order)
     if text is None:
         return []
-    if force:
-        _delete_source_classifications(session, "matter_court_order", order.id)
-    elif only_unclassified and _source_already_classified(session, "matter_court_order", order.id):
+    if not force and only_unclassified and _source_already_classified(
+        session, "matter_court_order", order.id
+    ):
         return []
 
     source = _SourceContext(
@@ -336,6 +339,8 @@ def classify_matter_court_order(
             source=source,
             provider=provider,
         )
+        if force:
+            _delete_source_classifications(session, "matter_court_order", order.id)
         if error is not None:
             return [_store_quarantine(session, source, model_run_id, error)]
         return _store_candidates(
@@ -345,6 +350,8 @@ def classify_matter_court_order(
             method="llm",
             model_run_id=model_run_id,
         )
+    if force:
+        _delete_source_classifications(session, "matter_court_order", order.id)
     return _store_candidates(session, source, candidates, method="deterministic")
 
 
@@ -837,6 +844,9 @@ def _llm_candidates(
                 if item.label != "insufficient_signal"
             ]
             return candidates, model_run.id if model_run else None, None
+        except AiMoneyBudgetError:
+            # Admission denial says nothing about the source or prior model output.
+            raise
         except (LLMResponseFormatError, ValueError) as exc:
             last_error = f"malformed_output:{type(exc).__name__}"
             if model_run is not None:

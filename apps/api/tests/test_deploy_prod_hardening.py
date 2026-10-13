@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import ast
 import fnmatch
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import socket
@@ -792,9 +794,10 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "start worker" in docker_script
     assert '$WorkerStateAfterRestart -ne "running"' in docker_script
     assert '$WorkerStateAfterPlaywright -ne "running"' in docker_script
-    assert docker_script.index("stop --timeout 30 worker") < docker_script.index("-m postgres")
-    assert docker_script.index("-m postgres") < docker_script.index("start worker")
-    assert docker_script.index("-m postgres") < docker_script.index(
+    native_execution = docker_script.index("& $ApiPython @NativeArguments")
+    assert docker_script.index("stop --timeout 30 worker") < native_execution
+    assert native_execution < docker_script.index("start worker")
+    assert native_execution < docker_script.index(
         "PostgreSQL post-rehearsal index health gate failed."
     ) < docker_script.index("start worker")
     assert docker_script.index("start worker") < docker_script.index(
@@ -825,11 +828,55 @@ def _assert_complete_postgres_selection(command: str) -> None:
 
 
 def test_all_postgres_marked_modules_are_selected_locally_and_in_ci() -> None:
-    for path in ("scripts/verify-docker.ps1", ".github/workflows/ci.yml"):
-        lines = _read_repo_text(path).splitlines()
-        commands = [line.strip() for line in lines if "pytest" in line and "-m postgres" in line]
-        assert len(commands) == 1, path
-        _assert_complete_postgres_selection(commands[0])
+    lines = _read_repo_text(".github/workflows/ci.yml").splitlines()
+    commands = [line.strip() for line in lines if "pytest" in line and "-m postgres" in line]
+    assert len(commands) == 1
+    _assert_complete_postgres_selection(commands[0])
+
+    wrapper = _read_repo_text("scripts/verify-docker.ps1")
+    assert wrapper.count("& $ApiPython @NativeArguments") == 1
+    assert '(Join-Path $RepoRoot "scripts\\run_postgres_acceptance.py")' in wrapper
+    assert '"--api-dir", $ApiDir, "--results-directory", $ResultsDirectory' in wrapper
+    tree = ast.parse(_read_repo_text("scripts/run_postgres_acceptance.py"))
+    functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    command = next(
+        node.value for node in ast.walk(functions["execute"])
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "command" for target in node.targets)
+    )
+    assert isinstance(command, ast.List) and len(command.elts) == 8
+    assert ast.unparse(command.elts[0]) == "sys.executable"
+    assert [ast.literal_eval(node) for node in command.elts[1:6]] == [
+        "-m", "pytest", "-q", "-m", "postgres"
+    ]
+    assert ast.unparse(command.elts[6]) == "'--basetemp=' + str(runtime / 'fixtures')"
+    assert isinstance(command.elts[7], ast.Starred)
+    assert ast.unparse(command.elts[7].value) == "forwarded"
+    forwarding = next(
+        node for node in ast.walk(functions["execute"])
+        if isinstance(node, ast.For) and ast.unparse(node.target) == "argument"
+    )
+    assert ast.unparse(forwarding.iter) == "arguments"
+    assert ast.unparse(forwarding.body[-1]) == "forwarded.append(argument)"
+    calls = [
+        node for node in ast.walk(functions["run"])
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        and node.func.id == "execute"
+    ]
+    assert len(calls) == 2
+    assert ast.literal_eval(calls[0].args[2]) == ["--collect-only"]
+    assert ast.unparse(calls[0].args[0]) == "api"
+    assert ast.unparse(calls[0].args[1]) == "collection"
+    assert ast.unparse(calls[1].args[2]) == (
+        "['--junitxml=' + str(folder / 'results.xml'), *group['files']]"
+    )
+    plan_calls = [
+        node for node in ast.walk(functions["run"])
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        and node.func.id == "plan"
+    ]
+    assert len(plan_calls) == 1
+    assert [ast.unparse(argument) for argument in plan_calls[0].args] == ["identities", "api"]
 
 
 @pytest.mark.parametrize("command", [
@@ -862,12 +909,17 @@ def test_complete_postgres_selector_rejects_narrowed_or_nonexecuting_gates(
 def test_postgres_ci_requires_complete_disjoint_shard_results_before_browser_acceptance() -> None:
     workflow = yaml.safe_load(_read_repo_text(".github/workflows/ci.yml"))
     shards = workflow["jobs"]["postgres-validation-shards"]
-    assert shards["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert shards["strategy"]["matrix"] == {"total_shards": [8], "shard": list(range(1, 9))}
+    total = shards["strategy"]["matrix"]["total_shards"][0]
+    assert shards["strategy"]["max-parallel"] == 4
+    assert shards["name"] == (
+        "Postgres + pgvector shard ${{ matrix.shard }}/${{ matrix.total_shards }}"
+    )
     assert shards["strategy"]["fail-fast"] is False
     assert shards["timeout-minutes"] == 12
     step = next(item for item in shards["steps"] if item.get("name") == "Pytest -m postgres")
     assert "-p tests.postgres_sharding" in step["env"]["PYTEST_ADDOPTS"]
-    assert "--postgres-shards=4" in step["env"]["PYTEST_ADDOPTS"]
+    assert "--postgres-shards=${{ matrix.total_shards }}" in step["env"]["PYTEST_ADDOPTS"]
     assert step["env"]["CASEOPS_TEST_RESULT_JOURNAL"] == (
         "postgres-shard-${{ matrix.shard }}.jsonl"
     )
@@ -877,7 +929,7 @@ def test_postgres_ci_requires_complete_disjoint_shard_results_before_browser_acc
     assert upload["if"] == "always()"
     aggregate = workflow["jobs"]["postgres-validation"]
     assert aggregate["needs"] == ["postgres-validation-shards"]
-    assert any("tests.postgres_sharding postgres-evidence --total 4" in item.get("run", "")
+    assert any(f"tests.postgres_sharding postgres-evidence --total {total}" in item.get("run", "")
                for item in aggregate["steps"])
     assert "postgres-validation" in workflow["jobs"]["e2e"]["needs"]
 
@@ -945,7 +997,7 @@ def test_docker_acceptance_restores_release_statutes_after_database_rehearsals()
     assert script.count(seed_command) == 1
     seed_at = script.index(seed_command)
     assert script.index("$ImageRevision -ne $ReleaseSha") < seed_at
-    assert script.index("& $ApiPython -m pytest -q -m postgres") < seed_at
+    assert script.index("& $ApiPython @NativeArguments") < seed_at
     assert script.index('throw "PostgreSQL post-rehearsal index health gate failed."') < seed_at
     assert seed_at < script.index(
         'Assert-CandidateSourceUnchanged -Stage "before browser acceptance"'
@@ -1098,16 +1150,178 @@ def _ignore_matches(ignore_text: str, relative_path: str) -> bool:
 
 @pytest.mark.parametrize("ignore_path", [".gcloudignore", ".dockerignore"])
 def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str) -> None:
-    patterns = set(_read_repo_text(ignore_path).splitlines())
-    helper = "tests/e2e/support/prod-failure-diagnostics.ts"
-    assert {"!tests/e2e/", "!tests/e2e/support/", f"!{helper}"} <= patterns
-    assert not {"!tests/**", "!tests/e2e/**", "!tests/e2e/support/**"} & patterns
-    builder, runner = _read_repo_text("apps/web/Dockerfile").split(
-        "FROM node:22.14.0-alpine AS runner", 1,
+    required = _web_external_unit_dependencies(REPO_ROOT)
+    assert {
+        "tests/fixtures/statutes/structured-schedule-api.json",
+        "tests/e2e/support/prod-failure-diagnostics.ts",
+        "tests/e2e/support/bounded-network-evidence.ts",
+        "tests/e2e/support/prod-api-response-evidence.ts",
+        "tests/e2e/support/cost-controls.ts",
+    } <= required
+    _assert_web_builder_inputs(
+        _read_repo_text("apps/web/Dockerfile"), _read_repo_text(ignore_path), required,
     )
-    assert f"COPY {helper} /app/{helper}" in builder
-    assert "COPY tests/ " not in builder
-    assert helper not in runner and "/app/tests" not in runner
+
+
+def _web_external_unit_dependencies(root: Path) -> set[str]:
+    """Inventory literal fixture imports; the CI Docker compiler checks full TS semantics."""
+    web = root / "apps/web"
+    pending = []
+    for directory, children, files in os.walk(web):
+        children[:] = [name for name in children if not name.startswith(".") and name not in {
+            "node_modules", "coverage", "test-results", "playwright-report",
+        }]
+        pending.extend(Path(directory) / name for name in sorted(files)
+                       if name.endswith((".test.ts", ".test.tsx")))
+    assert pending, "Colocated web unit inventory must not be empty"
+    required = set()
+    visited = set()
+    references = re.compile(
+        r"\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)[\"'](\.[^\"']+)[\"']",
+    )
+    while pending:
+        importer = pending.pop()
+        if importer in visited:
+            continue
+        visited.add(importer)
+        for reference in references.findall(importer.read_text(encoding="utf-8")):
+            base = (importer.parent / reference).resolve()
+            assert base.is_relative_to(root.resolve()), "Fixture import escapes repository"
+            candidates = [base, *(Path(str(base) + suffix) for suffix in (".ts", ".tsx", ".json")),
+                          base / "index.ts", base / "index.tsx"]
+            dependency = next((path for path in candidates if path.is_file()), None)
+            assert dependency is not None, f"Unresolved fixture import: {importer}: {reference}"
+            if dependency.is_relative_to(web.resolve()):
+                continue
+            required.add(dependency.relative_to(root.resolve()).as_posix())
+            if dependency.suffix in {".ts", ".tsx", ".js", ".mjs"}:
+                pending.append(dependency)
+    return required
+
+
+def _assert_web_builder_inputs(dockerfile: str, ignore: str, required: set[str]) -> None:
+    builder, runner = dockerfile.split("FROM node:22.14.0-alpine AS runner", 1)
+    builder = builder.split("FROM deps AS builder", 1)[1]
+    lines = set(builder.splitlines())
+    patterns = set(ignore.splitlines())
+    assert ignore.splitlines()[0] == "**"
+    parents = {str(parent).replace("\\", "/") + "/" for path in required
+               for parent in Path(path).parents if parent != Path(".")}
+    for path in sorted(required):
+        assert f"COPY {path} /app/{path}" in lines, f"Missing builder input: {path}"
+        assert f"!{path}" in patterns, f"Missing context input: {path}"
+    assert {f"!{parent}" for parent in parents} <= patterns, "Missing context ancestor"
+    assert {line[1:] for line in patterns if line.startswith("!tests/")} == (
+        {path for path in required | parents if path.startswith("tests/")}
+    ), "Test build context must admit only its explicit dependency closure"
+    assert all(not line.startswith("COPY tests/") or line in {
+        f"COPY {path} /app/{path}" for path in required
+    } for line in lines), "Do not copy the whole test tree"
+    assert "/app/tests" not in runner and "COPY tests/" not in runner
+
+
+def test_web_fixture_dependency_inventory_follows_transitive_literal_forms(tmp_path: Path) -> None:
+    files = {
+        "apps/web/lib/fixture.test.ts": 'import { value } from "../../../tests/e2e/support/first";',
+        "tests/e2e/support/first.ts": 'export { value } from "./second";',
+        "tests/e2e/support/second.ts": 'import("./third"); require("./fourth");',
+        "tests/e2e/support/third.ts": 'import "./leaf.json";',
+        "tests/e2e/support/fourth.ts": 'import { value } from "./first";',
+        "tests/e2e/support/leaf.json": '{}',
+    }
+    for name, content in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    assert _web_external_unit_dependencies(tmp_path) == set(files) - {
+        "apps/web/lib/fixture.test.ts",
+    }
+
+
+@pytest.mark.parametrize("helper", [
+    "bounded-network-evidence.ts", "prod-api-response-evidence.ts", "cost-controls.ts",
+])
+def test_web_fixture_closure_rejects_omitted_direct_or_transitive_copy(helper: str) -> None:
+    path = f"tests/e2e/support/{helper}"
+    dockerfile = _read_repo_text("apps/web/Dockerfile").replace(f"COPY {path} /app/{path}", "")
+    with pytest.raises(AssertionError, match=f"Missing builder input: {re.escape(path)}"):
+        _assert_web_builder_inputs(
+            dockerfile, _read_repo_text(".dockerignore"),
+            _web_external_unit_dependencies(REPO_ROOT),
+        )
+
+
+@pytest.mark.parametrize("ignore_path", [".dockerignore", ".gcloudignore"])
+@pytest.mark.parametrize("helper", [
+    "bounded-network-evidence.ts", "prod-api-response-evidence.ts", "cost-controls.ts",
+])
+def test_web_fixture_closure_rejects_omitted_context_input(ignore_path: str, helper: str) -> None:
+    path = f"tests/e2e/support/{helper}"
+    ignore = _read_repo_text(ignore_path).replace(f"!{path}", "")
+    with pytest.raises(AssertionError, match=f"Missing context input: {re.escape(path)}"):
+        _assert_web_builder_inputs(
+            _read_repo_text("apps/web/Dockerfile"), ignore,
+            _web_external_unit_dependencies(REPO_ROOT),
+        )
+
+
+@pytest.mark.parametrize("ignore_path", [".dockerignore", ".gcloudignore"])
+def test_web_fixture_closure_rejects_broad_test_admission(ignore_path: str) -> None:
+    ignore = _read_repo_text(ignore_path) + "\n!tests/e2e/support/**\n"
+    with pytest.raises(AssertionError, match="only its explicit dependency closure"):
+        _assert_web_builder_inputs(
+            _read_repo_text("apps/web/Dockerfile"), ignore,
+            _web_external_unit_dependencies(REPO_ROOT),
+        )
+
+
+def test_web_builder_preserves_strict_colocated_unit_typechecking() -> None:
+    config = json.loads(_read_repo_text("apps/web/tsconfig.json"))
+    assert config["compilerOptions"]["strict"] is True
+    assert {"**/*.ts", "**/*.tsx"} <= set(config["include"])
+    assert config["exclude"] == ["node_modules"]
+    assert "ignoreBuildErrors" not in _read_repo_text("apps/web/next.config.ts")
+    assert "RUN npm run build" in _read_repo_text("apps/web/Dockerfile")
+
+
+def _assert_ci_web_builder_gate(workflow: dict) -> None:
+    web = workflow["jobs"]["web"]
+    assert "if" not in web and not web.get("continue-on-error", False)
+    steps = web["steps"]
+    builders = [step for step in steps if step.get("name") == "Web Docker builder"]
+    assert len(builders) == 1, "CI must build the actual web Docker builder"
+    builder = builders[0]
+    assert shlex.split(builder["run"]) == [
+        "docker", "build", "--pull", "--target", "builder", "--file", "apps/web/Dockerfile",
+        "--tag", "caseops-web-builder:${{ github.sha }}", ".",
+    ]
+    assert "if" not in builder and not builder.get("continue-on-error", False)
+    assert builder.get("working-directory", ".") == "."
+    assert workflow.get("defaults", {}).get("run", {}).get("working-directory", ".") == "."
+    assert web.get("defaults", {}).get("run", {}).get("working-directory", ".") == "."
+    assert builder["timeout-minutes"] == 12
+    assert steps.index(builder) > next(index for index, step in enumerate(steps)
+                                      if step.get("run") == "npm run build:web")
+
+
+def test_ci_web_builds_actual_root_context_builder_after_next_build() -> None:
+    _assert_ci_web_builder_gate(yaml.safe_load(_read_repo_text(".github/workflows/ci.yml")))
+
+
+@pytest.mark.parametrize("old,new", [
+    ("--target builder", "--target runner"),
+    ("--file apps/web/Dockerfile", "--file apps/api/Dockerfile"),
+    (' }}" .', ' }}" apps/web'),
+    ("--pull ", ""),
+])
+def test_ci_web_builder_contract_rejects_context_or_target_drift(old: str, new: str) -> None:
+    workflow = yaml.safe_load(_read_repo_text(".github/workflows/ci.yml"))
+    builder = next(step for step in workflow["jobs"]["web"]["steps"]
+                   if step.get("name") == "Web Docker builder")
+    assert old in builder["run"]
+    builder["run"] = builder["run"].replace(old, new)
+    with pytest.raises(AssertionError):
+        _assert_ci_web_builder_gate(workflow)
 
 
 @pytest.mark.parametrize("job_id", ["api", "postgres-validation"])
@@ -1717,6 +1931,7 @@ def _run_deploy_with_fakes(
     tmp_path: Path,
     *arguments: str,
     git_status: str = "",
+    native_status_root: Path | None = None,
     curl_mode: str = "ok",
     traffic_mode: str = "ok",
     expected_tag: str = "abcdef1",
@@ -1734,6 +1949,8 @@ def _run_deploy_with_fakes(
     active_prod_verify_runs: str = "",
     artifact_describe_failures: int = 0,
     rate_identity_mode: str = "ok",
+    document_worker_mode: str = "ok",
+    backup_mode: str = "ok",
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -1753,6 +1970,10 @@ if [[ "$1" == "fetch" ]]; then
   exit 0
 fi
 if [[ "$1" == "status" ]]; then
+  if [[ -n "${FAKE_NATIVE_GIT:-}" ]]; then
+    printf '%s\n' "$@" > "${FAKE_NATIVE_GIT_STATUS_ARGS}"
+    exec "${FAKE_NATIVE_GIT}" -C "${FAKE_NATIVE_GIT_STATUS_ROOT}" "$@"
+  fi
   if [[ -n "${FAKE_GIT_STATUS:-}" ]]; then
     printf '%s\n' "${FAKE_GIT_STATUS}"
   fi
@@ -1885,6 +2106,14 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_BILLING_ANNOTATION=''
   FAKE_CPU_BOOST_ANNOTATION='"run.googleapis.com/startup-cpu-boost":"true",'
   FAKE_API_OVERRIDE=''
+  FAKE_API_SERVICE_ACCOUNT='caseops-runtime@perfect-period-305406.iam.gserviceaccount.com'
+  FAKE_DOCUMENT_PROJECT='perfect-period-305406'
+  FAKE_DOCUMENT_MODE='cloud_run_job'
+  FAKE_DOCUMENT_REGION='asia-south1'
+  FAKE_DOCUMENT_JOB='caseops-document-processing'
+  FAKE_COURT_MODE='cloud_run_job'
+  FAKE_COURT_REGION='asia-south1'
+  FAKE_COURT_JOB='caseops-court-sync'
   FAKE_SCANNER_REQUIRED='true'
   FAKE_API_PROBE_PERIOD='2'
   FAKE_STARTUP_DEPENDENCIES='{}'
@@ -1935,6 +2164,22 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     FAKE_API_OVERRIDE='"command":["uv","run","uvicorn"],'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "api-args-override" ]]; then
     FAKE_API_OVERRIDE='"args":["--workers","4"],'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "api-service-account-drift" ]]; then
+    FAKE_API_SERVICE_ACCOUNT='other@perfect-period-305406.iam.gserviceaccount.com'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "document-project-drift" ]]; then
+    FAKE_DOCUMENT_PROJECT='other-project'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "document-mode-drift" ]]; then
+    FAKE_DOCUMENT_MODE='local_background'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "document-region-drift" ]]; then
+    FAKE_DOCUMENT_REGION='other-region'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "document-job-drift" ]]; then
+    FAKE_DOCUMENT_JOB='other-job'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "court-mode-drift" ]]; then
+    FAKE_COURT_MODE='local_background'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "court-region-drift" ]]; then
+    FAKE_COURT_REGION='other-region'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "court-job-drift" ]]; then
+    FAKE_COURT_JOB='other-job'
   fi
   printf '%s' \
     '{"metadata":{"generation":2,"annotations":{' \
@@ -1947,10 +2192,18 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '"run.googleapis.com/container-dependencies":"' "${FAKE_STARTUP_DEPENDENCIES}" \
     '"}},"spec":{"containerConcurrency":' "${FAKE_CONCURRENCY}" ',' \
     '"timeoutSeconds":' "${FAKE_TIMEOUT}" ',' \
+    '"serviceAccountName":"' "${FAKE_API_SERVICE_ACCOUNT}" '",' \
     '"containers":[{"name":"api",' "${FAKE_API_OVERRIDE}" \
     '"startupProbe":{"tcpSocket":{"port":8080},"periodSeconds":' \
     "${FAKE_API_PROBE_PERIOD}" ',"timeoutSeconds":1,"failureThreshold":120},"env":[' \
     '{"name":"CASEOPS_CLAMAV_REQUIRED","value":"' "${FAKE_SCANNER_REQUIRED}" '"},' \
+    '{"name":"CASEOPS_GCP_PROJECT_ID","value":"' "${FAKE_DOCUMENT_PROJECT}" '"},' \
+    '{"name":"CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE","value":"' "${FAKE_DOCUMENT_MODE}" '"},' \
+    '{"name":"CASEOPS_DOCUMENT_PROCESSING_RUN_REGION","value":"' "${FAKE_DOCUMENT_REGION}" '"},' \
+    '{"name":"CASEOPS_DOCUMENT_PROCESSING_RUN_JOB","value":"' "${FAKE_DOCUMENT_JOB}" '"},' \
+    '{"name":"CASEOPS_COURT_SYNC_DISPATCH_MODE","value":"' "${FAKE_COURT_MODE}" '"},' \
+    '{"name":"CASEOPS_COURT_SYNC_RUN_REGION","value":"' "${FAKE_COURT_REGION}" '"},' \
+    '{"name":"CASEOPS_COURT_SYNC_RUN_JOB","value":"' "${FAKE_COURT_JOB}" '"},' \
     '{"name":"CASEOPS_RELEASE_SHA",' \
     '"value":"abcdef1234567890abcdef1234567890abcdef12"},' \
     '{"name":"CASEOPS_IP_RULE_GOVERNANCE_ENABLED","value":"' \
@@ -2104,6 +2357,24 @@ if [[ "${1:-}" == "scripts/scheduler_inventory.py" || \
   printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
   exit 0
 fi
+if [[ "${1:-}" == "scripts/document_worker_release.py" ]]; then
+  printf '%s\\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+  if [[ "${FAKE_DOCUMENT_WORKER_MODE}" == "${2:-}" ]]; then
+    printf '%s\\n' 'Document worker release failed closed.' >&2
+    exit 59
+  fi
+  printf '%s\\n' '{"schema_version":1,"admission_disabled":true}'
+  exit 0
+fi
+if [[ "${1:-}" == "scripts/pre_migration_backup.py" ]]; then
+  printf '%s\\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+  if [[ "${FAKE_BACKUP_MODE:-ok}" != "ok" ]]; then
+    printf '%s\\n' 'Backup checkpoint failed closed.' >&2
+    exit 60
+  fi
+  printf '%s\\n' '{"event":"backup_completed","backup_id":"fake-only-123"}'
+  exit 0
+fi
 if [[ "${1:-}" == "scripts/reconcile_rate_identity_edge.py" ]]; then
   printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
   if [[ "${FAKE_RATE_IDENTITY_MODE}" == "${2:-}" ]]; then
@@ -2139,6 +2410,20 @@ exec "${FAKE_REAL_PYTHON}" "$@"
     )
     release_sha = "abcdef1234567890abcdef1234567890abcdef12"
     env = os.environ.copy()
+    env["FAKE_NATIVE_GIT"] = ""
+    if native_status_root is not None:
+        assert native_status_root.resolve().is_relative_to(tmp_path.resolve())
+        native_git = shutil.which("git")
+        assert native_git is not None
+        env = {key: value for key, value in env.items() if not key.startswith("GIT_")}
+        env.update({
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_TERMINAL_PROMPT": "0",
+            "FAKE_NATIVE_GIT": _bash_path(Path(native_git)),
+            "FAKE_NATIVE_GIT_STATUS_ROOT": _bash_path(native_status_root),
+            "FAKE_NATIVE_GIT_STATUS_ARGS": _bash_path(tmp_path / "native-status-args.txt"),
+        })
     fingerprint_json = _a0_fingerprint_json()
     fingerprint_log_json = json.dumps(
         [
@@ -2203,6 +2488,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
                 separators=(",", ":"),
             ),
             "FAKE_GCLOUD_LOG": _bash_path(gcloud_log),
+            "FAKE_BACKUP_MODE": backup_mode,
             "FAKE_GIT_FETCH_COUNT": _bash_path(tmp_path / "git-fetch-count"),
             "FAKE_GIT_STATUS": git_status,
             "FAKE_MAIN_DRIFT_AFTER_FETCHES": str(main_drift_after_fetches or 0),
@@ -2210,9 +2496,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_GH_ACTIVE_RUNS": active_prod_verify_runs,
             "FAKE_GH_RUNS_CLEARED": _bash_path(tmp_path / "gh-runs-cleared"),
             "FAKE_INDEX_HEALTH_MODE": index_health_mode,
-            "FAKE_ARTIFACT_DESCRIBE_COUNT": _bash_path(
-                tmp_path / "artifact-describe-count"
-            ),
+            "FAKE_ARTIFACT_DESCRIBE_COUNT": _bash_path(tmp_path / "artifact-describe-count"),
             "FAKE_ARTIFACT_DESCRIBE_FAILURES": str(artifact_describe_failures),
             "FAKE_RATE_IDENTITY_MODE": rate_identity_mode,
             "FAKE_QA_AFTER_JSON": _a0_qa_job_json(
@@ -2262,6 +2546,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_QA_UPDATED": _bash_path(tmp_path / "qa-updated"),
             "FAKE_PENDING_EXECUTION_JSON": _a0_pending_execution_json(immutable_image),
             "FAKE_PYTHON_CRLF": "true" if python_crlf else "false",
+            "FAKE_DOCUMENT_WORKER_MODE": document_worker_mode,
             "FAKE_REAL_PYTHON": _bash_path(Path(sys.executable)),
             "FAKE_TAG": expected_tag,
             "FAKE_TRAFFIC_MODE": traffic_mode,
@@ -2281,7 +2566,11 @@ exec "${FAKE_REAL_PYTHON}" "$@"
     command = [
         _find_working_bash(),
         "-c",
-        'export PATH="$1:$PATH"; shift; bash scripts/deploy-prod.sh "$@"',
+        'export PATH="$1:$PATH"; '
+        'for cli in git gcloud gh curl sleep python; do '
+        'selected=$(command -v "$cli"); '
+        '[[ "$selected" == "$1/$cli" && -x "$selected" ]] || exit 99; '
+        'done; shift; bash scripts/deploy-prod.sh "$@"',
         "deploy-test",
         _bash_path(fake_bin),
         *arguments,
@@ -2571,6 +2860,14 @@ def test_deploy_prod_withholds_certification_when_the_sidecar_disappears(
 
 
 _API_RUNTIME_CONTRACT_ERRORS = {
+    "api-service-account-drift": "API service identity does not match the document-job invoker",
+    "document-project-drift": "CASEOPS_GCP_PROJECT_ID is missing or stale",
+    "document-mode-drift": "CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE is missing or stale",
+    "document-region-drift": "CASEOPS_DOCUMENT_PROCESSING_RUN_REGION is missing or stale",
+    "document-job-drift": "CASEOPS_DOCUMENT_PROCESSING_RUN_JOB is missing or stale",
+    "court-mode-drift": "CASEOPS_COURT_SYNC_DISPATCH_MODE is missing or stale",
+    "court-region-drift": "CASEOPS_COURT_SYNC_RUN_REGION is missing or stale",
+    "court-job-drift": "CASEOPS_COURT_SYNC_RUN_JOB is missing or stale",
     "billing-drift": "request-based billing is not in effect (cpu-throttling is not true)",
     "cpu-boost-drift": "startup CPU boost is not enabled",
     "cpu-boost-missing": "startup CPU boost is not enabled",
@@ -2717,6 +3014,47 @@ def test_deploy_prod_retries_scheduler_reconciliation_with_a_finite_bound() -> N
     assert "failed after three bounded attempts" in reconcile
 
 
+def test_document_worker_bridge_precedes_migration_and_activation_follows_exact_routing(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1")
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+
+    def index(value: str) -> int:
+        return next(offset for offset, call in enumerate(calls) if value in call)
+
+    assert index("document_worker_release.py prepare") < index("scheduler_inventory.py quiesce")
+    assert index("document_worker_release.py preflight") < index("builds submit")
+    assert index("document_worker_release.py prepare --worker court") < index(
+        "run jobs execute caseops-migrate-job"
+    )
+    assert index("document_worker_release.py prepare") < index(
+        "run jobs execute caseops-migrate-job"
+    )
+    assert index("run deploy caseops-api") < index("document_worker_release.py activate")
+    assert index("document_worker_release.py activate") < index("scheduler_inventory.py resume")
+    assert index("document_worker_release.py activate") < index("workflow run prod-verify.yml")
+    assert index("document_worker_release.py activate --worker court") < index(
+        "scheduler_inventory.py resume"
+    )
+
+
+@pytest.mark.parametrize("stage", ["preflight", "prepare", "activate"])
+def test_document_worker_bridge_failure_never_resumes_or_certifies(
+    tmp_path: Path, stage: str
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", document_worker_mode=stage)
+    assert result.returncode != 0 and "Document worker release failed closed" in result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert not any("scheduler_inventory.py resume" in call for call in calls)
+    assert not any("workflow run prod-verify.yml" in call for call in calls)
+    if stage in {"preflight", "prepare"}:
+        assert not any("run jobs execute caseops-migrate-job" in call for call in calls)
+    if stage == "preflight":
+        assert not any("builds submit" in call for call in calls)
+
+
 def test_deploy_prod_retries_transient_artifact_digest_lookup(tmp_path: Path) -> None:
     result = _run_deploy_with_fakes(
         tmp_path,
@@ -2755,36 +3093,48 @@ def test_deploy_prod_rejects_invalid_private_projection_scheduler_hold(
         ),
         (
             3,
+            "scheduler_inventory.py quiesce",
+            "pre_migration_backup.py",
+            "pre-backup mutation gate",
+        ),
+        (
+            4,
+            "pre_migration_backup.py",
+            "run jobs update caseops-migrate-job",
+            "post-backup pre-migration gate",
+        ),
+        (
+            5,
             "run jobs update caseops-ip-qa-bootstrap",
             "run deploy caseops-api",
             "final pre-route gate",
         ),
         (
-            4,
+            6,
             "run jobs update caseops-ip-qa-bootstrap",
             "reconcile_rate_identity_edge.py prepare",
             "before-purpose-edge-reconciliation",
         ),
         (
-            5,
+            7,
             "reconcile_rate_identity_edge.py prepare",
             "run deploy caseops-api",
             "after-purpose-edge-reconciliation",
         ),
         (
-            6,
+            8,
             "run deploy caseops-web",
             "reconcile_rate_identity_edge.py verify",
             "before-effective-purpose-edge-proof",
         ),
         (
-            7,
+            9,
             "run deploy caseops-web",
             "run jobs execute caseops-ip-qa-bootstrap",
             "post-route pre-certification gate",
         ),
         (
-            8,
+            10,
             "run jobs execute caseops-ip-qa-bootstrap",
             "scheduler_inventory.py resume",
             "pre-provider-scheduler-resume gate",
@@ -2818,6 +3168,21 @@ def test_deploy_prod_fails_closed_when_main_advances_during_release(
         assert forbidden_call not in calls
     assert "gh workflow run prod-verify.yml" not in calls
     assert "=== deploy-prod.sh — DONE" not in result.stdout
+
+
+@pytest.mark.parametrize("mode", ["failed", "unknown", "pending"])
+def test_deploy_refuses_migration_and_routing_without_backup_completion(tmp_path, mode):
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", backup_mode=mode)
+    assert result.returncode != 0
+    assert "Backup checkpoint failed closed." in result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert "builds submit" in calls and calls.count("pre_migration_backup.py") == 1
+    for forbidden in (
+        "run jobs update caseops-migrate-job", "run jobs execute caseops-migrate-job",
+        "run deploy caseops-api", "services update-traffic", "scheduler_inventory.py resume",
+        "gh workflow run prod-verify.yml",
+    ):
+        assert forbidden not in calls
 
 
 def test_deploy_prod_does_not_repeat_a_successful_current_generation_qa_bootstrap(
@@ -3192,3 +3557,118 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
     assert result.returncode != 0, result.stdout + result.stderr
     assert expected_message in result.stdout
     assert "=== deploy-prod.sh — DONE" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("case", "mutation_path", "mutation", "reject"),
+    [
+        ("clean", None, None, False),
+        ("unrelated-doc", "docs/unrelated-note.md", "modify", False),
+        ("registry", "license-policy/reviewed-packages.json", "modify", True),
+        ("upstream", "license-policy/upstream/fake-package/LICENSE.txt", "modify", True),
+        ("review-doc", "docs/security/js-license-compliance-review-2026-10-12.md",
+         "modify", True),
+        ("statute-fixture", "tests/fixtures/statutes/structured-schedule-api.json",
+         "modify", True),
+        ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts", "modify", True),
+        ("network-evidence", "tests/e2e/support/bounded-network-evidence.ts", "modify", True),
+        ("api-evidence", "tests/e2e/support/prod-api-response-evidence.ts", "modify", True),
+        ("cost-controls", "tests/e2e/support/cost-controls.ts", "modify", True),
+        ("new-upstream", "license-policy/upstream/new-package/LICENSE.txt", "new", True),
+        ("deleted-review", "docs/security/js-license-compliance-review-2026-10-12.md",
+         "delete", True),
+    ],
+    ids=lambda value: value if isinstance(value, str) else None,
+)
+def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
+    tmp_path: Path,
+    case: str,
+    mutation_path: str | None,
+    mutation: str | None,
+    reject: bool,
+) -> None:
+    native_git = shutil.which("git")
+    assert native_git is not None, "Real local Git is required, not a canned dirty status"
+    repository = tmp_path / "native-status"
+    repository.mkdir()
+    empty_hooks = tmp_path / "empty-hooks"
+    empty_hooks.mkdir()
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    env.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
+                "GIT_TERMINAL_PROMPT": "0"})
+    git_commands = []
+
+    def git(*arguments: str) -> subprocess.CompletedProcess[str]:
+        command = [native_git, "-c", f"core.hooksPath={empty_hooks}",
+                   "-c", "core.autocrlf=false", "-c", "core.longpaths=true",
+                   "-c", "commit.gpgsign=false", "-c", "user.name=Offline fixture",
+                   "-c", "user.email=fixture@example.invalid", "-C", str(repository),
+                   *arguments]
+        result = subprocess.run(command, env=env, capture_output=True, text=True,
+                                check=False, timeout=10)
+        git_commands.append({"argv": command, "exit_code": result.returncode,
+                             "stdout": result.stdout, "stderr": result.stderr})
+        assert result.returncode == 0, result.stdout + result.stderr
+        return result
+
+    git("init", "--quiet")
+    initial_paths = {
+        "apps/api/main.py", "apps/web/package.json", "package.json", "package-lock.json",
+        ".dockerignore", ".gcloudignore", "docs/unrelated-note.md",
+        *(row[1] for row in [
+            ("registry", "license-policy/reviewed-packages.json"),
+            ("upstream", "license-policy/upstream/fake-package/LICENSE.txt"),
+            ("review", "docs/security/js-license-compliance-review-2026-10-12.md"),
+            ("fixture", "tests/fixtures/statutes/structured-schedule-api.json"),
+            ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts"),
+            ("network", "tests/e2e/support/bounded-network-evidence.ts"),
+            ("api", "tests/e2e/support/prod-api-response-evidence.ts"),
+            ("cost", "tests/e2e/support/cost-controls.ts"),
+        ]),
+    }
+    for relative in initial_paths:
+        target = repository / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("FAKE offline dirty-path fixture; not licensed material.\n")
+    git("add", ".")
+    git("commit", "--quiet", "-m", "Offline context fixture baseline")
+    assert git("status", "--porcelain", "--untracked-files=all").stdout == ""
+    if mutation_path is not None:
+        target = repository / mutation_path
+        if mutation == "delete":
+            target.unlink()
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("FAKE changed offline fixture bytes.\n")
+    actual_status = git("status", "--porcelain", "--untracked-files=all").stdout
+    assert (mutation_path in actual_status) if mutation_path else actual_status == ""
+
+    result = _run_deploy_with_fakes(tmp_path, native_status_root=repository)
+    status_arguments = (tmp_path / "native-status-args.txt").read_text().splitlines()
+    assert status_arguments[:4] == ["status", "--porcelain", "--untracked-files=all", "--"]
+    filtered = git(*status_arguments).stdout
+    calls = tmp_path / "gcloud.log"
+    evidence = os.environ.get("CASEOPS_DEPLOY_NATIVE_EVIDENCE")
+    if evidence:
+        directory = Path(evidence) / case
+        directory.mkdir(parents=True, exist_ok=False)
+        (directory / "receipt.json").write_text(json.dumps({
+            "case": case, "mutation_path": mutation_path, "mutation": mutation,
+            "expected_rejection": reject, "native_git_commands": git_commands,
+            "actual_full_status": actual_status, "actual_guard_arguments": status_arguments,
+            "actual_filtered_status": filtered, "deploy_exit_code": result.returncode,
+            "fake_cloud_calls_exist": calls.exists(),
+            "scope": "Only isolated native Git init/add/commit/status; all release CLI calls fake",
+        }, indent=2), encoding="utf-8")
+        (directory / "deploy.stdout").write_text(result.stdout, encoding="utf-8")
+        (directory / "deploy.stderr").write_text(result.stderr, encoding="utf-8")
+    if reject:
+        assert mutation_path in filtered
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "build context is dirty" in result.stdout
+        assert not calls.exists(), "Dirty uploaded bytes must stop before any fake cloud call"
+    else:
+        assert filtered == ""
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "DONE abcdef1" in result.stdout
+        assert calls.is_file()

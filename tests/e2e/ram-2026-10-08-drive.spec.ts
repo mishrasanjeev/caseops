@@ -7,6 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, repoRoot } from "./support/env";
+import { persistFixtureProcessEvidence } from "./support/fixture-process";
 
 const fixtureRoot = apiBaseUrl + "/_e2e/drive-import/fixtures";
 const password = "DriveBrowserRegression123!";
@@ -95,7 +96,16 @@ test("Drive browser emulator cannot activate in production or fetch other fixtur
     repoRoot, "apps", "api", ".venv", process.platform === "win32" ? "Scripts" : "bin",
     process.platform === "win32" ? "python.exe" : "python",
   );
-  const result = spawnSync(python, [
+  const project = process.env.CASEOPS_E2E_DOCKER_PROJECT;
+  const file = process.env.CASEOPS_E2E_DOCKER_COMPOSE_FILE;
+  if (project && !file) throw new Error("Docker isolation requires its exact Compose file.");
+  const startedAt = new Date().toISOString();
+  const started = performance.now();
+  const result = project && file ? spawnSync("docker", [
+    "compose", "--project-name", project, "--file", file, "exec", "-T", "api",
+    "python", "-m", "unittest", "discover", "-s", "/oauth-harness",
+    "-p", "test_drive_import_emulator.py", "-v",
+  ], { cwd: repoRoot, encoding: "utf8", timeout: 60_000 }) : spawnSync(python, [
     "-m", "unittest", "discover", "-s", "tests/e2e/support/oauth",
     "-p", "test_drive_import_emulator.py", "-v",
   ], {
@@ -106,7 +116,9 @@ test("Drive browser emulator cannot activate in production or fetch other fixtur
     },
   });
   const output = result.stdout + result.stderr;
-  await testInfo.attach("drive-emulator-isolation", { body: output, contentType: "text/plain" });
+  await persistFixtureProcessEvidence(
+    testInfo, "drive-isolation-process", result, startedAt, performance.now() - started, output,
+  );
   expect(result.error, output).toBeUndefined();
   expect(result.status, output).toBe(0);
   expect(output).toContain("Ran 7 tests");
