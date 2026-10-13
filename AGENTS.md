@@ -616,6 +616,13 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- Wrapping navigation must allocate block height for every row. Horizontal
+  overflow checks and DOM visibility do not prove a tab is clickable: a panel
+  can cover a later wrapped row. Assert each trigger is inside its tablist on
+  both axes, owns its real pointer hit and works with unforced clicks after
+  panel changes and around sidebar breakpoints. Keep single-row sizing intact;
+  never use force-click, z-index or longer timeouts to hide a flow-layout defect.
+
 - A global maintenance return count describes every eligible row, not only
   the current test's tenant or locked fixture. Use an independently migrated,
   connection-disabled-template child for zero/exact-count recovery assertions;

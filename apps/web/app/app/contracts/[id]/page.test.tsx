@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -111,6 +111,21 @@ describe("ContractDetailPage", () => {
     expect(screen.getByRole("tab", { name: /Clauses/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Legal refs/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Terms/i })).toBeInTheDocument();
+  });
+
+  it("reserves automatic height for all eight wrapped contract tabs", async () => {
+    render(withClient(<ContractDetailPage />));
+    expect(await screen.findByText("Vendor MSA")).toBeInTheDocument();
+    const tablist = screen.getByRole("tablist");
+    expect(tablist).toHaveClass(
+      "h-auto", "w-full", "min-w-0", "flex-wrap", "justify-start", "gap-1",
+    );
+    expect(tablist).not.toHaveClass("h-10");
+    expect(within(tablist).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Overview", "Attachments (0)", "Clauses (0)", "Obligations (0)",
+      "Terms (0)", "Legal refs (0)", "Playbook (0)", "Redline",
+    ]);
+    expect(fetchWorkspaceMock).toHaveBeenCalledWith("c1");
   });
 
   it("renders legal references, term suggestions, and attachment roles", async () => {

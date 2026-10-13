@@ -2,6 +2,12 @@
 
 ## October 12 Combined Release
 
+October13 browser checkpoint:6fc has green API/coverage/native/web jobs but
+complete browser RED (550 cases:532 pass/17 skip/one393px layout failure).
+Fix contract wrapping height and prove all tab hit targets before a fresh
+complete release. CodeQL552 current SARIF absence is verified, not a provider
+or production claim. See `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`; **NO-GO**.
+
 October13 final-candidate checkpoint: dd7 local native acceptance naturally
 completed2,853 identities/8,559 phases with one failed global recovery assertion.
 Browser acceptance did not run; hosted CI also failed one artifact expectation.

@@ -1,6 +1,6 @@
 /** J10/M09/FT-051/052: all four contract AI actions, at zero external cost. */
 import { randomUUID } from "node:crypto";
-import type { APIRequestContext, Locator, Response } from "@playwright/test";
+import type { APIRequestContext, Locator, Page, Response } from "@playwright/test";
 
 import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
@@ -19,6 +19,35 @@ function required(name: string): string {
 }
 const loopback = (url: URL) => ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
 const SOURCE = "Acme India shall pay Supplier India by 20 October 2026.";
+
+async function assertContractTabsReachable(page: Page) {
+  const tabs = page.getByRole("tablist").getByRole("tab");
+  await expect(tabs).toHaveCount(8);
+  for (const tab of await tabs.all()) {
+    await expect(tab).toBeVisible();
+    await expect(tab).toBeEnabled();
+    await tab.scrollIntoViewIfNeeded();
+    const geometry = await tab.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const list = element.closest('[role="tablist"]')!.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        bounds.left + bounds.width / 2, bounds.top + bounds.height / 2,
+      );
+      return {
+        label: element.textContent,
+        width: bounds.width,
+        contained: bounds.left >= list.left - 1 && bounds.right <= list.right + 1
+          && bounds.top >= list.top - 1 && bounds.bottom <= list.bottom + 1,
+        withinViewport: bounds.left >= 0 && bounds.right <= window.innerWidth + 1,
+        ownsPointer: hit !== null && (hit === element || element.contains(hit)),
+      };
+    });
+    expect(geometry.width, `${geometry.label} has useful width`).toBeGreaterThan(24);
+    expect(geometry.contained, `${geometry.label} remains inside its tablist`).toBe(true);
+    expect(geometry.withinViewport, `${geometry.label} remains visible horizontally`).toBe(true);
+    expect(geometry.ownsPointer, `${geometry.label} is not covered by its panel`).toBe(true);
+  }
+}
 
 for (const width of [1280, 393]) {
   test.describe(`Contract AI source preservation at ${width}px`, () => {
@@ -89,6 +118,17 @@ for (const width of [1280, 393]) {
         expected_position: SOURCE, severity: "medium" });
       await page.goto(`/app/contracts/${contractId}`);
       await expect(page.getByRole("heading", { name: title })).toBeVisible();
+      for (const layoutWidth of [320, 393, 767, 768, 769, 1023, 1024, 1025, 1280]) {
+        await page.setViewportSize({ width: layoutWidth, height: 900 });
+        await assertContractTabsReachable(page);
+        if (local && width === 1280) {
+          await test.info().attach(`contract-tabs-${layoutWidth}px`, {
+            body: await page.getByRole("tablist").screenshot(), contentType: "image/png",
+          });
+        }
+      }
+      await page.setViewportSize({ width, height: 900 });
+      await assertContractTabsReachable(page);
       await page.getByRole("tab", { name: /^Clauses/ }).click();
       await expect(page.getByTestId("contract-extract-clauses")).toBeDisabled();
       await page.getByRole("tab", { name: /^Attachments/ }).click();
@@ -159,10 +199,12 @@ for (const width of [1280, 393]) {
       const obligations = await action(page.getByTestId("contract-extract-obligations"), "obligations/extract");
       expect(await obligations.json()).toMatchObject({ contract_id: contractId, inserted: 1, removed: 0 });
       await expect(page.getByText("Offline source duty", { exact: true })).toBeVisible();
+      await assertContractTabsReachable(page);
       await page.getByRole("tab", { name: /^Playbook/ }).click();
       const compared = await action(page.getByTestId("contract-run-playbook-compare"), "playbook/compare");
       expect((await compared.json()).findings).toEqual([expect.objectContaining({ rule_id: rule.id, status: "missing" })]);
       await expect(page.getByText("Findings (1)", { exact: true })).toBeVisible();
+      await assertContractTabsReachable(page);
       const workspace = await request.get(`${api.origin}${path}/workspace`, { headers });
       expect(workspace.status()).toBe(200);
       const retained = await workspace.json();

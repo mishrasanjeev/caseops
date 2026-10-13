@@ -8,6 +8,47 @@ The owner requires green CI, complete exact-candidate workstation Docker
 acceptance, canonical-main merge, guarded production deployment and live replay.
 Scoped results below do not replace those gates.
 
+## Current Browser Finding
+
+The later candidate `6fc6c97fbe9dbf2afd053883afb7088881b75031`
+(tree `40c0769eaaf6f31341642008ca1708b2a98bb37e`) remains **NO-GO**.
+Its actual hosted merge checkout is
+`bac1b3c02c27d94eed66c2c3479ea193e14d3989`, with the same tree.
+CI run 38322285885 completed its API, aggregate coverage, PostgreSQL and
+web jobs successfully, but complete browser acceptance failed: 550 cases,
+532 passed, 17 skipped, one unexpected failure, zero retries/flaky cases
+and zero global errors. The skips are not verified positive workflows.
+
+The sole failure is J10/M09/FT-051/052's 393px contract AI source-preservation
+journey in `ram-2026-10-12-prod.spec.ts`. Its Playbook tab was visible and
+enabled but the Obligations panel heading intercepted its pointer for the
+original 15-second action deadline. The actual page snapshot and complete
+click error establish a product layout defect, not locator drift or provider
+availability. The contract page wraps its eight tabs while inheriting the
+shared single-row `h-10` height. Other existing wrapping consumers explicitly
+override that height; the shared single-row primitive need not change.
+
+The correction must let the contract tablist contain its wrapped rows and
+remain bounded by the available content width. The dated browser journey
+now checks every trigger's horizontal/vertical containment, useful width and
+real center-point ownership at 320/393px and immediately around the 768px and
+1024px breakpoints, as well as 1280px. Its original unforced clicks, four
+actions, manual-row retention, response checks and reload assertions remain.
+Those stronger browser assertions are not accepted until actually replayed.
+The focused page module has five passes, including four unchanged behavior
+cases and a retained RED for the new wrapping-class regression. jsdom does
+not prove physical geometry. Cropped tablist screenshots are retained only
+for loopback fixtures, never for the production record surface.
+All failed browser/native evidence remains retained; the clean R4 native
+run is still independent of this required frontend correction.
+
+CodeQL run 38322285945 completed all three analyses on that exact merge tree.
+Alert 552 is absent from every current SARIF and the current PR open list.
+Its PR instance is fixed without dismissal; its last affected commit remains
+the earlier merge, while alert-level state/fixed_at are null. Do not invent
+an exact new instance commit from those nullable API fields. This proves
+scanner absence only, not whole-release or live-provider acceptance.
+
 ## Preserved Candidate Evidence
 
 Candidate `dd7c4d5030410c6b0abbc3c941e4022be164f77e` has tree
@@ -107,3 +148,5 @@ Evidence is retained under
 `finalizer-observability-scope-clarification-01`. The workload snapshot and
 original failed phases are in `court-recovery-dd7c4d50-diagnosis-01`;
 the corrected full focused proof is in `court-recovery-isolation-20261013-02`.
+The later complete failed browser report and exact-tree CodeQL SARIF are in
+`ci-6fc6c97f-reconciliation-01`.

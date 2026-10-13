@@ -2,6 +2,12 @@
 
 ## October 12 Combined Candidate
 
+October13: J10/M09/FT-051/052 adds the actual393px wrapped-tab overlap and
+all-trigger containment/hit-test regression. Complete6fc browser CI is RED
+(532 pass/17 skip/one failure), despite green non-browser jobs and current
+CodeQL absence. Release remains **NO-GO**; source scope and original evidence
+are in `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
 October13: J09/M07, J14/M14, UJ36/UJ61 and QG-SEC-004 remain **NO-GO** for
 release. dd7 full local native inventory completed with one failed recovery
 assertion and no browsers; hosted artifact drift and CodeQL552 need new-head

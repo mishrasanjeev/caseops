@@ -2,6 +2,12 @@
 
 ## October 12 Integration Checkpoint
 
+October13 browser checkpoint: responsive contract navigation is **Partially
+implemented / NO-GO** after a real393px tab/panel overlap. Complete6fc browser
+evidence has one failure among550; all non-browser CI jobs passed. Current
+CodeQL SARIF clears552 without a waiver. Whole-source/mobile/live replay is
+still mandatory. See `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
 October13 final-candidate checkpoint: release remains **NO-GO / Partially
 implemented**. Complete dd7 Docker native gate has2,852 passes/one failed
 global recovery assertion; browsers are unexecuted. Hosted CI artifact drift

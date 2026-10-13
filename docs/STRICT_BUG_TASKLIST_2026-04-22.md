@@ -2,6 +2,12 @@
 
 ## October 12 Combined Fixes
 
+October13 browser checkpoint: contract mobile navigation is **Not fixed**
+in the accepted source/live surface. Complete6fc CI reproduced a393px Playbook
+tab covered by the Obligations panel (532 pass/17 skip/one failure). Root and
+stronger regression are recorded in `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+Current source correction is not closure before full Docker/CI/live replay.
+
 October13 final-candidate checkpoint: **Partially fixed / NO-GO**, not deployed.
 The complete dd7 local native run has one global recovery assertion failure;
 its full evidence is retained and product attribution is not presumed.
