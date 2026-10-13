@@ -2,6 +2,17 @@
 
 ## October 12 Combined Candidate
 
+October 13 PostgreSQL strategy checkpoint: J09/M07/QG-SEC-004 stay **NO-GO**.
+ba has green CI and 2,854 fresh native passes, but actual Docker strategy returns
+500 from shared unproven authority reads. Both artifact-retention boundaries
+work; three serial cases and four mobile cases did not run. Preserve source,
+index/work bounds and provider-write denial through the correction and complete
+new gates. Evidence: `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
+The correction has 42 native PostgreSQL and 299 adjacent unit passes, with
+complete phases and identities. Full fresh CI/Docker and deployed proof remain;
+no source, provider-write or cost boundary is weakened.
+
 October13 Windows artifact checkpoint: QG-SEC-004/J10/M09 stay **NO-GO** despite
 green ce hosted CI and 2,854 local native passes. First Docker browser shard has
 272 passes/one skip; artifact retention failed and 277 cases did not run.

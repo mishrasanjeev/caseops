@@ -8,6 +8,93 @@ The owner requires green CI, complete exact-candidate workstation Docker
 acceptance, canonical-main merge, guarded production deployment and live replay.
 Scoped results below do not replace those gates.
 
+## Authority Read Correction
+
+The shared indexed-text, embedding-availability and vector-prefilter queries
+now use structured SQLAlchemy reads. Fixed indexed constants remain inlined
+after compilation; the vector candidate limit remains before document joins,
+with unchanged six-decimal vector formatting, filters, ranking and limits.
+The production transaction guard and its SQL/function allowlist are unchanged.
+Read-error fallbacks may roll back only a proven caller-owned read-only session;
+pending/flushed, Core and raw-driver writes remain protected.
+
+The new complete PostgreSQL module passes 42 identities and 126 phases, with
+zero failures, skips, duplicate or missing phases. An independently migrated
+fresh PG17 database exercises the real CaseOpsSession and HTTP Strategy route,
+an uncited rejection and a grounded deterministic success with persisted reload,
+empty/vector reads, all nullable filter combinations, nearest-result exclusion,
+literal court metacharacters and caller-write preservation after read failures.
+Forced generic GIN and forced HNSW plans prove index eligibility, not natural
+production plan choice or latency. All providers are deterministic and offline;
+no legal-model quality, paid-provider or deployed-fix claim follows.
+
+Evidence is `recommendation-authority-read-plan-02/native-parent-03`: natural
+exit zero, unchanged source, every owned container/network removed. The earlier
+native-01 loopback setup timeout and native-02 SQL test percent-placeholder
+failure remain retained separately. Static independent review has no remaining
+findings. The full six-module adjacent-unit replay has 299 passes and 897 phases,
+zero skips/failures and unchanged source. Both journals' complete collections
+match their JUnit identities, with no missing, duplicate or unknown phase.
+Evidence is `recommendation-authority-read-plan-02/full-adjacent-parent-04`.
+Amended-tree CI/Docker, canonical merge and live exact-release gates are still
+required before release or bug closure.
+
+## PostgreSQL Strategy Checkpoint
+
+Candidate `ba16167de60bfa98502ae4828ca3228ae0bccd97`, tree
+`3b2acb25b0be58be09fc0510e6942fabb7c87b01`, has fully reconciled green hosted
+CI 38346171604 on merge `891659c0`: 7,603 API passes and 2,858 explained skips,
+2,854 native passes, 1,280 log-reported web passes and 533 browser passes with
+17 skips. The Linux retention module has 24 passes and one Windows-only skip.
+The separate 50-case Windows supplement and its observed-source binding remain
+explicit, not fabricated pre-execution fingerprints. Security and CodeQL pass.
+
+Fresh R7 native acceptance completed at `2026-10-13T06:26:16Z`: 2,854 passes,
+8,562 phases, no skips/retries/faults and unchanged source. All 4,351 historical
+obligations and 84 original failed identities reconcile. The actual new web
+image passes 962 material checks. These are separately scoped results.
+
+R7 full Docker acceptance is **NO-GO**. Both desktop artifact-retention
+boundaries now succeed, including the actual forward-slash source paths.
+However, `ram-2026-09-02-bugs.spec.ts:546` returns two HTTP 500s while generating
+`litigation_strategy`. The complete desktop reports contain 532 passes, ten
+explicit skips, one failure and three serial-blocked cases; all four mobile
+cases remain unexecuted. The first shard has 272 passes/one skip; the second
+has 260 passes and 12 producer-reported skips, of which three are blocked by
+the serial failure. Do not call those three verified or voluntary exclusions.
+
+The failed request fell outside the retained final API log tail after thousands
+of subsequent statute GETs. Fresh isolated diagnostic 04 reproduces the 500
+with the unchanged API image, schema, source and equivalent local Matter,
+owner policy and Article 14 setup. Observer-only diagnostic 05 reproduces the
+same error and captures its origin immediately. No source or guard behavior
+changed; both diagnostics cleaned up only their owned resources.
+
+The first unproven read is the exact-name authority lookup: its indexed text
+expression contains raw literal columns for empty text and separators. The
+second is the raw PostgreSQL embedding-availability SELECT. No pending ORM
+insert/update/delete was observed. The exact existing `SET LOCAL
+statement_timeout = '60000'` was proven read-only. The transport-boundary guard
+correctly refuses to discard unproven caller work, raising its protected
+RuntimeError before provider transport. This is a retrieval-construction
+compatibility defect, not evidence that the guard should allow arbitrary SQL.
+
+Correct the shared retrieval queries with structured SQLAlchemy expressions.
+Keep the production trigram-index expression, generic-plan behavior, bounded
+top-chunk HNSW stage before joins, filters, rank, source rules and DML-denial
+invariants. Audit populated vector paths as well as the empty probe. Require
+real PostgreSQL HTTP/CaseOpsSession regression and the original dated browser
+journey, not only SQLite or mocked authority retrieval. Fresh amended-tree
+complete gates, canonical merge, guarded deployment and live replay remain.
+
+Current evidence: `ci-ba16167d-reconciliation-01`, `docker-ba16167d-01`,
+`docker-ba16167d-native-independent-reconciliation-01`,
+`docker-ba16167d-browser-reconciliation-01`,
+`recommendation-r7-ba16167d-diagnosis-01` and
+`bug004-ba16167d-docker-diagnostic-04`/`05`. Diagnostic setup attempts and
+all previous failed/superseded gates remain preserved. There is still no main
+merge, cloud backup, production deployment or private scheduler resume.
+
 ## Windows Artifact Checkpoint
 
 Candidate `ce19933ded0b25e84e22ab93f1b16f4081c2536a`, tree

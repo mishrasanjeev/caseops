@@ -2,6 +2,19 @@
 
 ## October 12 Combined Fixes
 
+October 13 PostgreSQL strategy checkpoint: BUG-004 is **Not fixed** on actual
+Docker ba, despite green hosted CI and native acceptance. The request returns
+500 at the read-only provider boundary after shared authority retrieval emits
+unproven SQL forms. Correct those forms, keep caller writes/index bounds/source
+rules protected, and replay the actual PostgreSQL and dated browser boundaries.
+Three serial cases/four mobile cases remain unexecuted; no deployed closure.
+Full evidence: `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
+The new structured-read correction is **Partially fixed**: 42 real PostgreSQL
+and 299 adjacent unit passes cover the actual session/HTTP and protected-write
+boundaries. Original dated Docker and exact-release production replay remain
+required before any deployed bug closure.
+
 October13 Windows artifact checkpoint: **Partially fixed / NO-GO**. ce hosted
 CI is green and fresh Docker native has 2,854 passes, but retention failed after
 272 browser passes/one skip; 277 cases remain unexecuted. The real report's

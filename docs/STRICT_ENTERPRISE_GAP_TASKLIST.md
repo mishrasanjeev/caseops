@@ -2,6 +2,18 @@
 
 ## October 12 Integration Checkpoint
 
+October 13 PostgreSQL strategy checkpoint: **Partially implemented / NO-GO**.
+The ba full Docker browser gate exposes a strategy 500 from shared authority
+read provenance, despite green hosted/native companions. Real unchanged-image
+reproduction confirms indexed literal columns and a raw vector probe; preserve
+the transaction fence, index semantics and bounded vector work while correcting
+construction. Three serial/four mobile cases did not execute. Fresh complete
+and live gates remain; `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md` records proof.
+
+The structured-query correction has 42 native PostgreSQL and 299 adjacent unit
+passes with fully reconciled phases and inventories. Complete amended-source
+release and live gates remain; backup/restore and provider gaps are not closed.
+
 October13 Windows artifact checkpoint: release is **Partially implemented /
 NO-GO**. ce hosted CI and fresh 2,854-case native acceptance pass, but artifact
 retention stopped Docker after 272 browser passes/one skip, leaving 277 unexecuted.

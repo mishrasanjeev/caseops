@@ -1,5 +1,19 @@
 # CaseOps agent instructions
 
+- Authority retrieval must remain proven read-only under the actual PostgreSQL
+  request-session class before an AI transport call. Exercise exact-name,
+  empty-vector and vector-hit paths; SQLite or mocked retrieval cannot close
+  that gap. Preserve the production indexed expression and bounded HNSW query
+  shape when replacing raw SQL/literal columns with structured expressions.
+  Never clear caller write evidence or weaken the provider transaction fence.
+  A read-error fallback may release only a proven owned read-only transaction;
+  it must preserve caller writes, nested transactions and external ownership.
+  Filter regressions must exclude the nearest row and prove zero-match behavior,
+  not merely return the same winning fixture under every filter combination.
+- Capture an HTTP 5xx's bounded backend exception evidence at its failure
+  boundary. Thousands of later catalogue requests can displace it from a final
+  log tail. Retain original failures and distinguish explicit skips from
+  serial-blocked and entirely unexecuted journeys.
 - Real Playwright reports normalize Windows paths to forward slashes. Convert
   separators before adding an extended-path prefix; an invalid native path can
   return `Attributes=-1`, not a real reparse tag. Retain unavailable-metadata

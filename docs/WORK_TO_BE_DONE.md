@@ -2,6 +2,19 @@
 
 ## October 12 Combined Release
 
+October 13 PostgreSQL strategy checkpoint: **NO-GO**. ba has green hosted CI,
+2,854 fresh local native passes and working real browser artifact retention,
+but actual Docker strategy generation returns 500. Shared authority retrieval
+uses unproven indexed literal columns and a raw availability SELECT; fix its
+construction without relaxing the provider write fence or index/work bounds.
+Three serial cases and four mobile cases remain unexecuted. Evidence and
+remaining complete/live gates: `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
+The shared structured-read correction has 42 native PostgreSQL and 299 adjacent
+unit passes, with all phases and identities reconciled. It preserves the guard,
+index eligibility, vector bounds and caller writes. Fresh full CI/Docker and
+canonical deployment/live replay remain pending, so release remains NO-GO.
+
 October13 Windows artifact checkpoint: ce has green complete hosted CI and
 2,854 fresh local native passes, but Docker stopped after its first browser
 shard (272 pass/one skip); 277 cases did not run. Real forward-slash report paths
