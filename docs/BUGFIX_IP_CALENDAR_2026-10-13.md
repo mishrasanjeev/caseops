@@ -384,3 +384,33 @@ remains Inconclusive; neither an eight-record read nor a passing synthetic
 dispose/reopen regression establishes its historical cause. No lifecycle fence
 has been weakened. Fresh live fingerprints on October14 still serve3dbf364d on
 both API and web. PR535 has not been merged or deployed.
+
+## Native Replacement And Export Declaration
+
+On47265b8d the complete eighteen-module local replacement reconciles369
+identities:315 passes,54 explicit native-environment skips and1053 ordered
+phases, zero failures and unchanged745 source pins. Its complete native
+selection separately reconciles221 passes/663 phases with zero skips, errors,
+failures or phase faults, all149 authority identities and all16 original HTTP
+adapters. Source pins, JUnit, natural exit0 and owned resource cleanup agree.
+Evidence: final-service-complete-20261014-01/reconciliation.json and
+ip-portal-source-native-20261014-01/reconciliation-20261013T211723Z-2c87091b/receipt.json.
+These are scoped local/native evidence, not full Docker or production closure.
+
+Latest exact-ref CodeQL analysis1946885214 on merge db921fab has one finding570:
+the retained public compatibility import is not declared as an export. Original
+567/568/569 have fixed instances on the PR ref, with no dismissal. The new
+declaration lists all twelve canonical renewal workflow functions and that
+unchanged predicate. A regression requires one literal unique13-name inventory,
+every callable and exact compatibility identity. No star-import consumer was
+found. No function body, API schema, lock or policy changes for this declaration.
+The [official query](https://github.com/github/codeql/blob/main/python/ql/src/Imports/UnusedImport.ql)
+recognizes explicitly declared exports; no synthetic use or rule suppression
+is introduced. Fresh actual analysis, full current-head CI/Docker and live
+verification remain required. Production still serves3dbf364d.
+
+The complete amended dependency/export/sender modules pass115 identities and
+345 ordered phases with no skips or failures, exact JUnit, unchanged730 source
+pins and natural exit0. Evidence: export570-service-complete-20261014-01/
+reconciliation.json. This proves the new declaration and retained callable/DAG
+contracts locally, not actual hosted alert closure or whole-release acceptance.

@@ -5,6 +5,10 @@
   recheck canonical main after merge. Optional review steps skipped by a key
   guard are not completed reviews. Break genuine service dependency cycles at
   shared access/provenance boundaries without changing guards or hiding imports.
+  Declare retained public re-exports explicitly; a same-name import alias accepted
+  by Ruff is not necessarily an explicit export to CodeQL. Preserve callable
+  identity and the complete intended public inventory without no-op usage or
+  scanner suppression.
 
 - Audit acceptance coverage before freezing a release candidate. A mode-switch
   click does not prove its dated contents; assert persisted identities and time

@@ -1690,3 +1690,20 @@ def transition_renewal_term(
     session.commit()
     session.refresh(term)
     return _record(session, term)
+
+
+__all__ = [
+    "acknowledge_client_instruction",
+    "create_client_instruction",
+    "create_renewal_term",
+    "imported_renewal_reminder_is_current",
+    "list_renewal_portfolio",
+    "list_renewal_terms",
+    "portfolio_renewal_alert_at",
+    "portfolio_source_renewal_details",
+    "renewal_foundation_contract",
+    "schedule_imported_renewal_reminder",
+    "schedule_renewal_instruction_reminders",
+    "synchronize_imported_renewal_reminder",
+    "transition_renewal_term",
+]

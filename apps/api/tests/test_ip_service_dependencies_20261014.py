@@ -174,6 +174,33 @@ def test_notification_delivery_imports_the_neutral_predicate():
     assert ip_portfolio_source.__all__ == ["imported_renewal_reminder_is_current"]
 
 
+def test_renewals_declares_its_public_workflow_and_compatibility_exports():
+    from caseops_api.services import ip_portfolio_source, ip_renewals
+
+    tree = ast.parse((SRC / "caseops_api/services/ip_renewals.py").read_text())
+    declarations = [
+        node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets)
+    ]
+    assert len(declarations) == 1 and isinstance(declarations[0], ast.List)
+    names = ast.literal_eval(declarations[0])
+    public_functions = {
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
+    }
+    assert len(names) == len(set(names)) == 13
+    assert set(names) == public_functions | {"imported_renewal_reminder_is_current"}
+    assert ip_renewals.__all__ == names
+    assert all(callable(getattr(ip_renewals, name)) for name in names)
+    assert (
+        ip_renewals.imported_renewal_reminder_is_current
+        is ip_portfolio_source.imported_renewal_reminder_is_current
+    )
+
+
 class _ReadSession:
     def __init__(self, *, version=None, row=None):
         self.version = version
