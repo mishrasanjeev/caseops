@@ -727,6 +727,11 @@ requirements when using the fallback.
   the ordinary cadence, never start a global billable notification drain to
   manufacture a receipt. Direct local dispatch is restricted to an isolated
   loopback fixture's exact tenant, recipient, source, docket and in-app intent.
+- Delivery status alone does not prove that its recipient can read an alert.
+  Regress the exact saved current-version content in the user-visible view,
+  including identity, due date, remaining days and record destination. Deny
+  another recipient, revoked access, terminal records and stale source versions;
+  do not expose a queued body or rebind historical delivery to corrected facts.
 
 - Wrapping navigation must allocate block height for every row. Horizontal
   overflow checks and DOM visibility do not prove a tab is clickable: a panel

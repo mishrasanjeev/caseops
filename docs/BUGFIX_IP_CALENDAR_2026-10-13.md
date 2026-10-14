@@ -24,7 +24,7 @@ model, forum hierarchy, scheduler or lifecycle owner is authorized.
 | IP13-04 | IP sections 6..7 | Enhancement | Extras retained/surfaced, placeholders, multiple classes, optional invalid-date warnings |
 | IP13-05 | IP section 8 | Enhancement | Cautious current-workspace/in-file duplicate skips, distinct same-mark applications survive |
 | IP13-06 | IP sections 9..11 | Enhancement | Preview does not create dockets; commit revalidates, idempotence and concurrency; history/reload/count reconciliation |
-| IP13-07 | IP section 12 | Enhancement | One calendar month, month-end/leap year, due-soon, date-change cancellation and no duplicate alert |
+| IP13-07 | IP section 12 | Enhancement | One calendar month, month-end/leap year, due-soon, date-change cancellation, no duplicate alert and recipient-visible current-source content |
 | IP13-08 | IP sections 12..14 | Existing safeguards plus enhancement | Current permissions/lifecycle, no sensitive remarks leak, delivery-channel truth, bounded parser/storage/query work |
 | IP13-09 | IP section 13 | Enhancement | Portfolio/import history/renewal visibility, responsive linked-record journey |
 | CAL13-01 | Calendar sections 2..4 | Valid display enhancement | Canonical stored SC/HC/DC/other identity, retained bench/region/complex/number only when present |
@@ -602,3 +602,21 @@ This is new acceptance coverage, not a claim of deployment or completed live
 delivery. The replacement full-source release gates and live replay remain
 required. Native current-facts tests retain the stronger body, lifecycle and
 access assertions; admin receipt visibility alone does not prove those facts.
+
+The next acceptance pass found a concrete read-path omission: the delivered
+body is retained correctly but Portfolio and the admin receipt do not display
+it. The fresh clean `3f639af0` build's complete four-case browser inventory has
+two genuine failures at both widths on the absent source-renewal body, after
+actual in-app delivery has succeeded, plus two passing history journeys. The
+full failures, source pins, phases and JUnit are retained at
+`recipient-visible-renewal-3f639af0-red-01/SEAL.json`. This is not a fixture or
+transport error. The earlier `eada45d2` four green cases proved delivery status
+only and cannot close the content requirement. The correction must reuse the
+authorized bounded Portfolio read, showing only the current recipient's actual
+delivered current-source content without a new inbox, scheduler or provider.
+
+Full CI also caught a separate integration mistake in the QA operator: its
+direct audit construction bypasses the canonical audit writer. Focused new
+operator tests did not cover the existing shared ownership invariant. The
+existing audit regression and all three actual CodeQL findings stay open until
+the corrected complete inventory passes. No production grant has executed.
