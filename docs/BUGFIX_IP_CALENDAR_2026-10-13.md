@@ -640,3 +640,23 @@ failures remain in their original scopes. The full final-source control-plane,
 secret, CI/CodeQL, Docker and exact-release production gates still apply. The
 approved test-legal grant remains unexecuted; GBA, other entitlements and
 provider automation are unchanged by this work.
+
+## Native Specialist-List Performance Failure
+
+The frozen655 complete workstation Docker run exposes one genuine native
+call failure in the 10,000-record specialist list's unchanged five-second
+statement budget. All failure phases and the complete original query are
+retained. A read-only EXPLAIN of that retained local fixture shows healthy
+partial grant/wall indexes but a bad parent join: PostgreSQL materializes the
+authorized docket set using an estimate of one row, then repeatedly joins it
+to specialist headers. Counting SQL statements does not bound that work.
+
+The PostgreSQL list now performs a correlated, limit-one authorized docket
+lookup for each candidate. The same shared access, wall, grant, tenant, record
+type, lifecycle and archive predicates remain inside that lookup. SQLite keeps
+its existing query contract. No timeout, cache, index or permission is weakened.
+The original native assertions remain; the regression also records actual
+EXPLAIN row/loop work, conservatively charging PostgreSQL's rounded averages,
+and rejects bulk docket scans. Read-only diagnostic comparison is not fresh
+acceptance: the complete original module and joined release gates must replay
+on independently migrated native storage before this failure can close.

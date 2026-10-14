@@ -6,7 +6,7 @@ from datetime import UTC
 from hmac import compare_digest
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -230,32 +230,52 @@ def list_records(
 ):
     if domain not in FACT_MODELS or not 1 <= limit <= 50:
         raise _error("specialist_list_invalid", "Select a domain and a page size up to 50.", 422)
-    statement = (
-        select(
+    docket_conditions = [
+        IpDocketRecord.record_type == f"{domain}_intake",
+        IpDocketRecord.restricted,
+        ~IpDocketRecord.archived_by_matter_disposal,
+        visible_ip_dockets_filter(session, context=context),
+    ]
+    if not include_closed:
+        docket_conditions.extend(
+            (IpDocketRecord.is_active, IpDocketRecord.status.notin_(TERMINAL_IP_DOCKET_STATUSES))
+        )
+    relationship = (IpDocketRecord.id == IpSpecialistRecord.docket_id) & (
+        IpDocketRecord.company_id == IpSpecialistRecord.company_id
+    )
+    if session.get_bind().dialect.name == "postgresql":
+        # Keep one indexed docket lookup per candidate. A bulk policy join can
+        # materialize thousands of authorized dockets under stale estimates.
+        docket = (
+            select(IpDocketRecord.title, IpDocketRecord.status, IpDocketRecord.current_version)
+            .where(relationship, *docket_conditions)
+            .correlate(IpSpecialistRecord)
+            .limit(1)
+            .lateral("authorized_docket")
+        )
+        statement = select(
             IpSpecialistRecord.id,
             IpSpecialistRecord.domain,
-            IpDocketRecord.title,
-            IpDocketRecord.status,
-            IpDocketRecord.current_version,
+            docket.c.title,
+            docket.c.status,
+            docket.c.current_version,
+        ).join(docket, true())
+    else:
+        statement = (
+            select(
+                IpSpecialistRecord.id,
+                IpSpecialistRecord.domain,
+                IpDocketRecord.title,
+                IpDocketRecord.status,
+                IpDocketRecord.current_version,
+            )
+            .join(IpDocketRecord, relationship)
+            .where(*docket_conditions)
         )
-        .join(
-            IpDocketRecord,
-            (IpDocketRecord.id == IpSpecialistRecord.docket_id)
-            & (IpDocketRecord.company_id == IpSpecialistRecord.company_id),
-        )
-        .where(
-            IpSpecialistRecord.company_id == context.company.id,
-            IpSpecialistRecord.domain == domain,
-            IpDocketRecord.record_type == f"{domain}_intake",
-            IpDocketRecord.restricted,
-            ~IpDocketRecord.archived_by_matter_disposal,
-            visible_ip_dockets_filter(session, context=context),
-        )
+    statement = statement.where(
+        IpSpecialistRecord.company_id == context.company.id,
+        IpSpecialistRecord.domain == domain,
     )
-    if not include_closed:
-        statement = statement.where(
-            IpDocketRecord.is_active, IpDocketRecord.status.notin_(TERMINAL_IP_DOCKET_STATUSES)
-        )
     if cursor:
         statement = statement.where(IpSpecialistRecord.id > cursor)
     rows = session.execute(statement.order_by(IpSpecialistRecord.id).limit(limit + 1)).all()

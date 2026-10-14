@@ -1,3 +1,4 @@
+import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -174,7 +175,7 @@ def test_tenant_constraints_and_database_history_guard(pg_engine, registered_int
 
 
 def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
-    pg_engine, registered_intake
+    pg_engine, registered_intake, request
 ):
     company, actor, record = _seed(pg_engine)
     with Session(pg_engine) as session:
@@ -234,17 +235,72 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
             session.commit()
         context = _ip_race_context(session, company_id=company, membership_id=actor)
         statements = []
+        clauses = []
 
         def capture(_conn, _cursor, statement, _params, _context, _many):
             statements.append(statement)
 
+        def capture_clause(_conn, clause, _multiparams, _params, _options):
+            if getattr(clause, "is_select", False):
+                clauses.append(clause)
+
         session.execute(text("SET LOCAL statement_timeout = '5s'"))
         event.listen(pg_engine, "before_cursor_execute", capture)
+        event.listen(pg_engine, "before_execute", capture_clause)
         try:
             page = list_records(session, context=context, domain="design", limit=25)
         finally:
             event.remove(pg_engine, "before_cursor_execute", capture)
+            event.remove(pg_engine, "before_execute", capture_clause)
         assert len(page.records) == 25 and page.next_cursor
         assert all(not row.title.startswith("Hidden") for row in page.records)
         assert len(statements) <= 12, statements
         assert not any("ip_specialist_versions" in statement for statement in statements)
+        assert len(clauses) == 1 and "JOIN LATERAL" in statements[0]
+        sql = str(clauses[0].compile(pg_engine, compile_kwargs={"literal_binds": True}))
+        plan = session.scalar(text("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + sql))[0]
+        nodes, pending = [], [plan["Plan"]]
+        while pending:
+            node = pending.pop()
+            nodes.append(node)
+            pending.extend(node.get("Plans", []))
+        # PostgreSQL rounds per-loop row averages. Charge an extra row per
+        # active loop so zero averages cannot hide repeated work.
+        row_work = sum(
+            node.get("Actual Loops", 0)
+            * (
+                1
+                + node.get("Actual Rows", 0)
+                + node.get("Rows Removed by Filter", 0)
+                + node.get("Rows Removed by Join Filter", 0)
+            )
+            for node in nodes
+        )
+        docket_nodes = [node for node in nodes if node.get("Relation Name") == "ip_docket_records"]
+        request.node.user_properties.append(
+            (
+                "specialist_list_plan",
+                json.dumps(
+                    {
+                        "row_work": row_work,
+                        "execution_ms": plan["Execution Time"],
+                        "docket_nodes": [
+                            {
+                                key: node.get(key)
+                                for key in (
+                                    "Node Type",
+                                    "Index Name",
+                                    "Actual Loops",
+                                    "Actual Rows",
+                                    "Index Cond",
+                                )
+                            }
+                            for node in docket_nodes
+                        ],
+                    }
+                ),
+            )
+        )
+        assert row_work <= 2048
+        assert docket_nodes and all(node["Actual Loops"] <= 128 for node in docket_nodes)
+        assert all("Index" in node["Node Type"] for node in docket_nodes)
