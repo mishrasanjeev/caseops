@@ -2,6 +2,16 @@
 
 ## October 13 Canonical Release Checkpoint
 
+October14 dfa full Docker is NO-GO: 2,996 native passes/one work-bound failure,
+8,991 phases; all556 browser cases unexecuted. A separately labelled retained
+plan isolates repeated global Team scans, not the bounded docket lookup. The
+26f97222 shared IP membership-first correction has166 scoped native passes,
+144 SQLite passes and60 exact native supplements; max page work1,279 under
+unchanged2,048/128/5s bounds. All failed scopes remain retained. Fresh joined
+gates, canonical merge, guarded release and live replay are pending; production
+is3dbf, the QA grant is unexecuted and historical reopening is Inconclusive.
+See `docs/BUGFIX_IP_CALENDAR_2026-10-13.md` for cause and proof limitations.
+
 The new participant-observation correction has114 scoped native passes/342
 phases, preserving105 original identities and111 assertions under unchanged
 deadlines/GC/security. Real admission and delayed-preflight controls supplement,

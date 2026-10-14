@@ -710,3 +710,56 @@ by normalized bytes and complete AST, not mislabeled as raw immutable equality.
 Parent independently checked all270 sealed artifacts with zero hash mismatches.
 Proof: `native-participant-observation-20261014-01/README.md`. This does not
 supersede the failed hosted run or certify the joined Docker/live release.
+
+## Mixed-Team Work Failure And Replacement
+
+The exact dfa candidate's complete workstation Docker gate is NO-GO: 2,997
+native identities, 2,996 passes and one call failure, 8,991 retained phases,
+no errors or skips. All eight children completed naturally; all owned Docker
+resources are absent. Its 556 discovered browser cases did not execute. The
+sole failure is specialist-list charged work 5,571 exceeding the unchanged
+2,048 bound, not the earlier SQL timeout. Correct page contents, pagination,
+query count and bounded indexed docket lookup passed before that assertion.
+The complete failed evidence and 1,299 independently checked raw hashes remain
+in `docker-dfa2dc8c-r6-02/full-native-reconciliation-01`.
+
+A later separately labelled read-only plan of the retained 10,001-record
+fixture charges 5,573 work; 4,784 comes from scanning the global Team catalogue
+26 times despite zero actor memberships. This is not the original full plan,
+which the old test did not retain. I previously proved only the per-docket
+lookup on a clean scoped fixture and missed the shared team subquery's mixed
+catalogue behavior. A fast 2.241 ms diagnostic does not waive unbounded work.
+
+The e88ed4ae amendment, integrated as 26f97222, changes only IP team eligibility:
+enumerate every current actor membership, perform one ordered correlated Team
+seek per membership, then reject a nonexact, foreign or inactive successor.
+All other policy functions, ACL tuple seeks, effective windows, wall precedence
+and lifecycle rules remain unchanged. No planner override, new index, cache,
+timeout increase or relaxed work bound is introduced.
+
+Complete scoped native replacement passes 166 identities/498 phases with zero
+skips, errors or failures. It includes the original 19 specialist, 18 patent,
+107 batch and 14 composition identities plus eight new controls. Eight actual
+fresh/stale empty/inactive first/next-page plans have maximum work 1,279 and
+52 docket loops; empty actors perform zero Team probes. Real HTTP acceptance
+proves serialized cursor continuation, exact/disjoint pages, terminal null,
+malformed-cursor 422 before service and unique cross-tenant results. Current
+membership, inactive teams, later-team walls/grants, windows and revocation
+remain fail-closed. SQLite has 144 passes and 60 native-only skips, each matched
+to the exact passing native identity; the reconciled successful union is 249.
+Proof: `ip-active-team-bounded-final-proof-01/README.md` and its commit binding.
+
+Every failed preparation and replacement remains retained. Adapted raw HTTP
+clients initially mixed member cookies with owner Bearer headers; actual /me,
+creator and grant receipts prove the fixture problem without changing cookie-
+first production authentication. Other new fixture mistakes included a missing
+record type, duplicate bootstrap, reserved .test email, UUID passed directly to
+a string service cursor, and expired context after a fixture commit. The latter
+also explained an unbound refresh query; that plan is invalid performance proof
+and remains incomplete. Exact original PRD blob bytes replaced checkout-only
+CRLF expansion; no immutable expected hashes or document content changed.
+
+Joined final-source prerequisites, full Docker/browser, hosted CI/scans,
+canonical-main merge, guarded deployment, approved one-time QA grant and exact
+live browser/cadence certification remain required. Production still serves
+3dbf; no grant or deployed closure is claimed. LIFE13-01 remains Inconclusive.

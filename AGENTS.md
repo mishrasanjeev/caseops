@@ -1,5 +1,23 @@
 # CaseOps agent instructions
 
+- A per-record ACL lookup can still repeat global team-catalogue work even when
+  the actor has no team memberships. Drive eligibility from every current actor
+  membership, then seek one exact tenant/active Team per membership. Preserve
+  post-seek identity rejection, all teams, wall precedence and effective windows.
+  Prove mixed foreign-team volume, empty/inactive memberships, stale statistics
+  and continuation pages under the original total-work bound; retain the full
+  actual EXPLAIN before assertions, not only a successful docket-index summary.
+- A PostgreSQL HTTP adaptation must preserve the standard fixture's explicit
+  Bearer actor isolation without changing production's cookie-first policy.
+  Prove actual /me identity, creator and grant provenance before classifying an
+  authorization failure. Unique foreign fixtures must satisfy the real schema;
+  duplicate bootstrap or invalid email/record setup is not a security reproduction.
+- Continuation fixtures must use the public serialized cursor and canonical
+  request context. After fixture commits, reload context before a measured page;
+  retain all observed statements and explain the actual specialist SELECT, never
+  an unbound ORM refresh. Keep the original one-query, row-work and time bounds.
+  A failed or wrong-clause plan remains incomplete even after a later valid run.
+
 - A successful scanner job is not an empty finding inventory. Query the exact
   candidate's code-scanning ref and reconcile every open alert before release;
   recheck canonical main after merge. Optional review steps skipped by a key
