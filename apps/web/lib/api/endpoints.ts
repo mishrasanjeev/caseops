@@ -11476,8 +11476,8 @@ export async function updateIpPortfolioRenewalDate(input: {
 }): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(input.docketId)}/portfolio-renewal-date`, {
     method: "PATCH",
-    body: JSON.stringify({ expected_current_version: input.expectedCurrentVersion,
-      renewal_due_date: input.renewalDueDate, reason: input.reason }),
+    body: { expected_current_version: input.expectedCurrentVersion,
+      renewal_due_date: input.renewalDueDate, reason: input.reason },
   });
 }
 

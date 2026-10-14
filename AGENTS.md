@@ -2308,3 +2308,19 @@ requirements when using the fallback.
   Preserve guard/source/sender bodies, API contracts and lock order; inventory
   every caller and mock binding, and replay native authorization and delivery.
   A compatibility alias does not redirect another module's later monkeypatch.
+- A positive import fixture must establish the linked work area's independent
+  entitlement, rollout and persisted workspace configuration before navigating
+  to that record. Successful preview, commit and portfolio reads do not prove
+  docket-workspace readiness. Grant only the newly bootstrapped loopback tenant
+  a non-billable fixture entitlement; never rewrite production subscriptions or
+  weaken a working setup gate. Assert production's actual read-only readiness.
+- Independent browser journeys must continue after a sibling failure while
+  retaining one-worker mutation ordering and zero retries. Serial-cascade skips
+  are unverified coverage, not proof that later responsive, correction or
+  recovery paths work. Reconcile every original case in the replacement run.
+- The HTTP client owns JSON serialization. Endpoint wrappers must pass the raw
+  request object, not JSON.stringify output. A mocked page handler cannot prove
+  that boundary: assert the actual fetch body parses once to the canonical
+  object, including null clearing, concurrency fields, CSRF and rejected writes;
+  then replay the complete browser journey through a fresh build. Audit other
+  client callers when this known double-encoding defect reappears.

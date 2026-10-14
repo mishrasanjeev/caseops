@@ -7,6 +7,20 @@ canonical-main merge and deployed browser replay are still required. This guide
 does not certify the current production build. Acceptance evidence is tracked
 in `docs/BUGFIX_IP_CALENDAR_2026-10-13.md`.
 
+## Workspace Readiness
+
+Opening an operational IP docket requires the IP plan entitlement, the active
+manual-workspace rollout and a configured, enabled manual workspace. Import
+preview, commit and portfolio visibility do not themselves grant that entitlement
+or enable the separate docket workspace. A workspace setup screen reports those
+preconditions; it is not evidence that the imported record disappeared.
+
+The workspace administrator can configure and enable manual work when the plan
+includes IP. External provider terms, credentials and automations remain separate;
+they are not required for manual work and are not enabled by an import. A missing
+plan entitlement must be resolved through the authorized billing operator, not
+by changing record access, retrying an import or bypassing the readiness gate.
+
 ## Import A Trademark Register
 
 1. Open IP Portfolio, then Trademark Portfolio Import.

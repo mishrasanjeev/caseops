@@ -440,3 +440,85 @@ identity, not admitted classes, schema, handlers or policy. A regression proves
 the truthful reference and continued change-gate refusal without map review.
 Complete current CI contract commands, fresh source-bound tests, CI/Docker,
 canonical merge, guarded deployment and exact live acceptance still remain.
+
+## Positive Workspace Fixture Omission
+
+Current c28 CI38479605818 completed with a failing browser job115589365035.
+Its complete556-case receipt reports535 passes, one failure and20 skips.
+The sole failed October13 IP1280 journey reaches the linked docket URL, but
+line357 cannot find its heading: the retained page shows workspace setup with
+missing_entitlement and workspace_configuration_missing. The local helper
+bootstrapped a fresh tenant without the non-billable IP entitlement and manual
+workspace configuration/enablement used by the existing IPLF030B fixture.
+The product's setup gate is working; imported docket reads are not proof of
+that distinct work area's readiness. This is a fixture failure, not proof that
+the persisted docket is missing or that a lifecycle/access gate needs weakening.
+
+I omitted those positive preconditions and used serial grouping for four
+independent cases. Three following October13 IP cases consequently did not
+execute; the later correction, mobile and acknowledged-history recovery
+assertions remain unverified. Two October13 Calendar cases passed. Complete
+native/API and scanning receipts do not erase this browser failure. Original
+receipts, all20 skip annotations and the full error context are preserved in
+ci-c28f584c-reconciliation-01/derived/browser. No production closure is claimed.
+
+The replacement must establish only a fresh loopback tenant's non-billable
+manual workspace, assert actual readiness before navigation, leave production
+entitlements/configuration untouched, and execute all four independent IP
+cases with one worker and no retries. Preserve every original import, saved
+identity, source correction and recovery assertion. Full amended local Docker,
+hosted CI, canonical merge and exact-release live replay still remain required.
+
+## Renewal Correction Transport Defect
+
+The amended fixture's complete four-case browser diagnostic now executes every
+case. Both acknowledged-history recovery cases pass. Both source-import cases
+reach the actual linked docket, then fail at source-date correction with422:
+the API receives a JSON string instead of the required request object. Full
+results and both complete errors remain in ip13-fixture-setup-recovery-c28f584c-01/
+browser-four-02. The preceding outside-config global-setup resolution failure
+is preserved separately as incomplete collection, not a product reproduction.
+
+The new endpoint wrapper calls JSON.stringify before apiRequest serializes it
+again. The shared client is correct. This same mistake was already documented
+for BUG017 in addMatterStatuteReference; I reintroduced it in a new wrapper and
+the mocked page handler did not inspect the real wire body. The earlier fixture
+failure and serial cascade concealed the later defective workflow. Neither
+better error copy nor a positive preview/commit could close that acceptance.
+
+The correction passes the raw object through the unchanged client. A six-case
+fetch-boundary regression initially has two genuine failures for date change
+and null clearing, plus four passed rejection/no-retry controls. Original RED
+JSON and JUnit remain at renewal-transport-red-01. It preserves exact version,
+reason, JSON content type, cookie credentials and CSRF. Full adjacent-caller
+audit, replacement transport/browser tests, fresh final Docker/CI and exact
+production replay still remain required; no deployed fix is claimed.
+
+The complete replacement transport/client/endpoints/import-page/fixture selection
+passes38 cases across all five intended modules, zero failures/skips, natural
+exit0. Proof: renewal-transport-complete-green-01 JSON/JUnit. This is scoped
+local transport/UI evidence, not the required fresh browser or release gate.
+
+A separate marked, read-only production readiness check at00:15:41Z confirms
+test-legal on serving3dbf has a configured, enabled manual workspace with no
+automations or configuration blockers, but lacks the IP entitlement. This is
+different from the fresh local fixture's missing configuration. No subscription,
+plan or production configuration was changed. Owner authorization for a
+non-billable QA entitlement is pending; exact live acceptance cannot pretend
+that this existing tenant is ready. Original source hashes and historical
+reopening causation remain unchanged and Inconclusive respectively.
+
+The fresh replacement browser-four-03 independently executes all four intended
+IP cases: four passes, zero skips/failures/retries, exact collected/phase/JSON/
+JUnit identities and2867 unchanged source pins across build and execution.
+Both1280 and393 paths complete linked-record opening, correction/clear/reload
+and acknowledged-history recovery. Owned processes are reaped and prior runtime
+restored. This is dirty-source CI reproduction, not final Docker or live proof.
+
+The adjacent TypeScript AST audit resolves679 client-bound calls in20 files,
+including357 explicit bodies. It detects the known defect on immutable c28 and
+zero additional offenders on corrected source. Opaque helper returns and
+arbitrary interprocedural flows remain outside the proven scope; no formal
+whole-program guarantee is claimed. Proof: api-request-preencoding-readonly-01.
+The unchanged client's literal-string contract is also regression-tested so
+caller mistakes cannot be hidden by guessing that string input is encoded JSON.

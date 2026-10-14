@@ -1,6 +1,7 @@
 /** IP13-02..09 / UJ-02,UJ-04: source cells -> saved records -> responsive UI.
  * IP13-01's historical upload failure is not inferred from this synthetic file.
  */
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -9,10 +10,11 @@ import JSZip from "jszip";
 
 import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
+import { e2eEnv, repoRoot } from "./support/env";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders, storageState: { cookies: [], origins: [] },
   trace: "off", screenshot: "off", video: "off" });
-test.describe.configure({ retries: 0, mode: "serial" });
+test.describe.configure({ retries: 0, mode: "default" });
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -52,6 +54,93 @@ type ImportResult = {
     valid_rows: number; invalid_rows: number; commit_batch_size: number; source_sha256: string }; rows: ImportRow[];
 };
 
+type PortfolioActor = { company: { id: string; slug: string }; membership: { id: string }; access_token: string };
+
+function grantLocalPortfolioEntitlement(web: URL, api: URL, actor: PortfolioActor, slug: string) {
+  if (![web, api].every(origin => loopback(origin) && ["http:", "https:"].includes(origin.protocol)
+    && !origin.username && !origin.password)) throw new Error("Fixture grants require loopback origins.");
+  const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
+  if (!slug.startsWith("ip13-") || !uuid.test(slug.slice(5)) || actor.company.slug !== slug
+    || !uuid.test(actor.company.id)) throw new Error("Fixture grant must match the newly bootstrapped IP13 tenant.");
+  const database = process.env.CASEOPS_E2E_DATABASE_URL?.trim() || e2eEnv.CASEOPS_DATABASE_URL;
+  if (database.startsWith("postgresql+psycopg://")) {
+    const target = new URL(database);
+    if (!loopback(target) || target.search || target.hash || target.pathname.length <= 1) {
+      throw new Error("Fixture grants require an explicit loopback database without connection overrides.");
+    }
+  } else if (database.startsWith("sqlite+pysqlite:///")) {
+    const target = database.slice("sqlite+pysqlite:///".length);
+    const relative = path.relative(repoRoot, path.resolve(target));
+    if (!path.isAbsolute(target) || /[?#%]/.test(target) || target.startsWith("//") || target.startsWith("\\\\")
+      || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("Fixture SQLite database must belong to this candidate.");
+  } else throw new Error("Unsupported fixture database; no entitlement grant was attempted.");
+  const python = process.env.CASEOPS_E2E_PYTHON?.trim() || path.join(repoRoot, "apps", "api", ".venv",
+    process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+  const pythonRelative = path.relative(path.join(repoRoot, "apps", "api", ".venv"), path.resolve(python));
+  if (pythonRelative.startsWith("..") || path.isAbsolute(pythonRelative)) throw new Error("Fixture Python must belong to this candidate.");
+  const script = [
+    "import os",
+    "from pathlib import Path",
+    "from sqlalchemy.engine import make_url",
+    "url=make_url(os.environ['CASEOPS_DATABASE_URL'])",
+    "assert not url.query",
+    "assert (url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))",
+    "from caseops_api.db.models import BillingSubscription,Company,CompanyMembership",
+    "from caseops_api.db.session import get_session_factory",
+    "with get_session_factory()() as session:",
+    "    company=session.get(Company,os.environ['CASEOPS_E2E_COMPANY_ID'])",
+    "    assert company is not None and company.slug==os.environ['CASEOPS_E2E_COMPANY_SLUG'] and company.slug.startswith('ip13-')",
+    "    owner=session.get(CompanyMembership,os.environ['CASEOPS_E2E_MEMBERSHIP_ID'])",
+    "    assert owner is not None and owner.company_id==company.id and owner.is_active and owner.role=='owner'",
+    "    session.add(BillingSubscription(company_id=company.id,status='manual_active',segment='law_firm',source='ip13_local_fixture',externally_billable=False,entitlement_overrides_json={'ip_workspace': True}))",
+    "    session.commit()",
+  ].join("\n");
+  const result = spawnSync(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
+    env: { ...process.env, ...e2eEnv, CASEOPS_DATABASE_URL: database, CASEOPS_LLM_PROVIDER: "mock",
+      CASEOPS_EMBEDDING_PROVIDER: "mock", CASEOPS_E2E_COMPANY_ID: actor.company.id,
+      CASEOPS_E2E_COMPANY_SLUG: slug, CASEOPS_E2E_MEMBERSHIP_ID: actor.membership.id,
+      PYTHONPATH: path.join(repoRoot, "apps", "api", "src") } });
+  expect(result.status, `Local fixture grant failed: ${result.error?.message ?? result.stderr}`).toBe(0);
+}
+
+async function preparePortfolioWorkspace(request: APIRequestContext, web: URL, api: URL,
+  local: boolean, actor: PortfolioActor, slug: string, headers: Record<string, string>) {
+  if (local) {
+    grantLocalPortfolioEntitlement(web, api, actor, slug);
+    const configured = await request.put(`${api.origin}/api/ip/workspace/configuration`, { headers, data: {
+      expected_version: null, enabled_asset_types: ["trademark"], jurisdictions: ["IN"], offices: ["IP India"],
+      timezone: "Asia/Kolkata", holiday_calendar_key: "ip13-synthetic-calendar",
+      working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] }, document_taxonomy_version: "ip-taxonomy-2026.1",
+      event_catalog_version: "ip-events-v1", deadline_rule_versions: { IN: "2026.1" },
+      notification_channels: ["in_app"], critical_event_policy: { escalation_after_minutes: 30 },
+      escalation_owner_membership_id: actor.membership.id, provider_keys: [], provider_terms_version: null,
+      accept_provider_terms: false,
+    } });
+    expect(configured.status(), await configured.text()).toBe(200);
+    const configuration = (await configured.json()).configuration;
+    expect(configuration.version).toBeGreaterThan(0);
+    const enabled = await request.post(`${api.origin}/api/ip/workspace/enable`, { headers,
+      data: { expected_config_version: configuration.version, enabled_automations: [] } });
+    expect(enabled.status(), await enabled.text()).toBe(200);
+  }
+  const response = await request.get(`${api.origin}/api/ip/readiness`, { headers });
+  expect(response.status(), await response.text()).toBe(200);
+  const readiness = await response.json();
+  if (!readiness.workspace_available || !readiness.manual_docketing_available) {
+    throw new Error(`IP portfolio workspace precondition failed: ${JSON.stringify({
+      features: readiness.features.map((feature: { feature_id: string; reason: string }) =>
+        ({ feature_id: feature.feature_id, reason: feature.reason })),
+      blockers: readiness.configuration_status.enablement_blockers,
+    })}`);
+  }
+  expect(readiness.configuration_status.configuration.workspace_enabled).toBe(true);
+  for (const id of ["workspace_core", "manual_docketing"]) {
+    expect(readiness.features.find((feature: { feature_id: string }) => feature.feature_id === id))
+      .toMatchObject({ available: true, entitled: true, rollout_enabled: true, reason: "available" });
+  }
+  if (local) expect(readiness.configuration_status.configuration.enabled_automations_json).toEqual([]);
+}
+
 async function preparePortfolio(page: Page, request: APIRequestContext, baseURL: string | undefined, width: number) {
     const web = new URL(baseURL ?? required("CASEOPS_WEB_BASE_URL"));
     const api = new URL(process.env.PROD_API_BASE_URL ?? (loopback(web)
@@ -82,6 +171,7 @@ async function preparePortfolio(page: Page, request: APIRequestContext, baseURL:
       }
     }
     await release(request);
+    let freshCompanyId: string | undefined;
     if (local) {
       const bootstrap = await request.post(`${api.origin}/api/bootstrap/company`, {
         headers: noPaidProviderHeaders, data: {
@@ -91,6 +181,9 @@ async function preparePortfolio(page: Page, request: APIRequestContext, baseURL:
         },
       });
       expect(bootstrap.status(), await bootstrap.text()).toBe(200);
+      const fresh = await bootstrap.json() as PortfolioActor;
+      expect(fresh.company.slug).toBe(credentials.slug);
+      freshCompanyId = fresh.company.id;
     }
     const login = await request.post(`${api.origin}/api/auth/login`, {
       headers: noPaidProviderHeaders,
@@ -99,7 +192,9 @@ async function preparePortfolio(page: Page, request: APIRequestContext, baseURL:
     expect(login.status(), await login.text()).toBe(200);
     const actor = await login.json();
     expect(actor.company.slug).toBe(credentials.slug);
+    if (local) expect(actor.company.id).toBe(freshCompanyId);
     const headers = { ...noPaidProviderHeaders, Authorization: `Bearer ${actor.access_token}` };
+    await preparePortfolioWorkspace(request, web, api, local, actor, credentials.slug, headers);
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`${web.origin}/sign-in`);
     await page.locator("#company-slug").fill(credentials.slug);
@@ -352,8 +447,8 @@ for (const width of [1280, 393]) {
     await expect(sourceRow.getByText(due, { exact: true })).toBeVisible();
     await expect(sourceRow.getByText("Alert: queued", { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-    await page.getByRole("link", { name: mark, exact: true }).first().click();
-    await expect(page).toHaveURL(/\/app\/ip\?docket=/);
+    await sourceRow.getByRole("link", { name: mark, exact: true }).click();
+    await expect(page).toHaveURL(`${web.origin}/app/ip?docket=${saved.rows[0].created_docket_id}`);
     await expect(page.getByRole("heading", { name: mark, exact: true })).toBeVisible();
     const docketId = saved.rows[0].created_docket_id;
     expect(docketId).toBeTruthy();
