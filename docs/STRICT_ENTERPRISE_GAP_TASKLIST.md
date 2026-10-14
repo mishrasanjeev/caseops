@@ -1,5 +1,13 @@
 # Strict Enterprise Gap Tasklist
 
+## October 14 Serving Release Recovery
+
+**NO-GO / Partially implemented.** PR535 merged and API/web serve09d79527,
+but native CI exceeded its job budget and guarded release failed before the
+approved manual-IP grant. Fresh source-bound CI/Docker/CodeQL, exact-SHA
+release, actual test-legal acceptance and post-QA cadence remain required.
+See `docs/RELEASE_RECOVERY_IP_CALENDAR_2026-10-14.md`. Older checkpoints are history.
+
 ## October 13 Canonical Release Checkpoint
 
 October14 dfa full Docker is NO-GO: 2,996 native passes/one work-bound failure,

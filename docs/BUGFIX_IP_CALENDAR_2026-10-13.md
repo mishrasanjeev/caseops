@@ -1,5 +1,14 @@
 # IP Portfolio and Court Calendar Acceptance
 
+## October 14 Release Recovery
+
+PR535 is merged and production serves09d79527 on API and web, but the guarded
+release failed before the one-time manual-IP grant and production certification.
+Main CI timed out after passing native tests; skipped browser is not acceptance.
+The fresh recovery scope and honest historical proof limits are recorded in
+`docs/RELEASE_RECOVERY_IP_CALENDAR_2026-10-14.md`. Earlier dated checkpoints
+below remain historical; they do not describe the current serving revision.
+
 ## Scope And Status
 
 Owner supplied two DOCX specifications on October 13. Their original files

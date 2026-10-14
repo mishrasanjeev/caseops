@@ -1,5 +1,22 @@
 # CaseOps agent instructions
 
+- A native CI pass with seconds of job-budget margin is fragile acceptance.
+  Compare startup, collection, setup, call, teardown and upload across every
+  shard and adverse runs. Split the complete canonical inventory without
+  increasing concurrency, SQL/race waits or job deadlines; timing models are
+  not replacement acceptance. Confirm cancellation from actual annotations.
+- A Windows cloud CLI argument separator is a shell transport boundary.
+  Verify the full received argv through the actual CMD entry point; exit zero
+  can conceal a truncated invocation and unintended pipeline commands. Use
+  the default separator only for validated separator-free arguments, and
+  retain sanitized stage/classification on failure without private stderr.
+  A fresh transport reproduction does not establish a discarded historical
+  command's cause. Never blindly repeat an uncertain one-time grant.
+- Adversarial exception tests must keep original exception identity and cleanup
+  assertions after scanner corrections. Use explicit expected-type catches
+  and a no-exception failure; preserve the pool body, raise point, wait and
+  shutdown budgets. A green scanner job still requires its actual alert inventory.
+
 - A per-record ACL lookup can still repeat global team-catalogue work even when
   the actor has no team memberships. Drive eligibility from every current actor
   membership, then seek one exact tenant/active Team per membership. Preserve

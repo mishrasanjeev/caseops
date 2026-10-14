@@ -1,5 +1,13 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 14 Serving Release Recovery
+
+**Partially fixed / NO-GO.** PR535 merged and API/web serve09d79527, not a
+completed certification. Native CI budget exhaustion and Windows cloud argument
+transport require fresh joined proof. The grant was not attempted; the discarded
+historical command's cause is unknown. LIFE13-01 stays Inconclusive. See
+`docs/RELEASE_RECOVERY_IP_CALENDAR_2026-10-14.md`; older checkpoints are history.
+
 ## October 13 Canonical Release Checkpoint
 
 October14 dfa full Docker is NO-GO: 2,996 native passes/one work-bound failure,
