@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- Complete CMD argv transport is not Cloud SDK parser admission. Bind a
+  dash-prefixed container argument list as one `--args=...` token using the
+  existing scheduler helper; separate `--args` and `-m,...` are rejected.
+  Reconcile the installed SDK's real deploy and execution parsers offline,
+  retain exact parsed lists and no-network/auth fences, and cover both forms
+  in the standard regression suite before a one-shot production mutation.
+
 - A native CI pass with seconds of job-budget margin is fragile acceptance.
   Compare startup, collection, setup, call, teardown and upload across every
   shard and adverse runs. Split the complete canonical inventory without

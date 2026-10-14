@@ -16,7 +16,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from scheduler_inventory import InventoryError, run_gcloud
+from scheduler_inventory import InventoryError, _gcloud_args_flag, run_gcloud
 
 PROJECT = "perfect-period-305406"
 REGION = "asia-south1"
@@ -283,7 +283,7 @@ def _serialized_args(arguments: list[str]) -> str:
                 for value in arguments),
         "invalid_operator_args",
     )
-    return ",".join(arguments)
+    return _gcloud_args_flag(arguments)
 
 
 def _environment(container: dict, release: str, secrets: dict[str, str]) -> None:
@@ -787,7 +787,6 @@ def execute(
                     image,
                     "--command",
                     "python",
-                    "--args",
                     _serialized_args(args),
                     "--service-account",
                     SERVICE_ACCOUNT,
@@ -887,7 +886,6 @@ def execute(
                     JOB,
                     "--async",
                     "--quiet",
-                    "--args",
                     _serialized_args(inspect_args),
                     *_flags(),
                 ],

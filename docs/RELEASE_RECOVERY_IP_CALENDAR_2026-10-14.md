@@ -14,6 +14,16 @@ entitlement policy, scheduler, lifecycle owner or legal claim.
 
 ## Confirmed Failures And Corrections
 
+Candidate8307f0ec has zero source-exact CodeQL findings, but is still **NO-GO**:
+the installed SDK's actual deploy and execution parsers reject separate
+`--args` / `-m,...` tokens with `expected one argument`. The single bound
+`--args=...` token is accepted with the exact grant/inspection lists. CMD
+transport proof alone missed this independent parser boundary. The correction
+reuses the existing scheduler `_gcloud_args_flag`, adds parser admission and
+negative unbound-value regressions, and preserves every one-shot guard.
+Offline installed-SDK evidence is in `sdk-manual-ip-argparse-20261015-01`.
+Preserve830's partial gate as incomplete; fresh joined gates remain required.
+
 - Main CI38598544709 has3005 passing native identities and9015 passing phases,
   but its fifth shard exceeded the unchanged12-minute job budget. The GitHub
   check annotation positively establishes budget exhaustion. Its aggregate

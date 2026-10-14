@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import copy
 import hashlib
 import importlib
@@ -14,6 +15,12 @@ from types import SimpleNamespace
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import pytest
+
+
+def _args_value(argv):
+    values = [item.removeprefix("--args=") for item in argv if item.startswith("--args=")]
+    assert len(values) == 1 and "--args" not in argv
+    return values[0]
 
 ROOT = Path(__file__).resolve().parents[3]
 SHA = "a" * 40
@@ -226,7 +233,8 @@ def harness(monkeypatch, tmp_path):
         prefix = state.get("cloud_failure_prefix")
         failure_mode = state.get("cloud_failure_mode")
         matches_mode = failure_mode is None or (
-            "--args" in argv and failure_mode in argv[argv.index("--args") + 1].split(",")
+            any(item.startswith("--args=") for item in argv)
+            and failure_mode in _args_value(argv).split(",")
         )
         if prefix and prefix == tuple(argv[:len(prefix)]) and matches_mode:
             raise state["cloud_failure"]
@@ -314,8 +322,8 @@ def harness(monkeypatch, tmp_path):
             if state["fail_execute"]:
                 raise RuntimeError("secret-value-must-not-escape")
             args = (
-                argv[argv.index("--args") + 1].split(",")
-                if "--args" in argv
+                _args_value(argv).split(",")
+                if any(item.startswith("--args=") for item in argv)
                 else module._args(REQUEST)
             )
             name = module.JOB + ("-inspect" if args[2] == "inspect" else "-grant")
@@ -412,7 +420,8 @@ def test_operator_args_use_default_comma_without_cmd_metacharacters(harness, mod
     run(harness)
     calls = [
         argv for argv in harness.state["calls"]
-        if "--args" in argv and (argv[:3] == ["run", "jobs", "deploy"] if mode == "grant"
+        if any(item.startswith("--args=") for item in argv)
+        and (argv[:3] == ["run", "jobs", "deploy"] if mode == "grant"
                                 else argv[:3] == ["run", "jobs", "execute"])
     ]
     assert len(calls) == 1
@@ -420,7 +429,18 @@ def test_operator_args_use_default_comma_without_cmd_metacharacters(harness, mod
         "-m", harness.module.MODULE, "inspect", "--company-id", REQUEST["company_id"],
         "--subscription-id", REQUEST["subscription_id"],
     ]
-    assert calls[0][calls[0].index("--args") + 1] == ",".join(expected)
+    assert _args_value(calls[0]) == ",".join(expected)
+    parser = argparse.ArgumentParser(exit_on_error=False)
+    parser.add_argument("--args")
+    parsed, _unknown = parser.parse_known_args(calls[0])
+    assert parsed.args.split(",") == expected
+
+
+def test_unbound_dash_prefixed_container_args_fail_parser_admission():
+    parser = argparse.ArgumentParser(exit_on_error=False)
+    parser.add_argument("--args")
+    with pytest.raises(argparse.ArgumentError, match="expected one argument"):
+        parser.parse_known_args(["--args", "-m,caseops_api.scripts.qa_manual_ip_entitlement"])
 
 
 @pytest.mark.parametrize(
@@ -533,6 +553,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import argparse
 try:
     socket.socket()
 except PermissionError:
@@ -543,6 +564,10 @@ ctypes.windll.kernel32.GetCommandLineW.restype = ctypes.c_wchar_p
 value = dict(received=sys.argv[1:], stage=os.environ['CMD_CAPTURE_STAGE'], pid=os.getpid(),
     raw_command_line=ctypes.windll.kernel32.GetCommandLineW(), no_site=sys.flags.no_site,
     python=sys.executable, socket_denied=denied)
+parser = argparse.ArgumentParser(exit_on_error=False)
+parser.add_argument('--args')
+parsed, _unknown = parser.parse_known_args(sys.argv[1:])
+value['parsed_container_args'] = parsed.args.split(',') if parsed.args is not None else None
 path = Path(os.environ['CMD_CAPTURE_DIR']) / (value['stage'] + '-' + str(value['pid']) + '.json')
 with path.open('x', encoding='utf-8') as stream:
     json.dump(value, stream)
@@ -628,7 +653,7 @@ def test_actual_windows_cmd_roundtrips_complete_grant_and_inspection_argv(
     observed = []
 
     def transport(argv, **kwargs):
-        if "--args" in argv:
+        if any(item.startswith("--args=") for item in argv):
             value = windows_cmd_cli.inventory.run_gcloud(argv, **kwargs)
             record_property("native_cmd_" + str(len(observed)), json.dumps(value, sort_keys=True))
             assert value["stage"] == "gcloud" and value["received"] == argv
@@ -645,7 +670,8 @@ def test_actual_windows_cmd_roundtrips_complete_grant_and_inspection_argv(
         "-m", harness.module.MODULE, "inspect", "--company-id", REQUEST["company_id"],
         "--subscription-id", REQUEST["subscription_id"],
     ]
-    assert value[value.index("--args") + 1].split(",") == expected
+    assert _args_value(value).split(",") == expected
+    assert observed[0 if mode == "grant" else 1]["parsed_container_args"] == expected
     assert value[-1] == "--format=json"
     assert [args[2] for _, args in harness.state["runs"]] == ["grant", "inspect"]
 

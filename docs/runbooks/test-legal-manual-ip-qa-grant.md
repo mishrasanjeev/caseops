@@ -82,7 +82,10 @@ contact details or legal content in this input.
 
 ## Replay And Recovery
 
-The release helper uses the default cloud CLI comma separator only for its
+The release helper binds its container list as one `--args=...` token, following
+the existing scheduler helper. Separate dash-prefixed values are rejected by
+the installed SDK parser even when CMD preserves every argument. It uses the
+default cloud CLI comma separator only for its
 fixed module/flags and validated UUID/hash arguments. Native Windows CMD tests
 assert the complete received argv for grant and inspection; a zero exit alone
 does not prove argument transport. Do not restore caret/pipe delimiters.
