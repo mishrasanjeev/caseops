@@ -1,14 +1,61 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import event
+from sqlalchemy.orm import Session
 
 from caseops_api.db.models import ForumCatalogEntry
 from caseops_api.db.session import get_engine, get_session_factory
+from caseops_api.schemas.calendar import CalendarEventKind, CalendarEventRecord
+from caseops_api.services import calendar
+from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
+
+
+@pytest.mark.parametrize("kind", ["task", "deadline"])
+@pytest.mark.parametrize("tie_field", ["matter_id", "event_id", "hearing_time"])
+def test_non_hearing_equal_date_title_keeps_legacy_stable_order(
+    monkeypatch: pytest.MonkeyPatch, kind: CalendarEventKind, tie_field: str
+) -> None:
+    day = date(2026, 10, 15)
+    rows = [
+        CalendarEventRecord(
+            id=f"{kind}:{'z' if tie_field == 'event_id' else 'a'}",
+            kind=kind,
+            display_type="task_date" if kind == "task" else "deadline",
+            occurs_on=day,
+            title="Same stored title",
+            matter_id="z" if tie_field == "matter_id" else "same-matter",
+            matter_title="Same matter title",
+            matter_code="CAL-STABLE",
+            hearing_time=time(9, 30) if tie_field == "hearing_time" else None,
+        ),
+        CalendarEventRecord(
+            id=f"{kind}:{'a' if tie_field == 'event_id' else 'b'}",
+            kind=kind,
+            display_type="task_date" if kind == "task" else "deadline",
+            occurs_on=day,
+            title="Same stored title",
+            matter_id="a" if tie_field == "matter_id" else "same-matter",
+            matter_title="Same matter title",
+            matter_code="CAL-STABLE",
+            hearing_time=time(8, 30) if tie_field == "hearing_time" else None,
+        ),
+    ]
+    collector = Mock(return_value=rows)
+    monkeypatch.setattr(
+        calendar, f"_collect_{'tasks' if kind == 'task' else 'deadlines'}", collector
+    )
+    session, context = Mock(spec=Session), Mock(spec=SessionContext)
+    result = calendar.aggregate_calendar_events(
+        session, context=context, range_from=day, range_to=day, kinds=[kind]
+    )
+    collector.assert_called_once_with(session, context, day, day)
+    assert [row.id for row in result] == [row.id for row in rows]
 
 
 def test_calendar_uses_catalog_order_and_stored_court_identity(client: TestClient) -> None:

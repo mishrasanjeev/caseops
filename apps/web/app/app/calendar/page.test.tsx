@@ -10,7 +10,7 @@
 // - "+N more" overflow appears when a single day has >3 events.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -713,6 +713,54 @@ describe("CalendarPage", () => {
     // event id.
     expect(await screen.findByTestId("calendar-event-hearing:h1")).toBeTruthy();
     expect(await screen.findByTestId("calendar-event-task:t1")).toBeTruthy();
+  });
+
+  it("does not report an empty calendar while its events request is delayed", async () => {
+    const today = isoToday();
+    const response = {
+      range_from: today, range_to: today,
+      events: [{ id: "hearing:delayed", kind: "hearing", occurs_on: today,
+        title: "Delayed hearing", matter_id: "delayed-matter", matter_code: "CAL-DELAY",
+        matter_title: "Delayed matter" }],
+    };
+    let resolveEvents!: (value: typeof response) => void;
+    fetchCalendarEventsMock.mockReturnValueOnce(new Promise<typeof response>(resolve => {
+      resolveEvents = resolve;
+    }));
+    render(withClient(<CalendarPage />));
+    await waitFor(() => expect(fetchCalendarEventsMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("calendar-month-label")).toBeVisible();
+    expect(screen.queryByTestId("calendar-empty-state")).not.toBeInTheDocument();
+    expect(screen.queryByText("Could not load calendar")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("calendar-event-hearing:delayed")).not.toBeInTheDocument();
+    await act(async () => resolveEvents(response));
+    expect(await screen.findByTestId("calendar-event-hearing:delayed"))
+      .toHaveAttribute("href", "/app/matters/delayed-matter/hearings");
+    expect(screen.queryByTestId("calendar-empty-state")).not.toBeInTheDocument();
+    expect(fetchCalendarEventsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a failed events request distinctly and recovers only after explicit retry", async () => {
+    const today = isoToday();
+    fetchCalendarEventsMock.mockRejectedValueOnce(new Error("Calendar request unavailable"));
+    render(withClient(<CalendarPage />));
+    expect(await screen.findByText("Could not load calendar")).toBeVisible();
+    expect(screen.getByText("Calendar request unavailable")).toBeVisible();
+    expect(screen.queryByTestId("calendar-empty-state")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("calendar-event-hearing:recovered")).not.toBeInTheDocument();
+    expect(fetchCalendarEventsMock).toHaveBeenCalledTimes(1);
+    fetchCalendarEventsMock.mockResolvedValueOnce({
+      range_from: today, range_to: today,
+      events: [{ id: "hearing:recovered", kind: "hearing", occurs_on: today,
+        title: "Recovered hearing", matter_id: "recovered-matter", matter_code: "CAL-RETRY",
+        matter_title: "Recovered matter" }],
+    });
+    await userEvent.setup().click(screen.getByRole("button", { name: "Try again", exact: true }));
+    expect(await screen.findByTestId("calendar-event-hearing:recovered"))
+      .toHaveAttribute("href", "/app/matters/recovered-matter/hearings");
+    expect(screen.queryByText("Could not load calendar")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("calendar-empty-state")).not.toBeInTheDocument();
+    expect(fetchCalendarEventsMock).toHaveBeenCalledTimes(2);
   });
 
   it("deep-links each event chip to the source matter's right tab", async () => {

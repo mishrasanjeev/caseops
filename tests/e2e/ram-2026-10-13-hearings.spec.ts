@@ -148,14 +148,15 @@ test.describe.serial("October 13 court Calendar acceptance", () => {
       for (const date of dates) {
         // Reverse insertion proves time order, not accidental creation order.
         for (const time of ["10:30:00", "09:30:00"]) {
+          const purpose = `Next hearing ${run} ${index} ${date} ${time}`;
           const hearing = await api.post(`${origin}/api/matters/${matter.id}/hearings`, { headers: auth, data: {
-            hearing_on: date, forum_name: forum!.name, purpose: `Next hearing ${run}`,
+            hearing_on: date, forum_name: forum!.name, purpose,
             time_status: "exact", hearing_time: time, timezone: "Asia/Kolkata",
           } });
           await status(hearing, 200);
           const stored = await hearing.json() as HearingSource;
           const source: HearingSource = {
-            id: stored.id, matter_id: matter.id, hearing_on: date, purpose: `Next hearing ${run}`,
+            id: stored.id, matter_id: matter.id, hearing_on: date, purpose,
             time_status: "exact", hearing_time: time, session_label: null, timezone: "Asia/Kolkata",
           };
           expect(stored.id).toBeTruthy();
@@ -272,6 +273,35 @@ test.describe.serial("October 13 court Calendar acceptance", () => {
         await trigger.click();
         await expect(dialog).toBeVisible();
         await dialog.getByRole("button", { name: "Close", exact: true }).click();
+        const selected = expected.slice(3).find(event => expectedHearings.has(event.id));
+        expect(selected, "An owned overflow hearing must be followed, not only href-checked").toBeDefined();
+        const source = expectedHearings.get(selected!.id)!;
+        const matter = matters.find(row => row.id === source.matter_id)!;
+        await trigger.click();
+        const workspaceResponse = page.waitForResponse(response =>
+          new URL(response.url()).pathname === `/api/matters/${matter.id}/workspace`
+          && response.request().method() === "GET");
+        await dialog.getByTestId(`calendar-event-${selected!.id}`).click();
+        const loaded = await workspaceResponse;
+        await status(loaded, 200);
+        const workspace = await loaded.json() as { matter: Matter; hearings: HearingSource[] };
+        expect(workspace.matter).toMatchObject({ id: matter.id, matter_code: matter.matter_code, title: matter.title });
+        expect(workspace.hearings.find(hearing => hearing.id === source.id)).toMatchObject(source);
+        await expect(page).toHaveURL(`${web}/app/matters/${matter.id}/hearings`);
+        await expect(page.getByRole("heading", { name: matter.title, exact: true })).toBeVisible();
+        await expect(page.getByText(matter.matter_code, { exact: true })).toBeVisible();
+        const hearingRow = page.getByRole("listitem").filter({ has: page.getByText(source.purpose, { exact: true }) });
+        await expect(hearingRow).toHaveCount(1);
+        await expect(hearingRow.getByText(source.purpose, { exact: true })).toBeVisible();
+        const displayedDate = await page.evaluate(value => {
+          const [year, month, day] = value.split("-").map(Number);
+          return new Date(year, month - 1, day).toLocaleDateString(undefined,
+            { day: "2-digit", month: "short", year: "numeric" });
+        }, source.hearing_on);
+        await expect(hearingRow).toContainText(displayedDate);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await page.goto(`${web}/app/calendar`);
+        await expect(page.getByTestId(`calendar-month-day-${date}`)).toBeVisible();
       }
       await page.reload();
       await expect(page.getByTestId(`calendar-month-day-${dates[0]}`).getByRole("button", { name: `View all events on ${dates[0]}` })).toBeVisible();

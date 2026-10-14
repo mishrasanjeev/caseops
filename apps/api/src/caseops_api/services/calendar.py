@@ -82,10 +82,10 @@ def aggregate_calendar_events(
             e.forum_display_order is None if e.kind == "hearing" else False,
             (e.forum_display_order or 0) if e.kind == "hearing" else 0,
             e.hearing_time is None if e.kind == "hearing" else False,
-            e.hearing_time.isoformat() if e.hearing_time else "",
+            e.hearing_time.isoformat() if e.kind == "hearing" and e.hearing_time else "",
             e.matter_title.casefold() if e.kind == "hearing" else e.title,
-            e.matter_id,
-            e.id,
+            e.matter_id if e.kind == "hearing" else "",
+            e.id if e.kind == "hearing" else "",
         )
     )
     return events
