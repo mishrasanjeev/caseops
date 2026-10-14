@@ -189,6 +189,10 @@ async function preparePortfolioWorkspace(request: APIRequestContext, web: URL, a
       .toMatchObject({ available: true, entitled: true, rollout_enabled: true, reason: "available" });
   }
   if (local) expect(readiness.configuration_status.configuration.enabled_automations_json).toEqual([]);
+  const timezone = readiness.configuration_status.configuration.timezone;
+  expect(typeof timezone).toBe("string");
+  if (local) expect(timezone).toBe("Asia/Kolkata");
+  return timezone as string;
 }
 
 async function preparePortfolio(page: Page, request: APIRequestContext, baseURL: string | undefined, width: number) {
@@ -244,7 +248,7 @@ async function preparePortfolio(page: Page, request: APIRequestContext, baseURL:
     expect(actor.company.slug).toBe(credentials.slug);
     if (local) expect(actor.company.id).toBe(freshCompanyId);
     const headers = { ...noPaidProviderHeaders, Authorization: `Bearer ${actor.access_token}` };
-    await preparePortfolioWorkspace(request, web, api, local, actor, credentials.slug, headers);
+    const timezone = await preparePortfolioWorkspace(request, web, api, local, actor, credentials.slug, headers);
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`${web.origin}/sign-in`);
     await page.locator("#company-slug").fill(credentials.slug);
@@ -252,13 +256,13 @@ async function preparePortfolio(page: Page, request: APIRequestContext, baseURL:
     await page.locator("#password").fill(credentials.password);
     await page.getByRole("button", { name: /^Sign in$/ }).click();
     await page.waitForURL(/\/app(?:[/?]|$)/);
-    return { web, api, local, run, headers, release, actor: actor as PortfolioActor };
+    return { web, api, local, run, headers, release, actor: actor as PortfolioActor, timezone };
 }
 
 for (const width of [1280, 393]) {
   test(`source-tolerant portfolio import, duplicate skip and renewal alert at ${width}px`, async ({ page, request, baseURL }) => {
     test.setTimeout(660_000);
-    const { web, api, local, run, headers, release, actor } = await preparePortfolio(page, request, baseURL, width);
+    const { web, api, local, run, headers, release, actor, timezone } = await preparePortfolio(page, request, baseURL, width);
     // Actual Excel datetime cells, independently pinned to this synthetic fixture.
     const nativeName = `ip13-native-${run}.xlsx`;
     const nativeMark = `Synthetic native Excel date ${run}`;
@@ -565,7 +569,7 @@ for (const width of [1280, 393]) {
     expect(deliveryDocket.status()).toBe(200);
     const deliverySourceId = (await deliveryDocket.json()).current_particulars.id as string;
     type SourceIntent = { id: string; source_id: string; source_type: string; channel: string;
-      event_type: string; status: string; attempts: number; destination: string | null };
+      event_type: string; status: string; attempts: number; destination: string | null; scheduled_for: string | null };
     async function currentSourceIntent(): Promise<SourceIntent> {
       const response = await request.get(`${api.origin}/api/admin/notifications`, { headers, params: { limit: 200 } });
       expect(response.status(), await response.text()).toBe(200);
@@ -594,7 +598,16 @@ for (const width of [1280, 393]) {
     expect(deliveredBody).toContain("Source Owner One");
     expect(deliveredBody).toContain("Source Owner Two");
     expect(deliveredBody).toContain(`Source renewal date ${tomorrow} (not a verified legal deadline).`);
-    expect(deliveredBody).toMatch(/\d+ days remaining on the alert date\./);
+    expect(typeof deliveryIntent.scheduled_for).toBe("string");
+    const scheduledAt = new Date(deliveryIntent.scheduled_for!);
+    expect(Number.isFinite(scheduledAt.getTime())).toBe(true);
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en", { timeZone: timezone,
+      year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(scheduledAt)
+      .filter(part => ["year", "month", "day"].includes(part.type)).map(part => [part.type, part.value]));
+    const scheduledDay = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
+    const daysRemaining = (Date.parse(`${tomorrow}T00:00:00Z`) - scheduledDay) / 86_400_000;
+    expect(Number.isInteger(daysRemaining)).toBe(true);
+    expect(deliveredBody).toContain(`${daysRemaining} days remaining on the alert date.`);
     expect(deliveredBody).toContain(`/app/ip?docket=${docketId}`);
     expect(deliveredBody).not.toContain("private import remark");
     await page.goto(`${web.origin}/app/ip/portfolio`);
@@ -605,6 +618,7 @@ for (const width of [1280, 393]) {
     await sourceRow.locator("summary").filter({ hasText: /^Renewal alert$/ }).click();
     await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toHaveText(deliveredBody);
     await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
     await page.reload();
     await page.getByPlaceholder("Mark, application number, opposition number").fill(number);
     await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
@@ -612,6 +626,7 @@ for (const width of [1280, 393]) {
     await sourceRow.locator("summary").filter({ hasText: /^Renewal alert$/ }).click();
     await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toHaveText(deliveredBody);
     await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
     await page.goto(`${web.origin}/app/admin/notifications`);
     const receipt = page.getByTestId(`notification-intent-${deliveryIntent.id}`);
     await expect(receipt.getByText("delivered", { exact: true })).toBeVisible();
