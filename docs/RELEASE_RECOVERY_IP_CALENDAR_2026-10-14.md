@@ -81,3 +81,24 @@ No historical pass transfers automatically to the new recovery candidate.
 Daily SEO stays active but release-gated until certification; afterward verify
 the actual GSC identity `sanjeev@orchestrum.in` and exact-serving public browser
 inventory. No synthetic leads, paid probes or unsupported conversion claims.
+
+## Scoped Recovery Proof, Not Release Acceptance
+
+The parent CI/finalizer slice collected341 identities:340 passed and one
+explicit POSIX mount-policy skip on Windows. Ordered JUnit and all1022 phase
+reports agree with collection and natural sessionexitzero. Evidence:
+`recovery-ci-finalizer-scoped-02.jsonl` and its XML. The first launcher used a
+wrong relative interpreter path and ran no tests; it is not acceptance.
+
+Grant transport scoped Windows evidence has602 passes and one POSIX skip.
+The Linux offline image has588 passes, three explicit platform skips and12
+failed setup prerequisites because real Git is absent. Those12 cases passed
+on Windows, but this does not certify their Linux boundary. Keep the failed
+Linux evidence and require the fresh complete hosted Linux replacement.
+The two actual native CMD cases fail against the original caret/pipe helper
+and pass with complete argv on the corrected helper. Independent review found
+no actionable delta findings, but did not execute CI or CodeQL.
+
+The shared79 retained CMD-counterproof/read-only-investigation artifacts were
+independently rehashed with zero mismatches. Fresh joined-source prerequisites,
+Docker, hosted CI and actual CodeQL alert reconciliation remain mandatory.
