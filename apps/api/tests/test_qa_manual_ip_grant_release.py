@@ -4,10 +4,14 @@ import copy
 import hashlib
 import importlib
 import json
+import os
+import shutil
+import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import pytest
 
@@ -219,6 +223,14 @@ def harness(monkeypatch, tmp_path):
     def cloud(argv, **kwargs):
         assert kwargs["expect_json"] is True
         state["calls"].append(argv)
+        prefix = state.get("cloud_failure_prefix")
+        failure_mode = state.get("cloud_failure_mode")
+        matches_mode = failure_mode is None or (
+            "--args" in argv and failure_mode in argv[argv.index("--args") + 1].split(",")
+        )
+        if prefix and prefix == tuple(argv[:len(prefix)]) and matches_mode:
+            raise state["cloud_failure"]
+        state.setdefault("timeouts", []).append((argv[:3], kwargs["timeout"]))
         if argv[:3] == ["run", "services", "describe"]:
             value = {
                 "metadata": {"generation": 8},
@@ -302,7 +314,7 @@ def harness(monkeypatch, tmp_path):
             if state["fail_execute"]:
                 raise RuntimeError("secret-value-must-not-escape")
             args = (
-                argv[argv.index("--args") + 1][3:].split("|")
+                argv[argv.index("--args") + 1].split(",")
                 if "--args" in argv
                 else module._args(REQUEST)
             )
@@ -356,6 +368,7 @@ def harness(monkeypatch, tmp_path):
         secrets=secrets,
         job=job,
         execution=execution,
+        cloud=cloud,
     )
 
 
@@ -392,6 +405,249 @@ def test_complete_release_uses_one_grant_and_separate_readonly_inspection(harnes
         "CASEOPS_DATABASE_URL=caseops-database-url:7,CASEOPS_AUTH_SECRET=caseops-auth-secret:11"
     )
     assert "latest" not in deploy[deploy.index("--set-secrets") + 1]
+
+
+@pytest.mark.parametrize("mode", ["grant", "inspect"])
+def test_operator_args_use_default_comma_without_cmd_metacharacters(harness, mode):
+    run(harness)
+    calls = [
+        argv for argv in harness.state["calls"]
+        if "--args" in argv and (argv[:3] == ["run", "jobs", "deploy"] if mode == "grant"
+                                else argv[:3] == ["run", "jobs", "execute"])
+    ]
+    assert len(calls) == 1
+    expected = harness.module._args(REQUEST) if mode == "grant" else [
+        "-m", harness.module.MODULE, "inspect", "--company-id", REQUEST["company_id"],
+        "--subscription-id", REQUEST["subscription_id"],
+    ]
+    assert calls[0][calls[0].index("--args") + 1] == ",".join(expected)
+
+
+@pytest.mark.parametrize(
+    "prefix,stage",
+    [
+        (("run", "services", "describe"), "serving_service"),
+        (("run", "revisions", "describe"), "serving_revision"),
+        (("scheduler", "jobs", "list"), "scheduler_inventory"),
+        (("run", "jobs", "list"), "job_inventory"),
+        (("projects", "describe"), "secret_project"),
+        (("secrets", "versions", "describe"), "secret_version"),
+        (("run", "jobs", "deploy"), "job_deploy"),
+        (("run", "jobs", "describe"), "job_readback"),
+        (("run", "jobs", "execute"), "grant_execution"),
+        (("run", "jobs", "executions", "describe"), "execution_readback"),
+        (("logging", "read"), "receipt_readback"),
+    ],
+)
+@pytest.mark.parametrize(
+    "kind",
+    ["command_failed", "deadline_exceeded", "invalid_json", "transport_error", "unexpected_error"],
+)
+def test_failed_output_retains_only_allowlisted_stage_and_typed_category(
+    harness, prefix, stage, kind,
+):
+    inventory = importlib.import_module("scheduler_inventory")
+    sensitive = "CANARY_PASSWORD_AND_RAW_ARGV_MUST_NOT_ESCAPE"
+    if kind in {"command_failed", "deadline_exceeded", "invalid_json"}:
+        error = inventory.InventoryError(sensitive)
+        if kind == "deadline_exceeded":
+            error.__cause__ = subprocess.TimeoutExpired([sensitive], 30, output=sensitive)
+        elif kind == "invalid_json":
+            error.__cause__ = json.JSONDecodeError(sensitive, sensitive, 0)
+    else:
+        error = OSError(sensitive) if kind == "transport_error" else RuntimeError(sensitive)
+    harness.state.update(cloud_failure_prefix=prefix, cloud_failure=error)
+    with pytest.raises(harness.module.ReleaseError, match="cloud_command_failed"):
+        run(harness)
+    raw = harness.output.read_text()
+    evidence = json.loads(raw)
+    assert evidence["error_code"] == "cloud_command_failed"
+    assert evidence["cloud_error"] == {"stage": stage, "category": kind}
+    assert evidence["status"] == "failed_closed"
+    assert sensitive not in raw
+    assert sum(tuple(argv[:len(prefix)]) == prefix for argv in harness.state["calls"]) == 1
+    assert evidence["execute_attempted"] is (
+        stage in {"grant_execution", "execution_readback", "receipt_readback"}
+    )
+
+
+def test_inspection_failure_retains_one_grant_and_separate_safe_cloud_stage(harness):
+    harness.state.update(
+        cloud_failure_prefix=("run", "jobs", "execute"), cloud_failure_mode="inspect",
+        cloud_failure=RuntimeError("DO_NOT_RETAIN_SECRET_EXCEPTION"),
+    )
+    with pytest.raises(harness.module.ReleaseError, match="cloud_command_failed"):
+        run(harness)
+    raw = harness.output.read_text()
+    evidence = json.loads(raw)
+    assert evidence["cloud_error"] == {
+        "stage": "inspection_execution", "category": "unexpected_error",
+    }
+    assert evidence["receipt"]["operation_id"] == REQUEST["operation_id"]
+    assert evidence["execute_attempted"] is evidence["inspection_execute_attempted"] is True
+    assert [args[2] for _, args in harness.state["runs"]] == ["grant"]
+    assert "DO_NOT_RETAIN_SECRET_EXCEPTION" not in raw
+
+
+@pytest.mark.parametrize(
+    "value", ["a,b", "^,^a,b", "a|b", "a&b", "%TOKEN%", "a b", "a\nb", "", None],
+)
+def test_fixed_operator_serializer_rejects_commas_and_shell_metacharacters(harness, value):
+    with pytest.raises(harness.module.ReleaseError, match="invalid_operator_args"):
+        harness.module._serialized_args(["-m", harness.module.MODULE, value])
+    assert harness.state["calls"] == []
+
+
+def test_execution_inventory_failure_has_safe_stage_without_dispatch(harness):
+    harness.state.update(
+        history=[{"metadata": {"name": "old"}}],
+        cloud_failure_prefix=("run", "jobs", "executions", "list"),
+        cloud_failure=OSError("DO_NOT_RETAIN_RAW_ERROR"),
+    )
+    with pytest.raises(harness.module.ReleaseError, match="cloud_command_failed"):
+        run(harness)
+    evidence = json.loads(harness.output.read_text())
+    assert evidence["cloud_error"] == {
+        "stage": "execution_inventory", "category": "transport_error",
+    }
+    assert harness.state["runs"] == []
+
+
+def test_cloud_diagnostics_do_not_extend_deadlines_or_repeat_mutations(harness):
+    run(harness)
+    assert [timeout for prefix, timeout in harness.state["timeouts"]
+            if prefix == ["run", "jobs", "deploy"]] == [180]
+    assert [timeout for prefix, timeout in harness.state["timeouts"]
+            if prefix == ["run", "jobs", "execute"]] == [30, 30]
+    assert all(timeout <= 30 for prefix, timeout in harness.state["timeouts"]
+               if prefix != ["run", "jobs", "deploy"])
+
+
+_CMD_LOGGER = '''import sys
+def offline(event, args):
+    if event.startswith('socket.') or event in ('subprocess.Popen', 'os.system', 'os.startfile'):
+        raise PermissionError('OFFLINE_FIXTURE_DENIED')
+sys.addaudithook(offline)
+import ctypes
+import json
+import os
+from pathlib import Path
+import socket
+try:
+    socket.socket()
+except PermissionError:
+    denied = True
+else:
+    raise RuntimeError('Socket fence failed')
+ctypes.windll.kernel32.GetCommandLineW.restype = ctypes.c_wchar_p
+value = dict(received=sys.argv[1:], stage=os.environ['CMD_CAPTURE_STAGE'], pid=os.getpid(),
+    raw_command_line=ctypes.windll.kernel32.GetCommandLineW(), no_site=sys.flags.no_site,
+    python=sys.executable, socket_denied=denied)
+path = Path(os.environ['CMD_CAPTURE_DIR']) / (value['stage'] + '-' + str(value['pid']) + '.json')
+with path.open('x', encoding='utf-8') as stream:
+    json.dump(value, stream)
+print(json.dumps(value))
+'''
+
+
+@pytest.fixture
+def windows_cmd_cli(harness, monkeypatch, tmp_path):
+    import winreg
+
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            with winreg.OpenKey(hive, r"Software\Microsoft\Command Processor") as key:
+                autorun = winreg.QueryValueEx(key, "AutoRun")[0]
+        except FileNotFoundError:
+            autorun = ""
+        assert not autorun, "Refuse implicit native CMD AutoRun"
+    root = (tmp_path / "owned-cmd").absolute()
+    root.mkdir()
+    assert root.resolve() == root and root.is_relative_to(tmp_path.resolve())
+    owner = str(uuid4())
+    marker = root / "owner.json"
+    marker.write_text(json.dumps({"owner": owner}), encoding="utf-8")
+    library, captures = root / "lib", root / "captures"
+    library.mkdir()
+    captures.mkdir()
+    logger = library / "gcloud.py"
+    logger.write_text(_CMD_LOGGER, encoding="utf-8")
+    system32 = Path(os.environ["SystemRoot"]) / "System32"
+    fake = root / "gcloud.cmd"
+    forwarding = (
+        '"%CLOUDSDK_PYTHON%" %CLOUDSDK_PYTHON_ARGS% "%CLOUDSDK_ROOT_DIR%\\lib\\gcloud.py" '
+        '%* & goto lastline 2>NUL || "%COMSPEC%" /C exit 0\n:lastline\n'
+        '"%COMSPEC%" /C exit %ERRORLEVEL%\n'
+    )
+    fixture_files = [marker, logger]
+    tokens = set(harness.module._args(REQUEST)) | {"inspect"}
+    for token in ["gcloud", *sorted(tokens)]:
+        path = root / (token + ".cmd")
+        path.write_text('@echo off\nSETLOCAL DisableDelayedExpansion\n'
+                        f'SET "CMD_CAPTURE_STAGE={token}"\n' + forwarding, encoding="utf-8")
+        fixture_files.append(path)
+    env = {
+        "SystemRoot": str(system32.parent), "WINDIR": str(system32.parent),
+        "COMSPEC": str(system32 / "cmd.exe"), "PATH": str(root) + os.pathsep + str(system32),
+        "PATHEXT": ".CMD", "TEMP": str(root), "TMP": str(root),
+        "CLOUDSDK_PYTHON": sys.executable, "CLOUDSDK_PYTHON_ARGS": "-S",
+        "CLOUDSDK_ROOT_DIR": str(root), "CMD_CAPTURE_DIR": str(captures),
+        "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1",
+    }
+    monkeypatch.setenv("PATH", env["PATH"])
+    monkeypatch.setenv("PATHEXT", env["PATHEXT"])
+    assert Path(shutil.which("gcloud") or "").resolve() == fake.resolve()
+    inventory = importlib.import_module("scheduler_inventory")
+    real_run = subprocess.run
+
+    def isolated_run(argv, **kwargs):
+        assert Path(argv[0]).resolve() == fake.resolve()
+        assert fake.resolve().parent == root.resolve()
+        kwargs["timeout"] = min(kwargs["timeout"], 20)
+        return real_run(argv, cwd=root, env=env, **kwargs)
+
+    monkeypatch.setattr(inventory.subprocess, "run", isolated_run)
+    try:
+        yield SimpleNamespace(root=root, captures=captures, inventory=inventory)
+    finally:
+        assert root.resolve() == root and json.loads(marker.read_text())["owner"] == owner
+        for path in [*fixture_files, *captures.glob("*.json")]:
+            assert path.resolve().is_relative_to(root) and not path.is_symlink()
+            path.unlink()
+        captures.rmdir()
+        library.rmdir()
+        root.rmdir()
+        assert not root.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Actual Windows CMD argument dispatch")
+@pytest.mark.parametrize("mode", ["grant", "inspect"])
+def test_actual_windows_cmd_roundtrips_complete_grant_and_inspection_argv(
+    harness, windows_cmd_cli, monkeypatch, record_property, mode,
+):
+    observed = []
+
+    def transport(argv, **kwargs):
+        if "--args" in argv:
+            value = windows_cmd_cli.inventory.run_gcloud(argv, **kwargs)
+            record_property("native_cmd_" + str(len(observed)), json.dumps(value, sort_keys=True))
+            assert value["stage"] == "gcloud" and value["received"] == argv
+            assert value["socket_denied"] is True and value["no_site"] == 1
+            assert Path(value["python"]).resolve() == Path(sys.executable).resolve()
+            observed.append(value)
+        return harness.cloud(argv, **kwargs)
+
+    monkeypatch.setattr(harness.module, "run_gcloud", transport)
+    assert run(harness)["status"] == "verified"
+    assert len(observed) == 2
+    value = observed[0 if mode == "grant" else 1]["received"]
+    expected = harness.module._args(REQUEST) if mode == "grant" else [
+        "-m", harness.module.MODULE, "inspect", "--company-id", REQUEST["company_id"],
+        "--subscription-id", REQUEST["subscription_id"],
+    ]
+    assert value[value.index("--args") + 1].split(",") == expected
+    assert value[-1] == "--format=json"
+    assert [args[2] for _, args in harness.state["runs"]] == ["grant", "inspect"]
 
 
 @pytest.mark.parametrize(
