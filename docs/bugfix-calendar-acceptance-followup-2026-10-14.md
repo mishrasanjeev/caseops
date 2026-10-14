@@ -8,7 +8,7 @@ change the frozen 655 acceptance candidate or certify a production release.
 PRD mapping: J08 / M08 / MOD-TS-006; US-022 through US-025;
 FT-042/043 and FT-078 through FT-082; SEC-003/004 and NFT-007.
 
-The original Calendar document allows existing URL/file-reference attachment
+The original IP document allows existing URL/file-reference attachment
 models. This follow-up adds no embedded-image requirement. It does not recreate
 the missing original IP register or identify the unknown LIFE-13 Matter.
 
@@ -18,7 +18,7 @@ The same six aggregation regressions pass against the immutable base
 `30e7229368de013123e9a48db2b19230829ddac2` Calendar module and fail in
 the call phase against unchanged 655. Each full error is retained independently.
 Equal-date/title task and deadline rows were reordered by Matter/event IDs.
-Two additional cases prove that irrelevant hearing-time metadata must not
+Two of the six cases prove that irrelevant hearing-time metadata must not
 influence those kinds; current collectors do not normally populate that field.
 
 Only hearing-time, Matter-ID and event-ID sort keys are now hearing-only.
