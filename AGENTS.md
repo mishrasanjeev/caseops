@@ -720,6 +720,20 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- A new subscription/audit operator must run the existing canonical audit-owner
+  coverage as well as its own complete unit/native modules. Use the shared
+  audit writer with atomic caller-owned commit, deterministic replay identity
+  and exact minimized receipt metadata. New-module-only green is incomplete.
+- Container readiness does not establish a Windows host's published PostgreSQL
+  transport. Before native pytest, use the actual candidate-owned interpreter
+  for a bounded host connection and SQL query. Retain failed setup as failed
+  infrastructure, prove the fresh migrated template and rerun the whole unchanged
+  inventory. Never borrow another gate's database or alter global networking.
+- A hearing-only ordering enhancement must leave equal-date/title task and
+  deadline ties unchanged. Compare the actual old aggregation contract, keep
+  new tie-break fields hearing-only, and preserve the complete dated calendar
+  journey through a clicked event to its loaded exact Matter and hearing.
+
 - A queued source-renewal alert is not delivered acceptance. Bind the browser
   receipt to the exact current particular version and unique in-app intent,
   require one actual delivered attempt and visible reload, then clear the source

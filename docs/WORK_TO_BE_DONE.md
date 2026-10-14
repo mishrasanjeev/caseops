@@ -2,6 +2,17 @@
 
 ## October 13 Canonical Release Checkpoint
 
+October14 acceptance correction: J08/M08/US-022..025/FT-042..043 and
+FT-078..082 retain non-hearing stable ties and actual loaded hearing navigation.
+UJ-02/04/26 and IPLF-037 require recipient-readable delivered renewal content,
+not only a queued/delivered status. The complete local content RED has two
+failures plus two history passes on3f639af0; current read-path closure is pending.
+The QA grant remains approved but unexecuted. Canonical audit ownership is
+restored with219 scoped passes across seven complete modules; fresh joined
+CI/CodeQL/Docker/main/deploy/live gates remain required. Production remains3dbf,
+canonical main30e, historical reopening cause Inconclusive. These scoped results
+do not certify the final joined release. See the October13 bug document.
+
 The earlier four-PR batch is merged as main
 `30e7229368de013123e9a48db2b19230829ddac2`, tree
 `88cf5e4c9a59ea8ad721e69cf2efe7784e5081e0`, identical to accepted `51ecde9c`.
