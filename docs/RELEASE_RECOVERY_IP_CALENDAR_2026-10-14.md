@@ -84,6 +84,16 @@ inventory. No synthetic leads, paid probes or unsupported conversion claims.
 
 ## Scoped Recovery Proof, Not Release Acceptance
 
+The first joined candidate2637d3ec is **NO-GO**. Its actual Python CodeQL
+analysis1953851084 has two new warnings574/575 in the redundant `else` failure
+branches of the two definitely raising tests, despite a successful scan job.
+Retain its partial Docker/CI evidence as incomplete for the amended candidate.
+Removing only those branches preserves each mandatory original-error identity
+assertion, which rejects a missing exception. New deterministic swallowing
+context regressions prove that exact identity assertion fails; the two
+conditional-body cleanup tests retain their necessary no-exception `else`.
+Fresh actual CodeQL results must be reconciled before expensive acceptance.
+
 The parent CI/finalizer slice collected341 identities:340 passed and one
 explicit POSIX mount-policy skip on Windows. Ordered JUnit and all1022 phase
 reports agree with collection and natural sessionexitzero. Evidence:

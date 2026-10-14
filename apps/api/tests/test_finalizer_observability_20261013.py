@@ -6,6 +6,7 @@ import io
 import json
 import sys
 from concurrent.futures import Future
+from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
@@ -284,8 +285,6 @@ def test_pool_failure_retains_original_exception_and_sanitized_future_outcomes()
             raise original
     except AssertionError as error:
         observed_error = error
-    else:
-        pytest.fail("The observer failure must propagate")
     assert observed_error is original
     assert audit.release.is_set() and audit.passive.critical_pools == 0
     completed = next(row for row in records if row["event"] == "contenders_completed")
@@ -486,8 +485,6 @@ def test_cleanup_evidence_failure_makes_footer_incomplete_without_replacing_orig
             raise original
     except AssertionError as error:
         observed_error = error
-    else:
-        pytest.fail("The observer failure must propagate")
     assert observed_error is original
     with pytest.raises(AssertionError, match="incomplete"):
         journal.complete()
@@ -495,6 +492,26 @@ def test_cleanup_evidence_failure_makes_footer_incomplete_without_replacing_orig
     assert footer["event"] == "native_evidence_incomplete" and not footer["complete"]
     assert footer["incomplete_reasons"] == ["contender_cleanup_failed"]
     assert "FAKE_" not in stream.getvalue()
+
+
+@pytest.mark.parametrize("probe", [
+    test_pool_failure_retains_original_exception_and_sanitized_future_outcomes,
+    test_cleanup_evidence_failure_makes_footer_incomplete_without_replacing_original,
+], ids=["pool-original", "cleanup-original"])
+def test_original_error_identity_assertion_rejects_suppressed_body(monkeypatch, tmp_path, probe):
+    @contextmanager
+    def suppress_body(_audit):
+        try:
+            yield SimpleNamespace(submit=lambda _callback: Future()), []
+        except AssertionError:
+            pass
+
+    monkeypatch.setattr(native._FinalizerAudit, "pool", suppress_body)
+    arguments = [tmp_path] if probe is (
+        test_cleanup_evidence_failure_makes_footer_incomplete_without_replacing_original
+    ) else []
+    with pytest.raises(AssertionError, match="assert None is"):
+        probe(*arguments)
 
 
 def test_ci_retains_exact_per_shard_native_journals_without_weakening_invocation():

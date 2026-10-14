@@ -16,6 +16,11 @@
   assertions after scanner corrections. Use explicit expected-type catches
   and a no-exception failure; preserve the pool body, raise point, wait and
   shutdown budgets. A green scanner job still requires its actual alert inventory.
+- A definite raising test body needs no redundant catch `else` when its following
+  mandatory exception-identity assertion already rejects no exception. Prove
+  that assertion with a deliberately swallowing test context, not a removed
+  negative oracle. Report actual scanner findings immediately before costly
+  acceptance; keep an amended candidate's earlier partial run incomplete.
 
 - A per-record ACL lookup can still repeat global team-catalogue work even when
   the actor has no team memberships. Drive eligibility from every current actor
