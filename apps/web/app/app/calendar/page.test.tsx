@@ -755,7 +755,7 @@ describe("CalendarPage", () => {
         title: "Recovered hearing", matter_id: "recovered-matter", matter_code: "CAL-RETRY",
         matter_title: "Recovered matter" }],
     });
-    await userEvent.setup().click(screen.getByRole("button", { name: "Try again", exact: true }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Try again$/ }));
     expect(await screen.findByTestId("calendar-event-hearing:recovered"))
       .toHaveAttribute("href", "/app/matters/recovered-matter/hearings");
     expect(screen.queryByText("Could not load calendar")).not.toBeInTheDocument();
