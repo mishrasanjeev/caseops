@@ -1,5 +1,101 @@
 # CaseOps agent instructions
 
+- A per-record ACL lookup can still repeat global team-catalogue work even when
+  the actor has no team memberships. Drive eligibility from every current actor
+  membership, then seek one exact tenant/active Team per membership. Preserve
+  post-seek identity rejection, all teams, wall precedence and effective windows.
+  Prove mixed foreign-team volume, empty/inactive memberships, stale statistics
+  and continuation pages under the original total-work bound; retain the full
+  actual EXPLAIN before assertions, not only a successful docket-index summary.
+- A PostgreSQL HTTP adaptation must preserve the standard fixture's explicit
+  Bearer actor isolation without changing production's cookie-first policy.
+  Prove actual /me identity, creator and grant provenance before classifying an
+  authorization failure. Unique foreign fixtures must satisfy the real schema;
+  duplicate bootstrap or invalid email/record setup is not a security reproduction.
+- Continuation fixtures must use the public serialized cursor and canonical
+  request context. After fixture commits, reload context before a measured page;
+  retain all observed statements and explain the actual specialist SELECT, never
+  an unbound ORM refresh. Keep the original one-query, row-work and time bounds.
+  A failed or wrong-clause plan remains incomplete even after a later valid run.
+
+- A successful scanner job is not an empty finding inventory. Query the exact
+  candidate's code-scanning ref and reconcile every open alert before release;
+  recheck canonical main after merge. Optional review steps skipped by a key
+  guard are not completed reviews. Break genuine service dependency cycles at
+  shared access/provenance boundaries without changing guards or hiding imports.
+  Declare retained public re-exports explicitly; a same-name import alias accepted
+  by Ruff is not necessarily an explicit export to CodeQL. Preserve callable
+  identity and the complete intended public inventory without no-op usage or
+  scanner suppression.
+
+- Audit acceptance coverage before freezing a release candidate. A mode-switch
+  click does not prove its dated contents; assert persisted identities and time
+  in every changed Calendar view. An import under its batch limit cannot prove
+  continuation or browser-storage loss: retain an acknowledged partial result,
+  remove the client claim key, reopen creator-owned history and prove exact
+  server-owned continuation, original row identities and terminal reload.
+  Source-date correction must be visibly verified before clearing the date.
+
+- An import admission change must inventory every service/HTTP fixture and
+  every native security race caller, not only import-page tests. Directly
+  seeded companies do not inherit bootstrap workspace context. Preserve a
+  missing-context negative, provide explicit reviewed synthetic context in
+  positive fixtures and retain their actual preview errors before diagnosis.
+  Observe the real advisory primitive and dedicated backend PID; keep exact
+  blocker/NOWAIT/deadline proofs. A foreign creator must remain denied rather
+  than weakening access to satisfy an obsolete success expectation.
+- A new release-owned browser invocation changes both the required native
+  receipts and exact workflow-invocation inventory. Reconcile all test consumers
+  of that workflow, preserving every earlier invocation and negative guard;
+  passing the main workflow contract module alone missed the second inventory.
+
+- A dedicated advisory transaction can expire while the application commits
+  import rows on another connection. Do not raise the idle timeout. Use explicit
+  session-owned autocommit claims, prove current ownership and release, bound
+  successful requests into acknowledged batches and retain creator-authorized
+  recovery without retrying failed mutations. Native acceptance must exercise
+  a thousand real rows, not only a preview or a small mock.
+- SQLite's Bearer-cookie fixture wrapper can hide a mixed-identity native test.
+  Authenticate cross-tenant probes in separate clients; preserve production's
+  cookie-first policy. Native console encoding failures do not erase structured
+  failures: retain original binary output and complete journal/JUnit identities,
+  and never decode unused console bytes merely to obtain an exit status.
+- Source-import acceptance must complete native XLSX commit and canonical reload,
+  not only preview. Freeze the reviewed derived workspace context through commit;
+  a changed default requires a new preview. Explicit separate-record decisions
+  may override cautious identifier-less suggestions, never exact identifiers.
+- Reminder cancellation is not a dispatch fence. Resolve the current source
+  version/date and current message facts under the existing authoritative lock;
+  prove stale retained intents produce zero delivery and corrected ones deliver
+  current facts. Creator-authorized import recovery must survive lost browser
+  storage, and commit candidate materialization must have a total-work bound.
+
+- A local browser origin does not authorize a bootstrap against a separately
+  configured remote API. Verify both origins, reject mixed targets and
+  credential-bearing URLs before any request, and verify exact API/web release
+  identity before authentication or fixture creation. Production mutations use
+  only the explicitly authorized test tenant and retain the no-paid marker.
+- Saved-calendar acceptance must compare identity and priority with the chosen
+  catalog and persisted Matter, not only with the Calendar response that may
+  itself be wrong. Preserve exact, session-only and unpublished timing; prove
+  ties and mobile access to the full identity of initially visible events.
+- Every executed release-owned browser invocation needs a required native
+  receipt. Adding a green workflow step without adding it to reconciliation can
+  hide absent or incomplete evidence. Keep scheduled read-only and dispatched
+  mutation steps separately scoped even when their display names are equal.
+
+- Calendar overflow acceptance must open the real control and reconcile the
+  exact date's visible and hidden event identities, links, keyboard dismissal
+  and focus return. Text-presence coverage missed a dead `+N more` div. Resolve
+  court identity from stored Matter/catalog fields in one joined read, retain
+  hearing time and use the catalog's display order; never infer a bench or
+  region from free text or introduce a Calendar-only hierarchy.
+- Optional import-source columns do not authorize inventing canonical legal
+  identities. Preserve source values and warnings, classify unusable rows and
+  prove preview/commit/history/reload plus identifier-less duplicate boundaries
+  before relaxing admission. A one-month business alert is calendar arithmetic,
+  not a fixed thirty-day legal deadline or evidence of provider delivery.
+
 - A complete native journal envelope is not complete passive timing evidence.
   Reconcile the recorder's overflow, pairing and unfinished-read flags as well
   as every pytest phase. Size finite evidence buffers for the actual bounded
@@ -641,6 +737,59 @@ spreadsheet skill's formatting, formula, inspection, and visual-verification
 requirements when using the fallback.
 
 ## Permanent regression learnings
+
+- A short directed-lock oracle must begin at the observed exact participant SQL
+  admission, not an upstream worker callback that still has bounded preflight
+  work to perform. Keep a separate bounded admission handshake, prove a delayed
+  preflight cannot supply the edge, then require the real backend blocker, free
+  parent and normal worker completion under the unchanged observation and SQL
+  limits. Retain process-wide timing without inventing thread/object attribution;
+  do not change production GC policy or raise a deadline to hide a missed probe.
+
+- A strengthened dated browser setup helper changes its offline fixture contract
+  too. Replay every consumer after adding required readiness metadata or return
+  fields, assert the actual configured value on local and production-read-only
+  paths, and reject malformed metadata without mutation. Do not invent a default
+  timezone to make a simplified mock pass. Focused page tests cannot certify an
+  omitted fixture module or replace complete frontend coverage.
+
+- Bounded ACL probes and a low SQL statement count do not bound the work of a
+  parent admission join. Retain the actual PostgreSQL plan under representative
+  tenant volume and stale estimates, charge executor rows and loops, and avoid
+  materializing the full authorized parent set before pagination. Preserve every
+  access/lifecycle predicate and the original timeout. A first-page alternating-
+  visibility fixture does not certify arbitrary sparse grants or later cursors.
+
+- A new subscription/audit operator must run the existing canonical audit-owner
+  coverage as well as its own complete unit/native modules. Use the shared
+  audit writer with atomic caller-owned commit, deterministic replay identity
+  and exact minimized receipt metadata. New-module-only green is incomplete.
+- Container readiness does not establish a Windows host's published PostgreSQL
+  transport. Before native pytest, use the actual candidate-owned interpreter
+  for a bounded host connection and SQL query. Retain failed setup as failed
+  infrastructure, prove the fresh migrated template and rerun the whole unchanged
+  inventory. Never borrow another gate's database or alter global networking.
+- A hearing-only ordering enhancement must leave equal-date/title task and
+  deadline ties unchanged. Compare the actual old aggregation contract, keep
+  new tie-break fields hearing-only, and preserve the complete dated calendar
+  journey through a clicked event to its loaded exact Matter and hearing.
+
+- A queued source-renewal alert is not delivered acceptance. Bind the browser
+  receipt to the exact current particular version and unique in-app intent,
+  require one actual delivered attempt and visible reload, then clear the source
+  date without rewriting delivered history. Production automation must observe
+  the ordinary cadence, never start a global billable notification drain to
+  manufacture a receipt. Direct local dispatch is restricted to an isolated
+  loopback fixture's exact tenant, recipient, source, docket and in-app intent.
+- Delivery status alone does not prove that its recipient can read an alert.
+  Regress the exact saved current-version content in the user-visible view,
+  including identity, due date, remaining days and record destination. Deny
+  another recipient, revoked access, terminal records and stale source versions;
+  do not expose a queued body or rebind historical delivery to corrected facts.
+- ORM JSON annotations do not enforce retained database JSON shape. A new
+  receipt read must reject non-object metadata before inspecting its keys,
+  preserve the original evidence and deny ambiguous linked receipts. Prove
+  the denial without turning a single malformed row into a Portfolio failure.
 
 - Wrapping navigation must allocate block height for every row. Horizontal
   overflow checks and DOM visibility do not prove a tab is clickable: a panel
@@ -2219,3 +2368,49 @@ requirements when using the fallback.
   changed-history secret preflight before costly acceptance. Independently
   verify reported artifact checksums against immutable bytes; allow only an
   exact reviewed historical fingerprint, never path, rule or all-hash suppression.
+- Before costly acceptance, replay every prerequisite command in the current CI
+  contract group, including change gates against canonical origin/main. An
+  extracted transport still carries the original governed payload. Register its
+  actual owner/boundary, regenerate the human map and runtime projection, and
+  prove unchanged policy plus the change gate; standalone map validation or
+  local Ruff cannot certify commands the hosted shell never reached.
+- Break workflow import cycles at their actual shared read-only policy or
+  transport boundary, not by duplicating authorization or hiding local imports.
+  Preserve guard/source/sender bodies, API contracts and lock order; inventory
+  every caller and mock binding, and replay native authorization and delivery.
+  A compatibility alias does not redirect another module's later monkeypatch.
+- A positive import fixture must establish the linked work area's independent
+  entitlement, rollout and persisted workspace configuration before navigating
+  to that record. Successful preview, commit and portfolio reads do not prove
+  docket-workspace readiness. Grant only the newly bootstrapped loopback tenant
+  a non-billable fixture entitlement; never rewrite production subscriptions or
+  weaken a working setup gate. Assert production's actual read-only readiness.
+- Independent browser journeys must continue after a sibling failure while
+  retaining one-worker mutation ordering and zero retries. Serial-cascade skips
+  are unverified coverage, not proof that later responsive, correction or
+  recovery paths work. Reconcile every original case in the replacement run.
+- The HTTP client owns JSON serialization. Endpoint wrappers must pass the raw
+  request object, not JSON.stringify output. A mocked page handler cannot prove
+  that boundary: assert the actual fetch body parses once to the canonical
+  object, including null clearing, concurrency fields, CSRF and rejected writes;
+  then replay the complete browser journey through a fresh build. Audit other
+  client callers when this known double-encoding defect reappears.
+- An owner-approved one-time QA entitlement is not a default bootstrap policy.
+  Pin the existing tenant/subscription and inspected before-state, preserve
+  billing/provider/configuration fields, and atomically retain an operation
+  receipt. Replay may be a no-op only while that exact after-state remains;
+  later revocation or drift must refuse regrant. Prove wrong-tenant rejection,
+  audit rollback and concurrent receipt admission on real PostgreSQL, then
+  verify actual workspace readiness and the saved-record browser journey.
+- A connection-scoped read-only setting must be cleared on the same connection
+  before it returns to the pool. A cleanup query through a session that already
+  released its connection can reset another connection and poison the original.
+  Hold the inspection connection explicitly, roll back read-only work, restore
+  the exact connection's state and regress interleaved pooled checkouts.
+- A cloud-job fixture must match the real API and SDK serialization contract.
+  Cloud Run v1 execution annotations are top-level metadata; JSON stdout becomes
+  jsonPayload, and protobuf Struct may render integer-valued numbers as floats.
+  Keep any representation exception confined to that documented boundary.
+  Bind exact serving secret references, reject truncated execution inventories,
+  and poll only bounded read-only log visibility, never repeat a mutation to
+  compensate for missing or uncertain evidence.

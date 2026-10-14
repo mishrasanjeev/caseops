@@ -1,5 +1,97 @@
 # CaseOps  - Work To Be Done
 
+## October 13 Canonical Release Checkpoint
+
+October14 dfa full Docker is NO-GO: 2,996 native passes/one work-bound failure,
+8,991 phases; all556 browser cases unexecuted. A separately labelled retained
+plan isolates repeated global Team scans, not the bounded docket lookup. The
+26f97222 shared IP membership-first correction has166 scoped native passes,
+144 SQLite passes and60 exact native supplements; max page work1,279 under
+unchanged2,048/128/5s bounds. All failed scopes remain retained. Fresh joined
+gates, canonical merge, guarded release and live replay are pending; production
+is3dbf, the QA grant is unexecuted and historical reopening is Inconclusive.
+See `docs/BUGFIX_IP_CALENDAR_2026-10-13.md` for cause and proof limitations.
+
+The new participant-observation correction has114 scoped native passes/342
+phases, preserving105 original identities and111 assertions under unchanged
+deadlines/GC/security. Real admission and delayed-preflight controls supplement,
+not replace, the failed40e8 hosted evidence. Complete amended-source gates and
+exact live acceptance remain pending; no deployed closure or QA grant is claimed.
+
+October14 fresh40e8 CI is NO-GO despite19 prerequisite passes and clean secret
+scans. The web gate fails two offline readiness fixtures after a required
+timezone read; the a446 local correction has a complete204-file/1,323-pass
+frontend replacement, not hosted closure. Native shard3 has373 passes and one
+missed directed-wait deadline; its final snapshot contains the expected edge,
+and its process-wide GC timing is retained without thread/cause overclaim.
+Complete deterministic native and final-source release gates remain required.
+The independent099 specialist module passes19 cases with measured executor
+bounds; that scoped proof does not accept the joined release. Production is
+still3dbf and the approved QA grant is unexecuted. See the October13 bug document.
+
+October14 native gate: frozen655 has2,957 native passes and one genuine5s
+specialist-list timeout; its556 browser cases did not execute. The parent join,
+not its indexed grant probes, materialized the authorized docket set. The
+PostgreSQL per-candidate lookup correction preserves all access/lifecycle
+predicates and adds actual executor-work proof. Fresh complete native replay,
+joined Docker/CI/CodeQL and deployed acceptance remain required; no old proof
+transfers. Adjacent ordinary joins remain audit candidates, not demonstrated
+defects. The query bound currently targets the reported alternating-visibility
+first-page fixture. Production is still3dbf and the QA grant remains unexecuted.
+
+October14 acceptance correction: J08/M08/US-022..025/FT-042..043 and
+FT-078..082 retain non-hearing stable ties and actual loaded hearing navigation.
+UJ-02/04/26 and IPLF-037 require recipient-readable delivered renewal content,
+not only a queued/delivered status. The complete local content RED has two
+failures plus two history passes on3f639af0; current read-path closure is pending.
+The QA grant remains approved but unexecuted. Canonical audit ownership is
+restored with219 scoped passes across seven complete modules; fresh joined
+CI/CodeQL/Docker/main/deploy/live gates remain required. Production remains3dbf,
+canonical main30e, historical reopening cause Inconclusive. These scoped results
+do not certify the final joined release. See the October13 bug document.
+
+The earlier four-PR batch is merged as main
+`30e7229368de013123e9a48db2b19230829ddac2`, tree
+`88cf5e4c9a59ea8ad721e69cf2efe7784e5081e0`, identical to accepted `51ecde9c`.
+Its complete workstation Docker gate has 2,898 native passes and 540 browser
+passes plus ten explicit skips, natural exit zero and sealed artifact/cleanup
+reconciliation. Candidate CI/Security/CodeQL passed. Main Security and CodeQL
+passed; main CI38399405530 also completed successfully. This supersedes earlier merge/local-gate
+checkpoints below, not their retained failed evidence. Production is still
+`3dbf364d`; no new deployed closure or scheduler resume is claimed.
+
+The October 13 IP/Calendar scope is draft PR535, with subsequent acceptance
+corrections under review and fresh whole-candidate gates required. Actual
+production preview reproduces native Excel datetime upload 500 on serving
+3dbf, request `ip-native-date-prod-7a0ae37155884f198720b24eda3006b8`; native
+baseline establishes JSON serialization cause. Scoped corrections remain
+Partially fixed pending fresh Docker/full CI and exact-production browser
+replay. Historical reopening cause remains Inconclusive. See
+`docs/BUGFIX_IP_CALENDAR_2026-10-13.md` and
+`docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
+
+October14 QA readiness checkpoint: the owner approved one non-billable manual-IP
+grant for test-legal only under existing M14/US-041 and IP workspace ownership.
+Read-only production inspection finds one manual_active grandfathered_free
+subscription with no IP override. The one-shot control preserves plan/status,
+other entitlements, providers, configuration and GBA; consumed replay cannot
+regrant after revocation. No production grant has executed. Scoped operator
+coverage has39 SQLite and29 PostgreSQL passes, and the four governance modules
+have47 passes. These do not certify the joined release. Fresh final-source
+Docker/CI, canonical merge, guarded execution and exact live browser replay
+remain required. The historical unidentified reopening remains Inconclusive.
+See `docs/runbooks/test-legal-manual-ip-qa-grant.md` for the operator procedure.
+
+## October 13 IP And Calendar Owner Scope
+
+The two new DOCX specifications extend existing UJ-02/04/26, IPLF-030/032/037
+and J08/M08 ownership. Calendar joined court metadata/order and accessible
+exact-date overflow are locally corrected; new Docker/browser/canonical-release
+proof is outstanding. IP optional-header import, partial outcomes and business
+renewal alerts are being implemented against the canonical owners. No deployed
+closure follows from the older frozen #533 gate. See
+`docs/BUGFIX_IP_CALENDAR_2026-10-13.md` for the complete requirement inventory.
+
 ## October 12 Combined Release
 
 October 13 passive evidence checkpoint: **NO-GO**. faff CI failed on a bounded

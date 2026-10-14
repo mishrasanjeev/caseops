@@ -71,8 +71,8 @@ def test_ip_port_08_xlsx_validation_history_and_error_report(client: TestClient)
     actor = _actor(client)
     workbook = Workbook()
     sheet = workbook.active
-    sheet.append(["title", "mark", "class", "applicant"])
-    sheet.append(["INVALID CLASS", "INVALID CLASS", 99, "Aster Products LLP"])
+    sheet.append(["title", "mark", "class", "applicant", "jurisdiction", "office"])
+    sheet.append(["INVALID CLASS", "INVALID CLASS", 99, "Aster Products LLP", "IN", "IP India"])
     stream = io.BytesIO()
     workbook.save(stream)
     workbook.close()
@@ -112,10 +112,10 @@ def test_ip_port_06_import_normalizes_supported_representation_categories(
 ) -> None:
     actor = _actor(client)
     content = (
-        b"title,mark,class,applicant,representation type\n"
-        b"ASTER LOGO,ASTER LOGO,9,Aster Products LLP,logo\n"
-        b"ASTER COLOUR,ASTER COLOUR,9,Aster Products LLP,color\n"
-        b"ASTER HOLOGRAM,ASTER HOLOGRAM,9,Aster Products LLP,hologram\n"
+        b"title,mark,class,applicant,representation type,jurisdiction,office\n"
+        b"ASTER LOGO,ASTER LOGO,9,Aster Products LLP,logo,IN,IP India\n"
+        b"ASTER COLOUR,ASTER COLOUR,9,Aster Products LLP,color,IN,IP India\n"
+        b"ASTER HOLOGRAM,ASTER HOLOGRAM,9,Aster Products LLP,hologram,IN,IP India\n"
     )
     staged = client.post(
         "/api/ip/imports/upload",
@@ -132,7 +132,9 @@ def test_ip_port_06_import_normalizes_supported_representation_categories(
     ]
 
 
-def test_ip_port_08_duplicate_requires_audited_reconciliation(client: TestClient) -> None:
+def test_ip_port_08_duplicate_skips_by_default_and_explicit_link_is_audited(
+    client: TestClient,
+) -> None:
     actor = _actor(client)
     first = client.post(
         "/api/ip/imports/upload",
@@ -151,9 +153,16 @@ def test_ip_port_08_duplicate_requires_audited_reconciliation(client: TestClient
     candidate = second["rows"][0]["duplicate_candidates"][0]
     assert "exact_application_number" in candidate["match_reasons"]
 
-    blocked = _commit(client, actor["headers"], second, "duplicate-link-9002")
-    assert blocked.status_code == 409
-    assert blocked.json()["code"] == "ip_import_duplicate_decision_required"
+    skipped = _commit(client, actor["headers"], second, "duplicate-skip-9002")
+    assert skipped.status_code == 200, skipped.text
+    assert skipped.json()["job"]["committed_rows"] == 0
+    assert skipped.json()["rows"][0]["commit_status"] == "skipped"
+    assert skipped.json()["rows"][0]["commit_error_code"] == "duplicate_skipped"
+
+    second = client.post(
+        "/api/ip/imports/upload", headers=actor["headers"],
+        files={"file": ("explicit-link.csv", _csv("ASTER DUP", "TM 2026 9002"), "text/csv")},
+    ).json()
 
     reconciled = client.post(
         f"/api/ip/imports/{second['job']['id']}/reconcile",

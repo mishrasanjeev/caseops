@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import traceback
 from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Annotated
@@ -12,10 +14,11 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
@@ -109,6 +112,7 @@ from caseops_api.schemas.ip_imports import (
     IpImportJobListResponse,
     IpImportPreviewResponse,
     IpImportReconciliationRequest,
+    IpImportResumeRequest,
 )
 from caseops_api.schemas.ip_lifecycle import (
     IpDocketEventCreateRequest,
@@ -240,6 +244,7 @@ from caseops_api.schemas.ip_records import (
 from caseops_api.schemas.ip_renewals import (
     IpClientInstructionAcknowledgeRequest,
     IpClientInstructionCreateRequest,
+    IpPortfolioRenewalDateUpdateRequest,
     IpRenewalFoundationContract,
     IpRenewalPortfolioResponse,
     IpRenewalReminderScheduleRequest,
@@ -340,6 +345,7 @@ from caseops_api.services.ip_imports import (
     list_ip_import_jobs,
     preview_ip_import_job,
     reconcile_ip_import_job,
+    resume_ip_import_job,
     revalidate_ip_import_job,
 )
 from caseops_api.services.ip_lifecycle import (
@@ -399,6 +405,7 @@ from caseops_api.services.ip_operations import (
     review_ip_evidence_candidate,
     save_ip_docket_queue,
     sign_off_ip_control_review,
+    update_imported_renewal_date,
     verify_ip_deadline_incident,
 )
 from caseops_api.services.ip_opposition_applicant import (
@@ -1584,7 +1591,7 @@ async def post_ip_import_job(
     context: IpWriter,
     session: DbSession,
 ) -> IpImportPreviewResponse:
-    return create_ip_import_job(session, context=context, payload=payload)
+    return await run_in_threadpool(create_ip_import_job, session, context=context, payload=payload)
 
 
 @router.post(
@@ -1594,14 +1601,45 @@ async def post_ip_import_job(
 )
 async def post_ip_import_file(
     file: UploadFile,
+    request: Request,
     context: IpWriter,
     session: DbSession,
 ) -> IpImportPreviewResponse:
-    payload = parse_ip_import_file(
-        filename=file.filename or "portfolio.csv",
-        content=await file.read(MAX_IMPORT_BYTES + 1),
-    )
-    return create_ip_import_job(session, context=context, payload=payload)
+    content = await file.read(MAX_IMPORT_BYTES + 1)
+    try:
+        payload = await run_in_threadpool(
+            parse_ip_import_file,
+            filename=file.filename or "portfolio.csv",
+            content=content,
+        )
+        return await run_in_threadpool(
+            create_ip_import_job,
+            session,
+            context=context,
+            payload=payload,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        session.rollback()
+        # SQL exceptions can contain applicant cells; retain frames, not values.
+        frames = [
+            (frame.name, frame.lineno) for frame in traceback.extract_tb(exc.__traceback__)[-8:]
+        ]
+        logging.getLogger(__name__).error(
+            "IP import upload failed request_id=%s exception_type=%s frames=%s",
+            getattr(request.state, "request_id", None),
+            type(exc).__name__,
+            frames,
+        )
+        raise HTTPException(
+            500,
+            {
+                "code": "ip_import_unexpected_failure",
+                "message": "The portfolio file could not be staged because of a server error. "
+                "Use the request ID when reporting this failure.",
+            },
+        ) from exc
 
 
 @router.get("/imports/history", response_model=IpImportJobListResponse)
@@ -1610,7 +1648,8 @@ async def get_ip_import_history(
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> IpImportJobListResponse:
-    return IpImportJobListResponse(jobs=list_ip_import_jobs(session, context=context, limit=limit))
+    jobs = await run_in_threadpool(list_ip_import_jobs, session, context=context, limit=limit)
+    return IpImportJobListResponse(jobs=jobs)
 
 
 @router.get("/imports/{job_id}", response_model=IpImportPreviewResponse)
@@ -1619,7 +1658,7 @@ async def get_ip_import_job(
     context: IpViewer,
     session: DbSession,
 ) -> IpImportPreviewResponse:
-    return preview_ip_import_job(session, context=context, job_id=job_id)
+    return await run_in_threadpool(preview_ip_import_job, session, context=context, job_id=job_id)
 
 
 @router.post("/imports/{job_id}/revalidate", response_model=IpImportPreviewResponse)
@@ -1628,7 +1667,12 @@ async def post_ip_import_revalidation(
     context: IpWriter,
     session: DbSession,
 ) -> IpImportPreviewResponse:
-    return revalidate_ip_import_job(session, context=context, job_id=job_id)
+    return await run_in_threadpool(
+        revalidate_ip_import_job,
+        session,
+        context=context,
+        job_id=job_id,
+    )
 
 
 @router.post("/imports/{job_id}/reconcile", response_model=IpImportPreviewResponse)
@@ -1638,7 +1682,8 @@ async def post_ip_import_reconciliation(
     context: IpWriter,
     session: DbSession,
 ) -> IpImportPreviewResponse:
-    return reconcile_ip_import_job(
+    return await run_in_threadpool(
+        reconcile_ip_import_job,
         session,
         context=context,
         job_id=job_id,
@@ -1652,7 +1697,8 @@ async def get_ip_import_errors(
     context: IpViewer,
     session: DbSession,
 ) -> StreamingResponse:
-    content = ip_import_error_report(
+    content = await run_in_threadpool(
+        ip_import_error_report,
         session,
         context=context,
         job_id=job_id,
@@ -1667,14 +1713,50 @@ async def get_ip_import_errors(
     )
 
 
-@router.post("/imports/{job_id}/commit", response_model=IpImportCommitResponse)
+@router.post(
+    "/imports/{job_id}/commit",
+    response_model=IpImportCommitResponse,
+    responses={202: {"model": IpImportCommitResponse}},
+)
 async def post_ip_import_commit(
     job_id: str,
     payload: IpImportCommitRequest,
     context: IpWriter,
     session: DbSession,
 ) -> IpImportCommitResponse:
-    return commit_ip_import_job(session, context=context, job_id=job_id, payload=payload)
+    result = await run_in_threadpool(
+        commit_ip_import_job,
+        session,
+        context=context,
+        job_id=job_id,
+        payload=payload,
+    )
+    if result.job.status == "staged":
+        return JSONResponse(status_code=202, content=result.model_dump(mode="json"))
+    return result
+
+
+@router.post(
+    "/imports/{job_id}/resume",
+    response_model=IpImportCommitResponse,
+    responses={202: {"model": IpImportCommitResponse}},
+)
+async def post_ip_import_resume(
+    job_id: str,
+    payload: IpImportResumeRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpImportCommitResponse:
+    result = await run_in_threadpool(
+        resume_ip_import_job,
+        session,
+        context=context,
+        job_id=job_id,
+        payload=payload,
+    )
+    if result.job.status == "staged":
+        return JSONResponse(status_code=202, content=result.model_dump(mode="json"))
+    return result
 
 
 @router.get("/portfolio/views", response_model=IpPortfolioSavedViewListResponse)
@@ -3014,6 +3096,22 @@ async def post_ip_identifier_reconciliation(
         context=context,
         docket_id=docket_id,
         identifier_id=identifier_id,
+        payload=payload,
+    )
+
+
+@router.patch("/dockets/{docket_id}/portfolio-renewal-date", response_model=IpDocketRecordResponse)
+async def patch_portfolio_renewal_date(
+    docket_id: str,
+    payload: IpPortfolioRenewalDateUpdateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocketRecordResponse:
+    return await run_in_threadpool(
+        update_imported_renewal_date,
+        session,
+        context=context,
+        docket_id=docket_id,
         payload=payload,
     )
 

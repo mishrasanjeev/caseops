@@ -44,12 +44,15 @@ def record_audit(
     request_id: str | None = None,
     ip: str | None = None,
     user_agent: str | None = None,
+    event_id: str | None = None,
     commit: bool = False,
 ) -> AuditEvent:
     """Write an audit row. The caller owns the transaction — by default
     we only `add` + `flush` so the row is visible to the same session
     without committing prematurely. Pass `commit=True` when the caller
-    is outside a request scope (background jobs, CLI paths)."""
+    is outside a request scope (background jobs, CLI paths). An explicit
+    event identity supports atomic idempotent writers without bypassing this
+    canonical metadata-minimisation boundary."""
     event = AuditEvent(
         company_id=company_id,
         action=action,
@@ -72,6 +75,8 @@ def record_audit(
         user_agent=user_agent,
         created_at=datetime.now(UTC),
     )
+    if event_id is not None:
+        event.id = event_id
     session.add(event)
     session.flush()
     if commit:

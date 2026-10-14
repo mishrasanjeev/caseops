@@ -981,6 +981,23 @@ function PortfolioValue({ row, column }: { row: IpPortfolioRow; column: ColumnKe
       return (
         <span className="tabular-nums">
           {row.open_deadline_count} open · {row.unconfirmed_deadline_count} unconfirmed · {row.overdue_deadline_count} overdue
+          {row.source_renewal_due_on ? (
+            <span className="mt-1 block text-xs text-[var(--color-warning-700)]">
+              Renewal (unverified source): <time dateTime={row.source_renewal_due_on}>{row.source_renewal_due_on}</time>
+              <span className="block">Alert: {row.source_renewal_alert_status ?? "not scheduled"}</span>
+              {row.source_renewal_alert_status === "delivered" && row.source_renewal_alert_body ? (
+                <details className="mt-2 min-w-0 text-[var(--color-ink)]">
+                  <summary className="cursor-pointer text-xs font-medium">Renewal alert</summary>
+                  <span
+                    data-testid={`ip-source-renewal-alert-${row.docket_id}`}
+                    className="mt-2 block whitespace-pre-wrap text-xs leading-5 [overflow-wrap:anywhere]"
+                  >
+                    {row.source_renewal_alert_body}
+                  </span>
+                </details>
+              ) : null}
+            </span>
+          ) : null}
         </span>
       );
     case "data_quality":
@@ -1006,7 +1023,7 @@ function PortfolioValue({ row, column }: { row: IpPortfolioRow; column: ColumnKe
 
 function ListValue({ values, mono = false }: { values: string[]; mono?: boolean }) {
   if (values.length === 0) return <span className="text-[var(--color-mute)]">Not recorded</span>;
-  return <span className={mono ? "font-mono text-xs" : "break-words"}>{values.join(", ")}</span>;
+  return <span className={mono ? "break-words font-mono text-xs" : "break-words"}>{values.join(", ")}</span>;
 }
 
 function ExportQueue({

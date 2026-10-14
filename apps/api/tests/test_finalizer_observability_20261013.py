@@ -1,7 +1,10 @@
 """Pure controls for native journal retention and sanitized contender evidence."""
 
+import ctypes
+import gc
 import io
 import json
+import sys
 from concurrent.futures import Future
 from hashlib import sha256
 from pathlib import Path
@@ -25,6 +28,211 @@ class _PrivateValue:
 class _PrivateError(Exception):
     def __str__(self):
         raise AssertionError("Exception message must not be inspected")
+
+
+class _ObserverInterruption(BaseException):
+    """Nonstandard control-flow fault; direct observer calls must propagate it."""
+
+
+_INTERRUPTIONS = (KeyboardInterrupt, SystemExit, GeneratorExit, _ObserverInterruption)
+
+
+@pytest.mark.parametrize("error_type", (RuntimeError, *_INTERRUPTIONS))
+@pytest.mark.parametrize("stage", ("next_slot", "phase", "generation", "mono", "utc"))
+def test_gc_callback_recording_failure_is_invalid_before_exit_and_preserves_interrupts(
+    monkeypatch, error_type, stage,
+):
+    timing = native._PassiveOverlapTiming(gc_cap=2)
+    callbacks = list(gc.callbacks)
+    policy = (gc.isenabled(), gc.get_threshold())
+    failure = error_type("FAKE_OBSERVER_FAILURE")
+    first = timing.next_gc
+    info = {"generation": 0}
+    latches = []
+
+    def fail(_value):
+        latches.append(timing.invalid)
+        with pytest.raises(AssertionError, match="Passive capture is active"):
+            timing.flush(lambda *_args, **_kwargs: pytest.fail("Must not flush incomplete capture"))
+        raise failure
+
+    class FaultySlot:
+        @property
+        def next(self):
+            if stage == "next_slot":
+                fail(None)
+            return first.next
+
+        @property
+        def phase(self):
+            return first.phase
+
+        @phase.setter
+        def phase(self, value):
+            fail(value)
+
+    class FaultyInfo:
+        def __getitem__(self, key):
+            assert key == "generation"
+            fail(key)
+
+    if stage in {"next_slot", "phase"}:
+        timing.next_gc = FaultySlot()
+    elif stage == "generation":
+        info = FaultyInfo()
+    else:
+        monkeypatch.setattr(timing, f"{stage}_clock", fail)
+    gc.disable()
+    try:
+        if issubclass(error_type, Exception):
+            with timing.capture():
+                timing.callback("start", info)
+        else:
+            with pytest.raises(error_type) as caught:
+                with timing.capture():
+                    timing.callback("start", info)
+            assert caught.value is failure
+        assert latches == [False]
+        assert timing.invalid is True
+    finally:
+        if policy[0]:
+            gc.enable()
+    assert not timing.enabled and timing.callback not in gc.callbacks
+    records = []
+    with pytest.raises(AssertionError, match="Passive timing evidence is incomplete"):
+        timing.flush(lambda kind, **data: records.append({"event": kind, **data}))
+    assert records[0]["invalid"] and not records[0]["complete"]
+    assert "FAKE_OBSERVER_FAILURE" not in json.dumps(records)
+    assert gc.callbacks == callbacks and (gc.isenabled(), gc.get_threshold()) == policy
+
+
+@pytest.mark.parametrize("prior_invalid", (False, True))
+def test_gc_callback_success_preserves_exact_native_clock_bytes_and_sticky_invalid(prior_invalid):
+    timing = native._PassiveOverlapTiming(gc_cap=2)
+    callbacks = list(gc.callbacks)
+    policy = (gc.isenabled(), gc.get_threshold())
+    expected = []
+    calls = []
+    latches = []
+    # Prepare all payload bytes before invoking the allocation-bounded callback.
+    for index, slot in enumerate(timing.gc_slots):
+        mono = type(slot.mono)()
+        utc = type(slot.utc)()
+        if sys.platform == "win32":
+            mono.value = (7 + index) * timing.frequency
+            utc.value = 116444736000000000 + (1750000000 + index) * 10000000
+        else:
+            mono.seconds, mono.nanoseconds = 7 + index, 123
+            utc.seconds, utc.nanoseconds = 1750000000 + index, 456
+        expected.append((bytes(mono), bytes(utc)))
+
+    def mono_clock(pointer):
+        latches.append(timing.invalid)
+        calls.append("mono")
+        payload = expected[len(calls) // 2][0]
+        ctypes.memmove(pointer, payload, len(payload))
+
+    def utc_clock(pointer):
+        latches.append(timing.invalid)
+        payload = expected[len(calls) // 2][1]
+        calls.append("utc")
+        ctypes.memmove(pointer, payload, len(payload))
+
+    timing.mono_clock, timing.utc_clock = mono_clock, utc_clock
+    timing.invalid = prior_invalid
+    timing.enabled = True
+    try:
+        timing.callback("start", {"generation": 0})
+        assert timing.invalid is prior_invalid
+        timing.callback("stop", {"generation": 0})
+        assert timing.invalid is prior_invalid
+    finally:
+        timing.enabled = False
+    assert calls == ["mono", "utc", "mono", "utc"]
+    assert latches == [prior_invalid, prior_invalid, prior_invalid, prior_invalid]
+    assert [(bytes(slot.mono), bytes(slot.utc)) for slot in timing.gc_slots] == expected
+    assert [slot.phase for slot in timing.gc_slots] == ["start", "stop"]
+    assert all(slot.generation == 0 for slot in timing.gc_slots) and timing.next_gc is None
+    records = []
+    if prior_invalid:
+        with pytest.raises(AssertionError, match="Passive timing evidence is incomplete"):
+            timing.flush(lambda kind, **data: records.append({"event": kind, **data}))
+    else:
+        timing.flush(lambda kind, **data: records.append({"event": kind, **data}))
+    assert records[0]["complete"] is (not prior_invalid)
+    assert records[0]["invalid"] is prior_invalid
+    assert records[1]["duration_ns"] == 1000000000
+    assert records[1]["utc_finished_ns"] - records[1]["utc_started_ns"] == 1000000000
+    assert gc.callbacks == callbacks and (gc.isenabled(), gc.get_threshold()) == policy
+
+
+@pytest.mark.parametrize("error_type", _INTERRUPTIONS)
+def test_gc_callback_interrupt_is_ignored_by_cpython_but_latched_and_removed(
+    monkeypatch, error_type,
+):
+    timing = native._PassiveOverlapTiming(gc_cap=2)
+    callbacks = list(gc.callbacks)
+    policy = (gc.isenabled(), gc.get_threshold())
+    hook = sys.unraisablehook
+    observed = []
+    failure = error_type("FAKE_GC_INTERRUPTION")
+
+    def fail_clock(_pointer):
+        raise failure
+
+    def retain_unraisable(args):
+        if args.object is timing.callback:
+            observed.append((args.exc_type, args.exc_value))
+        else:
+            hook(args)
+
+    timing.mono_clock = fail_clock
+    gc.disable()
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(sys, "unraisablehook", retain_unraisable)
+            with timing.capture():
+                assert gc.callbacks == callbacks + [timing.callback]
+                gc.collect(0)
+                assert timing.invalid is True
+    finally:
+        if policy[0]:
+            gc.enable()
+    assert observed == [(error_type, failure), (error_type, failure)]
+    assert sys.unraisablehook is hook
+    assert not timing.enabled and timing.callback not in gc.callbacks
+    assert gc.callbacks == callbacks and (gc.isenabled(), gc.get_threshold()) == policy
+    records = []
+    with pytest.raises(AssertionError, match="Passive timing evidence is incomplete"):
+        timing.flush(lambda kind, **data: records.append({"event": kind, **data}))
+    assert records[0]["invalid"] and not records[0]["complete"]
+    assert "FAKE_GC_INTERRUPTION" not in json.dumps(records)
+
+
+def test_gc_success_does_not_clear_independent_sql_invalid_mark_at_clock_boundary(monkeypatch):
+    timing = native._PassiveOverlapTiming(gc_cap=2)
+    callbacks = list(gc.callbacks)
+    policy = (gc.isenabled(), gc.get_threshold())
+    clock = timing.utc_clock
+
+    def clock_with_invalid_sql_context(pointer):
+        clock(pointer)
+        # Deterministic interleaving of the existing SQL-recorder failure path.
+        timing.begin_select("worker", "SELECT 1", None)
+
+    monkeypatch.setattr(timing, "utc_clock", clock_with_invalid_sql_context)
+    timing.enabled = True
+    try:
+        timing.callback("start", {"generation": 0})
+        timing.callback("stop", {"generation": 0})
+    finally:
+        timing.enabled = False
+    assert timing.invalid is True
+    records = []
+    with pytest.raises(AssertionError, match="Passive timing evidence is incomplete"):
+        timing.flush(lambda kind, **data: records.append({"event": kind, **data}))
+    assert records[0]["invalid"] and not records[0]["complete"]
+    assert gc.callbacks == callbacks and (gc.isenabled(), gc.get_threshold()) == policy
 
 
 @pytest.mark.parametrize("state", ["completed", "error", "cancelled", "pending"])
@@ -69,9 +277,10 @@ def test_pool_failure_retains_original_exception_and_sanitized_future_outcomes()
         assert audit.release.wait(8)
         raise _PrivateError("FAKE_PROVIDER_CREDENTIAL")
 
-    with pytest.raises(AssertionError) as caught, audit.pool() as (pool, futures):
-        futures.append(pool.submit(contender))
-        raise original
+    with pytest.raises(AssertionError) as caught:
+        with audit.pool() as (pool, futures):
+            futures.append(pool.submit(contender))
+            raise original
     assert caught.value is original
     assert audit.release.is_set() and audit.passive.critical_pools == 0
     completed = next(row for row in records if row["event"] == "contenders_completed")
@@ -88,7 +297,7 @@ def test_pool_success_does_not_serialize_completed_results():
         None, lambda kind, **data: records.append({"event": kind, **data}),
     )
     with audit.pool() as (pool, futures):
-        futures.append(pool.submit(lambda: _PrivateValue()))
+        futures.append(pool.submit(_PrivateValue))
     assert records[-1]["future_outcomes"] == [{"index": 0, "status": "completed"}]
     assert records[-1]["observer_failed"] is False
 
@@ -101,9 +310,10 @@ def test_pool_cleanup_record_failure_cannot_replace_original_observer_error(body
     audit = native._FinalizerAudit(None, broken_record)
     original = AssertionError("FAKE_ORIGINAL_OBSERVER_FAILURE")
     expected = AssertionError if body_failure else RuntimeError
-    with pytest.raises(expected) as caught, audit.pool():
-        if body_failure:
-            raise original
+    with pytest.raises(expected) as caught:
+        with audit.pool():
+            if body_failure:
+                raise original
     if body_failure:
         assert caught.value is original
     assert audit.release.is_set()
@@ -134,10 +344,11 @@ def test_pool_keeps_full_wait_and_shutdown_deadlines_and_reports_pending(monkeyp
     )
     audit.passive = SimpleNamespace(critical_pools=0)
     original = AssertionError("FAKE_ORIGINAL_OBSERVER_FAILURE")
-    with pytest.raises(AssertionError) as caught, audit.pool() as (_pool, futures):
-        futures.append(future)
-        if body_failure:
-            raise original
+    with pytest.raises(AssertionError) as caught:
+        with audit.pool() as (_pool, futures):
+            futures.append(future)
+            if body_failure:
+                raise original
     assert operations == [("wait", 12), ("shutdown", True, True)]
     completed = next(row for row in records if row["event"] == "contenders_completed")
     assert completed["pending"] == 1
@@ -254,8 +465,9 @@ def test_cleanup_evidence_failure_makes_footer_incomplete_without_replacing_orig
 
     audit = native._FinalizerAudit(None, record)
     original = AssertionError("FAKE_ORIGINAL_PRIVATE_MESSAGE")
-    with pytest.raises(AssertionError) as caught, audit.pool():
-        raise original
+    with pytest.raises(AssertionError) as caught:
+        with audit.pool():
+            raise original
     assert caught.value is original
     with pytest.raises(AssertionError, match="incomplete"):
         journal.complete()

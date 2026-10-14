@@ -5778,6 +5778,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/portfolio-renewal-date": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Portfolio Renewal Date */
+        patch: operations["patch_portfolio_renewal_date_api_ip_dockets__docket_id__portfolio_renewal_date_patch"];
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/proceedings": {
         parameters: {
             query?: never;
@@ -6970,6 +6987,23 @@ export interface paths {
         put?: never;
         /** Post Ip Import Reconciliation */
         post: operations["post_ip_import_reconciliation_api_ip_imports__job_id__reconcile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/imports/{job_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Import Resume */
+        post: operations["post_ip_import_resume_api_ip_imports__job_id__resume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16874,6 +16908,10 @@ export interface components {
          * @description One row on the calendar — same shape regardless of source.
          */
         CalendarEventRecord: {
+            /** Court Identity */
+            court_identity?: string | null;
+            /** Court Label */
+            court_label?: string | null;
             /** Detail */
             detail?: string | null;
             /**
@@ -16881,6 +16919,10 @@ export interface components {
              * @enum {string}
              */
             display_type: "hearing" | "task_date" | "filing_deadline" | "internal_target" | "renewal" | "client_instruction" | "reminder" | "deadline";
+            /** Forum Display Order */
+            forum_display_order?: number | null;
+            /** Hearing Time */
+            hearing_time?: string | null;
             /**
              * Id
              * @description Source row's primary key prefixed by kind.
@@ -16905,8 +16947,14 @@ export interface components {
              * @description ISO yyyy-mm-dd. All events are date-granular.
              */
             occurs_on: string;
+            /** Session Label */
+            session_label?: string | null;
             /** Status */
             status?: string | null;
+            /** Time Status */
+            time_status?: ("exact" | "session" | "time_not_published") | null;
+            /** Timezone */
+            timezone?: string | null;
             /** Title */
             title: string;
         };
@@ -28291,6 +28339,11 @@ export interface components {
         };
         /** IpImportJobRecord */
         IpImportJobRecord: {
+            /**
+             * Commit Batch Size
+             * @default 50
+             */
+            commit_batch_size: number;
             /** Committed At */
             committed_at: string | null;
             /** Committed Rows */
@@ -28316,6 +28369,11 @@ export interface components {
             preview_expires_at: string | null;
             /** Preview Token */
             preview_token: string | null;
+            /**
+             * Recovery Available
+             * @default false
+             */
+            recovery_available: boolean;
             /** Source Sha256 */
             source_sha256: string;
             /** Status */
@@ -28356,6 +28414,13 @@ export interface components {
             decisions: components["schemas"]["IpImportReconciliationDecision"][];
             /** Expected Job Version */
             expected_job_version: number;
+        };
+        /** IpImportResumeRequest */
+        IpImportResumeRequest: {
+            /** Expected Job Version */
+            expected_job_version: number;
+            /** Preview Token */
+            preview_token?: string | null;
         };
         /**
          * IpImportRowInput
@@ -30435,6 +30500,15 @@ export interface components {
             /** Rows */
             rows: components["schemas"]["IpPortfolioRow"][];
         };
+        /** IpPortfolioRenewalDateUpdateRequest */
+        IpPortfolioRenewalDateUpdateRequest: {
+            /** Expected Current Version */
+            expected_current_version: number;
+            /** Reason */
+            reason: string;
+            /** Renewal Due Date */
+            renewal_due_date: string | null;
+        };
         /**
          * IpPortfolioRow
          * @description One jurisdiction/application record with its owning mark.
@@ -30521,6 +30595,14 @@ export interface components {
             responsible_lawyer?: string | null;
             /** Responsible Membership Id */
             responsible_membership_id?: string | null;
+            /** Source Renewal Alert At */
+            source_renewal_alert_at?: string | null;
+            /** Source Renewal Alert Body */
+            source_renewal_alert_body?: string | null;
+            /** Source Renewal Alert Status */
+            source_renewal_alert_status?: string | null;
+            /** Source Renewal Due On */
+            source_renewal_due_on?: string | null;
             /** Team Id */
             team_id?: string | null;
             /** Team Name */
@@ -58942,6 +59024,41 @@ export interface operations {
             };
         };
     };
+    patch_portfolio_renewal_date_api_ip_dockets__docket_id__portfolio_renewal_date_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpPortfolioRenewalDateUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_proceeding_api_ip_dockets__docket_id__proceedings_post: {
         parameters: {
             query?: never;
@@ -61492,6 +61609,15 @@ export interface operations {
                     "application/json": components["schemas"]["IpImportCommitResponse"];
                 };
             };
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportCommitResponse"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -61556,6 +61682,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_import_resume_api_ip_imports__job_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpImportResumeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportCommitResponse"];
+                };
+            };
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpImportCommitResponse"];
                 };
             };
             /** @description Validation Error */

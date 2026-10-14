@@ -25,6 +25,7 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import communications
 from caseops_api.services.email_suppression import record_suppression
 from caseops_api.services.hearing_reminders import run_reminder_worker
 from caseops_api.services.notification_delivery import (
@@ -270,6 +271,10 @@ def test_iplf_uj_11_exc_01_out_of_order_bounce_is_audited_and_not_overwritten(
     monkeypatch.setattr(
         "caseops_api.services.communications._send_via_sendgrid",
         lambda **_kwargs: (True, "sg-007c-message", None),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.sendgrid_transport._send_via_sendgrid",
+        communications._send_via_sendgrid,
     )
 
     with get_session_factory()() as session:
@@ -520,6 +525,10 @@ def test_ip_hearing_and_deadline_recovery_preserve_authority_and_deny_unrelated(
         "caseops_api.services.communications._send_via_sendgrid",
         lambda **_kwargs: (False, None, "sendgrid 400 rejected"),
     )
+    monkeypatch.setattr(
+        "caseops_api.services.sendgrid_transport._send_via_sendgrid",
+        communications._send_via_sendgrid,
+    )
     with get_session_factory()() as session:
         company = session.get(Company, env["company_id"])
         actor = session.get(CompanyMembership, env["owner_id"])
@@ -696,6 +705,9 @@ def test_sendgrid_accepted_then_timeout_is_not_automatically_resent(
         "caseops_api.services.communications._send_via_sendgrid",
         accepted_then_timeout,
     )
+    monkeypatch.setattr(
+        "caseops_api.services.sendgrid_transport._send_via_sendgrid", accepted_then_timeout,
+    )
     with get_session_factory()() as session:
         context = _context(session)
         intent = enqueue_notification_delivery_intent(
@@ -779,6 +791,9 @@ def test_unknown_provider_outcome_cannot_use_generic_recovery_or_resend(
     monkeypatch.setattr(
         "caseops_api.services.communications._send_via_sendgrid",
         unexpected_send,
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.sendgrid_transport._send_via_sendgrid", unexpected_send,
     )
     with get_session_factory()() as session:
         context = _context(session)
@@ -873,6 +888,9 @@ def test_raw_sendgrid_claim_cannot_be_closed_recovered_or_resent(
     monkeypatch.setattr(
         "caseops_api.services.communications._send_via_sendgrid",
         unexpected_send,
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.sendgrid_transport._send_via_sendgrid", unexpected_send,
     )
     factory = get_session_factory()
     with factory() as session:
@@ -988,6 +1006,7 @@ def test_sendgrid_deferred_is_provider_audit_only_and_never_resubmitted(
         "caseops_api.services.communications._send_via_sendgrid",
         accepted,
     )
+    monkeypatch.setattr("caseops_api.services.sendgrid_transport._send_via_sendgrid", accepted)
     factory = get_session_factory()
     with factory() as session:
         context = _context(session)
@@ -1103,6 +1122,9 @@ def test_linked_hearing_reminder_sends_once_through_canonical_intent_in_either_o
     monkeypatch.setattr(
         "caseops_api.services.communications._send_via_sendgrid",
         canonical_send,
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.sendgrid_transport._send_via_sendgrid", canonical_send,
     )
     monkeypatch.setattr(
         "caseops_api.services.hearing_reminders._send_via_sendgrid",

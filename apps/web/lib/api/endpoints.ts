@@ -8948,6 +8948,10 @@ export type IpPortfolioFilters = {
 };
 
 export type IpPortfolioRow = {
+  source_renewal_due_on?: string | null;
+  source_renewal_alert_at?: string | null;
+  source_renewal_alert_status?: string | null;
+  source_renewal_alert_body?: string | null;
   application_id: string;
   docket_id: string;
   matter_id: string | null;
@@ -9108,6 +9112,8 @@ export type IpImportJob = {
   failed_rows: number;
   preview_token: string | null;
   preview_expires_at: string | null;
+  recovery_available?: boolean;
+  commit_batch_size?: number;
   committed_at: string | null;
   creator_label_snapshot: string;
   version: number;
@@ -11339,14 +11345,84 @@ export async function commitIpPortfolioImport(input: {
   jobId: string;
   previewToken: string;
   idempotencyKey: string;
+  onProgress?: (result: IpImportPreview) => void;
 }): Promise<IpImportPreview & { replayed: boolean }> {
-  return apiRequest(`/api/ip/imports/${encodeURIComponent(input.jobId)}/commit`, {
+  const result = await apiRequest<IpImportPreview & { replayed: boolean }>(`/api/ip/imports/${encodeURIComponent(input.jobId)}/commit`, {
     method: "POST",
     body: {
       preview_token: input.previewToken,
       idempotency_key: input.idempotencyKey,
     },
   });
+  return finishSuccessfulIpImportBatches(input.jobId, result, input.onProgress);
+}
+
+async function finishSuccessfulIpImportBatches(
+  jobId: string,
+  result: IpImportPreview & { replayed: boolean },
+  onProgress?: (result: IpImportPreview) => void,
+): Promise<IpImportPreview & { replayed: boolean }> {
+  const sourceHash = result.job.source_sha256;
+  const batchSize = result.job.commit_batch_size;
+  if (result.job.status === "staged"
+    && (!Number.isInteger(batchSize) || !batchSize || batchSize < 1 || batchSize > 50)) {
+    throw new Error("Import progress has no valid server batch limit. Reload its history.");
+  }
+  let remainingRequests = result.job.status === "staged"
+    ? Math.ceil(result.job.total_rows / batchSize!) : 0;
+  if (!Number.isFinite(remainingRequests) || remainingRequests > 20) {
+    throw new Error("Import progress has no valid server batch limit. Reload its history.");
+  }
+  while (true) {
+    if (result.job.id !== jobId || result.job.source_sha256 !== sourceHash) {
+      throw new Error("Import identity changed. Reload its history before continuing.");
+    }
+    if (!["staged", "committed", "committed_with_errors"].includes(result.job.status)
+      || result.rows.length !== result.job.total_rows) {
+      throw new Error("Import progress has an invalid state or inventory. Reload its history.");
+    }
+    const pending = result.rows.filter(row => row.commit_status === "pending").length;
+    if (result.job.status !== "staged") {
+      if (pending) {
+        throw new Error("Import still has pending rows. Reload its durable history.");
+      }
+      onProgress?.(result);
+      return result;
+    }
+    if (!pending || remainingRequests-- <= 0) {
+      throw new Error("Import progress is incomplete. Reload its durable history.");
+    }
+    onProgress?.(result);
+    const version = result.job.version;
+    // Continue only an acknowledged successful batch. A failed call throws;
+    // there is no transport retry or locally reconstructed claim key.
+    const next = await apiRequest<IpImportPreview & { replayed: boolean }>(
+      `/api/ip/imports/${encodeURIComponent(jobId)}/resume`, {
+        method: "POST", body: { expected_job_version: version, preview_token: result.job.preview_token },
+      },
+    );
+    if (next.job.version <= version
+      || next.rows.filter(row => row.commit_status === "pending").length >= pending) {
+      throw new Error("Import made no acknowledged progress. Reload its history.");
+    }
+    result = next;
+  }
+}
+
+export async function resumeIpPortfolioImport(input: {
+  jobId: string;
+  expectedJobVersion: number;
+  previewToken: string | null;
+  onProgress?: (result: IpImportPreview) => void;
+}): Promise<IpImportPreview & { replayed: boolean }> {
+  const result = await apiRequest<IpImportPreview & { replayed: boolean }>(`/api/ip/imports/${encodeURIComponent(input.jobId)}/resume`, {
+    method: "POST",
+    body: {
+      expected_job_version: input.expectedJobVersion,
+      preview_token: input.previewToken,
+    },
+  });
+  return finishSuccessfulIpImportBatches(input.jobId, result, input.onProgress);
 }
 
 export async function downloadIpPortfolioImportErrors(id: string): Promise<Blob> {
@@ -11394,6 +11470,16 @@ export async function fetchIpDockets(): Promise<{
 
 export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}`);
+}
+
+export async function updateIpPortfolioRenewalDate(input: {
+  docketId: string; expectedCurrentVersion: number; renewalDueDate: string | null; reason: string;
+}): Promise<IpDocket> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(input.docketId)}/portfolio-renewal-date`, {
+    method: "PATCH",
+    body: { expected_current_version: input.expectedCurrentVersion,
+      renewal_due_date: input.renewalDueDate, reason: input.reason },
+  });
 }
 
 export type IpForeignAssociateStatus =

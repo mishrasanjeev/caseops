@@ -35,6 +35,16 @@ describe("apiRequest", () => {
     document.cookie = "caseops_csrf=; Max-Age=0; Path=/";
   });
 
+  it("serializes JSON-looking strings as literal values without interpreting them", async () => {
+    const literal = '{"source":"literal text"}';
+    vi.mocked(fetch).mockResolvedValue(response({ ok: true }, 200));
+    await expect(apiRequest("/api/fixture-literal", { method: "POST", body: literal }))
+      .resolves.toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const init = vi.mocked(fetch).mock.calls[0][1]!;
+    expect(JSON.parse(init.body as string)).toBe(literal);
+  });
+
   it("preserves RFC 7807 detail and type from application/problem+json", async () => {
     const problem = {
       type: "validation_error",

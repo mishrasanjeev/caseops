@@ -285,12 +285,31 @@ def visible_ip_dockets_filter(
     del session
     membership_id = context.membership.id
     now = datetime.now(UTC)
+    # A flattenable team join can rescan the global catalog for every docket.
+    # Probe one Team per membership row, then check its exact identity and eligibility.
+    team_candidate = (
+        select(Team.id, Team.company_id, Team.is_active)
+        .where(Team.id >= TeamMembership.team_id)
+        .order_by(Team.id)
+        .correlate(TeamMembership)
+        .limit(1)
+        .subquery()
+    )
+    active_team_id = (
+        select(team_candidate.c.id)
+        .where(
+            team_candidate.c.id == TeamMembership.team_id,
+            team_candidate.c.company_id == context.company.id,
+            team_candidate.c.is_active.is_(True),
+        )
+        .correlate(TeamMembership)
+        .scalar_subquery()
+    )
     active_teams = (
         select(TeamMembership.team_id)
-        .join(Team, Team.id == TeamMembership.team_id)
         .where(
             TeamMembership.membership_id == membership_id,
-            Team.is_active.is_(True),
+            active_team_id.is_not(None),
         )
         .subquery()
     )

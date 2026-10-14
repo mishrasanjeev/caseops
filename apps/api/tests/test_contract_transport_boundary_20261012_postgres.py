@@ -273,6 +273,8 @@ def test_native_unreviewed_text_cannot_release_caller_transaction(contract_datab
         try:
             session.execute(text(sql), {"timeout": "60000"})
         except DBAPIError:
+            # Invalid text may fail in PostgreSQL; it must still prevent release
+            # without rolling back or replacing the caller's transaction.
             pass
         transaction = session.get_transaction()
         with pytest.raises(RuntimeError, match="^The caller transaction contains writes"):

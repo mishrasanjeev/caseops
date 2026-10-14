@@ -941,6 +941,11 @@ def list_ip_portfolio(
     )
 
     rows: list[IpPortfolioRow] = []
+    from caseops_api.services.ip_renewals import portfolio_source_renewal_details
+
+    source_renewals = portfolio_source_renewal_details(
+        session, context=context, docket_ids=docket_ids,
+    )
     for application, asset, docket in visible:
         open_count, unconfirmed, overdue = deadlines.get(docket.id, (0, 0, 0))
         primary_identifier = primary_identifiers.get(application.id)
@@ -967,6 +972,7 @@ def list_ip_portfolio(
                 representation_kinds=detail["representation_kinds"],
                 proprietors=detail["proprietors"],
                 agents=detail["agents"],
+                **source_renewals.get(docket.id, {}),
                 client_name=matter_detail.get("client_name"),
                 responsible_lawyer=matter_detail.get("responsible_lawyer"),
                 responsible_membership_id=matter_detail.get("responsible_membership_id"),

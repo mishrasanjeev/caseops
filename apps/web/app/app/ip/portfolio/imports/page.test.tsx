@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
+import type { IpImportPreview } from "@/lib/api/endpoints";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -11,8 +12,11 @@ const {
   historyMock,
   reconcileMock,
   revalidateMock,
+  resumeMock,
   uploadMock,
   useCapabilityMock,
+  fetchDocketMock,
+  updateDateMock,
 } = vi.hoisted(() => ({
   commitMock: vi.fn(),
   downloadErrorsMock: vi.fn(),
@@ -20,8 +24,11 @@ const {
   historyMock: vi.fn(),
   reconcileMock: vi.fn(),
   revalidateMock: vi.fn(),
+  resumeMock: vi.fn(),
   uploadMock: vi.fn(),
   useCapabilityMock: vi.fn(),
+  fetchDocketMock: vi.fn(),
+  updateDateMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
@@ -31,7 +38,10 @@ vi.mock("@/lib/api/endpoints", () => ({
   listIpPortfolioImports: historyMock,
   reconcileIpPortfolioImport: reconcileMock,
   revalidateIpPortfolioImport: revalidateMock,
+  resumeIpPortfolioImport: resumeMock,
   uploadIpPortfolioImport: uploadMock,
+  fetchIpDocket: fetchDocketMock,
+  updateIpPortfolioRenewalDate: updateDateMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -49,7 +59,7 @@ function withClient(children: ReactNode) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-function preview(overrides: Record<string, unknown> = {}) {
+function preview(overrides: Record<string, unknown> = {}): IpImportPreview {
   return {
     job: {
       id: "import-1",
@@ -103,8 +113,11 @@ describe("IpPortfolioImportsPage", () => {
     commitMock.mockReset();
     reconcileMock.mockReset();
     revalidateMock.mockReset();
+    resumeMock.mockReset();
     getImportMock.mockReset();
     downloadErrorsMock.mockReset();
+    fetchDocketMock.mockReset();
+    updateDateMock.mockReset();
   });
 
   it("uploads and commits a validated CSV with a preview token and idempotency key", async () => {
@@ -113,7 +126,7 @@ describe("IpPortfolioImportsPage", () => {
     commitMock.mockResolvedValue({
       ...result,
       job: { ...result.job, status: "committed", committed_rows: 1, committed_at: "2026-08-21T10:05:00Z" },
-      rows: [{ ...result.rows[0], commit_status: "created", created_docket_id: "docket-1" }],
+      rows: [{ ...result.rows[0], commit_status: "committed", created_docket_id: "docket-1" }],
       replayed: false,
     });
     render(withClient(<IpPortfolioImportsPage />));
@@ -131,7 +144,7 @@ describe("IpPortfolioImportsPage", () => {
       previewToken: "preview-token-1",
       idempotencyKey: expect.any(String),
     })));
-    expect(await screen.findByText("1 rows committed; 0 failed.")).toBeInTheDocument();
+    expect(await screen.findByText("1 created; 0 linked; 0 skipped (0 duplicates); 0 with warnings; 0 failed.")).toBeInTheDocument();
   });
 
   it("requires an explicit accessible-docket decision and uses the rotated token", async () => {
@@ -155,8 +168,8 @@ describe("IpPortfolioImportsPage", () => {
     const file = new File(["Title,Mark Text,Nice Class,Applicant\nASTER,ASTER,9,Aster"], "duplicates.csv", { type: "text/csv" });
     await user.upload(screen.getByLabelText("CSV or XLSX file"), file);
     await user.click(screen.getByRole("button", { name: "Validate file" }));
-    expect(await screen.findByText("1 duplicate rows still need a decision.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Commit to portfolio" })).toBeDisabled();
+    expect(await screen.findByText("Eligible rows will be committed; duplicate and unusable rows will be skipped.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Commit to portfolio" })).toBeEnabled();
 
     await user.click(screen.getByLabelText("Decision for row 1"));
     await user.click(screen.getByRole("option", { name: "Link existing docket" }));
@@ -171,6 +184,68 @@ describe("IpPortfolioImportsPage", () => {
     }));
     await user.click(screen.getByRole("button", { name: "Commit to portfolio" }));
     await waitFor(() => expect(commitMock).toHaveBeenCalledWith(expect.objectContaining({ previewToken: "preview-token-2" })));
+  });
+
+  it.each(["2029-04-30", null])("corrects the current canonical source date to %s without rewriting history", async (newDue) => {
+    const source = preview();
+    const committed = { ...source, job: { ...source.job, status: "committed", committed_rows: 1 },
+      rows: [{ ...source.rows[0], created_docket_id: "docket-1", commit_status: "committed",
+        normalized: { ...source.rows[0].normalized, renewal_due_date: "2029-03-31" } }] };
+    historyMock.mockResolvedValue({ jobs: [committed.job] });
+    getImportMock.mockResolvedValue(committed);
+    fetchDocketMock.mockResolvedValue({ id: "docket-1", title: "ASTER", current_version: 7,
+      current_particulars: { representation_json: { portfolio_import: { renewal_due_date: "2029-03-31" } } } });
+    updateDateMock.mockResolvedValue({ current_version: 8 });
+    render(withClient(<IpPortfolioImportsPage />));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /trademarks.csv/i }));
+    await user.click(await screen.findByRole("button", { name: "Edit source renewal date" }));
+    expect(await screen.findByRole("dialog", { name: "Correct source renewal date" })).toBeVisible();
+    expect(screen.getByLabelText("Renewal due date")).toHaveValue("2029-03-31");
+    if (newDue) fireEvent.change(screen.getByLabelText("Renewal due date"), { target: { value: newDue } });
+    else await user.click(screen.getByRole("button", { name: "Clear date" }));
+    expect(screen.getByRole("button", { name: "Save source date" })).toBeDisabled();
+    await user.type(screen.getByLabelText("Correction reason"), "Source date corrected");
+    await user.click(screen.getByRole("button", { name: "Save source date" }));
+    await waitFor(() => expect(updateDateMock).toHaveBeenCalledWith({ docketId: "docket-1",
+      expectedCurrentVersion: 7, renewalDueDate: newDue, reason: "Source date corrected" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByText("2029-03-31", { exact: true })).toBeInTheDocument();
+  });
+
+  it("recovers a retained creator claim without browser storage or exposing its key", async () => {
+    sessionStorage.clear();
+    const retained = preview();
+    retained.job.status = "staged";
+    retained.job.preview_token = null;
+    retained.job.recovery_available = true;
+    historyMock.mockResolvedValue({ jobs: [retained.job] });
+    getImportMock.mockResolvedValue(retained);
+    resumeMock.mockResolvedValue({ ...retained, job: { ...retained.job, status: "committed", committed_rows: 1 },
+      rows: [{ ...retained.rows[0], commit_status: "committed", created_docket_id: "docket-1" }], replayed: false });
+    render(withClient(<IpPortfolioImportsPage />));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /trademarks.csv/i }));
+    await user.click(screen.getByRole("button", { name: "Commit to portfolio" }));
+    await waitFor(() => expect(resumeMock).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: retained.job.id, expectedJobVersion: retained.job.version, previewToken: null,
+      onProgress: expect.any(Function),
+    })));
+    expect(commitMock).not.toHaveBeenCalled();
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("does not enable a fresh commit for an all-unusable source", async () => {
+    const unusable = preview();
+    unusable.job.valid_rows = 0;
+    unusable.job.invalid_rows = 1;
+    uploadMock.mockResolvedValue(unusable);
+    render(withClient(<IpPortfolioImportsPage />));
+    const user = userEvent.setup();
+    await user.upload(screen.getByLabelText("CSV or XLSX file"), new File(["Comment\nOnly notes"], "source.csv"));
+    await user.click(screen.getByRole("button", { name: "Validate file" }));
+    await screen.findByRole("heading", { name: "Review trademarks.csv" });
+    expect(screen.getByRole("button", { name: "Commit to portfolio" })).toBeDisabled();
   });
 
   it("revalidates an expired history preview and fails closed without read access", async () => {

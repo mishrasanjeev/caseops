@@ -9,7 +9,7 @@ IPLF-030B and are deliberately absent here.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
@@ -58,6 +58,10 @@ class IpPortfolioRow(BaseModel):
     representation_kinds: list[str] = Field(default_factory=list)
     proprietors: list[str] = Field(default_factory=list)
     agents: list[str] = Field(default_factory=list)
+    source_renewal_due_on: date | None = None
+    source_renewal_alert_at: datetime | None = None
+    source_renewal_alert_status: str | None = None
+    source_renewal_alert_body: str | None = None
     client_name: str | None = None
     responsible_lawyer: str | None = None
     responsible_membership_id: str | None = None

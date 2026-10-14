@@ -2,7 +2,25 @@
 
 ## Current Verdict
 
-**NO-GO; not merged or deployed.** This checkpoint covers J09/M07
+**Merged; production acceptance pending.** Canonical main is
+`30e7229368de013123e9a48db2b19230829ddac2`, tree
+`88cf5e4c9a59ea8ad721e69cf2efe7784e5081e0`, exactly the complete Docker-accepted
+51ec tree. PRs #531/#532/#533/#534 are merged. R9 naturally completed at
+12:27:49 UTC: 2,898 native passes/8,694 phases, 540 browser passes and ten
+explicit skips, complete retained-byte/source/cleanup reconciliation.
+Candidate CI 38377277470, Security 38377277551 and CodeQL 38377277487 passed.
+Main Security 38399405578, CodeQL 38399405509 and CI 38399405530 passed.
+Scheduled production verification 38407422538 passed against the old serving
+release; its workflow head is not deployment evidence. Sealed evidence is
+`docker-51ecde9c-independent-reconciliation-01`
+and `ci-51ecde9c-reconciliation-01` under retained release outputs.
+Production remains 3dbf364d. No deployment, live replay or scheduler resume
+is claimed. New IP/Calendar source is separate and cannot inherit this gate.
+
+The historical checkpoints below retain original failures and prior verdicts;
+their current-state claims are superseded by the checkpoint above.
+
+The original NO-GO checkpoint covers J09/M07
 (US-026..028, FT-034..036), J14/M14, UJ36/UJ61 and QG-SEC-004.
 The owner requires green CI, complete exact-candidate workstation Docker
 acceptance, canonical-main merge, guarded production deployment and live replay.

@@ -1123,6 +1123,7 @@ def test_all_production_invocations_have_native_capture_and_success_artifacts():
                 invocations.append(line.split('caseops-prod-playwright" ', 1)[1].split(" ", 1)[0])
     assert invocations == [
         "tester",
+        "test-legal-write-oct13",
         "legacy",
         "test-legal-readonly",
         "ip-a0",

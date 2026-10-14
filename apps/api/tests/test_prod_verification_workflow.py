@@ -44,6 +44,39 @@ def test_every_playwright_config_blocks_paid_provider_requests() -> None:
         config = config_path.read_text(encoding="utf-8")
         _assert_playwright_provider_marker(config_path.name, config, helper)
 
+def test_oct13_production_mutations_own_test_legal_credentials_and_release_code() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    selected = [
+        step
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("name") == "Run release-owned test-legal portfolio and Calendar regressions"
+    ]
+    assert len(selected) == 1
+    step = selected[0]
+    assert step["if"] == "matrix.suite == 'tester'"
+    assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
+    assert "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD" in step["env"]["CASEOPS_RAM_PROD_PASSWORD"]
+    assert (
+        "needs.resolve-release.outputs.release_sha" in step["env"]["CASEOPS_EXPECTED_RELEASE_SHA"]
+    )
+    assert (
+        "git merge-base --is-ancestor HEAD 30e7229368de013123e9a48db2b19230829ddac2" in step["run"]
+    )
+    assert "test -f tests/e2e/ram-2026-10-13-ip-portfolio.spec.ts" in step["run"]
+    assert "--project=test-legal-write-prod-chromium --workers=1 --retries=0" in step["run"]
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
+    project = config.split('name: "test-legal-write-prod-chromium"', 1)[1].split("name:", 1)[0]
+    assert "testMatch: OCT13_PORTFOLIO_CALENDAR_SPECS" in project
+    assert "storageState: { cookies: [], origins: [] }" in project
+    evidence_step = [step for step in workflow["jobs"]["prod-playwright-shards"]["steps"]
+                     if step.get("name") == "Reconcile required native Playwright evidence"]
+    assert len(evidence_step) == 1
+    assert "required+=(test-legal-write-oct13)" in evidence_step[0]["run"]
+
+
 
 @pytest.mark.parametrize(
     ("name", "target", "old", "replacement"),

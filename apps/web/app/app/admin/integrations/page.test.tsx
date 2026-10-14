@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { defaultScheduler, notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -44,23 +44,67 @@ describe("TenantIntegrationsPage", () => {
   });
 
   it("sequences initial connector reads instead of cold-starting a request burst", async () => {
-    renderWithQuery(<TenantIntegrationsPage />);
+    expect(vi.isFakeTimers()).toBe(false);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const notifications: Array<() => void> = [];
+    notifyManager.setScheduler((callback) => {
+      expect(notifications.length).toBeLessThan(8);
+      notifications.push(callback);
+    });
+    let view: ReturnType<typeof render> | undefined;
+    try {
+      view = render(<QueryClientProvider client={client}><TenantIntegrationsPage /></QueryClientProvider>);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toEqual(
-      expect.stringContaining("/api/admin/integrations"),
-    );
-    await screen.findByTestId("google-workspace-configuration");
-    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(4));
-    const firstFourPaths = fetchMock.mock.calls.slice(0, 4).map(([url]) =>
-      new URL(String(url)).pathname,
-    );
-    expect(firstFourPaths).toEqual([
-      "/api/admin/integrations",
-      "/api/admin/integrations/health",
-      "/api/admin/google-workspace-configuration",
-      "/api/drive/google/status",
-    ]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0]?.[0]).toEqual(
+        expect.stringContaining("/api/admin/integrations"),
+      );
+      const phases = [
+        ["admin", "integrations"],
+        ["admin", "integrations", "health"],
+        ["admin", "google-workspace-configuration"],
+        ["drive", "google", "status"],
+      ];
+      for (const [index, queryKey] of phases.entries()) {
+        const query = client.getQueryCache().find({ queryKey, exact: true });
+        expect(query?.promise).toBeDefined();
+        await act(async () => { await query!.promise; });
+        expect(client.getQueryState(queryKey)?.status).toBe("success");
+        expect(fetchMock).toHaveBeenCalledTimes(index + 1);
+        expect(notifications.length).toBeGreaterThan(0);
+        if (index < 3) {
+          expect(screen.queryByTestId("google-workspace-configuration")).not.toBeInTheDocument();
+        }
+        console.info("ADMIN_QUERY_DELIVERY_CONTROL", {
+          phase: index, cacheStatus: client.getQueryState(queryKey)?.status,
+          queuedNotifications: notifications.length, requestCount: fetchMock.mock.calls.length,
+        });
+        // A settled cache entry does not yet deliver the next query's enablement.
+        await act(async () => { notifications.splice(0).forEach((callback) => callback()); });
+      }
+      expect(notifications).toHaveLength(0);
+      await screen.findByTestId("google-workspace-configuration");
+      await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(4));
+      const firstFourPaths = fetchMock.mock.calls.slice(0, 4).map(([url]) =>
+        new URL(String(url)).pathname,
+      );
+      expect(firstFourPaths).toEqual([
+        "/api/admin/integrations",
+        "/api/admin/integrations/health",
+        "/api/admin/google-workspace-configuration",
+        "/api/drive/google/status",
+      ]);
+    } finally {
+      try { view?.unmount(); } finally {
+        try { client.clear(); } finally {
+          notifications.length = 0;
+          notifyManager.setScheduler(defaultScheduler);
+        }
+      }
+    }
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
   });
 
   it("renders tenant-safe connector readiness without internal labels", async () => {

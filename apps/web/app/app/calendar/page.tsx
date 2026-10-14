@@ -28,6 +28,7 @@ import { useMemo, useState } from "react";
 import { OAuthCallbackNotice } from "@/components/app/OAuthCallbackNotice";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/Dialog";
 import {
   fetchCalendarEvents,
   fetchCalendarSyncStatus,
@@ -76,6 +77,12 @@ function displayTypeForEvent(event: CalendarEventRecord): CalendarEventDisplayTy
   if (event.kind === "hearing") return "hearing";
   if (event.kind === "task") return "task_date";
   return "deadline";
+}
+
+function hearingTimeLabel(event: CalendarEventRecord): string | null {
+  if (event.hearing_time) return `${event.hearing_time.slice(0, 5)} ${event.timezone ?? ""}`.trim();
+  if (event.time_status === "session" && event.session_label) return event.session_label;
+  return null;
 }
 
 function startOfMonth(d: Date): Date {
@@ -1115,26 +1122,42 @@ function MonthView({
           return (
             <div
               key={`${idx}-${key}`}
+              data-testid={`calendar-month-day-${key}`}
               className={cn(
-                "min-h-[7rem] border-b border-r border-[var(--color-line-2)] p-2",
+                "min-h-[7rem] min-w-0 border-b border-r border-[var(--color-line-2)] p-1 sm:p-2",
                 !inMonth && "bg-[var(--color-line-1)]/40",
                 isToday && "bg-[var(--color-accent-bg)]",
                 idx % 7 === 6 && "border-r-0",
                 idx >= 35 && "border-b-0",
               )}
             >
-              <div
-                className={cn(
-                  "mb-1 text-[11px] font-medium",
-                  inMonth
-                    ? isToday
-                      ? "text-[var(--color-accent)]"
-                      : "text-[var(--color-ink)]"
-                    : "text-[var(--color-mute)]",
-                )}
-              >
-                {d.getDate()}
-              </div>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={isPending || events.length === 0}
+                    aria-label={`View all events on ${key}`}
+                    title={`View all events on ${key}`}
+                    className={cn(
+                      "mb-1 inline-flex h-7 w-7 items-center justify-center text-[11px] font-medium enabled:hover:bg-[var(--color-line-1)] focus-visible:outline focus-visible:outline-2",
+                      inMonth
+                        ? isToday ? "text-[var(--color-accent)]" : "text-[var(--color-ink)]"
+                        : "text-[var(--color-mute)]",
+                    )}
+                  >
+                    {d.getDate()}
+                  </button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogTitle>Events on {key}</DialogTitle>
+                  <DialogDescription>{events.length} events</DialogDescription>
+                  <ul className="flex min-w-0 flex-col gap-2">
+                    {events.map((event) => (
+                      <li key={event.id}><CalendarEventChip event={event} expanded /></li>
+                    ))}
+                  </ul>
+                </DialogContent>
+              </Dialog>
               <div className="flex flex-col gap-1">
                 {isPending ? (
                   <Skeleton className="h-4 w-full" />
@@ -1143,10 +1166,27 @@ function MonthView({
                     <CalendarEventChip key={event.id} event={event} />
                   ))
                 )}
-                {overflow > 0 ? (
-                  <div className="text-[10px] text-[var(--color-mute)]">
-                    +{overflow} more
-                  </div>
+                {!isPending && overflow > 0 ? (
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Show ${overflow} more events on ${key}`}
+                        className="min-h-8 w-full break-words text-left text-[10px] text-[var(--color-ink-2)] underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2"
+                      >
+                        +{overflow} more
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogTitle>More events on {key}</DialogTitle>
+                      <DialogDescription>{overflow} additional events</DialogDescription>
+                      <ul className="flex min-w-0 flex-col gap-2">
+                        {events.slice(showCount.length).map((event) => (
+                          <li key={event.id}><CalendarEventChip event={event} expanded /></li>
+                        ))}
+                      </ul>
+                    </DialogContent>
+                  </Dialog>
                 ) : null}
               </div>
             </div>
@@ -1278,8 +1318,11 @@ function DayView({
                   >
                     <Icon className="h-3.5 w-3.5" aria-hidden />
                   </span>
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1 break-words">
                     <div className="font-medium text-[var(--color-ink)]">
+                      {event.kind === "hearing" && event.court_label ? (
+                        <div>{event.court_label}</div>
+                      ) : null}
                       {event.title}
                     </div>
                     <div className="text-xs text-[var(--color-mute)]">
@@ -1289,6 +1332,8 @@ function DayView({
                       {" · "}
                       {event.matter_title}
                       {event.detail ? ` · ${event.detail}` : ""}
+                      {event.court_identity ? <div>{event.court_identity}</div> : null}
+                      {hearingTimeLabel(event) ? <div>{hearingTimeLabel(event)}</div> : null}
                     </div>
                   </div>
                   <ExternalLink
@@ -1319,20 +1364,29 @@ function deepLinkForEvent(event: CalendarEventRecord): string {
   }
 }
 
-function CalendarEventChip({ event }: { event: CalendarEventRecord }) {
+function CalendarEventChip({ event, expanded = false }: { event: CalendarEventRecord; expanded?: boolean }) {
   const meta = DISPLAY_META[displayTypeForEvent(event)];
+  const hearingLabel = event.kind === "hearing" ? event.court_label : null;
   return (
     <Link
       href={deepLinkForEvent(event)}
-      className="group flex items-start gap-1.5 rounded-sm px-1.5 py-1 text-[11px] hover:bg-[var(--color-line-1)]"
-      title={`${meta.label} · ${event.matter_code} · ${event.matter_title} — ${event.title}`}
+      className="group flex min-w-0 items-start gap-1 rounded-sm px-1 py-1 text-[11px] hover:bg-[var(--color-line-1)]"
+      title={[meta.label, event.court_identity, event.matter_code, event.matter_title, event.title, hearingTimeLabel(event)].filter(Boolean).join(" · ")}
       data-testid={`calendar-event-${event.id}`}
     >
       <span
         className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", meta.dot)}
       />
-      <span className="flex-1 truncate text-[var(--color-ink)] group-hover:underline">
-        <span className="font-semibold">{meta.shortLabel}:</span> {event.title}
+      <span className={cn("min-w-0 flex-1 text-[var(--color-ink)] group-hover:underline", expanded ? "break-words" : "truncate")}>
+        {hearingLabel ? <span className="font-semibold">{hearingLabel}</span> : <><span className="font-semibold">{meta.shortLabel}:</span> {event.title}</>}
+        {expanded ? (
+          <>
+            <span className="block">{event.matter_code} · {event.matter_title}</span>
+            {event.court_identity ? <span className="block">{event.court_identity}</span> : null}
+            <span className="block">{event.occurs_on}{hearingTimeLabel(event) ? ` · ${hearingTimeLabel(event)}` : ""}</span>
+            <span className="block">{event.title}{event.detail ? ` · ${event.detail}` : ""}</span>
+          </>
+        ) : null}
       </span>
       <ExternalLink
         className="h-3 w-3 shrink-0 text-[var(--color-mute)] opacity-0 group-hover:opacity-100"

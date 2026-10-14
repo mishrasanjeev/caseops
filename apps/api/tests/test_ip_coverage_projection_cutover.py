@@ -1691,6 +1691,7 @@ def test_external_delivery_uses_fresh_locked_user_destination(
     from caseops_api.services import communications
 
     monkeypatch.setattr(communications, "_send_via_sendgrid", fake_sendgrid)
+    monkeypatch.setattr("caseops_api.services.sendgrid_transport._send_via_sendgrid", fake_sendgrid)
     with factory() as session:
         worker_session_ref.append(session)
         result = process_notification_delivery_intent(
@@ -1779,6 +1780,7 @@ def test_expired_notification_claim_is_dead_lettered_without_duplicate_send(
     from caseops_api.services import communications
 
     monkeypatch.setattr(communications, "_send_via_sendgrid", fail_if_sent)
+    monkeypatch.setattr("caseops_api.services.sendgrid_transport._send_via_sendgrid", fail_if_sent)
     with factory() as session:
         result = process_notification_delivery_intent(
             session,
@@ -3284,6 +3286,9 @@ def test_postgres_legacy_and_intent_workers_emit_one_hearing_email(
     monkeypatch.setattr(
         "caseops_api.services.communications._send_via_sendgrid",
         canonical_send,
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.sendgrid_transport._send_via_sendgrid", canonical_send,
     )
     monkeypatch.setattr(
         "caseops_api.services.hearing_reminders._send_via_sendgrid",

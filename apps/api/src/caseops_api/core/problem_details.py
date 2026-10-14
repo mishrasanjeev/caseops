@@ -31,6 +31,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
+from starlette.middleware.cors import CORSMiddleware
+from starlette.types import Message
 
 from caseops_api.core.observability import ensure_request_id, get_request_id
 
@@ -309,7 +311,9 @@ def problem_json(
     )
 
 
-def register_problem_handlers(application: FastAPI) -> None:
+def register_problem_handlers(
+    application: FastAPI, *, cors_policy: CORSMiddleware | None = None
+) -> None:
     """Attach RFC 7807 handlers to the FastAPI app. Idempotent."""
 
     @application.exception_handler(HTTPException)
@@ -385,11 +389,24 @@ def register_problem_handlers(application: FastAPI) -> None:
         # credentials, or tenant-private content. ServerErrorMiddleware still
         # re-raises after sending this response so the server records the
         # original exception and traceback.
-        return problem_json(
+        response = problem_json(
             500,
             detail="An unexpected error occurred.",
             request=request,
         )
+        if cors_policy is not None and request.headers.get("origin"):
+            # ServerErrorMiddleware owns unexpected 500s outside user middleware.
+            # Apply native CORS header admission without changing ASGI app/route
+            # contracts, reflecting exceptions or swallowing the server rethrow.
+            async def retain_headers(message: Message) -> None:
+                response.raw_headers = message["headers"]
+
+            await cors_policy.send(
+                {"type": "http.response.start", "status": 500, "headers": response.raw_headers},
+                retain_headers,
+                request_headers=request.headers,
+            )
+        return response
 
 __all__ = [
     "PROBLEM_CONTENT_TYPE",

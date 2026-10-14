@@ -2567,10 +2567,10 @@ exec "${FAKE_REAL_PYTHON}" "$@"
         _find_working_bash(),
         "-c",
         'export PATH="$1:$PATH"; '
-        'for cli in git gcloud gh curl sleep python; do '
-        'selected=$(command -v "$cli"); '
-        '[[ "$selected" == "$1/$cli" && -x "$selected" ]] || exit 99; '
-        'done; shift; bash scripts/deploy-prod.sh "$@"',
+        + 'for cli in git gcloud gh curl sleep python; do '
+        + 'selected=$(command -v "$cli"); '
+        + '[[ "$selected" == "$1/$cli" && -x "$selected" ]] || exit 99; '
+        + 'done; shift; bash scripts/deploy-prod.sh "$@"',
         "deploy-test",
         _bash_path(fake_bin),
         *arguments,

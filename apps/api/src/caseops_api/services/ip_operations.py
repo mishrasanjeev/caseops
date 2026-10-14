@@ -4,6 +4,7 @@ import hashlib
 import json
 from collections import defaultdict
 from collections.abc import Iterable
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
@@ -125,6 +126,7 @@ from caseops_api.schemas.ip_operations import (
     TrademarkParticularPayload,
     TrademarkParticularVersionRecord,
 )
+from caseops_api.schemas.ip_renewals import IpPortfolioRenewalDateUpdateRequest
 from caseops_api.services.assignment_memberships import (
     lock_company_memberships_for_assignment,
     require_locked_membership_capability,
@@ -145,6 +147,7 @@ from caseops_api.services.ip_deadlines import (
     assert_distinct_deadline_coverage,
     assert_distinct_deadline_escalation,
 )
+from caseops_api.services.ip_docket_access import _docket_or_404, _lock_ip_writer_context
 from caseops_api.services.ip_domain_policy import TRADEMARK_RECORD_TYPES, assert_trademark_docket
 from caseops_api.services.matter_access import (
     _operational_matter_role_snapshot,
@@ -228,106 +231,6 @@ def _matter_for_docket(
     # The caller takes and revalidates the authoritative Matter lock after the
     # sorted participant fence.
     return assert_operational_matter(session, matter=matter, lock_for_write=False)
-
-
-def _docket_or_404(
-    session: Session,
-    *,
-    context: SessionContext,
-    docket_id: str,
-    for_update: bool = False,
-    required_capability: str = "ip:write",
-) -> IpDocketRecord:
-    if for_update:
-        # Every docket mutation eventually persists an actor-backed audit or
-        # evidence row.  Fence that FK participant before Matter/docket locks;
-        # otherwise offboarding can hold Membership while waiting on the
-        # docket and this writer can hold the docket while PostgreSQL waits for
-        # a Membership KEY SHARE lock during flush.
-        context = _lock_ip_writer_context(
-            session,
-            context=context,
-            required_capability=required_capability,
-        )
-    statement = select(IpDocketRecord).where(
-        IpDocketRecord.id == docket_id,
-        IpDocketRecord.company_id == context.company.id,
-    )
-    discovered_parent = (
-        session.execute(
-            select(IpDocketRecord.id, IpDocketRecord.matter_id).where(
-                IpDocketRecord.id == docket_id,
-                IpDocketRecord.company_id == context.company.id,
-            )
-        ).one_or_none()
-        if for_update
-        else None
-    )
-    docket = session.scalar(statement) if not for_update else None
-    locked_matter: Matter | None = None
-    if discovered_parent is not None and discovered_parent.matter_id:
-        # Stabilize the compatibility pointer before the docket lock. The
-        # Matter is not the IP lifecycle parent; this lock only prevents a
-        # concurrent operational relink from changing the target mid-write.
-        locked_matter = session.scalar(
-            select(Matter)
-            .where(
-                Matter.id == discovered_parent.matter_id,
-                Matter.company_id == context.company.id,
-            )
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-        if locked_matter is None:
-            raise HTTPException(status_code=404, detail="IP docket record not found.")
-    if discovered_parent is not None:
-        docket = session.scalar(
-            statement.with_for_update().execution_options(populate_existing=True)
-        )
-    if docket is None:
-        raise HTTPException(status_code=404, detail="IP docket record not found.")
-    if for_update:
-        assert discovered_parent is not None
-        if docket.matter_id != discovered_parent.matter_id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="The IP docket parent changed; retry the operation.",
-            )
-    if docket.archived_by_matter_disposal or not docket.is_active:
-        raise HTTPException(status_code=404, detail="IP docket record not found.")
-    assert_ip_docket_access(session, context=context, docket=docket)
-    return docket
-
-
-def _lock_ip_writer_context(
-    session: Session,
-    *,
-    context: SessionContext,
-    required_capability: str,
-) -> SessionContext:
-    """Fence an IP mutation actor and rebuild context from locked rows."""
-
-    actor_memberships = lock_company_memberships_for_assignment(
-        session,
-        company_id=context.company.id,
-        membership_ids={context.membership.id},
-    )
-    locked_actor = actor_memberships.get(context.membership.id)
-    if locked_actor is None or not locked_actor.is_active or not locked_actor.user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="An active company membership is required for this IP mutation.",
-        )
-    require_locked_membership_capability(
-        session,
-        locked_actor,
-        required_capability,
-    )
-    return SessionContext(
-        company=context.company,
-        user=locked_actor.user,
-        membership=locked_actor,
-    )
 
 
 def _lock_ip_dockets_in_stable_order(
@@ -1087,6 +990,9 @@ def append_ip_docket_version(
     )
     session.flush()
     source_version = private_source_version(docket)
+    from caseops_api.services.ip_renewals import synchronize_imported_renewal_reminder
+
+    synchronize_imported_renewal_reminder(session, context=context, docket_id=docket.id)
     if source_version != previous_source_version:
         from caseops_api.services.private_retrieval import (
             propagate_private_source_change_if_indexed,
@@ -1106,6 +1012,71 @@ def append_ip_docket_version(
     session.commit()
     session.refresh(docket)
     return _serialize_docket(session, docket, context=context)
+
+
+def update_imported_renewal_date(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    payload: IpPortfolioRenewalDateUpdateRequest,
+):
+    from caseops_api.schemas.ip_imports import IpImportDocketVersionCreateRequest
+    from caseops_api.services.ip_portfolio_source import _imported_source_row, _portfolio_source
+    from caseops_api.services.private_retrieval import lock_private_authority_writer
+
+    lock_private_authority_writer(session, company_id=context.company.id)
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:write",
+    )
+    version = session.scalar(
+        select(IpTrademarkParticularVersion).where(
+            IpTrademarkParticularVersion.company_id == context.company.id,
+            IpTrademarkParticularVersion.docket_id == docket.id,
+            IpTrademarkParticularVersion.version == docket.current_version,
+        )
+    )
+    source = _portfolio_source(version.representation_json) if version else {}
+    if not _imported_source_row(
+        session, company_id=context.company.id, docket_id=docket.id, source=source
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_portfolio_source_missing",
+                "message": "This record has no imported source date.",
+            },
+        )
+    representation = deepcopy(version.representation_json)
+    representation["portfolio_import"]["renewal_due_date"] = (
+        payload.renewal_due_date.isoformat() if payload.renewal_due_date else None
+    )
+    representation["portfolio_import"]["date_correction"] = {
+        "reason": payload.reason,
+        "previous_due_date": source.get("renewal_due_date"),
+        "previous_version": docket.current_version,
+    }
+    return append_ip_docket_version(
+        session,
+        context=context,
+        docket_id=docket.id,
+        payload=IpImportDocketVersionCreateRequest(
+            expected_current_version=payload.expected_current_version,
+            form_key=version.form_key,
+            form_version=version.form_version,
+            mark_kind=version.mark_kind,
+            representation=representation,
+            classes=version.classes_json,
+            parties=version.parties_json,
+            use_priority=version.use_priority_json,
+            agent=version.agent_json,
+            filing_manifest=version.filing_manifest_json,
+        ),
+    )
 
 
 def list_ip_dockets(

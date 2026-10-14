@@ -100,7 +100,10 @@ class NativeUploadTests(unittest.TestCase):
         required_operator = {name for name in self.required if name.startswith("license-policy/")}
         self.assertEqual(operator, required_operator)
         self.assertEqual(len(operator), 55)
-        self.assertTrue(BUILDER_INPUTS <= present, f"Missing builder inputs: {sorted(BUILDER_INPUTS - present)}")
+        self.assertTrue(
+            BUILDER_INPUTS <= present,
+            f"Missing builder inputs: {sorted(BUILDER_INPUTS - present)}",
+        )
 
     def test_real_traversal_includes_records_and_excludes_secret_canaries(self):
         forbidden = {
@@ -131,7 +134,7 @@ class NativeUploadTests(unittest.TestCase):
         present = self.discover(self.upload)
         self.assertIn(REVIEW, present)
         public = {name for name in self.required if name.startswith("apps/web/public/")}
-        self.assertTrue(public <= present)
+        self.assertLessEqual(public, present)
         self.assertNotIn(REGISTRY, present)
         self.assertFalse(any(name.startswith("license-policy/") for name in present))
 
@@ -164,7 +167,8 @@ class NativeUploadTests(unittest.TestCase):
             },
             "tests/fixtures/**": {"tests/fixtures/unlisted.json"},
             "tests/fixtures/statutes/**": {
-                "tests/fixtures/statutes/unlisted.json", "tests/fixtures/statutes/deep/unlisted.json",
+                "tests/fixtures/statutes/unlisted.json",
+                "tests/fixtures/statutes/deep/unlisted.json",
             },
             "tests/e2e/**": {"tests/e2e/.auth/fake-state.json", "tests/e2e/unlisted.spec.ts"},
             "tests/e2e/support/**": {

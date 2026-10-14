@@ -23,6 +23,7 @@ process.env.PROD_BASE_URL ||= "https://caseops.ai";
 process.env.PROD_API_BASE_URL ||= "https://api.caseops.ai";
 const PATENT_PROD_SPECS = /iplf-(?:079b-domain-availability|080[ab]-patent-(?:family|application|parties|priorities|source-scope))-2026-09-0[67]\.spec\.ts$/;
 const SAVED_MANIFEST_PROD_SPEC = /iplf-066c-saved-manifest-later-events-2026-09-29\.spec\.ts$/;
+const OCT13_PORTFOLIO_CALENDAR_SPECS = /ram-2026-10-13-(?:hearings|ip-portfolio)\.spec\.ts$/;
 
 const candidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -51,6 +52,7 @@ export default defineConfig({
     /ram-2026-09-07-statute-source-data\.spec\.ts$/,
     PATENT_PROD_SPECS,
     SAVED_MANIFEST_PROD_SPEC,
+    OCT13_PORTFOLIO_CALENDAR_SPECS,
     /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/,
   ],
   timeout: 120_000,
@@ -99,6 +101,15 @@ export default defineConfig({
         launchOptions: browserExecutablePath
           ? { executablePath: browserExecutablePath }
           : undefined,
+      },
+    },
+    {
+      name: "test-legal-write-prod-chromium",
+      testMatch: OCT13_PORTFOLIO_CALENDAR_SPECS,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: { cookies: [], origins: [] },
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
       },
     },
     {

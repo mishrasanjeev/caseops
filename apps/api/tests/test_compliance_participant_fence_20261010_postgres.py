@@ -908,8 +908,51 @@ def test_creator_provenance_is_not_replaced_by_audit_election(finalizer_audit, c
         }
 
 
-@pytest.mark.parametrize("participant", ["audit", "recipient"])
-def test_actual_participant_fk_is_fenced_before_parent(finalizer_audit, monkeypatch, participant):
+def _is_participant_lock_admission(connection, sql, parameters, *, company_id, target):
+    return (
+        connection.info.get("finalizer_role") == "worker"
+        and sql.startswith("SELECT ")
+        and "FROM company_memberships" in sql
+        and "FOR UPDATE OF company_memberships" in sql
+        and isinstance(parameters, dict)
+        and any(key.startswith("company_id") and value == company_id
+                for key, value in parameters.items())
+        and any(key.startswith("id_") and value == target
+                for key, value in parameters.items())
+    )
+
+
+@pytest.mark.parametrize(
+    "role,sql,parameters,expected",
+    [
+        ("worker", "SELECT id FROM company_memberships FOR UPDATE OF company_memberships",
+         {"company_id_1": "company", "id_1_1": "target"}, True),
+        ("revocation", "SELECT id FROM company_memberships FOR UPDATE OF company_memberships",
+         {"company_id_1": "company", "id_1_1": "target"}, False),
+        ("worker", "SELECT id FROM company_memberships",
+         {"company_id_1": "company", "id_1_1": "target"}, False),
+        ("worker", "SELECT id FROM matters FOR UPDATE OF company_memberships",
+         {"company_id_1": "company", "id_1_1": "target"}, False),
+        ("worker", "SELECT id FROM company_memberships FOR UPDATE OF company_memberships",
+         {"company_id_1": "other", "id_1_1": "target"}, False),
+        ("worker", "SELECT id FROM company_memberships FOR UPDATE OF company_memberships",
+         {"company_id_1": "company", "id_1_1": "other"}, False),
+        ("worker", "SELECT id FROM company_memberships FOR UPDATE OF company_memberships",
+         None, False),
+    ],
+)
+def test_participant_sql_admission_requires_exact_role_scope_and_lock(
+    role, sql, parameters, expected,
+):
+    connection = SimpleNamespace(info={"finalizer_role": role})
+    assert _is_participant_lock_admission(
+        connection, sql, parameters, company_id="company", target="target",
+    ) is expected
+
+
+def _exercise_participant_fk_overlap(
+    finalizer_audit, monkeypatch, participant, *, delayed_preflight=False,
+):
     audit = finalizer_audit
     fixture = _seed(audit)
     monkeypatch.setattr(
@@ -924,42 +967,77 @@ def test_actual_participant_fk_is_fenced_before_parent(finalizer_audit, monkeypa
     )
     target = fixture["actor_id"] if participant == "audit" else fixture["recipient_id"]
     ready, proceed = Event(), Event()
+    admission_ready, admit_sql = Event(), Event()
+    preflight_ready, release_preflight = Event(), Event()
     original = compliance_extraction.run_compliance_extraction_for_attachment
 
     def enter(*args, **kwargs):
         ready.set()
         assert proceed.wait(8)
+        if delayed_preflight:
+            preflight_ready.set()
+            assert release_preflight.wait(8)
         return original(*args, **kwargs)
 
+    def at_participant_sql(connection, _cursor, sql, parameters, _context, _many):
+        if not admission_ready.is_set() and _is_participant_lock_admission(
+            connection, sql, parameters, company_id=fixture["company_id"], target=target,
+        ):
+            audit.record("participant_sql_admission", role="worker", pid=audit.pids["worker"],
+                         sql=sql)
+            admission_ready.set()
+            assert admit_sql.wait(8)
+
     monkeypatch.setattr(compliance_extraction, "run_compliance_extraction_for_attachment", enter)
-    with audit.pool() as (pool, futures):
-        worker = pool.submit(audit.worker, fixture)
-        futures.append(worker)
-        assert ready.wait(8), "Real indexing must commit before participant overlap"
-        with audit.session("revocation") as blocker:
-            lock_company_memberships_for_assignment(
-                blocker,
-                company_id=fixture["company_id"],
-                membership_ids=[target],
-            )
-            proceed.set()
-            audit.await_blocker("worker", "revocation")
-            # The wait must be in downstream participant acquisition, not indexing.
-            assert any(
-                "FOR UPDATE OF company_memberships" in sql for sql in audit.statements["worker"]
-            )
-            with audit.session("mutation") as observer:
-                parent = observer.scalar(
-                    select(Matter)
-                    .where(
-                        Matter.id == fixture["matter_id"],
+    event.listen(audit.engine, "before_cursor_execute", at_participant_sql)
+    try:
+        with audit.pool() as (pool, futures):
+            try:
+                worker = pool.submit(audit.worker, fixture)
+                futures.append(worker)
+                assert ready.wait(8), "Real indexing must commit before participant overlap"
+                with audit.session("revocation") as blocker:
+                    lock_company_memberships_for_assignment(
+                        blocker,
+                        company_id=fixture["company_id"],
+                        membership_ids=[target],
                     )
-                    .with_for_update(of=Matter)
-                )
-                assert parent is not None
-                observer.rollback()
-            blocker.rollback()
-        worker.result(10)
+                    proceed.set()
+                    if delayed_preflight:
+                        assert preflight_ready.wait(8)
+                        # A held preflight cannot produce the participant wait, even
+                        # when the unchanged oracle exhausts its entire deadline.
+                        with pytest.raises(AssertionError, match="Actual worker -> revocation"):
+                            audit.await_blocker("worker", "revocation")
+                        assert not admission_ready.is_set()
+                        audit.record("expected_preflight_oracle_miss", participant=participant)
+                        release_preflight.set()
+                    assert admission_ready.wait(8), "Actual participant lock SQL was not admitted"
+                    admit_sql.set()
+                    audit.await_blocker("worker", "revocation")
+                    # The wait must be in downstream participant acquisition, not indexing.
+                    assert any(
+                        "FOR UPDATE OF company_memberships" in sql
+                        for sql in audit.statements["worker"]
+                    )
+                    with audit.session("mutation") as observer:
+                        parent = observer.scalar(
+                            select(Matter)
+                            .where(
+                                Matter.id == fixture["matter_id"],
+                            )
+                            .with_for_update(of=Matter)
+                        )
+                        assert parent is not None
+                        observer.rollback()
+                    blocker.rollback()
+                worker.result(10)
+            finally:
+                proceed.set()
+                release_preflight.set()
+                admit_sql.set()
+    finally:
+        event.remove(audit.engine, "before_cursor_execute", at_participant_sql)
     assert audit.errors == []
     with Session(audit.engine) as session:
         assert session.get(DocumentProcessingJob, fixture["job_id"]).error_message is None
@@ -975,6 +1053,20 @@ def test_actual_participant_fk_is_fenced_before_parent(finalizer_audit, monkeypa
             )
             > 0
         )
+
+
+@pytest.mark.parametrize("participant", ["audit", "recipient"])
+def test_actual_participant_fk_is_fenced_before_parent(finalizer_audit, monkeypatch, participant):
+    _exercise_participant_fk_overlap(finalizer_audit, monkeypatch, participant)
+
+
+@pytest.mark.parametrize("participant", ["audit", "recipient"])
+def test_delayed_preflight_does_not_consume_participant_wait_deadline(
+    finalizer_audit, monkeypatch, participant,
+):
+    _exercise_participant_fk_overlap(
+        finalizer_audit, monkeypatch, participant, delayed_preflight=True,
+    )
 
 
 @pytest.mark.parametrize("change", ["recipient", "assignee", "audit"])

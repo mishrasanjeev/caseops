@@ -16,6 +16,7 @@ Why a service rather than three route handlers:
   function — keeps the export deterministic vs. whatever the UI
   happened to render at the time.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -25,6 +26,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    ForumCatalogEntry,
     IpDeadline,
     Matter,
     MatterDeadline,
@@ -73,7 +75,19 @@ def aggregate_calendar_events(
     # the same day grouped predictably (hearings render above tasks
     # render above deadlines — gives the lawyer a glanceable order).
     _kind_order = {"hearing": 0, "task": 1, "deadline": 2}
-    events.sort(key=lambda e: (e.occurs_on, _kind_order.get(e.kind, 99), e.title))
+    events.sort(
+        key=lambda e: (
+            e.occurs_on,
+            _kind_order.get(e.kind, 99),
+            e.forum_display_order is None if e.kind == "hearing" else False,
+            (e.forum_display_order or 0) if e.kind == "hearing" else 0,
+            e.hearing_time is None if e.kind == "hearing" else False,
+            e.hearing_time.isoformat() if e.kind == "hearing" and e.hearing_time else "",
+            e.matter_title.casefold() if e.kind == "hearing" else e.title,
+            e.matter_id if e.kind == "hearing" else "",
+            e.id if e.kind == "hearing" else "",
+        )
+    )
     return events
 
 
@@ -84,8 +98,9 @@ def _collect_hearings(
     range_to: date,
 ) -> list[CalendarEventRecord]:
     rows = session.execute(
-        select(MatterHearing, Matter)
+        select(MatterHearing, Matter, ForumCatalogEntry)
         .join(Matter, Matter.id == MatterHearing.matter_id)
+        .outerjoin(ForumCatalogEntry, ForumCatalogEntry.id == Matter.forum_catalog_entry_id)
         .where(
             Matter.company_id == context.company.id,
             Matter.is_active.is_(True),
@@ -99,7 +114,7 @@ def _collect_hearings(
         )
     ).all()
     out: list[CalendarEventRecord] = []
-    for hearing, matter in rows:
+    for hearing, matter, forum in rows:
         # The hearing display title is the purpose if set, else "Hearing"
         # — keeps the calendar grid readable at small sizes.
         display_title = (hearing.purpose or "Hearing").strip() or "Hearing"
@@ -107,6 +122,7 @@ def _collect_hearings(
         detail_parts = [hearing.forum_name]
         if hearing.judge_name:
             detail_parts.append(hearing.judge_name)
+        court_label, court_identity = _hearing_court_identity(hearing, matter, forum)
         out.append(
             CalendarEventRecord(
                 id=f"hearing:{hearing.id}",
@@ -119,9 +135,46 @@ def _collect_hearings(
                 matter_code=matter.matter_code,
                 status=hearing.status,
                 detail=" · ".join(p for p in detail_parts if p) or None,
+                court_label=court_label,
+                court_identity=court_identity,
+                forum_display_order=forum.display_order if forum else None,
+                hearing_time=hearing.hearing_time,
+                time_status=hearing.time_status,
+                session_label=hearing.session_label,
+                timezone=hearing.timezone,
             )
         )
     return out
+
+
+def _hearing_court_identity(
+    hearing: MatterHearing,
+    matter: Matter,
+    forum: ForumCatalogEntry | None,
+) -> tuple[str | None, str | None]:
+    # Stored lineage is authoritative; never derive a bench/region from a name.
+    name = matter.court_name or (forum.name if forum else None) or hearing.forum_name
+    kind = forum.forum_type if forum else matter.forum_level
+    district = matter.forum_district or (forum.district if forum else None)
+    city = matter.forum_city or (forum.city if forum else None)
+
+    def unique_parts(values: Iterable[str | None]) -> str | None:
+        parts: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            clean = (value or "").strip()
+            if clean and clean.casefold() not in seen:
+                seen.add(clean.casefold())
+                parts.append(clean)
+        return ", ".join(parts) or None
+
+    primary = unique_parts([district if kind == "district_court" else None, name])
+    prefix = {"supreme_court": "SC", "high_court": "HC", "district_court": "DC"}.get(kind)
+    label = f"{prefix} - {primary}" if prefix and primary else primary
+    identity = unique_parts(
+        [district if kind == "district_court" else None, name, city, matter.court_forum_number]
+    )
+    return label, identity
 
 
 def _collect_tasks(
@@ -138,9 +191,7 @@ def _collect_tasks(
             Matter.is_active.is_(True),
             Matter.status.notin_(("closed", "disposed")),
             visible_matters_filter(session, context=context),
-            MatterTask.status.notin_(
-                (MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)
-            ),
+            MatterTask.status.notin_((MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)),
             MatterTask.due_on.is_not(None),
             MatterTask.due_on >= range_from,
             MatterTask.due_on <= range_to,
@@ -180,9 +231,7 @@ def _collect_deadlines(
             and_(
                 IpDeadline.id == MatterDeadline.source_ref_id,
                 IpDeadline.company_id == MatterDeadline.company_id,
-                MatterDeadline.source_ref_type.in_(
-                    ("ip_deadline", "ip_deadline_internal_target")
-                ),
+                MatterDeadline.source_ref_type.in_(("ip_deadline", "ip_deadline_internal_target")),
             ),
         )
         .where(
@@ -284,16 +333,18 @@ def render_events_as_ical(
         if event.status:
             description_parts.append(f"Status: {event.status}")
         description = "\\n".join(_ical_escape(p) for p in description_parts)
-        lines.extend([
-            "BEGIN:VEVENT",
-            f"UID:{event.id}@caseops.ai",
-            f"SUMMARY:{_ical_escape(f'[{event.kind.upper()}] {event.title}')}",
-            f"DTSTART;VALUE=DATE:{start}",
-            f"DTEND;VALUE=DATE:{end}",
-            f"DESCRIPTION:{description}",
-            f"CATEGORIES:{event.kind.upper()}",
-            "END:VEVENT",
-        ])
+        lines.extend(
+            [
+                "BEGIN:VEVENT",
+                f"UID:{event.id}@caseops.ai",
+                f"SUMMARY:{_ical_escape(f'[{event.kind.upper()}] {event.title}')}",
+                f"DTSTART;VALUE=DATE:{start}",
+                f"DTEND;VALUE=DATE:{end}",
+                f"DESCRIPTION:{description}",
+                f"CATEGORIES:{event.kind.upper()}",
+                "END:VEVENT",
+            ]
+        )
     lines.append("END:VCALENDAR")
     # RFC 5545 requires CRLF line breaks.
     return "\r\n".join(lines) + "\r\n"
