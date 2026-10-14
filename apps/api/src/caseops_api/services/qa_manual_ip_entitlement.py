@@ -14,6 +14,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import AuditEvent, BillingSubscription, Company
+from caseops_api.services import audit
 
 _ACTIVE = frozenset({"active", "trialing", "grace", "manual_active"})
 _ACTION = "qa.test_legal.manual_ip_granted"
@@ -308,29 +309,26 @@ def grant_qa_manual_ip_entitlement(
             session.flush()
         after_sha256 = _fingerprint(company, subscription)
         # Deterministic PK provides bounded collision detection; this writer only INSERTs.
-        session.add(
-            AuditEvent(
-                id=audit_id,
-                company_id=company_id,
-                actor_type="system",
-                actor_label=_ACTOR,
-                action=_ACTION,
-                target_type="billing_subscription",
-                target_id=subscription_id,
-                result="success",
-                request_id=operation_id,
-                metadata_json=_canonical(
-                    {
-                        "schema_version": 1,
-                        "operation_id": operation_id,
-                        "request_sha256": request_sha256,
-                        "before_sha256": expected_before_sha256,
-                        "after_sha256": after_sha256,
-                    }
-                ),
-            )
+        audit.record_audit(
+            session,
+            event_id=audit_id,
+            company_id=company_id,
+            actor_type="system",
+            actor_label=_ACTOR,
+            action=_ACTION,
+            target_type="billing_subscription",
+            target_id=subscription_id,
+            result="success",
+            request_id=operation_id,
+            commit=False,
+            metadata={
+                "schema_version": 1,
+                "operation_id": operation_id,
+                "request_sha256": request_sha256,
+                "before_sha256": expected_before_sha256,
+                "after_sha256": after_sha256,
+            },
         )
-        session.flush()
         return GrantReceipt(
             company_id,
             subscription_id,

@@ -28,6 +28,26 @@ def owned_engine(http_pg_engine):
     return http_pg_engine
 
 
+def test_native_canonical_audit_exact_receipt_and_replay(owned_engine, monkeypatch):
+    assert owned_engine.dialect.name == "postgresql"
+    cases.test_grant_uses_canonical_audit_with_exact_receipt_metadata(owned_engine, monkeypatch)
+
+
+def test_native_canonical_audit_failure_after_flush_rolls_back(owned_engine, monkeypatch):
+    assert owned_engine.dialect.name == "postgresql"
+    cases.test_canonical_audit_failure_after_flush_rolls_back_grant(owned_engine, monkeypatch)
+
+
+def test_native_canonical_audit_default_explicit_identity_and_rollback(owned_engine):
+    assert owned_engine.dialect.name == "postgresql"
+    cases.test_canonical_audit_identity_preserves_default_and_caller_rollback(owned_engine)
+
+
+def test_native_canonical_audit_identity_collision(owned_engine):
+    assert owned_engine.dialect.name == "postgresql"
+    cases.test_canonical_audit_identity_collision_never_overwrites(owned_engine)
+
+
 @pytest.mark.parametrize("status", ["active", "trialing", "grace", "manual_active"])
 def test_native_grant_preserves_actual_plan_status_and_effective_gate(owned_engine, status):
     cases.test_grant_preserves_plan_status_provider_other_keys_and_effective_gate(

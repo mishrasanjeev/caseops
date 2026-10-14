@@ -334,7 +334,7 @@ def harness(monkeypatch, tmp_path):
                 for row in rows:
                     state["mutate_log"](row)
             return rows
-        pytest.fail(f"Unexpected offline CLI invocation: {argv[:4]}")
+        return pytest.fail(f"Unexpected offline CLI invocation: {argv[:4]}")
 
     def current(release):
         assert release == SHA
@@ -879,3 +879,9 @@ def test_plain_text_float_schema_version_is_rejected_without_retry(harness, mode
     assert sum(args[2] == "grant" for _, args in harness.state["runs"]) == 1
     assert sum(args[2] == "inspect" for _, args in harness.state["runs"]) == (mode == "inspect")
     assert harness.state["log_reads"] == (1 if mode == "grant" else 2)
+
+
+def test_unknown_offline_cli_invocation_fails_without_mutation(harness):
+    with pytest.raises(pytest.fail.Exception, match="Unexpected offline CLI invocation"):
+        harness.module._cloud(["unsupported-offline-command"])
+    assert harness.state["runs"] == []

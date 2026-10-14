@@ -8,11 +8,11 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from threading import Event, Lock
-from uuid import NAMESPACE_URL, uuid4, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pytest
 from sqlalchemy import create_engine, event, func, select, text
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from caseops_api.db.models import (
@@ -23,6 +23,7 @@ from caseops_api.db.models import (
     Company,
 )
 from caseops_api.scripts import qa_manual_ip_entitlement as cli
+from caseops_api.services import audit
 from caseops_api.services import qa_manual_ip_entitlement as operator
 from caseops_api.services.saas_billing import current_entitlements_for_company
 
@@ -143,11 +144,13 @@ def _grant(engine, request):
 
 def _assert_preserved(engine, request, before):
     after = _state(engine, request["subscription_id"])
-    assert after.pop("updated_at") > before["updated_at"]
+    updated_at = after.pop("updated_at")
+    assert updated_at > before["updated_at"]
     old = copy.deepcopy(before)
     old.pop("updated_at")
     overrides = old.pop("entitlement_overrides_json")
-    assert after.pop("entitlement_overrides_json") == {**overrides, "ip_workspace": True}
+    current_overrides = after.pop("entitlement_overrides_json")
+    assert current_overrides == {**overrides, "ip_workspace": True}
     assert after == old
     with Session(engine) as session:
         assert current_entitlements_for_company(session, request["company_id"]) == {
@@ -156,6 +159,131 @@ def _assert_preserved(engine, request, before):
             "other_feature": {"limit": 7},
             "paid_provider": False,
         }
+
+
+def test_grant_uses_canonical_audit_with_exact_receipt_metadata(operator_engine, monkeypatch):
+    company_id, subscription_id, _ = _seed(operator_engine)
+    request = _request(operator_engine, company_id, subscription_id)
+    original = audit.record_audit
+    recorded = []
+
+    def record(session, **kwargs):
+        assert session.in_transaction()
+        assert kwargs.get("commit", False) is False
+        row = original(session, **kwargs)
+        recorded.append((copy.deepcopy(kwargs), row.id, json.loads(row.metadata_json)))
+        return row
+
+    monkeypatch.setattr(audit, "record_audit", record)
+    receipt = _grant(operator_engine, request)
+    assert len(recorded) == 1
+    arguments, event_id, metadata = recorded[0]
+    expected_metadata = {
+        "schema_version": 1,
+        "operation_id": request["operation_id"],
+        "request_sha256": receipt.request_sha256,
+        "before_sha256": request["expected_before_sha256"],
+        "after_sha256": receipt.after_sha256,
+    }
+    expected_id = str(
+        uuid5(NAMESPACE_URL, f"caseops:qa-manual-ip-entitlement:{request['operation_id']}")
+    )
+    assert event_id == receipt.audit_event_id == arguments["event_id"] == expected_id
+    assert metadata == arguments["metadata"] == expected_metadata
+    assert set(metadata) == set(expected_metadata)
+    assert type(metadata["schema_version"]) is int
+    with Session(operator_engine) as session:
+        persisted = session.get(AuditEvent, event_id)
+        assert json.loads(persisted.metadata_json) == expected_metadata
+        assert persisted.request_id == request["operation_id"]
+        assert persisted.actor_type == "system"
+        assert persisted.actor_label == "qa_manual_ip_entitlement"
+    replay = _grant(operator_engine, request)
+    assert replay.replayed is True
+    assert replay.audit_event_id == event_id
+    assert replay.after_sha256 == receipt.after_sha256
+    assert len(recorded) == 1
+
+
+def test_canonical_audit_failure_after_flush_rolls_back_grant(operator_engine, monkeypatch):
+    company_id, subscription_id, _ = _seed(operator_engine)
+    request = _request(operator_engine, company_id, subscription_id)
+    before = _state(operator_engine, subscription_id)
+    original = audit.record_audit
+    flushed = []
+
+    def fail_after_flush(session, **kwargs):
+        row = original(session, **kwargs)
+        assert session.in_transaction()
+        flushed.append(row.id)
+        raise RuntimeError("canonical_audit_failure_after_flush")
+
+    monkeypatch.setattr(audit, "record_audit", fail_after_flush)
+    with pytest.raises(RuntimeError, match="canonical_audit_failure_after_flush"):
+        _grant(operator_engine, request)
+    assert len(flushed) == 1
+    assert _state(operator_engine, subscription_id) == before
+    with Session(operator_engine) as session:
+        assert session.get(AuditEvent, flushed[0]) is None
+        assert session.scalar(select(func.count()).select_from(AuditEvent)) == 0
+
+
+def test_canonical_audit_identity_preserves_default_and_caller_rollback(operator_engine):
+    company_id, subscription_id, _ = _seed(operator_engine)
+    event_id = str(uuid4())
+    with Session(operator_engine) as session:
+        generated = audit.record_audit(
+            session,
+            company_id=company_id,
+            action="qa.audit.default_identity",
+            target_type="billing_subscription",
+            target_id=subscription_id,
+        )
+        generated_id = generated.id
+        normalized_id = str(UUID(generated_id))
+        assert generated_id == normalized_id and generated_id != event_id
+        explicit = audit.record_audit(
+            session,
+            event_id=event_id,
+            company_id=company_id,
+            action="qa.audit.explicit_identity",
+            target_type="billing_subscription",
+            target_id=subscription_id,
+            metadata={"prompt": "Synthetic privileged fixture", "source_sha256": "a" * 64},
+        )
+        assert explicit.id == event_id
+        assert json.loads(explicit.metadata_json) == {
+            "prompt": "[content-withheld chars=28]",
+            "source_sha256": "a" * 64,
+        }
+        assert session.in_transaction()
+        session.rollback()
+    with Session(operator_engine) as session:
+        assert session.get(AuditEvent, event_id) is None
+        assert session.get(AuditEvent, generated_id) is None
+
+
+def test_canonical_audit_identity_collision_never_overwrites(operator_engine):
+    company_id, subscription_id, _ = _seed(operator_engine)
+    event_id = str(uuid4())
+    fields = {
+        "event_id": event_id,
+        "company_id": company_id,
+        "action": "qa.audit.collision",
+        "target_type": "billing_subscription",
+        "target_id": subscription_id,
+    }
+    with Session(operator_engine) as session, session.begin():
+        audit.record_audit(session, **fields, metadata={"retained": True})
+    with pytest.raises(IntegrityError):
+        with Session(operator_engine) as session, session.begin():
+            audit.record_audit(session, **fields, metadata={"retained": False})
+    with Session(operator_engine) as session:
+        retained = session.get(AuditEvent, event_id)
+        assert json.loads(retained.metadata_json) == {"retained": True}
+        assert retained.company_id == company_id
+        assert retained.target_id == subscription_id
+        assert session.scalar(select(func.count()).select_from(AuditEvent)) == 1
 
 
 @pytest.mark.parametrize("status", ["active", "trialing", "grace", "manual_active"])
