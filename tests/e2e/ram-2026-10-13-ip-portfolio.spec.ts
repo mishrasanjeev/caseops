@@ -103,6 +103,56 @@ function grantLocalPortfolioEntitlement(web: URL, api: URL, actor: PortfolioActo
   expect(result.status, `Local fixture grant failed: ${result.error?.message ?? result.stderr}`).toBe(0);
 }
 
+function deliverLocalImportedReminder(web: URL, api: URL, actor: PortfolioActor,
+  docketId: string, sourceId: string, intentId: string) {
+  if (![web, api].every(origin => loopback(origin) && ["http:", "https:"].includes(origin.protocol)
+    && !origin.username && !origin.password)) throw new Error("Local delivery requires loopback origins.");
+  const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
+  if (!actor.company.slug.startsWith("ip13-") || !uuid.test(actor.company.slug.slice(5))
+    || ![actor.company.id, actor.membership.id, docketId, sourceId, intentId].every(id => uuid.test(id))) {
+    throw new Error("Local delivery must belong to a fresh isolated IP13 fixture.");
+  }
+  const database = process.env.CASEOPS_E2E_DATABASE_URL?.trim() || e2eEnv.CASEOPS_DATABASE_URL;
+  const python = process.env.CASEOPS_E2E_PYTHON?.trim() || path.join(repoRoot, "apps", "api", ".venv",
+    process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+  const relative = path.relative(path.join(repoRoot, "apps", "api", ".venv"), path.resolve(python));
+  if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("Local delivery requires candidate-owned Python.");
+  const script = [
+    "import os",
+    "from pathlib import Path",
+    "from sqlalchemy.engine import make_url",
+    "url=make_url(os.environ['CASEOPS_DATABASE_URL'])",
+    "assert not url.query",
+    "assert (url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))",
+    "from caseops_api.db.models import Company,CompanyMembership,InAppNotification,NotificationDeliveryIntent",
+    "from caseops_api.db.session import get_session_factory",
+    "from caseops_api.services.notification_delivery import process_notification_delivery_intent",
+    "with get_session_factory()() as session:",
+    "    company=session.get(Company,os.environ['CASEOPS_E2E_COMPANY_ID'])",
+    "    assert company and company.slug==os.environ['CASEOPS_E2E_COMPANY_SLUG'] and company.slug.startswith('ip13-')",
+    "    owner=session.get(CompanyMembership,os.environ['CASEOPS_E2E_MEMBERSHIP_ID'])",
+    "    assert owner and owner.company_id==company.id and owner.is_active and owner.role=='owner'",
+    "    intent=session.get(NotificationDeliveryIntent,os.environ['CASEOPS_E2E_INTENT_ID'])",
+    "    assert intent and intent.company_id==company.id and intent.recipient_membership_id==owner.id",
+    "    assert intent.ip_docket_id==os.environ['CASEOPS_E2E_DOCKET_ID'] and intent.source_id==os.environ['CASEOPS_E2E_SOURCE_ID']",
+    "    assert str(intent.channel)=='in_app' and intent.event_type=='renewal_source_date_1month' and intent.source_type=='ip_trademark_particular_version'",
+    "    result=process_notification_delivery_intent(session,intent_id=intent.id,company_id=company.id)",
+    "    assert result.delivered and str(result.status)=='delivered' and result.external_calls==0",
+    "    note=session.get(InAppNotification,intent.in_app_notification_id)",
+    "    assert note and note.company_id==company.id and note.recipient_membership_id==owner.id and note.source_id==intent.source_id",
+    "    assert note.event_type==intent.event_type and note.body==intent.body and 'private import remark' not in note.body",
+    "    assert intent.attempts==1",
+    "    session.commit()",
+  ].join("\n");
+  const result = spawnSync(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
+    env: { ...process.env, ...e2eEnv, CASEOPS_DATABASE_URL: database, CASEOPS_LLM_PROVIDER: "mock",
+      CASEOPS_EMBEDDING_PROVIDER: "mock", CASEOPS_E2E_COMPANY_ID: actor.company.id,
+      CASEOPS_E2E_COMPANY_SLUG: actor.company.slug, CASEOPS_E2E_MEMBERSHIP_ID: actor.membership.id,
+      CASEOPS_E2E_DOCKET_ID: docketId, CASEOPS_E2E_SOURCE_ID: sourceId, CASEOPS_E2E_INTENT_ID: intentId,
+      PYTHONPATH: path.join(repoRoot, "apps", "api", "src") } });
+  expect(result.status, `Local in-app delivery failed: ${result.error?.message ?? result.stderr}`).toBe(0);
+}
+
 async function preparePortfolioWorkspace(request: APIRequestContext, web: URL, api: URL,
   local: boolean, actor: PortfolioActor, slug: string, headers: Record<string, string>) {
   if (local) {
@@ -202,13 +252,13 @@ async function preparePortfolio(page: Page, request: APIRequestContext, baseURL:
     await page.locator("#password").fill(credentials.password);
     await page.getByRole("button", { name: /^Sign in$/ }).click();
     await page.waitForURL(/\/app(?:[/?]|$)/);
-    return { web, api, local, run, headers, release };
+    return { web, api, local, run, headers, release, actor: actor as PortfolioActor };
 }
 
 for (const width of [1280, 393]) {
   test(`source-tolerant portfolio import, duplicate skip and renewal alert at ${width}px`, async ({ page, request, baseURL }) => {
-    test.setTimeout(180_000);
-    const { web, api, local, run, headers, release } = await preparePortfolio(page, request, baseURL, width);
+    test.setTimeout(660_000);
+    const { web, api, local, run, headers, release, actor } = await preparePortfolio(page, request, baseURL, width);
     // Actual Excel datetime cells, independently pinned to this synthetic fixture.
     const nativeName = `ip13-native-${run}.xlsx`;
     const nativeMark = `Synthetic native Excel date ${run}`;
@@ -500,6 +550,66 @@ for (const width of [1280, 393]) {
       await page.goto(`${web.origin}/app/ip/portfolio/imports`);
       await page.getByRole("button", { name: new RegExp(`ip13-${run}\\.csv`) }).click();
     }
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    await importedRow.getByRole("button", { name: "Edit source renewal date", exact: true }).click();
+    const deliveryEditor = page.getByRole("dialog", { name: "Correct source renewal date" });
+    await deliveryEditor.getByLabel("Renewal due date").fill(tomorrow);
+    await deliveryEditor.getByLabel("Correction reason").fill("Synthetic due-soon in-app delivery acceptance");
+    const deliveryCorrection = page.waitForResponse(response => new URL(response.url()).pathname ===
+      `/api/ip/dockets/${docketId}/portfolio-renewal-date` && response.request().method() === "PATCH");
+    await deliveryEditor.getByRole("button", { name: "Save source date", exact: true }).click();
+    const deliveryUpdate = await deliveryCorrection;
+    expect(deliveryUpdate.status(), await deliveryUpdate.text()).toBe(200);
+    await expect(deliveryEditor).not.toBeVisible();
+    const deliveryDocket = await request.get(`${api.origin}/api/ip/dockets/${docketId}`, { headers });
+    expect(deliveryDocket.status()).toBe(200);
+    const deliverySourceId = (await deliveryDocket.json()).current_particulars.id as string;
+    type SourceIntent = { id: string; source_id: string; source_type: string; channel: string;
+      event_type: string; status: string; attempts: number; destination: string | null };
+    async function currentSourceIntent(): Promise<SourceIntent> {
+      const response = await request.get(`${api.origin}/api/admin/notifications`, { headers, params: { limit: 200 } });
+      expect(response.status(), await response.text()).toBe(200);
+      const matches = ((await response.json()).intents as SourceIntent[])
+        .filter(intent => intent.source_id === deliverySourceId && intent.event_type === "renewal_source_date_1month");
+      expect(matches, "exact current-version renewal intent must remain visible").toHaveLength(1);
+      return matches[0];
+    }
+    const deliveryIntent = await currentSourceIntent();
+    expect(deliveryIntent).toMatchObject({ source_type: "ip_trademark_particular_version", channel: "in_app", destination: null });
+    // Only loopback fixtures invoke the real owner directly. Production observes
+    // the ordinary scheduler and never starts a global/provider delivery job.
+    if (local) deliverLocalImportedReminder(web, api, actor, docketId!, deliverySourceId, deliveryIntent.id);
+    await expect.poll(async () => (await currentSourceIntent()).status, {
+      timeout: local ? 15_000 : 420_000, intervals: [1000, 5000, 10_000],
+      message: "the source-renewal-specific in-app intent must actually be delivered",
+    }).toBe("delivered");
+    expect(await currentSourceIntent()).toMatchObject({ id: deliveryIntent.id, attempts: 1 });
+    await page.goto(`${web.origin}/app/ip/portfolio`);
+    await page.getByPlaceholder("Mark, application number, opposition number").fill(number);
+    await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
+    await expect(sourceRow.getByText(tomorrow, { exact: true })).toBeVisible();
+    await expect(sourceRow.getByText("Alert: delivered", { exact: true })).toBeVisible();
+    await page.reload();
+    await page.getByPlaceholder("Mark, application number, opposition number").fill(number);
+    await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
+    await expect(sourceRow.getByText("Alert: delivered", { exact: true })).toBeVisible();
+    await page.goto(`${web.origin}/app/admin/notifications`);
+    const receipt = page.getByTestId(`notification-intent-${deliveryIntent.id}`);
+    await expect(receipt.getByText("delivered", { exact: true })).toBeVisible();
+    await expect(receipt.getByText("renewal source date 1month", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    await page.goto(`${web.origin}/app/ip/portfolio/imports`);
+    await page.getByRole("button", { name: new RegExp(`ip13-${run}\\.csv`) }).click();
+    await importedRow.getByRole("button", { name: "Edit source renewal date", exact: true }).click();
+    await deliveryEditor.getByRole("button", { name: "Clear date", exact: true }).click();
+    await deliveryEditor.getByLabel("Correction reason").fill("Synthetic delivered source date withdrawn");
+    const deliveredClear = page.waitForResponse(response => new URL(response.url()).pathname ===
+      `/api/ip/dockets/${docketId}/portfolio-renewal-date` && response.request().method() === "PATCH");
+    await deliveryEditor.getByRole("button", { name: "Save source date", exact: true }).click();
+    const clearResponse = await deliveredClear;
+    expect(clearResponse.status(), await clearResponse.text()).toBe(200);
+    await expect(deliveryEditor).not.toBeVisible();
+    expect(await currentSourceIntent()).toMatchObject({ id: deliveryIntent.id, status: "delivered", attempts: 1 });
     const immutableSource = await request.get(`${api.origin}/api/ip/imports/${preview.job.id}`, { headers });
     expect((await immutableSource.json()).rows).toEqual(saved.rows);
     await page.goto(`${web.origin}/app/ip/portfolio`);

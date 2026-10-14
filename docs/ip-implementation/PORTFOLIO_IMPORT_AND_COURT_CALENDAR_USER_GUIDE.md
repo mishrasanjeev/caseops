@@ -121,6 +121,9 @@ deadline or a claim of email/provider delivery.
   immediately. Blank, invalid or already-past due dates do not create an alert.
 - Portfolio shows the current source renewal date and queue/delivery state.
   Queued means scheduled, not delivered.
+- After delivery, Portfolio shows **Alert: delivered**. Administrators can
+  inspect the matching **renewal source date 1month** receipt under **Admin ->
+  Notifications**. External-channel delivery is not implied by an in-app receipt.
 - From the committed import row, select **Edit source renewal date**. Review
   the current value, enter a correction reason, change or clear the date,
   then select **Save source date**.

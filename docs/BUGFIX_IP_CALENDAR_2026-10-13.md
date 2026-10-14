@@ -584,3 +584,21 @@ for both grant and inspection. Both new text-rejection RED cases are preserved
 alongside the earlier92-case scope. Proof: qa-manual-ip-release-helper-20261014-01/
 final-09/README.md. No cloud execution or production grant is inferred. The
 joined candidate still needs full fresh gates and exact live acceptance.
+
+## Source-Renewal Delivery Acceptance Follow-Up
+
+IP13-07 (UJ-02/04/26, IPLF-037) had browser proof of queued/corrected/cleared
+dates, not an actual delivered source-renewal alert. The dated portfolio journey
+now makes a unique current source version due soon, identifies its exact single
+in-app intent, requires one delivered attempt and visible delivered status after
+reload, and opens that exact receipt in the admin surface at both widths. It
+then clears the source date while retaining the original delivered history and
+immutable import rows. Production only observes the ordinary scheduler; it does
+not trigger a global worker or an external delivery. Loopback fixtures invoke
+the actual delivery owner for only their own exact in-app intent and verify its
+recipient/source receipt with zero external calls.
+
+This is new acceptance coverage, not a claim of deployment or completed live
+delivery. The replacement full-source release gates and live replay remain
+required. Native current-facts tests retain the stronger body, lifecycle and
+access assertions; admin receipt visibility alone does not prove those facts.

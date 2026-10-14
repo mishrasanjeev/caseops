@@ -720,6 +720,14 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- A queued source-renewal alert is not delivered acceptance. Bind the browser
+  receipt to the exact current particular version and unique in-app intent,
+  require one actual delivered attempt and visible reload, then clear the source
+  date without rewriting delivered history. Production automation must observe
+  the ordinary cadence, never start a global billable notification drain to
+  manufacture a receipt. Direct local dispatch is restricted to an isolated
+  loopback fixture's exact tenant, recipient, source, docket and in-app intent.
+
 - Wrapping navigation must allocate block height for every row. Horizontal
   overflow checks and DOM visibility do not prove a tab is clickable: a panel
   can cover a later wrapped row. Assert each trigger is inside its tablist on
