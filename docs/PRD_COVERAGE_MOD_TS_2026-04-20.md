@@ -1,5 +1,13 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 14 Serving Release Recovery
+
+J08/M08/MOD-TS-006, UJ-02/04/26, IPLF-030/032/037 and QG-SEC-004 remain
+partially verified: PR535 merged and API/web serve09d79527, while manual-IP
+grant and production certification are incomplete. Native CI budget exhaustion
+and Windows cloud argument transport need fresh joined proof. See
+`docs/RELEASE_RECOVERY_IP_CALENDAR_2026-10-14.md`; older checkpoints are history.
+
 ## October 13 Canonical Release Checkpoint
 
 October14 dfa full Docker is NO-GO: 2,996 native passes/one work-bound failure,

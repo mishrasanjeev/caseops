@@ -30,7 +30,7 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     strategy = job["strategy"]
     assert strategy["fail-fast"] is False
     assert strategy.get("max-parallel") == 4
-    assert strategy["matrix"] == {"total_shards": [8], "shard": list(range(1, 9))}
+    assert strategy["matrix"] == {"total_shards": [16], "shard": list(range(1, 17))}
     total = strategy["matrix"]["total_shards"][0]
     assert job["name"] == "Postgres + pgvector shard ${{ matrix.shard }}/${{ matrix.total_shards }}"
     step = next(item for item in job["steps"] if item.get("name") == "Pytest -m postgres")
@@ -108,7 +108,7 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     total = matrix["total_shards"][0]
     steps = job["steps"]
     assert job["timeout-minutes"] == 12
-    assert total == 8 and matrix["shard"] == list(range(1, total + 1))
+    assert total == 16 and matrix["shard"] == list(range(1, total + 1))
     step = next(item for item in steps if item.get("name") == "Pytest -m postgres")
     command = shlex.split(step["run"])
     assert command[:2] == ["uv", "run"]
@@ -178,7 +178,7 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     assert json.loads(result.stdout) == summary
 
 
-@pytest.mark.parametrize("total", [4, 8])
+@pytest.mark.parametrize("total", [4, 8, 16])
 def test_postgres_partition_is_complete_disjoint_and_order_independent(total):
     nodes = [f"tests/test_example.py::test_item[{index}]" for index in range(2301)]
     selections = [partition(nodes, shard, total) for shard in range(1, total + 1)]
@@ -187,9 +187,18 @@ def test_postgres_partition_is_complete_disjoint_and_order_independent(total):
     assert selections == [
         partition(list(reversed(nodes)), shard, total) for shard in range(1, total + 1)
     ]
-    assert sorted(map(len, selections)) == (
-        [575, 575, 575, 576] if total == 4 else [287, 287, 287, 288, 288, 288, 288, 288]
-    )
+    floor, remainder = divmod(len(nodes), total)
+    assert sorted(map(len, selections)) == [floor] * (total - remainder) + [floor + 1] * remainder
+
+
+def test_sixteen_shards_split_each_previous_shard_without_changing_its_inventory():
+    nodes = [f"tests/test_example.py::test_item[{index}]" for index in range(3005)]
+    for shard in range(1, 9):
+        prior = partition(nodes, shard, 8)
+        first, second = partition(nodes, shard, 16), partition(nodes, shard + 8, 16)
+        assert set(first).isdisjoint(second)
+        assert sorted(first + second) == prior
+        assert abs(len(first) - len(second)) <= 1
 
 
 @pytest.mark.parametrize("nodes,shard,total", [([], 1, 4), (["a", "a"], 1, 1),
@@ -202,7 +211,7 @@ def test_postgres_partition_rejects_incomplete_or_invalid_selections(nodes, shar
 @pytest.mark.parametrize(
     "fault", [None, "missing", "drift", "skipped", "failure", "error", "wrong-node"]
 )
-@pytest.mark.parametrize("total", [4, 8])
+@pytest.mark.parametrize("total", [4, 8, 16])
 def test_postgres_report_gate_requires_every_actual_success(tmp_path, fault, total):
     nodes = [f"tests/test_example.py::TestCases::test_item[{index}]" for index in range(16)]
     for shard in range(1, total + 1):

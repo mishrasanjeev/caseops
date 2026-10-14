@@ -16,7 +16,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from scheduler_inventory import run_gcloud
+from scheduler_inventory import InventoryError, _gcloud_args_flag, run_gcloud
 
 PROJECT = "perfect-period-305406"
 REGION = "asia-south1"
@@ -28,10 +28,30 @@ IMAGE_PREFIX = f"{REGION}-docker.pkg.dev/{PROJECT}/caseops-images/caseops-api@sh
 MAX_INPUT = 8_192
 MAX_OUTPUT = 200_000
 ROOT = Path(__file__).resolve().parents[1]
+_CLOUD_STAGES = {
+    ("run", "services", "describe"): "serving_service",
+    ("run", "revisions", "describe"): "serving_revision",
+    ("scheduler", "jobs", "list"): "scheduler_inventory",
+    ("run", "jobs", "list"): "job_inventory",
+    ("run", "jobs", "executions", "list"): "execution_inventory",
+    ("projects", "describe"): "secret_project",
+    ("secrets", "versions", "describe"): "secret_version",
+    ("run", "jobs", "deploy"): "job_deploy",
+    ("run", "jobs", "describe"): "job_readback",
+    ("run", "jobs", "execute"): "job_execution",
+    ("run", "jobs", "executions", "describe"): "execution_readback",
+    ("logging", "read"): "receipt_readback",
+}
 
 
 class ReleaseError(RuntimeError):
     """Only constant, non-sensitive diagnostic codes leave this control."""
+
+
+class _CloudError(ReleaseError):
+    def __init__(self, stage: str, category: str, code: str = "cloud_command_failed"):
+        super().__init__(code)
+        self.diagnostic = {"stage": stage, "category": category}
 
 
 def _require(condition: bool, code: str) -> None:
@@ -120,15 +140,36 @@ def preflight(input_path: str | None, output_path: str | None) -> tuple[dict, st
     return value, hashlib.sha256(canonical.encode()).hexdigest()
 
 
-def _cloud(arguments: list[str], *, timeout: float = 30) -> Any:
+def _cloud(arguments: list[str], *, timeout: float = 30, stage: str | None = None) -> Any:
+    if stage is not None:
+        _require(stage in {"grant_execution", "inspection_execution"}, "invalid_cloud_stage")
+    else:
+        stage = next(
+            (value for prefix, value in _CLOUD_STAGES.items()
+             if tuple(arguments[:len(prefix)]) == prefix),
+            "unclassified",
+        )
     try:
         value = run_gcloud(arguments, expect_json=True, timeout=timeout)
-        _require(len(json.dumps(value).encode()) <= MAX_OUTPUT, "cloud_output_bounds")
-        return value
+        size = len(json.dumps(value).encode())
     except ReleaseError:
         raise
-    except Exception:
-        raise ReleaseError("cloud_command_failed") from None
+    except Exception as error:
+        cause = error.__cause__ or error
+        if isinstance(cause, subprocess.TimeoutExpired):
+            category = "deadline_exceeded"
+        elif isinstance(cause, json.JSONDecodeError):
+            category = "invalid_json"
+        elif isinstance(error, (InventoryError, subprocess.CalledProcessError)):
+            category = "command_failed"
+        elif isinstance(cause, OSError):
+            category = "transport_error"
+        else:
+            category = "unexpected_error"
+        raise _CloudError(stage, category) from None
+    if size > MAX_OUTPUT:
+        raise _CloudError(stage, "output_bounds", "cloud_output_bounds")
+    return value
 
 
 def _flags() -> list[str]:
@@ -232,6 +273,17 @@ def _args(request: dict) -> list[str]:
         "--operation-id",
         request["operation_id"],
     ]
+
+
+def _serialized_args(arguments: list[str]) -> str:
+    # Fixed module/flags and validated UUID/hash values need no custom CMD delimiter.
+    _require(
+        bool(arguments)
+        and all(isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.-]+", value)
+                for value in arguments),
+        "invalid_operator_args",
+    )
+    return _gcloud_args_flag(arguments)
 
 
 def _environment(container: dict, release: str, secrets: dict[str, str]) -> None:
@@ -735,8 +787,7 @@ def execute(
                     image,
                     "--command",
                     "python",
-                    "--args",
-                    "^|^" + "|".join(args),
+                    _serialized_args(args),
                     "--service-account",
                     SERVICE_ACCOUNT,
                     "--set-env-vars",
@@ -784,7 +835,10 @@ def execute(
             )
             evidence["execute_attempted"] = True
             record()
-            response = _cloud(["run", "jobs", "execute", JOB, "--async", "--quiet", *_flags()])
+            response = _cloud(
+                ["run", "jobs", "execute", JOB, "--async", "--quiet", *_flags()],
+                stage="grant_execution",
+            )
             previous = {str(row["metadata"].get("name", "")).rsplit("/", 1)[-1] for row in existing}
             previous.add(str(job["latest"]).rsplit("/", 1)[-1])
             evidence["execution"] = _execution_name(response, previous)
@@ -832,10 +886,10 @@ def execute(
                     JOB,
                     "--async",
                     "--quiet",
-                    "--args",
-                    "^|^" + "|".join(inspect_args),
+                    _serialized_args(inspect_args),
                     *_flags(),
-                ]
+                ],
+                stage="inspection_execution",
             )
             evidence["inspection_execution"] = _execution_name(inspection, previous | {name})
             record()
@@ -873,6 +927,8 @@ def execute(
             return evidence
         except ReleaseError as error:
             evidence.update(status="failed_closed", error_code=str(error))
+            if isinstance(error, _CloudError):
+                evidence["cloud_error"] = error.diagnostic
             record()
             raise
 

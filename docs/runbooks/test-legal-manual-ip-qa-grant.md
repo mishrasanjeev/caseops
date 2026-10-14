@@ -82,6 +82,22 @@ contact details or legal content in this input.
 
 ## Replay And Recovery
 
+The release helper binds its container list as one `--args=...` token, following
+the existing scheduler helper. Separate dash-prefixed values are rejected by
+the installed SDK parser even when CMD preserves every argument. It uses the
+default cloud CLI comma separator only for its
+fixed module/flags and validated UUID/hash arguments. Native Windows CMD tests
+assert the complete received argv for grant and inspection; a zero exit alone
+does not prove argument transport. Do not restore caret/pipe delimiters.
+
+Cloud-command failures retain an allowlisted `cloud_error.stage` and typed
+`cloud_error.category` beside the existing constant `error_code`. Raw command
+arguments, stdout, stderr and exception messages are not diagnostic evidence.
+Use the stage to investigate the retained execution state; do not increase
+deadlines or automatically repeat a mutation. The original09d preflight failure
+discarded its exact stage, so a separately reproduced transport defect must
+not be represented as that historical command's proven cause.
+
 The service inserts the grant and its deterministic audit receipt atomically
 under Company-first locking. An identical service replay is a no-op only while
 the current state still matches the recorded after-state. A consumed operation

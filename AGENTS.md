@@ -1,5 +1,37 @@
 # CaseOps agent instructions
 
+- Complete CMD argv transport is not Cloud SDK parser admission. Bind a
+  dash-prefixed container argument list as one `--args=...` token using the
+  existing scheduler helper; separate `--args` and `-m,...` are rejected.
+  Reconcile the installed SDK's real deploy and execution parsers offline,
+  retain exact parsed lists and no-network/auth fences, and cover both forms
+  in the standard regression suite before a one-shot production mutation.
+
+- A native CI pass with seconds of job-budget margin is fragile acceptance.
+  Compare startup, collection, setup, call, teardown and upload across every
+  shard and adverse runs. Split the complete canonical inventory without
+  increasing concurrency, SQL/race waits or job deadlines; timing models are
+  not replacement acceptance. Confirm cancellation from actual annotations.
+- A Windows cloud CLI argument separator is a shell transport boundary.
+  Verify the full received argv through the actual CMD entry point; exit zero
+  can conceal a truncated invocation and unintended pipeline commands. Use
+  the default separator only for validated separator-free arguments, and
+  retain sanitized stage/classification on failure without private stderr.
+  A fresh transport reproduction does not establish a discarded historical
+  command's cause. Never blindly repeat an uncertain one-time grant.
+- Adversarial exception tests must keep original exception identity and cleanup
+  assertions after scanner corrections. Use explicit expected-type catches
+  and a no-exception failure; preserve the pool body, raise point, wait and
+  shutdown budgets. A green scanner job still requires its actual alert inventory.
+- A definite raising test body needs no redundant catch `else` when its following
+  mandatory exception-identity assertion already rejects no exception. Prove
+  that assertion with a deliberately swallowing test context, not a removed
+  negative oracle. Report actual scanner findings immediately before costly
+  acceptance; keep an amended candidate's earlier partial run incomplete.
+- A deliberately swallowing negative fixture must retain and assert the fault
+  it swallowed. An empty `except: pass` neither explains nor proves that control;
+  keep the exact missing-exception identity failure and the one swallowed fault.
+
 - A per-record ACL lookup can still repeat global team-catalogue work even when
   the actor has no team memberships. Drive eligibility from every current actor
   membership, then seek one exact tenant/active Team per membership. Preserve

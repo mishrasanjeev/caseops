@@ -1,5 +1,13 @@
 # CaseOps  - Work To Be Done
 
+## October 14 Serving Release Recovery
+
+PR535 merged and API/web serve09d79527. Manual IP remains ungranted and release
+certification incomplete after guarded preflight failure. Native CI budget and
+Windows grant transport corrections require fresh joined acceptance. See
+`docs/RELEASE_RECOVERY_IP_CALENDAR_2026-10-14.md`. Preserve all failed evidence;
+older checkpoints below are history, not current production identity.
+
 ## October 13 Canonical Release Checkpoint
 
 October14 dfa full Docker is NO-GO: 2,996 native passes/one work-bound failure,

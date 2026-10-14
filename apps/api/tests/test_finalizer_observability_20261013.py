@@ -6,6 +6,7 @@ import io
 import json
 import sys
 from concurrent.futures import Future
+from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
@@ -277,11 +278,14 @@ def test_pool_failure_retains_original_exception_and_sanitized_future_outcomes()
         assert audit.release.wait(8)
         raise _PrivateError("FAKE_PROVIDER_CREDENTIAL")
 
-    with pytest.raises(AssertionError) as caught:
+    observed_error = None
+    try:
         with audit.pool() as (pool, futures):
             futures.append(pool.submit(contender))
             raise original
-    assert caught.value is original
+    except AssertionError as error:
+        observed_error = error
+    assert observed_error is original
     assert audit.release.is_set() and audit.passive.critical_pools == 0
     completed = next(row for row in records if row["event"] == "contenders_completed")
     assert completed["observer_failed"] is True and completed["pending"] == 0
@@ -310,12 +314,17 @@ def test_pool_cleanup_record_failure_cannot_replace_original_observer_error(body
     audit = native._FinalizerAudit(None, broken_record)
     original = AssertionError("FAKE_ORIGINAL_OBSERVER_FAILURE")
     expected = AssertionError if body_failure else RuntimeError
-    with pytest.raises(expected) as caught:
+    observed_error = None
+    try:
         with audit.pool():
             if body_failure:
                 raise original
+    except expected as error:
+        observed_error = error
+    else:
+        pytest.fail("The observer or cleanup failure must propagate")
     if body_failure:
-        assert caught.value is original
+        assert observed_error is original
     assert audit.release.is_set()
 
 
@@ -344,18 +353,23 @@ def test_pool_keeps_full_wait_and_shutdown_deadlines_and_reports_pending(monkeyp
     )
     audit.passive = SimpleNamespace(critical_pools=0)
     original = AssertionError("FAKE_ORIGINAL_OBSERVER_FAILURE")
-    with pytest.raises(AssertionError) as caught:
+    observed_error = None
+    try:
         with audit.pool() as (_pool, futures):
             futures.append(future)
             if body_failure:
                 raise original
+    except AssertionError as error:
+        observed_error = error
+    else:
+        pytest.fail("The observer or pending-contender failure must propagate")
     assert operations == [("wait", 12), ("shutdown", True, True)]
     completed = next(row for row in records if row["event"] == "contenders_completed")
     assert completed["pending"] == 1
     assert completed["future_outcomes"] == [{"index": 0, "status": "pending"}]
     assert audit.passive.critical_pools == 0
     if body_failure:
-        assert caught.value is original
+        assert observed_error is original
 
 
 def test_native_journal_footer_hashes_original_prefix_and_binds_full_node_path(tmp_path):
@@ -465,16 +479,42 @@ def test_cleanup_evidence_failure_makes_footer_incomplete_without_replacing_orig
 
     audit = native._FinalizerAudit(None, record)
     original = AssertionError("FAKE_ORIGINAL_PRIVATE_MESSAGE")
-    with pytest.raises(AssertionError) as caught:
+    observed_error = None
+    try:
         with audit.pool():
             raise original
-    assert caught.value is original
+    except AssertionError as error:
+        observed_error = error
+    assert observed_error is original
     with pytest.raises(AssertionError, match="incomplete"):
         journal.complete()
     footer = json.loads(stream.getvalue().splitlines()[-1])
     assert footer["event"] == "native_evidence_incomplete" and not footer["complete"]
     assert footer["incomplete_reasons"] == ["contender_cleanup_failed"]
     assert "FAKE_" not in stream.getvalue()
+
+
+@pytest.mark.parametrize("probe", [
+    test_pool_failure_retains_original_exception_and_sanitized_future_outcomes,
+    test_cleanup_evidence_failure_makes_footer_incomplete_without_replacing_original,
+], ids=["pool-original", "cleanup-original"])
+def test_original_error_identity_assertion_rejects_suppressed_body(monkeypatch, tmp_path, probe):
+    swallowed = []
+
+    @contextmanager
+    def suppress_body(_audit):
+        try:
+            yield SimpleNamespace(submit=lambda _callback: Future()), []
+        except AssertionError as error:
+            swallowed.append(error)
+
+    monkeypatch.setattr(native._FinalizerAudit, "pool", suppress_body)
+    arguments = [tmp_path] if probe is (
+        test_cleanup_evidence_failure_makes_footer_incomplete_without_replacing_original
+    ) else []
+    with pytest.raises(AssertionError, match="assert None is"):
+        probe(*arguments)
+    assert len(swallowed) == 1
 
 
 def test_ci_retains_exact_per_shard_native_journals_without_weakening_invocation():
