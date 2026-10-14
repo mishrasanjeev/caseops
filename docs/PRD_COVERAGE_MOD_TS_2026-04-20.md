@@ -2,6 +2,16 @@
 
 ## October 13 Canonical Release Checkpoint
 
+October14 native gate: frozen655 has2,957 native passes and one genuine5s
+specialist-list timeout; its556 browser cases did not execute. The parent join,
+not its indexed grant probes, materialized the authorized docket set. The
+PostgreSQL per-candidate lookup correction preserves all access/lifecycle
+predicates and adds actual executor-work proof. Fresh complete native replay,
+joined Docker/CI/CodeQL and deployed acceptance remain required; no old proof
+transfers. Adjacent ordinary joins remain audit candidates, not demonstrated
+defects. The query bound currently targets the reported alternating-visibility
+first-page fixture. Production is still3dbf and the QA grant remains unexecuted.
+
 October14 acceptance correction: J08/M08/US-022..025/FT-042..043 and
 FT-078..082 retain non-hearing stable ties and actual loaded hearing navigation.
 UJ-02/04/26 and IPLF-037 require recipient-readable delivered renewal content,

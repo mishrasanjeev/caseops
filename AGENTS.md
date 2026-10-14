@@ -720,6 +720,13 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- Bounded ACL probes and a low SQL statement count do not bound the work of a
+  parent admission join. Retain the actual PostgreSQL plan under representative
+  tenant volume and stale estimates, charge executor rows and loops, and avoid
+  materializing the full authorized parent set before pagination. Preserve every
+  access/lifecycle predicate and the original timeout. A first-page alternating-
+  visibility fixture does not certify arbitrary sparse grants or later cursors.
+
 - A new subscription/audit operator must run the existing canonical audit-owner
   coverage as well as its own complete unit/native modules. Use the shared
   audit writer with atomic caller-owned commit, deterministic replay identity
