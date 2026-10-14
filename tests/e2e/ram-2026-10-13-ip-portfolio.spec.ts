@@ -602,13 +602,16 @@ for (const width of [1280, 393]) {
     await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
     await expect(sourceRow.getByText(tomorrow, { exact: true })).toBeVisible();
     await expect(sourceRow.getByText("Alert: delivered", { exact: true })).toBeVisible();
+    await sourceRow.locator("summary").filter({ hasText: /^Renewal alert$/ }).click();
     await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toHaveText(deliveredBody);
     await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toBeVisible();
     await page.reload();
     await page.getByPlaceholder("Mark, application number, opposition number").fill(number);
     await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
     await expect(sourceRow.getByText("Alert: delivered", { exact: true })).toBeVisible();
+    await sourceRow.locator("summary").filter({ hasText: /^Renewal alert$/ }).click();
     await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toHaveText(deliveredBody);
+    await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toBeVisible();
     await page.goto(`${web.origin}/app/admin/notifications`);
     const receipt = page.getByTestId(`notification-intent-${deliveryIntent.id}`);
     await expect(receipt.getByText("delivered", { exact: true })).toBeVisible();
