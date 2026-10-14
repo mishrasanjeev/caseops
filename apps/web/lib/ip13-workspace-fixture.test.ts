@@ -15,7 +15,8 @@ type FixtureActor = typeof actor;
 const marker = { "X-CaseOps-Automated-Test": "no-paid-providers" };
 const database = `sqlite+pysqlite:///${path.join(root, "caseops-e2e.db").replaceAll("\\", "/")}`;
 
-function fixture(overrides: Record<string, string> = {}, ready = true, loginCompanyId = tenantId) {
+function fixture(overrides: Record<string, string> = {}, ready = true, loginCompanyId = tenantId,
+  configurationTimezone: unknown = "Asia/Kolkata") {
   const functions = new Set(["required", "grantLocalPortfolioEntitlement", "preparePortfolioWorkspace", "preparePortfolio"]);
   const ast = ts.createSourceFile("dated-fixture.ts", source, ts.ScriptTarget.Latest, true);
   const body = ast.statements.filter(statement =>
@@ -43,7 +44,8 @@ function fixture(overrides: Record<string, string> = {}, ready = true, loginComp
       return url.endsWith("/readiness") ? response({ workspace_available: ready, manual_docketing_available: ready,
         features: ["workspace_core", "manual_docketing"].map(feature_id => ({ feature_id,
           available: ready, entitled: ready, rollout_enabled: true, reason: ready ? "available" : "missing_entitlement" })),
-        configuration_status: { configuration: { workspace_enabled: ready, enabled_automations_json: [] },
+        configuration_status: { configuration: { workspace_enabled: ready, enabled_automations_json: [],
+          timezone: configurationTimezone },
           enablement_blockers: ready ? [] : ["workspace_configuration_missing"] } }) : response({ release_sha: "c".repeat(40) });
     }),
     put: vi.fn(async (url: string, options: { headers: Record<string, string>; data: Record<string, unknown> }) => {
@@ -69,7 +71,8 @@ describe("IP13 fresh workspace fixture boundaries", () => {
   it("grants only the fresh fixture, configures/enables manual workspace and reads actual readiness", async () => {
     const python = path.join(root, "apps/api/.venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
     const f = fixture({ CASEOPS_E2E_PYTHON: python });
-    await f.run();
+    const result = await f.run() as { timezone: string };
+    expect(result.timezone).toBe("Asia/Kolkata");
     expect(f.spawnSync).toHaveBeenCalledTimes(1);
     const [executable, args, options] = f.spawnSync.mock.calls[0] as unknown as [string, string[], { env: Record<string, string> }];
     expect(executable).toBe(python);
@@ -126,12 +129,21 @@ describe("IP13 fresh workspace fixture boundaries", () => {
   });
 
   it("uses read-only readiness on canonical production and never grants/configures/enables", async () => {
-    const f = fixture({ PROD_API_BASE_URL: "https://api.caseops.ai" });
-    await f.run("https://caseops.ai");
+    const f = fixture({ PROD_API_BASE_URL: "https://api.caseops.ai" }, true, tenantId, "Europe/London");
+    const result = await f.run("https://caseops.ai") as { timezone: string };
+    expect(result.timezone).toBe("Europe/London");
     expect(f.spawnSync).not.toHaveBeenCalled();
     expect(f.request.put).not.toHaveBeenCalled();
     expect(f.request.post.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(["/api/auth/login"]);
     expect(f.events.at(-1)).toBe("/api/ip/readiness");
+  });
+
+  it.each([null, 17])("rejects malformed production timezone %s without workspace mutation", async timezone => {
+    const f = fixture({ PROD_API_BASE_URL: "https://api.caseops.ai" }, true, tenantId, timezone);
+    await expect(f.run("https://caseops.ai")).rejects.toThrow();
+    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.request.put).not.toHaveBeenCalled();
+    expect(f.request.post.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(["/api/auth/login"]);
   });
 
   it("fails remote readiness with its real entitlement/configuration reasons, without mutation", async () => {
