@@ -181,6 +181,40 @@ def test_only_exact_actual_delivery_can_supply_body(source_client, state):
         assert session.get(InAppNotification, note_id).body == body
 
 
+@pytest.mark.parametrize("target", ["intent", "note"])
+@pytest.mark.parametrize("metadata", [["retained-non-object"], "retained-non-object", 7, []],
+                         ids=["list", "string", "number", "empty-list"])
+def test_non_object_retained_metadata_denies_body_without_crashing_portfolio(
+    source_client, target, metadata,
+):
+    client = source_client
+    actor, imported = _import_source(client)
+    intent_id, note_id, body = _deliver(actor, imported["created_docket_id"])
+    with get_session_factory()() as session:
+        record = session.get(
+            NotificationDeliveryIntent if target == "intent" else InAppNotification,
+            intent_id if target == "intent" else note_id,
+        )
+        record.metadata_json = deepcopy(metadata)
+        session.commit()
+    with TestClient(client.app, raise_server_exceptions=False) as transport:
+        transport.cookies.update(client.cookies)
+        # This must remain a successful authenticated Portfolio read, not HTTP 500.
+        rows = _portfolio(transport, actor)["rows"]
+        assert len(rows) == 1
+        assert rows[0]["source_renewal_alert_status"] == "delivered"
+        assert rows[0].get("source_renewal_alert_body") is None
+        assert body not in str(rows)
+    with get_session_factory()() as session:
+        record = session.get(
+            NotificationDeliveryIntent if target == "intent" else InAppNotification,
+            intent_id if target == "intent" else note_id,
+        )
+        assert record.metadata_json == metadata
+        assert session.get(InAppNotification, note_id).body == body
+        assert session.get(NotificationDeliveryIntent, intent_id).body == body
+
+
 def _bootstrap_foreign(client):
     identity = uuid4().hex
     response = client.post("/api/bootstrap/company", json={

@@ -270,8 +270,10 @@ def portfolio_source_renewal_details(
             data = result[keys[source_id]]
             due_on = data["source_renewal_due_on"].isoformat()
             if (
-                (intent_metadata or {}).get("source_due_on") == due_on
-                and (note_metadata or {}).get("source_due_on") == due_on
+                isinstance(intent_metadata, dict)
+                and isinstance(note_metadata, dict)
+                and intent_metadata.get("source_due_on") == due_on
+                and note_metadata.get("source_due_on") == due_on
             ):
                 data["source_renewal_alert_body"] = body
     for data in result.values():
