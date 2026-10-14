@@ -2,6 +2,23 @@
 
 ## October 13 Canonical Release Checkpoint
 
+The new participant-observation correction has114 scoped native passes/342
+phases, preserving105 original identities and111 assertions under unchanged
+deadlines/GC/security. Real admission and delayed-preflight controls supplement,
+not replace, the failed40e8 hosted evidence. Complete amended-source gates and
+exact live acceptance remain pending; no deployed closure or QA grant is claimed.
+
+October14 fresh40e8 CI is NO-GO despite19 prerequisite passes and clean secret
+scans. The web gate fails two offline readiness fixtures after a required
+timezone read; the a446 local correction has a complete204-file/1,323-pass
+frontend replacement, not hosted closure. Native shard3 has373 passes and one
+missed directed-wait deadline; its final snapshot contains the expected edge,
+and its process-wide GC timing is retained without thread/cause overclaim.
+Complete deterministic native and final-source release gates remain required.
+The independent099 specialist module passes19 cases with measured executor
+bounds; that scoped proof does not accept the joined release. Production is
+still3dbf and the approved QA grant is unexecuted. See the October13 bug document.
+
 October14 native gate: frozen655 has2,957 native passes and one genuine5s
 specialist-list timeout; its556 browser cases did not execute. The parent join,
 not its indexed grant probes, materialized the authorized docket set. The

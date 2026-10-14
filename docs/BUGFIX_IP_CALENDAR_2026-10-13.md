@@ -660,3 +660,53 @@ EXPLAIN row/loop work, conservatively charging PostgreSQL's rounded averages,
 and rejects bulk docket scans. Read-only diagnostic comparison is not fresh
 acceptance: the complete original module and joined release gates must replay
 on independently migrated native storage before this failure can close.
+
+## Final-Candidate CI Follow-Up
+
+Fresh 40e8b34c prerequisites pass all19 current commands; its pinned secret tree
+and history scans have zero final findings. These are not whole-release proof.
+Actual hosted CI38519638841 checks out merge278da3ed with the exact same tree.
+The web gate has1,319 passes and two failures in the dated setup helper's offline
+fixture module. I strengthened the helper to return the real workspace timezone
+but missed replaying its existing mock consumer before freezing the candidate.
+This is an acceptance-contract omission, not permission to guess a timezone or
+weaken the real readiness check. The a4466c4d test correction supplies that field,
+asserts a different production-read-only timezone and adds malformed-value
+denials without grant/configuration writes. Its complete pre-commit frontend
+replacement has1,323 passes across204 files, no skips, JSON/XML count agreement,
+coverage exit0 and typecheck exit0. Its six affected files separately pass49
+cases. These remain scoped local proof; final-source hosted gates must replay.
+
+The same hosted run's complete native shard3 has373 call passes and one failed
+call across374 identities/1,122 phases, with no skipped setup/teardown. All native
+records and the complete failure are retained in
+`ci-40e8b34c-native-shard3-readonly-01`. The directed-wait oracle expires before
+the participant-lock assertion. Its final snapshot contains the actual expected
+worker-to-revocation edge; a measured process-wide generation2 GC interval of
+1.509247591s precedes that acquisition. This does not establish an absent product
+fence or identify the triggering thread/object graph. The later free-parent,
+worker-completion and retained-output assertions were not reached. A deterministic
+admission boundary with the original wait/SQL/future budgets and complete native
+replacement is required; no production GC, timeout or security change is waived.
+
+Full frozen40e8 Docker remains its own unchanged source scope. The new amendment,
+canonical merge, guarded release, approved grant and exact live browser/cadence
+acceptance remain pending. Production remains3dbf; no grant has executed and the
+unidentified historical reopening remains Inconclusive.
+
+The participant-observation correction is now committed as3ee6e324 on its
+independent clean QA checkout and integrated as4722f29a. Complete participant
+and shared-observer modules pass114 cases/342 phases with zero skips/failures.
+All105 original identities and111 original AST assertions remain; seven exact
+admission-predicate controls and two delayed-preflight native controls are added.
+The latter deliberately exhaust the old oracle before SQL admission, then prove
+the real PostgreSQL edge and every original postcondition. Those expected
+control misses are not failed native outcomes. The shared oracle, production
+code/GC and1.5s observation/2s SQL/8s barriers/10s future bounds are unchanged.
+All67 native envelopes, schema/index/constraint/trigger/catalogue fingerprints,
+ordered collection/phases/JUnit and owned-resource cleanup reconcile. Tested
+physical source pins are exact; Windows CRLF versus Git LF is explicitly bound
+by normalized bytes and complete AST, not mislabeled as raw immutable equality.
+Parent independently checked all270 sealed artifacts with zero hash mismatches.
+Proof: `native-participant-observation-20261014-01/README.md`. This does not
+supersede the failed hosted run or certify the joined Docker/live release.

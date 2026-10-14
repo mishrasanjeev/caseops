@@ -720,6 +720,21 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- A short directed-lock oracle must begin at the observed exact participant SQL
+  admission, not an upstream worker callback that still has bounded preflight
+  work to perform. Keep a separate bounded admission handshake, prove a delayed
+  preflight cannot supply the edge, then require the real backend blocker, free
+  parent and normal worker completion under the unchanged observation and SQL
+  limits. Retain process-wide timing without inventing thread/object attribution;
+  do not change production GC policy or raise a deadline to hide a missed probe.
+
+- A strengthened dated browser setup helper changes its offline fixture contract
+  too. Replay every consumer after adding required readiness metadata or return
+  fields, assert the actual configured value on local and production-read-only
+  paths, and reject malformed metadata without mutation. Do not invent a default
+  timezone to make a simplified mock pass. Focused page tests cannot certify an
+  omitted fixture module or replace complete frontend coverage.
+
 - Bounded ACL probes and a low SQL statement count do not bound the work of a
   parent admission join. Retain the actual PostgreSQL plan under representative
   tenant volume and stale estimates, charge executor rows and loops, and avoid
