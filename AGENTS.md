@@ -746,6 +746,10 @@ requirements when using the fallback.
   including identity, due date, remaining days and record destination. Deny
   another recipient, revoked access, terminal records and stale source versions;
   do not expose a queued body or rebind historical delivery to corrected facts.
+- ORM JSON annotations do not enforce retained database JSON shape. A new
+  receipt read must reject non-object metadata before inspecting its keys,
+  preserve the original evidence and deny ambiguous linked receipts. Prove
+  the denial without turning a single malformed row into a Portfolio failure.
 
 - Wrapping navigation must allocate block height for every row. Horizontal
   overflow checks and DOM visibility do not prove a tab is clickable: a panel

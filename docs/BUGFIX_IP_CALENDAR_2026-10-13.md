@@ -620,3 +620,23 @@ direct audit construction bypasses the canonical audit writer. Focused new
 operator tests did not cover the existing shared ownership invariant. The
 existing audit regression and all three actual CodeQL findings stay open until
 the corrected complete inventory passes. No production grant has executed.
+
+The joined recipient read correction now uses the existing authorized Portfolio
+page, not a new inbox or scheduler. It joins the actual delivered notification
+to its exact intent/current source/recipient, checks current tenant, user,
+membership, docket and linked-Matter lifecycle/access, and rejects duplicate
+eligible receipts. The content is immutable saved text, never reconstructed
+from newer facts. Both retained metadata values must be objects matching the
+current source date. A parent review caught a malformed-JSON crash on this new
+read; the regression and denial correction are retained separately. Frontend
+types and generated OpenAPI include the nullable content field; the responsive
+row uses a compact **Renewal alert** disclosure. New dated browser assertions
+require the actual remaining-day count from the scheduled instant in the
+workspace timezone and check width while the body is open, including reload.
+
+This describes implemented joined source, not deployed closure. Earlier
+queue/status-only passes, all genuine content/order/audit REDs and infrastructure
+failures remain in their original scopes. The full final-source control-plane,
+secret, CI/CodeQL, Docker and exact-release production gates still apply. The
+approved test-legal grant remains unexecuted; GBA, other entitlements and
+provider automation are unchanged by this work.

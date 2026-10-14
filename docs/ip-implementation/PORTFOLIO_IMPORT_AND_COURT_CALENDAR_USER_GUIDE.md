@@ -124,6 +124,13 @@ deadline or a claim of email/provider delivery.
 - After delivery, Portfolio shows **Alert: delivered**. Administrators can
   inspect the matching **renewal source date 1month** receipt under **Admin ->
   Notifications**. External-channel delivery is not implied by an in-app receipt.
+- The recipient can select **Renewal alert** in the Portfolio row to read the
+  actual delivered content: mark, application number, classes, applicants, source
+  date, remaining days and record destination. The existing mark link opens the
+  saved record. Another member does not receive this personal alert content.
+- Alert content is not shown for queued, cancelled, dismissed, ambiguous or
+  stale receipts, withdrawn source dates, revoked access or terminal records.
+  Stored delivered history remains unchanged when the source is corrected.
 - From the committed import row, select **Edit source renewal date**. Review
   the current value, enter a correction reason, change or clear the date,
   then select **Save source date**.
