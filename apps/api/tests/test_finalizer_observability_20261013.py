@@ -499,12 +499,14 @@ def test_cleanup_evidence_failure_makes_footer_incomplete_without_replacing_orig
     test_cleanup_evidence_failure_makes_footer_incomplete_without_replacing_original,
 ], ids=["pool-original", "cleanup-original"])
 def test_original_error_identity_assertion_rejects_suppressed_body(monkeypatch, tmp_path, probe):
+    swallowed = []
+
     @contextmanager
     def suppress_body(_audit):
         try:
             yield SimpleNamespace(submit=lambda _callback: Future()), []
-        except AssertionError:
-            pass
+        except AssertionError as error:
+            swallowed.append(error)
 
     monkeypatch.setattr(native._FinalizerAudit, "pool", suppress_body)
     arguments = [tmp_path] if probe is (
@@ -512,6 +514,7 @@ def test_original_error_identity_assertion_rejects_suppressed_body(monkeypatch, 
     ) else []
     with pytest.raises(AssertionError, match="assert None is"):
         probe(*arguments)
+    assert len(swallowed) == 1
 
 
 def test_ci_retains_exact_per_shard_native_journals_without_weakening_invocation():

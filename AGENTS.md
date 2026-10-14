@@ -21,6 +21,9 @@
   that assertion with a deliberately swallowing test context, not a removed
   negative oracle. Report actual scanner findings immediately before costly
   acceptance; keep an amended candidate's earlier partial run incomplete.
+- A deliberately swallowing negative fixture must retain and assert the fault
+  it swallowed. An empty `except: pass` neither explains nor proves that control;
+  keep the exact missing-exception identity failure and the one swallowed fault.
 
 - A per-record ACL lookup can still repeat global team-catalogue work even when
   the actor has no team memberships. Drive eligibility from every current actor

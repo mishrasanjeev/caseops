@@ -94,6 +94,12 @@ context regressions prove that exact identity assertion fails; the two
 conditional-body cleanup tests retain their necessary no-exception `else`.
 Fresh actual CodeQL results must be reconciled before expensive acceptance.
 
+Candidate351581b8 remains **NO-GO**: its fresh actual CodeQL inventory contains
+one `py/empty-except` warning576 in the deliberately swallowing negative
+fixture. The fixture now retains and asserts exactly one swallowed error,
+while preserving the exact missing-exception identity failure. No scanner
+suppression, exception-policy change or acceptance transfer is authorized.
+
 The parent CI/finalizer slice collected341 identities:340 passed and one
 explicit POSIX mount-policy skip on Windows. Ordered JUnit and all1022 phase
 reports agree with collection and natural sessionexitzero. Evidence:
