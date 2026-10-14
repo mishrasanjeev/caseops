@@ -522,3 +522,65 @@ arbitrary interprocedural flows remain outside the proven scope; no formal
 whole-program guarantee is claimed. Proof: api-request-preencoding-readonly-01.
 The unchanged client's literal-string contract is also regression-tested so
 caller mistakes cannot be hidden by guessing that string input is encoded JSON.
+
+## Approved QA Entitlement And Current Release Checkpoint
+
+On October14 the owner explicitly authorized non-billable manual IP for the
+existing test-legal tenant only. This supersedes the pending-authorization
+checkpoint above, not its read-only evidence. No production grant has executed.
+The current subscription endpoint cannot set an IP-only override; upgrading
+the whole plan or widening the normal QA bootstrap would exceed the scope.
+
+The scoped one-shot operator uses the existing subscription and audit owners,
+exact company/subscription identity, an inspected before-fingerprint and one
+retained operation UUID. It changes the IP override and normal update timestamp
+atomically with the receipt, preserving billing, other override keys, provider
+flags, workspace configuration and GBA. A consumed operation must not regrant
+after revocation. No new provider transmission, account, subscription, paid plan
+or automated grant policy is authorized. Procedure:
+`docs/runbooks/test-legal-manual-ip-qa-grant.md`.
+
+The corrected f745a17d candidate has39 passed cases across the five complete
+transport/client/endpoints/import-page/fixture modules. Its fresh real-browser
+replay has four passes at1280 and393, without skips or mutation retries. All19
+current API prerequisite commands pass on clean f745, with source and canonical
+base unchanged. This is scoped proof only: the new operator and joined release
+still require fresh final-source gates. Earlier c28 browser failure and its
+interrupted Docker gate remain failed and incomplete respectively. PR535 has
+not been merged or deployed; production remains3dbf364d at this checkpoint.
+
+The final operator selection has39 SQLite passes/117 phases and29 PostgreSQL
+passes/87 phases, with no failures/skips, exact ordered JUnit agreement, stable
+source pins and owned-resource cleanup. Independent review caught an inspection
+cleanup bug before production use: returning a pooled connection before clearing
+query_only could poison another checkout, and always clearing to OFF could widen
+a connection whose original state was ON. The corrected routine owns the exact
+connection, restores its prior state on success/failure, and invalidates it when
+cleanup fails. Native tests use the canonical independently migrated template;
+an initial host-connection setup failure remains incomplete, not a product RED.
+Proof: qa-manual-ip-operator-20261014-01/README.md.
+
+Deployment-control review also found pre-production contract mistakes concealed
+by handcrafted cloud fixtures: execution annotations belong at top-level v1
+metadata, structured stdout is stored as jsonPayload, log visibility is delayed,
+and protobuf Struct renders integer-valued JSON numbers as floats. Actual SDK/
+protobuf contracts now drive the controls; observation can poll only an empty
+log result within a deadline and never repeat the grant. The original failing
+regressions remain in red-03/red-04/red-07. A complete amended helper selection
+passes92 cases/276 phases; its final text-versus-structured numeric restriction
+still requires the complete replacement proof before the joined release gate.
+
+Production CLI inspection at02:00:34Z is read-only, source-pinned and reaped.
+It establishes the service's complete before-fingerprint for the exact existing
+test-legal subscription; it is not a grant or release acceptance. The approved
+one-time request is prepared outside the release checkout and will be rechecked
+under the grant's locks. Production still serves3dbf364d; no deployed closure is
+claimed. The unidentified Matter incident remains Inconclusive.
+
+The complete helper replacement now passes94 cases/282 phases, Ruff and Bash,
+with unchanged owned source pins and natural/reaped exit0. Only structured
+jsonPayload accepts protobuf's logical integer1.0; text JSON requires integer1
+for both grant and inspection. Both new text-rejection RED cases are preserved
+alongside the earlier92-case scope. Proof: qa-manual-ip-release-helper-20261014-01/
+final-09/README.md. No cloud execution or production grant is inferred. The
+joined candidate still needs full fresh gates and exact live acceptance.

@@ -2324,3 +2324,22 @@ requirements when using the fallback.
   object, including null clearing, concurrency fields, CSRF and rejected writes;
   then replay the complete browser journey through a fresh build. Audit other
   client callers when this known double-encoding defect reappears.
+- An owner-approved one-time QA entitlement is not a default bootstrap policy.
+  Pin the existing tenant/subscription and inspected before-state, preserve
+  billing/provider/configuration fields, and atomically retain an operation
+  receipt. Replay may be a no-op only while that exact after-state remains;
+  later revocation or drift must refuse regrant. Prove wrong-tenant rejection,
+  audit rollback and concurrent receipt admission on real PostgreSQL, then
+  verify actual workspace readiness and the saved-record browser journey.
+- A connection-scoped read-only setting must be cleared on the same connection
+  before it returns to the pool. A cleanup query through a session that already
+  released its connection can reset another connection and poison the original.
+  Hold the inspection connection explicitly, roll back read-only work, restore
+  the exact connection's state and regress interleaved pooled checkouts.
+- A cloud-job fixture must match the real API and SDK serialization contract.
+  Cloud Run v1 execution annotations are top-level metadata; JSON stdout becomes
+  jsonPayload, and protobuf Struct may render integer-valued numbers as floats.
+  Keep any representation exception confined to that documented boundary.
+  Bind exact serving secret references, reject truncated execution inventories,
+  and poll only bounded read-only log visibility, never repeat a mutation to
+  compensate for missing or uncertain evidence.

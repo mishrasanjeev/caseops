@@ -122,6 +122,8 @@ A0_RULE_GOVERNANCE_BASELINE_OUTPUT="${CASEOPS_A0_RULE_GOVERNANCE_BASELINE_OUTPUT
 # Scheduled verification is read-only, so normal cadence can remain enabled
 # between releases without colliding with synthetic QA mutation.
 PRIVATE_PROJECTION_SCHEDULER_HOLD="${CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD:-true}"
+TEST_LEGAL_MANUAL_IP_GRANT_INPUT="${CASEOPS_TEST_LEGAL_MANUAL_IP_GRANT_INPUT:-}"
+TEST_LEGAL_MANUAL_IP_GRANT_OUTPUT="${CASEOPS_TEST_LEGAL_MANUAL_IP_GRANT_OUTPUT:-}"
 
 if [[ "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" != "true" && "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" != "false" ]]; then
   echo "ERROR: CASEOPS_A0_CAPTURE_RULE_GOVERNANCE_BASELINE must be true or false."
@@ -214,6 +216,12 @@ resolve_image_digest() {
 # A long release can otherwise route an obsolete commit after another PR lands
 # on main. Refresh the remote ref before the first cloud call, then repeat at
 # every mutation/activation boundary below.
+TEST_LEGAL_MANUAL_IP_GRANT_SHA256=""
+if [[ -n "${TEST_LEGAL_MANUAL_IP_GRANT_INPUT}" || -n "${TEST_LEGAL_MANUAL_IP_GRANT_OUTPUT}" ]]; then
+  TEST_LEGAL_MANUAL_IP_GRANT_SHA256=$(python scripts/qa_manual_ip_grant_release.py validate \
+    --input "${TEST_LEGAL_MANUAL_IP_GRANT_INPUT}" \
+    --output "${TEST_LEGAL_MANUAL_IP_GRANT_OUTPUT}" | tr -d '\r')
+fi
 assert_current_main "release preflight"
 
 DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
@@ -221,6 +229,7 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   .dockerignore .gcloudignore "license-policy" \
   "docs/security/js-license-compliance-review-2026-10-12.md" \
   "scripts/deploy-prod.sh" "scripts/pre_migration_backup.py" "scripts/scheduler_inventory.py" \
+  "scripts/qa_manual_ip_grant_release.py" \
   "tests/fixtures/statutes/structured-schedule-api.json" \
   "tests/e2e/support/prod-failure-diagnostics.ts" \
   "tests/e2e/support/bounded-network-evidence.ts" \
@@ -1365,6 +1374,16 @@ fi
 rm -f -- "${A0_QA_JOB_POST}" "${A0_QA_EXECUTION}"
 A0_QA_JOB_POST=""
 A0_QA_EXECUTION=""
+
+if [[ -n "${TEST_LEGAL_MANUAL_IP_GRANT_INPUT}" ]]; then
+  assert_current_main "pre-test-legal-manual-ip-grant gate"
+  python scripts/qa_manual_ip_grant_release.py execute \
+    --input "${TEST_LEGAL_MANUAL_IP_GRANT_INPUT}" \
+    --output "${TEST_LEGAL_MANUAL_IP_GRANT_OUTPUT}" \
+    --expected-input-sha256 "${TEST_LEGAL_MANUAL_IP_GRANT_SHA256}" \
+    --release-sha "${HEAD_SHA}" --image "${API_IMMUTABLE_IMAGE}"
+  assert_current_main "post-test-legal-manual-ip-grant gate"
+fi
 
 # A push to main is not proof that a release started. Dispatch the exact-SHA
 # browser gate only after both services pass every synchronous deploy gate.

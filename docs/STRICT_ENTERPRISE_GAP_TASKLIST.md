@@ -22,6 +22,18 @@ replay. Historical reopening cause remains Inconclusive. See
 `docs/BUGFIX_IP_CALENDAR_2026-10-13.md` and
 `docs/RELEASE_PR533_ACCEPTANCE_2026-10-13.md`.
 
+October14 QA readiness checkpoint: the owner approved one non-billable manual-IP
+grant for test-legal only under existing M14/US-041 and IP workspace ownership.
+Read-only production inspection finds one manual_active grandfathered_free
+subscription with no IP override. The one-shot control preserves plan/status,
+other entitlements, providers, configuration and GBA; consumed replay cannot
+regrant after revocation. No production grant has executed. Scoped operator
+coverage has39 SQLite and29 PostgreSQL passes, and the four governance modules
+have47 passes. These do not certify the joined release. Fresh final-source
+Docker/CI, canonical merge, guarded execution and exact live browser replay
+remain required. The historical unidentified reopening remains Inconclusive.
+See `docs/runbooks/test-legal-manual-ip-qa-grant.md` for the operator procedure.
+
 ## October 13 Import And Calendar Acceptance Gap
 
 **Partially implemented / NO-GO**: Calendar presence-only tests missed a dead

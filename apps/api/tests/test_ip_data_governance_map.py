@@ -20,6 +20,31 @@ def test_committed_data_governance_map_covers_current_repository_inventory() -> 
     assert ip_data_governance_map.validate(_map()) == []
 
 
+def test_manual_ip_qa_receipts_use_existing_owners_without_policy_activation() -> None:
+    data = _map()
+    rows = {row["table_name"]: row for row in data["sql_tables"]}
+    for name in ("billing_subscriptions", "audit_events"):
+        assert rows[name]["purpose"] == data["table_purpose_overrides"][name]
+        assert "existing" in rows[name]["purpose"].lower()
+    logs = next(
+        row
+        for row in data["non_sql_data_classes"]
+        if row["id"] == "application-logs-traces-and-metrics"
+    )
+    assert {
+        "apps/api/src/caseops_api/services/qa_manual_ip_entitlement.py",
+        "apps/api/src/caseops_api/scripts/qa_manual_ip_entitlement.py",
+        "scripts/qa_manual_ip_grant_release.py",
+        "docs/runbooks/test-legal-manual-ip-qa-grant.md",
+    }.issubset(logs["implementation_refs"])
+    assert logs["status"] == "inventory_registered_runtime_policy_unapproved"
+    assert logs["disposition_handler_id"] == "registry_fail_closed"
+    assert logs["tenant_configurable"] is False
+    assert logs["default_retention"].startswith("No approved automated retention duration.")
+    assert "No account/subscription creation" in data["latest_change_note"]
+    assert "default/scheduled grant" in data["latest_change_note"]
+
+
 def test_sendgrid_leaf_keeps_existing_provider_class_and_requires_change_review() -> None:
     data = _map()
     provider = next(

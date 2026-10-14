@@ -21,6 +21,13 @@ they are not required for manual work and are not enabled by an import. A missin
 plan entitlement must be resolved through the authorized billing operator, not
 by changing record access, retrying an import or bypassing the readiness gate.
 
+The owner-approved test-legal QA exception is a separate one-time, non-billable
+manual-IP grant. It does not upgrade customer plans or enable providers and
+must not be rerun automatically after revocation. Operator instructions and
+the current execution status are in
+`docs/runbooks/test-legal-manual-ip-qa-grant.md`. A grant is not complete user
+acceptance until the saved docket opens and the dated browser journey passes.
+
 ## Import A Trademark Register
 
 1. Open IP Portfolio, then Trademark Portfolio Import.
