@@ -985,6 +985,17 @@ function PortfolioValue({ row, column }: { row: IpPortfolioRow; column: ColumnKe
             <span className="mt-1 block text-xs text-[var(--color-warning-700)]">
               Renewal (unverified source): <time dateTime={row.source_renewal_due_on}>{row.source_renewal_due_on}</time>
               <span className="block">Alert: {row.source_renewal_alert_status ?? "not scheduled"}</span>
+              {row.source_renewal_alert_status === "delivered" && row.source_renewal_alert_body ? (
+                <details className="mt-2 min-w-0 text-[var(--color-ink)]">
+                  <summary className="cursor-pointer text-xs font-medium">Renewal alert</summary>
+                  <span
+                    data-testid={`ip-source-renewal-alert-${row.docket_id}`}
+                    className="mt-2 block whitespace-pre-wrap text-xs leading-5 [overflow-wrap:anywhere]"
+                  >
+                    {row.source_renewal_alert_body}
+                  </span>
+                </details>
+              ) : null}
             </span>
           ) : null}
         </span>

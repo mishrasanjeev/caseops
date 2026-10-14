@@ -944,7 +944,7 @@ def list_ip_portfolio(
     from caseops_api.services.ip_renewals import portfolio_source_renewal_details
 
     source_renewals = portfolio_source_renewal_details(
-        session, company_id=context.company.id, docket_ids=docket_ids,
+        session, context=context, docket_ids=docket_ids,
     )
     for application, asset, docket in visible:
         open_count, unconfirmed, overdue = deadlines.get(docket.id, (0, 0, 0))

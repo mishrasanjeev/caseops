@@ -8951,6 +8951,7 @@ export type IpPortfolioRow = {
   source_renewal_due_on?: string | null;
   source_renewal_alert_at?: string | null;
   source_renewal_alert_status?: string | null;
+  source_renewal_alert_body?: string | null;
   application_id: string;
   docket_id: string;
   matter_id: string | null;

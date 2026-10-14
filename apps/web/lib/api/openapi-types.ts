@@ -30597,6 +30597,8 @@ export interface components {
             responsible_membership_id?: string | null;
             /** Source Renewal Alert At */
             source_renewal_alert_at?: string | null;
+            /** Source Renewal Alert Body */
+            source_renewal_alert_body?: string | null;
             /** Source Renewal Alert Status */
             source_renewal_alert_status?: string | null;
             /** Source Renewal Due On */
