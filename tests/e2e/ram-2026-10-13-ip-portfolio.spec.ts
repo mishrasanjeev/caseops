@@ -584,15 +584,31 @@ for (const width of [1280, 393]) {
       message: "the source-renewal-specific in-app intent must actually be delivered",
     }).toBe("delivered");
     expect(await currentSourceIntent()).toMatchObject({ id: deliveryIntent.id, attempts: 1 });
+    const deliveredPortfolio = await request.get(`${api.origin}/api/ip/portfolio`, { headers, params: { query: number } });
+    expect(deliveredPortfolio.status()).toBe(200);
+    const deliveredRow = (await deliveredPortfolio.json()).rows
+      .find((row: { docket_id: string }) => row.docket_id === docketId);
+    const deliveredBody = deliveredRow.source_renewal_alert_body;
+    expect(typeof deliveredBody).toBe("string");
+    expect(deliveredBody).toContain(`${mark}; application ${number}; classes 9, 36, 42;`);
+    expect(deliveredBody).toContain("Source Owner One");
+    expect(deliveredBody).toContain("Source Owner Two");
+    expect(deliveredBody).toContain(`Source renewal date ${tomorrow} (not a verified legal deadline).`);
+    expect(deliveredBody).toMatch(/\d+ days remaining on the alert date\./);
+    expect(deliveredBody).toContain(`/app/ip?docket=${docketId}`);
+    expect(deliveredBody).not.toContain("private import remark");
     await page.goto(`${web.origin}/app/ip/portfolio`);
     await page.getByPlaceholder("Mark, application number, opposition number").fill(number);
     await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
     await expect(sourceRow.getByText(tomorrow, { exact: true })).toBeVisible();
     await expect(sourceRow.getByText("Alert: delivered", { exact: true })).toBeVisible();
+    await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toHaveText(deliveredBody);
+    await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toBeVisible();
     await page.reload();
     await page.getByPlaceholder("Mark, application number, opposition number").fill(number);
     await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
     await expect(sourceRow.getByText("Alert: delivered", { exact: true })).toBeVisible();
+    await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toHaveText(deliveredBody);
     await page.goto(`${web.origin}/app/admin/notifications`);
     const receipt = page.getByTestId(`notification-intent-${deliveryIntent.id}`);
     await expect(receipt.getByText("delivered", { exact: true })).toBeVisible();
@@ -617,6 +633,7 @@ for (const width of [1280, 393]) {
     await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
     await expect(sourceRow.getByText(due, { exact: true })).toHaveCount(0);
     await expect(sourceRow.getByText("Alert: queued", { exact: true })).toHaveCount(0);
+    await expect(sourceRow.getByTestId(`ip-source-renewal-alert-${docketId}`)).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
     if (local) await test.info().attach(`ip-import-${width}px`, { body: await page.screenshot(), contentType: "image/png" });
     await release(request);
