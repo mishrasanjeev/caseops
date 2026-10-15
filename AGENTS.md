@@ -2503,3 +2503,8 @@ requirements when using the fallback.
   keyboard activation, subset counts and mobile proof. Do not change shared
   modal focus behavior, add sleeps/retries or infer duplicate data from a wrong
   dialog. A trace without activeElement does not directly prove focus theft.
+- Testing Library and Playwright role-query options are different contracts.
+  Literal accessible-name matching does not authorize copying Playwright's
+  exact option into component tests. Vitest transpilation and E2E typecheck do
+  not typecheck the web test tree: run the full web typecheck and fresh build
+  as well before publishing a frontend test amendment.

@@ -904,11 +904,11 @@ describe("CalendarPage", () => {
     const dayTrigger = screen.getByRole("button", { name: `View all events on ${today}` });
     const overflowTrigger = screen.getByRole("button", { name: `Show 5 more events on ${today}` });
     await user.click(dayTrigger);
-    const allDialog = screen.getByRole("dialog", { name: `Events on ${today}`, exact: true });
+    const allDialog = screen.getByRole("dialog", { name: `Events on ${today}` });
     expect(within(allDialog).getAllByRole("link")).toHaveLength(8);
     expect(within(allDialog).getAllByRole("link").map(link => link.getAttribute("data-testid")))
       .toEqual(events.map(event => `calendar-event-${event.id}`));
-    await user.click(within(allDialog).getByRole("button", { name: "Close", exact: true }));
+    await user.click(within(allDialog).getByRole("button", { name: "Close" }));
     await waitFor(() => {
       expect(allDialog).not.toBeInTheDocument();
       expect(dayTrigger).toHaveFocus();
@@ -916,7 +916,7 @@ describe("CalendarPage", () => {
     act(() => overflowTrigger.focus());
     expect(overflowTrigger).toHaveFocus();
     await user.keyboard("{Enter}");
-    const overflowDialog = screen.getByRole("dialog", { name: `More events on ${today}`, exact: true });
+    const overflowDialog = screen.getByRole("dialog", { name: `More events on ${today}` });
     expect(within(overflowDialog).getAllByRole("link")).toHaveLength(5);
     expect(within(overflowDialog).getAllByRole("link").map(link => link.getAttribute("data-testid")))
       .toEqual(events.slice(3).map(event => `calendar-event-${event.id}`));
@@ -926,16 +926,16 @@ describe("CalendarPage", () => {
       expect(overflowTrigger).toHaveFocus();
     });
     await user.keyboard("{Enter}");
-    const reopened = screen.getByRole("dialog", { name: `More events on ${today}`, exact: true });
+    const reopened = screen.getByRole("dialog", { name: `More events on ${today}` });
     expect(within(reopened).getAllByRole("link").map(link => link.getAttribute("data-testid")))
       .toEqual(events.slice(3).map(event => `calendar-event-${event.id}`));
-    await user.click(within(reopened).getByRole("button", { name: "Close", exact: true }));
+    await user.click(within(reopened).getByRole("button", { name: "Close" }));
     await waitFor(() => {
       expect(reopened).not.toBeInTheDocument();
       expect(overflowTrigger).toHaveFocus();
     });
     await user.click(dayTrigger);
-    const allReopened = screen.getByRole("dialog", { name: `Events on ${today}`, exact: true });
+    const allReopened = screen.getByRole("dialog", { name: `Events on ${today}` });
     expect(within(allReopened).getAllByRole("link").map(link => link.getAttribute("data-testid")))
       .toEqual(events.map(event => `calendar-event-${event.id}`));
     await user.keyboard("{Escape}");

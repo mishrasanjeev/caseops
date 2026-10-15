@@ -108,6 +108,18 @@ complete Calendar component module passes20 cases with no exclusions; E2E
 type-check and diff checks pass. This is scoped proof, not a browser pass or
 acceptance of an amended commit. No product/shared Dialog source was modified.
 
+The first amendment2dd18700 passes all three current-language CodeQL analyses
+with zero results/open PR alerts and all eight Security jobs, but CI38726148636
+fails web typecheck at six new component locators. Playwright's exact option
+is not a Testing Library ByRoleOptions property. Vitest and the separate E2E
+typecheck did not cover that compile boundary. This is an introduced test defect,
+not a new production Calendar defect, and no Docker build or deployment of2dd
+is admitted. The correction removes only the six unsupported component options,
+retaining literal accessible names, exact IDs/subsets and every Playwright
+keyboard assertion. Require complete local web typecheck, frontend suite and
+fresh build before publishing the next candidate. Preserve the actual six
+TS2769 diagnostics and do not transfer2dd's scanner result to another tree.
+
 PR538's initial frozen candidate is a5f53f9a, tree a4c75db8. Its eight Security
 jobs and three CodeQL jobs pass, but PR-scoped high-severity alert577 remains
 open for the verification workflow's dynamic release checkout. This is a release
