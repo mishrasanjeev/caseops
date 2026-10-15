@@ -189,6 +189,15 @@ The new seven browser cases, the amended acknowledgement journey,
 fresh whole Docker, green CI and a corrected exact-release replay remain
 required before the new scope is marked fixed.
 
+The `2cd44384` Docker admission failed before any browser case started: the
+acknowledgement unit imported a helper absent from the web builder's explicit
+dependency closure. The local Next build did not prove container packaging.
+The unchanged closure inventory regression also reproduced both missing-input
+failures. Admit only that helper in Docker and Cloud Build, copy it only into
+the builder, and include it in the dirty-context guard. Negative regressions
+must reject an omitted copy, either omitted allowlist entry and a dirty uploaded
+helper. Retain this failed admission and rerun the fresh image and browser gates.
+
 During this batch, the first new column test also checked before loaded rows
 were guaranteed. That failure cannot independently diagnose the product. The
 corrected test waits for the actual loaded header; the earlier reports remain

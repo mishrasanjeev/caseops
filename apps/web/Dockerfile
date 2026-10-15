@@ -47,6 +47,7 @@ COPY tests/e2e/support/prod-failure-diagnostics.ts /app/tests/e2e/support/prod-f
 COPY tests/e2e/support/bounded-network-evidence.ts /app/tests/e2e/support/bounded-network-evidence.ts
 COPY tests/e2e/support/prod-api-response-evidence.ts /app/tests/e2e/support/prod-api-response-evidence.ts
 COPY tests/e2e/support/cost-controls.ts /app/tests/e2e/support/cost-controls.ts
+COPY tests/e2e/support/ip-import-acknowledgements.ts /app/tests/e2e/support/ip-import-acknowledgements.ts
 
 RUN npm run build
 
