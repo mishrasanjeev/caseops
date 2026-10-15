@@ -1077,8 +1077,296 @@ def test_new_native_capture_cli_parses_invocation_and_original_options(capture, 
     assert seen == [(capture.root, "offline", capture.args)]
 
 
+def _tester_canonical_rows():
+    rows = []
+    partitions = {
+        "tester": {"ordinary-prod.spec.ts": 115},
+        "tester-index": evidence.INDEX_FILES,
+        "test-legal-write-oct13": evidence.OCT13_FILES,
+    }
+    for invocation, files in partitions.items():
+        for file, count in files.items():
+            for index in range(count):
+                native_id = f"{file}-{index}"
+                project = evidence.TESTER_PARTITIONS[invocation]
+                rows.append({
+                    "id": f"{native_id}:{project}:0", "native_spec_id": native_id,
+                    "file": file, "line": index + 1, "column": 1, "tags": [],
+                    "title_path": [file, f"case {index} with literal::parameter"],
+                    "project_id": project, "project_name": project, "retries": 0,
+                    "repeat_each_index": 0, "timeout": 120000, "status": "expected",
+                    "results": [{"status": "passed", "retry": 0}],
+                })
+    return rows
+
+
+def test_tester_partition_selection_preserves_complete_ordered_literal_identities():
+    canonical = {"tests": _tester_canonical_rows()}
+    for invocation, project in evidence.TESTER_PARTITIONS.items():
+        binding = {
+            "config": "playwright.prod-ram.config.ts", "invocation": invocation,
+            "project": project, "arguments": ["--workers=1", "--retries=0"],
+        }
+        selected = {"tests": [row for row in canonical["tests"] if row["project_name"] == project]}
+        evidence._check_tester_selection(binding, selected, canonical)
+
+
+@pytest.mark.parametrize("damage", [
+    "omitted", "extra", "duplicate", "semantic_duplicate", "rerouted",
+])
+def test_matching_truncated_or_changed_core_inventories_cannot_certify(damage):
+    rows = _tester_canonical_rows()
+    if damage == "omitted":
+        rows.pop(0)
+    elif damage == "extra":
+        extra = copy.deepcopy(rows[0])
+        extra["id"] += "-unreviewed"
+        extra["native_spec_id"] += "-unreviewed"
+        rows.append(extra)
+    elif damage == "duplicate":
+        rows.append(copy.deepcopy(rows[0]))
+    elif damage == "semantic_duplicate":
+        replacement = copy.deepcopy(rows[0])
+        replacement.update(id=rows[1]["id"], native_spec_id=rows[1]["native_spec_id"])
+        rows[1] = replacement
+    else:
+        rows[0]["project_id"] = rows[0]["project_name"] = evidence.TESTER_PARTITIONS[
+            "tester-index"
+        ]
+    project = evidence.TESTER_PARTITIONS["tester"]
+    selected = {"tests": [row for row in rows if row["project_name"] == project]}
+    with pytest.raises(evidence.EvidenceError):
+        evidence._check_tester_selection({
+            "config": "playwright.prod-ram.config.ts", "invocation": "tester",
+            "project": project, "arguments": ["--workers=1", "--retries=0"],
+        }, selected, {"tests": rows})
+
+
+@pytest.mark.parametrize("invocation", list(evidence.TESTER_PARTITIONS))
+@pytest.mark.parametrize("damage", [None, "missing_case", "missing_report", "executed_discovery"])
+def test_native_tester_capture_retains_unfiltered_inventory_before_execution(
+    capture, invocation, damage,
+):
+    state = capture
+    config = state.root / "playwright.prod-ram.config.ts"
+    config.write_text("// offline partition contract\n", encoding="utf-8")
+    project = evidence.TESTER_PARTITIONS[invocation]
+    rows = _tester_canonical_rows()
+    template = copy.deepcopy(state.discovery)
+    template["config"]["configFile"] = str(config)
+    template["config"]["projects"] = [
+        {**template["config"]["projects"][0], "id": name, "name": name}
+        for name in evidence.TESTER_PARTITIONS.values()
+    ]
+
+    def document(selected, runtime=False):
+        doc = copy.deepcopy(template)
+        doc["suites"] = []
+        for row in selected:
+            (state.root / row["file"]).touch(exist_ok=True)
+            spec = copy.deepcopy(state.discovery["suites"][0]["specs"][0])
+            spec.update(id=row["native_spec_id"], file=row["file"], line=row["line"],
+                        title=row["title_path"][-1])
+            test = copy.deepcopy((state.runtime if runtime else state.discovery)[
+                "suites"][0]["specs"][0]["tests"][0])
+            test.update(projectId=row["project_id"], projectName=row["project_name"])
+            spec["tests"] = [test]
+            doc["suites"].append({"title": row["file"], "specs": [spec]})
+        doc["stats"].update(expected=len(selected) if runtime else 0,
+                            skipped=0 if runtime else len(selected))
+        return doc
+
+    selected = [row for row in rows if row["project_name"] == project]
+    state.discovery = document(selected)
+    state.runtime = document(selected, runtime=True)
+    state.junit_count = len(selected)
+    state.path = state.root / evidence.EVIDENCE / invocation
+    args = [f"--config={config.name}", f"--project={project}", *state.args[2:]]
+    base_launch = state.launch
+
+    def launch(command, **kwargs):
+        canonical = kwargs["env"]["CASEOPS_PW_EVIDENCE_INVOCATION"].endswith("-canonical")
+        saved = state.discovery
+        if canonical:
+            assert "--list" in command and not any(arg.startswith("--project=") for arg in command)
+            state.discovery = document(rows[:-1] if damage == "missing_case" else rows)
+            if damage == "executed_discovery":
+                state.discovery["suites"][0]["specs"][0]["tests"][0]["results"] = [
+                    {"status": "passed", "retry": 0}
+                ]
+        try:
+            result = base_launch(command, **kwargs)
+        finally:
+            state.discovery = saved
+        path = Path(kwargs["env"]["CASEOPS_PW_EVIDENCE_JSON_FILE"])
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        doc["invocation"] = kwargs["env"]["CASEOPS_PW_EVIDENCE_INVOCATION"]
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        if canonical and damage == "missing_report":
+            path.unlink()
+        if "--list" not in command:
+            progress = state.path / "progress.jsonl"
+            packets = [json.loads(line) for line in progress.read_text().splitlines()]
+            for packet in packets:
+                if "invocation" in packet:
+                    packet["invocation"] = invocation
+            progress.write_text("".join(json.dumps(packet) + "\n" for packet in packets))
+        return result
+
+    code = evidence.run(state.root, invocation, args, env=state.env, launch=launch)
+    execution = [command for command, _ in state.calls if "--list" not in command]
+    if damage:
+        assert code == 1 and execution == []
+        assert not (state.path / "completion.json").exists()
+        assert (state.path / "exit.json").is_file()
+    else:
+        assert code == 0 and len(execution) == 1
+        evidence.validate(state.root, [invocation], BASE)
+        completion = json.loads((state.path / "completion.json").read_text())
+        assert set(completion["sha256"]) == evidence.REPORT_FILES | evidence.TESTER_CANONICAL_FILES
+        assert not (state.root / evidence.EVIDENCE / f"{invocation}-canonical").exists()
+
+
+@pytest.mark.parametrize("damage", [
+    "missing_core", "missing_index", "missing_oct13", "duplicate_id", "extra_index",
+    "wrong_index_file", "core_index_overlap", "core_oct13_overlap",
+])
+def test_tester_canonical_inventory_rejects_dropped_or_overlapping_cases(damage):
+    rows = _tester_canonical_rows()
+    if damage == "missing_core":
+        rows = rows[1:]
+    elif damage in {"missing_index", "missing_oct13"}:
+        project = evidence.TESTER_PARTITIONS[
+            "tester-index" if damage == "missing_index" else "test-legal-write-oct13"
+        ]
+        rows.remove(next(row for row in rows if row["project_name"] == project))
+    elif damage in {"duplicate_id", "extra_index"}:
+        row = copy.deepcopy(next(
+            row for row in rows if row["project_name"] == evidence.TESTER_PARTITIONS["tester-index"]
+        ))
+        if damage == "extra_index":
+            row["id"] += "-extra"
+        rows.append(row)
+    elif damage == "wrong_index_file":
+        next(row for row in rows if row["project_name"] == evidence.TESTER_PARTITIONS[
+            "tester-index"
+        ])["file"] = "not-the-owned-spec.ts"
+    else:
+        rows[0]["file"] = next(iter(
+            evidence.INDEX_FILES if damage == "core_index_overlap" else evidence.OCT13_FILES
+        ))
+    with pytest.raises(evidence.EvidenceError):
+        evidence._tester_inventory({"tests": rows})
+
+
+@pytest.mark.parametrize("damage", ["missing", "reordered", "foreign", "same_id_changed_metadata"])
+def test_tester_selection_rejects_noncanonical_subset(damage):
+    rows = _tester_canonical_rows()
+    project = evidence.TESTER_PARTITIONS["tester-index"]
+    selected = copy.deepcopy([row for row in rows if row["project_name"] == project])
+    if damage == "missing":
+        selected.pop()
+    elif damage == "reordered":
+        selected.reverse()
+    elif damage == "foreign":
+        selected[-1] = rows[0]
+    else:
+        selected[0]["title_path"][-1] = "different identity despite copied native ID"
+    with pytest.raises(evidence.EvidenceError, match="tester_partition_selection_mismatch"):
+        evidence._check_tester_selection({
+            "config": "playwright.prod-ram.config.ts", "invocation": "tester-index",
+            "project": project, "arguments": ["--workers=1", "--retries=0"],
+        }, {"tests": selected}, {"tests": rows})
+
+
+@pytest.fixture
+def verified_tester_union(tmp_path, monkeypatch):
+    """Unit control after envelope validation; not a real browser execution."""
+    config = tmp_path / "playwright.prod-ram.config.ts"
+    config.write_text("// source-bound offline config\n", encoding="utf-8")
+    rows = _tester_canonical_rows()
+    checked = []
+    monkeypatch.setattr(evidence, "validate", lambda *args: checked.append(args))
+    directories = {}
+    for invocation, project in evidence.TESTER_PARTITIONS.items():
+        directory = tmp_path / evidence.EVIDENCE / invocation
+        directory.mkdir(parents=True)
+        binding = {
+            "config": config.name, "config_sha256": evidence._hash(config),
+            "invocation": invocation, "project": project,
+            "arguments": ["--workers=1", "--retries=0"],
+        }
+        (directory / "results.json").write_text(json.dumps({
+            "binding": binding,
+            "tests": [row for row in rows if row["project_name"] == project],
+        }), encoding="utf-8")
+        (directory / "canonical-discovery.json").write_text(
+            json.dumps({"tests": rows}), encoding="utf-8"
+        )
+        directories[invocation] = directory
+    return SimpleNamespace(root=tmp_path, directories=directories, checked=checked, config=config)
+
+
+def test_verified_tester_union_requires_all_three_envelopes_before_certification(
+    verified_tester_union,
+):
+    state = verified_tester_union
+    required = list(evidence.TESTER_PARTITIONS)
+    evidence.validate_tester_partition_union(state.root, required, BASE)
+    assert state.checked == [(state.root, required, BASE)]
+
+
+@pytest.mark.parametrize("damage", [
+    "missing_partition", "duplicate_partition", "canonical_disagreement", "source_changed",
+    "mandatory_skipped", "mandatory_failed", "mandatory_retry", "mandatory_unended",
+    "wrong_project", "overlap", "workers_increased", "metadata_disagreement",
+])
+def test_verified_tester_union_is_fail_closed(verified_tester_union, damage):
+    state = verified_tester_union
+    required = list(evidence.TESTER_PARTITIONS)
+    directory = state.directories["tester-index"]
+    result_path = directory / "results.json"
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    if damage == "missing_partition":
+        required.pop()
+    elif damage == "duplicate_partition":
+        required[-1] = required[0]
+    elif damage == "source_changed":
+        state.config.write_text("// changed\n", encoding="utf-8")
+    elif damage in {"canonical_disagreement", "metadata_disagreement"}:
+        path = directory / "canonical-discovery.json"
+        canonical = json.loads(path.read_text(encoding="utf-8"))
+        if damage == "canonical_disagreement":
+            canonical["tests"][0]["id"] += "-changed"
+        else:
+            canonical["tests"][0]["title_path"][-1] += "-changed"
+        path.write_text(json.dumps(canonical), encoding="utf-8")
+    elif damage == "mandatory_unended":
+        result["tests"][0]["results"] = []
+    elif damage == "wrong_project":
+        result["binding"]["project"] = "unreviewed"
+    elif damage == "workers_increased":
+        result["binding"]["arguments"][0] = "--workers=2"
+    elif damage == "overlap":
+        result["tests"].append(copy.deepcopy(result["tests"][0]))
+    else:
+        result["tests"][0]["results"][0].update({
+            "status": (
+                "skipped" if damage == "mandatory_skipped"
+                else "passed" if damage == "mandatory_retry" else "failed"
+            ),
+            "retry": 1 if damage == "mandatory_retry" else 0,
+        })
+    result_path.write_text(json.dumps(result), encoding="utf-8")
+    with pytest.raises(evidence.EvidenceError):
+        evidence.validate_tester_partition_union(state.root, required, BASE)
+
+
 def _assert_native_manifest(workflow):
-    for job_name in ("prod-playwright-shards", "scheduled-statute-verification"):
+    for job_name in (
+        "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13",
+        "scheduled-statute-verification",
+    ):
         job = workflow["jobs"][job_name]
         steps = {step.get("name"): step for step in job["steps"]}
         prepare = steps["Prepare release-owned native Playwright evidence"]
@@ -1092,7 +1380,16 @@ def _assert_native_manifest(workflow):
         )
         checkout = next(step for step in job["steps"] if step.get("uses") == "actions/checkout@v4")
         assert checkout["with"]["fetch-depth"] == 0
-        assert checkout["with"]["ref"] == job["env"]["CASEOPS_EXPECTED_RELEASE_SHA"]
+        assert checkout["with"]["ref"] == "main"
+        assert checkout["with"]["persist-credentials"] is False
+        trust = steps["Validate canonical serving commit before release code"]
+        assert trust["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == (
+            job["env"]["CASEOPS_EXPECTED_RELEASE_SHA"]
+        )
+        assert 'trusted_release_checkout.py --release-sha "$CASEOPS_EXPECTED_RELEASE_SHA"' in (
+            trust["run"]
+        )
+        assert job["steps"].index(trust) < job["steps"].index(prepare)
         upload = steps["Upload native Playwright evidence"]
         assert upload["if"] == "always()"
         assert upload["with"]["path"].strip() == "test-results/prod-native-evidence/"
@@ -1123,6 +1420,7 @@ def test_all_production_invocations_have_native_capture_and_success_artifacts():
                 invocations.append(line.split('caseops-prod-playwright" ', 1)[1].split(" ", 1)[0])
     assert invocations == [
         "tester",
+        "tester-index",
         "test-legal-write-oct13",
         "legacy",
         "test-legal-readonly",

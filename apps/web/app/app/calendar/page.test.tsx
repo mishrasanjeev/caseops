@@ -880,9 +880,69 @@ describe("CalendarPage", () => {
     expect(trigger).toHaveFocus();
     await user.keyboard("{Enter}");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+    const reopenedDialog = screen.getByRole("dialog");
     await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(reopenedDialog).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    });
     await user.click(screen.getByRole("button", { name: `View all events on ${today}` }));
     expect(within(screen.getByRole("dialog")).getAllByRole("link")).toHaveLength(5);
+  });
+
+  it("waits for all-events close focus restoration before overflow keyboard activation", async () => {
+    const today = isoToday();
+    const events = Array.from({ length: 8 }, (_, index) => ({
+      id: `hearing:lifecycle-${index}`, kind: "hearing" as const, occurs_on: today,
+      title: `Lifecycle hearing ${index}`, matter_id: `lifecycle-${index}`,
+      matter_code: `LIFE-${index}`, matter_title: `Lifecycle matter ${index}`,
+    }));
+    fetchCalendarEventsMock.mockResolvedValue({ range_from: today, range_to: today, events });
+    render(withClient(<CalendarPage />));
+    await screen.findByTestId("calendar-event-hearing:lifecycle-0");
+    const user = userEvent.setup();
+    const dayTrigger = screen.getByRole("button", { name: `View all events on ${today}` });
+    const overflowTrigger = screen.getByRole("button", { name: `Show 5 more events on ${today}` });
+    await user.click(dayTrigger);
+    const allDialog = screen.getByRole("dialog", { name: `Events on ${today}` });
+    expect(within(allDialog).getAllByRole("link")).toHaveLength(8);
+    expect(within(allDialog).getAllByRole("link").map(link => link.getAttribute("data-testid")))
+      .toEqual(events.map(event => `calendar-event-${event.id}`));
+    await user.click(within(allDialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => {
+      expect(allDialog).not.toBeInTheDocument();
+      expect(dayTrigger).toHaveFocus();
+    });
+    act(() => overflowTrigger.focus());
+    expect(overflowTrigger).toHaveFocus();
+    await user.keyboard("{Enter}");
+    const overflowDialog = screen.getByRole("dialog", { name: `More events on ${today}` });
+    expect(within(overflowDialog).getAllByRole("link")).toHaveLength(5);
+    expect(within(overflowDialog).getAllByRole("link").map(link => link.getAttribute("data-testid")))
+      .toEqual(events.slice(3).map(event => `calendar-event-${event.id}`));
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(overflowDialog).not.toBeInTheDocument();
+      expect(overflowTrigger).toHaveFocus();
+    });
+    await user.keyboard("{Enter}");
+    const reopened = screen.getByRole("dialog", { name: `More events on ${today}` });
+    expect(within(reopened).getAllByRole("link").map(link => link.getAttribute("data-testid")))
+      .toEqual(events.slice(3).map(event => `calendar-event-${event.id}`));
+    await user.click(within(reopened).getByRole("button", { name: "Close" }));
+    await waitFor(() => {
+      expect(reopened).not.toBeInTheDocument();
+      expect(overflowTrigger).toHaveFocus();
+    });
+    await user.click(dayTrigger);
+    const allReopened = screen.getByRole("dialog", { name: `Events on ${today}` });
+    expect(within(allReopened).getAllByRole("link").map(link => link.getAttribute("data-testid")))
+      .toEqual(events.map(event => `calendar-event-${event.id}`));
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(allReopened).not.toBeInTheDocument();
+      expect(dayTrigger).toHaveFocus();
+    });
   });
 
   it("shows canonical court identity in month, week and day without inventing missing data", async () => {

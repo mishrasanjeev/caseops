@@ -2453,3 +2453,58 @@ requirements when using the fallback.
   Bind exact serving secret references, reject truncated execution inventories,
   and poll only bounded read-only log visibility, never repeat a mutation to
   compensate for missing or uncertain evidence.
+- A serialized acceptance job must fit its unchanged wall-clock budget with
+  its full discovered inventory. Separate slow whole-file indexing/AI journeys
+  and mandatory dated mutations into serial jobs, preserve one worker and zero
+  retries, and require their exact disjoint canonical union before recording
+  certification. Unstarted or unended cases remain unverified. Queue-quiescence
+  diagnosis must use actual job timestamps: the October 15 Review invalidation
+  came from a legacy job queued at 01:43:22Z and completed at 06:42:26Z, not the
+  current bootstrap or a preceding acceptance test. Preserve the private fence.
+- Release QA must not start while a repaired document worker is still draining
+  old QA work. Observe the actual fixed QA queues, including processing claims,
+  with bounded read-only transactions that close before waiting. Disabled
+  admission and an empty worker startup receipt are not queue quiescence. Keep
+  normal workers available for positive indexing acceptance and keep unknown
+  outcomes, missing tenants and timed-out drains release-blocking.
+- A disabled received-only Notice reply filter must not filter Sent notices,
+  including linked-global rows. Preserve intentional shared search behavior and
+  the received selection when returning to Received. Browser tests must make
+  their search preconditions explicit; clearing every filter would hide the
+  disabled-control defect. Retain the indexing and reload assertions.
+- A QA queue observer must use the same verified database authority as the
+  serving API, not merely a worker with a matching image. Bind current secret
+  identity/resolved version, namespace and Cloud SQL metadata before and after
+  execution. Read actual SDK shapes and handle only documented omissions.
+  Check readiness through the serving tenant API again at the mutation phase;
+  an earlier empty observation is neither a lease nor permission to retry a
+  rejected mutation or weaken a private-source epoch fence.
+- Drain old QA document work before the final release-owned private-index
+  bootstrap, not only before browser dispatch. A queue that becomes idle after
+  an earlier rebuild does not prove its active generation includes the completed
+  sources. Preserve once-per-generation bootstrap execution and block bootstrap
+  and certification on an uncertain drain or canonical-main drift.
+- A successful CodeQL workflow is not proof of zero open alerts. Reconcile the
+  current PR/main analysis and alert instances before release. A live endpoint's
+  well-formed release SHA is not authorization to execute arbitrary repository
+  code: verify commit identity and canonical-main ancestry from a trusted control
+  plane before switching to the exact serving source. Sensitive verification
+  jobs must not restore or save shared caches or retain checkout credentials.
+- Scanner admission requires every expected language analysis for the current
+  merge tree to finish before reading the final open-alert list. A clean Actions
+  result can precede a new Python finding. Do not start expensive final release
+  acceptance from an early zero-alert snapshot or log unnecessary input-derived
+  receipt payloads when a literal success marker and separate identity check
+  provide the required evidence.
+- Calendar keyboard acceptance must await removal of the previous modal and
+  restoration of its trigger focus before moving focus to a different trigger.
+  Assert the named all-events versus overflow dialog and its exact event IDs;
+  a generic dialog locator can hide activation of the wrong surface. Preserve
+  keyboard activation, subset counts and mobile proof. Do not change shared
+  modal focus behavior, add sleeps/retries or infer duplicate data from a wrong
+  dialog. A trace without activeElement does not directly prove focus theft.
+- Testing Library and Playwright role-query options are different contracts.
+  Literal accessible-name matching does not authorize copying Playwright's
+  exact option into component tests. Vitest transpilation and E2E typecheck do
+  not typecheck the web test tree: run the full web typecheck and fresh build
+  as well before publishing a frontend test amendment.

@@ -1,5 +1,21 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 15 Production Replay And Candidate Recovery
+
+J04/M03, J07/M06, UJ-18 and ARCH-OPS-23/QG-SEC-004 remain production-incomplete.
+API/web0c82fbb0 is deployed and its four retained-index browser journeys pass.
+Run38693611994 still fails certification: tester budget, unstarted October13
+cases, legacy queue overlap with Review and a separate disabled Notice filter.
+The candidate preserves private fences and all intended acceptance identities.
+Manual IP is already granted once to test-legal only. See
+`docs/bugfix-qa-quiescence-2026-10-15.md`; combined fresh gates/live proof remain
+required, and prior dated checkpoints remain historical.
+
+J08/M08/MOD-TS-006 remains partially verified after PR538 CI38716637035's single
+Calendar wrong-dialog failure. Exact all-events/overflow identities and modal
+close/focus/keyboard lifecycle require amended dated regression plus fresh full
+CI/Docker and both production widths; the skipped mobile sibling is not proof.
+
 ## October 15 Worker Environment Acceptance
 
 J04/M03/MOD-TS-002/005, US-007..009 and FT-011..015 remain production-incomplete.

@@ -1243,6 +1243,8 @@ def _successful_qa_dispatch(release_sha: str, qa_run_id: int) -> tuple[datetime,
     required = {
         "Resolve exact production release",
         "Prod Playwright (tester)",
+        "Prod Playwright (tester-index)",
+        "Prod Playwright (test-legal-write-oct13)",
         "Prod Playwright (legacy)",
         "Prod Playwright (supporting)",
         "Prod Playwright (patent-statute)",

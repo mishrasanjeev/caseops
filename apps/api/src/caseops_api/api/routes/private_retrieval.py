@@ -30,6 +30,7 @@ from caseops_api.services.private_retrieval import (
     stream_private_content,
 )
 from caseops_api.services.private_retrieval_jobs import inspect_private_index_integrity
+from caseops_api.services.qa_document_quiescence import pending_document_jobs
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
@@ -258,6 +259,7 @@ def get_private_retrieval_integrity(
         tombstoned_projection_count=report.tombstoned_projection_count,
         pending_event_count=report.pending_event_count,
         failed_event_count=report.failed_event_count,
+        document_processing_pending=pending_document_jobs(session, (context.company.id,)),
         oldest_pending_lag_seconds=report.oldest_pending_lag_seconds,
         orphan_scope_count=report.orphan_scope_count,
         stale_source_count=report.stale_source_count,

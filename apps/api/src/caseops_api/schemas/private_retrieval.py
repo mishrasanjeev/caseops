@@ -58,6 +58,7 @@ class PrivateRetrievalIntegrityResponse(BaseModel):
     tombstoned_projection_count: int
     pending_event_count: int
     failed_event_count: int
+    document_processing_pending: bool
     oldest_pending_lag_seconds: int | None
     orphan_scope_count: int
     stale_source_count: int

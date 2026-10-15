@@ -40,10 +40,89 @@ REPORT_FILES = {
     "progress.jsonl",
 }
 REPORTER = "./scripts/prod_playwright_reporter.cjs"
+TESTER_PARTITIONS = {
+    "tester": "tester-prod-chromium",
+    "tester-index": "tester-index-prod-chromium",
+    "test-legal-write-oct13": "test-legal-write-prod-chromium",
+}
+# Reviewed exact inventory; any new or removed case requires an explicit update.
+TESTER_PARTITION_COUNTS = {"tester": 115, "tester-index": 6, "test-legal-write-oct13": 6}
+TESTER_CANONICAL_FILES = {"canonical-native-discovery.json", "canonical-discovery.json"}
+INDEX_FILES = {
+    "ram-2026-10-10-prod.spec.ts": 4,
+    "ram-2026-10-12-prod.spec.ts": 2,
+}
+OCT13_FILES = {
+    "ram-2026-10-13-hearings.spec.ts": 2,
+    "ram-2026-10-13-ip-portfolio.spec.ts": 4,
+}
 
 
 class EvidenceError(ValueError):
     pass
+
+
+def _tester_partition(binding):
+    invocation = binding["invocation"]
+    if binding["config"] != "playwright.prod-ram.config.ts" or invocation not in TESTER_PARTITIONS:
+        return None
+    if binding["project"] != TESTER_PARTITIONS[invocation]:
+        raise EvidenceError("tester_partition_project_mismatch")
+    if "--workers=1" not in binding["arguments"] or "--retries=0" not in binding["arguments"]:
+        raise EvidenceError("tester_partition_serial_zero_retry_required")
+    return invocation
+
+
+def _tester_inventory(canonical):
+    projects = set(TESTER_PARTITIONS.values())
+    rows = [row for row in canonical["tests"] if row["project_name"] in projects]
+    if not rows or len({row["id"] for row in rows}) != len(rows):
+        raise EvidenceError("empty_or_duplicate_tester_canonical_inventory")
+    expected_counts = Counter({
+        TESTER_PARTITIONS[invocation]: count
+        for invocation, count in TESTER_PARTITION_COUNTS.items()
+    })
+    if Counter(row["project_name"] for row in rows) != expected_counts:
+        raise EvidenceError("reviewed_tester_partition_counts_mismatch")
+    semantic_cases = {
+        (row["file"], tuple(row["title_path"]), row["repeat_each_index"])
+        for row in rows
+    }
+    if len(semantic_cases) != len(rows):
+        raise EvidenceError("duplicate_tester_semantic_identity")
+    for invocation, expected_files in (
+        ("tester-index", INDEX_FILES), ("test-legal-write-oct13", OCT13_FILES)
+    ):
+        actual = Counter(
+            Path(row["file"]).name
+            for row in rows
+            if row["project_name"] == TESTER_PARTITIONS[invocation]
+        )
+        if actual != Counter(expected_files):
+            raise EvidenceError("mandatory_tester_partition_inventory_mismatch")
+    core = [row for row in rows if row["project_name"] == TESTER_PARTITIONS["tester"]]
+    if not core or any(Path(row["file"]).name in INDEX_FILES | OCT13_FILES for row in core):
+        raise EvidenceError("tester_core_partition_overlap")
+    return rows
+
+
+def _check_tester_selection(binding, discovery, canonical):
+    invocation = _tester_partition(binding)
+    if invocation is None:
+        raise EvidenceError("unreviewed_tester_partition_binding")
+    expected = [
+        _tester_case_identity(row) for row in _tester_inventory(canonical)
+        if row["project_name"] == TESTER_PARTITIONS[invocation]
+    ]
+    if [_tester_case_identity(row) for row in discovery["tests"]] != expected:
+        raise EvidenceError("tester_partition_selection_mismatch")
+
+
+def _tester_case_identity(row):
+    return (
+        row["id"], _identity(row), tuple(row["tags"]),
+        row["retries"], row["repeat_each_index"],
+    )
 
 
 def _json(path: Path):
@@ -621,6 +700,47 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
             raise EvidenceError("discovery_executed_tests")
         discovery["binding"] = public_binding
         _write(destination / "discovery.json", discovery)
+        partition = _tester_partition(binding)
+        if partition is not None:
+            canonical_invocation = f"{invocation}-canonical"
+            canonical_directory = root / EVIDENCE / canonical_invocation
+            canonical_directory.mkdir(parents=True, exist_ok=False)
+            canonical_args = [arg for arg in discovery_args if not arg.startswith("--project=")]
+            canonical_binding = {
+                **binding,
+                "invocation": canonical_invocation,
+                "project": None,
+                "arguments": [arg for arg in args if not arg.startswith("--project=")],
+            }
+            canonical_env = {
+                **child_env,
+                "CASEOPS_PW_EVIDENCE_INVOCATION": canonical_invocation,
+                "CASEOPS_PW_EVIDENCE_JSON_FILE": str(canonical_directory / "native-discovery.json"),
+            }
+            process = launch(
+                [node, str(cli), "test", *canonical_args, "--list", f"--reporter={REPORTER}"],
+                cwd=root,
+                env=canonical_env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            marker["canonical_discovery_exit"] = process.returncode
+            if process.returncode:
+                raise EvidenceError("canonical_tester_discovery_failed")
+            canonical_path = canonical_directory / "native-discovery.json"
+            canonical = _native(canonical_path, canonical_binding, env, "discovery")
+            if canonical["global_error_count"] or any(row["results"] for row in canonical["tests"]):
+                raise EvidenceError("canonical_tester_discovery_executed_tests")
+            canonical["binding"] = {
+                key: value for key, value in canonical_binding.items() if key != "config_path"
+            }
+            _check_tester_selection(binding, discovery, canonical)
+            with (destination / "canonical-native-discovery.json").open("xb") as stream:
+                stream.write(canonical_path.read_bytes())
+            _write(destination / "canonical-discovery.json", canonical)
+            canonical_path.unlink()
+            canonical_directory.rmdir()
         marker["phase"] = "execution"
         child_env["CASEOPS_PW_EVIDENCE_JSON_FILE"] = str(
             destination / "native-results.json"
@@ -709,15 +829,8 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
                 "test_count": len(result["tests"]),
                 "sha256": {
                     name: _hash(destination / name)
-                    for name in (
-                        "invocation.json",
-                        "discovery.json",
-                        "results.json",
-                        "results.xml",
-                        "native-discovery.json",
-                        "native-results.json",
-                        "native-results.xml",
-                        "progress.jsonl",
+                    for name in sorted(
+                        REPORT_FILES | (TESTER_CANONICAL_FILES if partition is not None else set())
                     )
                 },
             },
@@ -767,6 +880,8 @@ def validate(root: Path, required, expected: str) -> None:
         if not completion["completed"] or not exit_marker["completed"]:
             raise EvidenceError("incomplete_invocation")
         binding = completion["binding"]
+        partition = _tester_partition(binding)
+        report_files = REPORT_FILES | (TESTER_CANONICAL_FILES if partition is not None else set())
         if (
             binding["release_sha"] != expected
             or binding["checkout_sha"] != expected
@@ -777,17 +892,34 @@ def validate(root: Path, required, expected: str) -> None:
         if exit_marker["wrapper_exit"] or completion["execution_exit"]:
             raise EvidenceError("failed_invocation")
         for name, digest in completion["sha256"].items():
-            if name not in REPORT_FILES:
+            if name not in report_files:
                 raise EvidenceError("unreviewed_evidence_file")
             if _hash(directory / name) != digest:
                 raise EvidenceError("evidence_hash_mismatch")
-        if set(completion["sha256"]) != REPORT_FILES:
+        if set(completion["sha256"]) != report_files:
             raise EvidenceError("missing_required_evidence")
         for name in ("invocation.json", "discovery.json", "results.json"):
             if _json(directory / name)["binding"] != binding:
                 raise EvidenceError("evidence_binding_mismatch")
         discovery = _json(directory / "discovery.json")
         result = _json(directory / "results.json")
+        if partition is not None:
+            canonical = _json(directory / "canonical-discovery.json")
+            canonical_binding = canonical["binding"]
+            if (
+                canonical_binding != {
+                    **binding,
+                    "invocation": f"{invocation}-canonical",
+                    "project": None,
+                    "arguments": [
+                        arg for arg in binding["arguments"] if not arg.startswith("--project=")
+                    ],
+                }
+                or canonical["global_error_count"]
+                or any(row["results"] for row in canonical["tests"])
+            ):
+                raise EvidenceError("canonical_tester_binding_mismatch")
+            _check_tester_selection(binding, discovery, canonical)
         if (
             completion["test_count"] <= 0
             or len(result["tests"]) != completion["test_count"]
@@ -807,6 +939,39 @@ def validate(root: Path, required, expected: str) -> None:
         )
 
 
+def validate_tester_partition_union(root: Path, required, expected: str) -> None:
+    if len(required) != len(TESTER_PARTITIONS) or set(required) != set(TESTER_PARTITIONS):
+        raise EvidenceError("missing_or_duplicate_tester_partition")
+    validate(root, required, expected)
+    selected = []
+    canonical_ids = None
+    config_hash = None
+    for invocation in TESTER_PARTITIONS:
+        directory = root / EVIDENCE / invocation
+        result = _json(directory / "results.json")
+        binding = result["binding"]
+        if _tester_partition(binding) != invocation:
+            raise EvidenceError("unreviewed_tester_partition_binding")
+        digest = binding["config_sha256"]
+        if _hash(root / binding["config"]) != digest or (config_hash and config_hash != digest):
+            raise EvidenceError("tester_partition_source_mismatch")
+        config_hash = digest
+        canonical = _tester_inventory(_json(directory / "canonical-discovery.json"))
+        identities = [_tester_case_identity(row) for row in canonical]
+        if canonical_ids is not None and canonical_ids != identities:
+            raise EvidenceError("tester_canonical_inventories_disagree")
+        canonical_ids = identities
+        if invocation != "tester" and any(
+            len(row["results"]) != 1 or row["results"][0]["status"] != "passed"
+            or row["results"][0]["retry"] != 0 or row["status"] != "expected"
+            for row in result["tests"]
+        ):
+            raise EvidenceError("mandatory_tester_partition_not_passed")
+        selected.extend(_tester_case_identity(row) for row in result["tests"])
+    if len(set(selected)) != len(selected) or Counter(selected) != Counter(canonical_ids):
+        raise EvidenceError("tester_partition_union_mismatch")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_subparsers(dest="mode", required=True)
@@ -815,10 +980,14 @@ def main() -> int:
     runner.add_argument("arguments", nargs=argparse.REMAINDER)
     validator = modes.add_parser("validate")
     validator.add_argument("--required", nargs="+", required=True)
+    validator.add_argument("--tester-partition-union", action="store_true")
     options = parser.parse_args()
     try:
         if options.mode == "validate":
-            validate(
+            validation = (
+                validate_tester_partition_union if options.tester_partition_union else validate
+            )
+            validation(
                 ROOT,
                 options.required,
                 os.environ.get("CASEOPS_EXPECTED_RELEASE_SHA", ""),

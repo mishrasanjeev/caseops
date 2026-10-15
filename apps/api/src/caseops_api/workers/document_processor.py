@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import sys
 import time
 from dataclasses import dataclass
 
@@ -91,6 +93,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--admission-disabled", action="store_true",
         help="Exit without database work; requires --documents-only.",
     )
+    parser.add_argument(
+        "--require-qa-quiescence", action="store_true",
+        help="Read-only QA queue observation; requires documents-only, once and skip-migrations.",
+    )
     parser.add_argument("--summary-batch-size", type=int, choices=range(1, 26), default=5,
                         help="Maximum case update summaries per iteration.")
     parser.add_argument(
@@ -163,6 +169,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--documents-only requires --once")
     if args.admission_disabled and not args.documents_only:
         parser.error("--admission-disabled requires --documents-only")
+    if args.require_qa_quiescence and (
+        not args.documents_only or not args.once or not args.skip_migrations
+        or args.admission_disabled
+    ):
+        parser.error("QA quiescence requires enabled documents-only, once and skip-migrations")
 
     if args.documents_only:
         protocol = getattr(settings, "document_worker_admission_protocol_version", 0)
@@ -174,6 +185,29 @@ def main(argv: list[str] | None = None) -> int:
             protocol != DOCUMENT_WORKER_ADMISSION_PROTOCOL_VERSION or admission is None
         ):
             parser.error("non-local document worker requires explicit admission and protocol 1")
+        if args.require_qa_quiescence:
+            if protocol != DOCUMENT_WORKER_ADMISSION_PROTOCOL_VERSION or admission is not True:
+                parser.error("QA quiescence requires explicit enabled admission and protocol 1")
+            from caseops_api.services.qa_document_quiescence import wait_for_qa_document_quiescence
+
+            try:
+                receipt = wait_for_qa_document_quiescence()
+            except Exception as exc:
+                allowed = {
+                    "qa_document_tenant_inventory_changed", "qa_document_queue_not_quiescent",
+                    "invalid_document_queue_scope",
+                }
+                reason = str(exc) if isinstance(exc, (RuntimeError, ValueError)) else ""
+                print(
+                    json.dumps({
+                        "status": "blocked", "error_class": type(exc).__name__,
+                        "reason_code": reason if reason in allowed else "queue_observation_failed",
+                    }),
+                    file=sys.stderr,
+                )
+                return 1
+            print("CASEOPS_QA_DOCUMENT_QUIESCENCE " + json.dumps(receipt), flush=True)
+            return 0
         if args.admission_disabled or admission is False:
             print(
                 "CaseOps document worker: admission_protocol=1 admission=disabled "

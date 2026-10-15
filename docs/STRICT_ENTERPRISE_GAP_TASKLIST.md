@@ -1,5 +1,22 @@
 # Strict Enterprise Gap Tasklist
 
+## October 15 Production Replay And Candidate Recovery
+
+**NO-GO.** PR537 is serving0c82fbb0 after green Docker/current-main gates. The
+worker startup repair is positively verified by four production indexing cases,
+but38693611994 exhausted tester admission and retained Review/Notice failures.
+An old queued IP document advanced the Review epoch during QA. The replacement
+adds bounded read-only pre-QA queue coordination and complete serialized case
+partitions without weakening the private fence or increasing test deadlines.
+See `docs/bugfix-qa-quiescence-2026-10-15.md`. Full replacement live acceptance
+and two post-QA clean maintenance runs remain open; the QA grant is consumed.
+
+PR538 CI38716637035 adds one Calendar browser acceptance failure, not a new
+demonstrated product or data-integrity defect. Its all-events modal reopened
+instead of overflow; preserve the trace and exact subsets while synchronizing
+the test's actual close/focus lifecycle. All three current scans are clear on
+15458561 only. Fresh amended-source CI/Docker/live evidence remains mandatory.
+
 ## October 15 Worker Environment Acceptance
 
 **NO-GO.** Release62243583 is serving and the approved QA grant is consumed,

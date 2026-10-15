@@ -42966,6 +42966,8 @@ export interface components {
             active_generation_id: string | null;
             /** Blockers */
             blockers: string[];
+            /** Document Processing Pending */
+            document_processing_pending: boolean;
             /** Failed Event Count */
             failed_event_count: number;
             /** Generation Manifest Matches */

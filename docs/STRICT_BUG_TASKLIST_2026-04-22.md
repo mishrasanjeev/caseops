@@ -1,5 +1,23 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 15 Production Replay And Candidate Recovery
+
+**Partially fixed / NO-GO.** API/web0c82fbb0 is deployed and four dated production
+document/contract cases pass. In38693611994 the tester still exhausted its budget,
+six October13 cases never ran, Review met a legacy-worker epoch change, and Notice
+failed after successful indexing because a received reply filter also hid Sent.
+The candidate fixes coordination and the scoped filter while preserving shared
+search, full inventories, deadlines, provider isolation and source/access fences.
+See `docs/bugfix-qa-quiescence-2026-10-15.md`. Exact new production replay remains
+required. The grant is already applied once; LIFE13-01 remains Inconclusive.
+
+PR538 CI38716637035 subsequently fails one Calendar browser journey while its
+other33 jobs and all current language scans pass. Trace data proves the test
+opened all-events rather than overflow, not duplicate hearings. J08/M08 dated
+keyboard acceptance now synchronizes modal removal/focus restoration and checks
+exact named dialogs and subsets. Fresh joined gates and both widths remain
+required; see the candidate document for the retained failure and limits.
+
 ## October 15 Worker Environment Acceptance
 
 **Partially fixed / NO-GO.** API/web serve62243583 and the one-time test-legal
