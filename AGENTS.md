@@ -2592,3 +2592,9 @@ requirements when using the fallback.
   public URLs, DTOs, source guards, locks and audits. Regress both clean import
   orders and mutation-injected back edges; require fresh code-scanning closure,
   not a delayed import, suppression or a disguised dynamic import.
+- A browser response handle is not durable evidence across navigation. For
+  persisted reload acceptance, drain the mutation's canonical rendered result,
+  require the real reload, then compare a mandatory same-actor API read with
+  the reloaded visible record and native options. Keep POST acknowledgements
+  intact. Do not turn a lost CDP response body into an application retry,
+  timeout increase, fallback success or a claim that the browser GET was read.

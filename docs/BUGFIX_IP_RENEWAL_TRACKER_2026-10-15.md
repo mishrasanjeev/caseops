@@ -250,6 +250,26 @@ Docker, fresh CI and code scanning, canonical merge, guarded deployment and
 exact-serving browser acceptance remain required. Production is still the
 separate `b4bee6f8` baseline with failed certification, not this joined source.
 
+The `a5d68f5b` nine-case Docker diagnostic then passed both tracker widths,
+both batch widths and the 1280px controls journey. Four other controls widths
+failed at the post-reload `response.json()` call with Chromium's
+`Network.getResponseBody: No resource with given identifier found`. The exact
+HTTP-status guard had passed. The upstream project's
+[navigation/body-lifetime report](https://github.com/microsoft/playwright/issues/41512)
+documents this protocol-resource boundary. These failures are retained; they
+are not successful browser acceptance or evidence that the saved date was lost.
+
+The correction removes both navigation-crossing GET response handles. After
+each required reload, a mandatory same-owner authenticated API read retains all
+existing identity, active-option and persisted-deadline checks. Native options
+and the actual reloaded deadline/date must still be visible. The candidate card
+must also appear before the second reload; it comes from the canonical workspace
+query, not optimistic mutation state. POST acknowledgements, no-paid markers
+and all budgets remain unchanged. This proves API/UI agreement, not the body of
+the browser's particular GET. There is no catch-and-retry or fallback request.
+All 47 fixture unit cases and the E2E type check pass after this test-only edit;
+fresh complete browser and release acceptance remain pending.
+
 During this batch, the first new column test also checked before loaded rows
 were guaranteed. That failure cannot independently diagnose the product. The
 corrected test waits for the actual loaded header; the earlier reports remain

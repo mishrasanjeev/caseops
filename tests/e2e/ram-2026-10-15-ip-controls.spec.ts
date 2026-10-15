@@ -277,11 +277,10 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
         data: { reviewer_membership_id: fixture.reviewerId, select_for_company: true, auto_confirm_eligible: false },
       }));
       expect(activeRule).toMatchObject({ id: rule.id, status: "active" });
-      const approvedRead = page.waitForResponse(response =>
-        new URL(response.url()).pathname === `/api/ip/dockets/${fixture.docketId}/deadline-workspace`
-        && response.request().method() === "GET");
       await page.reload();
-      const approved: IpDeadlineWorkspace = await json(await approvedRead);
+      const approved: IpDeadlineWorkspace = await json(await request.get(
+        `${fixture.api.origin}/api/ip/dockets/${fixture.docketId}/deadline-workspace`, { headers: fixture.headers },
+      ));
       expect(approved.docket_id).toBe(fixture.docketId);
       expect(approved.eligible_rule_version_ids).toEqual([rule.id]);
       expect(approved.calendars.filter(row => row.status === "active").map(row => row.id)).toEqual([calendar.id]);
@@ -301,12 +300,12 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
       await workspace.getByRole("button", { name: "Calculate deadline proposal" }).click();
       const saved = await json(await proposal, 201);
       expect(saved).toMatchObject({ rule_version_id: rule.id, calendar_version_id: calendar.id, result_on: "2026-10-16", state: "candidate" });
+      await expect(workspace.getByTestId(`ip-legal-deadline-${saved.id}`)).toContainText("2026-10-16");
       await checkGeometry(page, workspace);
-      const persistedRead = page.waitForResponse(response =>
-        new URL(response.url()).pathname === `/api/ip/dockets/${fixture.docketId}/deadline-workspace`
-        && response.request().method() === "GET");
       await page.reload();
-      const persisted: IpDeadlineWorkspace = await json(await persistedRead);
+      const persisted: IpDeadlineWorkspace = await json(await request.get(
+        `${fixture.api.origin}/api/ip/dockets/${fixture.docketId}/deadline-workspace`, { headers: fixture.headers },
+      ));
       expect(persisted.docket_id).toBe(fixture.docketId);
       expect(persisted.deadlines.find(row => row.id === saved.id)).toMatchObject({
         rule_version_id: rule.id, calendar_version_id: calendar.id, result_on: "2026-10-16", state: "candidate",
