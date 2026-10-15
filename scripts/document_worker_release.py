@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 import sys
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -52,11 +54,11 @@ COURT = Executor(
 EXECUTORS = {"document": DOCUMENT, "court": COURT}
 
 
-def _call(arguments: list[str], *, project: str, region: str, json_result=True):
+def _call(arguments: list[str], *, project: str, region: str, json_result=True, timeout=90):
     return inventory.run_gcloud(
         [*arguments, "--project", project, "--region", region],
         expect_json=json_result,
-        timeout=90,
+        timeout=timeout,
     )
 
 
@@ -438,9 +440,352 @@ def activate(
     }
 
 
+def _qa_object(value: object) -> dict:
+    if not isinstance(value, dict):
+        raise inventory.InventoryError("QA quiescence resource metadata is invalid")
+    return value
+
+
+def _qa_environment(container: dict) -> dict:
+    environment = container.get("env")
+    if not isinstance(environment, list) or any(
+        not isinstance(row, dict) or not isinstance(row.get("name"), str) or not row["name"]
+        for row in environment
+    ):
+        raise inventory.InventoryError("QA quiescence database environment is invalid")
+    return _env(container)
+
+
+def _qa_database_reference(container: dict) -> dict:
+    _qa_environment(container)
+    environment = container["env"]
+    rows = [row for row in environment if row.get("name") == "CASEOPS_DATABASE_URL"]
+    if len(rows) != 1:
+        raise inventory.InventoryError("QA quiescence database secret is missing or ambiguous")
+    reference = _qa_object(_qa_object(rows[0].get("valueFrom")).get("secretKeyRef"))
+    if (
+        set(reference) != {"name", "key"}
+        or reference.get("name") != "caseops-database-url"
+        or not isinstance(reference.get("key"), str)
+        or not re.fullmatch(r"latest|[1-9][0-9]*", reference["key"])
+        or rows[0]
+        != {
+            "name": "CASEOPS_DATABASE_URL",
+            "valueFrom": {"secretKeyRef": reference},
+        }
+    ):
+        raise inventory.InventoryError("QA quiescence database secret binding is invalid")
+    return copy.deepcopy(reference)
+
+
+def _qa_database_alias(annotations: dict, *, project: str, namespace: str) -> None:
+    aliases = annotations.get("run.googleapis.com/secrets")
+    if aliases is None:
+        return
+    if not isinstance(aliases, str) or len(aliases) > 65_536:
+        raise inventory.InventoryError("QA quiescence secret alias metadata is invalid")
+    matches = []
+    for binding in aliases.split(","):
+        alias, separator, resource = binding.partition(":")
+        if alias.strip() == "caseops-database-url":
+            matches.append(resource.strip() if separator else "")
+    if len(matches) > 1 or any(
+        value
+        not in {
+            f"projects/{project}/secrets/caseops-database-url",
+            f"projects/{namespace}/secrets/caseops-database-url",
+        }
+        for value in matches
+    ):
+        raise inventory.InventoryError("QA quiescence database alias targets another authority")
+
+
+def _qa_database_version(reference: dict, *, project: str, namespace: str) -> str:
+    # Secret Manager is global. Never use the regional Cloud Run wrapper or access values.
+    payload = _qa_object(
+        inventory.run_gcloud(
+            [
+                "secrets",
+                "versions",
+                "describe",
+                reference["key"],
+                "--secret",
+                "caseops-database-url",
+                "--project",
+                project,
+                "--quiet",
+                "--format=json",
+            ],
+            expect_json=True,
+            timeout=30,
+        )
+    )
+    name = payload.get("name")
+    match = re.fullmatch(
+        r"projects/([^/]+)/secrets/caseops-database-url/versions/([1-9][0-9]*)",
+        name if isinstance(name, str) else "",
+    )
+    if (
+        match is None
+        or match[1] not in (project, namespace)
+        or payload.get("state") != "ENABLED"
+        or reference["key"] not in ("latest", match[2])
+    ):
+        raise inventory.InventoryError("QA quiescence database secret version is unverified")
+    return match[2]
+
+
+def _qa_quiescence_runtime(
+    *,
+    project: str,
+    region: str,
+    release_sha: str,
+    image: str,
+) -> tuple[str, dict, dict]:
+    revision, _ = _service(project=project, region=region)
+    serving = _qa_object(
+        _call(
+            ["run", "revisions", "describe", revision, "--format=json"],
+            project=project,
+            region=region,
+            timeout=30,
+        )
+    )
+    metadata = _qa_object(serving.get("metadata"))
+    namespace = metadata.get("namespace")
+    containers = _qa_object(serving.get("spec")).get("containers")
+    if (
+        metadata.get("name") != revision
+        or _qa_object(metadata.get("labels")).get("serving.knative.dev/service") != SERVICE
+        or not isinstance(namespace, str)
+        or not re.fullmatch(r"[1-9][0-9]*", namespace)
+        or not isinstance(containers, list)
+        or any(not isinstance(row, dict) for row in containers)
+    ):
+        raise inventory.InventoryError("QA quiescence serving API authority is invalid")
+    api = [row for row in containers if row.get("name") == "api"]
+    if len(api) != 1:
+        raise inventory.InventoryError("QA quiescence serving API container is ambiguous")
+    job = _qa_object(
+        _call(
+            ["run", "jobs", "describe", JOB, "--format=json"],
+            project=project,
+            region=region,
+            timeout=30,
+        )
+    )
+    job_metadata = _qa_object(job.get("metadata"))
+    template = _qa_object(_qa_object(job.get("spec")).get("template"))
+    execution_spec = _qa_object(template.get("spec"))
+    task = _qa_object(_qa_object(execution_spec.get("template")).get("spec"))
+    if (
+        type(execution_spec.get("taskCount")) is not int
+        or execution_spec["taskCount"] != 1
+        or "taskCount" in task
+    ):
+        raise inventory.InventoryError("QA quiescence requires an explicit single-task worker template")
+    workers = task.get("containers")
+    if not isinstance(workers, list) or len(workers) != 1 or not isinstance(workers[0], dict):
+        raise inventory.InventoryError("QA quiescence worker template is invalid")
+    worker = workers[0]
+    env = _qa_environment(worker)
+    if (
+        api[0].get("image") != image
+        or worker.get("image") != image
+        or _qa_environment(api[0]).get("CASEOPS_RELEASE_SHA") != release_sha
+        or env.get(PROTOCOL) != "1"
+        or env.get(ADMISSION) != "true"
+        or worker.get("command") != [DOCUMENT.command]
+        or worker.get("args") != list(DOCUMENT.args)
+        or type(task.get("maxRetries")) is not int
+        or task["maxRetries"] != 0
+    ):
+        raise inventory.InventoryError("QA quiescence requires the enabled exact-release worker")
+    generation = str(job_metadata.get("generation", ""))
+    status = _qa_object(job.get("status"))
+    conditions = status.get("conditions")
+    if not isinstance(conditions, list) or any(not isinstance(row, dict) for row in conditions):
+        raise inventory.InventoryError("QA quiescence worker readiness metadata is invalid")
+    ready = [row for row in conditions if row.get("type") == "Ready"]
+    if (
+        job_metadata.get("name") != JOB
+        or job_metadata.get("namespace") != namespace
+        or not re.fullmatch(r"[1-9][0-9]*", generation)
+        or str(status.get("observedGeneration")) != generation
+        or len(ready) != 1
+        or ready[0].get("status") != "True"
+    ):
+        raise inventory.InventoryError("QA quiescence worker generation or namespace is invalid")
+    cloud_sql = f"{project}:{region}:caseops-db"
+    annotation = "run.googleapis.com/cloudsql-instances"
+    api_annotations = _qa_object(metadata.get("annotations"))
+    worker_annotations = _qa_object(_qa_object(template.get("metadata")).get("annotations"))
+    if (
+        api_annotations.get(annotation) != cloud_sql
+        or worker_annotations.get(annotation) != cloud_sql
+    ):
+        raise inventory.InventoryError("QA quiescence Cloud SQL database authority is invalid")
+    _qa_database_alias(api_annotations, project=project, namespace=namespace)
+    _qa_database_alias(worker_annotations, project=project, namespace=namespace)
+    api_reference = _qa_database_reference(api[0])
+    worker_reference = _qa_database_reference(worker)
+    api_version = _qa_database_version(api_reference, project=project, namespace=namespace)
+    worker_version = _qa_database_version(worker_reference, project=project, namespace=namespace)
+    if api_version != worker_version:
+        raise inventory.InventoryError("QA quiescence API and worker database versions differ")
+    return (
+        revision,
+        job,
+        {
+            "api_revision": revision,
+            "namespace": namespace,
+            "api_database_reference": api_reference,
+            "worker_database_reference": worker_reference,
+            "database_version": api_version,
+            "cloud_sql_instance": cloud_sql,
+            "worker_generation": generation,
+            "worker_task": copy.deepcopy(task),
+            "api_annotations": api_annotations,
+            "worker_annotations": worker_annotations,
+        },
+    )
+
+
+def quiesce_qa(*, project: str, region: str, release_sha: str, image: str) -> dict:
+    revision, job, authority = _qa_quiescence_runtime(
+        project=project,
+        region=region,
+        release_sha=release_sha,
+        image=image,
+    )
+    arguments = [*DOCUMENT.args, "--require-qa-quiescence"]
+    expected_task = (
+        job.get("spec", {}).get("template", {}).get("spec", {}).get("template", {}).get("spec", {})
+    )
+    expected_containers = expected_task.get("containers", [])
+    if (
+        len(expected_containers) != 1
+        or expected_containers[0].get("image") != image
+        or expected_containers[0].get("command") != [DOCUMENT.command]
+        or expected_containers[0].get("args") != list(DOCUMENT.args)
+        or _env(expected_containers[0]).get(ADMISSION) != "true"
+        or expected_task.get("maxRetries") != 0
+    ):
+        raise inventory.InventoryError("QA quiescence worker template changed before execution")
+    expected_container = copy.deepcopy(expected_containers[0])
+    expected_container["args"] = arguments
+    dispatched_at = datetime.now(UTC)
+    response = _call(
+        [
+            "run",
+            "jobs",
+            "execute",
+            JOB,
+            "--async",
+            "--quiet",
+            "--format=json",
+            inventory._gcloud_args_flag(arguments),
+        ],
+        project=project,
+        region=region,
+    )
+    name = str(response.get("metadata", {}).get("name", "")).rsplit("/", 1)[-1]
+    if not re.fullmatch(r"caseops-document-processing-[a-z0-9]+", name):
+        raise inventory.InventoryError("QA quiescence execution identity is missing")
+    deadline = time.monotonic() + 360
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise inventory.InventoryError("QA quiescence execution deadline; no QA dispatched")
+        execution = _qa_object(
+            _call(
+                [
+                    "run",
+                    "jobs",
+                    "executions",
+                    "describe",
+                    name,
+                    "--format=json",
+                ],
+                project=project,
+                region=region,
+                timeout=min(30, remaining),
+            )
+        )
+        status = _qa_object(execution.get("status"))
+        outcomes = status.get("conditions")
+        if not isinstance(outcomes, list) or any(not isinstance(row, dict) for row in outcomes):
+            raise inventory.InventoryError("QA quiescence execution outcome metadata is invalid")
+        conditions = [row for row in outcomes if row.get("type") == "Completed"]
+        if len(conditions) > 1:
+            raise inventory.InventoryError("QA quiescence execution has conflicting outcomes")
+        if conditions and str(conditions[0].get("status")).lower() in {"true", "false"}:
+            break
+        time.sleep(min(5, max(0, deadline - time.monotonic())))
+    metadata = _qa_object(execution.get("metadata"))
+    labels = _qa_object(metadata.get("labels"))
+    annotations = _qa_object(metadata.get("annotations"))
+    spec = _qa_object(execution.get("spec"))
+    task = _qa_object(_qa_object(spec.get("template")).get("spec"))
+    containers = task.get("containers", [])
+    if (
+        str(metadata.get("name", "")).rsplit("/", 1)[-1] != name
+        or labels.get("run.googleapis.com/job") != JOB
+        or metadata.get("namespace") != authority["namespace"]
+        or labels.get("run.googleapis.com/jobGeneration") != authority["worker_generation"]
+        or annotations.get("run.googleapis.com/cloudsql-instances")
+        != authority["cloud_sql_instance"]
+        or type(spec.get("taskCount")) is not int
+        or spec["taskCount"] != 1
+        or not isinstance(containers, list)
+        or len(containers) != 1
+        or containers[0] != expected_container
+        or containers[0].get("image") != image
+        or containers[0].get("command") != [DOCUMENT.command]
+        or containers[0].get("args") != arguments
+        or str(conditions[0].get("status")).lower() != "true"
+        or type(status.get("succeededCount")) is not int
+        or status["succeededCount"] != 1
+        or status.get("failedCount", 0) not in (None, 0)
+        or status.get("cancelledCount", 0) not in (None, 0)
+        or type(task.get("maxRetries")) is not int
+        or task["maxRetries"] != 0
+        or task.get("serviceAccountName") != expected_task.get("serviceAccountName")
+    ):
+        raise inventory.InventoryError("QA quiescence execution contract or outcome is invalid")
+    _qa_database_alias(annotations, project=project, namespace=authority["namespace"])
+    started = inventory._evidence_time(status.get("startTime"), "QA quiescence start")
+    completed = inventory._evidence_time(status.get("completionTime"), "QA quiescence completion")
+    if not dispatched_at <= started < completed <= datetime.now(UTC):
+        raise inventory.InventoryError("QA quiescence execution timing is invalid")
+    _, _, current_authority = _qa_quiescence_runtime(
+        project=project,
+        region=region,
+        release_sha=release_sha,
+        image=image,
+    )
+    if current_authority != authority:
+        raise inventory.InventoryError(
+            "API or worker database authority changed during QA quiescence"
+        )
+    return {
+        "schema_version": 1,
+        "release_sha": release_sha,
+        "image": image,
+        "api_revision": revision,
+        "execution": name,
+        "qa_queues_quiescent": True,
+        "basis": "exact-image read-only queue gate completed successfully",
+        "database_secret": "caseops-database-url",
+        "database_version": authority["database_version"],
+        "cloud_sql_instance": authority["cloud_sql_instance"],
+        "worker_generation": authority["worker_generation"],
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("preflight", "prepare", "activate"))
+    parser.add_argument("command", choices=("preflight", "prepare", "activate", "quiesce-qa"))
     parser.add_argument("--project", required=True)
     parser.add_argument("--region", required=True)
     parser.add_argument("--release-sha", required=True)
@@ -466,6 +811,13 @@ def main(argv: list[str] | None = None) -> int:
             receipt = prepare(
                 project=args.project, region=args.region, release_sha=args.release_sha,
                 executor=EXECUTORS[args.worker],
+            )
+        elif args.command == "quiesce-qa":
+            if args.worker != "document" or not inventory.DIGEST_IMAGE.fullmatch(args.image or ""):
+                raise inventory.InventoryError("QA quiescence requires the immutable document image")
+            receipt = quiesce_qa(
+                project=args.project, region=args.region, release_sha=args.release_sha,
+                image=args.image,
             )
         else:
             if args.state is None or not inventory.DIGEST_IMAGE.fullmatch(

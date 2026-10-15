@@ -51,12 +51,13 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
     selected = [
         step
         for job in workflow["jobs"].values()
+        if "test-legal-write-oct13" in job.get("strategy", {}).get("matrix", {}).get("suite", [])
         for step in job.get("steps", [])
         if step.get("name") == "Run release-owned test-legal portfolio and Calendar regressions"
     ]
     assert len(selected) == 1
     step = selected[0]
-    assert step["if"] == "matrix.suite == 'tester'"
+    assert step["if"] == "matrix.suite == 'test-legal-write-oct13'"
     assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
     assert "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD" in step["env"]["CASEOPS_RAM_PROD_PASSWORD"]
     assert (
@@ -74,7 +75,9 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
     evidence_step = [step for step in workflow["jobs"]["prod-playwright-shards"]["steps"]
                      if step.get("name") == "Reconcile required native Playwright evidence"]
     assert len(evidence_step) == 1
-    assert "required+=(test-legal-write-oct13)" in evidence_step[0]["run"]
+    assert 'tester|tester-index|test-legal-write-oct13) required=("$SUITE")' in (
+        evidence_step[0]["run"]
+    )
 
 
 
@@ -302,13 +305,64 @@ def test_exact_release_dispatch_records_only_the_claim_proven_by_the_suite() -> 
     )
 
     assert "needs.prod-playwright-shards.result == 'success'" in job["if"]
-    assert job["needs"] == ["resolve-release", "prod-playwright-shards"]
+    assert job["needs"] == [
+        "resolve-release", "prod-playwright-shards", "prod-tester-index",
+        "prod-test-legal-write-oct13",
+    ]
+    assert "needs.prod-tester-index.result == 'success'" in job["if"]
+    assert "needs.prod-test-legal-write-oct13.result == 'success'" in job["if"]
     assert "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" in writer["env"]
     assert "needs.resolve-release.outputs.release_sha" in writer["env"]["SERVING_RELEASE_SHA"]
     assert '--run-id "github-actions:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"' in writer["run"]
     assert "--operational public_claims_reviewed=pass" in writer["run"]
     assert "--billing" not in writer["run"]
     assert "--pine" not in writer["run"]
+
+
+def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_gate() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    jobs = workflow["jobs"]
+    original = jobs["prod-playwright-shards"]
+    assert original["strategy"]["matrix"]["suite"] == [
+        "tester", "test-legal-readonly", "legacy", "supporting", "patent-statute", "public-pages",
+    ]
+    for name, predecessor, suite in (
+        ("prod-tester-index", "prod-playwright-shards", "tester-index"),
+        ("prod-test-legal-write-oct13", "prod-tester-index", "test-legal-write-oct13"),
+    ):
+        job = jobs[name]
+        assert job["needs"] == ["resolve-release", predecessor]
+        assert "always()" in job["if"] and "!cancelled()" in job["if"]
+        assert f"needs.{predecessor}.result == 'failure'" in job["if"]
+        assert "needs.resolve-release.result == 'success'" in job["if"]
+        assert job["strategy"]["matrix"]["suite"] == [suite]
+        assert job["steps"] == original["steps"]
+    for name in ("prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13"):
+        job = jobs[name]
+        assert job["timeout-minutes"] == 38
+        assert job["strategy"]["max-parallel"] == 1
+        assert job["strategy"]["fail-fast"] is False
+    certificate = jobs["record-release-evidence"]
+    steps = certificate["steps"]
+    union_index = next(
+        i for i, step in enumerate(steps)
+        if step.get("name") == "Require complete source-bound tester partition union"
+    )
+    writer_index = next(i for i, step in enumerate(steps)
+                        if step.get("name") == "Record exact-release public-claims evidence")
+    assert union_index < writer_index
+    assert "--tester-partition-union" in steps[union_index]["run"]
+    assert "--required tester tester-index test-legal-write-oct13" in steps[union_index]["run"]
+    downloaded = {
+        step["with"]["name"] for step in steps
+        if step.get("uses") == "actions/download-artifact@v4"
+    }
+    assert downloaded == {
+        "prod-playwright-report-tester", "prod-playwright-report-tester-index",
+        "prod-playwright-report-test-legal-write-oct13",
+    }
 
 
 def test_public_claims_attestation_requires_exact_release_nonmutating_browser_evidence() -> None:

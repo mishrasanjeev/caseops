@@ -106,7 +106,7 @@ jobs:
           - supporting
           - patent-statute
           - public-pages
-    steps:
+    steps: &prod-playwright-steps
       - name: Check out the exact serving production release
         uses: actions/checkout@v4
         with:
@@ -248,8 +248,22 @@ jobs:
           CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
         run: bash "$RUNNER_TEMP/caseops-prod-playwright" tester --config=playwright.prod-ram.config.ts --project=tester-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester
 
+      - name: Run retained indexing and Contract AI production regressions
+        if: matrix.suite == 'tester-index'
+        env:
+          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
+          CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
+          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          CASEOPS_RAM_PROD_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
+          CASEOPS_RAM_PROD_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: bash "$RUNNER_TEMP/caseops-prod-playwright" tester-index --config=playwright.prod-ram.config.ts --project=tester-index-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester-index
+
       - name: Run release-owned test-legal portfolio and Calendar regressions
-        if: matrix.suite == 'tester'
+        if: matrix.suite == 'test-legal-write-oct13'
         env:
           CASEOPS_RAM_PROD_SLUG: test-legal
           CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
@@ -478,12 +492,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$SUITE" in
-            tester)
-              required=(tester)
-              if [[ -f tests/e2e/ram-2026-10-13-hearings.spec.ts ]]; then
-                required+=(test-legal-write-oct13)
-              fi
-              ;;
+            tester|tester-index|test-legal-write-oct13) required=("$SUITE") ;;
             legacy|test-legal-readonly) required=("$SUITE") ;;
             supporting)
               required=(notice)
@@ -506,6 +515,36 @@ jobs:
             test-results/prod-native-evidence/
           if-no-files-found: ${{ steps.prod-playwright-prerequisites.outputs.ready == 'true' && 'error' || 'warn' }}
           retention-days: 14
+
+  prod-tester-index:
+    name: Prod Playwright (tester-index)
+    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-playwright-shards.result == 'success' || needs.prod-playwright-shards.result == 'failure')
+    needs: [resolve-release, prod-playwright-shards]
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    env:
+      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        suite: [tester-index]
+    steps: *prod-playwright-steps
+
+  prod-test-legal-write-oct13:
+    name: Prod Playwright (test-legal-write-oct13)
+    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-tester-index.result == 'success' || needs.prod-tester-index.result == 'failure')
+    needs: [resolve-release, prod-tester-index]
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    env:
+      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        suite: [test-legal-write-oct13]
+    steps: *prod-playwright-steps
 
   scheduled-statute-verification:
     name: Scheduled read-only statute verification
@@ -623,10 +662,12 @@ jobs:
 
   record-release-evidence:
     name: Record exact-release evidence
-    if: always() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && needs.prod-playwright-shards.result == 'success'
+    if: always() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && needs.prod-playwright-shards.result == 'success' && needs.prod-tester-index.result == 'success' && needs.prod-test-legal-write-oct13.result == 'success'
     needs:
       - resolve-release
       - prod-playwright-shards
+      - prod-tester-index
+      - prod-test-legal-write-oct13
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -642,6 +683,32 @@ jobs:
             --expected-sha "${{ needs.resolve-release.outputs.release_sha }}" \
             --wait-seconds 30 \
             --interval-seconds 5
+
+      - name: Retain canonical tester partition evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: prod-playwright-report-tester
+          path: test-results/prod-native-evidence
+
+      - name: Retain indexing partition evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: prod-playwright-report-tester-index
+          path: test-results/prod-native-evidence
+
+      - name: Retain October 13 partition evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: prod-playwright-report-test-legal-write-oct13
+          path: test-results/prod-native-evidence
+
+      - name: Require complete source-bound tester partition union
+        env:
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: |
+          python scripts/prod_playwright_evidence.py validate \
+            --required tester tester-index test-legal-write-oct13 \
+            --tester-partition-union
 
       - name: Record exact-release public-claims evidence
         env:

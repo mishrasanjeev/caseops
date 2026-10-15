@@ -3040,6 +3040,55 @@ def test_document_worker_bridge_precedes_migration_and_activation_follows_exact_
     )
 
 
+def test_qa_queue_quiescence_precedes_bootstrap_rebuild_and_dispatch(tmp_path: Path) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1")
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+
+    def index(value: str) -> int:
+        return next(offset for offset, call in enumerate(calls) if value in call)
+
+    assert index("run deploy caseops-web") < index("document_worker_release.py activate")
+    assert index("document_worker_release.py activate") < index("scheduler_inventory.py resume")
+    resumes = [
+        offset for offset, call in enumerate(calls) if "scheduler_inventory.py resume" in call
+    ]
+    assert len(resumes) == 3
+    assert max(resumes) < index("document_worker_release.py quiesce-qa")
+    assert index("document_worker_release.py quiesce-qa") < index(
+        "run jobs execute caseops-ip-qa-bootstrap"
+    ) < index("gh workflow run prod-verify.yml")
+    assert sum("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls) == 1
+
+
+def test_failed_qa_queue_observation_never_bootstraps_or_dispatches(tmp_path: Path) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", document_worker_mode="quiesce-qa")
+    assert result.returncode != 0 and "Document worker release failed closed" in result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert "document_worker_release.py quiesce-qa" in calls
+    assert "run jobs execute caseops-ip-qa-bootstrap" not in calls
+    assert "gh workflow run prod-verify.yml" not in calls
+
+
+@pytest.mark.parametrize("fetches,required,phase", [
+    (11, "scheduler_inventory.py resume", "pre-QA document-quiescence gate"),
+    (12, "document_worker_release.py quiesce-qa", "post-QA document-quiescence gate"),
+    (13, "run jobs execute caseops-ip-qa-bootstrap", "post-QA bootstrap gate"),
+    (14, "run jobs execute caseops-ip-qa-bootstrap", "pre-QA dispatch gate"),
+])
+def test_main_drift_around_qa_queue_and_bootstrap_cannot_certify(
+    tmp_path: Path, fetches: int, required: str, phase: str,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", main_drift_after_fetches=fetches)
+    assert result.returncode != 0
+    assert f"main advanced during release at {phase}" in result.stdout
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert required in calls
+    if fetches <= 12:
+        assert "run jobs execute caseops-ip-qa-bootstrap" not in calls
+    assert "gh workflow run prod-verify.yml" not in calls
+
+
 @pytest.mark.parametrize("stage", ["preflight", "prepare", "activate"])
 def test_document_worker_bridge_failure_never_resumes_or_certifies(
     tmp_path: Path, stage: str
@@ -3135,8 +3184,8 @@ def test_deploy_prod_rejects_invalid_private_projection_scheduler_hold(
         ),
         (
             10,
-            "run jobs execute caseops-ip-qa-bootstrap",
-            "scheduler_inventory.py resume",
+            "run deploy caseops-web",
+            "document_worker_release.py activate",
             "pre-provider-scheduler-resume gate",
         ),
     ],

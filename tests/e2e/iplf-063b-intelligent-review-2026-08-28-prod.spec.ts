@@ -89,6 +89,26 @@ async function queueReviewWithOneGenerationRetry(
   label: string,
 ) {
   for (let attempt = 1; attempt <= 2; attempt += 1) {
+    // The serving API owns the authoritative queue. A deploy-time observation
+    // cannot cover asynchronous work left by an earlier acceptance phase.
+    const idleDeadline = Date.now() + 300_000;
+    let consecutiveIdle = 0;
+    while (Date.now() < idleDeadline && consecutiveIdle < 2) {
+      const readinessResponse = await page.request.get(`${API}/api/private-retrieval/integrity`, {
+        headers,
+        timeout: Math.min(10_000, Math.max(1, idleDeadline - Date.now())),
+      });
+      const readiness = await json(readinessResponse, 200, "read authoritative document queue");
+      if (typeof readiness.document_processing_pending !== "boolean") {
+        throw new Error("The exact serving release did not report document queue readiness.");
+      }
+      consecutiveIdle = readiness.document_processing_pending ? 0 : consecutiveIdle + 1;
+      if (consecutiveIdle < 2) {
+        const remaining = idleDeadline - Date.now();
+        if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(2_000, remaining)));
+      }
+    }
+    expect(consecutiveIdle, "The serving tenant document queue must settle before review creation.").toBe(2);
     const queued = await json(
       await page.request.post(`${API}/api/research/reviews`, { headers, data }),
       202,

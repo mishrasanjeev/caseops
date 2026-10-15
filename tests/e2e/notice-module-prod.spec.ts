@@ -208,6 +208,13 @@ test.describe("Notice module production workflows", () => {
     await expect(page.getByTestId("matter-notice-row")).toHaveCount(1);
     await expect(page.getByTestId("matter-notice-row")).toContainText("Reply Sent");
     await page.getByTestId("notice-sent-tab").click();
+    await expect(page.getByTestId("notice-filter-query")).toHaveValue("GST");
+    await expect(page.getByTestId("notice-filter-reply-status")).toBeDisabled();
+    await expect(page.getByTestId("notice-filter-reply-status")).toHaveValue("reply_sent");
+    await expect(page.getByTestId("matter-notice-row")).toHaveCount(0);
+    await page.getByTestId("notice-filter-query").fill("");
+    await expect(page.getByTestId("notice-filter-reply-status")).toHaveValue("reply_sent");
+    await expect(page.getByTestId("matter-notice-row")).toHaveCount(1);
     await expect(page.getByTestId("matter-notice-row")).toContainText("Payment recovery notice");
   });
 });

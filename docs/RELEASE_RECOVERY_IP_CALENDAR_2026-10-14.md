@@ -1,5 +1,30 @@
 # IP And Calendar Release Recovery
 
+## October 15 Deployed Startup Fix And New Replay Blockers
+
+PR537 merged as0c82fbb0, identical to Docker-accepted96e965ad's tree. Both
+surfaces serve that release at100% latest-only traffic. Full Docker3005 native
+and546 browser passes/10 explicit skips, fresh main35-job CI, security and zero
+open CodeQL alerts passed. The manual-IP grant remains consumed exactly once.
+Four actual production retained-index journeys now pass, as does the October12
+desktop Contract AI case. This is a deployed startup repair, not full closure.
+
+Run38693611994 is still NO-GO: tester121 collected/120 ended,106 pass/13 skip/
+1 Review failure/1 unended, and six mandatory October13 cases never started.
+Notice failed separately after its original indexing assertion passed. Bounded
+metadata proves an old01:43:22Z document job completed06:42:26Z and fenced the
+saved Review at a new tenant epoch. The private fence remains unchanged. A
+disabled received-only reply filter also excluded Sent notices; retained GST
+search is an independent test precondition, not a reason to reset all filters.
+
+The combined candidate's bounded read-only queue coordination, fixed serialized
+whole-file partitions and narrow Notice repair are described in
+`docs/bugfix-qa-quiescence-2026-10-15.md` and
+`docs/bugfix-prod-acceptance-capacity-2026-10-15.md`. Fresh full candidate gates,
+canonical release and original live replay remain required. Private cadence is
+still held until successful QA and two later clean reports. Earlier sections are
+historical, not the current serving identity or a new grant authorization.
+
 ## October 15 Actual Production Acceptance
 
 PR536 is merged; API/web serve62243583 at latest-only100%, service minimum4/1.

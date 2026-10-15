@@ -1228,6 +1228,32 @@ echo "  EG-003 clamav sidecar present with immediate two-second startup probing 
 # next canonical-main release will supersede it.
 assert_current_main "post-route pre-certification gate"
 
+# Drain retained QA work before the canary captures its final private generation.
+# Workers stay enabled for the later document-indexing acceptance journeys.
+assert_current_main "pre-provider-scheduler-resume gate"
+python scripts/document_worker_release.py activate \
+  --project "${PROJECT}" --region "${REGION}" --release-sha "${HEAD_SHA}" \
+  --state "${DOCUMENT_WORKER_RELEASE_STATE}" --image "${API_IMMUTABLE_IMAGE}"
+rm -f -- "${DOCUMENT_WORKER_RELEASE_STATE}"
+python scripts/document_worker_release.py activate --worker court \
+  --project "${PROJECT}" --region "${REGION}" --release-sha "${HEAD_SHA}" \
+  --state "${COURT_WORKER_RELEASE_STATE}" --image "${API_IMMUTABLE_IMAGE}"
+rm -f -- "${COURT_WORKER_RELEASE_STATE}"
+python scripts/scheduler_inventory.py resume \
+  --scheduler caseops-document-processing-cadence \
+  --project "${PROJECT}" --region "${REGION}" --image "${API_IMMUTABLE_IMAGE}"
+python scripts/scheduler_inventory.py resume \
+  --scheduler caseops-court-sync-cadence \
+  --project "${PROJECT}" --region "${REGION}" --image "${API_IMMUTABLE_IMAGE}"
+python scripts/scheduler_inventory.py resume \
+  --scheduler caseops-case-tracking-poll-1800-ist \
+  --project "${PROJECT}" --region "${REGION}" --image "${API_IMMUTABLE_IMAGE}"
+assert_current_main "pre-QA document-quiescence gate"
+python scripts/document_worker_release.py quiesce-qa \
+  --project "${PROJECT}" --region "${REGION}" --release-sha "${HEAD_SHA}" \
+  --image "${API_IMMUTABLE_IMAGE}"
+assert_current_main "post-QA document-quiescence gate"
+
 # The release-specific production canary is a synthetic QA mutation and may run
 # only after migration, exact traffic, public health, and sidecar checks pass.
 # A completed execution on the current job generation is authoritative: a
@@ -1374,6 +1400,7 @@ fi
 rm -f -- "${A0_QA_JOB_POST}" "${A0_QA_EXECUTION}"
 A0_QA_JOB_POST=""
 A0_QA_EXECUTION=""
+assert_current_main "post-QA bootstrap gate"
 
 if [[ -n "${TEST_LEGAL_MANUAL_IP_GRANT_INPUT}" ]]; then
   assert_current_main "pre-test-legal-manual-ip-grant gate"
@@ -1387,25 +1414,8 @@ fi
 
 # A push to main is not proof that a release started. Dispatch the exact-SHA
 # browser gate only after both services pass every synchronous deploy gate.
-assert_current_main "pre-provider-scheduler-resume gate"
-python scripts/document_worker_release.py activate \
-  --project "${PROJECT}" --region "${REGION}" --release-sha "${HEAD_SHA}" \
-  --state "${DOCUMENT_WORKER_RELEASE_STATE}" --image "${API_IMMUTABLE_IMAGE}"
-rm -f -- "${DOCUMENT_WORKER_RELEASE_STATE}"
-python scripts/document_worker_release.py activate --worker court \
-  --project "${PROJECT}" --region "${REGION}" --release-sha "${HEAD_SHA}" \
-  --state "${COURT_WORKER_RELEASE_STATE}" --image "${API_IMMUTABLE_IMAGE}"
-rm -f -- "${COURT_WORKER_RELEASE_STATE}"
-python scripts/scheduler_inventory.py resume \
-  --scheduler caseops-document-processing-cadence \
-  --project "${PROJECT}" --region "${REGION}" --image "${API_IMMUTABLE_IMAGE}"
-python scripts/scheduler_inventory.py resume \
-  --scheduler caseops-court-sync-cadence \
-  --project "${PROJECT}" --region "${REGION}" --image "${API_IMMUTABLE_IMAGE}"
-python scripts/scheduler_inventory.py resume \
-  --scheduler caseops-case-tracking-poll-1800-ist \
-  --project "${PROJECT}" --region "${REGION}" --image "${API_IMMUTABLE_IMAGE}"
 echo "--- dispatch exact-release production verification ---"
+assert_current_main "pre-QA dispatch gate"
 gh workflow run prod-verify.yml \
   --repo mishrasanjeev/caseops \
   --ref main \

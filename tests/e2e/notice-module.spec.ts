@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, request, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
+import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl } from "./support/env";
 import { makeUploadFixture } from "./support/helpers";
 
@@ -73,10 +74,8 @@ async function createMatter(
 test.describe("Notice module workflows", () => {
   test.setTimeout(180_000);
 
-  test("received and sent notices persist metadata, reply tracking, child documents, and filters", async ({
-    page,
-  }) => {
-    const api = await request.newContext();
+  async function noticeJourney(page: Page) {
+    const api = await request.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
     const slug = unique("notice");
     const { token, ownerEmail } = await bootstrap(api, slug);
     const matterCode = unique("NOTICE").toUpperCase();
@@ -121,7 +120,8 @@ test.describe("Notice module workflows", () => {
         response.request().method() === "POST",
     );
     await page.setInputFiles('[data-testid="matter-notice-file-input"]', receivedNoticePath);
-    expect((await receivedUploadResponse).status()).toBe(200);
+    const receivedResponse = await receivedUploadResponse;
+    expect(receivedResponse.status()).toBe(200);
 
     const receivedRow = page.getByTestId("matter-notice-row");
     await expect(receivedRow).toContainText("GST demand notice");
@@ -130,6 +130,7 @@ test.describe("Notice module workflows", () => {
     await expect(receivedRow).toContainText("Reply Overdue");
     await expect(receivedRow).toContainText("Reminders: 7, 3, 1 days before");
     await expect(receivedRow).toContainText("Prepare reply with payment challans");
+    await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(0);
 
     const replyPath = makeUploadFixture(
       `${matterCode.toLowerCase()}-gst-demand-reply.txt`,
@@ -145,10 +146,12 @@ test.describe("Notice module workflows", () => {
       '[data-testid="matter-notice-related-file-input"]',
       replyPath,
     );
-    expect((await replyUploadResponse).status()).toBe(200);
+    const replyResponse = await replyUploadResponse;
+    expect(replyResponse.status()).toBe(200);
     await expect(receivedRow).toContainText("Reply Sent");
     await expect(receivedRow).toContainText(path.basename(replyPath));
     await expect(receivedRow).toContainText("Documents and reply history");
+    await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(0);
 
     await page.getByTestId("notice-sent-tab").click();
     await page.getByTestId("matter-notice-sent-on").fill(dateOffset(0));
@@ -174,23 +177,82 @@ test.describe("Notice module workflows", () => {
         response.request().method() === "POST",
     );
     await page.setInputFiles('[data-testid="matter-notice-file-input"]', sentNoticePath);
-    expect((await sentUploadResponse).status()).toBe(200);
+    const sentResponse = await sentUploadResponse;
+    expect(sentResponse.status()).toBe(200);
 
     const sentRow = page.getByTestId("matter-notice-row");
     await expect(sentRow).toContainText("Payment recovery notice");
     await expect(sentRow).toContainText("Sent");
     await expect(sentRow).toContainText("Rao & Co.");
     await expect(sentRow).toContainText("Dispatched");
+    await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(0);
 
+    const attachmentIds = await Promise.all(
+      [receivedResponse, replyResponse, sentResponse].map(async (response) =>
+        ((await response.json()) as { id: string }).id,
+      ),
+    );
+    expect(new Set(attachmentIds).size).toBe(3);
+    await expect.poll(async () => {
+      const response = await page.request.get(`${apiBaseUrl}/api/matters/${matterId}/workspace`);
+      expect(response.status()).toBe(200);
+      const workspace = await response.json() as { attachments: Array<{
+        id: string; processing_status: string; extracted_char_count: number; latest_job: { status: string } | null;
+      }> };
+      return workspace.attachments.filter((row) => attachmentIds.includes(row.id)).map((row) => ({
+        indexed: row.processing_status === "indexed", completed: row.latest_job?.status === "completed",
+        nonempty: row.extracted_char_count > 0,
+      }));
+    }, { timeout: 90_000, intervals: [1_000, 2_000, 5_000] }).toEqual(
+      Array.from({ length: 3 }, () => ({ indexed: true, completed: true, nonempty: true })),
+    );
+
+    await page.reload({ waitUntil: "networkidle" });
     await page.getByTestId("notice-received-tab").click();
     await page.getByTestId("notice-filter-query").fill("GST");
     await page.getByTestId("notice-filter-reply-status").selectOption("reply_sent");
     await expect(page.getByTestId("matter-notice-row")).toHaveCount(1);
     await expect(page.getByTestId("matter-notice-row")).toContainText("GST demand notice");
+    await expect(page.getByTestId("matter-notice-row")).toContainText("Reply Sent");
+
+    const query = page.getByTestId("notice-filter-query");
+    const replyFilter = page.getByTestId("notice-filter-reply-status");
+    await page.getByTestId("notice-sent-tab").click();
+    await expect(query).toHaveValue("GST");
+    await expect(replyFilter).toHaveValue("reply_sent");
+    await expect(replyFilter).toBeDisabled();
+    await expect(page.getByTestId("matter-notice-row")).toHaveCount(0);
+    await query.fill("");
+    await expect(replyFilter).toHaveValue("reply_sent");
+    await expect(page.getByTestId("matter-notice-row")).toHaveCount(1);
+    await expect(sentRow).toContainText("Payment recovery notice");
+    await expect(sentRow).toContainText("Rao & Co.");
+    await expect(sentRow).toContainText("Dispatched");
+    await sentRow.scrollIntoViewIfNeeded();
+    await expect(sentRow).toBeInViewport();
+    await query.scrollIntoViewIfNeeded();
+    await expect(query).toBeInViewport();
+    expect((await query.boundingBox())?.width ?? 0).toBeGreaterThan(160);
+    await page.getByTestId("notice-received-tab").click();
+    await expect(replyFilter).toBeEnabled();
+    await expect(replyFilter).toHaveValue("reply_sent");
+    await expect(receivedRow).toContainText("GST demand notice");
+    await expect(receivedRow).toContainText("Reply Sent");
+    await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(0);
 
     await page.goto(`/app/matters/${matterId}/documents`);
     await expect(page.getByText(path.basename(receivedNoticePath)).first()).toBeVisible();
     await expect(page.getByText(path.basename(replyPath)).first()).toBeVisible();
     await expect(page.getByText(path.basename(sentNoticePath)).first()).toBeVisible();
-  });
+  }
+
+  for (const viewport of [
+    { name: "desktop", width: 1280, height: 900 },
+    { name: "mobile", width: 393, height: 851 },
+  ]) {
+    test(`received and sent notices persist metadata, reply tracking, child documents, and filters (${viewport.name})`, async ({ page }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await noticeJourney(page);
+    });
+  }
 });

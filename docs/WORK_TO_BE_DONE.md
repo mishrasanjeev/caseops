@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 15 Production Replay And Candidate Recovery
+
+PR537/API/web0c82fbb0 and the one-time test-legal manual-IP grant are deployed.
+Four production indexing journeys pass, but38693611994 is NO-GO: one unended
+tester case, six unstarted October13 cases, a legacy-worker Review epoch race
+and a distinct Notice reply-filter failure. The combined candidate coordinates
+QA queue quiescence, serial inventory-complete budgets and the disabled Sent
+reply filter. Fresh Docker/CI/release/live proof and post-QA private cadence remain
+open. See `docs/bugfix-qa-quiescence-2026-10-15.md`. Do not replay the grant;
+GBA/provider gaps and historical reopening diagnosis remain unchanged.
+
 ## October 15 Worker Environment Acceptance
 
 API/web62243583 and the approved test-legal-only manual-IP grant are deployed,

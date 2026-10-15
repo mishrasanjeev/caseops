@@ -21,6 +21,8 @@ NAMES = (f"{JOB}-second", f"{JOB}-first", f"{JOB}-historical-blocked")
 REQUIRED_JOBS = (
     "Resolve exact production release",
     "Prod Playwright (tester)",
+    "Prod Playwright (tester-index)",
+    "Prod Playwright (test-legal-write-oct13)",
     "Prod Playwright (legacy)",
     "Prod Playwright (supporting)",
     "Prod Playwright (patent-statute)",
@@ -234,6 +236,36 @@ def test_private_resume_accepts_two_later_serial_clean_runs_after_historical_bre
         for kind, args in state["calls"] if kind == "gcloud"
     ) == 1
     assert inventory == original
+
+
+@pytest.mark.parametrize("name", [
+    "Prod Playwright (tester-index)", "Prod Playwright (test-legal-write-oct13)",
+])
+@pytest.mark.parametrize("outcome", ["missing", "failure", "cancelled", "skipped"])
+def test_private_resume_requires_both_serial_partitions_even_with_recorded_evidence(
+    monkeypatch, name, outcome,
+):
+    inventory, state = evidence(monkeypatch)
+    original_gh = guard._run_gh
+
+    def changed_qa(arguments):
+        result = original_gh(arguments)
+        if arguments[:2] == ["run", "view"]:
+            if outcome == "missing":
+                result["jobs"] = [job for job in result["jobs"] if job["name"] != name]
+            else:
+                next(job for job in result["jobs"] if job["name"] == name)[
+                    "conclusion"
+                ] = outcome
+            assert next(job for job in result["jobs"] if job["name"] == (
+                "Record exact-release evidence"
+            ))["conclusion"] == "success"
+        return result
+
+    monkeypatch.setattr(guard, "_run_gh", changed_qa)
+    with pytest.raises(guard.InventoryError, match="every required QA job"):
+        resume(inventory)
+    assert_no_resume(state)
 
 
 def test_mutable_service_template_tag_does_not_override_revision_digest(monkeypatch):

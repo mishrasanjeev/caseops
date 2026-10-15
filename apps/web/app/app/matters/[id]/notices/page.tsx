@@ -410,7 +410,7 @@ export default function MatterNoticesPage() {
     if (filters.status && (notice.notice_status || "Open") !== filters.status) {
       return false;
     }
-    if (filters.replyStatus && replyStatus(notice) !== filters.replyStatus) {
+    if (activeTab === "received" && filters.replyStatus && replyStatus(notice) !== filters.replyStatus) {
       return false;
     }
     if (!dateInRange(notice.notice_reply_due_on, filters.dueFrom, filters.dueTo)) {
@@ -445,6 +445,7 @@ export default function MatterNoticesPage() {
     }
     if (filters.status && notice.status !== filters.status) return false;
     if (
+      activeTab === "received" &&
       filters.replyStatus &&
       (filters.replyStatus === "reply_sent"
         ? !notice.reply_sent

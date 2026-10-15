@@ -4,6 +4,9 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { NoticeRecord } from "@/lib/api/notices";
+import { todayLocalDateInput } from "@/lib/dates";
+
 const {
   uploadMock,
   updateMock,
@@ -88,6 +91,29 @@ async function enterText(user: UserEvent, field: HTMLElement, value: string) {
   expect(field).toHaveDisplayValue(value);
 }
 
+const REPLY_FILTERS = [
+  "", "reply_pending", "reply_sent", "reply_overdue", "reply_due_today",
+  "reply_due_in_days", "not_required",
+] as const;
+
+function filterNotice(id: string, overrides: Partial<NoticeRecord> = {}): NoticeRecord {
+  return {
+    id, source_kind: "standalone", read_only: false, direction: "received",
+    subject: "GST demand notice", type: null, mode: null, authority: null,
+    received_from: null, summary: null, response: null, remarks: null,
+    internal_spoc: null, internal_remarks: null, status: "Open", department: null,
+    owner_membership_id: null, owner_name: null, owner_email: null,
+    received_on: todayLocalDateInput(), sent_on: null, reply_due_on: null,
+    reply_required: true, reply_sent: false, reply_sent_on: null,
+    amount_minor: null, dispute_amount_minor: null, recovered_amount_minor: null,
+    currency: "INR", counsel_engaged: null,
+    matter_links: [{ matter_id: "m1", matter_code: "N-1", matter_title: "Notice Matter" }],
+    filename: null, has_file: false, content_type: null, size_bytes: null,
+    created_at: "2026-10-15T07:00:00Z", updated_at: "2026-10-15T07:00:00Z",
+    ...overrides,
+  };
+}
+
 describe("MatterNoticesPage", () => {
   beforeEach(() => {
     uploadMock.mockReset();
@@ -103,6 +129,87 @@ describe("MatterNoticesPage", () => {
       ...(workspaceData.current as object),
       attachments: [],
     };
+  });
+
+  it.each(
+    (["local", "linked-global"] as const).flatMap((source) =>
+      REPLY_FILTERS.map((replyFilter) => ({ source, replyFilter })),
+    ),
+  )("keeps shared search but ignores $source reply filter '$replyFilter' on Sent", async ({ source, replyFilter }) => {
+    useCapabilityMock.mockImplementation(() => false);
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + (replyFilter === "reply_overdue" ? -1
+      : replyFilter === "reply_due_in_days" ? 2 : 0));
+    const matching = filterNotice("received-match", {
+      reply_required: replyFilter !== "not_required",
+      reply_sent: !replyFilter || replyFilter === "reply_sent",
+      reply_due_on: ["reply_overdue", "reply_due_today", "reply_due_in_days"].includes(replyFilter)
+        ? todayLocalDateInput(dueDate) : null,
+      reply_sent_on: !replyFilter || replyFilter === "reply_sent" ? todayLocalDateInput() : null,
+    });
+    const excluded = filterNotice("received-excluded", {
+      subject: "GST unrelated notice", reply_required: !matching.reply_required,
+    });
+    const sent = filterNotice("sent", {
+      direction: "sent", subject: "Payment recovery notice", received_on: null,
+      sent_on: todayLocalDateInput(), reply_required: false,
+    });
+    const records = [matching, excluded, sent];
+    if (source === "local") {
+      workspaceData.current = {
+        ...(workspaceData.current as object),
+        attachments: records.map((notice) => ({
+          id: notice.id, document_type: "notice", notice_document_role: "notice",
+          original_filename: `${notice.id}.txt`, notice_direction: notice.direction,
+          notice_subject: notice.subject, notice_received_on: notice.received_on,
+          notice_sent_on: notice.sent_on, notice_reply_due_on: notice.reply_due_on,
+          notice_reply_required: notice.reply_required, notice_reply_sent: notice.reply_sent,
+          notice_reply_sent_on: notice.reply_sent_on,
+          notice_reply_days_remaining: notice === matching && notice.reply_due_on
+            ? replyFilter === "reply_overdue" ? -1 : replyFilter === "reply_due_in_days" ? 2 : 0 : null,
+          notice_reply_status: notice === matching ? replyFilter || "reply_sent"
+            : notice === excluded ? matching.reply_required ? "not_required" : "reply_pending" : null,
+          created_at: notice.created_at,
+        })),
+      };
+    } else {
+      listNoticesMock.mockResolvedValue({ notices: records, total: records.length, next_cursor: null });
+    }
+    const user = userEvent.setup();
+    const page = renderUploadPage();
+    const rows = () => page.queryAllByTestId(source === "local" ? "matter-notice-row" : /^matter-global-notice-/);
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    const query = page.getByTestId("notice-filter-query");
+    const reply = page.getByTestId("notice-filter-reply-status");
+    expect(within(reply).getAllByRole("option").map((option) => (option as HTMLOptionElement).value))
+      .toEqual(REPLY_FILTERS);
+    await enterText(user, query, "GST");
+    await user.selectOptions(reply, replyFilter);
+    expect(rows()).toHaveLength(replyFilter ? 1 : 2);
+    expect(rows()[0]).toHaveTextContent("GST demand notice");
+
+    await user.click(page.getByTestId("notice-sent-tab"));
+    expect(query).toHaveValue("GST");
+    expect(reply).toBeDisabled();
+    expect(reply).toHaveValue(replyFilter);
+    expect(rows()).toHaveLength(0);
+    await user.clear(query);
+    expect(reply).toHaveValue(replyFilter);
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toHaveTextContent("Payment recovery notice");
+    await enterText(user, query, "Payment");
+    expect(rows()).toHaveLength(1);
+    await user.clear(query);
+    await enterText(user, query, "Unrelated search");
+    expect(rows()).toHaveLength(0);
+    await user.clear(query);
+
+    await user.click(page.getByTestId("notice-received-tab"));
+    expect(reply).toBeEnabled();
+    expect(reply).toHaveValue(replyFilter);
+    expect(rows()).toHaveLength(replyFilter ? 1 : 2);
+    expect(rows()[0]).toHaveTextContent("GST demand notice");
+    if (replyFilter) expect(rows()[0]).not.toHaveTextContent("GST unrelated notice");
   });
 
   it("lists received notices with reply tracking and related documents", () => {
