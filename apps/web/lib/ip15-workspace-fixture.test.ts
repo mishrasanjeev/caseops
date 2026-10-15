@@ -73,7 +73,7 @@ describe("IP15 shared workspace fixture boundaries", () => {
     expect(f.events.slice(0, 2)).toEqual(["/api/build", "/api/release-identity"]);
     expect(f.events.slice(-2)).toEqual(["/api/build", "/api/release-identity"]);
     expect(f.request.put).toHaveBeenCalledWith(expect.stringMatching(/configuration$/), expect.objectContaining({ data: expect.objectContaining({
-      provider_keys: [], accept_provider_terms: false, provider_terms_version: null, timezone: "Asia/Kolkata",
+      provider_keys: [], accept_provider_terms: false, provider_terms_version: null, timezone: "Asia/Kolkata", holiday_calendar_key: "ip15",
     }) }));
     const args = f.spawnSync.mock.calls[0] as unknown as [string, string[], { env: Record<string, string> }];
     expect(args[1][1]).toContain("owner.role=='owner'");

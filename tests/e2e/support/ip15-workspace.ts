@@ -138,7 +138,7 @@ export async function prepareIp15Workspace(
     grantFreshLocalWorkspace(web, api, actor, credentials.slug);
     const configured = await body(await request.put(`${api.origin}/api/ip/workspace/configuration`, { headers, data: {
       expected_version: null, enabled_asset_types: ["trademark"], jurisdictions: ["IN"], offices: ["IP India"],
-      timezone: "Asia/Kolkata", holiday_calendar_key: "ip15-synthetic", working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] },
+      timezone: "Asia/Kolkata", holiday_calendar_key: "ip15", working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] },
       document_taxonomy_version: "ip-taxonomy-2026.1", event_catalog_version: "ip-events-v1", deadline_rule_versions: { IN: "2026.1" },
       notification_channels: ["in_app"], critical_event_policy: { escalation_after_minutes: 30 },
       escalation_owner_membership_id: actor.membership.id, provider_keys: [], provider_terms_version: null, accept_provider_terms: false,

@@ -124,6 +124,12 @@ An ambiguous or invalid value must be resolved from the source, not guessed.
 Review the import's created, skipped and failed counts and retained original
 rows before treating the upload as complete.
 
+Larger imports continue in acknowledged batches of at most 50 rows. Keep the
+review open while its counts advance; a staged import is not a completed one.
+After an interrupted connection, open the existing import from history and
+inspect its retained counts before using its creator-authorized recovery
+action. Do not upload another copy or discard the original claim to retry it.
+
 ## Legal Deadline Controls Are Separate
 
 A supplied-date reminder is not an approved legal-rule calculation. The Legal

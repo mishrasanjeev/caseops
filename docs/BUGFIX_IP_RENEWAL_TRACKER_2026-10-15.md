@@ -150,6 +150,21 @@ The concrete weaknesses in the earlier implementation and verification were:
     the existing QA tenant bindings and has names-only fail-fast checks. The
     original missing-key regression failed before correction; all 14 new
     contract/guard cases and their three complete modules passed afterward.
+14. The six added migration indexes changed governance fingerprints even though
+    model metadata already contained those indexes. The assumption that no
+    regeneration was needed was wrong. Canonical generation and rendering now
+    precede all 12 actual CI preflight commands; all 12 passed locally.
+15. The 101-row browser test started a ten-second final-visibility assertion
+    while its first 50-row UI continuation was still outstanding. Restricted
+    exact-serving diagnostics reproduced this twice; initial batches took
+    16.39 and 25.56 seconds, below the unchanged 90-second request budget.
+    The test now waits for both genuine acknowledgements and validates their
+    status, source identity, version and row progress before the same visible
+    completion assertion. Its 180-second total budget and ten-second visibility
+    budget are unchanged, with no transport retry. The server's SQL timing is
+    not established by that test failure; the unrelated health read remained
+    responsive after abandonment. New local and exact-release browser proof
+    is still required for the amended journey.
 
 ## Verification Checkpoint
 
@@ -164,11 +179,13 @@ not new whole-Docker or production acceptance.
 The separate baseline b4bee6f8 is deployed but its exact-release production
 run 38777040009 is NO-GO: 360 identities, 334 passes, 18 explicit skips and
 eight failures. Both court Calendar and source-renewal portfolio journeys
-passed at desktop/mobile widths. Six index setup failures and two 101-row
-recovery failures remain separate. The latter's original ledgers retain
-100 committed rows, one valid pending row, zero failed rows and source values;
-browser acknowledgement and root cause must not be inferred from those counts.
-The original jobs were not blindly resumed. The new seven browser cases,
+passed at desktop/mobile widths. A separate unchanged six-case index replay
+with the required QA environment then passed on b4bee, confirming the wiring
+defect; it does not rewrite the failed workflow as green. The two 101-row
+failures have separate exact-serving timing evidence as described above.
+Their original ledgers retain 100 committed rows, one valid pending row,
+zero failed rows and source values. The original jobs were not blindly resumed.
+The new seven browser cases, the amended acknowledgement journey,
 fresh whole Docker, green CI and a corrected exact-release replay remain
 required before the new scope is marked fixed.
 

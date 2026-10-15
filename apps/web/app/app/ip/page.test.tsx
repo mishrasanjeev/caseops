@@ -1282,13 +1282,17 @@ describe("IpDocketPage", () => {
     expect(days).toHaveAttribute("min", "1");
     expect(days).toHaveAttribute("max", "31");
     expect(days).toHaveAttribute("step", "1");
+    const calendar = within(card).getByLabelText("Holiday calendar");
+    await userEvent.clear(calendar);
+    await userEvent.type(calendar, "IN-TEST");
+    expect(calendar).toHaveValue("IN-TEST");
     fireEvent.change(days, { target: { value: String(cadence) } });
     fireEvent.change(time, { target: { value: "23:59" } });
     await userEvent.click(within(card).getByRole("button", { name: "Save configuration" }));
     await waitFor(() => expect(saveIpWorkspaceConfigurationMock).toHaveBeenCalledExactlyOnceWith({
       currentConfiguration: undefined,
       expectedVersion: null, jurisdiction: "IN", office: "IP India", timezone: "Asia/Kolkata",
-      holidayCalendarKey: "IN-CENTRAL-2026", escalationOwnerMembershipId: "membership-1",
+      holidayCalendarKey: "IN-TEST", escalationOwnerMembershipId: "membership-1",
       providerKey: "", acceptProviderTerms: false,
       renewalReminderCadenceDays: cadence, renewalReminderDeliveryTime: "23:59",
     }));

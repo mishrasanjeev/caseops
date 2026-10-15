@@ -2562,3 +2562,16 @@ requirements when using the fallback.
   acknowledgement, and obtain the exact failed assertion and bounded route
   timing before changing code. Do not infer a timeout from elapsed time alone,
   raise the deadline, or automatically retry an uncertain mutation.
+  A batch journey must await the actual continuation acknowledgements before
+  starting its final visibility assertion, within the unchanged case, request
+  and visibility budgets. Reject transport, status, parse and progress errors;
+  never fabricate a remaining acknowledgement or accept staged work as complete.
+- A migration-only index amendment changes the governance map's migration
+  inventory even when model metadata is unchanged. Regenerate and review that
+  inventory, render its projections and run the complete actual CI preflight
+  sequence, not only Ruff or column-map validation, before freezing the source.
+- Keep synthetic calendar labels plainly non-secret. A reviewed origin finding
+  can recur in a virtual merge's history patch even after tree scanning passes.
+  Do not add volatile merge-SHA exemptions or weaken scanner rules; preserve
+  exact historical reviews and require fresh tree plus complete changed-history
+  scans after correcting the current fixture text.
