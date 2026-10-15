@@ -2496,3 +2496,10 @@ requirements when using the fallback.
   acceptance from an early zero-alert snapshot or log unnecessary input-derived
   receipt payloads when a literal success marker and separate identity check
   provide the required evidence.
+- Calendar keyboard acceptance must await removal of the previous modal and
+  restoration of its trigger focus before moving focus to a different trigger.
+  Assert the named all-events versus overflow dialog and its exact event IDs;
+  a generic dialog locator can hide activation of the wrong surface. Preserve
+  keyboard activation, subset counts and mobile proof. Do not change shared
+  modal focus behavior, add sleeps/retries or infer duplicate data from a wrong
+  dialog. A trace without activeElement does not directly prove focus theft.

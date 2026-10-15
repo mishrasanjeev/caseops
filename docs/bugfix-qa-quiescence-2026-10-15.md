@@ -77,6 +77,37 @@ selected to exercise the actual fix. Its90-second indexing assertion is intact.
 
 ## Verification And Limits
 
+Current PR538 candidate15458561 has complete current-tree Actions, JavaScript
+and Python CodeQL analyses with zero SARIF results and zero open PR alerts;
+577 and578 are fixed without dismissal. This is not full release acceptance.
+CI38716637035 passes33 jobs, including8,386 API cases,3,009 native PostgreSQL
+cases and1,337 frontend cases, but its browser job fails. Its557 browser
+identities reconcile as538 passes,18 skips and one failure, with zero flaky
+cases. The sole failure is the1280px October13 Calendar journey at line261;
+its393px serial sibling is skipped and remains unverified.
+
+The retained trace shows the all-events dialog with eight links rather than
+the overflow dialog's expected five. All eight distinct hearing identities
+belong to that run's four Matters, and both calendar API responses agree.
+Duplicate data or foreign fixtures are not demonstrated. The test closes the
+all-events modal then moves focus before Radix's deferred unmount focus
+restoration has completed. That timing is a supported diagnosis, not a directly
+recorded activeElement observation. The minimal regression correction awaits
+modal removal and restored day-trigger focus, then asserts overflow focus,
+keyboard activation, the named dialog and exact five IDs. Adjacent close/reopen
+transitions receive the same lifecycle synchronization and component coverage.
+No shared Dialog behavior, count, keyboard action, retry or deadline is changed.
+Fresh complete amended-source CI, Docker and exact-production proof remain
+required. The earlier failed154 run and all subsequent results stay separate.
+The security-amendment checkpoints below are retained historical evidence.
+
+The separate lifecycle counterproof reproduces focus returning to the day
+trigger when the test moves it before deferred close completion. Its first
+fake-timer harness timeout is retained as invalid counterproof. The corrected
+complete Calendar component module passes20 cases with no exclusions; E2E
+type-check and diff checks pass. This is scoped proof, not a browser pass or
+acceptance of an amended commit. No product/shared Dialog source was modified.
+
 PR538's initial frozen candidate is a5f53f9a, tree a4c75db8. Its eight Security
 jobs and three CodeQL jobs pass, but PR-scoped high-severity alert577 remains
 open for the verification workflow's dynamic release checkout. This is a release

@@ -11,6 +11,13 @@ search, full inventories, deadlines, provider isolation and source/access fences
 See `docs/bugfix-qa-quiescence-2026-10-15.md`. Exact new production replay remains
 required. The grant is already applied once; LIFE13-01 remains Inconclusive.
 
+PR538 CI38716637035 subsequently fails one Calendar browser journey while its
+other33 jobs and all current language scans pass. Trace data proves the test
+opened all-events rather than overflow, not duplicate hearings. J08/M08 dated
+keyboard acceptance now synchronizes modal removal/focus restoration and checks
+exact named dialogs and subsets. Fresh joined gates and both widths remain
+required; see the candidate document for the retained failure and limits.
+
 ## October 15 Worker Environment Acceptance
 
 **Partially fixed / NO-GO.** API/web serve62243583 and the one-time test-legal

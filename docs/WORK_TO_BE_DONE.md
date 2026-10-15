@@ -11,6 +11,12 @@ reply filter. Fresh Docker/CI/release/live proof and post-QA private cadence rem
 open. See `docs/bugfix-qa-quiescence-2026-10-15.md`. Do not replay the grant;
 GBA/provider gaps and historical reopening diagnosis remain unchanged.
 
+PR538 candidate15458561 is not releasable: complete CI has one Calendar browser
+failure despite33 successful jobs and clear current-tree scans. The trace shows
+the wrong modal, not duplicated API data. Repair dated keyboard lifecycle
+synchronization, then require fresh complete amended-source CI/Docker and live
+desktop/mobile acceptance. Do not transfer the older tree's security clearance.
+
 ## October 15 Worker Environment Acceptance
 
 API/web62243583 and the approved test-legal-only manual-IP grant are deployed,

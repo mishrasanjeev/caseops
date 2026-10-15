@@ -11,6 +11,11 @@ Manual IP is already granted once to test-legal only. See
 `docs/bugfix-qa-quiescence-2026-10-15.md`; combined fresh gates/live proof remain
 required, and prior dated checkpoints remain historical.
 
+J08/M08/MOD-TS-006 remains partially verified after PR538 CI38716637035's single
+Calendar wrong-dialog failure. Exact all-events/overflow identities and modal
+close/focus/keyboard lifecycle require amended dated regression plus fresh full
+CI/Docker and both production widths; the skipped mobile sibling is not proof.
+
 ## October 15 Worker Environment Acceptance
 
 J04/M03/MOD-TS-002/005, US-007..009 and FT-011..015 remain production-incomplete.

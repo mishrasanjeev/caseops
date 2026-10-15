@@ -244,20 +244,30 @@ test.describe.serial("October 13 court Calendar acceptance", () => {
         await expect(cell.locator('[data-testid^="calendar-event-"]')).toHaveCount(3);
         expect(await cell.locator('[data-testid^="calendar-event-"]').evaluateAll(nodes => nodes.map(n => n.getAttribute("data-testid"))))
           .toEqual(expected.slice(0, 3).map(e => `calendar-event-${e.id}`));
-        await cell.getByRole("button", { name: `View all events on ${date}` }).click();
-        const allDetails = page.getByRole("dialog");
-        await expect(allDetails.getByRole("link")).toHaveCount(expected.length);
+        const dayTrigger = cell.getByRole("button", { name: `View all events on ${date}` });
+        await dayTrigger.click();
+        const allDialog = page.getByRole("dialog", { name: `Events on ${date}`, exact: true });
+        await expect(allDialog.getByRole("heading", { name: `Events on ${date}`, exact: true })).toBeVisible();
+        await expect(allDialog.getByRole("link")).toHaveCount(expected.length);
+        expect(await allDialog.locator('[data-testid^="calendar-event-"]').evaluateAll(nodes =>
+          nodes.map(node => node.getAttribute("data-testid"))))
+          .toEqual(expected.map(event => `calendar-event-${event.id}`));
         for (const event of expected.filter(e => expectedCourt.has(e.matter_id))) {
-          const link = allDetails.getByTestId(`calendar-event-${event.id}`);
+          const link = allDialog.getByTestId(`calendar-event-${event.id}`);
           await expect(link).toContainText(expectedCourt.get(event.matter_id)!.identity);
         }
-        await allDetails.getByRole("button", { name: "Close", exact: true }).click();
+        await allDialog.getByRole("button", { name: "Close", exact: true }).click();
+        // Radix restores focus after unmount; finish that lifecycle before moving it.
+        await expect(allDialog).toHaveCount(0);
+        await expect(dayTrigger).toBeFocused();
         const trigger = cell.getByRole("button", { name: `Show ${expected.length - 3} more events on ${date}` });
         await expect(trigger).toBeVisible();
         await trigger.focus();
+        await expect(trigger).toBeFocused();
         await page.keyboard.press("Enter");
-        const dialog = page.getByRole("dialog");
+        const dialog = page.getByRole("dialog", { name: `More events on ${date}`, exact: true });
         await expect(dialog).toBeVisible();
+        await expect(dialog.getByRole("heading", { name: `More events on ${date}`, exact: true })).toBeVisible();
         await expect(dialog.getByRole("link")).toHaveCount(expected.length - 3);
         expect(await dialog.locator('[data-testid^="calendar-event-"]').evaluateAll(nodes => nodes.map(n => n.getAttribute("data-testid"))))
           .toEqual(expected.slice(3).map(e => `calendar-event-${e.id}`));
@@ -269,10 +279,13 @@ test.describe.serial("October 13 court Calendar acceptance", () => {
         }
         await page.keyboard.press("Escape");
         await expect(dialog).toBeHidden();
+        await expect(dialog).toHaveCount(0);
         await expect(trigger).toBeFocused();
         await trigger.click();
         await expect(dialog).toBeVisible();
         await dialog.getByRole("button", { name: "Close", exact: true }).click();
+        await expect(dialog).toHaveCount(0);
+        await expect(trigger).toBeFocused();
         const selected = expected.slice(3).find(event => expectedHearings.has(event.id));
         expect(selected, "An owned overflow hearing must be followed, not only href-checked").toBeDefined();
         const source = expectedHearings.get(selected!.id)!;
