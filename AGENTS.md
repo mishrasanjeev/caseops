@@ -2508,3 +2508,31 @@ requirements when using the fallback.
   exact option into component tests. Vitest transpilation and E2E typecheck do
   not typecheck the web test tree: run the full web typecheck and fresh build
   as well before publishing a frontend test amendment.
+- A recurring reminder is not verified by one queued or delivered alert.
+  Advance the clock through consecutive dates, prove unique persisted daily
+  occurrences and same-occurrence replay, then test downtime catch-up without
+  historical bursts and rescheduling against current source/lifecycle access.
+  Reconcile inconsistent specification examples with the stated calendar rule;
+  31 March 2028 minus one calendar month is 29 February 2028.
+- An active governance record is not necessarily an eligible calculation input.
+  Keep the review history visible, but derive selectable rule identities from
+  the same current company-selection policy that admits the server mutation.
+  Prove an active but unselected rule is absent from the picker and rejected
+  by the API, including after a previously valid policy is removed.
+- Adding a policy control to an existing configuration form must not overwrite
+  unrelated saved settings with initial defaults. Hydrate asynchronous current
+  values, preserve hidden fields and unchanged multi-value selections, retain
+  optimistic versions and readiness resets, and never carry provider consent
+  to a different identity. Regress a cadence-only edit on a nondefault,
+  multi-domain workspace through the actual serialized HTTP request.
+- A setting is not usable merely because it exists on a setup-only screen.
+  Prove authorized active users can reach, save and reload it, while denied
+  roles cannot reach the action. Preserve readiness resets and normal manual
+  re-enablement. An unrelated policy save must retain recorded provider consent
+  rather than submit a fresh acceptance that rewrites its actor or timestamp.
+- A valid import-row ID and materialization audit do not authenticate mutable
+  snapshot values. Generic version writes must preserve reserved imported
+  snapshots as well as manual corrections, rejecting explicit alterations or
+  rebinding. Test the bypass after a genuine import. Fixture date changes must
+  use the same reasoned, versioned correction API, then reconcile intermediate
+  versions, canceled intents and exactly one current reminder.

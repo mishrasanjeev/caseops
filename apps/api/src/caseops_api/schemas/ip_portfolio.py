@@ -36,6 +36,13 @@ class IpPortfolioFilters(BaseModel):
         default_factory=list
     )
     include_inactive: bool = False
+    application_date_from: date | None = None
+    application_date_to: date | None = None
+    renewal_due_from: date | None = None
+    renewal_due_to: date | None = None
+    renewal_tracker_state: list[
+        Literal["upcoming", "active", "due_today", "overdue", "missing", "failed"]
+    ] = Field(default_factory=list)
 
 
 class IpPortfolioRow(BaseModel):
@@ -59,6 +66,14 @@ class IpPortfolioRow(BaseModel):
     proprietors: list[str] = Field(default_factory=list)
     agents: list[str] = Field(default_factory=list)
     source_renewal_due_on: date | None = None
+    source_application_on: date | None = None
+    current_version: int = 1
+    source_application_state: Literal["missing", "manual", "imported_unverified", "verified"] = (
+        "missing"
+    )
+    source_renewal_state: Literal["missing", "manual", "imported_unverified", "verified"] = (
+        "missing"
+    )
     source_renewal_alert_at: datetime | None = None
     source_renewal_alert_status: str | None = None
     source_renewal_alert_body: str | None = None

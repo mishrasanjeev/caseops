@@ -1,5 +1,15 @@
 # CaseOps  - Work To Be Done
 
+## October 15 IP Controls And Renewal Tracker
+
+Partially implemented under existing J08/M08 and UJ-02/04/26,
+IPLF-023/030/032/037. Current portfolio source alerts are one-off; the new
+specification requires persistent daily recurrence, independently editable
+application/renewal dates and a truthful authorized tracker. The seven new IP
+control/layout rows require exact-response and responsive browser proof.
+IP15-001..022 in `docs/BUGFIX_IP_RENEWAL_TRACKER_2026-10-15.md` own acceptance.
+New source needs fresh complete gates and production certification.
+
 ## October 15 Production Replay And Candidate Recovery
 
 PR537/API/web0c82fbb0 and the one-time test-legal manual-IP grant are deployed.

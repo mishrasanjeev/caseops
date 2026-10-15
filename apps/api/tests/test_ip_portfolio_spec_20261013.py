@@ -303,7 +303,9 @@ def test_supplied_headers_partial_commit_and_no_fabricated_legal_state(client, m
         assert session.scalar(select(IpRenewalTerm.id)) is None
         intents = session.scalars(select(NotificationDeliveryIntent)).all()
         assert len(intents) == 1
-        assert intents[0].scheduled_for == datetime(2028, 2, 29, 3, 30)
+        assert ip_renewals._aware(intents[0].scheduled_for) == datetime(
+            2028, 2, 29, 3, 30, tzinfo=UTC
+        )
         assert intents[0].recipient_membership_id == actor["membership"]["id"]
         assert "not a verified legal deadline" in intents[0].body
     repeated = _commit(client, actor, preview)
@@ -502,6 +504,8 @@ def test_source_reminder_actual_in_app_dispatch_rechecks_recipient(client, monke
 @pytest.mark.parametrize("new_due", ["2028-04-30", None], ids=["date-change", "date-removal"])
 def test_source_predicate_rejects_actual_canonical_version_correction(client, monkeypatch, new_due):
     """The real canonical writer cancels/remakes intents, not only the predicate."""
+    from tests.test_ip_current_source_reminders_20261013 import _append_current
+
     actor = _actor(client)
     monkeypatch.setattr(ip_renewals, "_now", lambda: datetime(2028, 1, 1, tzinfo=UTC))
     dispatch_at = datetime(2028, 4, 20, tzinfo=UTC)
@@ -515,26 +519,8 @@ def test_source_predicate_rejects_actual_canonical_version_correction(client, mo
     result = _commit(client, actor, preview)
     row = result["rows"][0]
     docket_id = row["created_docket_id"]
-    docket = client.get(f"/api/ip/dockets/{docket_id}", headers=actor["headers"]).json()
-    particulars = docket["current_particulars"]
-    representation = particulars["representation_json"]
-    representation["portfolio_import"]["renewal_due_date"] = new_due
-    corrected = client.post(
-        f"/api/ip/dockets/{docket_id}/versions",
-        headers=actor["headers"],
-        json={
-            "expected_current_version": docket["current_version"],
-            "form_key": particulars["form_key"],
-            "form_version": particulars["form_version"],
-            "mark_kind": particulars["mark_kind"],
-            "representation": representation,
-            "classes": particulars["classes_json"],
-            "parties": particulars["parties_json"],
-            "filing_manifest": particulars["filing_manifest_json"],
-            "finalize": False,
-        },
-    )
-    assert corrected.status_code == 200, corrected.text
+    corrected = _append_current(client, actor, docket_id, due=new_due)
+    assert corrected["current_version"] == 3
     with get_session_factory()() as session:
         intent = session.get(
             NotificationDeliveryIntent, row["normalized"]["_renewal_reminder"]["intent_id"]

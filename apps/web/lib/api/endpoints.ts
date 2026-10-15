@@ -8945,15 +8945,64 @@ export type IpPortfolioFilters = {
   opposition_only?: boolean;
   registry_sync_state?: Array<"current" | "stale" | "failed" | "unavailable">;
   include_inactive?: boolean;
+  application_date_from?: string | null;
+  application_date_to?: string | null;
+  renewal_due_from?: string | null;
+  renewal_due_to?: string | null;
+  renewal_tracker_state?: IpRenewalTrackerCategory[];
 };
 
-export type IpPortfolioRow = {
-  source_renewal_due_on?: string | null;
+export type IpPortfolioDateState = "missing" | "manual" | "imported_unverified" | "verified";
+export type IpRenewalTrackerCategory = "upcoming" | "active" | "due_today" | "overdue" | "missing" | "failed";
+export type IpRenewalTrackerStatus = "scheduled" | "active" | "sent" | "failed" | "missing_date" | "overdue" | "cancelled";
+
+export type IpPortfolioDatesRecord = {
+  docket_id: string;
+  current_version: number;
+  source_application_on: string | null;
+  source_renewal_due_on: string | null;
+  source_application_state: IpPortfolioDateState;
+  source_renewal_state: IpPortfolioDateState;
+};
+
+export type IpRenewalTrackerRow = IpPortfolioDatesRecord & {
+  docket_title: string;
+  docket_operational: boolean;
+  application_numbers: string[];
+  nice_classes: number[];
+  reminder_start_on: string | null;
+  next_reminder_at: string | null;
+  timezone: string;
+  cadence_days: number;
+  delivery_time: string;
+  days_remaining: number | null;
+  status: IpRenewalTrackerStatus;
+  last_attempt_at: string | null;
+  delivered_at: string | null;
+  last_error: string | null;
+};
+
+export type IpRenewalTrackerResponse = {
+  rows: IpRenewalTrackerRow[];
+  counts: Record<IpRenewalTrackerCategory, number>;
+  limit: number;
+  next_cursor: string | null;
+};
+
+export type IpPortfolioDatesUpdate = {
+  expected_current_version: number;
+  reason: string;
+  application_date?: string | null;
+  renewal_due_date?: string | null;
+};
+
+export type IpPortfolioDatesResponse = IpPortfolioDatesRecord & { tracker: IpRenewalTrackerRow };
+
+export type IpPortfolioRow = IpPortfolioDatesRecord & {
   source_renewal_alert_at?: string | null;
   source_renewal_alert_status?: string | null;
   source_renewal_alert_body?: string | null;
   application_id: string;
-  docket_id: string;
   matter_id: string | null;
   asset_id: string | null;
   asset_kind: string | null;
@@ -10531,6 +10580,8 @@ export type IpWorkspaceConfiguration = {
   event_catalog_version: string;
   deadline_rule_versions_json: Record<string, string>;
   notification_channels_json: string[];
+  renewal_reminder_cadence_days: number;
+  renewal_reminder_delivery_time: string;
   critical_event_policy_json: Record<string, unknown>;
   escalation_owner_membership_id: string;
   provider_keys_json: string[];
@@ -10692,6 +10743,7 @@ export type IpDeadlineException = {
 };
 
 export type IpDeadlineWorkspace = {
+  eligible_rule_version_ids: string[];
   docket_id: string;
   rules: IpDeadlineRuleVersion[];
   calendars: IpWorkingCalendarVersion[];
@@ -11071,6 +11123,7 @@ export async function fetchIpWorkspaceReadiness(): Promise<IpWorkspaceReadiness>
 }
 
 export async function saveIpWorkspaceConfiguration(input: {
+  currentConfiguration?: IpWorkspaceConfiguration;
   expectedVersion: number | null;
   jurisdiction: string;
   office: string;
@@ -11079,27 +11132,37 @@ export async function saveIpWorkspaceConfiguration(input: {
   escalationOwnerMembershipId: string;
   providerKey: string;
   acceptProviderTerms: boolean;
+  renewalReminderCadenceDays?: number;
+  renewalReminderDeliveryTime?: string;
 }): Promise<IpWorkspaceConfigurationStatus> {
-  const providerKeys = input.providerKey.trim() ? [input.providerKey.trim()] : [];
+  const current = input.currentConfiguration;
+  const jurisdiction = input.jurisdiction.trim();
+  const office = input.office.trim();
+  const providerKey = input.providerKey.trim();
+  const sameProvider = current?.provider_keys_json[0] === providerKey;
+  const providerKeys = sameProvider ? current.provider_keys_json : providerKey ? [providerKey] : [];
+  const retainProviderConsent = sameProvider && Boolean(current.provider_terms_accepted_at);
   return apiRequest("/api/ip/workspace/configuration", {
     method: "PUT",
     body: {
       expected_version: input.expectedVersion,
-      enabled_asset_types: ["trademark"],
-      jurisdictions: [input.jurisdiction.trim()],
-      offices: [input.office.trim()],
+      enabled_asset_types: current?.enabled_asset_types_json ?? ["trademark"],
+      jurisdictions: current?.jurisdictions_json[0] === jurisdiction ? current.jurisdictions_json : [jurisdiction],
+      offices: current?.offices_json[0] === office ? current.offices_json : [office],
       timezone: input.timezone.trim(),
       holiday_calendar_key: input.holidayCalendarKey.trim(),
-      working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] },
-      document_taxonomy_version: "ip-taxonomy-2026.1",
-      event_catalog_version: "ip-events-v1",
-      deadline_rule_versions: { [input.jurisdiction.trim()]: "2026.1" },
-      notification_channels: ["in_app"],
-      critical_event_policy: { escalation_after_minutes: 30 },
+      working_day_policy: current?.working_day_policy_json ?? { working_weekdays: [0, 1, 2, 3, 4] },
+      document_taxonomy_version: current?.document_taxonomy_version ?? "ip-taxonomy-2026.1",
+      event_catalog_version: current?.event_catalog_version ?? "ip-events-v1",
+      deadline_rule_versions: current?.deadline_rule_versions_json ?? { [jurisdiction]: "2026.1" },
+      notification_channels: current?.notification_channels_json ?? ["in_app"],
+      critical_event_policy: current?.critical_event_policy_json ?? { escalation_after_minutes: 30 },
       escalation_owner_membership_id: input.escalationOwnerMembershipId.trim(),
       provider_keys: providerKeys,
-      provider_terms_version: providerKeys.length ? "2026.1" : null,
-      accept_provider_terms: input.acceptProviderTerms,
+      provider_terms_version: providerKeys.length ? sameProvider ? current.provider_terms_version : "2026.1" : null,
+      accept_provider_terms: providerKeys.length > 0 && input.acceptProviderTerms && !retainProviderConsent,
+      ...(input.renewalReminderCadenceDays !== undefined ? { renewal_reminder_cadence_days: input.renewalReminderCadenceDays } : {}),
+      ...(input.renewalReminderDeliveryTime !== undefined ? { renewal_reminder_delivery_time: input.renewalReminderDeliveryTime } : {}),
     },
   });
 }
@@ -11153,10 +11216,14 @@ function ipPortfolioParams(
     "docket_status",
     "deadline_state",
     "registry_sync_state",
+    "renewal_tracker_state",
   ] as const) {
     for (const value of filters[key] ?? []) params.append(key, value);
   }
   for (const value of filters.nice_class ?? []) params.append("nice_class", String(value));
+  for (const key of ["application_date_from", "application_date_to", "renewal_due_from", "renewal_due_to"] as const) {
+    if (filters[key]) params.set(key, filters[key]);
+  }
   if (filters.opposition_only) params.set("opposition_only", "true");
   if (filters.include_inactive) params.set("include_inactive", "true");
   if (input?.limit) params.set("limit", String(input.limit));
@@ -11170,6 +11237,29 @@ export async function fetchIpPortfolio(
 ): Promise<IpPortfolioResponse> {
   const params = ipPortfolioParams(filters, input);
   return apiRequest(`/api/ip/portfolio?${params.toString()}`);
+}
+
+export async function fetchIpRenewalTracker(input: {
+  category?: IpRenewalTrackerCategory;
+  query?: string | null;
+  limit?: number;
+  cursor?: string | null;
+  horizonDays?: number;
+} = {}): Promise<IpRenewalTrackerResponse> {
+  const params = new URLSearchParams();
+  if (input.category) params.set("category", input.category);
+  if (input.query?.trim()) params.set("query", input.query.trim());
+  if (input.limit) params.set("limit", String(input.limit));
+  if (input.cursor) params.set("cursor", input.cursor);
+  if (input.horizonDays) params.set("horizon_days", String(input.horizonDays));
+  return apiRequest(`/api/ip/portfolio/renewal-tracker?${params.toString()}`);
+}
+
+export async function updateIpPortfolioDates(docketId: string, payload: IpPortfolioDatesUpdate): Promise<IpPortfolioDatesResponse> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}/portfolio-dates`, {
+    method: "PATCH",
+    body: payload,
+  });
 }
 
 export async function fetchIpPortfolioFamilies(

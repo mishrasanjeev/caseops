@@ -17761,6 +17761,9 @@ class IpWorkspaceConfiguration(Base):
     event_catalog_version: Mapped[str] = mapped_column(String(80), nullable=False)
     deadline_rule_versions_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     notification_channels_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    renewal_reminder_policy_json: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
     critical_event_policy_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     escalation_owner_membership_id: Mapped[str] = mapped_column(
         String(36), nullable=False, index=True
@@ -17782,6 +17785,15 @@ class IpWorkspaceConfiguration(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+
+
+    @property
+    def renewal_reminder_cadence_days(self) -> int:
+        return (self.renewal_reminder_policy_json or {}).get("cadence_days", 1)
+
+    @property
+    def renewal_reminder_delivery_time(self) -> str:
+        return (self.renewal_reminder_policy_json or {}).get("delivery_time", "09:00")
 
 
 class IpWorkspaceTestResult(Base):
@@ -18156,6 +18168,145 @@ class IpTrademarkParticularVersion(Base):
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpPortfolioRenewalSeries(Base):
+    """Persisted source-date cadence, never a legal deadline or delivery queue."""
+
+    __tablename__ = "ip_portfolio_renewal_series"
+    __table_args__ = (
+        UniqueConstraint("company_id", "docket_id", name="uq_ip_renewal_series_docket"),
+        UniqueConstraint("id", "company_id", "docket_id", name="uq_ip_renewal_series_scope"),
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["docket_id", "source_version"],
+            [
+                "ip_trademark_particular_versions.docket_id",
+                "ip_trademark_particular_versions.version",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["recipient_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "generation > 0 AND (cadence_days IS NULL OR cadence_days BETWEEN 1 AND 31) "
+            "AND ((policy_error IS NULL AND timezone IS NOT NULL AND cadence_days IS NOT NULL "
+            "AND delivery_time IS NOT NULL) OR (policy_error IS NOT NULL "
+            "AND next_reminder_at IS NULL AND reconcile_after IS NOT NULL))",
+            name="ck_ip_renewal_series_policy",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "last_delivery_key"],
+            [
+                "notification_delivery_intents.company_id",
+                "notification_delivery_intents.idempotency_key",
+            ],
+            ondelete="RESTRICT",
+        ),
+        Index("ix_ip_renewal_series_due", "next_reminder_at", "company_id", "id"),
+        Index("ix_ip_renewal_series_retry", "reconcile_after", "company_id", "id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    generation: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    due_on: Mapped[date] = mapped_column(Date, nullable=False)
+    start_on: Mapped[date] = mapped_column(Date, nullable=False)
+    recipient_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cadence_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    delivery_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    policy_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_delivery_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    policy_error: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    reconcile_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_reminder_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancellation_reason: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class IpPortfolioRenewalOccurrence(Base):
+    """Immutable occurrence identity linked to the canonical delivery owner."""
+
+    __tablename__ = "ip_portfolio_renewal_occurrences"
+    __table_args__ = (
+        UniqueConstraint("series_id", "generation", "local_on", name="uq_ip_renewal_occurrence"),
+        ForeignKeyConstraint(
+            ["series_id", "company_id", "docket_id"],
+            [
+                "ip_portfolio_renewal_series.id",
+                "ip_portfolio_renewal_series.company_id",
+                "ip_portfolio_renewal_series.docket_id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["docket_id", "source_version"],
+            [
+                "ip_trademark_particular_versions.docket_id",
+                "ip_trademark_particular_versions.version",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["recipient_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "delivery_key"],
+            [
+                "notification_delivery_intents.company_id",
+                "notification_delivery_intents.idempotency_key",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("generation > 0", name="ck_ip_renewal_occurrence_generation"),
+        Index("ix_ip_renewal_occurrence_history", "company_id", "docket_id", "local_on"),
+        Index("ix_ip_renewal_occurrence_delivery", "company_id", "delivery_key"),
+        Index(
+            "ix_ip_renewal_occurrence_current",
+            "company_id",
+            "docket_id",
+            "source_version",
+            "generation",
+            "local_on",
+            "created_at",
+            "id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    series_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    recipient_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    due_on: Mapped[date] = mapped_column(Date, nullable=False)
+    local_on: Mapped[date] = mapped_column(Date, nullable=False)
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    delivery_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
     )
 
 

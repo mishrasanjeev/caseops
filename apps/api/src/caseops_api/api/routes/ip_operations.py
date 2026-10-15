@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import traceback
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from fastapi import (
@@ -241,6 +241,12 @@ from caseops_api.schemas.ip_records import (
     TrademarkApplicationPhaseUpdateRequest,
     TrademarkApplicationResponse,
 )
+from caseops_api.schemas.ip_renewal_tracker import (
+    IpPortfolioDatesResponse,
+    IpPortfolioDatesUpdate,
+    IpRenewalTrackerResponse,
+    TrackerCategory,
+)
 from caseops_api.schemas.ip_renewals import (
     IpClientInstructionAcknowledgeRequest,
     IpClientInstructionCreateRequest,
@@ -431,6 +437,7 @@ from caseops_api.services.ip_portfolio import (
     list_ip_portfolio,
     list_ip_portfolio_families,
 )
+from caseops_api.services.ip_portfolio_dates_writer import update_portfolio_dates
 from caseops_api.services.ip_portfolio_workflow import (
     create_saved_view,
     delete_saved_view,
@@ -462,6 +469,7 @@ from caseops_api.services.ip_records import (
     search_ip_identifiers,
     update_trademark_application_phase,
 )
+from caseops_api.services.ip_renewal_tracker_read import list_tracker
 from caseops_api.services.ip_renewals import (
     acknowledge_client_instruction,
     create_client_instruction,
@@ -2294,6 +2302,11 @@ async def get_ip_portfolio(
     opposition_only: bool = False,
     registry_sync_state: Annotated[list[str] | None, Query()] = None,
     include_inactive: bool = False,
+    application_date_from: date | None = None,
+    application_date_to: date | None = None,
+    renewal_due_from: date | None = None,
+    renewal_due_to: date | None = None,
+    renewal_tracker_state: Annotated[list[TrackerCategory] | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     cursor: str | None = None,
 ) -> IpPortfolioListResponse:
@@ -2314,6 +2327,11 @@ async def get_ip_portfolio(
         opposition_only=opposition_only,
         registry_sync_state=registry_sync_state or [],
         include_inactive=include_inactive,
+        application_date_from=application_date_from,
+        application_date_to=application_date_to,
+        renewal_due_from=renewal_due_from,
+        renewal_due_to=renewal_due_to,
+        renewal_tracker_state=renewal_tracker_state or [],
     )
     return list_ip_portfolio(
         session,
@@ -3113,6 +3131,37 @@ async def patch_portfolio_renewal_date(
         context=context,
         docket_id=docket_id,
         payload=payload,
+    )
+
+
+@router.patch("/dockets/{docket_id}/portfolio-dates", response_model=IpPortfolioDatesResponse)
+async def patch_portfolio_dates(
+    docket_id: str, payload: IpPortfolioDatesUpdate, context: IpWriter, session: DbSession
+) -> IpPortfolioDatesResponse:
+    return await run_in_threadpool(
+        update_portfolio_dates, session, context=context, docket_id=docket_id, payload=payload
+    )
+
+
+@router.get("/portfolio/renewal-tracker", response_model=IpRenewalTrackerResponse)
+async def get_portfolio_renewal_tracker(
+    context: IpViewer,
+    session: DbSession,
+    category: TrackerCategory | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    cursor: Annotated[str | None, Query(max_length=36)] = None,
+    horizon_days: Annotated[int, Query(ge=1, le=365)] = 90,
+) -> IpRenewalTrackerResponse:
+    return await run_in_threadpool(
+        list_tracker,
+        session,
+        context=context,
+        category=category,
+        query=query,
+        limit=limit,
+        cursor=cursor,
+        horizon_days=horizon_days,
     )
 
 

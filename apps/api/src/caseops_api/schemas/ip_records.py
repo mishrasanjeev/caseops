@@ -194,9 +194,7 @@ class IpOppositionStageTransitionRequest(BaseModel):
         "withdrawn",
         "closed",
     ]
-    transition_kind: Literal["normal", "skipped", "waived", "extended", "superseded"] = (
-        "normal"
-    )
+    transition_kind: Literal["normal", "skipped", "waived", "extended", "superseded"] = "normal"
     source: Literal["manual", "registry", "integration", "system"]
     source_reference: str | None = Field(default=None, max_length=255)
     effective_at: datetime
@@ -371,6 +369,10 @@ class IpWorkspaceConfigurationUpsertRequest(BaseModel):
     event_catalog_version: str = Field(min_length=1, max_length=80)
     deadline_rule_versions: dict[str, str]
     notification_channels: list[Literal["in_app", "email"]] = Field(min_length=1)
+    renewal_reminder_cadence_days: int = Field(default=1, ge=1, le=31, strict=True)
+    renewal_reminder_delivery_time: str = Field(
+        default="09:00", pattern=r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+    )
     critical_event_policy: dict
     escalation_owner_membership_id: str
     provider_keys: list[str] = Field(default_factory=list, max_length=20)
@@ -416,6 +418,8 @@ class IpWorkspaceConfigurationResponse(BaseModel):
     event_catalog_version: str
     deadline_rule_versions_json: dict[str, str]
     notification_channels_json: list[str]
+    renewal_reminder_cadence_days: int = 1
+    renewal_reminder_delivery_time: str = "09:00"
     critical_event_policy_json: dict
     escalation_owner_membership_id: str
     provider_keys_json: list[str]

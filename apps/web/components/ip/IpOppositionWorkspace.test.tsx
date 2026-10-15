@@ -244,6 +244,23 @@ describe("IpOppositionWorkspace", () => {
     transitionMock.mockResolvedValue({ proceeding, event });
   });
 
+  it("B2-BUG-007 uses available-width fields and a full-row readable creation action", async () => {
+    render(withClient(
+      <IpOppositionWorkspace docket={docket} canWrite canReview currentMembershipId="membership-1" />,
+    ));
+    const application = await screen.findByLabelText("Trademark application");
+    expect(application.closest("form")).toHaveClass("grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))]");
+    const create = screen.getByRole("button", { name: "Create opposition" });
+    expect(create).toHaveClass("h-auto", "min-h-10", "whitespace-normal");
+    expect(create.parentElement).toHaveClass("col-span-full");
+    expect(await screen.findByLabelText("Applicable rule version")).toBeVisible();
+    expect((await screen.findByLabelText("Ground 1 lawyer detail")).parentElement).toHaveClass(
+      "grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))]",
+    );
+    expect(createMock).not.toHaveBeenCalled();
+    expect(transitionMock).not.toHaveBeenCalled();
+  });
+
   it("shows distinct registry identifiers and saves every optimistic fence", async () => {
     render(withClient(
       <IpOppositionWorkspace

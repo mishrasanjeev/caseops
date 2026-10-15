@@ -1111,6 +1111,29 @@ def test_tester_partition_selection_preserves_complete_ordered_literal_identitie
         evidence._check_tester_selection(binding, selected, canonical)
 
 
+@pytest.mark.parametrize("file", [
+    "ram-2026-10-15-ip-controls.spec.ts",
+    "ram-2026-10-15-ip-renewal-tracker.spec.ts",
+])
+def test_oct15_ip_file_cannot_disappear_behind_unchanged_partition_total(file):
+    rows = _tester_canonical_rows()
+    removed = next(row for row in rows if row["file"] == file)
+    rows.remove(removed)
+    replacement = copy.deepcopy(
+        next(row for row in rows if row["file"] == "ram-2026-10-13-hearings.spec.ts")
+    )
+    replacement["id"] += "-substitute"
+    replacement["native_spec_id"] += "-substitute"
+    replacement["title_path"][-1] += " substitute"
+    rows.append(replacement)
+    project = evidence.TESTER_PARTITIONS["test-legal-write-oct13"]
+    assert sum(row["project_name"] == project for row in rows) == 13
+    with pytest.raises(
+        evidence.EvidenceError, match="mandatory_tester_partition_inventory_mismatch"
+    ):
+        evidence._tester_inventory({"tests": rows})
+
+
 @pytest.mark.parametrize("damage", [
     "omitted", "extra", "duplicate", "semantic_duplicate", "rerouted",
 ])

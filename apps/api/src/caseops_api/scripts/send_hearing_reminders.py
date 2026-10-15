@@ -37,8 +37,17 @@ def run(
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     SessionFactory = get_session_factory()
+    from caseops_api.services.ip_renewal_tracker import reconcile_renewal_series
+
+    with SessionFactory() as renewal_session:
+        renewals = (
+            {"mode": "dry_run", "examined": 0}
+            if mode == "dry_run"
+            else reconcile_renewal_series(renewal_session, limit=limit)
+        )
     with SessionFactory() as session:
         report = run_reminder_worker(session, mode=mode, limit=limit)
+        report["portfolio_renewal_series"] = renewals
         report["durable_intents"] = (
             {"examined": 0, "external_calls": 0, "mode": "dry_run"}
             if mode == "dry_run"

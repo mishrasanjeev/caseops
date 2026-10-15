@@ -2216,9 +2216,19 @@ def deadline_workspace(
     company_selected_rule_ids = select(CompanyIpRulePolicy.active_rule_version_id).where(
         CompanyIpRulePolicy.company_id == context.company.id
     )
+    company_selected = (
+        select(CompanyIpRulePolicy.id)
+        .where(
+            CompanyIpRulePolicy.company_id == context.company.id,
+            CompanyIpRulePolicy.rule_set_id == IpRuleVersion.rule_set_id,
+            CompanyIpRulePolicy.active_rule_version_id == IpRuleVersion.id,
+        )
+        .correlate(IpRuleVersion)
+        .exists()
+    )
     rule_rows = list(
         session.execute(
-            select(IpRuleSet, IpRuleVersion)
+            select(IpRuleSet, IpRuleVersion, company_selected)
             .join(IpRuleVersion, IpRuleVersion.rule_set_id == IpRuleSet.id)
             .where(
                 or_(
@@ -2302,7 +2312,12 @@ def deadline_workspace(
             )
     return IpDeadlineWorkspaceResponse(
         docket_id=docket_id,
-        rules=[_rule_record(rule_set, row) for rule_set, row in rule_rows],
+        rules=[_rule_record(rule_set, row) for rule_set, row, _ in rule_rows],
+        eligible_rule_version_ids=[
+            row.id
+            for rule_set, row, selected in rule_rows
+            if selected and row.status == "active" and rule_set.rule_kind == "deadline"
+        ],
         calendars=[_calendar_record(calendar, row) for calendar, row in calendar_rows],
         deadlines=[_deadline_record(session, row) for row in deadlines],
         exceptions=exceptions,

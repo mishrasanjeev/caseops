@@ -14855,6 +14855,184 @@
       }
     },
     {
+      "id": "ip_portfolio_renewal_occurrences",
+      "table_name": "ip_portfolio_renewal_occurrences",
+      "purpose": "Repository SQL persistence class `ip_portfolio_renewal_occurrences`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "delivery_key": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
+        "docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": false
+        },
+        "generation": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "local_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": false
+        },
+        "recipient_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "scheduled_for": {
+          "category_id": "domain_attribute",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "series_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "source_version": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "INTEGER",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "ip_portfolio_renewal_series",
+      "table_name": "ip_portfolio_renewal_series",
+      "purpose": "Repository SQL persistence class `ip_portfolio_renewal_series`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "cadence_days": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": true
+        },
+        "cancellation_reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
+        "cancelled_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "delivery_time": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(5)",
+          "nullable": true
+        },
+        "docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": false
+        },
+        "generation": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "last_delivery_key": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
+        "next_reminder_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "policy_error": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
+        "policy_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "recipient_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "reconcile_after": {
+          "category_id": "domain_attribute",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "source_version": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "start_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": false
+        },
+        "timezone": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "ip_portfolio_saved_views",
       "table_name": "ip_portfolio_saved_views",
       "purpose": "Repository SQL persistence class `ip_portfolio_saved_views`; its exact column inventory is intentionally versioned below.",
@@ -17556,6 +17734,11 @@
           "category_id": "external_or_provider_identifier",
           "sql_type": "VARCHAR(80)",
           "nullable": true
+        },
+        "renewal_reminder_policy_json": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "JSON",
+          "nullable": false
         },
         "timezone": {
           "category_id": "domain_attribute",
@@ -30377,12 +30560,12 @@
       }
     }
   ],
-  "schema_fingerprint": "1445ecf390135ed7579c417c6d7d5a1feef8bb8ce8dc118d1e72d4a1d110c455",
+  "schema_fingerprint": "b10fcee97c50845e7766f702d361093f17f4d72944461fd3fa30b9a18f3b2be3",
   "index_inventory": {
-    "orm_index_count": 1766,
-    "orm_index_fingerprint": "4aa17b6a2bfc46a6be54cecef1190e5df67e701c92065435d5cf7e698ba75136",
-    "migration_index_count": 1550,
-    "migration_index_fingerprint": "ea055d36c34dcebfc5d44e5d01b33a65f6916821b2a815b2ae9189a0aabc06d0",
+    "orm_index_count": 1777,
+    "orm_index_fingerprint": "9549f6cf55bf5101dbaa4e5c428cb5f12018dff08fe803637b17cf0eeda58769",
+    "migration_index_count": 1555,
+    "migration_index_fingerprint": "9f101e972d26496cda696b7508ad19c9c6641d61b3dba347af9a783df6eb7663",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

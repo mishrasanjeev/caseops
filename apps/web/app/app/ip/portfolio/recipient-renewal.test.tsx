@@ -18,6 +18,8 @@ function response(body: string | null = BODY, status = "delivered"): IpPortfolio
   return {
     rows: [{
       application_id: "22222222-2222-4222-8222-222222222222", docket_id: DOCKET,
+      current_version: 1, source_application_on: null, source_application_state: "missing",
+      source_renewal_state: "imported_unverified",
       matter_id: null, asset_id: null, asset_kind: "trademark", asset_title: "Current mark",
       asset_jurisdiction: "IN", docket_title: "Current mark", docket_status: "draft",
       primary_identifier: "CURRENT/2028", application_numbers: ["CURRENT/2028"],

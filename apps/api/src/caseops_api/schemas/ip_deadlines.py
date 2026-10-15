@@ -449,6 +449,7 @@ class IpDeadlineExceptionRecord(BaseModel):
 class IpDeadlineWorkspaceResponse(BaseModel):
     docket_id: str
     rules: list[IpRuleVersionRecord]
+    eligible_rule_version_ids: list[str] = Field(default_factory=list)
     calendars: list[LegalCalendarVersionRecord]
     deadlines: list[IpDeadlineRecord]
     exceptions: list[IpDeadlineExceptionRecord]

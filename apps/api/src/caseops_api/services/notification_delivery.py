@@ -456,7 +456,9 @@ def _recipient_still_permitted(
                     session, portal_user=portal_user, publication_id=intent.source_id
                 )
                 if visibility is None or not publication_is_available(
-                    visibility, portal_user=portal_user, now=_now(),
+                    visibility,
+                    portal_user=portal_user,
+                    now=_now(),
                 ):
                     return False
                 publication_targets = session.execute(
@@ -716,12 +718,18 @@ def enqueue_notification_delivery_intent(
         NotificationDeliveryIntent.company_id == context.company.id,
         NotificationDeliveryIntent.idempotency_key == key,
     )
-    active_company = select(Company.id).where(
-        Company.id == context.company.id, Company.is_active.is_(True),
-    ).exists()
+    active_company = (
+        select(Company.id)
+        .where(
+            Company.id == context.company.id,
+            Company.is_active.is_(True),
+        )
+        .exists()
+    )
     if matter is not None and recipient_membership is not None:
         recipient_context = _recipient_context(
-            actor_context=context, membership=recipient_membership,
+            actor_context=context,
+            membership=recipient_membership,
         )
         # Keep the non-null parent identity when the joined child does not exist.
         # Check current ACL and idempotency together, still under the parent lock.
@@ -1153,7 +1161,8 @@ def process_notification_delivery_intent(
         # tenant-first, before employee, Matter/docket and intent locks. The
         # claim commit decides the winner and releases locks before transport.
         session.scalar(
-            select(Company).where(Company.id == expected_company_id)
+            select(Company)
+            .where(Company.id == expected_company_id)
             .with_for_update(of=Company, key_share=True)
             .execution_options(populate_existing=True)
         )
@@ -1356,6 +1365,23 @@ def process_notification_delivery_intent(
         )
         session.flush()
         return _delivery_result(intent)
+    if intent.source_type == "ip_portfolio_renewal_occurrence":
+        from caseops_api.services.ip_renewal_tracker import occurrence_is_current
+
+        if not occurrence_is_current(session, intent=intent, now=_now()):
+            intent.status = NotificationDeliveryStatus.BLOCKED
+            intent.dead_letter_reason = "ip_portfolio_renewal_occurrence_stale"
+            intent.last_error_redacted = "Renewal occurrence, policy, source or preference changed."
+            intent.failed_at, intent.next_attempt_at = _now(), None
+            _record_delivery_event(
+                session,
+                intent=intent,
+                event_type="delivery_source_blocked",
+                status_value=str(intent.status),
+                error=intent.last_error_redacted,
+            )
+            session.flush()
+            return _delivery_result(intent)
     if (
         intent.event_type == "renewal_source_date_1month"
         or intent.schedule_source_type == "ip_portfolio_renewal"
@@ -1364,8 +1390,11 @@ def process_notification_delivery_intent(
         # The docket and intent are locked; check the immutable current source
         # before either internal materialization or an external dispatch claim.
         from caseops_api.services.ip_portfolio_source import imported_renewal_reminder_is_current
+        from caseops_api.services.ip_renewal_tracker import legacy_occurrence_is_current
 
-        if not imported_renewal_reminder_is_current(session, intent=intent):
+        if not imported_renewal_reminder_is_current(
+            session, intent=intent
+        ) or not legacy_occurrence_is_current(session, intent=intent, now=_now()):
             intent.status = NotificationDeliveryStatus.BLOCKED
             intent.dead_letter_reason = "ip_portfolio_renewal_source_stale"
             intent.last_error_redacted = "Imported renewal source date or version changed."
@@ -1382,9 +1411,30 @@ def process_notification_delivery_intent(
             session.flush()
             return _delivery_result(intent)
     if (
+        intent.source_type == "ip_portfolio_renewal_occurrence"
+        or intent.event_type == "renewal_source_date_1month"
+    ):
+        from caseops_api.services.ip_renewal_tracker import quiet_hours_retry_at
+
+        retry_at = quiet_hours_retry_at(session, intent=intent, now=_now())
+        if retry_at is not None:
+            intent.status = NotificationDeliveryStatus.RETRY_SCHEDULED
+            intent.next_attempt_at = retry_at
+            intent.suppression_reason = "renewal_quiet_hours"
+            _record_delivery_event(
+                session,
+                intent=intent,
+                event_type="delivery_quiet_hours_deferred",
+                status_value=str(intent.status),
+            )
+            session.flush()
+            return _delivery_result(intent)
+        if intent.suppression_reason == "renewal_quiet_hours":
+            intent.suppression_reason = None
+    if (
         intent.status == NotificationDeliveryStatus.RETRY_SCHEDULED
         and intent.next_attempt_at is not None
-        and intent.next_attempt_at > _now()
+        and _as_utc(intent.next_attempt_at) > _now()
     ):
         return _delivery_result(intent)
     if intent.channel != NotificationDeliveryChannel.IN_APP:
@@ -1596,9 +1646,14 @@ def process_notification_delivery_intent(
         InAppNotification.source_type == intent.source_type,
         InAppNotification.source_id == intent.source_id,
     )
-    active_company = select(Company.id).where(
-        Company.id == intent.company_id, Company.is_active.is_(True),
-    ).exists()
+    active_company = (
+        select(Company.id)
+        .where(
+            Company.id == intent.company_id,
+            Company.is_active.is_(True),
+        )
+        .exists()
+    )
     if intent.matter is not None and intent.recipient_membership:
         recipient_context = SessionContext(
             company=intent_row[1],
@@ -1634,7 +1689,9 @@ def process_notification_delivery_intent(
         ).first()
         if row is None:
             return record_notification_delivery_failure(
-                session, intent=intent, raw_error="notification access denied",
+                session,
+                intent=intent,
+                raw_error="notification access denied",
             )
         existing = row[1]
     current_time = _now()
@@ -1682,6 +1739,10 @@ def process_notification_delivery_intent(
     intent.in_app_notification_id = existing.id
     intent.updated_at = current_time
     session.add(intent)
+    if intent.event_type in {"renewal_source_date_1month", "renewal_source_date_occurrence"}:
+        from caseops_api.services.ip_renewal_tracker import record_delivery_receipt
+
+        record_delivery_receipt(session, intent=intent)
     _record_delivery_event(
         session,
         intent=intent,
