@@ -2490,3 +2490,9 @@ requirements when using the fallback.
   code: verify commit identity and canonical-main ancestry from a trusted control
   plane before switching to the exact serving source. Sensitive verification
   jobs must not restore or save shared caches or retain checkout credentials.
+- Scanner admission requires every expected language analysis for the current
+  merge tree to finish before reading the final open-alert list. A clean Actions
+  result can precede a new Python finding. Do not start expensive final release
+  acceptance from an early zero-alert snapshot or log unnecessary input-derived
+  receipt payloads when a literal success marker and separate identity check
+  provide the required evidence.

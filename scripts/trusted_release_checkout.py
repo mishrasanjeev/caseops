@@ -124,11 +124,11 @@ def main() -> int:
     parser.add_argument("--release-sha", required=True)
     args = parser.parse_args()
     try:
-        receipt = checkout_trusted_release(Path.cwd(), args.release_sha)
+        checkout_trusted_release(Path.cwd(), args.release_sha)
     except CheckoutError as exc:
         print(json.dumps({"error": str(exc)}))
         return 1
-    print(json.dumps(receipt, sort_keys=True))
+    print("Canonical serving checkout validated.")
     return 0
 
 

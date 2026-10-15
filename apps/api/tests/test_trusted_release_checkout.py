@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import importlib.util
-import json
 import os
 import subprocess
 import sys
@@ -214,7 +213,7 @@ def test_trusted_helper_finishes_when_older_release_does_not_contain_it(graph):
         cwd=graph.repo, env=graph.env, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout)["checked_out_sha"] == graph.ancestor
+    assert result.stdout == "Canonical serving checkout validated.\n"
     assert graph.git("rev-parse", "HEAD") == graph.ancestor
     assert not destination.exists()
 
@@ -346,3 +345,30 @@ def test_finite_oversized_exit_zero_cannot_race_final_output_admission(helper, m
             helper._bounded_output([sys.executable, "-u", "-c", program], 5)
     assert len(processes) == 1
     assert processes[0].returncode == 0 and processes[0].stdout.closed
+
+
+def test_cli_success_never_logs_returned_git_metadata(helper, monkeypatch, capsys):
+    sentinel = "secret-git-output-must-not-be-logged"
+    calls = []
+
+    def admitted(repo, sha):
+        calls.append((repo, sha))
+        return {"release_sha": sha, "canonical_main_sha": sentinel,
+                "checked_out_sha": sentinel, "canonical_ancestor": True}
+
+    monkeypatch.setattr(helper, "checkout_trusted_release", admitted)
+    monkeypatch.setattr(sys, "argv", [str(HELPER), "--release-sha", "a" * 40])
+    assert helper.main() == 0
+    captured = capsys.readouterr()
+    assert captured.out == "Canonical serving checkout validated.\n" and captured.err == ""
+    assert sentinel not in captured.out and "a" * 40 not in captured.out
+    assert calls == [(Path.cwd(), "a" * 40)]
+
+
+def test_cli_rejects_secretlike_input_without_logging_it(helper, monkeypatch, capsys):
+    sentinel = "secret-release-input-must-not-be-logged"
+    monkeypatch.setattr(sys, "argv", [str(HELPER), "--release-sha", sentinel])
+    assert helper.main() == 1
+    captured = capsys.readouterr()
+    assert captured.out == '{"error": "invalid_release_sha"}\n' and captured.err == ""
+    assert sentinel not in captured.out

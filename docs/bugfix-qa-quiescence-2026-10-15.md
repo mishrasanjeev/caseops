@@ -87,6 +87,16 @@ CodeQL/SARIF, complete CI and Docker proof after the amended source freezes.
 The initial a5f Docker acceptance is retained separately, not transferred to a
 different tree. Serving production remains0c82fbb0 and uncertified.
 
+The first security amendment5fdf2f45 fixes577 without dismissal: Actions analysis
+1958400371 has zero findings. The later Python analysis, however, opens high
+alert578 on the new helper's input-derived receipt logging. The early zero-alert
+snapshot is not final all-language clearance. Remove the unnecessary CLI payload,
+preserve internal metadata and separate exact identity checks, then require all
+current language analyses plus the final open-alert list before final expensive
+acceptance. The staged workbook checkpoint25 was not published after this new
+finding was discovered. This is candidate logging minimization, not evidence of
+an actual credential leak or a deployed change.
+
 Five complete local worker/operator modules pass259 identities/777 phases with
 zero skips or retries. The new native PostgreSQL module passes4 identities/12
 phases against an isolated local Docker PostgreSQL17. It proves2,000 retained
