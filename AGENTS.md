@@ -2581,3 +2581,14 @@ requirements when using the fallback.
   and negative eligibility checks, and reject nested label markup. A row's
   `has` locator must be relative to that row, not contain its outer region.
   Retain the failed browser evidence and replay the complete dated journeys.
+- A second API context does not inherit another actor's authentication headers.
+  Cookie-authenticated mutations must supply their CSRF pair; SDK fixtures may
+  instead use that actor's own validated Bearer token. Assert current company,
+  membership and effective capability before independent approval, isolate and
+  dispose login cookie jars, and regress foreign identities and cleanup failures.
+  Never disable CSRF or weaken reviewer independence to repair a fixture.
+- Function-local imports still form dependency cycles. Keep date writers and
+  their legacy route adapters in one dependency direction while preserving
+  public URLs, DTOs, source guards, locks and audits. Regress both clean import
+  orders and mutation-injected back edges; require fresh code-scanning closure,
+  not a delayed import, suppression or a disguised dynamic import.

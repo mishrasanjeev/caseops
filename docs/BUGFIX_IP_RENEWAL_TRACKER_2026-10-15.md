@@ -212,6 +212,44 @@ lost source dates or missing controls. Preserve every option, policy, date,
 geometry, reload and persistence assertion; the complete browser replay remains
 required before closure.
 
+The next diagnostic on `93caf94e` passed both tracker widths and both batch
+widths. All five controls widths reached independent calendar activation and
+received HTTP 403. One unchanged local 393px replay retained the exact problem:
+`https://caseops.ai/errors/csrf`, `Missing CSRF token.` This was a cookie-only
+test reviewer context without its required CSRF header, not a capability denial.
+The fixture now creates a separate same-actor Bearer context, verifies the
+current company/member/admin and activation capability, and disposes both
+contexts on their respective failure paths. Both activation responses must
+contain the requested identity and active status. No production CSRF, role,
+entitlement, independent-review or legal-source guard changed.
+
+The reviewer-fixture behavioral regression retained 3 passes and 28 failures
+before the fix, then 47 passes across the complete new and shared fixture
+modules. The unchanged authentication-cookie module also passed all 19 cases,
+including rejection of missing and mismatched CSRF tokens. Independent review
+found no actionable issue in the fixture correction.
+
+Code scanning separately reported four quality notes, not new security-severity
+findings: import-cycle alerts 579/580 and repeated-import alerts 581/582. Moving
+the legacy imported-date adapter into the date-writer module removes the back
+edge without changing its executable logic, public route, DTO, source gates,
+locks or audit behavior. Dependency regressions cover lazy back edges, route
+binding and both fresh import orders. Removing the two redundant local `json`
+imports retains the existing module import. Fresh GitHub scanning must confirm
+closure; source changes alone do not close the alerts.
+
+The joined source checkpoint has 219 PostgreSQL passes with 657 ordered passing
+phases across the complete 15-module native inventory. A separate SQLite and
+dependency scope has 185 passes and 27 explicit PostgreSQL skips across 212
+identities; it is not the same inventory as the native run. Its whole-tree pin
+recorded the concurrent frontend fixture edit, so it is only scoped backend
+proof, not a whole-source freeze claim. The fresh full web run has 1,443 passes
+across 208 files, both type checks, coverage floors, a fresh build and discovery
+of all seven new browser cases. Discovery is not browser execution. Whole
+Docker, fresh CI and code scanning, canonical merge, guarded deployment and
+exact-serving browser acceptance remain required. Production is still the
+separate `b4bee6f8` baseline with failed certification, not this joined source.
+
 During this batch, the first new column test also checked before loaded rows
 were guaranteed. That failure cannot independently diagnose the product. The
 corrected test waits for the actual loaded header; the earlier reports remain

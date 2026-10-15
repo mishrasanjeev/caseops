@@ -63,11 +63,40 @@ async function prepare(page: Page, api: APIRequestContext, baseURL: string | und
       IP15_COMPANY_ID: workspace.actor.company.id, IP15_SLUG: workspace.actor.company.slug,
       IP15_MEMBERS: JSON.stringify(members.map(member => member.id)), PYTHONPATH: path.join(repoRoot, "apps/api/src") } });
   expect(promoted.status, "Isolated fixture role setup must succeed; process output omitted.").toBe(0);
-  const legal = await playwrightRequest.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
+  const actorIds = [workspace.actor.membership.id, ...members.map(member => member.id)];
+  if (actorIds.some(id => typeof id !== "string" || !id) || new Set(actorIds).size !== 3) {
+    throw new Error("IP15 requires three distinct local governance actors.");
+  }
+  const matchesLegalIdentity = (actor: {
+    company?: { id?: string; slug?: string; is_active?: boolean };
+    membership?: { id?: string; role?: string; is_active?: boolean };
+  } | null | undefined) => actor?.company?.id === workspace.actor.company.id
+    && actor.company.slug === workspace.actor.company.slug && actor.company.is_active === true
+    && actor.membership?.id === members[0].id && actor.membership.role === "admin"
+    && actor.membership.is_active === true;
+  const authentication = await playwrightRequest.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
+  let legalToken: string;
   try {
-    await json(await legal.post(`${workspace.api.origin}/api/auth/login`, {
+    const actor = await json(await authentication.post(`${workspace.api.origin}/api/auth/login`, {
       data: { company_slug: workspace.actor.company.slug, email: members[0].email, password },
     }));
+    if (!matchesLegalIdentity(actor) || actor.token_type !== "bearer"
+      || typeof actor.access_token !== "string" || !actor.access_token.trim() || /\s/.test(actor.access_token)) {
+      throw new Error("IP15 legal login identity or token did not match the intended active admin.");
+    }
+    legalToken = actor.access_token;
+  } finally {
+    await authentication.dispose();
+  }
+  const legal = await playwrightRequest.newContext({ extraHTTPHeaders: {
+    ...noPaidProviderHeaders, Authorization: `Bearer ${legalToken}`,
+  } });
+  try {
+    const current = await json(await legal.get(`${workspace.api.origin}/api/auth/me`));
+    if (!matchesLegalIdentity(current) || !Array.isArray(current.capabilities)
+      || !current.capabilities.includes("ip:rules_activate")) {
+      throw new Error("IP15 current legal identity or activation capability did not match the intended actor.");
+    }
     await workspace.release();
     return { ...workspace, docketId, legal, reviewerId: members[1].id };
   } catch (error) {
@@ -226,9 +255,10 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
         timezone: "Asia/Kolkata", weekend_days: [5, 6], holidays: [], exceptional_working_days: [],
         source_priority: ["official_gazette"], source_reference: "fixture:ip15-calendar", source_hash: "a".repeat(64), effective_from: "2026-01-01",
       } }), 201);
-      await json(await fixture.legal.post(`${fixture.api.origin}/api/ip/working-calendars/${calendar.id}/activate`, {
+      const activeCalendar = await json(await fixture.legal.post(`${fixture.api.origin}/api/ip/working-calendars/${calendar.id}/activate`, {
         data: { reason: "Independent review of the isolated synthetic calendar.", conflict_reviewed: true },
       }));
+      expect(activeCalendar).toMatchObject({ id: calendar.id, status: "active" });
       const definition = { deadline_kind: "legal_deadline", trigger_kind: "examination_report_received", duration_value: 1,
         duration_unit: "days", calendar_method: "business_days", direction: "after", include_base_date: false,
         next_working_day: true, extension_days: 0, rule_citation: "Synthetic IP15 fixture, not legal advice" };
@@ -243,9 +273,10 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
             calendar: { calendar_version_id: calendar.id, timezone: "Asia/Kolkata", weekend_days: [5, 6], holidays: [],
               exceptional_working_days: [], source_reference: calendar.source_reference, source_hash: calendar.source_hash } } }],
       } }), 201);
-      await json(await fixture.legal.post(`${fixture.api.origin}/api/ip/deadline-rules/${rule.id}/activate`, {
+      const activeRule = await json(await fixture.legal.post(`${fixture.api.origin}/api/ip/deadline-rules/${rule.id}/activate`, {
         data: { reviewer_membership_id: fixture.reviewerId, select_for_company: true, auto_confirm_eligible: false },
       }));
+      expect(activeRule).toMatchObject({ id: rule.id, status: "active" });
       const approvedRead = page.waitForResponse(response =>
         new URL(response.url()).pathname === `/api/ip/dockets/${fixture.docketId}/deadline-workspace`
         && response.request().method() === "GET");

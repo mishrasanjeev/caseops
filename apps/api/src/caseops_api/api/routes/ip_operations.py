@@ -411,7 +411,6 @@ from caseops_api.services.ip_operations import (
     review_ip_evidence_candidate,
     save_ip_docket_queue,
     sign_off_ip_control_review,
-    update_imported_renewal_date,
     verify_ip_deadline_incident,
 )
 from caseops_api.services.ip_opposition_applicant import (
@@ -437,7 +436,10 @@ from caseops_api.services.ip_portfolio import (
     list_ip_portfolio,
     list_ip_portfolio_families,
 )
-from caseops_api.services.ip_portfolio_dates_writer import update_portfolio_dates
+from caseops_api.services.ip_portfolio_dates_writer import (
+    update_imported_renewal_date,
+    update_portfolio_dates,
+)
 from caseops_api.services.ip_portfolio_workflow import (
     create_saved_view,
     delete_saved_view,

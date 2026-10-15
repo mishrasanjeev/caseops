@@ -80,12 +80,89 @@ def dependency_graph() -> dict[str, set[str]]:
         ("ip_operations", "ip_renewals"),
         ("ip_renewals", "notification_delivery"),
         ("ip_operations", "notification_delivery"),
+        ("ip_operations", "ip_portfolio_dates_writer"),
     ],
 )
 def test_ip_workflow_dependencies_do_not_form_cycles(dependency_graph, source, target):
     forward = _route(dependency_graph, PREFIX + source, PREFIX + target)
     reverse = _route(dependency_graph, PREFIX + target, PREFIX + source)
     assert not (forward and reverse), (forward, reverse)
+
+
+def test_portfolio_date_writer_has_one_way_dependency_on_canonical_operations(dependency_graph):
+    writer = PREFIX + "ip_portfolio_dates_writer"
+    operations = PREFIX + "ip_operations"
+    assert operations in dependency_graph[writer]
+    assert _route(dependency_graph, operations, writer) is None
+
+
+def test_legacy_portfolio_date_route_uses_the_owned_writer():
+    tree = ast.parse((SRC / "caseops_api/api/routes/ip_operations.py").read_text())
+    owners = {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and any(alias.name == "update_imported_renewal_date" for alias in node.names)
+    }
+    assert owners == {PREFIX + "ip_portfolio_dates_writer"}
+    route = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "patch_portfolio_renewal_date"
+    )
+    assert ast.unparse(route.returns) == "IpDocketRecordResponse"
+    payload = next(argument for argument in route.args.args if argument.arg == "payload")
+    assert ast.unparse(payload.annotation) == "IpPortfolioRenewalDateUpdateRequest"
+    assert any(
+        isinstance(node, ast.Constant)
+        and node.value == "/dockets/{docket_id}/portfolio-renewal-date"
+        for node in ast.walk(route.decorator_list[0])
+    )
+    calls = [
+        node
+        for node in ast.walk(route)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "run_in_threadpool"
+    ]
+    assert len(calls) == 1
+    assert ast.unparse(calls[0].args[0]) == "update_imported_renewal_date"
+
+
+@pytest.mark.parametrize("first", ["ip_operations", "ip_portfolio_dates_writer"])
+def test_portfolio_date_services_import_cleanly_in_both_orders(first):
+    import os
+    import subprocess
+    import sys
+
+    second = "ip_portfolio_dates_writer" if first == "ip_operations" else "ip_operations"
+    env = os.environ.copy()
+    env.update(
+        CASEOPS_ENV="local",
+        CASEOPS_DATABASE_URL="sqlite+pysqlite:///:memory:",
+        CASEOPS_AUTO_MIGRATE="false",
+        CASEOPS_LLM_PROVIDER="mock",
+        CASEOPS_EMBEDDING_PROVIDER="mock",
+        PYTHONDONTWRITEBYTECODE="1",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-c",
+            f"import importlib; importlib.import_module('{PREFIX}{first}'); "
+            f"importlib.import_module('{PREFIX}{second}'); "
+            f"writer = importlib.import_module('{PREFIX}ip_portfolio_dates_writer'); "
+            "assert writer.update_imported_renewal_date.__module__ == "
+            f"'{PREFIX}ip_portfolio_dates_writer'",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.parametrize("workflow", WORKFLOWS)

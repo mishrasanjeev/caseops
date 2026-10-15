@@ -2,16 +2,19 @@
 
 from copy import deepcopy
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from caseops_api.db.models import IpTrademarkParticularVersion
 from caseops_api.schemas.ip_imports import IpImportDocketVersionCreateRequest
+from caseops_api.schemas.ip_renewals import IpPortfolioRenewalDateUpdateRequest
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.ip_docket_access import _docket_or_404
 from caseops_api.services.ip_domain_policy import assert_trademark_docket
 from caseops_api.services.ip_portfolio_dates import current_dates, docket_date_edit_operational
 from caseops_api.services.private_retrieval import lock_private_authority_writer
+from caseops_api.services.session_context import SessionContext
 
 
 def update_portfolio_dates(
@@ -131,3 +134,54 @@ def update_portfolio_dates(
     return IpPortfolioDatesResponse(
         **after, tracker=tracker_row(session, context=context, docket_id=docket.id)
     )
+
+
+def update_imported_renewal_date(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    payload: IpPortfolioRenewalDateUpdateRequest,
+):
+    from caseops_api.schemas.ip_renewal_tracker import IpPortfolioDatesUpdate
+    from caseops_api.services.ip_operations import _serialize_docket
+    from caseops_api.services.ip_portfolio_source import _imported_source_row, _portfolio_source
+
+    lock_private_authority_writer(session, company_id=context.company.id)
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:write",
+    )
+    version = session.scalar(
+        select(IpTrademarkParticularVersion).where(
+            IpTrademarkParticularVersion.company_id == context.company.id,
+            IpTrademarkParticularVersion.docket_id == docket.id,
+            IpTrademarkParticularVersion.version == docket.current_version,
+        )
+    )
+    source = _portfolio_source(version.representation_json) if version else {}
+    if not _imported_source_row(
+        session, company_id=context.company.id, docket_id=docket.id, source=source
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_portfolio_source_missing",
+                "message": "This record has no imported source date.",
+            },
+        )
+    update_portfolio_dates(
+        session,
+        context=context,
+        docket_id=docket.id,
+        payload=IpPortfolioDatesUpdate(
+            expected_current_version=payload.expected_current_version,
+            renewal_due_date=payload.renewal_due_date,
+            reason=payload.reason,
+        ),
+        _legacy_import_correction=True,
+    )
+    return _serialize_docket(session, docket, context=context)

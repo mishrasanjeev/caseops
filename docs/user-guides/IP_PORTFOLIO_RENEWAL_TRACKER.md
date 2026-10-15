@@ -1,8 +1,7 @@
 # IP Portfolio Renewal Tracker
 
 This guide covers supplied application and renewal dates, in-app reminders and
-the portfolio deadline tracker. The October 15 implementation is release-pending;
-the current evidence and limitations are in
+the portfolio deadline tracker. Current release evidence and limitations are in
 `docs/BUGFIX_IP_RENEWAL_TRACKER_2026-10-15.md`.
 
 ## Review And Edit Dates

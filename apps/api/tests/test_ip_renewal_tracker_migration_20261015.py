@@ -167,7 +167,6 @@ def test_downgrade_refuses_policy_writer_committed_while_waiting_for_ddl(
     isolated_postgres_client, writer_kind
 ):
     import importlib.util
-    import json
     from concurrent.futures import ThreadPoolExecutor
     from datetime import date, datetime
     from threading import Event
@@ -383,7 +382,6 @@ def test_downgrade_writer_exclusion_is_bounded_and_preserves_stricter_timeout(
 @pytest.mark.postgres
 def test_empty_downgrade_excludes_policy_writer_after_final_preflight(isolated_postgres_client):
     import importlib.util
-    import json
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event, current_thread
 
