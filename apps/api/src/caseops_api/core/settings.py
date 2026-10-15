@@ -3,7 +3,7 @@ from datetime import datetime
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PLACEHOLDER_AUTH_SECRET = "change-me-change-me-change-me-2026"
@@ -531,6 +531,20 @@ class Settings(BaseSettings):
         if self.api_docs_enabled is not None:
             return bool(self.api_docs_enabled)
         return not is_non_local_env(self.env)
+
+    @field_validator(
+        "document_worker_admission_protocol_version",
+        "court_sync_worker_admission_protocol_version",
+        mode="before",
+    )
+    @classmethod
+    def _parse_worker_admission_protocol(cls, value: object) -> int:
+        # Environment values are strings; do not admit Boolean/numeric lookalikes.
+        if type(value) is str and value in ("0", "1"):
+            return int(value)
+        if type(value) is int and value in (0, 1):
+            return value
+        raise ValueError("Worker admission protocol must be exactly 0 or 1.")
 
     @model_validator(mode="after")
     def _reject_placeholder_secret_outside_local(self) -> "Settings":

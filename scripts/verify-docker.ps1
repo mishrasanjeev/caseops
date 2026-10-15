@@ -971,6 +971,38 @@ try {
         if ($Service -eq "api") { $ApiImageId = $ImageMetadata[0].Id }
     }
 
+    Write-Host "[docker-acceptance] verifying real cloud worker environment startup offline"
+    $WorkerStartupReceipts = @()
+    foreach ($Worker in @(
+        @{ Command = "caseops-document-worker"; Prefix = "DOCUMENT"; Args = @("--documents-only", "--once", "--skip-migrations") },
+        @{ Command = "caseops-court-sync-worker"; Prefix = "COURT_SYNC"; Args = @("--once", "--skip-migrations") }
+    )) {
+        $WorkerArguments = @(
+            "run", "--rm", "--pull=never", "--network=none", "--read-only", "--entrypoint=timeout",
+            "--env=CASEOPS_ENV=cloud", "--env=CASEOPS_AUTO_MIGRATE=false",
+            "--env=CASEOPS_AUTH_SECRET=$([Guid]::NewGuid().ToString('N'))",
+            "--env=CASEOPS_DATABASE_URL=postgresql+psycopg://offline:offline@127.0.0.1:9/no_database",
+            "--env=CASEOPS_$($Worker.Prefix)_WORKER_ADMISSION_PROTOCOL_VERSION=1",
+            "--env=CASEOPS_$($Worker.Prefix)_WORKER_ADMISSION_ENABLED=false",
+            $ApiImageId, "--kill-after=5s", "30s", $Worker.Command
+        ) + $Worker.Args
+        $WorkerOutput = ((& docker @WorkerArguments 2>&1) | Out-String).Trim()
+        $WorkerExit = $LASTEXITCODE
+        $WorkerStartupReceipts += [ordered]@{
+            command = $Worker.Command; image_id = $ApiImageId; network = "none"
+            protocol_environment = "1"; admission_environment = "false"
+            startup_timeout_seconds = 30; kill_after_seconds = 5
+            exit = $WorkerExit; output = $WorkerOutput
+        }
+        $WorkerStartupReceipts | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (
+            Join-Path $ResultsDirectory "worker-env-startup.json"
+        ) -Encoding utf8
+        if ($WorkerExit -ne 0 -or $WorkerOutput -notmatch 'admission_protocol=1 admission=disabled' -or
+            $WorkerOutput -notmatch 'attempted=0 completed=0 failed=0 unfinalized=0') {
+            throw "$($Worker.Command) rejected cloud protocol environment or performed work while disabled: $WorkerOutput"
+        }
+    }
+
     $ApiHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health"
     $ApiIdentity = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/build"
     $WebIdentity = Invoke-RestMethod "http://127.0.0.1:$WebPort/api/release-identity"

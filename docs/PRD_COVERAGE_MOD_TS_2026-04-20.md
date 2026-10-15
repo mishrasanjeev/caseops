@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 15 Worker Environment Acceptance
+
+J04/M03/MOD-TS-002/005, US-007..009 and FT-011..015 remain production-incomplete.
+API/web62243583 and test-legal manual IP are deployed; production38660900422
+fails retained indexing/Notice after real protocol-string Settings rejection.
+The shared document/court correction has212 scoped passes and offline real-image
+startup proof, not deployed closure. October13 live cases never ran after the
+tester job exhausted its budget. Full new gates and live replay remain; see
+`docs/RELEASE_RECOVERY_IP_CALENDAR_2026-10-14.md` for current evidence limits.
+
 ## October 14 Serving Release Recovery
 
 J08/M08/MOD-TS-006, UJ-02/04/26, IPLF-030/032/037 and QG-SEC-004 remain

@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## October 15 Worker Environment Acceptance
+
+**NO-GO.** Release62243583 is serving and the approved QA grant is consumed,
+but Ready/config-matching document jobs crash on real cloud protocol string1.
+The court Settings boundary shares the defect. Preserve four live index failures,
+the Notice indexing failure and tester interruption in38660900422. Strict parsing
+and both real-image offline startup controls now have scoped proof; replacement
+full Docker/CI/release/live acceptance is outstanding. No admission, tenant,
+provider-cost or private-cadence fence is weakened. See
+`docs/RELEASE_RECOVERY_IP_CALENDAR_2026-10-14.md`; prior statuses remain history.
+
 ## October 14 Serving Release Recovery
 
 **NO-GO / Partially implemented.** PR535 merged and API/web serve09d79527,

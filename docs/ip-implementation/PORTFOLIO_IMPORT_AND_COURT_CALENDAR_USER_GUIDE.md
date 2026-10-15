@@ -2,10 +2,13 @@
 
 ## Release Status
 
-October 13 implementation guide. Fresh combined Docker acceptance, green CI,
-canonical-main merge and deployed browser replay are still required. This guide
-does not certify the current production build. Acceptance evidence is tracked
-in `docs/BUGFIX_IP_CALENDAR_2026-10-13.md`.
+October15 checkpoint: API/web62243583 and the approved test-legal-only manual-IP
+grant are deployed. Local Docker and main CI passed, but production certification
+is blocked by document-worker startup/indexing failures; the October13 browser
+acceptance did not run after the tester job's time limit. A focused protocol
+environment parser repair has local proof only. This guide does not certify
+the serving build. Current evidence is tracked in
+`docs/RELEASE_RECOVERY_IP_CALENDAR_2026-10-14.md`.
 
 ## Workspace Readiness
 
