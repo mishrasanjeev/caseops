@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- A valid Cloud Run job template is not executable worker proof. Exercise the
+  immutable image's real console commands with cloud environment strings, not
+  integer assignments on mocked Settings. Parse only documented protocol 0/1
+  values, reject Boolean/float/unknown lookalikes, and prove both document and
+  court disabled-admission startup offline before release. Keep active-work and
+  invalid-protocol fences unchanged; a Ready job may still crash before claims.
+
 - Complete CMD argv transport is not Cloud SDK parser admission. Bind a
   dash-prefixed container argument list as one `--args=...` token using the
   existing scheduler helper; separate `--args` and `-m,...` are rejected.

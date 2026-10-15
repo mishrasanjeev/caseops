@@ -1,5 +1,42 @@
 # IP And Calendar Release Recovery
 
+## October 15 Actual Production Acceptance
+
+PR536 is merged; API/web serve62243583 at latest-only100%, service minimum4/1.
+The identical f03e5011 tree passed full workstation Docker:3005 native passes,
+546 browser passes and10 explicit skips. Fresh exact-main CI38647812320,
+Security38647812483 and CodeQL38647812301 passed their release gates; raw Python
+SARIF retains30 previously reviewed dismissed notes, with zero open alerts.
+
+The approved original manual-IP operation succeeded once for test-legal in
+executionwxffj. The release helper then failed at receipt readback; that failure
+is preserved. Independent inspectv28st and authorized marked tester readiness
+confirm the grant. No replay, new grant identity, GBA/paid-plan/provider changes
+occurred. Separate guarded worker/scheduler continuation succeeded.
+
+Production38660900422 is **not certified**. The interrupted tester journal has
+102 passes,13 skips and four genuine retained-index failures, no completion.
+The mandatory October13 live step never ran. A Notice indexing case also fails.
+Actual document-job starts fail Settings on environment string1 because the
+protocol fields are integer Literal0/1; all63 observed starts fail before claims.
+Court uses the same declaration. Metadata Ready/config checks missed executable
+startup, while source tests assigned integers or retained local default0.
+
+The focused candidate normalizes only exact strings0/1 and exact integers0/1,
+rejecting booleans, floats and unknown/noncanonical values. Existing protocol1,
+disabled-admission, tenant, claim, batch, provider and empty-environment policies
+are unchanged. Six complete modules pass212 identities/636 phases. Both real
+console commands pass offline read-only startup at immutable WIP image7185b7cb;
+ten additional image cases prove Settings values and invalid cloud admission.
+That WIP image is not a production release. The standard Docker gate now performs
+the same bounded startup checks against its exact API image with no network.
+
+Fresh full Docker/CI/security, canonical main release and original complete live
+browser inventory remain required. Private cadence stays held until successful
+exact-release QA plus two later clean serial maintenance runs. LIFE13-01 remains
+Inconclusive and owner-kept provider/consent gaps remain open. Earlier sections
+below are historical checkpoints, not current deployment or grant state.
+
 ## Status
 
 **NO-GO / Partially fixed.** This checkpoint supersedes historical statements

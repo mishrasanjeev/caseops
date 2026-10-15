@@ -1,5 +1,15 @@
 # CaseOps  - Work To Be Done
 
+## October 15 Worker Environment Acceptance
+
+API/web62243583 and the approved test-legal-only manual-IP grant are deployed,
+not certified. Exact production38660900422 exposes worker startup string/int
+protocol mismatch and index/Notice failures before October13 live acceptance.
+The strict two-field fix has212 scoped passes plus offline real-image startup
+proof. Complete fresh Docker/CI/main release and original browser replay remain;
+private cadence is held. Details and historical checkpoints:
+`docs/RELEASE_RECOVERY_IP_CALENDAR_2026-10-14.md`.
+
 ## October 14 Serving Release Recovery
 
 PR535 merged and API/web serve09d79527. Manual IP remains ungranted and release

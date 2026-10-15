@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 15 Worker Environment Acceptance
+
+**Partially fixed / NO-GO.** API/web serve62243583 and the one-time test-legal
+manual-IP grant is applied. Production38660900422 retains four index failures,
+one Notice indexing failure and an interrupted tester invocation; the six
+October13 cases did not run. Real cloud string1 is rejected by integer-Literal
+worker settings before claims. The focused strict document/court parser fix
+has212 passes and offline actual-image startup proof, not deployed closure.
+Fresh joined gates/live replay remain; private cadence stays held. LIFE13-01
+is Inconclusive. See `docs/RELEASE_RECOVERY_IP_CALENDAR_2026-10-14.md`.
+
 ## October 14 Serving Release Recovery
 
 **Partially fixed / NO-GO.** PR535 merged and API/web serve09d79527, not a
