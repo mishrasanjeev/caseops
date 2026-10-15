@@ -46,6 +46,9 @@ concurrency:
 permissions:
   contents: read
 
+# Service-enforced scoped cache tokens: release code may neither restore nor save.
+cache-mode: none
+
 jobs:
   resolve-release:
     name: Resolve exact production release
@@ -58,6 +61,15 @@ jobs:
     steps:
       - name: Check out release-verification control plane
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require canonical verification control plane
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse refs/remotes/origin/main)"
 
       - name: Verify one exact API/web production release
         id: deployed-release
@@ -107,11 +119,17 @@ jobs:
           - patent-statute
           - public-pages
     steps: &prod-playwright-steps
-      - name: Check out the exact serving production release
+      - name: Check out trusted canonical verification control plane
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.resolve-release.outputs.release_sha }}
+          ref: main
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate canonical serving commit before release code
+        env:
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: python scripts/trusted_release_checkout.py --release-sha "$CASEOPS_EXPECTED_RELEASE_SHA"
 
       - name: Recheck exact serving identity at shard boundary
         run: |
@@ -150,8 +168,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
-          cache-dependency-path: package-lock.json
 
       - run: npm ci
 
@@ -555,11 +571,17 @@ jobs:
     env:
       CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
     steps:
-      - name: Check out the exact serving production release
+      - name: Check out trusted canonical verification control plane
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.resolve-release.outputs.release_sha }}
+          ref: main
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate canonical serving commit before release code
+        env:
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: python scripts/trusted_release_checkout.py --release-sha "$CASEOPS_EXPECTED_RELEASE_SHA"
 
       - name: Recheck exact serving identity
         run: |
@@ -581,8 +603,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
-          cache-dependency-path: package-lock.json
 
       - run: npm ci
 
@@ -671,10 +691,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check out the exact serving production release
+      - name: Check out trusted canonical verification control plane
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.resolve-release.outputs.release_sha }}
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate canonical serving commit before release code
+        env:
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: python scripts/trusted_release_checkout.py --release-sha "$CASEOPS_EXPECTED_RELEASE_SHA"
 
       - name: Recheck exact serving identity before evidence write
         run: |

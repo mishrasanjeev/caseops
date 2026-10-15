@@ -77,6 +77,16 @@ selected to exercise the actual fix. Its90-second indexing assertion is intact.
 
 ## Verification And Limits
 
+PR538's initial frozen candidate is a5f53f9a, tree a4c75db8. Its eight Security
+jobs and three CodeQL jobs pass, but PR-scoped high-severity alert577 remains
+open for the verification workflow's dynamic release checkout. This is a release
+blocker, not evidence of an exploit or a new production deployment. A trusted
+canonical-main ancestry admission and cache isolation amendment is being tested.
+Do not dismiss the alert or predict its closure; require fresh exact-source
+CodeQL/SARIF, complete CI and Docker proof after the amended source freezes.
+The initial a5f Docker acceptance is retained separately, not transferred to a
+different tree. Serving production remains0c82fbb0 and uncertified.
+
 Five complete local worker/operator modules pass259 identities/777 phases with
 zero skips or retries. The new native PostgreSQL module passes4 identities/12
 phases against an isolated local Docker PostgreSQL17. It proves2,000 retained

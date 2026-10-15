@@ -2484,3 +2484,9 @@ requirements when using the fallback.
   an earlier rebuild does not prove its active generation includes the completed
   sources. Preserve once-per-generation bootstrap execution and block bootstrap
   and certification on an uncertain drain or canonical-main drift.
+- A successful CodeQL workflow is not proof of zero open alerts. Reconcile the
+  current PR/main analysis and alert instances before release. A live endpoint's
+  well-formed release SHA is not authorization to execute arbitrary repository
+  code: verify commit identity and canonical-main ancestry from a trusted control
+  plane before switching to the exact serving source. Sensitive verification
+  jobs must not restore or save shared caches or retain checkout credentials.

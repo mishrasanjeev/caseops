@@ -1380,7 +1380,16 @@ def _assert_native_manifest(workflow):
         )
         checkout = next(step for step in job["steps"] if step.get("uses") == "actions/checkout@v4")
         assert checkout["with"]["fetch-depth"] == 0
-        assert checkout["with"]["ref"] == job["env"]["CASEOPS_EXPECTED_RELEASE_SHA"]
+        assert checkout["with"]["ref"] == "main"
+        assert checkout["with"]["persist-credentials"] is False
+        trust = steps["Validate canonical serving commit before release code"]
+        assert trust["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == (
+            job["env"]["CASEOPS_EXPECTED_RELEASE_SHA"]
+        )
+        assert 'trusted_release_checkout.py --release-sha "$CASEOPS_EXPECTED_RELEASE_SHA"' in (
+            trust["run"]
+        )
+        assert job["steps"].index(trust) < job["steps"].index(prepare)
         upload = steps["Upload native Playwright evidence"]
         assert upload["if"] == "always()"
         assert upload["with"]["path"].strip() == "test-results/prod-native-evidence/"

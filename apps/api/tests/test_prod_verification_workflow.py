@@ -192,9 +192,9 @@ def test_scheduled_prod_verification_is_read_only() -> None:
     steps_digest = hashlib.sha256(
         json.dumps(scheduled["steps"], sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-    # Reviewed 10 October: capture requires the before-disk safe native reporter.
-    # The exact statute project, source-spec bytes and four read-only workers remain.
-    assert steps_digest == "3475f5a0418cc20b4f95c721b62c642f44263a5bbe6bb366c2febdc5daee4dd4"
+    # Reviewed 15 October: trusted-main admission precedes serving code; no npm cache.
+    # Exact statute/source bytes, native capture and four read-only workers remain.
+    assert steps_digest == "7667cd82b237b2375ede43fbe0c7e8ed5bbd76f363e3da1a2b023006e70e1b2e"
     config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
     assert (
         'name: "statute-source-prod-chromium",\n'
