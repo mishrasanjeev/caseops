@@ -2536,3 +2536,29 @@ requirements when using the fallback.
   rebinding. Test the bypass after a genuine import. Fixture date changes must
   use the same reasoned, versioned correction API, then reconcile intermediate
   versions, canceled intents and exactly one current reminder.
+- Recurrence across quiet hours must use the effective local delivery date,
+  not only the occurrence's creation date. Prove three consecutive overnight
+  deferrals, receipt-day deduplication and preference removal. Keep the next
+  slot, due-date, source, access and lifecycle bounds; a first-night pass can
+  still hide a second-night suppression bug.
+- Model-generated foreign-key indexes do not prove migration coverage.
+  Independently migrate fresh SQLite and PostgreSQL databases and require the
+  complete leading-column coverage and declared-index health report. Before
+  destructive downgrade checks, exclude concurrent writers under a bounded
+  lock timeout and prove a committed writer's retained evidence survives.
+- A reserved-source protection change requires a complete fixture-consumer
+  audit, including direct generic writers and native adapters, not only shared
+  helper imports. Preserve original import values, actual intermediate versions,
+  actor audits and legitimate same-day delivery suppression in the replacement
+  fixtures; do not weaken the product fence to restore old positive tests.
+- Each serialized production partition must receive its selected specs'
+  required fixture keys in its own resolved workflow step. Step-local credentials
+  are not inherited from a sibling. Regress the actual selected consumers,
+  reject missing or whitespace-only keys before authentication with names-only
+  diagnostics, and preserve exact tenant scope, budgets and no-paid markers.
+- A persisted batch count is not proof that the browser acknowledged it.
+  Recover the bounded tenant-scoped import ledger before diagnosing a missing
+  continuation. Preserve original failed jobs, distinguish commit from transport
+  acknowledgement, and obtain the exact failed assertion and bounded route
+  timing before changing code. Do not infer a timeout from elapsed time alone,
+  raise the deadline, or automatically retry an uncertain mutation.

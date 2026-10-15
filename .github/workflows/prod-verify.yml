@@ -275,8 +275,20 @@ jobs:
           CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           CASEOPS_RAM_PROD_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_RAM_PROD_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
+          CASEOPS_NOTICE_QA_SLUG: test-legal
+          CASEOPS_NOTICE_OWNER_EMAIL: ram@testfirm.com
+          CASEOPS_NOTICE_OWNER_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: bash "$RUNNER_TEMP/caseops-prod-playwright" tester-index --config=playwright.prod-ram.config.ts --project=tester-index-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester-index
+        run: |
+          for key in CASEOPS_NOTICE_QA_SLUG CASEOPS_NOTICE_OWNER_EMAIL CASEOPS_NOTICE_OWNER_PASSWORD; do
+            value="${!key:-}"
+            if [[ -z "${value//[[:space:]]/}" ]]; then
+              printf '::error::Missing required tester-index fixture key: %s\n' "$key" >&2
+              exit 1
+            fi
+          done
+          unset value
+          bash "$RUNNER_TEMP/caseops-prod-playwright" tester-index --config=playwright.prod-ram.config.ts --project=tester-index-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester-index
 
       - name: Run release-owned test-legal portfolio and Calendar regressions
         if: matrix.suite == 'test-legal-write-oct13'

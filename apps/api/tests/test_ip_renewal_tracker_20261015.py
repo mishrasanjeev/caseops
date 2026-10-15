@@ -1,7 +1,7 @@
 """IP15-007..022: persisted source-date tracking without legal authority claims."""
 
 from copy import deepcopy
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select
@@ -488,6 +488,212 @@ def test_quiet_hours_defer_current_occurrence_without_losing_it(client, monkeypa
         )
         assert result.delivered
         session.commit()
+
+
+def _overnight_quiet_source(client, monkeypatch):
+    from tests.test_ip_workspace_configuration import _configuration
+
+    actor, docket_id = _imported(client, monkeypatch)
+    config = _configuration(actor["membership"]["id"])
+    config.update(expected_version=1, renewal_reminder_delivery_time="23:00")
+    saved = client.put("/api/ip/workspace/configuration", headers=actor["headers"], json=config)
+    assert saved.status_code == 200, saved.text
+    quiet = client.patch(
+        "/api/notification-preferences",
+        headers=actor["headers"],
+        json={
+            "quiet_hours": {
+                "enabled": True,
+                "start": "22:00",
+                "end": "08:00",
+                "timezone": "Asia/Kolkata",
+            }
+        },
+    )
+    assert quiet.status_code == 200, quiet.text
+    return actor, docket_id
+
+
+def _defer_overnight(actor, docket_id, monkeypatch, *, day):
+    _clock(monkeypatch, datetime(2028, 3, day, 17, 30, tzinfo=UTC))
+    with get_session_factory()() as session:
+        assert ip_renewal_tracker.reconcile_renewal_series(session)["advanced"] == 1
+        intent = session.scalars(
+            select(NotificationDeliveryIntent).where(
+                NotificationDeliveryIntent.ip_docket_id == docket_id,
+                NotificationDeliveryIntent.source_type == ip_renewal_tracker.SOURCE,
+                NotificationDeliveryIntent.status == "queued",
+            )
+        ).one()
+        intent_id = intent.id
+        result = notification_delivery.process_notification_delivery_intent(
+            session, intent_id=intent_id, company_id=actor["company"]["id"]
+        )
+        assert result.retry_scheduled and not result.delivered
+        assert intent.suppression_reason == "renewal_quiet_hours"
+        assert intent.next_attempt_at.replace(tzinfo=UTC) == (
+            datetime(2028, 3, day, 2, 30, tzinfo=UTC) + timedelta(days=1)
+        )
+        session.commit()
+    return intent_id
+
+
+def test_overnight_quiet_occurrence_survives_morning_worker_before_next_slot(
+    tracker_client, monkeypatch, request
+):
+    import json
+    import os
+    from hashlib import sha256
+    from pathlib import Path
+
+    actor, docket_id = _overnight_quiet_source(tracker_client, monkeypatch)
+    for day in (1, 2, 3):
+        intent_id = _defer_overnight(actor, docket_id, monkeypatch, day=day)
+        _clock(monkeypatch, datetime(2028, 3, day + 1, 2, 30, tzinfo=UTC))
+        with get_session_factory()() as session:
+            assert ip_renewal_tracker.reconcile_renewal_series(session)["advanced"] == 0
+            result = notification_delivery.process_notification_delivery_intent(
+                session, intent_id=intent_id, company_id=actor["company"]["id"]
+            )
+            assert result.delivered, result
+            session.commit()
+            replay = notification_delivery.process_notification_delivery_intent(
+                session, intent_id=intent_id, company_id=actor["company"]["id"]
+            )
+            assert replay.delivered and replay.external_calls == 0
+            session.commit()
+            assert session.scalar(select(func.count()).select_from(InAppNotification)) == day
+            history = list(
+                session.execute(
+                    select(
+                        IpPortfolioRenewalOccurrence.generation,
+                        IpPortfolioRenewalOccurrence.local_on,
+                        IpPortfolioRenewalOccurrence.source_version,
+                        NotificationDeliveryIntent.source_type,
+                        NotificationDeliveryIntent.status,
+                        NotificationDeliveryIntent.id,
+                        NotificationDeliveryIntent.delivered_at,
+                        NotificationDeliveryIntent.in_app_notification_id,
+                    )
+                    .join(
+                        NotificationDeliveryIntent,
+                        NotificationDeliveryIntent.idempotency_key
+                        == IpPortfolioRenewalOccurrence.delivery_key,
+                    )
+                    .where(IpPortfolioRenewalOccurrence.docket_id == docket_id)
+                    .order_by(
+                        IpPortfolioRenewalOccurrence.generation,
+                        IpPortfolioRenewalOccurrence.local_on,
+                    )
+                ).mappings()
+            )
+            if os.environ.get("CASEOPS_TEST_RESULT_JOURNAL"):
+                identity = sha256(request.node.nodeid.encode()).hexdigest()[:12]
+                target = (
+                    Path(os.environ["CASEOPS_TEST_RESULT_JOURNAL"]).parent
+                    / f"overnight-{identity}-day{day}.json"
+                )
+                target.write_text(
+                    json.dumps([dict(row) for row in history], indent=2, default=str),
+                    encoding="utf-8",
+                )
+            assert len(history) == day + 1
+            legacy, *current = history
+            assert legacy["generation"] == 1 and legacy["local_on"] == date(2028, 2, 29)
+            assert legacy["source_type"] == "ip_trademark_particular_version"
+            assert legacy["status"] == "cancelled" and legacy["in_app_notification_id"] is None
+            assert all(row["generation"] == 2 and row["source_version"] == 1 for row in current)
+            assert [row["local_on"] for row in current] == [
+                date(2028, 3, n) for n in range(1, day + 1)
+            ]
+            assert all(
+                row["source_type"] == ip_renewal_tracker.SOURCE
+                and row["status"] == "delivered"
+                and row["in_app_notification_id"]
+                for row in current
+            )
+
+
+def test_quiet_preference_removal_cannot_deliver_twice_on_the_receipt_day(
+    tracker_client, monkeypatch
+):
+    client = tracker_client
+    actor, docket_id = _overnight_quiet_source(client, monkeypatch)
+    intent_id = _defer_overnight(actor, docket_id, monkeypatch, day=1)
+    _clock(monkeypatch, datetime(2028, 3, 2, 2, 30, tzinfo=UTC))
+    with get_session_factory()() as session:
+        assert ip_renewal_tracker.reconcile_renewal_series(session)["advanced"] == 0
+        assert notification_delivery.process_notification_delivery_intent(
+            session, intent_id=intent_id, company_id=actor["company"]["id"]
+        ).delivered
+        session.commit()
+    next_id = _defer_overnight(actor, docket_id, monkeypatch, day=2)
+    changed = client.patch(
+        "/api/notification-preferences",
+        headers=actor["headers"],
+        json={"quiet_hours": {"enabled": False}},
+    )
+    assert changed.status_code == 200, changed.text
+    with get_session_factory()() as session:
+        result = notification_delivery.process_notification_delivery_intent(
+            session, intent_id=next_id, company_id=actor["company"]["id"]
+        )
+        assert result.blocked and not result.delivered and result.external_calls == 0
+        session.commit()
+        assert session.scalar(select(func.count()).select_from(InAppNotification)) == 1
+    _clock(monkeypatch, datetime(2028, 3, 3, 17, 30, tzinfo=UTC))
+    with get_session_factory()() as session:
+        assert ip_renewal_tracker.reconcile_renewal_series(session)["advanced"] == 1
+    assert len(_dispatch(actor)) == 1
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(InAppNotification)) == 2
+
+
+@pytest.mark.parametrize(
+    "boundary", ["next_slot", "after_due", "date_change", "date_clear", "not_quiet"]
+)
+def test_overnight_quiet_retry_cannot_bypass_current_slot_or_source(
+    tracker_client, monkeypatch, boundary
+):
+    client = tracker_client
+    actor, docket_id = _overnight_quiet_source(client, monkeypatch)
+    intent_id = _defer_overnight(
+        actor, docket_id, monkeypatch, day=31 if boundary == "after_due" else 1
+    )
+    now = datetime(2028, 3, 2, 2, 30, tzinfo=UTC)
+    if boundary == "next_slot":
+        now = datetime(2028, 3, 2, 17, 30, tzinfo=UTC)
+    elif boundary == "after_due":
+        now = datetime(2028, 4, 1, 2, 30, tzinfo=UTC)
+    _clock(monkeypatch, now)
+    if boundary.startswith("date_"):
+        changed = client.patch(
+            f"/api/ip/dockets/{docket_id}/portfolio-dates",
+            headers=actor["headers"],
+            json={
+                "expected_current_version": 1,
+                "renewal_due_date": "2028-04-30" if boundary == "date_change" else None,
+                "reason": "Withdraw the deferred occurrence source",
+            },
+        )
+        assert changed.status_code == 200, changed.text
+    with get_session_factory()() as session:
+        intent = session.get(NotificationDeliveryIntent, intent_id)
+        if boundary.startswith("date_"):
+            assert str(intent.status) == "cancelled"
+            # A retained retry repair must not bypass the authoritative current source.
+            intent.status = "retry_scheduled"
+            intent.suppression_reason = "renewal_quiet_hours"
+            intent.next_attempt_at = now
+        elif boundary == "not_quiet":
+            intent.suppression_reason = None
+        session.commit()
+        result = notification_delivery.process_notification_delivery_intent(
+            session, intent_id=intent_id, company_id=actor["company"]["id"]
+        )
+        assert result.blocked and not result.delivered and result.external_calls == 0, result
+        session.commit()
+        assert session.scalar(select(func.count()).select_from(InAppNotification)) == 0
 
 
 @pytest.mark.parametrize("boundary", ["preference", "membership", "date_change", "date_clear"])

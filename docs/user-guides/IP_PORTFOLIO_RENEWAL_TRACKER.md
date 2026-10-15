@@ -102,6 +102,13 @@ Calendar connection. External email/calendar delivery still depends on its
 separate configured integration and consent. This feature does not enable an
 unconfigured sender, provider, paid service or external calendar.
 
+If the chosen delivery time falls inside quiet hours, delivery waits for the
+quiet window to end, including the following morning. The original occurrence
+remains in history. Missed occurrences are superseded rather than delivered as
+a historical burst; current source dates and authorization are rechecked. Removing
+quiet hours does not authorize a second notification on a date that already
+has a confirmed receipt.
+
 ## Filters And Imports
 
 The portfolio Columns selector controls date-column visibility. The additional

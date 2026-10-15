@@ -214,6 +214,33 @@ def _append_current(client, actor, docket_id, *, due="2028-03-30"):
     assert response.status_code == 200, response.text
     docket = response.json()
     previous_version = docket["current_version"]
+    with get_session_factory()() as session:
+        retained_deliveries = list(
+            session.scalars(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.company_id == actor["company"]["id"],
+                    NotificationDeliveryIntent.ip_docket_id == docket_id,
+                    NotificationDeliveryIntent.status == "delivered",
+                )
+            )
+        )
+        assert all(
+            intent.delivered_at and intent.in_app_notification_id for intent in retained_deliveries
+        )
+        delivered_before = {
+            intent.id: (
+                intent.source_id,
+                intent.delivered_at,
+                intent.body,
+                intent.in_app_notification_id,
+                session.get(InAppNotification, intent.in_app_notification_id).body,
+            )
+            for intent in retained_deliveries
+        }
+        same_due_delivered = any(
+            intent.metadata_json["source_due_on"] == due for intent in retained_deliveries
+        )
+    expected_queued = int(due is not None and not same_due_delivered)
     correction_version = previous_version + 1
     reason = f"Correct imported source date before particulars version {previous_version + 2}"
     corrected = client.patch(
@@ -239,7 +266,7 @@ def _append_current(client, actor, docket_id, *, due="2028-03-30"):
                 )
             )
         )
-        assert len(intermediate) == int(due is not None)
+        assert len(intermediate) == expected_queued
         assert all(intent.source_id == particulars["id"] for intent in intermediate)
         intermediate_ids = [intent.id for intent in intermediate]
     version = correction_version + 1
@@ -332,13 +359,27 @@ def _append_current(client, actor, docket_id, *, due="2028-03-30"):
             )
         )
         queued = [intent for intent in intents if str(intent.status) == "queued"]
-        assert len(queued) == int(due is not None)
+        assert len(queued) == expected_queued
         assert all(
             intent.source_id == current["current_particulars"]["id"]
             and intent.metadata_json["source_due_on"] == due
             for intent in queued
         )
-        assert all(str(intent.status) == "cancelled" for intent in intents if intent not in queued)
+        assert all(
+            str(intent.status) == "cancelled"
+            for intent in intents
+            if intent not in queued and intent.id not in delivered_before
+        )
+        for identity, snapshot in delivered_before.items():
+            intent = session.get(NotificationDeliveryIntent, identity)
+            assert str(intent.status) == "delivered"
+            assert (
+                intent.source_id,
+                intent.delivered_at,
+                intent.body,
+                intent.in_app_notification_id,
+                session.get(InAppNotification, intent.in_app_notification_id).body,
+            ) == snapshot
         assert all(
             str(session.get(NotificationDeliveryIntent, identity).status) == "cancelled"
             for identity in intermediate_ids

@@ -598,6 +598,114 @@ def test_notice_acceptance_is_in_the_exact_release_tester_inventory() -> None:
     assert "test.skip" not in spec
 
 
+_INDEX_FIXTURE_KEYS = (
+    "CASEOPS_NOTICE_QA_SLUG",
+    "CASEOPS_NOTICE_OWNER_EMAIL",
+    "CASEOPS_NOTICE_OWNER_PASSWORD",
+)
+
+
+def _index_fixture_step() -> dict:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    matches = [
+        step for step in workflow["jobs"]["prod-tester-index"]["steps"]
+        if step.get("name") == "Run retained indexing and Contract AI production regressions"
+    ]
+    assert len(matches) == 1
+    assert matches[0]["if"] == "matrix.suite == 'tester-index'"
+    return matches[0]
+
+
+def _assert_index_fixture_environment(step: dict) -> None:
+    assert step["env"]["CASEOPS_NOTICE_QA_SLUG"] == "test-legal"
+    assert step["env"]["CASEOPS_NOTICE_OWNER_EMAIL"] == "ram@testfirm.com"
+    assert step["env"]["CASEOPS_NOTICE_OWNER_PASSWORD"] == (
+        "${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}"
+    )
+    assert "CASEOPS_NOTICE_CREATE_TEST_LEGAL_MEMBER" not in step["env"]
+
+
+def test_every_selected_index_dated_consumer_has_its_required_fixture_keys() -> None:
+    import re
+
+    step = _index_fixture_step()
+    _assert_index_fixture_environment(step)
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
+    declaration = re.search(r"const RETAINED_INDEX_PROD_SPECS = /(.+)/;", config)
+    assert declaration is not None
+    pattern = re.compile(declaration.group(1))
+    consumers = {
+        path.name: path.read_text()
+        for path in (REPO_ROOT / "tests/e2e").glob("*.spec.ts")
+        if pattern.fullmatch(path.name)
+    }
+    assert set(consumers) == {
+        "ram-2026-10-10-prod.spec.ts", "ram-2026-10-12-prod.spec.ts"
+    }
+    project = config.split('name: "tester-index-prod-chromium"', 1)[1].split("name:", 1)[0]
+    assert "testMatch: RETAINED_INDEX_PROD_SPECS" in project
+    for name, source in consumers.items():
+        consumed = set(re.findall(r'required\("(CASEOPS_NOTICE_[A-Z_]+)"\)', source))
+        assert consumed == set(_INDEX_FIXTURE_KEYS), name
+        assert consumed <= step["env"].keys(), name
+        assert "noPaidProviderHeaders" in source, name
+    assert step["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == (
+        "${{ needs.resolve-release.outputs.release_sha }}"
+    )
+    assert "--project=tester-index-prod-chromium --workers=1 --retries=0" in step["run"]
+
+
+@pytest.mark.parametrize("key", _INDEX_FIXTURE_KEYS)
+def test_index_fixture_contract_rejects_a_missing_step_local_key(key: str) -> None:
+    step = _index_fixture_step()
+    step["env"].pop(key)
+    with pytest.raises((AssertionError, KeyError)):
+        _assert_index_fixture_environment(step)
+
+
+def _run_index_fixture_guard(overrides: dict[str, str | None]) -> subprocess.CompletedProcess[str]:
+    bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
+    assert bash and Path(bash).is_file()
+    guard, invocation = _index_fixture_step()["run"].strip().rsplit("\n", 1)
+    assert invocation == (
+        'bash "$RUNNER_TEMP/caseops-prod-playwright" tester-index '
+        "--config=playwright.prod-ram.config.ts --project=tester-index-prod-chromium "
+        "--workers=1 --retries=0 --reporter=list --output=test-results/tester-index"
+    )
+    environment = dict(os.environ)
+    environment.update({key: "offline" for key in _INDEX_FIXTURE_KEYS})
+    for key, value in overrides.items():
+        if value is None:
+            environment.pop(key, None)
+        else:
+            environment[key] = value
+    # Only the actual presence guard and a shell builtin run, never Playwright or a CLI.
+    return subprocess.run(
+        [bash, "-c", guard + "\nprintf '%s\\n' fixture-guard-passed\n"],
+        env=environment, capture_output=True, text=True, timeout=5, check=False,
+    )
+
+
+@pytest.mark.parametrize("key", _INDEX_FIXTURE_KEYS)
+@pytest.mark.parametrize("value", [None, "", " \t"])
+def test_index_fixture_guard_fails_before_runner_without_printing_values(
+    key: str, value: str | None,
+) -> None:
+    result = _run_index_fixture_guard({key: value})
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == f"::error::Missing required tester-index fixture key: {key}\n"
+
+
+def test_index_fixture_guard_admits_all_present_keys_without_printing_values() -> None:
+    result = _run_index_fixture_guard({})
+    assert result.returncode == 0
+    assert result.stdout == "fixture-guard-passed\n"
+    assert result.stderr == ""
+
+
 def test_existing_patent_qa_helper_does_not_rewrite_live_configuration() -> None:
     helper = (REPO_ROOT / "tests/e2e/support/patent-acceptance.ts").read_text()
     assert 'required("CASEOPS_EXPECTED_RELEASE_SHA")' in helper

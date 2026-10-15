@@ -88,6 +88,21 @@ def upgrade() -> None:
         "ip_portfolio_renewal_series",
         ["next_reminder_at", "company_id", "id"],
     )
+    op.create_index(
+        "ix_fk_ip_portfolio_renewal_series_company_id_last_c1eae4b1",
+        "ip_portfolio_renewal_series",
+        ["company_id", "last_delivery_key"],
+    )
+    op.create_index(
+        "ix_fk_ip_portfolio_renewal_series_docket_id_sourc_159d74ef",
+        "ip_portfolio_renewal_series",
+        ["docket_id", "source_version"],
+    )
+    op.create_index(
+        "ix_fk_ip_portfolio_renewal_series_recipient_membe_2325bdcf",
+        "ip_portfolio_renewal_series",
+        ["recipient_membership_id", "company_id"],
+    )
     op.create_table(
         "ip_portfolio_renewal_occurrences",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -151,10 +166,40 @@ def upgrade() -> None:
         "ip_portfolio_renewal_occurrences",
         ["company_id", "docket_id", "source_version", "generation", "local_on", "created_at", "id"],
     )
+    op.create_index(
+        "ix_fk_ip_portfolio_renewal_occurrences_series_id_compa_2e0ab5d3",
+        "ip_portfolio_renewal_occurrences",
+        ["series_id", "company_id", "docket_id"],
+    )
+    op.create_index(
+        "ix_fk_ip_portfolio_renewal_occurrences_docket_id_sourc_dac064f6",
+        "ip_portfolio_renewal_occurrences",
+        ["docket_id", "source_version"],
+    )
+    op.create_index(
+        "ix_fk_ip_portfolio_renewal_occurrences_recipient_membe_c9446f9c",
+        "ip_portfolio_renewal_occurrences",
+        ["recipient_membership_id", "company_id"],
+    )
 
 
 def downgrade() -> None:
     connection = op.get_bind()
+    if connection.dialect.name == "postgresql":
+        timeout = int(
+            connection.scalar(
+                sa.text("SELECT setting FROM pg_settings WHERE name = 'lock_timeout'")
+            )
+        )
+        if timeout == 0 or timeout > 5000:
+            connection.execute(sa.text("SET LOCAL lock_timeout = '5000ms'"))
+        # Parent-to-child writer exclusion must precede every destructive preflight read.
+        connection.execute(
+            sa.text(
+                "LOCK TABLE ip_workspace_configurations, ip_portfolio_renewal_series, "
+                "ip_portfolio_renewal_occurrences IN SHARE ROW EXCLUSIVE MODE"
+            )
+        )
     for name in ("ip_portfolio_renewal_occurrences", "ip_portfolio_renewal_series"):
         if connection.scalar(sa.text(f"SELECT 1 FROM {name} LIMIT 1")) is not None:
             raise RuntimeError(

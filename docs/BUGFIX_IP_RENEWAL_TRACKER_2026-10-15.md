@@ -128,6 +128,49 @@ The concrete weaknesses in the earlier implementation and verification were:
    39 PostgreSQL passes and 35 SQLite passes with four explicit PG-only skips.
    Whole Docker acceptance remains required. An import-row identity is not
    proof of values.
+10. The first provenance fixture inventory missed a direct generic writer and
+    a recipient's shared-helper assumptions. Complete CI exposed eight failed
+    identities across six shards, including three fresh-head index checks.
+    The source protection was correct; fixtures now use the canonical writer,
+    actual versions and same-day receipt rules. The complete consumer audit
+    includes the native adapter, not just imports of one helper.
+11. A quiet-hours patch that works tomorrow morning can still block the next
+    evening because today's earlier receipt exists. Queue and delivery checks
+    now use the same effective local delivery date. Three consecutive overnight
+    cycles and removal of quiet hours prove both recurrence and no duplicate
+    receipt-day delivery, with all source/access/lifecycle bounds intact.
+12. The models automatically attached six foreign-key support indexes that the
+    new migration omitted. Metadata-created databases hid that difference.
+    The migration now creates all six and independently fresh migrated schema
+    health must pass. Its retained-evidence downgrade check also now excludes
+    writers before reading under a bounded lock timeout; a real PostgreSQL race
+    first proved the old code could erase a concurrently committed policy.
+13. Moving six production cases to a new serialized partition did not move
+    their step-local credentials. The actual resolved index step now receives
+    the existing QA tenant bindings and has names-only fail-fast checks. The
+    original missing-key regression failed before correction; all 14 new
+    contract/guard cases and their three complete modules passed afterward.
+
+## Verification Checkpoint
+
+The expanded backend inventory is 219 identities across 15 complete modules:
+219 PostgreSQL passes / 657 ordered phases, and 147 SQLite passes with 72
+explicit PostgreSQL-only exclusions. Both collected the same inventory.
+The workflow/evidence/scheduler regression inventory is 270 passes / 810
+ordered phases across three complete modules, with no skips. The earlier
+failed and incomplete runs remain retained. These are scoped source checks,
+not new whole-Docker or production acceptance.
+
+The separate baseline b4bee6f8 is deployed but its exact-release production
+run 38777040009 is NO-GO: 360 identities, 334 passes, 18 explicit skips and
+eight failures. Both court Calendar and source-renewal portfolio journeys
+passed at desktop/mobile widths. Six index setup failures and two 101-row
+recovery failures remain separate. The latter's original ledgers retain
+100 committed rows, one valid pending row, zero failed rows and source values;
+browser acknowledgement and root cause must not be inferred from those counts.
+The original jobs were not blindly resumed. The new seven browser cases,
+fresh whole Docker, green CI and a corrected exact-release replay remain
+required before the new scope is marked fixed.
 
 During this batch, the first new column test also checked before loaded rows
 were guaranteed. That failure cannot independently diagnose the product. The

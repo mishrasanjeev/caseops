@@ -410,6 +410,11 @@ def quiet_hours_retry_at(session, *, intent, now):
     return max(candidate, now + timedelta(days=1))
 
 
+def _effective_delivery_on(session, *, series, now):
+    quiet_until = quiet_hours_retry_at(session, intent=series, now=now)
+    return (quiet_until or now).astimezone(ZoneInfo(series.timezone)).date()
+
+
 def occurrence_is_current(session, *, intent, now=None):
     now = now or _now()
     pair = session.execute(
@@ -453,7 +458,26 @@ def occurrence_is_current(session, *, intent, now=None):
         and occurrence.source_version == series.source_version == version.version
         and facts["source_renewal_due_on"] == occurrence.due_on == series.due_on
         and series.start_on <= today <= series.due_on
-        and occurrence.local_on == today
+        and (
+            occurrence.local_on == today
+            or (
+                series.start_on <= occurrence.local_on < today
+                and intent.status == "retry_scheduled"
+                and intent.suppression_reason == "renewal_quiet_hours"
+                and intent.next_attempt_at is not None
+                and now
+                < local_stamp(
+                    occurrence.local_on + timedelta(days=series.cadence_days),
+                    timezone=series.timezone,
+                    delivery_time=series.delivery_time,
+                )
+            )
+        )
+        and not _delivered_today(
+            session,
+            series=series,
+            local_on=_effective_delivery_on(session, series=series, now=now),
+        )
         and all(getattr(series, key) == value for key, value in settings.items())
         and _preferences_allow(session, series=series, now=now)
     )
@@ -592,7 +616,9 @@ def advance_series(session, *, context, docket_id, now=None):
             IpPortfolioRenewalOccurrence.local_on == today,
         )
     )
-    if occurrence is None and not _delivered_today(session, series=series, local_on=today):
+    # An overnight quiet slot delivers tomorrow, not again on today's receipt day.
+    delivery_on = _effective_delivery_on(session, series=series, now=now)
+    if occurrence is None and not _delivered_today(session, series=series, local_on=delivery_on):
         occurrence = IpPortfolioRenewalOccurrence(
             company_id=series.company_id,
             docket_id=series.docket_id,

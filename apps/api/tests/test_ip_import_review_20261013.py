@@ -1,12 +1,16 @@
 """Independent review regressions for the October 13 IP source workflow."""
 
+import json
+from copy import deepcopy
 from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import event, select
 
 from caseops_api.db.models import (
+    AuditEvent,
     BulkImportJob,
+    IpImportRow,
     IpTrademarkParticularVersion,
     TrademarkApplication,
 )
@@ -156,16 +160,33 @@ def test_new_current_version_reminder_uses_current_particulars_not_original_sour
     )
     row = _commit(client, actor, preview)["rows"][0]
     docket_id = row["created_docket_id"]
+    with get_session_factory()() as session:
+        original_row = session.get(IpImportRow, row["id"])
+        ledger_before = deepcopy((original_row.raw_json, original_row.normalized_json))
+    reason = "Correct the supplied renewal date before updating current particulars"
+    corrected = client.patch(
+        f"/api/ip/dockets/{docket_id}/portfolio-renewal-date",
+        headers=actor["headers"],
+        json={"expected_current_version": 1, "renewal_due_date": "2028-03-30", "reason": reason},
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["current_version"] == 2
+    for path in ("/api/ip/portfolio", "/api/ip/portfolio/renewal-tracker"):
+        listed = client.get(path, headers=actor["headers"])
+        assert listed.status_code == 200, listed.text
+        dates = next(item for item in listed.json()["rows"] if item["docket_id"] == docket_id)
+        assert dates["current_version"] == 2
+        assert dates["source_renewal_due_on"] == "2028-03-30"
+        assert dates["source_renewal_state"] == "manual"
     docket = client.get(f"/api/ip/dockets/{docket_id}", headers=actor["headers"]).json()
     source = docket["current_particulars"]
-    representation = source["representation_json"]
+    representation = deepcopy(source["representation_json"])
     representation["text"] = "Current source mark"
-    representation["portfolio_import"]["renewal_due_date"] = "2028-03-30"
     changed = client.post(
         f"/api/ip/dockets/{docket_id}/versions",
         headers=actor["headers"],
         json={
-            "expected_current_version": 1,
+            "expected_current_version": 2,
             "mark_kind": source["mark_kind"],
             "representation": representation,
             "classes": [{"class_number": 42, "specification": "Current legal services"}],
@@ -175,15 +196,73 @@ def test_new_current_version_reminder_uses_current_particulars_not_original_sour
         },
     )
     assert changed.status_code == 200, changed.text
+    current = changed.json()
+    assert current["current_version"] == 3
+    assert (
+        current["current_particulars"]["representation_json"]["portfolio_import"]
+        == source["representation_json"]["portfolio_import"]
+    )
+    assert (
+        current["current_particulars"]["representation_json"]["portfolio_dates"]
+        == source["representation_json"]["portfolio_dates"]
+    )
     with get_session_factory()() as session:
         from caseops_api.db.models import InAppNotification, NotificationDeliveryIntent
 
-        intent = session.scalar(
-            select(NotificationDeliveryIntent).where(
-                NotificationDeliveryIntent.ip_docket_id == docket_id,
-                NotificationDeliveryIntent.status == "queued",
+        intents = list(
+            session.scalars(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.ip_docket_id == docket_id,
+                )
             )
         )
+        queued = [intent for intent in intents if str(intent.status) == "queued"]
+        assert len(queued) == 1
+        intent = queued[0]
+        assert intent.source_id == current["current_particulars"]["id"]
+        assert intent.metadata_json["source_due_on"] == "2028-03-30"
+        assert {intent.source_id for intent in intents if str(intent.status) == "cancelled"} == {
+            corrected.json()["current_particulars"]["id"],
+            session.scalar(
+                select(IpTrademarkParticularVersion.id).where(
+                    IpTrademarkParticularVersion.docket_id == docket_id,
+                    IpTrademarkParticularVersion.version == 1,
+                )
+            ),
+        }
+        assert list(
+            session.scalars(
+                select(IpTrademarkParticularVersion.version)
+                .where(
+                    IpTrademarkParticularVersion.docket_id == docket_id,
+                )
+                .order_by(IpTrademarkParticularVersion.version)
+            )
+        ) == [1, 2, 3]
+        audits = list(
+            session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.ip_docket_id == docket_id,
+                    AuditEvent.action.in_(
+                        ("ip_docket.version_created", "ip_portfolio.dates_corrected")
+                    ),
+                )
+            )
+        )
+        for version in (2, 3):
+            writes = [
+                event
+                for event in audits
+                if event.action == "ip_docket.version_created"
+                and json.loads(event.metadata_json)["version"] == version
+            ]
+            assert len(writes) == 1 and writes[0].actor_membership_id == actor["membership"]["id"]
+        corrections = [event for event in audits if event.action == "ip_portfolio.dates_corrected"]
+        assert len(corrections) == 1
+        metadata = json.loads(corrections[0].metadata_json)
+        assert metadata["version"] == 2 and metadata["previous_version"] == 1
+        assert metadata["reason"] == reason and metadata["changed_fields"] == ["renewal_due_date"]
+        assert corrections[0].actor_membership_id == actor["membership"]["id"]
         result = notification_delivery.process_notification_delivery_intent(
             session,
             intent_id=intent.id,
@@ -202,6 +281,15 @@ def test_new_current_version_reminder_uses_current_particulars_not_original_sour
         assert (
             "Original mark" not in body and "Original Owner" not in body and "classes 9" not in body
         )
+        assert body == (
+            "Current source mark; application not recorded; classes 42; "
+            "applicant Current Source Owner. "
+            "Source renewal date 2028-03-30 (not a verified legal deadline). "
+            f"10 days remaining on the alert date. /app/ip?docket={docket_id}"
+        )
+        assert intent.delivered_at.replace(tzinfo=UTC) == now
+        original_row = session.get(IpImportRow, row["id"])
+        assert (original_row.raw_json, original_row.normalized_json) == ledger_before
 
 
 def test_fresh_all_unusable_rejects_but_all_duplicates_complete_honestly(client):
