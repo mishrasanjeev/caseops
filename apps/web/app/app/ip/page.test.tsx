@@ -622,6 +622,9 @@ describe("IpDocketPage", () => {
     const workspace = await screen.findByTestId("ip-deadline-workspace");
     expect(await within(workspace).findByText("No active working calendar")).toBeInTheDocument();
     expect(within(workspace).getByText("No eligible active deadline rule")).toBeInTheDocument();
+    expect(workspace.querySelectorAll("label label")).toHaveLength(0);
+    expect(within(workspace).getByRole("combobox", { name: "Active working calendar" })).toBeDisabled();
+    expect(within(workspace).getByRole("combobox", { name: "Active rule version" })).toBeDisabled();
     expect(within(workspace).getByLabelText("Active working calendar")).toBeDisabled();
     expect(within(workspace).getByLabelText("Active rule version")).toBeDisabled();
     expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();

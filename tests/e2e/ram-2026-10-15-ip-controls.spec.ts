@@ -94,6 +94,7 @@ async function checkGeometry(page: Page, scope: Locator) {
 }
 
 async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWorkspace) {
+  await expect(scope.locator("label label")).toHaveCount(0);
   const ruleIds = data.eligible_rule_version_ids;
   expect(Array.isArray(ruleIds), "Workspace must return server-owned rule eligibility.").toBe(true);
   expect(new Set(ruleIds).size).toBe(ruleIds.length);
@@ -105,7 +106,9 @@ async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWork
     ["Active rule version", ruleIds, "No eligible active deadline rule"],
     ["Active working calendar", calendarIds, "No active working calendar"],
   ] as const) {
-    const select = scope.getByLabel(label, { exact: true });
+    const select = scope.getByRole("combobox", { name: label, exact: true });
+    await expect(select).toHaveCount(1);
+    await expect(select).toBeVisible();
     const optionIds = () => select.locator("option").evaluateAll(options =>
       options.map(option => (option as HTMLOptionElement).value).filter(Boolean));
     await expect.poll(async () => (await optionIds()).sort(), {
@@ -155,7 +158,7 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
       try {
         await page.goto(schedule);
         await expect(workspace.getByRole("option", { name: "Loading working calendars…", exact: true })).toHaveCount(1);
-        await expect(workspace.getByLabel("Active working calendar")).toBeDisabled();
+        await expect(workspace.getByRole("combobox", { name: "Active working calendar", exact: true })).toBeDisabled();
         finishRead();
         await expect(workspace.getByRole("button", { name: "Retry deadline workspace" })).toBeVisible();
         await expect(workspace.getByRole("option", { name: "Working calendars unavailable", exact: true })).toHaveCount(1);
@@ -172,16 +175,19 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
       await expect(workspace.getByRole("button", { name: "Retry deadline workspace" })).toHaveCount(0);
       const observedOptions = await assertCurrentSelectorOptions(workspace, currentWorkspace);
       if (fixture.local) {
-        await expect(workspace.getByLabel("Active working calendar")).toBeDisabled();
+        await expect(workspace.getByRole("combobox", { name: "Active working calendar", exact: true })).toBeDisabled();
         await expect(workspace.getByRole("option", { name: "No active working calendar", exact: true })).toHaveCount(1);
-        await expect(workspace.getByLabel("Active rule version")).toBeDisabled();
+        await expect(workspace.getByRole("combobox", { name: "Active rule version", exact: true })).toBeDisabled();
         await expect(workspace.getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
       }
       await checkGeometry(page, workspace);
       const hearingFields = page.getByTestId("ip-hearing-workflow");
       for (const label of ["Hearing date", "Time precision", "IANA timezone", "Forum", "Purpose", "Mode",
         "Location", "Virtual hearing link", "Source", "Reminder offsets (hours)"]) {
-        await expect(hearingFields.getByLabel(label, { exact: true })).toBeVisible();
+        const control = label === "Time precision" || label === "Mode"
+          ? hearingFields.getByRole("combobox", { name: label, exact: true })
+          : hearingFields.getByLabel(label, { exact: true });
+        await expect(control).toBeVisible();
       }
       await checkGeometry(page, hearingFields);
       await checkGeometry(page, page.getByTestId("ip-deadline-governance"));
@@ -189,7 +195,7 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
       const hearing = page.getByTestId("ip-hearing-workflow");
       const purpose = `Synthetic IP15 hearing ${fixture.run}`;
       await hearing.getByLabel("Hearing date", { exact: true }).fill("2099-12-20");
-      await hearing.getByLabel("Time precision").selectOption("exact");
+      await hearing.getByRole("combobox", { name: "Time precision", exact: true }).selectOption("exact");
       await hearing.getByLabel("Exact local time").fill("10:30");
       await hearing.getByLabel("IANA timezone").fill(fixture.timezone);
       await hearing.getByLabel("Purpose", { exact: true }).fill(purpose);
@@ -249,8 +255,8 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
       expect(approved.eligible_rule_version_ids).toEqual([rule.id]);
       expect(approved.calendars.filter(row => row.status === "active").map(row => row.id)).toEqual([calendar.id]);
       await assertCurrentSelectorOptions(workspace, approved);
-      const ruleSelect = workspace.getByLabel("Active rule version");
-      const calendarSelect = workspace.getByLabel("Active working calendar");
+      const ruleSelect = workspace.getByRole("combobox", { name: "Active rule version", exact: true });
+      const calendarSelect = workspace.getByRole("combobox", { name: "Active working calendar", exact: true });
       await expect(ruleSelect).toBeEnabled();
       await ruleSelect.selectOption(rule.id);
       await calendarSelect.focus();

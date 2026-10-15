@@ -164,7 +164,7 @@ for (const width of [1280, 393]) {
     const tracker = page.getByRole("region", { name: "Deadline tracker", exact: true });
     await tracker.getByRole("textbox", { name: "Search renewal tracker", exact: true }).fill(docket.title);
     await tracker.getByRole("button", { name: "Search renewal tracker", exact: true }).click();
-    let trackerRow = tracker.getByRole("row").filter({ has: tracker.getByRole("button", { name: `Edit dates for ${docket.title}`, exact: true }) });
+    let trackerRow = tracker.getByRole("row").filter({ has: page.getByRole("button", { name: `Edit dates for ${docket.title}`, exact: true }) });
     await expect(trackerRow).toBeVisible();
     const dueCell = trackerRow.locator(`time[datetime="${replacement}"]`);
     await dueCell.scrollIntoViewIfNeeded();
@@ -184,7 +184,7 @@ for (const width of [1280, 393]) {
     expect(cleared.result.tracker.next_reminder_at).toBeNull();
     await tracker.getByRole("combobox", { name: "Renewal tracker category" }).click();
     await page.getByRole("option", { name: "Missing Renewal Date", exact: true }).click();
-    trackerRow = tracker.getByRole("row").filter({ has: tracker.getByRole("button", { name: `Edit dates for ${docket.title}`, exact: true }) });
+    trackerRow = tracker.getByRole("row").filter({ has: page.getByRole("button", { name: `Edit dates for ${docket.title}`, exact: true }) });
     await expect(trackerRow.getByText("Missing Date", { exact: true })).toBeVisible();
     await expect(trackerRow.locator('time[datetime="2020-01-15"]')).toBeVisible();
     const final = await json(await request.get(`${workspace.api.origin}/api/ip/portfolio/renewal-tracker`, {

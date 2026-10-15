@@ -2575,3 +2575,9 @@ requirements when using the fallback.
   Do not add volatile merge-SHA exemptions or weaken scanner rules; preserve
   exact historical reviews and require fresh tree plus complete changed-history
   scans after correcting the current fixture text.
+- An empty option inventory is valid only after the actual named control exists
+  exactly once and is visible. A missing locator also returns an empty array.
+  Use the browser's accessible combobox name, retain both positive selection
+  and negative eligibility checks, and reject nested label markup. A row's
+  `has` locator must be relative to that row, not contain its outer region.
+  Retain the failed browser evidence and replay the complete dated journeys.

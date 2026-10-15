@@ -198,6 +198,20 @@ the builder, and include it in the dirty-context guard. Negative regressions
 must reject an omitted copy, either omitted allowlist entry and a dirty uploaded
 helper. Retain this failed admission and rerun the fresh image and browser gates.
 
+The first complete nine-case Docker diagnostic on `0ea00b90` passed both
+101-row recovery widths but failed all seven new cases. All five controls
+snapshots retained the correct disabled combobox and empty option; an exact
+label locator missed it. The shared Field also rendered invalid nested labels.
+The new unit assertion reproduced five nested labels before the markup fix.
+Use one wrapping label with a styled span, target the actual named combobox,
+and require exactly one visible control before an empty-inventory comparison.
+Both tracker snapshots retained the intended row, but its `has` locator
+incorrectly repeated the ancestor region inside each row. Correct that relative
+locator in both the dated and missing-date states. These are not evidence of
+lost source dates or missing controls. Preserve every option, policy, date,
+geometry, reload and persistence assertion; the complete browser replay remains
+required before closure.
+
 During this batch, the first new column test also checked before loaded rows
 were guaranteed. That failure cannot independently diagnose the product. The
 corrected test waits for the actual loaded header; the earlier reports remain

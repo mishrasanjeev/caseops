@@ -4043,7 +4043,7 @@ function Field({
       </div>
     );
   }
-  return <label className="flex min-w-0 flex-col gap-1"><Label className="break-words leading-snug">{label}</Label>{children}</label>;
+  return <label className="flex min-w-0 flex-col gap-1"><span className="break-words text-sm font-medium leading-snug text-[var(--color-ink-2)]">{label}</span>{children}</label>;
 }
 
 function Metric({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Scale }) {
