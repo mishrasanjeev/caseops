@@ -304,6 +304,16 @@ def schedule_imported_renewal_reminder(
         )
     )
     source = _portfolio_source(version.representation_json) if version else {}
+    corrected = (version.representation_json or {}).get("portfolio_dates", {}) if version else {}
+    if isinstance(corrected, dict) and isinstance(corrected.get("renewal_due_date"), dict):
+        if corrected["renewal_due_date"].get("origin") == "manual":
+            correction = source.get("date_correction")
+            if (
+                not isinstance(correction, dict)
+                or correction.get("writer") != "portfolio_dates"
+                or source.get("renewal_due_date") != corrected["renewal_due_date"].get("value")
+            ):
+                return None
     if source.get("source_row_id") != row_id or not _imported_source_row(
         session,
         company_id=context.company.id,
@@ -323,7 +333,9 @@ def schedule_imported_renewal_reminder(
             IpWorkspaceConfiguration.company_id == context.company.id,
         )
     )
-    timezone = configuration.timezone if configuration is not None else context.company.timezone
+    from caseops_api.services.ip_renewal_tracker_policy import validated_policy
+
+    timezone = validated_policy(configuration, company=context.company)["timezone"]
     now = _now()
     if due_on < now.astimezone(ZoneInfo(timezone)).date():
         return None
@@ -381,6 +393,9 @@ def schedule_imported_renewal_reminder(
         schedule_source_id=docket.id,
     )
     intent.metadata_json = {**(intent.metadata_json or {}), "source_due_on": due_on.isoformat()}
+    from caseops_api.services.ip_renewal_tracker import synchronize_series
+
+    synchronize_series(session, context=context, docket_id=docket.id, legacy_intent=intent, now=now)
     return intent
 
 

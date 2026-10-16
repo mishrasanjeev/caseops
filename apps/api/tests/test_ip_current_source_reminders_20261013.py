@@ -1,5 +1,6 @@
 """IPLF-032A: reminders retain provenance but display current canonical facts."""
 
+import json
 from copy import deepcopy
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ import pytest
 from sqlalchemy import func, select
 
 from caseops_api.db.models import (
+    AuditEvent,
     CompanyMembership,
     InAppNotification,
     IpDeadline,
@@ -20,7 +22,7 @@ from caseops_api.db.models import (
     NotificationDeliveryIntent,
 )
 from caseops_api.db.session import get_session_factory
-from caseops_api.services import ip_renewals, notification_delivery
+from caseops_api.services import ip_renewal_tracker, ip_renewals, notification_delivery
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 _NOW = datetime(2028, 3, 20, tzinfo=UTC)
@@ -72,7 +74,7 @@ def test_scheduler_uses_canonical_facts_not_caller_import_snapshot(monkeypatch, 
             if entity is IpTrademarkParticularVersion:
                 return version
             if entity is IpWorkspaceConfiguration:
-                return SimpleNamespace(timezone="UTC")
+                return SimpleNamespace(timezone="UTC", renewal_reminder_policy_json={}, version=1)
             assert entity is IpIdentifier
             return number
 
@@ -84,6 +86,10 @@ def test_scheduler_uses_canonical_facts_not_caller_import_snapshot(monkeypatch, 
     monkeypatch.setattr(ip_renewals, "_imported_source_row", lambda *args, **kwargs: object())
     monkeypatch.setattr(ip_renewals, "enqueue_notification_delivery_intent", enqueue)
     monkeypatch.setattr(ip_renewals, "_now", lambda: _NOW)
+    linked = []
+    monkeypatch.setattr(
+        ip_renewal_tracker, "synchronize_series", lambda _session, **kwargs: linked.append(kwargs)
+    )
     context = SimpleNamespace(
         company=SimpleNamespace(id=str(uuid4()), timezone="UTC"), membership=object()
     )
@@ -102,6 +108,9 @@ def test_scheduler_uses_canonical_facts_not_caller_import_snapshot(monkeypatch, 
         },
     )
     body = captured["body"]
+    assert linked == [
+        {"context": context, "docket_id": docket.id, "legacy_intent": intent, "now": _NOW}
+    ]
     assert "IMPORT" not in body and _PRIVATE not in body
     assert captured["source_id"] == version.id and captured["channel"] == "in_app"
     assert intent.metadata_json["source_due_on"] == "2028-03-30"
@@ -204,16 +213,70 @@ def _append_current(client, actor, docket_id, *, due="2028-03-30"):
     response = client.get(f"/api/ip/dockets/{docket_id}", headers=actor["headers"])
     assert response.status_code == 200, response.text
     docket = response.json()
-    particulars = docket["current_particulars"]
-    version = docket["current_version"] + 1
+    previous_version = docket["current_version"]
+    with get_session_factory()() as session:
+        retained_deliveries = list(
+            session.scalars(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.company_id == actor["company"]["id"],
+                    NotificationDeliveryIntent.ip_docket_id == docket_id,
+                    NotificationDeliveryIntent.status == "delivered",
+                )
+            )
+        )
+        assert all(
+            intent.delivered_at and intent.in_app_notification_id for intent in retained_deliveries
+        )
+        delivered_before = {
+            intent.id: (
+                intent.source_id,
+                intent.delivered_at,
+                intent.body,
+                intent.in_app_notification_id,
+                session.get(InAppNotification, intent.in_app_notification_id).body,
+            )
+            for intent in retained_deliveries
+        }
+        same_due_delivered = any(
+            intent.metadata_json["source_due_on"] == due for intent in retained_deliveries
+        )
+    expected_queued = int(due is not None and not same_due_delivered)
+    correction_version = previous_version + 1
+    reason = f"Correct imported source date before particulars version {previous_version + 2}"
+    corrected = client.patch(
+        f"/api/ip/dockets/{docket_id}/portfolio-renewal-date",
+        headers=actor["headers"],
+        json={
+            "expected_current_version": previous_version,
+            "renewal_due_date": due,
+            "reason": reason,
+        },
+    )
+    assert corrected.status_code == 200, corrected.text
+    dated = corrected.json()
+    assert dated["current_version"] == correction_version
+    particulars = dated["current_particulars"]
+    assert particulars["representation_json"]["portfolio_import"]["renewal_due_date"] == due
+    with get_session_factory()() as session:
+        intermediate = list(
+            session.scalars(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.ip_docket_id == docket_id,
+                    NotificationDeliveryIntent.status == "queued",
+                )
+            )
+        )
+        assert len(intermediate) == expected_queued
+        assert all(intent.source_id == particulars["id"] for intent in intermediate)
+        intermediate_ids = [intent.id for intent in intermediate]
+    version = correction_version + 1
     representation = deepcopy(particulars["representation_json"])
     representation["text"] = f"Current mark v{version}"
-    representation["portfolio_import"]["renewal_due_date"] = due
     changed = client.post(
         f"/api/ip/dockets/{docket_id}/versions",
         headers=actor["headers"],
         json={
-            "expected_current_version": docket["current_version"],
+            "expected_current_version": correction_version,
             "form_key": particulars["form_key"],
             "form_version": particulars["form_version"],
             "mark_kind": particulars["mark_kind"],
@@ -232,10 +295,99 @@ def _append_current(client, actor, docket_id, *, due="2028-03-30"):
         },
     )
     assert changed.status_code == 200, changed.text
-    return changed.json()
+    current = changed.json()
+    assert current["current_version"] == version
+    for key in ("portfolio_import", "portfolio_dates"):
+        assert (
+            current["current_particulars"]["representation_json"][key]
+            == particulars["representation_json"][key]
+        )
+    stale = client.patch(
+        f"/api/ip/dockets/{docket_id}/portfolio-renewal-date",
+        headers=actor["headers"],
+        json={
+            "expected_current_version": previous_version,
+            "renewal_due_date": None,
+            "reason": "Stale source correction cannot replace current dates",
+        },
+    )
+    assert stale.status_code == 409, stale.text
+    with get_session_factory()() as session:
+        assert list(
+            session.scalars(
+                select(IpTrademarkParticularVersion.version)
+                .where(IpTrademarkParticularVersion.docket_id == docket_id)
+                .order_by(IpTrademarkParticularVersion.version)
+            )
+        ) == list(range(1, version + 1))
+        events = list(
+            session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.company_id == actor["company"]["id"],
+                    AuditEvent.ip_docket_id == docket_id,
+                    AuditEvent.action.in_(
+                        ("ip_docket.version_created", "ip_portfolio.dates_corrected")
+                    ),
+                )
+            )
+        )
+        for saved_version in (correction_version, version):
+            writes = [
+                event
+                for event in events
+                if event.action == "ip_docket.version_created"
+                and json.loads(event.metadata_json)["version"] == saved_version
+            ]
+            assert len(writes) == 1
+            assert writes[0].actor_membership_id == actor["membership"]["id"]
+        corrections = [
+            event
+            for event in events
+            if event.action == "ip_portfolio.dates_corrected"
+            and json.loads(event.metadata_json)["version"] == correction_version
+        ]
+        assert len(corrections) == 1
+        assert corrections[0].actor_membership_id == actor["membership"]["id"]
+        metadata = json.loads(corrections[0].metadata_json)
+        assert metadata["previous_version"] == previous_version and metadata["reason"] == reason
+        assert metadata["changed_fields"] == ["renewal_due_date"]
+        intents = list(
+            session.scalars(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.ip_docket_id == docket_id
+                )
+            )
+        )
+        queued = [intent for intent in intents if str(intent.status) == "queued"]
+        assert len(queued) == expected_queued
+        assert all(
+            intent.source_id == current["current_particulars"]["id"]
+            and intent.metadata_json["source_due_on"] == due
+            for intent in queued
+        )
+        assert all(
+            str(intent.status) == "cancelled"
+            for intent in intents
+            if intent not in queued and intent.id not in delivered_before
+        )
+        for identity, snapshot in delivered_before.items():
+            intent = session.get(NotificationDeliveryIntent, identity)
+            assert str(intent.status) == "delivered"
+            assert (
+                intent.source_id,
+                intent.delivered_at,
+                intent.body,
+                intent.in_app_notification_id,
+                session.get(InAppNotification, intent.in_app_notification_id).body,
+            ) == snapshot
+        assert all(
+            str(session.get(NotificationDeliveryIntent, identity).status) == "cancelled"
+            for identity in intermediate_ids
+        )
+    return current
 
 
-@pytest.mark.parametrize("version", [2, 3], ids=["first-correction", "repeated-correction"])
+@pytest.mark.parametrize("corrections", [1, 2], ids=["first-correction", "repeated-correction"])
 @pytest.mark.parametrize(
     "client_fixture",
     [
@@ -247,15 +399,16 @@ def test_actual_dispatch_uses_exact_current_version_facts(
     request,
     client_fixture,
     reminder_clock,
-    version,
+    corrections,
 ):
     client = request.getfixturevalue(client_fixture)
     actor, row = _import_source(client)
     docket_id = row["created_docket_id"]
     original = deepcopy(row["normalized"])
     _correct_number(client, actor, docket_id)
-    for _ in range(1, version):
+    for _ in range(corrections):
         current = _append_current(client, actor, docket_id)
+    version = 1 + 2 * corrections
     assert current["current_version"] == version
     with get_session_factory()() as session:
         intents = session.scalars(

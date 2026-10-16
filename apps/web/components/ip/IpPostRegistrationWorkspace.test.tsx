@@ -218,6 +218,33 @@ describe("IpPostRegistrationWorkspace", () => {
     createMock.mockResolvedValue(proceeding);
   });
 
+  it("describes current application/proceeding identities and keeps parallel self-exclusion", async () => {
+    const core = await fetchCoreMock.getMockImplementation()!();
+    fetchCoreMock.mockResolvedValue({ ...core, proceedings: [proceeding,
+      { ...proceeding, id: "parallel-1", proceeding_kind: "opposition", stage: "hearing_pending" }],
+    });
+    render(withClient(<IpPostRegistrationWorkspace docket={docket} canWrite canReview currentMembershipId="membership-1" />));
+    const application = await screen.findByRole<HTMLSelectElement>("combobox", { name: "Target application" });
+    await waitFor(() => expect(application).toHaveValue("application-1"));
+    expect(application).toHaveAccessibleDescription("Trade Marks Registry Delhi · filed");
+    const selected = screen.getByRole<HTMLSelectElement>("combobox", { name: "Selected proceeding" });
+    expect(selected).toHaveValue(proceeding.id);
+    expect(selected).toHaveAccessibleDescription("Rectification · draft");
+    expect(document.getElementById(selected.getAttribute("aria-describedby")!))
+      .toHaveAttribute("data-selected-option-value", proceeding.id);
+    fireEvent.change(await screen.findByLabelText("Action"), { target: { value: "parallel_proceeding_link" } });
+    const parallel = screen.getByRole<HTMLSelectElement>("combobox", { name: "Parallel proceeding" });
+    expect(Array.from(parallel.options, option => option.value)).toEqual(["", "parallel-1"]);
+    fireEvent.change(parallel, { target: { value: "parallel-1" } });
+    expect(parallel.selectedOptions[0].value).toBe("parallel-1");
+    expect(parallel).toHaveAccessibleDescription("Opposition · hearing_pending");
+    fireEvent.change(parallel, { target: { value: "" } });
+    expect(parallel.value).toBe("");
+    expect(Array.from(parallel.selectedOptions, option => option.value)).toEqual([""]);
+    expect(parallel).not.toHaveAttribute("aria-describedby");
+    expect(actionMock).not.toHaveBeenCalled();
+  });
+
   it("saves the typed rule map and immutable profile fence", async () => {
     render(
       withClient(

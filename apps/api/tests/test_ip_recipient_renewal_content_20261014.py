@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, select
 
 from caseops_api.db.models import (
+    AuditEvent,
     Company,
     CompanyMembership,
     CustomRole,
@@ -83,34 +84,62 @@ def _portfolio(client, actor, **params):
     return response.json()
 
 
-@pytest.mark.parametrize("version", [1, 2], ids=["original-current", "corrected-current"])
+@pytest.mark.parametrize("version", [1, 3], ids=["original-current", "corrected-current"])
 def test_recipient_reads_exact_delivered_current_body(source_client, version):
     client = source_client
     actor, imported = _import_source(client)
     docket_id = imported["created_docket_id"]
     with get_session_factory()() as session:
         source_before = deepcopy(session.get(IpImportRow, imported["id"]).normalized_json)
-    if version == 2:
+    if version == 3:
         _correct_number(client, actor, docket_id)
         current = _append_current(client, actor, docket_id)
-        assert current["current_version"] == 2
+        assert current["current_version"] == 3
     intent_id, note_id, body = _deliver(actor, docket_id)
     expected = (
         "Original mark; application OLD/2026; classes 9; applicant Original Applicant. "
         "Source renewal date 2028-03-31 (not a verified legal deadline). "
         "11 days remaining on the alert date. "
-        if version == 1 else
-        "Current mark v2; application CURRENT/2028; classes 42, 45; "
-        "applicant Current Applicant v2, Current Joint Applicant. "
+        if version == 1
+        else "Current mark v3; application CURRENT/2028; classes 42, 45; "
+        "applicant Current Applicant v3, Current Joint Applicant. "
         "Source renewal date 2028-03-30 (not a verified legal deadline). "
         "10 days remaining on the alert date. "
     ) + f"/app/ip?docket={docket_id}"
     assert body == expected
     body_hash = sha256(body.encode()).hexdigest()
+    with get_session_factory()() as session:
+        intent = session.get(NotificationDeliveryIntent, intent_id)
+        note = session.get(InAppNotification, note_id)
+        delivery_before = (
+            intent.source_id,
+            intent.scheduled_for,
+            intent.delivered_at,
+            note.created_at,
+        )
+        assert intent.delivered_at is not None and note.created_at is not None
+        audit_before = list(
+            session.execute(
+                select(
+                    AuditEvent.id,
+                    AuditEvent.action,
+                    AuditEvent.actor_membership_id,
+                    AuditEvent.created_at,
+                    AuditEvent.metadata_json,
+                )
+                .where(AuditEvent.ip_docket_id == docket_id)
+                .order_by(AuditEvent.id)
+            )
+        )
+        assert audit_before and all(row.created_at is not None for row in audit_before)
     for _ in range(2):
         rows = _portfolio(client, actor)["rows"]
         assert len(rows) == 1 and rows[0]["docket_id"] == docket_id
         assert rows[0]["source_renewal_alert_status"] == "delivered"
+        assert rows[0]["current_version"] == version
+        assert datetime.fromisoformat(rows[0]["source_renewal_alert_at"]).replace(
+            tzinfo=UTC
+        ) == delivery_before[1].replace(tzinfo=UTC)
         # On 655 this is the failing call: actual delivery exists, body DTO does not.
         assert rows[0].get("source_renewal_alert_body") == expected
     with get_session_factory()() as session:
@@ -118,13 +147,47 @@ def test_recipient_reads_exact_delivered_current_body(source_client, version):
         retained_hash = sha256(session.get(InAppNotification, note_id).body.encode()).hexdigest()
         assert retained_hash == body_hash
         assert session.get(NotificationDeliveryIntent, intent_id).body == body
+        intent = session.get(NotificationDeliveryIntent, intent_id)
+        note = session.get(InAppNotification, note_id)
+        assert (
+            intent.source_id,
+            intent.scheduled_for,
+            intent.delivered_at,
+            note.created_at,
+        ) == delivery_before
+        assert (
+            list(
+                session.execute(
+                    select(
+                        AuditEvent.id,
+                        AuditEvent.action,
+                        AuditEvent.actor_membership_id,
+                        AuditEvent.created_at,
+                        AuditEvent.metadata_json,
+                    )
+                    .where(AuditEvent.ip_docket_id == docket_id)
+                    .order_by(AuditEvent.id)
+                )
+            )
+            == audit_before
+        )
         assert session.get(IpImportRow, imported["id"]).normalized_json == source_before
 
 
-@pytest.mark.parametrize("state", [
-    "queued", "missing-receipt", "cancelled", "blocked", "email",
-    "foreign-receipt", "wrong-source", "wrong-date", "ambiguous",
-])
+@pytest.mark.parametrize(
+    "state",
+    [
+        "queued",
+        "missing-receipt",
+        "cancelled",
+        "blocked",
+        "email",
+        "foreign-receipt",
+        "wrong-source",
+        "wrong-date",
+        "ambiguous",
+    ],
+)
 def test_only_exact_actual_delivery_can_supply_body(source_client, state):
     client = source_client
     actor, imported = _import_source(client)
@@ -292,23 +355,26 @@ def test_source_correction_clear_and_reload_never_rebind_historical_body(source_
     actor, imported = _import_source(client)
     docket_id = imported["created_docket_id"]
     _intent_id, old_note_id, old_body = _deliver(actor, docket_id)
-    _append_current(client, actor, docket_id, due="2028-03-31")
+    current = _append_current(client, actor, docket_id, due="2028-03-31")
+    assert current["current_version"] == 3
     # Same-date edits suppress replay, but must not rebound the old delivered body.
     for _ in range(2):
         row = _portfolio(client, actor)["rows"][0]
         assert row["source_renewal_due_on"] == "2028-03-31"
         assert row["source_renewal_alert_status"] is None
         assert row.get("source_renewal_alert_body") is None
-    _append_current(client, actor, docket_id, due="2028-03-30")
+    current = _append_current(client, actor, docket_id, due="2028-03-30")
+    assert current["current_version"] == 5
     for _ in range(2):
         row = _portfolio(client, actor)["rows"][0]
         assert row["source_renewal_due_on"] == "2028-03-30"
         assert row["source_renewal_alert_status"] == "queued"
         assert row.get("source_renewal_alert_body") is None
     _new_intent_id, new_note_id, new_body = _deliver(actor, docket_id)
-    assert new_body != old_body and "Current mark v3;" in new_body
+    assert new_body != old_body and "Current mark v5;" in new_body
     assert _portfolio(client, actor)["rows"][0]["source_renewal_alert_body"] == new_body
-    _append_current(client, actor, docket_id, due=None)
+    current = _append_current(client, actor, docket_id, due=None)
+    assert current["current_version"] == 7
     for _ in range(2):
         row = _portfolio(client, actor)["rows"][0]
         assert row["source_renewal_due_on"] is None

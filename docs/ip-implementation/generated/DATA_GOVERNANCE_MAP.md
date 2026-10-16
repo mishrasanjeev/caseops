@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `4138be99366d2b16aec220c1deed096178395ac56c566b3a5d6d72e2b1e794ca`
-- SQL tables: `337`
-- SQL columns: `5346`
-- ORM indexes: `1766`
-- Alembic/raw index declarations: `1550`
+- Canonical map SHA-256: `c548410656a8394b5ecf3301889e71dfcb26250964338e55e76d0a68c1aff728`
+- SQL tables: `339`
+- SQL columns: `5379`
+- ORM indexes: `1777`
+- Alembic/raw index declarations: `1561`
 - Non-SQL data classes: `12`
 
 ## Boundary
@@ -185,6 +185,8 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_patent_proceeding_events` | `tenant_restricted_legal_content` | 24 | `registry_fail_closed` |
 | `ip_patent_prosecution_events` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
 | `ip_portfolio_export_jobs` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
+| `ip_portfolio_renewal_occurrences` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
+| `ip_portfolio_renewal_series` | `tenant_restricted_legal_content` | 20 | `registry_fail_closed` |
 | `ip_portfolio_saved_views` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `ip_post_registration_recordals` | `tenant_restricted_legal_content` | 24 | `registry_fail_closed` |
 | `ip_proceedings` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
@@ -214,7 +216,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_watch_profiles` | `tenant_restricted_legal_content` | 25 | `registry_fail_closed` |
 | `ip_workflow_definitions` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_workflow_versions` | `tenant_restricted_legal_content` | 38 | `registry_fail_closed` |
-| `ip_workspace_configurations` | `tenant_restricted_legal_content` | 24 | `registry_fail_closed` |
+| `ip_workspace_configurations` | `tenant_restricted_legal_content` | 25 | `registry_fail_closed` |
 | `ip_workspace_test_results` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `judge_aliases` | `public_or_licensed_legal_reference` | 11 | `registry_fail_closed` |
 | `judge_appointments` | `public_or_licensed_legal_reference` | 10 | `registry_fail_closed` |

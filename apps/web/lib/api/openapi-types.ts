@@ -5778,6 +5778,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/portfolio-dates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Portfolio Dates */
+        patch: operations["patch_portfolio_dates_api_ip_dockets__docket_id__portfolio_dates_patch"];
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/portfolio-renewal-date": {
         parameters: {
             query?: never;
@@ -7777,6 +7794,23 @@ export interface paths {
         };
         /** Get Ip Portfolio Families */
         get: operations["get_ip_portfolio_families_api_ip_portfolio_families_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portfolio/renewal-tracker": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portfolio Renewal Tracker */
+        get: operations["get_portfolio_renewal_tracker_api_ip_portfolio_renewal_tracker_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -26470,6 +26504,8 @@ export interface components {
             deadlines: components["schemas"]["IpDeadlineRecord"][];
             /** Docket Id */
             docket_id: string;
+            /** Eligible Rule Version Ids */
+            eligible_rule_version_ids?: string[];
             /** Exceptions */
             exceptions: components["schemas"]["IpDeadlineExceptionRecord"][];
             /** Rules */
@@ -30271,6 +30307,41 @@ export interface components {
             /** Unconfirmed Deadline Records */
             unconfirmed_deadline_records: number;
         };
+        /** IpPortfolioDatesResponse */
+        IpPortfolioDatesResponse: {
+            /** Current Version */
+            current_version: number;
+            /** Docket Id */
+            docket_id: string;
+            /** Source Application On */
+            source_application_on?: string | null;
+            /**
+             * Source Application State
+             * @default missing
+             * @enum {string}
+             */
+            source_application_state: "missing" | "manual" | "imported_unverified" | "verified";
+            /** Source Renewal Due On */
+            source_renewal_due_on?: string | null;
+            /**
+             * Source Renewal State
+             * @default missing
+             * @enum {string}
+             */
+            source_renewal_state: "missing" | "manual" | "imported_unverified" | "verified";
+            tracker: components["schemas"]["IpRenewalTrackerRow"];
+        };
+        /** IpPortfolioDatesUpdate */
+        IpPortfolioDatesUpdate: {
+            /** Application Date */
+            application_date?: string | null;
+            /** Expected Current Version */
+            expected_current_version: number;
+            /** Reason */
+            reason: string;
+            /** Renewal Due Date */
+            renewal_due_date?: string | null;
+        };
         /** IpPortfolioExportCreate */
         IpPortfolioExportCreate: {
             /** Columns */
@@ -30446,6 +30517,10 @@ export interface components {
          * @description Server-owned filter scope for one portfolio query (IP-PORT-02).
          */
         IpPortfolioFilters: {
+            /** Application Date From */
+            application_date_from?: string | null;
+            /** Application Date To */
+            application_date_to?: string | null;
             /** Asset Kind */
             asset_kind?: string[];
             /** Client */
@@ -30480,6 +30555,12 @@ export interface components {
             query?: string | null;
             /** Registry Sync State */
             registry_sync_state?: ("current" | "stale" | "failed" | "unavailable")[];
+            /** Renewal Due From */
+            renewal_due_from?: string | null;
+            /** Renewal Due To */
+            renewal_due_to?: string | null;
+            /** Renewal Tracker State */
+            renewal_tracker_state?: ("upcoming" | "active" | "due_today" | "overdue" | "missing" | "failed")[];
             /** Responsible Membership Id */
             responsible_membership_id?: string[];
             /** Team Id */
@@ -30535,6 +30616,11 @@ export interface components {
             asset_title: string | null;
             /** Client Name */
             client_name?: string | null;
+            /**
+             * Current Version
+             * @default 1
+             */
+            current_version: number;
             /** Docket Id */
             docket_id: string;
             /** Docket Status */
@@ -30595,6 +30681,14 @@ export interface components {
             responsible_lawyer?: string | null;
             /** Responsible Membership Id */
             responsible_membership_id?: string | null;
+            /** Source Application On */
+            source_application_on?: string | null;
+            /**
+             * Source Application State
+             * @default missing
+             * @enum {string}
+             */
+            source_application_state: "missing" | "manual" | "imported_unverified" | "verified";
             /** Source Renewal Alert At */
             source_renewal_alert_at?: string | null;
             /** Source Renewal Alert Body */
@@ -30603,6 +30697,12 @@ export interface components {
             source_renewal_alert_status?: string | null;
             /** Source Renewal Due On */
             source_renewal_due_on?: string | null;
+            /**
+             * Source Renewal State
+             * @default missing
+             * @enum {string}
+             */
+            source_renewal_state: "missing" | "manual" | "imported_unverified" | "verified";
             /** Team Id */
             team_id?: string | null;
             /** Team Name */
@@ -32112,6 +32212,73 @@ export interface components {
              */
             target_state: "due" | "instructed" | "filing_in_progress" | "filed" | "accepted" | "grace" | "overdue" | "completed" | "cancelled";
         };
+        /** IpRenewalTrackerResponse */
+        IpRenewalTrackerResponse: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Rows */
+            rows: components["schemas"]["IpRenewalTrackerRow"][];
+        };
+        /** IpRenewalTrackerRow */
+        IpRenewalTrackerRow: {
+            /** Application Numbers */
+            application_numbers?: string[];
+            /** Cadence Days */
+            cadence_days: number;
+            /** Current Version */
+            current_version: number;
+            /** Days Remaining */
+            days_remaining?: number | null;
+            /** Delivered At */
+            delivered_at?: string | null;
+            /** Delivery Time */
+            delivery_time: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Operational */
+            docket_operational: boolean;
+            /** Docket Title */
+            docket_title: string;
+            /** Last Attempt At */
+            last_attempt_at?: string | null;
+            /** Last Error */
+            last_error?: string | null;
+            /** Next Reminder At */
+            next_reminder_at?: string | null;
+            /** Nice Classes */
+            nice_classes?: number[];
+            /** Reminder Start On */
+            reminder_start_on?: string | null;
+            /** Source Application On */
+            source_application_on?: string | null;
+            /**
+             * Source Application State
+             * @default missing
+             * @enum {string}
+             */
+            source_application_state: "missing" | "manual" | "imported_unverified" | "verified";
+            /** Source Renewal Due On */
+            source_renewal_due_on?: string | null;
+            /**
+             * Source Renewal State
+             * @default missing
+             * @enum {string}
+             */
+            source_renewal_state: "missing" | "manual" | "imported_unverified" | "verified";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "active" | "sent" | "failed" | "missing_date" | "overdue" | "cancelled";
+            /** Timezone */
+            timezone: string;
+        };
         /** IpRenewalWorkflowRecord */
         IpRenewalWorkflowRecord: {
             /**
@@ -32247,6 +32414,10 @@ export interface components {
          * @description Report filters reject misspellings instead of silently widening scope.
          */
         IpReportPortfolioFilters: {
+            /** Application Date From */
+            application_date_from?: string | null;
+            /** Application Date To */
+            application_date_to?: string | null;
             /** Asset Kind */
             asset_kind?: string[];
             /** Client */
@@ -32281,6 +32452,12 @@ export interface components {
             query?: string | null;
             /** Registry Sync State */
             registry_sync_state?: ("current" | "stale" | "failed" | "unavailable")[];
+            /** Renewal Due From */
+            renewal_due_from?: string | null;
+            /** Renewal Due To */
+            renewal_due_to?: string | null;
+            /** Renewal Tracker State */
+            renewal_tracker_state?: ("upcoming" | "active" | "due_today" | "overdue" | "missing" | "failed")[];
             /** Responsible Membership Id */
             responsible_membership_id?: string[];
             /** Team Id */
@@ -33355,6 +33532,16 @@ export interface components {
             provider_terms_accepted_by_membership_id: string | null;
             /** Provider Terms Version */
             provider_terms_version: string | null;
+            /**
+             * Renewal Reminder Cadence Days
+             * @default 1
+             */
+            renewal_reminder_cadence_days: number;
+            /**
+             * Renewal Reminder Delivery Time
+             * @default 09:00
+             */
+            renewal_reminder_delivery_time: string;
             /** Timezone */
             timezone: string;
             /**
@@ -33422,6 +33609,16 @@ export interface components {
             provider_keys?: string[];
             /** Provider Terms Version */
             provider_terms_version?: string | null;
+            /**
+             * Renewal Reminder Cadence Days
+             * @default 1
+             */
+            renewal_reminder_cadence_days: number;
+            /**
+             * Renewal Reminder Delivery Time
+             * @default 09:00
+             */
+            renewal_reminder_delivery_time: string;
             /** Timezone */
             timezone: string;
             /** Working Day Policy */
@@ -59026,6 +59223,41 @@ export interface operations {
             };
         };
     };
+    patch_portfolio_dates_api_ip_dockets__docket_id__portfolio_dates_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpPortfolioDatesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPortfolioDatesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     patch_portfolio_renewal_date_api_ip_dockets__docket_id__portfolio_renewal_date_patch: {
         parameters: {
             query?: never;
@@ -63329,6 +63561,8 @@ export interface operations {
     get_ip_portfolio_api_ip_portfolio_get: {
         parameters: {
             query?: {
+                application_date_from?: string | null;
+                application_date_to?: string | null;
                 asset_kind?: string[] | null;
                 client?: string[] | null;
                 cursor?: string | null;
@@ -63345,6 +63579,9 @@ export interface operations {
                 proprietor?: string[] | null;
                 query?: string | null;
                 registry_sync_state?: string[] | null;
+                renewal_due_from?: string | null;
+                renewal_due_to?: string | null;
+                renewal_tracker_state?: ("upcoming" | "active" | "due_today" | "overdue" | "missing" | "failed")[] | null;
                 responsible_membership_id?: string[] | null;
                 team_id?: string[] | null;
             };
@@ -63600,6 +63837,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpPortfolioFamilyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portfolio_renewal_tracker_api_ip_portfolio_renewal_tracker_get: {
+        parameters: {
+            query?: {
+                category?: ("upcoming" | "active" | "due_today" | "overdue" | "missing" | "failed") | null;
+                cursor?: string | null;
+                horizon_days?: number;
+                limit?: number;
+                query?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalTrackerResponse"];
                 };
             };
             /** @description Validation Error */

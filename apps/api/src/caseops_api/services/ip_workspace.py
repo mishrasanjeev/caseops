@@ -269,6 +269,14 @@ def upsert_ip_workspace_configuration(
     row.event_catalog_version = payload.event_catalog_version
     row.deadline_rule_versions_json = payload.deadline_rule_versions
     row.notification_channels_json = payload.notification_channels
+    reminder_policy = dict(row.renewal_reminder_policy_json or {})
+    for field, key in (
+        ("renewal_reminder_cadence_days", "cadence_days"),
+        ("renewal_reminder_delivery_time", "delivery_time"),
+    ):
+        if field in payload.model_fields_set:
+            reminder_policy[key] = getattr(payload, field)
+    row.renewal_reminder_policy_json = reminder_policy
     row.critical_event_policy_json = payload.critical_event_policy
     row.escalation_owner_membership_id = payload.escalation_owner_membership_id
     row.provider_keys_json = payload.provider_keys

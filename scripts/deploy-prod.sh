@@ -234,7 +234,8 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   "tests/e2e/support/prod-failure-diagnostics.ts" \
   "tests/e2e/support/bounded-network-evidence.ts" \
   "tests/e2e/support/prod-api-response-evidence.ts" \
-  "tests/e2e/support/cost-controls.ts")
+  "tests/e2e/support/cost-controls.ts" \
+  "tests/e2e/support/ip-import-acknowledgements.ts")
 if [[ -n "${DIRTY_BUILD_CONTEXT}" ]]; then
   echo "ERROR: API/web build context is dirty; refusing to label it as ${HEAD_SHA}."
   printf '%s\n' "${DIRTY_BUILD_CONTEXT}"

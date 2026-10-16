@@ -126,7 +126,6 @@ from caseops_api.schemas.ip_operations import (
     TrademarkParticularPayload,
     TrademarkParticularVersionRecord,
 )
-from caseops_api.schemas.ip_renewals import IpPortfolioRenewalDateUpdateRequest
 from caseops_api.services.assignment_memberships import (
     lock_company_memberships_for_assignment,
     require_locked_membership_capability,
@@ -174,6 +173,7 @@ CONTROL_REVIEW_QUERY_VERSION = "ip-docket-control-v1"
 CONTROL_REVIEW_SNAPSHOT_SCHEMA_VERSION = 2
 CONTROL_REVIEW_RESTRICTED_COUNT_POLICY = "omit_without_count"
 CONTROL_REVIEW_POLICY_VERSION = "daily-docket-review-v1"
+
 
 def _deadline_is_operational(deadline: MatterDeadline | None) -> bool:
     return bool(
@@ -696,6 +696,10 @@ def create_ip_docket(
 ) -> IpDocketRecordResponse:
     from caseops_api.services.private_retrieval import lock_private_authority_writer
 
+    if "portfolio_dates" in payload.particulars.representation:
+        raise HTTPException(
+            status_code=422, detail="Use the versioned portfolio date correction API."
+        )
     # Private events must enter tenant authority before participant/parent writes.
     with session.no_autoflush:
         lock_private_authority_writer(session, company_id=context.company.id)
@@ -913,7 +917,34 @@ def _new_version(
     version: int,
     errors: list[str],
     finalize: bool,
+    preserved: IpTrademarkParticularVersion | None = None,
 ) -> IpTrademarkParticularVersion:
+    if preserved is not None:
+        from copy import deepcopy
+
+        return IpTrademarkParticularVersion(
+            company_id=docket.company_id,
+            docket_id=docket.id,
+            version=version,
+            representation_json=deepcopy(payload.representation),
+            created_by_membership_id=context.membership.id,
+            **{
+                field: deepcopy(getattr(preserved, field))
+                for field in (
+                    "form_key",
+                    "form_version",
+                    "mark_kind",
+                    "classes_json",
+                    "use_priority_json",
+                    "parties_json",
+                    "agent_json",
+                    "filing_manifest_json",
+                    "readiness_status",
+                    "readiness_errors_json",
+                    "finalized_at",
+                )
+            },
+        )
     return IpTrademarkParticularVersion(
         company_id=docket.company_id,
         docket_id=docket.id,
@@ -940,6 +971,10 @@ def append_ip_docket_version(
     context: SessionContext,
     docket_id: str,
     payload: IpDocketVersionCreateRequest,
+    commit: bool = True,
+    preserve_status: bool = False,
+    _allow_portfolio_dates: bool = False,
+    _copy_existing_particulars: bool = False,
 ) -> IpDocketRecordResponse:
     from caseops_api.services.private_retrieval import lock_private_authority_writer
 
@@ -961,7 +996,35 @@ def append_ip_docket_version(
             status_code=409,
             detail="IP docket version changed; reload before saving.",
         )
-    errors = _readiness_errors(payload)
+    previous = session.scalar(
+        select(IpTrademarkParticularVersion).where(
+            IpTrademarkParticularVersion.company_id == context.company.id,
+            IpTrademarkParticularVersion.docket_id == docket.id,
+            IpTrademarkParticularVersion.version == docket.current_version,
+        )
+    )
+    saved_representation = previous.representation_json or {}
+    incoming = payload.representation
+    if not _allow_portfolio_dates:
+        preserved = {}
+        for key in ("portfolio_dates", "portfolio_import"):
+            if key in incoming and (
+                key not in saved_representation or incoming[key] != saved_representation[key]
+            ):
+                raise HTTPException(
+                    status_code=422, detail="Use the versioned portfolio date correction API."
+                )
+            if key in saved_representation:
+                preserved[key] = deepcopy(saved_representation[key])
+        if preserved:
+            payload = payload.model_copy(
+                update={"representation": {**incoming, **preserved}}
+            )
+    if _copy_existing_particulars and not _allow_portfolio_dates:
+        raise RuntimeError("Raw particulars preservation is exclusive to date corrections.")
+    errors = (
+        previous.readiness_errors_json if _copy_existing_particulars else _readiness_errors(payload)
+    )
     if payload.finalize and errors:
         raise HTTPException(status_code=409, detail={"readiness_errors": errors})
     next_version = docket.current_version + 1
@@ -973,10 +1036,12 @@ def append_ip_docket_version(
             version=next_version,
             errors=errors,
             finalize=payload.finalize,
+            preserved=previous if _copy_existing_particulars else None,
         )
     )
     docket.current_version = next_version
-    docket.status = "ready" if payload.finalize and not errors else "draft"
+    if not preserve_status:
+        docket.status = "ready" if payload.finalize and not errors else "draft"
     docket.updated_at = _now()
     record_from_context(
         session,
@@ -990,8 +1055,10 @@ def append_ip_docket_version(
     )
     session.flush()
     source_version = private_source_version(docket)
+    from caseops_api.services.ip_renewal_tracker import synchronize_series
     from caseops_api.services.ip_renewals import synchronize_imported_renewal_reminder
 
+    synchronize_series(session, context=context, docket_id=docket.id)
     synchronize_imported_renewal_reminder(session, context=context, docket_id=docket.id)
     if source_version != previous_source_version:
         from caseops_api.services.private_retrieval import (
@@ -1009,74 +1076,10 @@ def append_ip_docket_version(
             target_version=source_version,
             reason_code="ip_docket_version_created",
         )
-    session.commit()
-    session.refresh(docket)
+    if commit:
+        session.commit()
+        session.refresh(docket)
     return _serialize_docket(session, docket, context=context)
-
-
-def update_imported_renewal_date(
-    session: Session,
-    *,
-    context: SessionContext,
-    docket_id: str,
-    payload: IpPortfolioRenewalDateUpdateRequest,
-):
-    from caseops_api.schemas.ip_imports import IpImportDocketVersionCreateRequest
-    from caseops_api.services.ip_portfolio_source import _imported_source_row, _portfolio_source
-    from caseops_api.services.private_retrieval import lock_private_authority_writer
-
-    lock_private_authority_writer(session, company_id=context.company.id)
-    docket = _docket_or_404(
-        session,
-        context=context,
-        docket_id=docket_id,
-        for_update=True,
-        required_capability="ip:write",
-    )
-    version = session.scalar(
-        select(IpTrademarkParticularVersion).where(
-            IpTrademarkParticularVersion.company_id == context.company.id,
-            IpTrademarkParticularVersion.docket_id == docket.id,
-            IpTrademarkParticularVersion.version == docket.current_version,
-        )
-    )
-    source = _portfolio_source(version.representation_json) if version else {}
-    if not _imported_source_row(
-        session, company_id=context.company.id, docket_id=docket.id, source=source
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "ip_portfolio_source_missing",
-                "message": "This record has no imported source date.",
-            },
-        )
-    representation = deepcopy(version.representation_json)
-    representation["portfolio_import"]["renewal_due_date"] = (
-        payload.renewal_due_date.isoformat() if payload.renewal_due_date else None
-    )
-    representation["portfolio_import"]["date_correction"] = {
-        "reason": payload.reason,
-        "previous_due_date": source.get("renewal_due_date"),
-        "previous_version": docket.current_version,
-    }
-    return append_ip_docket_version(
-        session,
-        context=context,
-        docket_id=docket.id,
-        payload=IpImportDocketVersionCreateRequest(
-            expected_current_version=payload.expected_current_version,
-            form_key=version.form_key,
-            form_version=version.form_version,
-            mark_kind=version.mark_kind,
-            representation=representation,
-            classes=version.classes_json,
-            parties=version.parties_json,
-            use_priority=version.use_priority_json,
-            agent=version.agent_json,
-            filing_manifest=version.filing_manifest_json,
-        ),
-    )
 
 
 def list_ip_dockets(
@@ -3320,9 +3323,8 @@ def project_ip_recordal_title_interests(
                 if other.source_recordal_id == recordal.id:
                     continue
                 other_until = other.effective_until or date.max
-                overlaps = (
-                    recordal.effective_on <= other_until
-                    and _title_scopes_overlap(scope, other.scope_json)
+                overlaps = recordal.effective_on <= other_until and _title_scopes_overlap(
+                    scope, other.scope_json
                 )
                 if overlaps and other.party_name.casefold() != party_name.casefold():
                     flags.append(f"party_overlap:{other.id}")

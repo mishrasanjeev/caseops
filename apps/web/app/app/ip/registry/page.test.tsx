@@ -163,6 +163,23 @@ describe("IP registry reconciliation page", () => {
     expect(workspacesMock).not.toHaveBeenCalled();
   });
 
+  it("keeps canonical application/proceeding prefixes and current captions without changing labels", async () => {
+    const user = userEvent.setup();
+    render(<IpRegistryPage />, { wrapper: wrapper() });
+    const select = await screen.findByRole<HTMLSelectElement>("combobox", { name: "Legal record" });
+    await waitFor(() => expect(select).toHaveValue("application:application-1"));
+    expect(select).toHaveAccessibleName("Legal record");
+    expect(select).toHaveAccessibleDescription("Application · IP India · draft");
+    expect(Array.from(select.options, option => option.value)).toEqual(["", "application:application-1", "proceeding:proceeding-1"]);
+    await user.selectOptions(select, "proceeding:proceeding-1");
+    expect(select.selectedOptions[0].value).toBe("proceeding:proceeding-1");
+    expect(select).toHaveAccessibleDescription("Proceeding · opposition · draft");
+    const detail = document.getElementById(select.getAttribute("aria-describedby")!);
+    expect(detail).toHaveAttribute("data-selected-option-value", "proceeding:proceeding-1");
+    expect(detail?.textContent).toBe(select.selectedOptions[0].textContent);
+    expect(detail?.closest("label")).toBeNull();
+  });
+
   it("shows official provenance and records an explicit match decision", async () => {
     const user = userEvent.setup();
     decideMatchMock.mockResolvedValue({ ...LINK, match_status: "confirmed", version: 2 });

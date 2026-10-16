@@ -1,5 +1,14 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 15 IP Controls And Renewal Tracker
+
+Seven new populated bug rows and the new renewal specification are under
+reproduction, not deployed closure. IP15-001..022 retain source-aware selectors,
+container-responsive forms, independent persisted date edits, recurring daily
+in-app delivery, idempotence, recovery and lifecycle/access negatives.
+See `docs/BUGFIX_IP_RENEWAL_TRACKER_2026-10-15.md`. Earlier ecb acceptance is
+baseline only. Historical unidentified Matter reopening remains Inconclusive.
+
 ## October 15 Production Replay And Candidate Recovery
 
 **Partially fixed / NO-GO.** API/web0c82fbb0 is deployed and four dated production

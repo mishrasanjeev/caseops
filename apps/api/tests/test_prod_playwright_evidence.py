@@ -1100,6 +1100,19 @@ def _tester_canonical_rows():
     return rows
 
 
+def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
+    assert evidence.TESTER_PARTITION_COUNTS == {
+        "tester": 115, "tester-index": 6, "test-legal-write-oct13": 42,
+    }
+    assert evidence.OCT13_FILES == {
+        "ram-2026-10-13-hearings.spec.ts": 2,
+        "ram-2026-10-13-ip-portfolio.spec.ts": 4,
+        "ram-2026-10-15-ip-controls.spec.ts": 34,
+        "ram-2026-10-15-ip-renewal-tracker.spec.ts": 2,
+    }
+    assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 163
+
+
 def test_tester_partition_selection_preserves_complete_ordered_literal_identities():
     canonical = {"tests": _tester_canonical_rows()}
     for invocation, project in evidence.TESTER_PARTITIONS.items():
@@ -1109,6 +1122,29 @@ def test_tester_partition_selection_preserves_complete_ordered_literal_identitie
         }
         selected = {"tests": [row for row in canonical["tests"] if row["project_name"] == project]}
         evidence._check_tester_selection(binding, selected, canonical)
+
+
+@pytest.mark.parametrize("file", [
+    "ram-2026-10-15-ip-controls.spec.ts",
+    "ram-2026-10-15-ip-renewal-tracker.spec.ts",
+])
+def test_oct15_ip_file_cannot_disappear_behind_unchanged_partition_total(file):
+    rows = _tester_canonical_rows()
+    removed = next(row for row in rows if row["file"] == file)
+    rows.remove(removed)
+    replacement = copy.deepcopy(
+        next(row for row in rows if row["file"] == "ram-2026-10-13-hearings.spec.ts")
+    )
+    replacement["id"] += "-substitute"
+    replacement["native_spec_id"] += "-substitute"
+    replacement["title_path"][-1] += " substitute"
+    rows.append(replacement)
+    project = evidence.TESTER_PARTITIONS["test-legal-write-oct13"]
+    assert sum(row["project_name"] == project for row in rows) == 42
+    with pytest.raises(
+        evidence.EvidenceError, match="mandatory_tester_partition_inventory_mismatch"
+    ):
+        evidence._tester_inventory({"tests": rows})
 
 
 @pytest.mark.parametrize("damage", [

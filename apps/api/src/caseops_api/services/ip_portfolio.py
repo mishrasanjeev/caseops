@@ -48,7 +48,7 @@ from caseops_api.schemas.ip_portfolio import (
     IpPortfolioListResponse,
     IpPortfolioRow,
 )
-from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
+from caseops_api.services.ip_portfolio_search import portfolio_target_search_predicate
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.session_context import SessionContext
 
@@ -409,20 +409,50 @@ def _scoped_query(
         statement = statement.where(
             or_(*[_registry_state_predicate(state) for state in filters.registry_sync_state])
         )
+    if any(
+        (
+            filters.application_date_from,
+            filters.application_date_to,
+            filters.renewal_due_from,
+            filters.renewal_due_to,
+            filters.renewal_tracker_state,
+        )
+    ):
+        from caseops_api.db.models import IpPortfolioRenewalSeries
+        from caseops_api.services.ip_portfolio_dates import date_expression
+        from caseops_api.services.ip_renewal_tracker_read import category_predicates
+
+        statement = statement.join(
+            IpTrademarkParticularVersion,
+            and_(
+                IpTrademarkParticularVersion.company_id == IpDocketRecord.company_id,
+                IpTrademarkParticularVersion.docket_id == IpDocketRecord.id,
+                IpTrademarkParticularVersion.version == IpDocketRecord.current_version,
+            ),
+        )
+        for field, lower, upper in (
+            ("application_date", filters.application_date_from, filters.application_date_to),
+            ("renewal_due_date", filters.renewal_due_from, filters.renewal_due_to),
+        ):
+            expression = date_expression(field)
+            if lower:
+                statement = statement.where(expression >= lower.isoformat())
+            if upper:
+                statement = statement.where(expression <= upper.isoformat())
+        if filters.renewal_tracker_state:
+            statement = statement.outerjoin(
+                IpPortfolioRenewalSeries,
+                and_(
+                    IpPortfolioRenewalSeries.company_id == IpDocketRecord.company_id,
+                    IpPortfolioRenewalSeries.docket_id == IpDocketRecord.id,
+                ),
+            )
+            predicates = category_predicates(session=session, context=context)
+            statement = statement.where(
+                or_(*(predicates[key] for key in filters.renewal_tracker_state))
+            )
     if filters.query:
         like = f"%{filters.query.strip().lower()}%"
-        normalized_identifier = normalize_ip_identifier(filters.query)
-        identifier_match = (
-            select(IpIdentifier.id)
-            .where(
-                IpIdentifier.company_id == context.company.id,
-                IpIdentifier.docket_id == IpDocketRecord.id,
-                IpIdentifier.effective_until.is_(None),
-                IpIdentifier.superseded_by_identifier_id.is_(None),
-                IpIdentifier.normalized_value == normalized_identifier,
-            )
-            .exists()
-        )
         party_match = (
             select(IpPartyAndRole.id)
             .where(
@@ -479,10 +509,10 @@ def _scoped_query(
         )
         statement = statement.where(
             or_(
-                func.lower(IpDocketRecord.title).like(like),
-                func.lower(func.coalesce(IpAsset.title, "")).like(like),
+                portfolio_target_search_predicate(
+                    company_id=context.company.id, query=filters.query
+                ),
                 func.lower(func.coalesce(Matter.client_name, "")).like(like),
-                identifier_match,
                 party_match,
                 scope_match,
                 linked_client_match,
@@ -946,6 +976,9 @@ def list_ip_portfolio(
     source_renewals = portfolio_source_renewal_details(
         session, context=context, docket_ids=docket_ids,
     )
+    from caseops_api.services.ip_portfolio_dates import page_date_details
+
+    date_details = page_date_details(session, company_id=context.company.id, docket_ids=docket_ids)
     for application, asset, docket in visible:
         open_count, unconfirmed, overdue = deadlines.get(docket.id, (0, 0, 0))
         primary_identifier = primary_identifiers.get(application.id)
@@ -972,7 +1005,14 @@ def list_ip_portfolio(
                 representation_kinds=detail["representation_kinds"],
                 proprietors=detail["proprietors"],
                 agents=detail["agents"],
-                **source_renewals.get(docket.id, {}),
+                **{
+                    **source_renewals.get(docket.id, {}),
+                    **{
+                        key: value
+                        for key, value in date_details.get(docket.id, {}).items()
+                        if key != "docket_id"
+                    },
+                },
                 client_name=matter_detail.get("client_name"),
                 responsible_lawyer=matter_detail.get("responsible_lawyer"),
                 responsible_membership_id=matter_detail.get("responsible_membership_id"),

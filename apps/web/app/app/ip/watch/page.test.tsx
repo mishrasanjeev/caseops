@@ -176,6 +176,22 @@ describe("IP journal watch page", () => {
     expect(screen.getByText(/class_overlap/)).toBeVisible();
   });
 
+  it("describes a linked journal application and really selects the no-link option on clear", async () => {
+    const user = userEvent.setup();
+    const page = renderWatchPage();
+    await user.click(await page.findByRole("button", { name: "Journal intake" }));
+    const application = await page.findByRole<HTMLSelectElement>("combobox", { name: "Linked trademark application" });
+    await user.selectOptions(application, "application-1");
+    expect(application).toHaveAccessibleName("Linked trademark application");
+    expect(application).toHaveAccessibleDescription("application-1");
+    expect(document.getElementById(application.getAttribute("aria-describedby")!))
+      .toHaveAttribute("data-selected-option-value", "application-1");
+    await user.selectOptions(application, "");
+    expect(application.value).toBe("");
+    expect(Array.from(application.selectedOptions, option => option.value)).toEqual([""]);
+    expect(application).not.toHaveAttribute("aria-describedby");
+  });
+
   it("creates explicit criteria, frequency, recipients, and cost policy", async () => {
     const user = userEvent.setup();
     createProfileMock.mockResolvedValue(PROFILE);
@@ -234,6 +250,12 @@ describe("IP journal watch page", () => {
       sourceConfirmed: true,
     });
     await waitFor(() => expect(page.getByRole("button", { name: "Record review" })).toBeEnabled());
+    const application = page.getByRole<HTMLSelectElement>("combobox", { name: "Application" });
+    expect(application).toHaveValue("application-1");
+    expect(application.selectedOptions[0].value).toBe("application-1");
+    expect(application).toHaveAccessibleDescription("application-1");
+    expect(document.getElementById(application.getAttribute("aria-describedby")!))
+      .toHaveAttribute("data-selected-option-value", "application-1");
     await user.click(page.getByRole("button", { name: "Create opposition" }));
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("opposition created without re-entry."));
     expect(createHandoffMock).toHaveBeenCalledTimes(1);

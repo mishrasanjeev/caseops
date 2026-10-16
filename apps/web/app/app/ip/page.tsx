@@ -10,6 +10,7 @@ import {
   FileCheck2,
   Plus,
   Scale,
+  Settings2,
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -31,6 +32,7 @@ import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PersonName, PersonPicker } from "@/components/ui/PersonPicker";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
@@ -111,6 +113,7 @@ import { useSession } from "@/lib/use-session";
 const TODAY = new Date().toISOString().slice(0, 10);
 const FORM_SELECT_CLASS =
   "h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm";
+const IP_FORM_GRID = "grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-3";
 const DOCKET_VIEWS = ["overview", "proceedings", "schedule", "access"] as const;
 type DocketView = (typeof DOCKET_VIEWS)[number];
 
@@ -155,6 +158,7 @@ export default function IpDocketPage() {
     requestedDocketId,
   );
   const [showCreate, setShowCreate] = useState(false);
+  const [showConfiguration, setShowConfiguration] = useState(false);
 
   const readiness = useQuery({
     queryKey: ["ip", "readiness"],
@@ -254,13 +258,30 @@ export default function IpDocketPage() {
         title="Trademark docket"
         description="Form-versioned particulars, evidence links, deadline control, title history, and costs anchored to existing CaseOps owners."
         actions={
-          canWrite ? (
-            <Button size="sm" onClick={() => setShowCreate((value) => !value)}>
-              <Plus className="h-4 w-4" aria-hidden /> New trademark
-            </Button>
+          canWrite || canConfigure ? (
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {canConfigure ? <Button type="button" size="sm" variant="outline" className="h-10 w-10 shrink-0 p-0"
+                aria-label="Workspace configuration" title="Workspace configuration"
+                aria-expanded={showConfiguration} aria-controls="ip-workspace-configuration-panel"
+                onClick={() => setShowConfiguration((current) => !current)}>
+                <Settings2 className="h-4 w-4" aria-hidden />
+              </Button> : null}
+              {canWrite ? <Button size="sm" onClick={() => setShowCreate((value) => !value)}>
+                <Plus className="h-4 w-4" aria-hidden /> New trademark
+              </Button> : null}
+            </div>
           ) : null
         }
       />
+
+      {canConfigure && showConfiguration ? (
+        <section id="ip-workspace-configuration-panel" aria-label="Workspace configuration"
+          data-testid="ip-workspace-configuration-panel" className="min-w-0">
+          <IpWorkspaceSetupCard status={readiness.data.configuration_status}
+            currentMembershipId={session.context?.membership.id ?? null}
+            onChanged={async () => { await queryClient.invalidateQueries({ queryKey: ["ip", "readiness"] }); }} />
+        </section>
+      ) : null}
 
       <Link href="/app/ip/patents" className="w-fit text-sm text-brand-700 underline">Patent disclosures</Link>
       <Link href="/app/ip/specialist" className="w-fit text-sm text-brand-700 underline">Specialist IP intake</Link>
@@ -726,42 +747,59 @@ function IpWorkspaceSetupCard({
   onChanged: () => Promise<void>;
 }) {
   const configuration = status?.configuration ?? null;
-  const [jurisdiction, setJurisdiction] = useState(
-    configuration?.jurisdictions_json[0] ?? "IN",
-  );
-  const [office, setOffice] = useState(configuration?.offices_json[0] ?? "IP India");
-  const [timezone, setTimezone] = useState(configuration?.timezone ?? "Asia/Kolkata");
-  const [holidayCalendar, setHolidayCalendar] = useState(
-    configuration?.holiday_calendar_key ?? "IN-CENTRAL-2026",
-  );
-  const [providerKey, setProviderKey] = useState(
-    configuration?.provider_keys_json[0] ?? "",
-  );
-  const [acceptTerms, setAcceptTerms] = useState(
-    configuration?.provider_terms_accepted_at != null,
-  );
-  const [automations, setAutomations] = useState({
-    registry_sync: configuration?.enabled_automations_json.includes("registry_sync") ?? false,
-    deadline_automation:
-      configuration?.enabled_automations_json.includes("deadline_automation") ?? false,
-    notification_automation:
-      configuration?.enabled_automations_json.includes("notification_automation") ?? false,
-  });
+  const currentForm = {
+    jurisdiction: configuration?.jurisdictions_json[0] ?? "IN",
+    office: configuration?.offices_json[0] ?? "IP India",
+    timezone: configuration?.timezone ?? "Asia/Kolkata",
+    holidayCalendar: configuration?.holiday_calendar_key ?? "IN-CENTRAL-2026",
+    providerKey: configuration?.provider_keys_json[0] ?? "",
+    acceptTerms: Boolean(configuration?.provider_keys_json[0]) && Boolean(configuration?.provider_terms_version)
+      && configuration?.provider_terms_accepted_at != null,
+    automations: {
+      registry_sync: configuration?.enabled_automations_json.includes("registry_sync") ?? false,
+      deadline_automation: configuration?.enabled_automations_json.includes("deadline_automation") ?? false,
+      notification_automation: configuration?.enabled_automations_json.includes("notification_automation") ?? false,
+    },
+  };
+  const [configurationEdits, setConfigurationEdits] = useState<Partial<typeof currentForm>>({});
+  const { jurisdiction, office, timezone, holidayCalendar, providerKey, acceptTerms, automations } = {
+    ...currentForm, ...configurationEdits,
+  };
+  const editConfiguration = (changes: Partial<typeof currentForm>) =>
+    setConfigurationEdits((current) => ({ ...current, ...changes }));
+  const configurationVersion = configuration?.version ?? null;
+  const [renewalPolicyDraft, setRenewalPolicyDraft] = useState<{
+    version: number | null; cadence: string; time: string;
+  } | null>(null);
+  const renewalCadence = renewalPolicyDraft?.version === configurationVersion
+    ? renewalPolicyDraft.cadence
+    : configuration ? String(configuration.renewal_reminder_cadence_days ?? "") : "1";
+  const renewalTime = renewalPolicyDraft?.version === configurationVersion
+    ? renewalPolicyDraft.time
+    : configuration ? configuration.renewal_reminder_delivery_time ?? "" : "09:00";
+  const cadenceDays = Number(renewalCadence);
+  const cadenceValid = Number.isInteger(cadenceDays) && cadenceDays >= 1 && cadenceDays <= 31;
+  const deliveryTimeValid = /^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(renewalTime);
   const escalationOwner =
     configuration?.escalation_owner_membership_id ?? currentMembershipId ?? "";
   const providerAdapters = status?.provider_adapters ?? [];
   const selectedAdapter = providerAdapters.find(
     (adapter) => adapter.provider === providerKey,
   );
+  const consentTermsVersion = configuration?.provider_keys_json[0] === providerKey
+    ? configuration.provider_terms_version : "2026.1";
 
   const save = useMutation({
     mutationFn: () =>
       saveIpWorkspaceConfiguration({
+        currentConfiguration: configuration ?? undefined,
         expectedVersion: configuration?.version ?? null,
         jurisdiction,
         office,
         timezone,
         holidayCalendarKey: holidayCalendar,
+        renewalReminderCadenceDays: cadenceDays,
+        renewalReminderDeliveryTime: renewalTime,
         escalationOwnerMembershipId: escalationOwner,
         providerKey,
         acceptProviderTerms: acceptTerms,
@@ -827,31 +865,47 @@ function IpWorkspaceSetupCard({
       <CardContent className="flex min-w-0 flex-col gap-5">
         <div className="grid min-w-0 gap-4 sm:grid-cols-2">
           <Field label="Enabled asset type">
-            <Input value="Trademark" disabled aria-label="Enabled asset type" />
+            <Input value={configuration ? configuration.enabled_asset_types_json
+              .map((kind) => kind.charAt(0).toUpperCase() + kind.slice(1).replaceAll("_", " ")).join(", ")
+              : "Trademark"} disabled aria-label="Enabled asset type" />
           </Field>
           <Field label="Jurisdiction">
-            <Input value={jurisdiction} onChange={(event) => setJurisdiction(event.target.value)} />
+            <Input value={jurisdiction} onChange={(event) => editConfiguration({ jurisdiction: event.target.value })} />
           </Field>
           <Field label="Office">
-            <Input value={office} onChange={(event) => setOffice(event.target.value)} />
+            <Input value={office} onChange={(event) => editConfiguration({ office: event.target.value })} />
           </Field>
           <Field label="IANA timezone">
-            <Input value={timezone} onChange={(event) => setTimezone(event.target.value)} />
+            <Input value={timezone} onChange={(event) => editConfiguration({ timezone: event.target.value })} />
           </Field>
           <Field label="Holiday calendar">
             <Input
               value={holidayCalendar}
-              onChange={(event) => setHolidayCalendar(event.target.value)}
+              onChange={(event) => editConfiguration({ holidayCalendar: event.target.value })}
             />
+          </Field>
+          <Field label="Renewal reminder cadence (days)">
+            <Input type="number" min={1} max={31} step={1} inputMode="numeric" required
+              aria-invalid={!cadenceValid} value={renewalCadence}
+              onChange={(event) => setRenewalPolicyDraft({ version: configurationVersion,
+                cadence: event.target.value, time: renewalTime })} />
+          </Field>
+          <Field label="Renewal reminder local time">
+            <Input type="time" step={60} required aria-label="Renewal reminder local time" aria-invalid={!deliveryTimeValid}
+              aria-describedby="ip-renewal-reminder-timezone" value={renewalTime}
+              onChange={(event) => setRenewalPolicyDraft({ version: configurationVersion,
+                cadence: renewalCadence, time: event.target.value })} />
+            <span id="ip-renewal-reminder-timezone" className="break-words text-xs text-[var(--color-mute)]">
+              {timezone}
+            </span>
           </Field>
           <Field label="Permitted registry provider (optional)">
             <select
               className={FORM_SELECT_CLASS}
               value={providerKey}
               onChange={(event) => {
-                setProviderKey(event.target.value);
-                setAcceptTerms(false);
-                setAutomations((current) => ({ ...current, registry_sync: false }));
+                editConfiguration({ providerKey: event.target.value, acceptTerms: false,
+                  automations: { ...automations, registry_sync: false } });
               }}
               aria-label="Permitted registry provider"
             >
@@ -895,24 +949,24 @@ function IpWorkspaceSetupCard({
           </div>
         ) : null}
 
-        <div className="rounded-lg border border-[var(--color-line)] p-3 text-sm">
+        {!configuration ? <div className="rounded-lg border border-[var(--color-line)] p-3 text-sm">
           <div className="font-semibold">Seeded governance contract</div>
           <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
             Taxonomy ip-taxonomy-2026.1 · event catalogue ip-events-v1 · jurisdiction rule
             2026.1 · Monday–Friday working policy · in-app notification · 30-minute critical
             escalation.
           </div>
-        </div>
+        </div> : null}
 
         <label className="flex min-w-0 items-start gap-2 text-sm">
           <input
             type="checkbox"
             checked={acceptTerms}
-            onChange={(event) => setAcceptTerms(event.target.checked)}
+            onChange={(event) => editConfiguration({ acceptTerms: event.target.checked })}
             disabled={!providerKey.trim()}
           />
           <span className="min-w-0 break-words">
-            Accept provider attribution and cost terms version 2026.1. No credential is stored
+            Accept provider attribution and cost terms version {consentTermsVersion ?? "not configured"}. No credential is stored
             here; secrets remain in server-side integration settings.
           </span>
         </label>
@@ -927,7 +981,9 @@ function IpWorkspaceSetupCard({
               !timezone.trim() ||
               !holidayCalendar.trim() ||
               !escalationOwner ||
-              (Boolean(providerKey.trim()) && !acceptTerms) ||
+              !cadenceValid ||
+              !deliveryTimeValid ||
+              (Boolean(providerKey.trim()) && (!acceptTerms || !consentTermsVersion)) ||
               save.isPending
             }
           >
@@ -997,7 +1053,7 @@ function IpWorkspaceSetupCard({
                     selectedAdapter?.adapter_status !== "implemented"
                   }
                   onChange={(event) =>
-                    setAutomations((current) => ({ ...current, [feature]: event.target.checked }))
+                    editConfiguration({ automations: { ...automations, [feature]: event.target.checked } })
                   }
                 />
                 <span className="break-words">{feature.replaceAll("_", " ")}</span>
@@ -1693,7 +1749,7 @@ function HearingWorkflowCard({
         </p>
         {enabled ? (
           <form
-            className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+            className={IP_FORM_GRID}
             onSubmit={(event) => {
               event.preventDefault();
               if (previewing) create.mutate();
@@ -1722,7 +1778,7 @@ function HearingWorkflowCard({
             <Field label="Virtual hearing link"><Input type="url" value={meetingUrl} onChange={(event) => setMeetingUrl(event.target.value)} /></Field>
             <Field label="Source"><Input value={source} onChange={(event) => setSource(event.target.value)} /></Field>
             <Field label="Reminder offsets (hours)"><Input value={offsets} onChange={(event) => setOffsets(event.target.value)} /></Field>
-            <fieldset className="min-w-0 rounded-md border border-[var(--color-line)] p-3 sm:col-span-2">
+            <fieldset className="col-span-full min-w-0 rounded-md border border-[var(--color-line)] p-3">
               <legend className="px-1 text-sm font-semibold">Reminder channels</legend>
               <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={emailReminder} onChange={(event) => setEmailReminder(event.target.checked)} /> Email</label>
@@ -1730,14 +1786,14 @@ function HearingWorkflowCard({
               </div>
             </fieldset>
             {previewing ? (
-              <div className="min-w-0 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm sm:col-span-2 xl:col-span-4" data-testid="ip-hearing-preview">
+              <div className="col-span-full min-w-0 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm" data-testid="ip-hearing-preview">
                 <strong>Confirm reminder policy</strong>
                 <div className="mt-1 break-words">{timeStatus === "exact" ? `Exact time ${hearingTime}` : timeStatus === "session" ? `Session: ${sessionLabel}` : "Date-based reminder only; no hearing time will be invented."}</div>
                 <div className="mt-1 break-words">Recipients: {recipientIds.join(", ") || "none"} · Offsets: {offsetValues.join(", ") || "none"} hours · Channels: {reminderChannels.join(", ") || "none"}</div>
               </div>
             ) : null}
-            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:col-span-2 xl:col-span-4">
-              <Button className="w-full sm:w-auto" type="submit" disabled={!hearingOn || !forumName.trim() || !purpose.trim() || !offsetValues.length || !reminderChannels.length || !recipientIds.length || create.isPending}>
+            <div className="col-span-full flex min-w-0 flex-wrap gap-2">
+              <Button className="h-auto min-h-10 max-w-full whitespace-normal py-2 text-left" type="submit" disabled={!hearingOn || !forumName.trim() || !purpose.trim() || !offsetValues.length || !reminderChannels.length || !recipientIds.length || create.isPending}>
                 {previewing ? "Confirm hearing and reminders" : "Preview recipients and policy"}
               </Button>
               {previewing ? <Button className="w-full sm:w-auto" type="button" variant="secondary" onClick={() => setPreviewing(false)}>Edit details</Button> : null}
@@ -1753,7 +1809,7 @@ function HearingWorkflowCard({
               hearing.reminders.map((row) => row.schedule_generation),
             )].sort((left, right) => right - left);
             return (
-              <article key={hearing.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3">
+              <article key={hearing.id} data-testid={`ip-hearing-${hearing.id}`} className="min-w-0 rounded-md border border-[var(--color-line)] p-3">
                 <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <h4 className="break-words font-semibold">{hearing.purpose}</h4>
@@ -1782,7 +1838,7 @@ function HearingWorkflowCard({
                             <span className="text-emerald-700">Current schedule</span>
                           ) : null}
                         </div>
-                        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        <div className={IP_FORM_GRID}>
                           {generationRows.map((reminder) => (
                             <div key={reminder.id} className="min-w-0 rounded-md bg-[var(--color-bg-2)] p-2 text-xs">
                               <strong>{reminder.channel}</strong> · {reminder.status}
@@ -1799,7 +1855,7 @@ function HearingWorkflowCard({
                     <>
                       <Input
                         aria-label={`Published time for ${hearing.purpose}`}
-                        className="w-full sm:w-auto"
+                        className="w-full min-w-0 max-w-full sm:w-52 sm:shrink-0"
                         type="time"
                         value={confirmationTimes[hearing.id] ?? ""}
                         onChange={(event) => setConfirmationTimes((current) => ({
@@ -1823,7 +1879,7 @@ function HearingWorkflowCard({
                       </Button>
                     </>
                   ) : null}
-                  <Input aria-label={`Reschedule ${hearing.purpose}`} className="w-full sm:w-auto" type="date" value={rescheduleDates[hearing.id] ?? hearing.hearing_on} onChange={(event) => setRescheduleDates((current) => ({ ...current, [hearing.id]: event.target.value }))} />
+                  <Input aria-label={`Reschedule ${hearing.purpose}`} className="w-full min-w-0 max-w-full sm:w-52 sm:shrink-0" type="date" value={rescheduleDates[hearing.id] ?? hearing.hearing_on} onChange={(event) => setRescheduleDates((current) => ({ ...current, [hearing.id]: event.target.value }))} />
                   <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => update.mutate({ hearingId: hearing.id, hearingOn: rescheduleDates[hearing.id] ?? hearing.hearing_on })}>Reschedule</Button>
                   <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => update.mutate({ hearingId: hearing.id, status: "cancelled" })}>Cancel hearing</Button>
                   {connectedProviders.has("outlook") ? <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => sync.mutate({ provider: "outlook", hearingId: hearing.id })}>Sync Outlook</Button> : null}
@@ -1944,6 +2000,14 @@ function DeadlineProvenance({
   );
 }
 
+function deadlineRuleCaption(rule: IpDeadlineRuleVersion): string {
+  return `${rule.key} · version ${rule.version} · ${rule.jurisdiction}${rule.office ? ` · ${rule.office}` : ""} · ${rule.status}`;
+}
+
+function workingCalendarCaption(calendar: IpWorkingCalendarVersion): string {
+  return `${calendar.name} · version ${calendar.version} · ${calendar.jurisdiction}${calendar.office ? ` · ${calendar.office}` : ""} · ${calendar.timezone} · ${calendar.status}`;
+}
+
 function DeadlineWorkspaceCard({
   docket,
   enabled,
@@ -1976,11 +2040,14 @@ function DeadlineWorkspaceCard({
   const [evidenceReference, setEvidenceReference] = useState("");
   const [attestation, setAttestation] = useState("");
 
-  const activeRules = workspace.data?.rules.filter((row) => row.status === "active") ?? [];
+  const activeRules = workspace.data?.rules.filter((row) => row.status === "active"
+    && row.rule_kind === "deadline" && workspace.data?.eligible_rule_version_ids?.includes(row.id)) ?? [];
   const activeCalendars =
     workspace.data?.calendars.filter((row) => row.status === "active") ?? [];
-  const selectedRuleId = ruleVersionId || activeRules[0]?.id || "";
-  const selectedCalendarId = calendarVersionId || activeCalendars[0]?.id || "";
+  const selectedRuleId = activeRules.some((row) => row.id === ruleVersionId) ? ruleVersionId : activeRules[0]?.id ?? "";
+  const selectedCalendarId = activeCalendars.some((row) => row.id === calendarVersionId) ? calendarVersionId : activeCalendars[0]?.id ?? "";
+  const selectedRule = activeRules.find((row) => row.id === selectedRuleId);
+  const selectedCalendar = activeCalendars.find((row) => row.id === selectedCalendarId);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({
@@ -2150,7 +2217,7 @@ function DeadlineWorkspaceCard({
 
         {enabled ? (
           <form
-            className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+            className={IP_FORM_GRID}
             onSubmit={(event) => {
               event.preventDefault();
               proposal.mutate();
@@ -2185,9 +2252,14 @@ function DeadlineWorkspaceCard({
                 className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
                 value={selectedRuleId}
                 onChange={(event) => setRuleVersionId(event.target.value)}
+                disabled={!workspace.isSuccess || !activeRules.length}
+                aria-describedby={selectedRule ? "ip-active-rule-detail" : workspace.isSuccess ? "ip-deadline-prerequisites" : undefined}
               >
+                {!workspace.isSuccess || !activeRules.length ? (
+                  <option value="">{workspace.isPending ? "Loading deadline rules…" : workspace.isError ? "Deadline rules unavailable" : "No eligible active deadline rule"}</option>
+                ) : null}
                 {activeRules.map((row) => (
-                  <option key={row.id} value={row.id}>{row.key} v{row.version}</option>
+                  <option key={row.id} value={row.id}>{deadlineRuleCaption(row)}</option>
                 ))}
               </select>
             </Field>
@@ -2196,9 +2268,14 @@ function DeadlineWorkspaceCard({
                 className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
                 value={selectedCalendarId}
                 onChange={(event) => setCalendarVersionId(event.target.value)}
+                disabled={!workspace.isSuccess || !activeCalendars.length}
+                aria-describedby={selectedCalendar ? "ip-active-calendar-detail" : workspace.isSuccess ? "ip-deadline-prerequisites" : undefined}
               >
+                {!workspace.isSuccess || !activeCalendars.length ? (
+                  <option value="">{workspace.isPending ? "Loading working calendars…" : workspace.isError ? "Working calendars unavailable" : "No active working calendar"}</option>
+                ) : null}
                 {activeCalendars.map((row) => (
-                  <option key={row.id} value={row.id}>{row.name} v{row.version}</option>
+                  <option key={row.id} value={row.id}>{workingCalendarCaption(row)}</option>
                 ))}
               </select>
             </Field>
@@ -2210,14 +2287,18 @@ function DeadlineWorkspaceCard({
               />
               Critical legal deadline
             </label>
-            <div className="flex min-w-0 items-end sm:col-span-2">
+            <div className="col-span-full grid min-w-0 gap-2">
+              {selectedRule ? <p id="ip-active-rule-detail" data-selected-option-value={selectedRule.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{deadlineRuleCaption(selectedRule)}</p> : null}
+              {selectedCalendar ? <p id="ip-active-calendar-detail" data-selected-option-value={selectedCalendar.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{workingCalendarCaption(selectedCalendar)}</p> : null}
+              {workspace.isSuccess && (!activeRules.length || !activeCalendars.length) ? <p id="ip-deadline-prerequisites" className="text-sm text-[var(--color-mute)]">Independent approval is required before a working calendar or deadline rule can be used. Company policy must select the active rule.</p> : null}
               <Button
-                className="w-full sm:w-auto"
+                className="h-auto min-h-10 w-fit max-w-full whitespace-normal py-2 text-left"
                 type="submit"
                 disabled={
                   !title.trim() ||
                   !selectedRuleId ||
                   !selectedCalendarId ||
+                  !workspace.isSuccess ||
                   proposal.isPending ||
                   deadlineActionPending
                 }
@@ -2229,7 +2310,7 @@ function DeadlineWorkspaceCard({
         ) : null}
 
         {enabled && workspace.data?.deadlines.length ? (
-          <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className={IP_FORM_GRID}>
             <Field label="Responsible lawyer" htmlFor="deadline-primary-owner">
               <PersonPicker id="deadline-primary-owner" value={primaryId} onChange={setPrimaryId} />
             </Field>
@@ -2560,12 +2641,12 @@ function DeadlineGovernanceCard({
           legal activation must use separate memberships.
         </p>
         {canPropose ? (
-          <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,24rem),1fr))] gap-5">
             <form
-              className="grid min-w-0 gap-3 sm:grid-cols-2"
+              className={IP_FORM_GRID}
               onSubmit={(event) => { event.preventDefault(); proposeCalendar.mutate(); }}
             >
-              <div className="sm:col-span-2 text-sm font-semibold">Propose working calendar</div>
+              <div className="col-span-full text-sm font-semibold">Propose working calendar</div>
               <Field label="Calendar key"><Input value={calendarKey} onChange={(e) => setCalendarKey(e.target.value)} /></Field>
               <Field label="Calendar name"><Input value={calendarName} onChange={(e) => setCalendarName(e.target.value)} /></Field>
               <Field label="Jurisdiction"><Input value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} /></Field>
@@ -2574,26 +2655,26 @@ function DeadlineGovernanceCard({
               <Field label="Effective from"><Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} /></Field>
               <Field label="Official source reference"><Input value={sourceReference} onChange={(e) => setSourceReference(e.target.value)} /></Field>
               <Field label="Source SHA-256"><Input value={sourceHash} onChange={(e) => setSourceHash(e.target.value)} /></Field>
-              <div className="sm:col-span-2"><Button className="w-full sm:w-auto" type="submit" disabled={!sourceReference || sourceHash.length !== 64 || proposeCalendar.isPending}>Propose calendar version</Button></div>
+              <div className="col-span-full min-w-0"><Button className="h-auto min-h-10 max-w-full whitespace-normal py-2" type="submit" disabled={!sourceReference || sourceHash.length !== 64 || proposeCalendar.isPending}>Propose calendar version</Button></div>
             </form>
             <form
-              className="grid min-w-0 gap-3 sm:grid-cols-2"
+              className={IP_FORM_GRID}
               onSubmit={(event) => { event.preventDefault(); proposeRule.mutate(); }}
             >
-              <div className="sm:col-span-2 text-sm font-semibold">Propose tested deadline rule</div>
+              <div className="col-span-full text-sm font-semibold">Propose tested deadline rule</div>
               <Field label="Rule key"><Input value={ruleKey} onChange={(e) => setRuleKey(e.target.value)} /></Field>
               <Field label="Trigger kind"><Input value={triggerKind} onChange={(e) => setTriggerKind(e.target.value)} /></Field>
               <Field label="Business-day duration"><Input type="number" min={0} value={durationValue} onChange={(e) => setDurationValue(e.target.value)} /></Field>
               <Field label="Rule citation"><Input value={ruleCitation} onChange={(e) => setRuleCitation(e.target.value)} /></Field>
               <Field label="Fixture base date"><Input type="date" value={fixtureBaseDate} onChange={(e) => setFixtureBaseDate(e.target.value)} /></Field>
               <Field label="Expected fixture date"><Input type="date" value={fixtureExpectedDate} onChange={(e) => setFixtureExpectedDate(e.target.value)} /></Field>
-              <div className="sm:col-span-2"><Button className="w-full sm:w-auto" type="submit" disabled={!activeCalendar || !ruleCitation || !fixtureExpectedDate || !sourceReference || sourceHash.length !== 64 || proposeRule.isPending}>Propose rule and fixture</Button></div>
+              <div className="col-span-full min-w-0"><Button className="h-auto min-h-10 max-w-full whitespace-normal py-2" type="submit" disabled={!activeCalendar || !ruleCitation || !fixtureExpectedDate || !sourceReference || sourceHash.length !== 64 || proposeRule.isPending}>Propose rule and fixture</Button></div>
             </form>
           </div>
         ) : null}
 
         {canPropose || canActivate ? (
-          <div className="grid min-w-0 gap-3 sm:grid-cols-3">
+          <div className={IP_FORM_GRID}>
             <Field label="Independent fixture reviewer" htmlFor="rule-fixture-reviewer">
               <PersonPicker id="rule-fixture-reviewer" value={reviewerId} onChange={setReviewerId} />
             </Field>
@@ -2841,21 +2922,12 @@ function ProsecutionCard({
         {enabled ? (
           <form className="grid min-w-0 gap-3" onSubmit={(event) => { event.preventDefault(); preview.mutate(); }}>
             {applications.length ? (
-              <Field label="Application">
-                <select
-                  className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
-                  value={application?.id ?? ""}
-                  onChange={(event) => setApplicationId(event.target.value)}
-                >
-                  {applications.map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>
-                      {[candidate.jurisdiction, candidate.office, candidate.filing_phase]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <RecordSelect label="Application"
+                className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                value={application?.id ?? ""} onChange={event => setApplicationId(event.target.value)}
+                options={applications.map(candidate => ({ value: candidate.id,
+                  label: [candidate.jurisdiction, candidate.office, candidate.filing_phase].filter(Boolean).join(" · "),
+                }))} />
             ) : null}
             {supersedesEventId ? (
               <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
@@ -3966,12 +4038,12 @@ function Field({
   if (htmlFor) {
     return (
       <div className="flex min-w-0 flex-col gap-1">
-        <Label htmlFor={htmlFor}>{label}</Label>
+        <Label className="break-words leading-snug" htmlFor={htmlFor}>{label}</Label>
         {children}
       </div>
     );
   }
-  return <label className="flex min-w-0 flex-col gap-1"><Label>{label}</Label>{children}</label>;
+  return <label className="flex min-w-0 flex-col gap-1"><span className="break-words text-sm font-medium leading-snug text-[var(--color-ink-2)]">{label}</span>{children}</label>;
 }
 
 function Metric({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Scale }) {

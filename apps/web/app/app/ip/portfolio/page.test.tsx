@@ -57,6 +57,11 @@ const RESPONSE = {
     {
       application_id: "application-1",
       docket_id: "docket-1",
+      current_version: 1,
+      source_application_on: null,
+      source_renewal_due_on: null,
+      source_application_state: "missing",
+      source_renewal_state: "missing",
       matter_id: "matter-1",
       asset_id: "asset-1",
       asset_kind: "trademark",
@@ -190,6 +195,15 @@ describe("IpPortfolioPage", () => {
     expect(screen.getAllByText("OPP / 88 / 2026").length).toBeGreaterThan(0);
     expect(screen.getByText("Registry sync unavailable")).toBeInTheDocument();
     expect(screen.getByText("Unconfirmed deadlines")).toBeInTheDocument();
+  });
+
+  it("IP15-007 exposes application and renewal dates as default portfolio columns", async () => {
+    render(withClient(<IpPortfolioPage />));
+    await waitFor(() => expect(fetchPortfolioMock).toHaveBeenCalledTimes(1));
+
+    expect(await screen.findByRole("columnheader", { name: "Application Date" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Renewal Due Date" })).toBeInTheDocument();
+    expect(screen.getAllByText("Not set").length).toBeGreaterThanOrEqual(2);
   });
 
   it("submits exact-number search and queues a bounded background export", async () => {

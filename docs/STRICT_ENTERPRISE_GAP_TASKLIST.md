@@ -1,5 +1,15 @@
 # Strict Enterprise Gap Tasklist
 
+## October 15 Persistent Renewal And Responsive Control Gap
+
+Partially implemented. Existing versioned IP records and delivery intents do
+not prove daily recurring source-date reminders. IP15-001..022 require bounded
+persistent discovery, one unique occurrence, downtime catch-up without bursts,
+current tenant/ACL/lifecycle/source checks and truthful delivery state. The
+shared narrow-pane layouts also need actual usable-field geometry. Fresh
+PostgreSQL, full Docker and exact-serving browser evidence remain mandatory.
+See `docs/BUGFIX_IP_RENEWAL_TRACKER_2026-10-15.md`.
+
 ## October 15 Production Replay And Candidate Recovery
 
 **NO-GO.** PR537 is serving0c82fbb0 after green Docker/current-main gates. The

@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { IpWorkspaceConfiguration, IpWorkspaceReadiness } from "@/lib/api/endpoints";
+import { providerAdapterContractRecord } from "@/lib/api/schemas";
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(window.location.search),
@@ -233,6 +235,36 @@ function prosecutionEvent(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function renewalConfiguration(overrides: Partial<IpWorkspaceConfiguration> = {}): IpWorkspaceConfiguration {
+  return {
+    id: "config-1", version: 4, enabled_asset_types_json: ["trademark"],
+    jurisdictions_json: ["IN"], offices_json: ["IP India"], timezone: "Europe/London",
+    holiday_calendar_key: "reviewed-calendar", working_day_policy_json: { working_weekdays: [0, 1, 2, 3, 4] },
+    document_taxonomy_version: "ip-taxonomy-2026.1", event_catalog_version: "ip-events-v1",
+    deadline_rule_versions_json: { IN: "2026.1" }, notification_channels_json: ["in_app"],
+    critical_event_policy_json: { escalation_after_minutes: 30 },
+    renewal_reminder_cadence_days: 7, renewal_reminder_delivery_time: "14:45",
+    escalation_owner_membership_id: "membership-1", provider_keys_json: ["ipindia-registry"],
+    provider_terms_version: "2026.1", provider_terms_accepted_by_membership_id: "membership-1",
+    provider_terms_accepted_at: "2026-08-07T00:00:00Z", enabled_automations_json: [], workspace_enabled: false,
+    updated_by_membership_id: "membership-1", created_at: "2026-08-07T00:00:00Z", updated_at: "2026-08-07T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function setupReadiness(configuration: IpWorkspaceConfiguration | null = null): IpWorkspaceReadiness {
+  return {
+    timezone: configuration?.timezone ?? "Asia/Kolkata", workspace_available: false,
+    manual_docketing_available: false, features: [],
+    configuration_status: { configuration, tests: [], ready_for_manual_docketing: true,
+      enablement_blockers: [], provider_adapters: [providerAdapterContractRecord.parse({
+        provider: "ipindia-registry", display_name: "IP India registry", domain: "ip_office_registry",
+        adapter_status: "blocked_pending_provider_contract", commercial_terms_status: "not_approved",
+        attribution_label: "Synthetic registry contract, not activated", operations_path: "/api/admin/provider-operations/jobs",
+      })] },
+  };
+}
+
 function unknownTimeHearing() {
   const reminder = (
     id: string,
@@ -357,6 +389,7 @@ describe("IpDocketPage", () => {
     });
     fetchIpDeadlineWorkspaceMock.mockResolvedValue({
       docket_id: "ip-1",
+      eligible_rule_version_ids: ["rule-1"],
       rules: [{
         id: "rule-1", key: "in-tm-response", version: 1, status: "active",
         source_reference: "official:rule", rule_set_id: "set-1", rule_kind: "deadline",
@@ -577,6 +610,208 @@ describe("IpDocketPage", () => {
     ).toBeVisible();
   });
 
+  it("B2-BUG-001/002 explains absent active calendar and rule prerequisites without enabling calculation", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
+    fetchIpDeadlineWorkspaceMock.mockResolvedValue({
+      docket_id: "ip-1", rules: [], calendars: [], deadlines: [], exceptions: [],
+      eligible_rule_version_ids: [],
+      automation_state: "explicit_confirmation_only",
+    });
+    render(withClient(<IpDocketPage />));
+
+    const workspace = await screen.findByTestId("ip-deadline-workspace");
+    expect(await within(workspace).findByText("No active working calendar")).toBeInTheDocument();
+    expect(within(workspace).getByText("No eligible active deadline rule")).toBeInTheDocument();
+    expect(workspace.querySelectorAll("label label")).toHaveLength(0);
+    expect(within(workspace).getByRole("combobox", { name: "Active working calendar" })).toBeDisabled();
+    expect(within(workspace).getByRole("combobox", { name: "Active rule version" })).toBeDisabled();
+    expect(within(workspace).getByLabelText("Active working calendar")).toBeDisabled();
+    expect(within(workspace).getByLabelText("Active rule version")).toBeDisabled();
+    expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
+    expect(within(workspace).getByText(/independent approval/i)).toBeVisible();
+    expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
+  });
+
+  it("B2-BUG-001/002 distinguishes pending workspace data from an empty eligible inventory", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
+    fetchIpDeadlineWorkspaceMock.mockImplementation(() => new Promise(() => {}));
+    render(withClient(<IpDocketPage />));
+
+    const workspace = await screen.findByTestId("ip-deadline-workspace");
+    expect(within(workspace).getByLabelText("Active working calendar")).toBeDisabled();
+    expect(within(workspace).getByLabelText("Active rule version")).toBeDisabled();
+    expect(within(workspace).getByText("Loading working calendars…")).toBeInTheDocument();
+    expect(within(workspace).queryByText("No active working calendar")).not.toBeInTheDocument();
+    expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
+  });
+
+  it("B2-BUG-001/002 retries a workspace failure without presenting it as missing legal data", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
+    fetchIpDeadlineWorkspaceMock.mockRejectedValue(new Error("Bounded workspace read failed"));
+    render(withClient(<IpDocketPage />));
+
+    const workspace = await screen.findByTestId("ip-deadline-workspace");
+    await within(workspace).findByRole("button", { name: "Retry deadline workspace" });
+    expect(within(workspace).getByLabelText("Active working calendar")).toBeDisabled();
+    expect(within(workspace).getByText("Working calendars unavailable")).toBeInTheDocument();
+    expect(within(workspace).queryByText("No active working calendar")).not.toBeInTheDocument();
+    const callsBefore = fetchIpDeadlineWorkspaceMock.mock.calls.length;
+    fetchIpDeadlineWorkspaceMock.mockResolvedValue({
+      docket_id: "ip-1", rules: [], calendars: [], deadlines: [], exceptions: [],
+      eligible_rule_version_ids: [],
+      automation_state: "explicit_confirmation_only",
+    });
+    await userEvent.click(within(workspace).getByRole("button", { name: "Retry deadline workspace" }));
+    await within(workspace).findByText("No active working calendar");
+    expect(fetchIpDeadlineWorkspaceMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
+  });
+
+  it("B2-BUG-001/002 selects active deadline data and drops selections removed by a fresh response", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
+    const rule = {
+      id: "rule-1", rule_set_id: "set-1", key: "in-tm-response", version: 1,
+      status: "active", rule_kind: "deadline", jurisdiction: "IN", office: "IP India",
+    };
+    const calendar = {
+      id: "calendar-1", name: "IP India working calendar", version: 1,
+      status: "active", jurisdiction: "IN", timezone: "Asia/Kolkata",
+    };
+    const data = {
+      docket_id: "ip-1", eligible_rule_version_ids: ["rule-1", "rule-2"],
+      rules: [rule, { ...rule, id: "rule-2", rule_set_id: "set-2", key: "in-tm-alternate", version: 2 },
+        { ...rule, id: "unselected-active", rule_set_id: "set-unselected", key: "unselected-rule" },
+        { ...rule, id: "candidate-rule", status: "candidate" },
+        { ...rule, id: "fee-rule", rule_kind: "fee" }],
+      calendars: [calendar, { ...calendar, id: "calendar-2", version: 2 },
+        { ...calendar, id: "candidate-calendar", status: "candidate" }],
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+    };
+    fetchIpDeadlineWorkspaceMock.mockResolvedValue(data);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><IpDocketPage /></QueryClientProvider>);
+    const workspace = await screen.findByTestId("ip-deadline-workspace");
+    const rules = within(workspace).getByLabelText("Active rule version");
+    const calendars = within(workspace).getByLabelText("Active working calendar");
+    await waitFor(() => expect(rules).toBeEnabled());
+    expect(within(rules).getAllByRole("option").map(option => (option as HTMLOptionElement).value))
+      .toEqual(["rule-1", "rule-2"]);
+    expect(within(calendars).getAllByRole("option").map(option => (option as HTMLOptionElement).value))
+      .toEqual(["calendar-1", "calendar-2"]);
+    await userEvent.selectOptions(rules, "rule-2");
+    await userEvent.selectOptions(calendars, "calendar-2");
+    expect(rules).toHaveValue("rule-2");
+    expect(calendars).toHaveValue("calendar-2");
+    const ruleDetail = document.getElementById(rules.getAttribute("aria-describedby") ?? "");
+    const calendarDetail = document.getElementById(calendars.getAttribute("aria-describedby") ?? "");
+    expect(ruleDetail).toBeVisible();
+    expect(ruleDetail).toHaveAttribute("data-selected-option-value", "rule-2");
+    expect(ruleDetail?.textContent).toBe("in-tm-alternate · version 2 · IN · IP India · active");
+    expect(calendarDetail).toBeVisible();
+    expect(calendarDetail).toHaveAttribute("data-selected-option-value", "calendar-2");
+    expect(calendarDetail?.textContent).toBe("IP India working calendar · version 2 · IN · Asia/Kolkata · active");
+    expect((rules as HTMLSelectElement).selectedOptions[0].textContent).toBe(ruleDetail?.textContent);
+    expect((calendars as HTMLSelectElement).selectedOptions[0].textContent).toBe(calendarDetail?.textContent);
+    expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeEnabled();
+
+    await act(async () => client.setQueryData(["ip", "deadline-workspace", "ip-1"], {
+      ...data, eligible_rule_version_ids: ["rule-1"],
+    }));
+    await waitFor(() => expect(rules).toHaveValue("rule-1"));
+    expect(within(rules).queryByRole("option", { name: /in-tm-alternate/ })).not.toBeInTheDocument();
+    expect(calendars).toHaveValue("calendar-2");
+    expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
+
+    await act(async () => client.setQueryData(["ip", "deadline-workspace", "ip-1"], {
+      ...data, rules: [], calendars: [],
+    }));
+    await waitFor(() => expect(rules).toBeDisabled());
+    expect(rules).toHaveValue("");
+    expect(calendars).toHaveValue("");
+    expect(document.getElementById("ip-active-rule-detail")).toBeNull();
+    expect(document.getElementById("ip-active-calendar-detail")).toBeNull();
+    expect(rules).toHaveAttribute("aria-describedby", "ip-deadline-prerequisites");
+    expect(calendars).toHaveAttribute("aria-describedby", "ip-deadline-prerequisites");
+    expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
+    expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
+  });
+
+  it("B2-BUG-001/002 keeps complete long rule and calendar captions linked to exact selected IDs", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
+    const rule = {
+      id: "rule-one", rule_set_id: "set-one", key: `rule-${"longkey".repeat(30)}`,
+      version: 7, status: "active", rule_kind: "deadline", jurisdiction: "IN",
+      office: "Intellectual Property Office",
+    };
+    const calendar = {
+      id: "calendar-one", name: `Working calendar ${"longname".repeat(30)}`,
+      version: 8, status: "active", jurisdiction: "IN", office: "Calendar Office",
+      timezone: "Asia/Kolkata",
+    };
+    const data = {
+      docket_id: "ip-1", eligible_rule_version_ids: ["rule-one", "rule-two"],
+      rules: [rule, { ...rule, id: "rule-two", rule_set_id: "set-two" }],
+      calendars: [calendar, { ...calendar, id: "calendar-two" }],
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+    };
+    fetchIpDeadlineWorkspaceMock.mockResolvedValue(data);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><IpDocketPage /></QueryClientProvider>);
+    const workspace = await screen.findByTestId("ip-deadline-workspace");
+    const rules = within(workspace).getByLabelText("Active rule version") as HTMLSelectElement;
+    const calendars = within(workspace).getByLabelText("Active working calendar") as HTMLSelectElement;
+    await waitFor(() => expect(rules).toBeEnabled());
+
+    const assertDetail = (select: HTMLSelectElement, expectedId: string, caption: string) => {
+      expect(select).toHaveValue(expectedId);
+      const detail = document.getElementById(select.getAttribute("aria-describedby") ?? "");
+      expect(detail?.tagName).toBe("P");
+      expect(detail).toBeVisible();
+      expect(detail).toHaveAttribute("data-selected-option-value", expectedId);
+      expect(detail?.textContent).toBe(caption);
+      expect(select.selectedOptions[0].textContent).toBe(caption);
+      expect(detail).toHaveClass("min-w-0", "whitespace-normal", "break-all");
+      expect(detail?.className).not.toMatch(/truncate|line-clamp|overflow-hidden|sr-only/);
+    };
+    const ruleCaption = `${rule.key} · version 7 · IN · Intellectual Property Office · active`;
+    const calendarCaption = `${calendar.name} · version 8 · IN · Calendar Office · Asia/Kolkata · active`;
+    assertDetail(rules, "rule-one", ruleCaption);
+    assertDetail(calendars, "calendar-one", calendarCaption);
+    await userEvent.selectOptions(rules, "rule-two");
+    await userEvent.selectOptions(calendars, "calendar-two");
+    assertDetail(rules, "rule-two", ruleCaption);
+    assertDetail(calendars, "calendar-two", calendarCaption);
+
+    await act(async () => client.setQueryData(["ip", "deadline-workspace", "ip-1"], {
+      ...data, rules: [rule], calendars: [calendar],
+    }));
+    await waitFor(() => expect(rules).toHaveValue("rule-one"));
+    assertDetail(rules, "rule-one", ruleCaption);
+    assertDetail(calendars, "calendar-one", calendarCaption);
+    expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
+  });
+
+  it.each([{ label: "empty", ids: [] }, { label: "absent", ids: undefined }])(
+    "B2-BUG-002 rejects active rules when server-owned eligibility is $label", async ({ ids }) => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
+    fetchIpDeadlineWorkspaceMock.mockResolvedValue({
+      docket_id: "ip-1", eligible_rule_version_ids: ids,
+      rules: [{ id: "unselected-active", key: "unselected-rule", version: 1,
+        status: "active", rule_kind: "deadline", jurisdiction: "IN", office: "IP India" }],
+      calendars: [{ id: "calendar-1", name: "Approved calendar", version: 1,
+        status: "active", timezone: "Asia/Kolkata" }],
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+    });
+    render(withClient(<IpDocketPage />));
+    const workspace = await screen.findByTestId("ip-deadline-workspace");
+    await waitFor(() => expect(within(workspace).getByLabelText("Active working calendar")).toBeEnabled());
+    const rules = within(workspace).getByLabelText("Active rule version");
+    expect(rules).toBeDisabled();
+    expect(within(rules).queryByRole("option", { name: /unselected-rule/ })).not.toBeInTheDocument();
+    expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
+    expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
+  });
+
   it("creates a pre-filing application through one canonical command", async () => {
     createManualTrademarkApplicationMock.mockResolvedValue({
       docket: { id: "ip-created" },
@@ -621,14 +856,21 @@ describe("IpDocketPage", () => {
 
   it("confirms an unpublished hearing time and shows the reminder replacement chain", async () => {
     const hearing = unknownTimeHearing();
-    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
-    fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [hearing] });
-    updateIpSharedHearingMock.mockResolvedValue({
+    const rescheduledDate = "2026-12-16";
+    const exactRescheduledDate = "2026-12-17";
+    const confirmed = {
       ...hearing,
+      hearing_on: rescheduledDate,
       time_status: "exact",
       hearing_time: "14:30:00",
       time_confirmation_required: false,
-    });
+    };
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [hearing] });
+    updateIpSharedHearingMock
+      .mockResolvedValueOnce({ ...hearing, hearing_on: rescheduledDate })
+      .mockResolvedValueOnce(confirmed)
+      .mockResolvedValueOnce({ ...confirmed, hearing_on: exactRescheduledDate });
 
     render(withClient(<IpDocketPage />));
 
@@ -640,12 +882,33 @@ describe("IpDocketPage", () => {
     expect(await within(workflow).findByText(/Time confirmation pending/)).toBeVisible();
     expect(within(workflow).getByText("Superseded by generation 2")).toBeVisible();
     expect(within(workflow).getByText("Current schedule")).toBeVisible();
+    const rescheduleDate = within(workflow).getByLabelText("Reschedule Opposition hearing");
+    const publishedTime = within(workflow).getByLabelText("Published time for Opposition hearing");
+    for (const input of [rescheduleDate, publishedTime]) {
+      expect(input).toHaveClass("w-full", "min-w-0", "max-w-full", "sm:w-52", "sm:shrink-0");
+      expect(input).not.toHaveClass("sm:w-auto");
+    }
+    expect(rescheduleDate).toHaveAttribute("type", "date");
+    expect(rescheduleDate).toHaveValue(hearing.hearing_on);
+    expect(publishedTime).toHaveAttribute("type", "time");
+    expect(publishedTime).toHaveValue("");
 
     const confirm = within(workflow).getByRole("button", {
       name: "Confirm published time",
     });
     expect(confirm).toBeDisabled();
-    fireEvent.change(within(workflow).getByLabelText("Published time for Opposition hearing"), {
+    fireEvent.change(rescheduleDate, { target: { value: rescheduledDate } });
+    expect(rescheduleDate).toHaveValue(rescheduledDate);
+    fireEvent.click(within(workflow).getByRole("button", { name: "Reschedule" }));
+    await waitFor(() => expect(updateIpSharedHearingMock).toHaveBeenNthCalledWith(1, {
+      docketId: "ip-1", hearingId: "hearing-1", hearingOn: rescheduledDate,
+    }));
+    const savedHearing = within(workflow).getByTestId("ip-hearing-hearing-1");
+    await waitFor(() => expect(savedHearing).toHaveTextContent(`${rescheduledDate} · Time not published · Asia/Kolkata`));
+    expect(within(workflow).getByText(/Time confirmation pending/)).toBeVisible();
+    expect(confirm).toBeDisabled();
+    expect(publishedTime).toHaveValue("");
+    fireEvent.change(publishedTime, {
       target: { value: "14:30" },
     });
     expect(confirm).toBeEnabled();
@@ -663,6 +926,16 @@ describe("IpDocketPage", () => {
     await waitFor(() =>
       expect(within(workflow).queryByText(/Time confirmation pending/)).not.toBeInTheDocument(),
     );
+    expect(savedHearing).toHaveTextContent(`${rescheduledDate} · 14:30:00 · Asia/Kolkata`);
+    expect(within(workflow).queryByLabelText("Published time for Opposition hearing")).toBeNull();
+    fireEvent.change(rescheduleDate, { target: { value: exactRescheduledDate } });
+    expect(rescheduleDate).toHaveValue(exactRescheduledDate);
+    fireEvent.click(within(workflow).getByRole("button", { name: "Reschedule" }));
+    await waitFor(() => expect(updateIpSharedHearingMock).toHaveBeenNthCalledWith(3, {
+      docketId: "ip-1", hearingId: "hearing-1", hearingOn: exactRescheduledDate,
+    }));
+    await waitFor(() => expect(savedHearing).toHaveTextContent(`${exactRescheduledDate} · 14:30:00 · Asia/Kolkata`));
+    expect(updateIpSharedHearingMock).toHaveBeenCalledTimes(3);
     expect(fetchIpSharedHearingsMock).toHaveBeenCalledTimes(1);
   });
 
@@ -936,6 +1209,8 @@ describe("IpDocketPage", () => {
           deadline_rule_versions_json: { IN: "2026.1" },
           notification_channels_json: ["in_app"],
           critical_event_policy_json: { escalation_after_minutes: 30 },
+          renewal_reminder_cadence_days: 1,
+          renewal_reminder_delivery_time: "09:00",
           escalation_owner_membership_id: "membership-1",
           provider_keys_json: ["ipindia-registry"],
           provider_terms_version: "2026.1",
@@ -1018,6 +1293,249 @@ describe("IpDocketPage", () => {
       screen.getByRole("button", { name: "Enable selected tested automations" }),
     ).toBeVisible();
     expect(fetchIpDocketsMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves configured renewal policy and provider consent during an unrelated configuration save", async () => {
+    const readiness = setupReadiness(renewalConfiguration());
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(readiness);
+    saveIpWorkspaceConfigurationMock.mockResolvedValue(readiness.configuration_status);
+    render(withClient(<IpDocketPage />));
+    const card = await screen.findByTestId("ip-workspace-configuration");
+    expect(within(card).getByLabelText("Renewal reminder cadence (days)")).toHaveValue(7);
+    expect(within(card).getByLabelText("Renewal reminder local time")).toHaveValue("14:45");
+    expect(within(card).getByLabelText("Renewal reminder local time")).toHaveAccessibleName("Renewal reminder local time");
+    expect(within(card).getByLabelText("Renewal reminder local time")).toHaveAccessibleDescription("Europe/London");
+    expect(within(card).getByLabelText("IANA timezone")).toHaveValue("Europe/London");
+    const consent = within(card).getByLabelText(/Accept provider attribution and cost terms/);
+    expect(consent).toBeChecked();
+    fireEvent.change(within(card).getByLabelText("Office"), { target: { value: "Reviewed office" } });
+    await userEvent.click(within(card).getByRole("button", { name: "Save configuration" }));
+    await waitFor(() => expect(saveIpWorkspaceConfigurationMock).toHaveBeenCalledExactlyOnceWith({
+      currentConfiguration: readiness.configuration_status?.configuration ?? undefined,
+      expectedVersion: 4, jurisdiction: "IN", office: "Reviewed office", timezone: "Europe/London",
+      holidayCalendarKey: "reviewed-calendar", escalationOwnerMembershipId: "membership-1",
+      providerKey: "ipindia-registry", acceptProviderTerms: true,
+      renewalReminderCadenceDays: 7, renewalReminderDeliveryTime: "14:45",
+    }));
+    expect(consent).toBeChecked();
+    expect(enableIpWorkspaceMock).not.toHaveBeenCalled();
+    expect(runIpWorkspaceTestMock).not.toHaveBeenCalled();
+  });
+
+  it("opens active workspace configuration and requires explicit manual re-enable after saving policy", async () => {
+    const configuration = renewalConfiguration({ workspace_enabled: true });
+    let readiness = { ...setupReadiness(configuration), workspace_available: true, manual_docketing_available: true };
+    fetchIpWorkspaceReadinessMock.mockImplementation(async () => readiness);
+    saveIpWorkspaceConfigurationMock.mockImplementation(async () => {
+      readiness = setupReadiness(renewalConfiguration({ version: 5,
+        renewal_reminder_cadence_days: 2, renewal_reminder_delivery_time: "10:15" }));
+      return readiness.configuration_status;
+    });
+    enableIpWorkspaceMock.mockImplementation(async () => {
+      readiness = { ...setupReadiness(renewalConfiguration({ version: 5, workspace_enabled: true,
+        renewal_reminder_cadence_days: 2, renewal_reminder_delivery_time: "10:15" })),
+        workspace_available: true, manual_docketing_available: true };
+      return readiness.configuration_status;
+    });
+    render(withClient(<IpDocketPage />));
+    const action = await screen.findByRole("button", { name: "Workspace configuration" });
+    expect(action).toHaveAttribute("title", "Workspace configuration");
+    expect(action).toHaveAttribute("aria-expanded", "false");
+    expect(action).toHaveAttribute("aria-controls", "ip-workspace-configuration-panel");
+    expect(screen.queryByTestId("ip-workspace-configuration")).not.toBeInTheDocument();
+    await userEvent.click(action);
+    const region = await screen.findByRole("region", { name: "Workspace configuration" });
+    expect(region).toHaveAttribute("data-testid", "ip-workspace-configuration-panel");
+    expect(action).toHaveAttribute("aria-expanded", "true");
+    fireEvent.change(within(region).getByLabelText("Renewal reminder cadence (days)"), { target: { value: "2" } });
+    fireEvent.change(within(region).getByLabelText("Renewal reminder local time"), { target: { value: "10:15" } });
+    await userEvent.click(within(region).getByRole("button", { name: "Save configuration" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Workspace configuration" })).not.toBeInTheDocument());
+    expect(saveIpWorkspaceConfigurationMock).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      currentConfiguration: configuration, expectedVersion: 4, renewalReminderCadenceDays: 2, renewalReminderDeliveryTime: "10:15",
+    }));
+    expect(enableIpWorkspaceMock).not.toHaveBeenCalled();
+    const blockedCard = await screen.findByTestId("ip-workspace-configuration");
+    await userEvent.click(within(blockedCard).getByRole("button", { name: "Enable manual workspace" }));
+    await screen.findByRole("heading", { name: "Trademark docket" });
+    expect(enableIpWorkspaceMock).toHaveBeenCalledExactlyOnceWith({ version: 5, enabledAutomations: [] });
+    const restored = await screen.findByRole("region", { name: "Workspace configuration" });
+    expect(within(restored).getByLabelText("Renewal reminder cadence (days)")).toHaveValue(2);
+    expect(within(restored).getByLabelText("Renewal reminder local time")).toHaveValue("10:15");
+    await userEvent.click(screen.getByRole("button", { name: "Workspace configuration" }));
+    expect(screen.queryByRole("region", { name: "Workspace configuration" })).not.toBeInTheDocument();
+  });
+
+  it("does not expose active workspace configuration without its existing configuration capability", async () => {
+    useCapabilityMock.mockImplementation((capability: string) => capability !== "ip:taxonomy_admin");
+    fetchIpWorkspaceReadinessMock.mockResolvedValue({ ...setupReadiness(renewalConfiguration({ workspace_enabled: true })),
+      workspace_available: true, manual_docketing_available: true });
+    render(withClient(<IpDocketPage />));
+    await screen.findByRole("heading", { name: "Trademark docket" });
+    expect(screen.queryByRole("button", { name: "Workspace configuration" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Workspace configuration" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ip-workspace-configuration")).not.toBeInTheDocument();
+  });
+
+  it.each([1, 31])("saves the explicit renewal cadence boundary %i with local time and no new provider consent", async (cadence) => {
+    const readiness = setupReadiness();
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(readiness);
+    saveIpWorkspaceConfigurationMock.mockResolvedValue(readiness.configuration_status);
+    render(withClient(<IpDocketPage />));
+    const card = await screen.findByTestId("ip-workspace-configuration");
+    const days = within(card).getByLabelText("Renewal reminder cadence (days)");
+    const time = within(card).getByLabelText("Renewal reminder local time");
+    expect(days).toHaveValue(1);
+    expect(time).toHaveValue("09:00");
+    expect(days).toHaveAttribute("min", "1");
+    expect(days).toHaveAttribute("max", "31");
+    expect(days).toHaveAttribute("step", "1");
+    const calendar = within(card).getByLabelText("Holiday calendar");
+    await userEvent.clear(calendar);
+    await userEvent.type(calendar, "IN-TEST");
+    expect(calendar).toHaveValue("IN-TEST");
+    fireEvent.change(days, { target: { value: String(cadence) } });
+    fireEvent.change(time, { target: { value: "23:59" } });
+    await userEvent.click(within(card).getByRole("button", { name: "Save configuration" }));
+    await waitFor(() => expect(saveIpWorkspaceConfigurationMock).toHaveBeenCalledExactlyOnceWith({
+      currentConfiguration: undefined,
+      expectedVersion: null, jurisdiction: "IN", office: "IP India", timezone: "Asia/Kolkata",
+      holidayCalendarKey: "IN-TEST", escalationOwnerMembershipId: "membership-1",
+      providerKey: "", acceptProviderTerms: false,
+      renewalReminderCadenceDays: cadence, renewalReminderDeliveryTime: "23:59",
+    }));
+  });
+
+  it.each([
+    { name: "missing cadence", cadence: "", time: "09:00" },
+    { name: "zero cadence", cadence: "0", time: "09:00" },
+    { name: "oversized cadence", cadence: "32", time: "09:00" },
+    { name: "fractional cadence", cadence: "1.5", time: "09:00" },
+    { name: "missing time", cadence: "1", time: "" },
+    { name: "invalid time", cadence: "1", time: "24:00" },
+  ])("does not save a renewal policy with $name", async ({ cadence, time }) => {
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(setupReadiness());
+    render(withClient(<IpDocketPage />));
+    const card = await screen.findByTestId("ip-workspace-configuration");
+    fireEvent.change(within(card).getByLabelText("Renewal reminder cadence (days)"), { target: { value: cadence } });
+    fireEvent.change(within(card).getByLabelText("Renewal reminder local time"), { target: { value: time } });
+    expect(within(card).getByRole("button", { name: "Save configuration" })).toBeDisabled();
+    expect(saveIpWorkspaceConfigurationMock).not.toHaveBeenCalled();
+  });
+
+  it("hydrates a new configuration version without resetting current-version renewal edits or other fields", async () => {
+    const configuration = renewalConfiguration();
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(setupReadiness(configuration));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><IpDocketPage /></QueryClientProvider>);
+    const card = await screen.findByTestId("ip-workspace-configuration");
+    const days = within(card).getByLabelText("Renewal reminder cadence (days)");
+    const time = within(card).getByLabelText("Renewal reminder local time");
+    fireEvent.change(days, { target: { value: "3" } });
+    fireEvent.change(time, { target: { value: "15:30" } });
+    fireEvent.change(within(card).getByLabelText("Office"), { target: { value: "Reviewed office" } });
+    await act(async () => client.setQueryData(["ip", "readiness"], setupReadiness({ ...configuration })));
+    expect(days).toHaveValue(3);
+    expect(time).toHaveValue("15:30");
+    const refreshed = setupReadiness(renewalConfiguration({ version: 5,
+      renewal_reminder_cadence_days: 5, renewal_reminder_delivery_time: "16:00" }));
+    await act(async () => client.setQueryData(["ip", "readiness"], refreshed));
+    await waitFor(() => expect(days).toHaveValue(5));
+    expect(time).toHaveValue("16:00");
+    expect(within(card).getByLabelText("Office")).toHaveValue("Reviewed office");
+    expect(within(card).getByLabelText(/Accept provider attribution and cost terms/)).toBeChecked();
+  });
+
+  it("does not silently default an existing configuration whose renewal policy is absent", async () => {
+    const configuration: Partial<IpWorkspaceConfiguration> = renewalConfiguration();
+    delete configuration.renewal_reminder_cadence_days;
+    delete configuration.renewal_reminder_delivery_time;
+    fetchIpWorkspaceReadinessMock.mockResolvedValue({ ...setupReadiness(),
+      configuration_status: { ...setupReadiness().configuration_status, configuration } });
+    render(withClient(<IpDocketPage />));
+    const card = await screen.findByTestId("ip-workspace-configuration");
+    expect(within(card).getByLabelText("Renewal reminder cadence (days)")).toHaveValue(null);
+    expect(within(card).getByLabelText("Renewal reminder local time")).toHaveValue("");
+    expect(within(card).getByRole("button", { name: "Save configuration" })).toBeDisabled();
+    expect(saveIpWorkspaceConfigurationMock).not.toHaveBeenCalled();
+  });
+
+  it("passes the complete nondefault current configuration when editing only renewal cadence", async () => {
+    const configuration = renewalConfiguration({ enabled_asset_types_json: ["trademark", "patent"],
+      jurisdictions_json: ["GB", "IN"], offices_json: ["UK IPO", "IP India"],
+      working_day_policy_json: { working_weekdays: [0, 2, 4], region: "reviewed" },
+      document_taxonomy_version: "reviewed-taxonomy", event_catalog_version: "reviewed-events",
+      deadline_rule_versions_json: { GB: "reviewed-gb", IN: "reviewed-in" },
+      notification_channels_json: ["email", "in_app"], critical_event_policy_json: { escalation_after_minutes: 75 },
+      provider_keys_json: ["ipindia-registry", "reviewed-secondary"], provider_terms_version: "reviewed-terms" });
+    const before = structuredClone(configuration);
+    const readiness = setupReadiness(configuration);
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(readiness);
+    saveIpWorkspaceConfigurationMock.mockResolvedValue(readiness.configuration_status);
+    render(withClient(<IpDocketPage />));
+    const card = await screen.findByTestId("ip-workspace-configuration");
+    expect(within(card).getByLabelText("Enabled asset type")).toHaveValue("Trademark, Patent");
+    expect(within(card).queryByText(/Monday–Friday working policy/)).not.toBeInTheDocument();
+    expect(within(card).getByLabelText(/Accept provider attribution and cost terms version reviewed-terms/)).toBeChecked();
+    fireEvent.change(within(card).getByLabelText("Renewal reminder cadence (days)"), { target: { value: "2" } });
+    await userEvent.click(within(card).getByRole("button", { name: "Save configuration" }));
+    await waitFor(() => expect(saveIpWorkspaceConfigurationMock).toHaveBeenCalledExactlyOnceWith({
+      currentConfiguration: configuration, expectedVersion: 4, jurisdiction: "GB", office: "UK IPO",
+      timezone: "Europe/London", holidayCalendarKey: "reviewed-calendar", escalationOwnerMembershipId: "membership-1",
+      providerKey: "ipindia-registry", acceptProviderTerms: true,
+      renewalReminderCadenceDays: 2, renewalReminderDeliveryTime: "14:45",
+    }));
+    expect(configuration).toEqual(before);
+    expect(enableIpWorkspaceMock).not.toHaveBeenCalled();
+    expect(runIpWorkspaceTestMock).not.toHaveBeenCalled();
+  });
+
+  it("hydrates untouched configuration fields and consent when current configuration arrives asynchronously", async () => {
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(setupReadiness());
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><IpDocketPage /></QueryClientProvider>);
+    const card = await screen.findByTestId("ip-workspace-configuration");
+    expect(within(card).getByLabelText("Office")).toHaveValue("IP India");
+    const configuration = renewalConfiguration({ jurisdictions_json: ["GB", "IN"], offices_json: ["UK IPO", "IP India"] });
+    await act(async () => client.setQueryData(["ip", "readiness"], setupReadiness(configuration)));
+    await waitFor(() => expect(within(card).getByLabelText("Jurisdiction")).toHaveValue("GB"));
+    expect(within(card).getByLabelText("Office")).toHaveValue("UK IPO");
+    expect(within(card).getByLabelText("IANA timezone")).toHaveValue("Europe/London");
+    expect(within(card).getByLabelText("Holiday calendar")).toHaveValue("reviewed-calendar");
+    expect(within(card).getByLabelText("Permitted registry provider")).toHaveValue("ipindia-registry");
+    expect(within(card).getByLabelText(/Accept provider attribution and cost terms/)).toBeChecked();
+    expect(within(card).getByLabelText("Renewal reminder cadence (days)")).toHaveValue(7);
+    expect(within(card).getByLabelText("Renewal reminder local time")).toHaveValue("14:45");
+  });
+
+  it("requires explicit consent after provider identity changes, even when returning to the previously accepted provider", async () => {
+    const readiness = setupReadiness(renewalConfiguration());
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(readiness);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><IpDocketPage /></QueryClientProvider>);
+    const card = await screen.findByTestId("ip-workspace-configuration");
+    const provider = within(card).getByLabelText("Permitted registry provider");
+    const consent = within(card).getByLabelText(/Accept provider attribution and cost terms/);
+    expect(provider).toHaveValue("ipindia-registry");
+    expect(consent).toBeChecked();
+    await userEvent.selectOptions(provider, "");
+    expect(consent).not.toBeChecked();
+    expect(consent).toBeDisabled();
+    await userEvent.selectOptions(provider, "ipindia-registry");
+    await act(async () => client.setQueryData(["ip", "readiness"], { ...readiness }));
+    expect(consent).not.toBeChecked();
+    expect(consent).toBeEnabled();
+    expect(within(card).getByRole("button", { name: "Save configuration" })).toBeDisabled();
+    expect(saveIpWorkspaceConfigurationMock).not.toHaveBeenCalled();
+  });
+
+  it("does not infer acceptance for an existing provider without a recorded terms version", async () => {
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(setupReadiness(renewalConfiguration({ provider_terms_version: null })));
+    render(withClient(<IpDocketPage />));
+    const card = await screen.findByTestId("ip-workspace-configuration");
+    expect(within(card).getByLabelText(/Accept provider attribution and cost terms version not configured/)).not.toBeChecked();
+    expect(within(card).getByRole("button", { name: "Save configuration" })).toBeDisabled();
+    expect(saveIpWorkspaceConfigurationMock).not.toHaveBeenCalled();
   });
 
   it("renders every grouped operational action at a narrow viewport", async () => {
@@ -1293,6 +1811,7 @@ describe("IpDocketPage", () => {
     });
     fetchIpDeadlineWorkspaceMock.mockResolvedValue({
       docket_id: "ip-1",
+      eligible_rule_version_ids: ["rule-1", "rule-2"],
       rules: [
         { id: "rule-1", key: "in-tm-response", version: 1, status: "active", source_reference: "https://official.example/ip-india/tm-rules" },
         { id: "rule-2", key: "in-tm-alternate", version: 2, status: "active", source_reference: "https://official.example/ip-india/tm-rules-alternate" },
@@ -1409,6 +1928,29 @@ describe("IpDocketPage", () => {
     expect(apply).toBeEnabled();
     fireEvent.click(apply);
     await waitFor(() => expect(transitionIpDocketLifecycleMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps a prosecution application's complete caption outside its accessible field name", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    const office = `Registry ${"long-source-".repeat(15)}`;
+    fetchIpCoreRecordsMock.mockResolvedValue({ assets: [], proceedings: [], identifiers: [], applications: [
+      { id: "application-1", version: 1, jurisdiction: "IN", office, filing_phase: "response_filed" },
+      { id: "application-2", version: 1, jurisdiction: "IN", office, filing_phase: "response_filed" },
+    ] });
+    render(withClient(<IpDocketPage />));
+    await userEvent.click(await screen.findByRole("tab", { name: "Proceedings" }));
+    const prosecution = await screen.findByTestId("ip-prosecution-workspace");
+    const select = await within(prosecution).findByRole<HTMLSelectElement>("combobox", { name: "Application" });
+    expect(select).toHaveValue("application-1");
+    expect(select).toHaveAccessibleName("Application");
+    expect(select).toHaveAccessibleDescription(`IN · ${office} · response_filed`);
+    fireEvent.change(select, { target: { value: "application-2" } });
+    expect(select.selectedOptions[0].value).toBe("application-2");
+    const detail = document.getElementById(select.getAttribute("aria-describedby")!);
+    expect(detail).toHaveAttribute("data-selected-option-value", "application-2");
+    expect(detail?.textContent).toBe(select.selectedOptions[0].textContent);
+    expect(detail?.closest("label")).toBeNull();
+    expect(appendIpDocketEventMock).not.toHaveBeenCalled();
   });
 
   it("requires backdated acknowledgement before committing a correction", async () => {

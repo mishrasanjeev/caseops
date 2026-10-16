@@ -2508,3 +2508,137 @@ requirements when using the fallback.
   exact option into component tests. Vitest transpilation and E2E typecheck do
   not typecheck the web test tree: run the full web typecheck and fresh build
   as well before publishing a frontend test amendment.
+- A recurring reminder is not verified by one queued or delivered alert.
+  Advance the clock through consecutive dates, prove unique persisted daily
+  occurrences and same-occurrence replay, then test downtime catch-up without
+  historical bursts and rescheduling against current source/lifecycle access.
+  Reconcile inconsistent specification examples with the stated calendar rule;
+  31 March 2028 minus one calendar month is 29 February 2028.
+- An active governance record is not necessarily an eligible calculation input.
+  Keep the review history visible, but derive selectable rule identities from
+  the same current company-selection policy that admits the server mutation.
+  Prove an active but unselected rule is absent from the picker and rejected
+  by the API, including after a previously valid policy is removed.
+- Adding a policy control to an existing configuration form must not overwrite
+  unrelated saved settings with initial defaults. Hydrate asynchronous current
+  values, preserve hidden fields and unchanged multi-value selections, retain
+  optimistic versions and readiness resets, and never carry provider consent
+  to a different identity. Regress a cadence-only edit on a nondefault,
+  multi-domain workspace through the actual serialized HTTP request.
+- A setting is not usable merely because it exists on a setup-only screen.
+  Prove authorized active users can reach, save and reload it, while denied
+  roles cannot reach the action. Preserve readiness resets and normal manual
+  re-enablement. An unrelated policy save must retain recorded provider consent
+  rather than submit a fresh acceptance that rewrites its actor or timestamp.
+- A valid import-row ID and materialization audit do not authenticate mutable
+  snapshot values. Generic version writes must preserve reserved imported
+  snapshots as well as manual corrections, rejecting explicit alterations or
+  rebinding. Test the bypass after a genuine import. Fixture date changes must
+  use the same reasoned, versioned correction API, then reconcile intermediate
+  versions, canceled intents and exactly one current reminder.
+- Recurrence across quiet hours must use the effective local delivery date,
+  not only the occurrence's creation date. Prove three consecutive overnight
+  deferrals, receipt-day deduplication and preference removal. Keep the next
+  slot, due-date, source, access and lifecycle bounds; a first-night pass can
+  still hide a second-night suppression bug.
+- Model-generated foreign-key indexes do not prove migration coverage.
+  Independently migrate fresh SQLite and PostgreSQL databases and require the
+  complete leading-column coverage and declared-index health report. Before
+  destructive downgrade checks, exclude concurrent writers under a bounded
+  lock timeout and prove a committed writer's retained evidence survives.
+- A reserved-source protection change requires a complete fixture-consumer
+  audit, including direct generic writers and native adapters, not only shared
+  helper imports. Preserve original import values, actual intermediate versions,
+  actor audits and legitimate same-day delivery suppression in the replacement
+  fixtures; do not weaken the product fence to restore old positive tests.
+- Each serialized production partition must receive its selected specs'
+  required fixture keys in its own resolved workflow step. Step-local credentials
+  are not inherited from a sibling. Regress the actual selected consumers,
+  reject missing or whitespace-only keys before authentication with names-only
+  diagnostics, and preserve exact tenant scope, budgets and no-paid markers.
+- A persisted batch count is not proof that the browser acknowledged it.
+  Recover the bounded tenant-scoped import ledger before diagnosing a missing
+  continuation. Preserve original failed jobs, distinguish commit from transport
+  acknowledgement, and obtain the exact failed assertion and bounded route
+  timing before changing code. Do not infer a timeout from elapsed time alone,
+  raise the deadline, or automatically retry an uncertain mutation.
+  A batch journey must await the actual continuation acknowledgements before
+  starting its final visibility assertion, within the unchanged case, request
+  and visibility budgets. Reject transport, status, parse and progress errors;
+  never fabricate a remaining acknowledgement or accept staged work as complete.
+- A migration-only index amendment changes the governance map's migration
+  inventory even when model metadata is unchanged. Regenerate and review that
+  inventory, render its projections and run the complete actual CI preflight
+  sequence, not only Ruff or column-map validation, before freezing the source.
+- Keep synthetic calendar labels plainly non-secret. A reviewed origin finding
+  can recur in a virtual merge's history patch even after tree scanning passes.
+  Do not add volatile merge-SHA exemptions or weaken scanner rules; preserve
+  exact historical reviews and require fresh tree plus complete changed-history
+  scans after correcting the current fixture text.
+- An empty option inventory is valid only after the actual named control exists
+  exactly once and is visible. A missing locator also returns an empty array.
+  Use the browser's accessible combobox name, retain both positive selection
+  and negative eligibility checks, and reject nested label markup. A row's
+  `has` locator must be relative to that row, not contain its outer region.
+  Retain the failed browser evidence and replay the complete dated journeys.
+- A second API context does not inherit another actor's authentication headers.
+  Cookie-authenticated mutations must supply their CSRF pair; SDK fixtures may
+  instead use that actor's own validated Bearer token. Assert current company,
+  membership and effective capability before independent approval, isolate and
+  dispose login cookie jars, and regress foreign identities and cleanup failures.
+  Never disable CSRF or weaken reviewer independence to repair a fixture.
+- Function-local imports still form dependency cycles. Keep date writers and
+  their legacy route adapters in one dependency direction while preserving
+  public URLs, DTOs, source guards, locks and audits. Regress both clean import
+  orders and mutation-injected back edges; require fresh code-scanning closure,
+  not a delayed import, suppression or a disguised dynamic import.
+- A browser response handle is not durable evidence across navigation. For
+  persisted reload acceptance, drain the mutation's canonical rendered result,
+  require the real reload, then compare a mandatory same-actor API read with
+  the reloaded visible record and native options. Keep POST acknowledgements
+  intact. Do not turn a lost CDP response body into an application retry,
+  timeout increase, fallback success or a claim that the browser GET was read.
+- Native select scroll extents vary across Chromium versions and platforms;
+  neither a green Windows run nor equal client/scroll widths proves the full
+  selected identity is readable. Show its complete current caption in a normal
+  wrapping accessible description bound to the actual selected source ID.
+  Preserve every useful-width and boundary check; allow native overflow only
+  with that verified presentation, never a blanket select exemption or hidden
+  overflow. Regress stale IDs with identical captions, wrong/hidden/clipped
+  details, clear/change/unavailable selections and adjacent breakpoint widths.
+  Require known source descriptions even when native scroll metrics report no
+  overflow, and retain sanitized numeric evidence instead of private labels.
+- Stopping a known unreleasable candidate does not make its remaining tests
+  pass. Retain completed, skipped, interrupted and unstarted identities and
+  release all owned writers before editing. An operator/browser setup failure
+  with an unstarted app body is not a product reproduction. The corrected
+  candidate still needs its complete fresh release gates and serving replay.
+- Expanding a dated browser journey also changes its release-owned file and
+  partition inventory. Reconcile actual canonical Playwright collection with
+  the evidence producer and its consumer tests before freezing the candidate.
+  Keep a standard Node-capable CI regression that collects the real production
+  config without executing app setup. Do not weaken exact counts, substitute
+  an equal-sized wrong file or silently skip collection when a tool is absent.
+- A record's create response is not its state after activation. Assert the
+  returned current transition state, not a retained draft snapshot, and name
+  failed fact fields without logging private values. Audit responsive actions
+  after a child record exists and after reload: a toolbar's `sm:w-auto` can
+  shrink its date/time controls at the breakpoint. Preserve bounded widths and
+  prove a real reschedule acknowledgement, visible date and persisted reload
+  without losing exact time or timezone. Do not lower the layout guard to make
+  a newly discovered narrow control pass.
+- Native record-choice readability must not depend on OS scroll metrics. The
+  pending-application caption clipped in Linux CI while Windows Docker passed.
+  Require an always-visible, current-ID-bound verbatim caption for application
+  and proceeding choices, including truthful pending identifiers, and audit the
+  adjacent record pickers. Keep captions outside labels so accessible names
+  remain stable. Regress actual native clear/unmatched selection, ref/events,
+  duplicate captions, disabled options and retained description tokens; never
+  silently substitute another record. Name geometry stages with static keys,
+  not private values, so a later failure identifies its actual work area.
+- A dated browser setup change also changes every test that executes that
+  helper. Supply canonical create-response identities in those fixtures,
+  assert the returned IDs in local and production branches, and reject missing
+  or malformed identities before authentication or role mutation. Reconcile
+  every full-suite failure before blaming the tested authentication boundary;
+  a fixture that fails earlier has not exercised that boundary at all.

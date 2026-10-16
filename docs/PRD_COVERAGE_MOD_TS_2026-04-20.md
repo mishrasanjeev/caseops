@@ -1,5 +1,13 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 15 IP Controls And Renewal Tracker
+
+Existing J08/M08 and UJ-02/04/26, IPLF-023/030/032/037 retain ownership.
+IP15-001..022 add explicit date columns/editing, recurring source-date reminders,
+truthful tracker state and container-width form acceptance. This is a partial
+implementation, not a new module or completed release. The complete inventory
+and source discrepancy are in `docs/BUGFIX_IP_RENEWAL_TRACKER_2026-10-15.md`.
+
 ## October 15 Production Replay And Candidate Recovery
 
 J04/M03, J07/M06, UJ-18 and ARCH-OPS-23/QG-SEC-004 remain production-incomplete.

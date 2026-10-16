@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { listCompanyUsersMock } = vi.hoisted(() => ({ listCompanyUsersMock: vi.fn() }));
@@ -30,6 +30,19 @@ function person(id: string, name: string, extra: Record<string, unknown> = {}) {
 
 function directory(users: ReturnType<typeof person>[]) {
   return { company_id: "company-1", company_slug: "firm", users };
+}
+
+function selectedDescription(select: HTMLElement, value: string, caption: string) {
+  expect(select).toHaveAttribute("aria-describedby", `${select.id}-selected-description`);
+  const detail = document.getElementById(`${select.id}-selected-description`);
+  expect(detail?.tagName).toBe("P");
+  expect(detail).toBeVisible();
+  expect(detail).toHaveTextContent(caption);
+  expect(detail?.textContent).toBe(caption);
+  expect(detail).toHaveAttribute("data-selected-option-value", value);
+  expect(detail).toHaveClass("min-w-0", "whitespace-normal", "break-all");
+  expect(detail?.className).not.toMatch(/truncate|line-clamp|overflow-hidden|sr-only/);
+  return detail;
 }
 
 describe("PersonPicker", () => {
@@ -87,6 +100,54 @@ describe("PersonPicker", () => {
     expect(onChange).toHaveBeenCalledWith("m-2");
   });
 
+  it("shows the complete long selected identity in a linked wrapping description", async () => {
+    const name = `Colleague ${"LongName".repeat(20)}`;
+    const email = `${"longidentity".repeat(12)}@example.com`;
+    listCompanyUsersMock.mockResolvedValue(directory([person("m-long", name, { email })]));
+    render(withClient(<PersonPicker id="long-person" value="m-long" onChange={() => {}} />));
+
+    const select = await screen.findByRole("combobox");
+    await within(select).findByRole("option", { name: `${name} — ${email}` });
+    selectedDescription(select, "m-long", `${name} — ${email}`);
+    expect(select).toHaveValue("m-long");
+  });
+
+  it("updates the linked identity on change and removes both description and link on clear", async () => {
+    function ControlledPicker() {
+      const [value, setValue] = useState("m-1");
+      return <PersonPicker id="changing-person" value={value} onChange={setValue} />;
+    }
+    render(withClient(<ControlledPicker />));
+    const select = await screen.findByRole("combobox");
+    await within(select).findByRole("option", { name: /Priya Raghavan/ });
+    selectedDescription(select, "m-1", "Priya Raghavan — m-1@example.com");
+
+    fireEvent.change(select, { target: { value: "m-2" } });
+    selectedDescription(select, "m-2", "Anand Rao — m-2@example.com");
+    fireEvent.change(select, { target: { value: "" } });
+    expect(select).toHaveValue("");
+    expect(select).not.toHaveAttribute("aria-describedby");
+    expect(document.getElementById("changing-person-selected-description")).toBeNull();
+  });
+
+  it("binds identical selected captions to their actual membership rather than their text", async () => {
+    listCompanyUsersMock.mockResolvedValue(directory([
+      person("m-one", "Same Person", { email: "same@example.com" }),
+      person("m-two", "Same Person", { email: "same@example.com" }),
+    ]));
+    function ControlledPicker() {
+      const [value, setValue] = useState("m-one");
+      return <PersonPicker id="same-caption" value={value} onChange={setValue} />;
+    }
+    render(withClient(<ControlledPicker />));
+    const select = await screen.findByRole("combobox");
+    await waitFor(() => expect(within(select).getAllByRole("option")).toHaveLength(3));
+    selectedDescription(select, "m-one", "Same Person — same@example.com");
+    fireEvent.change(select, { target: { value: "m-two" } });
+    selectedDescription(select, "m-two", "Same Person — same@example.com");
+    expect(select).toHaveValue("m-two");
+  });
+
   it("offers only memberships whose membership and user are both active", async () => {
     listCompanyUsersMock.mockResolvedValue(
       directory([
@@ -128,6 +189,7 @@ describe("PersonPicker", () => {
     expect(historical).toBeDisabled();
     expect(select).toHaveValue("m-historical");
     expect(onChange).not.toHaveBeenCalled();
+    selectedDescription(select, "m-historical", historical.textContent ?? "");
 
     fireEvent.change(select, { target: { value: "m-active" } });
     expect(onChange).toHaveBeenCalledWith("m-active");
@@ -146,6 +208,7 @@ describe("PersonPicker", () => {
     expect(historical).toBeDisabled();
     expect(select).toHaveValue("m-missing");
     expect(onChange).not.toHaveBeenCalled();
+    selectedDescription(select, "m-missing", historical.textContent ?? "");
   });
 
   it("omits a person who cannot be a valid answer", async () => {
@@ -177,6 +240,8 @@ describe("PersonPicker", () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(""));
     expect(select).toHaveValue("");
     expect(within(select).queryByRole("option", { name: /Priya Raghavan/ })).toBeNull();
+    expect(select).not.toHaveAttribute("aria-describedby");
+    expect(document.getElementById("p-selected-description")).toBeNull();
   });
 
   it("keeps a valid chosen person visible when only the text filter hides them", async () => {
@@ -194,6 +259,7 @@ describe("PersonPicker", () => {
       expect(within(select).getByRole("option", { name: /Person 3/ })).toBeInTheDocument(),
     );
     expect(within(select).getByRole("option", { name: /Person 9/ })).toBeInTheDocument();
+    selectedDescription(select, "m-3", "Person 3 — m-3@example.com");
   });
 
   it("says plainly when a filter matches nobody", async () => {

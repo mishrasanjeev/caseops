@@ -11,6 +11,7 @@ import JSZip from "jszip";
 import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { e2eEnv, repoRoot } from "./support/env";
+import { ipImportAcknowledgements } from "./support/ip-import-acknowledgements";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders, storageState: { cookies: [], origins: [] },
   trace: "off", screenshot: "off", video: "off" });
@@ -712,7 +713,8 @@ for (const width of [1280, 393]) {
     expect(await page.evaluate(id => sessionStorage.getItem(`ip-import-commit:${id}`), preview.job.id)).toBeNull();
     const continuationRequests: Array<{ pathname: string; marker: string; body: Record<string, unknown> }> = [];
     const transportFailures: string[] = [];
-    const continuations: Array<Promise<{ status: number; body: ImportResult }>> = [];
+    const acknowledgements = ipImportAcknowledgements<ImportResult>();
+    const continuations = acknowledgements.continuations;
     const matches = (operation: import("@playwright/test").Request) => operation.method() === "POST"
       && new URL(operation.url()).pathname.startsWith(`/api/ip/imports/${preview.job.id}/`);
     const observeRequest = (operation: import("@playwright/test").Request) => {
@@ -721,20 +723,32 @@ for (const width of [1280, 393]) {
         marker: operation.headers()["x-caseops-automated-test"], body: operation.postDataJSON() as Record<string, unknown> });
     };
     const observeFailure = (operation: import("@playwright/test").Request) => {
-      if (matches(operation)) transportFailures.push(operation.failure()?.errorText ?? "unknown transport failure");
+      if (!matches(operation)) return;
+      const error = operation.failure()?.errorText ?? "unknown transport failure";
+      transportFailures.push(error);
+      acknowledgements.fail(new Error(`IP import continuation transport failed: ${error}`));
     };
     const observeResponse = (response: import("@playwright/test").Response) => {
       if (!matches(response.request())) return;
-      continuations.push(response.json().then(body => ({ status: response.status(), body })));
+      acknowledgements.response(response.status(), () => response.json(), async (body, index) => {
+        const previous = index === 0 ? staged : (await continuations[0]).body;
+        expect(body.job.id, "acknowledged import identity").toBe(preview.job.id);
+        expect(body.job.source_sha256, "acknowledged source bytes").toBe(preview.job.source_sha256);
+        expect(body.job.version, "acknowledged version progress").toBeGreaterThan(previous.job.version);
+        expect(body.job.committed_rows, "acknowledged row progress").toBe([100, 101][index]);
+        expect(body.job.failed_rows).toBe(0);
+      });
     };
     page.on("request", observeRequest);
     page.on("requestfailed", observeFailure);
     page.on("response", observeResponse);
     try {
-      await page.getByRole("button", { name: "Commit to portfolio", exact: true }).click();
+      const [results] = await Promise.all([
+        acknowledgements.completed,
+        page.getByRole("button", { name: "Commit to portfolio", exact: true }).click(),
+      ]);
       await expect(page.getByRole("region", { name: `Review ${filename}`, exact: true })
         .getByText(/101 created; 0 linked; 0 skipped \(0 duplicates\); 101 with warnings; 0 failed\./)).toBeVisible();
-      const results = await Promise.all(continuations);
       expect(transportFailures).toEqual([]);
       expect(results.map(result => result.status)).toEqual([202, 200]);
       expect(results.map(result => result.body.job.committed_rows)).toEqual([100, 101]);

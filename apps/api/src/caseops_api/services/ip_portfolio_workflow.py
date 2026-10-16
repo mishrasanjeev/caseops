@@ -52,6 +52,8 @@ logger = logging.getLogger(__name__)
 MAX_SAVED_VIEWS = 50
 DEFAULT_EXPORT_COLUMNS = [
     "mark",
+    "application_date",
+    "renewal_due_date",
     "application_numbers",
     "opposition_numbers",
     "classes",
@@ -70,6 +72,14 @@ DEFAULT_EXPORT_COLUMNS = [
     "provenance",
 ]
 EXPORT_COLUMNS = {
+    "application_date": (
+        "Application Date",
+        lambda row: row.source_application_on.isoformat() if row.source_application_on else "",
+    ),
+    "renewal_due_date": (
+        "Renewal Due Date",
+        lambda row: row.source_renewal_due_on.isoformat() if row.source_renewal_due_on else "",
+    ),
     "mark": ("Mark", lambda row: row.asset_title or row.docket_title),
     "representation": ("Representation types", lambda row: " | ".join(row.representation_kinds)),
     "application_numbers": ("Application numbers", lambda row: " | ".join(row.application_numbers)),

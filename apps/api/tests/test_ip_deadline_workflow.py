@@ -3,12 +3,13 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     CalendarEventSync,
     CalendarEventSyncStatus,
+    CompanyIpRulePolicy,
     EthicalWall,
     IpDeadline,
     IpDeadlineCoverage,
@@ -919,3 +920,73 @@ def test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_cl
         headers=second_headers,
     )
     assert leaked_workspace.status_code == 404
+
+
+def test_workspace_eligibility_rechecks_company_selection_without_hiding_governance_history(
+    client: TestClient,
+) -> None:
+    owner = bootstrap_company(client)
+    owner_headers = auth_headers(owner["access_token"])
+    _, legal_token = _member(client, owner["access_token"], name="Eligibility legal reviewer",
+                             email="eligibility-legal@asterlegal.in")
+    reviewer_id, _ = _member(client, owner["access_token"], name="Eligibility fixture reviewer",
+                             email="eligibility-fixture@asterlegal.in")
+    legal_headers = auth_headers(legal_token)
+    matter = _mk_matter(client, owner["access_token"], "IP15-ELIGIBILITY")
+    docket = _docket_for_matter(client, owner_headers, matter_id=matter["id"])
+    calendar_response = client.post("/api/ip/working-calendars", headers=owner_headers,
+                                    json=_calendar_payload())
+    assert calendar_response.status_code == 201, calendar_response.text
+    calendar = calendar_response.json()
+    activated_calendar = client.post(f"/api/ip/working-calendars/{calendar['id']}/activate",
+                                     headers=legal_headers,
+                                     json={"reason": "Independent synthetic calendar review"})
+    assert activated_calendar.status_code == 200, activated_calendar.text
+    rule_response = client.post(
+        "/api/ip/deadline-rules", headers=owner_headers, json=_rule_payload()
+    )
+    assert rule_response.status_code == 201, rule_response.text
+    rule = rule_response.json()
+    activation = client.post(
+        f"/api/ip/deadline-rules/{rule['id']}/activate", headers=legal_headers,
+        json={"reviewer_membership_id": reviewer_id, "select_for_company": True,
+              "auto_confirm_eligible": False},
+    )
+    assert activation.status_code == 200, activation.text
+    assert activation.json()["status"] == "active"
+    workspace_url = f"/api/ip/dockets/{docket['id']}/deadline-workspace"
+    selected = client.get(workspace_url, headers=legal_headers)
+    assert selected.status_code == 200, selected.text
+    assert selected.json()["eligible_rule_version_ids"] == [rule["id"]]
+    assert any(row["id"] == rule["id"] and row["status"] == "active"
+               for row in selected.json()["rules"])
+
+    with get_session_factory()() as session:
+        removed = session.execute(delete(CompanyIpRulePolicy).where(
+            CompanyIpRulePolicy.company_id == owner["company"]["id"],
+            CompanyIpRulePolicy.active_rule_version_id == rule["id"],
+        ))
+        assert removed.rowcount == 1
+        session.commit()
+
+    unselected = client.get(workspace_url, headers=legal_headers)
+    assert unselected.status_code == 200, unselected.text
+    assert unselected.json()["eligible_rule_version_ids"] == []
+    assert any(row["id"] == rule["id"] and row["status"] == "active"
+               for row in unselected.json()["rules"])
+    denied = client.post(f"/api/ip/dockets/{docket['id']}/deadlines", headers=legal_headers, json={
+        "title": "Unselected active version must not calculate",
+        "rule_version_id": rule["id"], "calendar_version_id": calendar["id"],
+        "base_date": "2026-08-14", "base_date_certainty": "certain", "is_critical": True,
+    })
+    assert denied.status_code == 409
+    assert "Company policy has not selected this rule" in denied.text
+
+
+@pytest.mark.postgres
+def test_workspace_eligibility_rechecks_company_selection_on_postgres(
+    isolated_postgres_client: TestClient,
+) -> None:
+    test_workspace_eligibility_rechecks_company_selection_without_hiding_governance_history(
+        isolated_postgres_client,
+    )

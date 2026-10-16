@@ -23,7 +23,7 @@ process.env.PROD_BASE_URL ||= "https://caseops.ai";
 process.env.PROD_API_BASE_URL ||= "https://api.caseops.ai";
 const PATENT_PROD_SPECS = /iplf-(?:079b-domain-availability|080[ab]-patent-(?:family|application|parties|priorities|source-scope))-2026-09-0[67]\.spec\.ts$/;
 const SAVED_MANIFEST_PROD_SPEC = /iplf-066c-saved-manifest-later-events-2026-09-29\.spec\.ts$/;
-const OCT13_PORTFOLIO_CALENDAR_SPECS = /ram-2026-10-13-(?:hearings|ip-portfolio)\.spec\.ts$/;
+const OCT13_PORTFOLIO_CALENDAR_SPECS = /(?:ram-2026-10-13-(?:hearings|ip-portfolio)|ram-2026-10-15-ip-(?:controls|renewal-tracker))\.spec\.ts$/;
 const RETAINED_INDEX_PROD_SPECS = /ram-2026-10-(?:10|12)-prod\.spec\.ts$/;
 
 const candidates = [

@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
@@ -389,7 +390,13 @@ function CreateRegistryLink({
       </CardHeader>
       <CardContent>
         <form className="grid gap-4 md:grid-cols-2 xl:grid-cols-6" onSubmit={submit}>
-          <div className="xl:col-span-2"><Label htmlFor="registry-target">Legal record</Label><select id="registry-target" className="mt-1 h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={target} onChange={(event) => setTarget(event.target.value)} disabled={pending}><option value="">Select record</option>{records?.applications.map((row) => <option value={`application:${row.id}`} key={row.id}>Application · {row.office} · {row.filing_phase}</option>)}{records?.proceedings.map((row) => <option value={`proceeding:${row.id}`} key={row.id}>Proceeding · {row.proceeding_kind} · {row.stage}</option>)}</select></div>
+          <RecordSelect fieldClassName="xl:col-span-2" id="registry-target" label="Legal record"
+            className="mt-1 h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+            value={target} onChange={event => setTarget(event.target.value)} disabled={pending} options={[
+              { value: "", label: "Select record" },
+              ...(records?.applications ?? []).map(row => ({ value: `application:${row.id}`, label: `Application · ${row.office} · ${row.filing_phase}` })),
+              ...(records?.proceedings ?? []).map(row => ({ value: `proceeding:${row.id}`, label: `Proceeding · ${row.proceeding_kind} · ${row.stage}` })),
+            ]} />
           <div><Label htmlFor="registry-kind">Identifier type</Label><Input id="registry-kind" className="mt-1" value={kind} onChange={(event) => setKind(event.target.value)} required /></div>
           <div><Label htmlFor="registry-identifier">Identifier</Label><Input id="registry-identifier" className="mt-1" value={identifier} onChange={(event) => setIdentifier(event.target.value)} required /></div>
           <div><Label htmlFor="registry-office">Office</Label><Input id="registry-office" className="mt-1" value={office} onChange={(event) => setOffice(event.target.value)} required /></div>

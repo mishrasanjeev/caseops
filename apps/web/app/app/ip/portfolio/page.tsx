@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookmarkPlus,
+  CalendarClock,
   Check,
   Download,
   LayoutGrid,
@@ -22,6 +23,8 @@ import type { FormEvent } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
+import { IpPortfolioRenewalTracker, PortfolioDateEditor, PortfolioDateEditButton, PortfolioDateValue,
+  type EditablePortfolioDates } from "@/components/ip/IpPortfolioDates";
 import { Button } from "@/components/ui/Button";
 import {
   Dialog,
@@ -75,6 +78,8 @@ const COLUMN_OPTIONS = [
   ["mark", "Mark"],
   ["representation", "Representation"],
   ["application_numbers", "Application no."],
+  ["application_date", "Application Date"],
+  ["renewal_due_date", "Renewal Due Date"],
   ["opposition_numbers", "Opposition no."],
   ["classes", "Classes"],
   ["goods_services", "Goods/services"],
@@ -99,6 +104,8 @@ type ColumnKey = (typeof COLUMN_OPTIONS)[number][0];
 const DEFAULT_COLUMNS: ColumnKey[] = [
   "mark",
   "application_numbers",
+  "application_date",
+  "renewal_due_date",
   "opposition_numbers",
   "classes",
   "jurisdiction",
@@ -139,7 +146,8 @@ export default function IpPortfolioPage() {
   const [selectedViewId, setSelectedViewId] = useState("none");
   const [saveOpen, setSaveOpen] = useState(false);
   const [viewName, setViewName] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "grid" | "families">("list");
+  const [viewMode, setViewMode] = useState<"list" | "grid" | "families" | "tracker">("list");
+  const [editingDates, setEditingDates] = useState<EditablePortfolioDates | null>(null);
   const [familyGrouping, setFamilyGrouping] = useState<"mark" | "client">("mark");
   const [exportPreview, setExportPreview] = useState<Awaited<
     ReturnType<typeof previewIpPortfolioExport>
@@ -150,7 +158,7 @@ export default function IpPortfolioPage() {
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => fetchIpPortfolio(filters, { limit: 50, cursor: pageParam }),
     getNextPageParam: (lastPage) => lastPage.next_cursor,
-    enabled: canView,
+    enabled: canView && viewMode !== "tracker",
   });
   const familyListing = useInfiniteQuery({
     queryKey: ["ip", "portfolio", "families", familyGrouping, filters],
@@ -316,6 +324,13 @@ export default function IpPortfolioPage() {
               >
                 <Network className="h-4 w-4" aria-hidden />
               </Button>
+              <Button size="sm" variant={viewMode === "tracker" ? "secondary" : "ghost"}
+                aria-label="Deadline tracker view" title="Deadline tracker view" onClick={() => {
+                  setFilters({ query: filters.query ?? null, renewal_tracker_state: filters.renewal_tracker_state ?? [] });
+                  setViewMode("tracker");
+                }}>
+                <CalendarClock className="h-4 w-4" aria-hidden />
+              </Button>
             </div>
             <Button size="sm" variant="outline" href="/app/ip/portfolio/imports">
               <Upload className="h-4 w-4" aria-hidden /> Import
@@ -347,7 +362,7 @@ export default function IpPortfolioPage() {
         }
       />
 
-      <section aria-label="Portfolio controls" className="flex min-w-0 flex-col gap-3">
+      {viewMode !== "tracker" ? <section aria-label="Portfolio controls" className="flex min-w-0 flex-col gap-3">
         <div className="flex min-w-0 flex-wrap items-end gap-3">
           <form className="flex w-full min-w-0 gap-2 2xl:min-w-72 2xl:flex-1" onSubmit={submitSearch}>
             <div className="min-w-0 flex-1">
@@ -498,6 +513,16 @@ export default function IpPortfolioPage() {
                   setFilters((current) => ({ ...current, deadline_state: one(value) }))
                 }
               />
+              {([
+                ["application_date_from", "Application Date from"],
+                ["application_date_to", "Application Date to"],
+                ["renewal_due_from", "Renewal Due Date from"],
+                ["renewal_due_to", "Renewal Due Date to"],
+              ] as const).map(([key, label]) => <div key={key} className="min-w-0 space-y-1.5">
+                <Label htmlFor={`portfolio-${key}`}>{label}</Label>
+                <Input id={`portfolio-${key}`} type="date" value={filters[key] ?? ""}
+                  onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value || null }))} />
+              </div>)}
               <FilterSelect
                 label="Registry freshness"
                 value={first(filters.registry_sync_state)}
@@ -536,9 +561,12 @@ export default function IpPortfolioPage() {
         </div>
 
         {counts ? <PortfolioCounts counts={counts} /> : null}
-      </section>
+      </section> : null}
 
-      {viewMode === "families" ? (
+      {viewMode === "tracker" ? <IpPortfolioRenewalTracker category={filters.renewal_tracker_state?.[0]} query={filters.query ?? null}
+        onQueryChange={(query) => { setQueryDraft(query ?? ""); setFilters((current) => ({ ...current, query })); }}
+        onCategoryChange={(category) => setFilters((current) => ({ ...current, renewal_tracker_state: category ? [category] : [] }))}
+        onEdit={setEditingDates} /> : viewMode === "families" ? (
         <PortfolioFamilies
           grouping={familyGrouping}
           onGroupingChange={setFamilyGrouping}
@@ -576,11 +604,11 @@ export default function IpPortfolioPage() {
         <>
           {viewMode === "list" ? (
             <>
-              <PortfolioTable rows={rows} columns={columns} />
-              <PortfolioCards rows={rows} columns={columns} />
+              <PortfolioTable rows={rows} columns={columns} onEdit={setEditingDates} />
+              <PortfolioCards rows={rows} columns={columns} onEdit={setEditingDates} />
             </>
           ) : (
-            <PortfolioCards rows={rows} columns={columns} forceGrid />
+            <PortfolioCards rows={rows} columns={columns} onEdit={setEditingDates} forceGrid />
           )}
           {listing.hasNextPage ? (
             <div className="flex justify-center">
@@ -595,6 +623,9 @@ export default function IpPortfolioPage() {
           ) : null}
         </>
       )}
+
+      {editingDates ? <PortfolioDateEditor key={`${editingDates.docket_id}:${editingDates.current_version}`}
+        row={editingDates} onClose={() => setEditingDates(null)} /> : null}
 
       <ExportQueue
         jobs={exports.data?.jobs ?? []}
@@ -872,9 +903,9 @@ function PortfolioCounts({ counts }: { counts: IpPortfolioResponse["counts"] }) 
   );
 }
 
-function PortfolioTable({ rows, columns }: { rows: IpPortfolioRow[]; columns: ColumnKey[] }) {
+function PortfolioTable({ rows, columns, onEdit }: { rows: IpPortfolioRow[]; columns: ColumnKey[]; onEdit: (row: EditablePortfolioDates) => void }) {
   return (
-    <div className="hidden min-w-0 overflow-x-auto border-y border-[var(--color-line)] md:block">
+    <div className="relative hidden min-w-0 overflow-x-auto border-y border-[var(--color-line)] md:block">
       <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-sm">
         <thead className="bg-[var(--color-bg-2)] text-xs font-semibold text-[var(--color-mute)]">
           <tr>
@@ -890,7 +921,7 @@ function PortfolioTable({ rows, columns }: { rows: IpPortfolioRow[]; columns: Co
             <tr key={row.application_id} className="align-top hover:bg-[var(--color-bg-2)]/60">
               {columns.map((column) => (
                 <td key={column} className="px-3 py-3">
-                  <PortfolioValue row={row} column={column} />
+                  <PortfolioValue row={row} column={column} onEdit={onEdit} />
                 </td>
               ))}
             </tr>
@@ -905,10 +936,12 @@ function PortfolioCards({
   rows,
   columns,
   forceGrid = false,
+  onEdit,
 }: {
   rows: IpPortfolioRow[];
   columns: ColumnKey[];
   forceGrid?: boolean;
+  onEdit: (row: EditablePortfolioDates) => void;
 }) {
   return (
     <div
@@ -931,7 +964,7 @@ function PortfolioCards({
                 {COLUMN_OPTIONS.find(([key]) => key === column)?.[1]}
               </span>
               <div className="min-w-0 text-sm">
-                <PortfolioValue row={row} column={column} />
+                <PortfolioValue row={row} column={column} onEdit={onEdit} />
               </div>
             </div>
           ))}
@@ -941,18 +974,25 @@ function PortfolioCards({
   );
 }
 
-function PortfolioValue({ row, column }: { row: IpPortfolioRow; column: ColumnKey }) {
+function PortfolioValue({ row, column, onEdit }: { row: IpPortfolioRow; column: ColumnKey; onEdit: (row: EditablePortfolioDates) => void }) {
   switch (column) {
     case "mark":
       return (
-        <Link href={`/app/ip?docket=${row.docket_id}`} className="font-semibold text-[var(--color-brand-700)] hover:underline">
-          {row.asset_title ?? row.docket_title}
-        </Link>
+        <div className="flex min-w-0 flex-wrap items-start gap-1">
+          <Link href={`/app/ip?docket=${row.docket_id}`} className="min-w-0 break-words font-semibold text-[var(--color-brand-700)] hover:underline">
+            {row.asset_title ?? row.docket_title}
+          </Link>
+          <PortfolioDateEditButton row={row} onEdit={onEdit} disabled={!row.is_active} />
+        </div>
       );
     case "representation":
       return <ListValue values={row.representation_kinds} />;
     case "application_numbers":
       return <ListValue values={row.application_numbers} mono />;
+    case "application_date":
+      return <PortfolioDateValue value={row.source_application_on} state={row.source_application_state} />;
+    case "renewal_due_date":
+      return <PortfolioDateValue value={row.source_renewal_due_on} state={row.source_renewal_state} />;
     case "opposition_numbers":
       return <ListValue values={row.opposition_numbers} mono />;
     case "classes":
