@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Textarea } from "@/components/ui/Textarea";
 import {
   createIpPostRegistrationProceeding,
@@ -328,19 +329,10 @@ export function IpPostRegistrationWorkspace({
             });
           }}
         >
-          <Field label="Target application">
-            <select
-              className={SELECT_CLASS}
-              value={applicationId}
-              onChange={(event) => setApplicationId(event.target.value)}
-            >
-              {(core.data?.applications ?? []).map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.office} · {row.filing_phase}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <RecordSelect label="Target application" className={SELECT_CLASS} value={applicationId}
+            onChange={event => setApplicationId(event.target.value)} options={(core.data?.applications ?? []).map(row => ({
+              value: row.id, label: `${row.office} · ${row.filing_phase}`,
+            }))} />
           <Field label="Proceeding type">
             <select
               className={SELECT_CLASS}
@@ -397,19 +389,10 @@ export function IpPostRegistrationWorkspace({
         </form>
 
         {proceedings.length ? (
-          <Field label="Selected proceeding">
-            <select
-              className={SELECT_CLASS}
-              value={selectedId}
-              onChange={(event) => setSelectedId(event.target.value)}
-            >
-              {proceedings.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {readable(row.proceeding_kind)} · {row.stage}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <RecordSelect label="Selected proceeding" className={SELECT_CLASS} value={selectedId}
+            onChange={event => setSelectedId(event.target.value)} options={proceedings.map(row => ({
+              value: row.id, label: `${readable(row.proceeding_kind)} · ${row.stage}`,
+            }))} />
         ) : null}
         {workspace.isError ? (
           <QueryErrorState
@@ -784,22 +767,13 @@ export function IpPostRegistrationWorkspace({
                 </Field>
               ) : null}
               {actionKind === "parallel_proceeding_link" ? (
-                <Field label="Parallel proceeding">
-                  <select
-                    className={SELECT_CLASS}
-                    value={parallelId}
-                    onChange={(event) => setParallelId(event.target.value)}
-                  >
-                    <option value="">Select</option>
-                    {(core.data?.proceedings ?? [])
-                      .filter((row) => row.id !== selectedId)
-                      .map((row) => (
-                        <option key={row.id} value={row.id}>
-                          {readable(row.proceeding_kind)} · {row.stage}
-                        </option>
-                      ))}
-                  </select>
-                </Field>
+                <RecordSelect label="Parallel proceeding" className={SELECT_CLASS} value={parallelId}
+                  onChange={event => setParallelId(event.target.value)} options={[
+                    { value: "", label: "Select" },
+                    ...(core.data?.proceedings ?? []).filter(row => row.id !== selectedId).map(row => ({
+                      value: row.id, label: `${readable(row.proceeding_kind)} · ${row.stage}`,
+                    })),
+                  ]} />
               ) : null}
               {actionKind === "disposition_candidate" ? (
                 <Field label="Candidate disposition">

@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { request as playwrightRequest, type APIRequestContext, type APIResponse, type Locator, type Page } from "@playwright/test";
-import type { IpDeadlineWorkspace } from "../../apps/web/lib/api/endpoints";
+import type { IpCoreRecords, IpDeadlineWorkspace } from "../../apps/web/lib/api/endpoints";
 
 import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
@@ -23,11 +23,13 @@ async function prepare(page: Page, api: APIRequestContext, baseURL: string | und
   const workspace = await prepareIp15Workspace(page, api, baseURL, width);
   const created = await createIp15ManualTrademark(workspace, api);
   const docketId = created.docket.id;
-  await json(await api.post(`${workspace.api.origin}/api/ip/dockets/${docketId}/proceedings`, { headers: workspace.headers, data: {
+  const proceeding = await json(await api.post(`${workspace.api.origin}/api/ip/dockets/${docketId}/proceedings`, { headers: workspace.headers, data: {
     application_id: created.application.id, proceeding_kind: "opposition", side: "applicant", office: "IP India",
     jurisdiction: "IN", stage: "draft", origin_kind: "manual_intake", source_pending_identifier_allocation: true,
   } }), 201);
-  if (!workspace.local) return { ...workspace, docketId, legal: null, reviewerId: "" };
+  expect(typeof proceeding.id, "The created proceeding must return its canonical identity.").toBe("string");
+  const recordIds = { applicationId: created.application.id, proceedingId: proceeding.id as string };
+  if (!workspace.local) return { ...workspace, docketId, ...recordIds, legal: null, reviewerId: "" };
   const password = `Synthetic!${randomUUID()}`;
   const members: Array<{ id: string; email: string }> = [];
   for (const label of ["legal", "reviewer"]) {
@@ -98,14 +100,18 @@ async function prepare(page: Page, api: APIRequestContext, baseURL: string | und
       throw new Error("IP15 current legal identity or activation capability did not match the intended actor.");
     }
     await workspace.release();
-    return { ...workspace, docketId, legal, reviewerId: members[1].id };
+    return { ...workspace, docketId, ...recordIds, legal, reviewerId: members[1].id };
   } catch (error) {
     await legal.dispose();
     throw error;
   }
 }
 
-async function checkGeometry(page: Page, scope: Locator, requiredSourceValues: readonly string[] = []) {
+type GeometryStage = "synthetic-guard" | "deadline-initial" | "hearing-initial" | "governance-initial"
+  | "governance-selected-identity" | "hearing-reloaded" | "hearing-rescheduled-reloaded"
+  | "deadline-created-long-values" | "opposition";
+
+async function checkGeometry(page: Page, scope: Locator, requiredSourceValues: readonly string[] = [], stage: GeometryStage = "synthetic-guard") {
   await expect(scope).toBeVisible();
   expect(await scope.locator("input, select, textarea, button").count()).toBeGreaterThan(0);
   const measurements = await scope.evaluate((root, requiredValues) => {
@@ -182,7 +188,7 @@ async function checkGeometry(page: Page, scope: Locator, requiredSourceValues: r
     });
   }, requiredSourceValues);
   const issues = measurements.filter(row => Object.values(row.failures).some(Boolean));
-  expect(issues, "Every control must have useful width, readable current value and stay in its form; numeric evidence excludes private labels.").toEqual([]);
+  expect(issues, `[${stage}] Every control must have useful width, readable current value and stay in its form; numeric evidence excludes private labels.`).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   return measurements;
 }
@@ -343,9 +349,9 @@ for (const scenario of ["current", "missing-link", "stale-id-same-caption", "wro
 for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 1280, 1281, 1535, 1536, 1537]) {
   test(`IP15 BUG-001..007 governed controls and readable forms at ${width}px`, async ({ page, request, baseURL }, testInfo) => {
     const fixture = await prepare(page, request, baseURL, width);
-    const geometry: Array<{ stage: string; measurements: Awaited<ReturnType<typeof checkGeometry>> }> = [];
-    const captureGeometry = async (stage: string, scope: Locator, requiredSources: readonly string[] = []) => {
-      geometry.push({ stage, measurements: await checkGeometry(page, scope, requiredSources) });
+    const geometry: Array<{ stage: GeometryStage; measurements: Awaited<ReturnType<typeof checkGeometry>> }> = [];
+    const captureGeometry = async (stage: GeometryStage, scope: Locator, requiredSources: readonly string[] = []) => {
+      geometry.push({ stage, measurements: await checkGeometry(page, scope, requiredSources, stage) });
     };
     try {
       const schedule = `${fixture.web.origin}/app/ip?docket=${fixture.docketId}&view=schedule`;
@@ -522,7 +528,32 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
       const opposition = page.getByTestId("ip-opposition-workspace");
       await expect(opposition.getByRole("heading", { name: "Trademark opposition", exact: true })).toBeVisible();
       await expect(opposition.getByRole("button", { name: "Apply stage" })).toBeDisabled();
-      await captureGeometry("opposition", opposition);
+      const core: IpCoreRecords = await json(await request.get(
+        `${fixture.api.origin}/api/ip/dockets/${fixture.docketId}/core-records`, { headers: fixture.headers },
+      ));
+      const application = core.applications.find(row => row.id === fixture.applicationId);
+      const proceeding = core.proceedings.find(row => row.id === fixture.proceedingId);
+      expect(application, "The current API response must retain the created application.").toBeDefined();
+      expect(proceeding, "The current API response must retain the created opposition.").toBeDefined();
+      const applicationSelect = opposition.getByRole("combobox", { name: "Trademark application", exact: true });
+      const proceedingSelect = opposition.getByRole("combobox", { name: "Opposition proceeding", exact: true });
+      for (const [select, ids] of [
+        [applicationSelect, core.applications.map(row => row.id)],
+        [proceedingSelect, core.proceedings.filter(row => row.proceeding_kind === "opposition").map(row => row.id)],
+      ] as const) {
+        await expect.poll(() => select.locator("option").evaluateAll(options =>
+          options.map(option => (option as HTMLOptionElement).value).filter(Boolean))).toEqual(ids);
+      }
+      // Native scroll metrics vary by platform; current record captions must always remain readable.
+      const recordDetail = (id: string) => opposition.locator(`[data-selected-option-value=${JSON.stringify(id)}]`);
+      await assertSelectedDescription(applicationSelect, recordDetail(fixture.applicationId), fixture.applicationId, {
+        number: core.identifiers.find(row => row.application_id === fixture.applicationId && row.identifier_kind === "application")?.raw_value
+          ?? "Application number pending", office: application!.office,
+      });
+      await assertSelectedDescription(proceedingSelect, recordDetail(fixture.proceedingId), fixture.proceedingId, {
+        side: proceeding!.side, stage: proceeding!.stage.replaceAll("_", " "), office: proceeding!.office,
+      });
+      await captureGeometry("opposition", opposition, [fixture.applicationId, fixture.proceedingId]);
       await testInfo.attach("ip15-control-coverage", { contentType: "application/json", body: Buffer.from(JSON.stringify({
         width, local: fixture.local, source: "API-backed manual trademark", governance_positive: fixture.local,
         observed_options_after_retry: observedOptions,

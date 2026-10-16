@@ -261,6 +261,41 @@ describe("IpOppositionWorkspace", () => {
     expect(transitionMock).not.toHaveBeenCalled();
   });
 
+  it.each([null, `TM-${"long-source-".repeat(15)}`])(
+    "shows the complete current application caption outside its field label (%s)", async (number) => {
+      fetchCoreMock.mockResolvedValue({
+        assets: [], applications: [{ id: "application-1", docket_id: docket.id, asset_id: "asset-1",
+          office: "IP India", jurisdiction: "IN", filing_phase: "pre_filing", is_active: true,
+          lifecycle_version: 1, source_pending_identifier_allocation: number === null, version: 1,
+          created_at: "2026-08-20T00:00:00Z", updated_at: "2026-08-20T00:00:00Z" }],
+        proceedings: [proceeding],
+        identifiers: number ? [{ ...workspace.application_identifiers[0], raw_value: number }] : [],
+      });
+      render(withClient(<IpOppositionWorkspace docket={docket} canWrite canReview currentMembershipId="membership-1" />));
+      const select = await screen.findByRole<HTMLSelectElement>("combobox", { name: "Trademark application" });
+      await waitFor(() => expect(select).toHaveValue("application-1"));
+      const caption = `${number ?? "Application number pending"} · IP India`;
+      expect(select.selectedOptions[0].textContent).toBe(caption);
+      expect(select).toHaveAccessibleName("Trademark application");
+      expect(select).toHaveAccessibleDescription(caption);
+      const detail = document.getElementById(select.getAttribute("aria-describedby")!);
+      expect(detail).toBeVisible();
+      expect(detail).toHaveAttribute("data-selected-option-value", "application-1");
+      expect(detail).toHaveTextContent(caption);
+      expect(detail?.closest("label")).toBeNull();
+      expect(createMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("binds the selected proceeding's complete caption to its current record ID", async () => {
+    render(withClient(<IpOppositionWorkspace docket={docket} canWrite canReview currentMembershipId="membership-1" />));
+    const select = await screen.findByRole<HTMLSelectElement>("combobox", { name: "Opposition proceeding" });
+    await waitFor(() => expect(select).toHaveValue(proceeding.id));
+    expect(select).toHaveAccessibleDescription(`applicant · draft · ${proceeding.office}`);
+    expect(document.getElementById(select.getAttribute("aria-describedby")!))
+      .toHaveAttribute("data-selected-option-value", proceeding.id);
+  });
+
   it("shows distinct registry identifiers and saves every optimistic fence", async () => {
     render(withClient(
       <IpOppositionWorkspace

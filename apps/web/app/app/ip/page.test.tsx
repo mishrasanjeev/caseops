@@ -1930,6 +1930,29 @@ describe("IpDocketPage", () => {
     await waitFor(() => expect(transitionIpDocketLifecycleMock).toHaveBeenCalledTimes(1));
   });
 
+  it("keeps a prosecution application's complete caption outside its accessible field name", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    const office = `Registry ${"long-source-".repeat(15)}`;
+    fetchIpCoreRecordsMock.mockResolvedValue({ assets: [], proceedings: [], identifiers: [], applications: [
+      { id: "application-1", version: 1, jurisdiction: "IN", office, filing_phase: "response_filed" },
+      { id: "application-2", version: 1, jurisdiction: "IN", office, filing_phase: "response_filed" },
+    ] });
+    render(withClient(<IpDocketPage />));
+    await userEvent.click(await screen.findByRole("tab", { name: "Proceedings" }));
+    const prosecution = await screen.findByTestId("ip-prosecution-workspace");
+    const select = await within(prosecution).findByRole<HTMLSelectElement>("combobox", { name: "Application" });
+    expect(select).toHaveValue("application-1");
+    expect(select).toHaveAccessibleName("Application");
+    expect(select).toHaveAccessibleDescription(`IN · ${office} · response_filed`);
+    fireEvent.change(select, { target: { value: "application-2" } });
+    expect(select.selectedOptions[0].value).toBe("application-2");
+    const detail = document.getElementById(select.getAttribute("aria-describedby")!);
+    expect(detail).toHaveAttribute("data-selected-option-value", "application-2");
+    expect(detail?.textContent).toBe(select.selectedOptions[0].textContent);
+    expect(detail?.closest("label")).toBeNull();
+    expect(appendIpDocketEventMock).not.toHaveBeenCalled();
+  });
+
   it("requires backdated acknowledgement before committing a correction", async () => {
     fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
     fetchIpCoreRecordsMock.mockResolvedValue({

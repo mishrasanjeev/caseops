@@ -32,6 +32,7 @@ import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PersonName, PersonPicker } from "@/components/ui/PersonPicker";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
@@ -2921,21 +2922,12 @@ function ProsecutionCard({
         {enabled ? (
           <form className="grid min-w-0 gap-3" onSubmit={(event) => { event.preventDefault(); preview.mutate(); }}>
             {applications.length ? (
-              <Field label="Application">
-                <select
-                  className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
-                  value={application?.id ?? ""}
-                  onChange={(event) => setApplicationId(event.target.value)}
-                >
-                  {applications.map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>
-                      {[candidate.jurisdiction, candidate.office, candidate.filing_phase]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <RecordSelect label="Application"
+                className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                value={application?.id ?? ""} onChange={event => setApplicationId(event.target.value)}
+                options={applications.map(candidate => ({ value: candidate.id,
+                  label: [candidate.jurisdiction, candidate.office, candidate.filing_phase].filter(Boolean).join(" · "),
+                }))} />
             ) : null}
             {supersedesEventId ? (
               <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">

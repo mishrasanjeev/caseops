@@ -210,6 +210,40 @@ describe("Madrid portfolio", () => {
     expect(recordsMock).not.toHaveBeenCalled();
   });
 
+  it("describes only the current eligible Indian application and clears it when its docket changes", async () => {
+    const user = userEvent.setup();
+    const office = `IP India ${"long-source-".repeat(15)}`;
+    docketsMock.mockResolvedValue({ dockets: [
+      { id: "docket-a", title: "First mark", record_type: "trademark" },
+      { id: "docket-b", title: "Second mark", record_type: "trademark" },
+      { id: "patent", title: "Not a trademark", record_type: "patent_application" },
+    ], count: 3 });
+    coreMock.mockImplementation(async (id: string) => ({ applications: [
+      { id: `${id}-in`, jurisdiction: "IN", office, filing_phase: "filed" },
+      { id: `${id}-foreign`, jurisdiction: "US", office: "USPTO", filing_phase: "filed" },
+    ] }));
+    render(<MadridPage />, { wrapper: wrapper() });
+    await user.click(await screen.findByRole("button", { name: "New record" }));
+    const docket = screen.getByRole<HTMLSelectElement>("combobox", { name: "Basic mark docket" });
+    await waitFor(() => expect(docket.options.length).toBe(3));
+    expect(Array.from(docket.options, option => option.value)).toEqual(["", "docket-a", "docket-b"]);
+    await user.selectOptions(docket, "docket-a");
+    const application = screen.getByRole<HTMLSelectElement>("combobox", { name: "Basic Indian application" });
+    await waitFor(() => expect(Array.from(application.options, option => option.value)).toEqual(["", "docket-a-in"]));
+    await user.selectOptions(application, "docket-a-in");
+    expect(application).toHaveAccessibleName("Basic Indian application");
+    expect(application).toHaveAccessibleDescription(`${office} · filed`);
+    const detail = document.getElementById(application.getAttribute("aria-describedby")!);
+    expect(detail).toHaveAttribute("data-selected-option-value", "docket-a-in");
+    expect(detail?.closest("label")).toBeNull();
+    await user.selectOptions(docket, "docket-b");
+    await waitFor(() => expect(Array.from(application.options, option => option.value)).toEqual(["", "docket-b-in"]));
+    expect(application.value).toBe("");
+    expect(Array.from(application.selectedOptions, option => option.value)).toEqual([""]);
+    expect(application).not.toHaveAttribute("aria-describedby");
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
   it("keeps designation statuses independent and reconciles a linked source candidate", async () => {
     const user = userEvent.setup();
     const startedAt = Date.now();

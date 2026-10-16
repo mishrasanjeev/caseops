@@ -2627,3 +2627,12 @@ requirements when using the fallback.
   prove a real reschedule acknowledgement, visible date and persisted reload
   without losing exact time or timezone. Do not lower the layout guard to make
   a newly discovered narrow control pass.
+- Native record-choice readability must not depend on OS scroll metrics. The
+  pending-application caption clipped in Linux CI while Windows Docker passed.
+  Require an always-visible, current-ID-bound verbatim caption for application
+  and proceeding choices, including truthful pending identifiers, and audit the
+  adjacent record pickers. Keep captions outside labels so accessible names
+  remain stable. Regress actual native clear/unmatched selection, ref/events,
+  duplicate captions, disabled options and retained description tokens; never
+  silently substitute another record. Name geometry stages with static keys,
+  not private values, so a later failure identifies its actual work area.

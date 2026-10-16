@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { IpOppositionApplicantWorkflow } from "@/components/ip/IpOppositionApplicantWorkflow";
@@ -131,6 +132,8 @@ export function IpOppositionWorkspace({
     [core.data?.proceedings],
   );
   const [selectedId, setSelectedId] = useState(initialProceedingId ?? "");
+  const oppositionOptions = oppositions.map(row => ({ value: row.id,
+    label: `${row.side} · ${readable(row.stage)} · ${row.office}` }));
   const selectedOpposition = oppositions.find((row) => row.id === selectedId) ?? null;
   const pleadingProceedingId = selectedOpposition?.id ?? (
     selectedId === initialProceedingId ? initialProceedingId : null
@@ -344,11 +347,8 @@ export function IpOppositionWorkspace({
           {core.isPending ? <Skeleton className="h-24 w-full" /> : null}
           {core.isError ? <QueryErrorState error={core.error} title="Could not load opposition records" onRetry={() => core.refetch()} /> : null}
           {oppositions.length ? (
-            <Field label="Opposition proceeding">
-              <select className={SELECT_CLASS} value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
-                {oppositions.map((row) => <option key={row.id} value={row.id}>{row.side} · {readable(row.stage)} · {row.office}</option>)}
-              </select>
-            </Field>
+            <RecordSelect label="Opposition proceeding" className={SELECT_CLASS} value={selectedId}
+              onChange={event => setSelectedId(event.target.value)} options={oppositionOptions} />
           ) : null}
           {pleadingWorkspace}
         </CardContent>
@@ -369,16 +369,16 @@ export function IpOppositionWorkspace({
         {core.isError ? <QueryErrorState error={core.error} title="Could not load opposition records" onRetry={() => core.refetch()} /> : null}
 
         {oppositions.length ? (
-          <Field label="Opposition proceeding">
-            <select className={SELECT_CLASS} value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
-              {oppositions.map((row) => <option key={row.id} value={row.id}>{row.side} · {readable(row.stage)} · {row.office}</option>)}
-            </select>
-          </Field>
+          <RecordSelect label="Opposition proceeding" className={SELECT_CLASS} value={selectedId}
+            onChange={event => setSelectedId(event.target.value)} options={oppositionOptions} />
         ) : null}
 
         {canWrite && core.data?.applications.length ? (
           <form className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-3 border-t border-[var(--color-line)] pt-4" onSubmit={(event) => { event.preventDefault(); create.mutate({ docketId: docket.id, applicationId, side, office, jurisdiction, originKind, oppositionNumber: oppositionNumber || null, identifierSource: numberSource, identifierEffectiveFrom: TODAY }); }}>
-            <Field label="Trademark application"><select className={SELECT_CLASS} value={applicationId} onChange={(event) => setApplicationId(event.target.value)}>{core.data.applications.map((row) => <option key={row.id} value={row.id}>{core.data.identifiers.find((id) => id.application_id === row.id && id.identifier_kind === "application")?.raw_value ?? "Application number pending"} · {row.office}</option>)}</select></Field>
+            <RecordSelect label="Trademark application" className={SELECT_CLASS} value={applicationId}
+              onChange={event => setApplicationId(event.target.value)} options={core.data.applications.map(row => ({
+                value: row.id, label: `${core.data.identifiers.find(id => id.application_id === row.id && id.identifier_kind === "application")?.raw_value ?? "Application number pending"} · ${row.office}`,
+              }))} />
             <fieldset className="block min-w-0 space-y-1.5">
               <legend className="text-sm font-medium">Represented side</legend>
               <div className="grid h-10 grid-cols-2 overflow-hidden rounded-md border border-[var(--color-line)]">

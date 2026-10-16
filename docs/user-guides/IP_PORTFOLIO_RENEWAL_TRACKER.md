@@ -150,6 +150,12 @@ selected name and email below the control. Changing or clearing the selection
 updates or removes that description. A retained unavailable colleague is
 historical context, not permission to make a new assignment to that person.
 
+Application and proceeding choices also show their complete selected caption
+beneath the control. Check the application/office or proceeding/stage details
+before acting. A pending application number remains explicitly pending; the
+description does not allocate an identifier or verify a legal record. Clearing
+or losing an available choice must not leave another record's stale caption.
+
 To move an existing IP hearing, change its reschedule date and select
 **Reschedule**. Wait for the saved date to appear before leaving the page, then
 reload when checking the result. Moving the date preserves the hearing's

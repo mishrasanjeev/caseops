@@ -357,6 +357,34 @@ are unchanged. All sixteen old preview failures remain retained; the full
 Docker gate and Review did not start on that failed candidate. This product
 layout amendment requires fresh full web, CI, Docker and production evidence.
 
+The complete `dc9ac4b3` CI run `38834543109` still failed: 593 cases in
+136 files completed with 573 passes, 17 explicit skips and three failures, no
+retries or job timeout. All three failures were at the final opposition step
+at 1535/1536/1537px. The actual Trademark application caption was the truthful
+pending-number/office label. Its native scroll width was 258px in a 227px client
+box without a linked readable description. Windows Docker preview38 passed
+and did not expose this Linux-native measurement. This is another record-choice
+readability defect, not permission to invent an application number or weaken
+the geometry guard.
+
+The corrective boundary includes application and proceeding pickers, not only
+the earlier named rule, calendar and colleague controls. Their full current
+caption must be visible and bound to the actual selected canonical ID even
+when a platform reports no overflow. Preserve labels, native events, source
+eligibility, disabled choices, Registry discriminators and cleared/unmatched
+states. The dated opposition journey now compares the real API core identities
+and requires both record descriptions at every existing width. Geometry errors
+include a static work-area stage without logging private labels.
+
+The superseded full local Docker run was interrupted after 1,699 complete
+passing native identities, one unended identity and 1,336 not started from its
+3,036-case collection. Its 5,098 retained phases are not a whole-suite pass.
+Broad browser and Review did not run. All owned processes and Docker resources
+were removed and the unchanged source was released before this amendment.
+Its earlier Web1451, preview38, Windows6 and clean three-category scans remain
+scoped historical evidence. Fresh final-source gates and live replay are still
+required. Production remains `b4bee6f8`, uncertified for the new scope.
+
 The empty production selectors also demonstrate why testing only synthetic
 positive options was insufficient. Reconcile the real eligible API identities
 with the loaded native options. Test honest empty, loading and failed requests
