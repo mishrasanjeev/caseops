@@ -127,6 +127,22 @@ for (const width of [1280, 393]) {
       await expect(row.getByText("Application Date", { exact: true })).toBeVisible();
       await expect(row.getByText("Renewal Due Date", { exact: true })).toBeVisible();
     }
+    for (const name of ["Application Date", "Renewal Due Date"]) {
+      const heading = width >= 768 ? page.getByRole("columnheader", { name, exact: true })
+        : row.getByText(name, { exact: true });
+      const columns = page.getByRole("button", { name: "Choose portfolio columns", exact: true });
+      await columns.click();
+      const checkbox = page.getByRole("checkbox", { name, exact: true });
+      await expect(checkbox).toBeChecked();
+      await checkbox.uncheck();
+      await page.keyboard.press("Escape");
+      await expect(heading).toHaveCount(0);
+      await columns.click();
+      await expect(checkbox).not.toBeChecked();
+      await checkbox.check();
+      await page.keyboard.press("Escape");
+      await expect(heading).toBeVisible();
+    }
     expect(await row.getByText("Not set", { exact: true }).count()).toBeGreaterThanOrEqual(2);
     const first = await saveDates(page, row, docket.title, { application: "2020-01-15", renewal: due },
       "Synthetic acceptance: record independent supplied dates");
@@ -149,6 +165,25 @@ for (const width of [1280, 393]) {
     expect(second.payload).not.toHaveProperty("application_date");
     expect(second.result.source_application_on).toBe("2020-01-15");
     expect(second.result.source_renewal_due_on).toBe(replacement);
+    const applicationCleared = await saveDates(page, row, docket.title, { application: "" },
+      "Synthetic acceptance: remove unsupported application date independently");
+    expect(applicationCleared.payload.application_date).toBeNull();
+    expect(applicationCleared.payload).not.toHaveProperty("renewal_due_date");
+    expect(applicationCleared.result.source_application_on).toBeNull();
+    expect(applicationCleared.result.source_application_state).toBe("missing");
+    expect(applicationCleared.result.source_renewal_due_on).toBe(replacement);
+    expect(applicationCleared.result.current_version).toBe(second.result.current_version + 1);
+    await page.reload();
+    row = await portfolioRecord(page, docket.title, width);
+    await expect(row.locator('time[datetime="2020-01-15"]')).toHaveCount(0);
+    await expect(row.locator(`time[datetime="${replacement}"]`).first()).toBeVisible();
+    await expect(row.getByText("Not set", { exact: true })).toBeVisible();
+    const applicationRestored = await saveDates(page, row, docket.title, { application: "2020-01-15" },
+      "Synthetic acceptance: restore supplied application date without changing renewal");
+    expect(applicationRestored.payload).not.toHaveProperty("renewal_due_date");
+    expect(applicationRestored.result.source_application_on).toBe("2020-01-15");
+    expect(applicationRestored.result.source_renewal_due_on).toBe(replacement);
+    expect(applicationRestored.result.current_version).toBe(applicationCleared.result.current_version + 1);
     const stale = await request.patch(`${docketPath}/portfolio-dates`, { headers: workspace.headers,
       data: { expected_current_version: before.current_version, application_date: "2020-02-20",
         reason: "Synthetic stale update must not replay" } });

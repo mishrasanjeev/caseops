@@ -385,6 +385,32 @@ Its earlier Web1451, preview38, Windows6 and clean three-category scans remain
 scoped historical evidence. Fresh final-source gates and live replay are still
 required. Production remains `b4bee6f8`, uncertified for the new scope.
 
+The next candidate, `b061a808`, passed the strengthened 38-case Docker preview
+and its focused 90 UI cases, but failed the complete web gate: 1,438 passes,
+30 failures and no skips across 210 files. Every structured failure was
+inspected. All 30 belong to the independent-reviewer fixture: the browser
+setup now requires the created proceeding's canonical ID, while its mock still
+returns an empty HTTP 201 body. The authentication negatives fail before their
+intended boundary, not because authentication is broken. This was an omitted
+test dependency in the parent amendment. Keep the canonical-ID assertion,
+update the complete response fixture, assert both returned record identities
+and reject malformed IDs before any authentication or role work.
+
+The full Docker run was stopped for that correction, with only one complete
+native identity and one unended identity from 3,036 collected. It is incomplete,
+not acceptance. All owned processes, Docker resources and listeners were
+removed before source was released. The failed full web results and interrupted
+native inventory are retained. The corrected candidate still requires fresh
+complete gates and exact-serving production replay.
+
+The same two-width tracker journey now explicitly removes and restores each
+date column through the real column menu. It also clears only the application
+date, proves the renewal date and canonical version survive, reloads the empty
+application date, then restores it without changing renewal. Existing renewal
+clear, stale-write, provenance and tracker assertions remain. These are added
+assertions in the existing two cases, not extra collected test identities or
+a claim that unrun browser coverage passed.
+
 The empty production selectors also demonstrate why testing only synthetic
 positive options was insufficient. Reconcile the real eligible API identities
 with the loaded native options. Test honest empty, loading and failed requests

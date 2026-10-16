@@ -2636,3 +2636,9 @@ requirements when using the fallback.
   duplicate captions, disabled options and retained description tokens; never
   silently substitute another record. Name geometry stages with static keys,
   not private values, so a later failure identifies its actual work area.
+- A dated browser setup change also changes every test that executes that
+  helper. Supply canonical create-response identities in those fixtures,
+  assert the returned IDs in local and production branches, and reject missing
+  or malformed identities before authentication or role mutation. Reconcile
+  every full-suite failure before blaming the tested authentication boundary;
+  a fixture that fails earlier has not exercised that boundary at all.

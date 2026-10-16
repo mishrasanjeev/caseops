@@ -12,6 +12,7 @@ const ownerId = "33333333-3333-4333-8333-333333333333";
 const legalId = "44444444-4444-4444-8444-444444444444";
 const reviewerId = "55555555-5555-4555-8555-555555555555";
 const otherId = "66666666-6666-4666-8666-666666666666";
+const proceedingId = "77777777-7777-4777-8777-777777777777";
 const marker = { "X-CaseOps-Automated-Test": "no-paid-providers" };
 const legalToken = "synthetic-memory-only-legal-token";
 
@@ -23,6 +24,7 @@ type Identity = {
 type Session = Identity & { access_token: unknown; token_type: string };
 type Options = {
   local?: boolean;
+  proceeding?: { id?: unknown };
   login?: (actor: Session) => unknown;
   current?: (actor: Identity) => unknown;
   loginStatus?: number;
@@ -97,7 +99,7 @@ function fixture(options: Options = {}) {
   let memberCount = 0;
   const request = { post: vi.fn(async (url: string) => {
     const route = new URL(url).pathname;
-    if (route.endsWith("/proceedings")) return response({}, 201);
+    if (route.endsWith("/proceedings")) return response(options.proceeding ?? { id: proceedingId }, 201);
     expect(route).toBe("/api/companies/current/users");
     memberCount += 1;
     return response({ membership_id: options.duplicateMemberIds || memberCount === 1 ? legalId : reviewerId });
@@ -112,7 +114,7 @@ function fixture(options: Options = {}) {
   vm.runInContext(ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.CommonJS } }).outputText, context);
   const helper = context as unknown as { prepare: (...args: unknown[]) => Promise<{
-    legal: typeof legal | null; reviewerId: string; docketId: string;
+    legal: typeof legal | null; reviewerId: string; docketId: string; applicationId: string; proceedingId: string;
   }> };
   return { run: () => helper.prepare({}, request, workspace.web.origin, 393), authentication, legal, newContext,
     request, release, spawnSync, events, activationRequests, workspace, prepareIp15Workspace, createIp15ManualTrademark,
@@ -136,6 +138,8 @@ describe("IP15 independent reviewer fixture authentication", () => {
     expect(result.legal).toBe(f.legal);
     expect(result.reviewerId).toBe(reviewerId);
     expect(result.docketId).toBe(run);
+    expect(result.applicationId).toBe(otherId);
+    expect(result.proceedingId).toBe(proceedingId);
     expect(f.events.indexOf("current-identity")).toBeLessThan(f.events.indexOf("release"));
     for (const route of ["working-calendars", "deadline-rules"]) {
       await result.legal!.post(`http://127.0.0.1:8000/api/ip/${route}/${run}/activate`);
@@ -145,6 +149,29 @@ describe("IP15 independent reviewer fixture authentication", () => {
     })));
     await result.legal!.dispose();
   });
+
+  for (const local of [true, false]) {
+    it.each([
+      ["missing", {}],
+      ["null", { id: null }],
+      ["number", { id: 42 }],
+      ["boolean", { id: false }],
+      ["object", { id: {} }],
+      ["array", { id: [] }],
+    ] as const)(`rejects %s proceeding identity before roles or authentication (${local ? "local" : "production"})`, async (_name, proceeding) => {
+      const f = fixture({ local, proceeding });
+      await expect(f.run()).rejects.toThrow("The created proceeding must return its canonical identity.");
+      expect(f.request.post.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([`/api/ip/dockets/${run}/proceedings`]);
+      expect(f.spawnSync).not.toHaveBeenCalled();
+      expect(f.newContext).not.toHaveBeenCalled();
+      expect(f.authentication.post).not.toHaveBeenCalled();
+      expect(f.authentication.dispose).not.toHaveBeenCalled();
+      expect(f.legal.get).not.toHaveBeenCalled();
+      expect(f.legal.post).not.toHaveBeenCalled();
+      expect(f.legal.dispose).not.toHaveBeenCalled();
+      expect(f.release).not.toHaveBeenCalled();
+    });
+  }
 
   it.each([undefined, null, "", "   ", 42])("rejects blank/non-string login token case %# before creating a legal context", async token => {
     const f = fixture({ login: actor => ({ ...actor, access_token: token }) });
@@ -198,7 +225,7 @@ describe("IP15 independent reviewer fixture authentication", () => {
 
   it("preserves independent creator, legal actor and reviewer identities", async () => {
     const f = fixture({ duplicateMemberIds: true });
-    await expect(f.run()).rejects.toThrow();
+    await expect(f.run()).rejects.toThrow("IP15 requires three distinct local governance actors.");
     expect(f.newContext).not.toHaveBeenCalled();
   });
 
@@ -227,7 +254,7 @@ describe("IP15 independent reviewer fixture authentication", () => {
   it("does not create local actors, role mutations or request contexts in production", async () => {
     const f = fixture({ local: false });
     const result = await f.run();
-    expect(result).toMatchObject({ legal: null, reviewerId: "", docketId: run });
+    expect(result).toMatchObject({ legal: null, reviewerId: "", docketId: run, applicationId: otherId, proceedingId });
     expect(f.request.post.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([`/api/ip/dockets/${run}/proceedings`]);
     expect(f.spawnSync).not.toHaveBeenCalled();
     expect(f.newContext).not.toHaveBeenCalled();
