@@ -105,21 +105,102 @@ async function prepare(page: Page, api: APIRequestContext, baseURL: string | und
   }
 }
 
-async function checkGeometry(page: Page, scope: Locator) {
+async function checkGeometry(page: Page, scope: Locator, requiredSourceValues: readonly string[] = []) {
   await expect(scope).toBeVisible();
   expect(await scope.locator("input, select, textarea, button").count()).toBeGreaterThan(0);
-  const issues = await scope.locator("input:not([type=checkbox]), select, textarea, button").evaluateAll(elements => elements.flatMap(element => {
-    const box = element.getBoundingClientRect();
-    if (!box.width || !box.height) return [];
-    const parent = element.closest("form")?.getBoundingClientRect();
-    const name = element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 70) ?? element.tagName;
-    const minimum = element.tagName === "BUTTON" ? 36 : Math.min(200, (parent?.width ?? box.width));
-    return box.width < minimum || box.left < 0 || box.right > document.documentElement.clientWidth + 1
-      || (parent && (box.left < parent.left - 1 || box.right > parent.right + 1))
-      || element.scrollWidth > element.clientWidth + 1 ? [name] : [];
-  }));
-  expect(issues, "Every control must have useful width, complete content and stay in its form.").toEqual([]);
+  const measurements = await scope.evaluate((root, requiredValues) => {
+    const elements = Array.from(root.querySelectorAll<HTMLElement>("input:not([type=checkbox]), select, textarea, button"));
+    const rectangle = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height };
+    };
+    const normalize = (value: string | null) => value?.replace(/\s+/g, " ").trim() ?? "";
+    return elements.flatMap((element, index) => {
+      const box = rectangle(element);
+      if (!box.width || !box.height) return [];
+      const parent = element.closest("form");
+      const parentBox = parent ? rectangle(parent) : null;
+      const ownerBox = parentBox ?? rectangle(root);
+      const minimum = element.tagName === "BUTTON" ? 36 : Math.min(200, ownerBox.width);
+      let selectedDetail: { readable: boolean; currentIdentity: boolean; completeLabel: boolean; width: number; height: number } | null = null;
+      if (element instanceof HTMLSelectElement && element.value) {
+        const label = normalize(element.selectedOptions[0]?.label ?? "");
+        for (const id of (element.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean)) {
+          const targets = document.querySelectorAll<HTMLElement>(`#${CSS.escape(id)}`);
+          if (targets.length !== 1) continue;
+          const detail = targets[0];
+          if (!root.contains(detail)) continue;
+          const bounds = rectangle(detail);
+          const style = getComputedStyle(detail);
+          const currentIdentity = detail.dataset.selectedOptionValue === element.value;
+          const completeLabel = Boolean(label) && normalize(detail.textContent) === label;
+          let visible = detail.isConnected && bounds.width > 0 && bounds.height > 0;
+          for (let ancestor: Element | null = detail; ancestor; ancestor = ancestor.parentElement) {
+            const ancestorStyle = getComputedStyle(ancestor);
+            if (ancestorStyle.display === "none" || ancestorStyle.visibility !== "visible" || Number(ancestorStyle.opacity) === 0) visible = false;
+            const ancestorBox = rectangle(ancestor);
+            const clipLeft = ancestorBox.left + ancestor.clientLeft;
+            const clipTop = ancestorBox.top + ancestor.clientTop;
+            if (["hidden", "clip"].includes(ancestorStyle.overflowX)
+              && (bounds.left < clipLeft - 1 || bounds.right > clipLeft + ancestor.clientWidth + 1)) visible = false;
+            if (["hidden", "clip"].includes(ancestorStyle.overflowY)
+              && (bounds.top < clipTop - 1 || bounds.bottom > clipTop + ancestor.clientHeight + 1)) visible = false;
+            if (ancestorStyle.clipPath !== "none" || ancestorStyle.clip !== "auto"
+              || !["", "none", "0"].includes(ancestorStyle.webkitLineClamp) || ancestorStyle.contentVisibility === "hidden") visible = false;
+          }
+          const unclipped = !["hidden", "clip"].includes(style.overflowX)
+            && !["hidden", "clip"].includes(style.overflowY) && style.textOverflow !== "ellipsis"
+            && ["", "none", "0"].includes(style.webkitLineClamp) && style.clipPath === "none"
+            && style.clip === "auto" && style.whiteSpace !== "nowrap"
+            && detail.scrollWidth <= detail.clientWidth + 1 && detail.scrollHeight <= detail.clientHeight + 1;
+          const contained = bounds.left >= ownerBox.left - 1 && bounds.right <= ownerBox.right + 1
+            && bounds.top >= ownerBox.top - 1 && bounds.bottom <= ownerBox.bottom + 1
+            && bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth + 1
+            && bounds.width >= Math.min(200, ownerBox.width);
+          const normalFlow = ["static", "relative"].includes(style.position);
+          const overlapsControl = elements.some(control => {
+            const controlBox = rectangle(control);
+            return controlBox.width > 0 && controlBox.height > 0 && bounds.left < controlBox.right - 1
+              && bounds.right > controlBox.left + 1 && bounds.top < controlBox.bottom - 1 && bounds.bottom > controlBox.top + 1;
+          });
+          const readable = currentIdentity && completeLabel && visible && unclipped && contained && normalFlow && !overlapsControl;
+          selectedDetail = { readable, currentIdentity, completeLabel, width: bounds.width, height: bounds.height };
+          if (readable) break;
+        }
+      }
+      const failures = {
+        usefulWidth: box.width < minimum,
+        viewportLeft: box.left < 0,
+        viewportRight: box.right > document.documentElement.clientWidth + 1,
+        formLeft: Boolean(parentBox && box.left < parentBox.left - 1),
+        formRight: Boolean(parentBox && box.right > parentBox.right + 1),
+        unreadableOverflow: element.scrollWidth > element.clientWidth + 1 && !selectedDetail?.readable,
+        requiredCurrentValue: element instanceof HTMLSelectElement && requiredValues.includes(element.value) && !selectedDetail?.readable,
+      };
+      return [{ control: element.id || element.getAttribute("aria-label") || `${element.tagName.toLowerCase()}[${index}]`,
+        box, parentBox, minimum, clientWidth: element.clientWidth, scrollWidth: element.scrollWidth, selectedDetail, failures }];
+    });
+  }, requiredSourceValues);
+  const issues = measurements.filter(row => Object.values(row.failures).some(Boolean));
+  expect(issues, "Every control must have useful width, readable current value and stay in its form; numeric evidence excludes private labels.").toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  return measurements;
+}
+
+async function assertSelectedDescription(select: Locator, detail: Locator, expectedValue: string, facts: readonly string[]) {
+  await expect(select).toBeVisible();
+  await expect(detail).toBeVisible();
+  expect(await select.inputValue() === expectedValue, "The native selection must retain the current source identity.").toBe(true);
+  const detailId = await detail.getAttribute("id");
+  expect(Boolean(detailId) && (await select.getAttribute("aria-describedby") ?? "").split(/\s+/).includes(detailId!),
+    "The current detail must be the select's actual accessible description.").toBe(true);
+  expect(await detail.getAttribute("data-selected-option-value") === expectedValue, "Description identity must not be stale.").toBe(true);
+  const text = (await detail.textContent() ?? "").replace(/\s+/g, " ").trim();
+  const caption = (await select.locator("option:checked").textContent() ?? "").replace(/\s+/g, " ").trim();
+  expect(Boolean(text) && text === caption, "The complete selected caption must be visible, not merely present in a native option.").toBe(true);
+  for (const fact of facts.filter(Boolean)) {
+    expect(text.toLowerCase().includes(fact.toLowerCase()), "The current caption must retain every source distinguishing fact.").toBe(true);
+  }
 }
 
 async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWorkspace) {
@@ -160,6 +241,16 @@ async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWork
         await select.press("Enter");
         await expect(select).toHaveValue(actualIds[actualIds.length - 1]);
       }
+      const selectedId = await select.inputValue();
+      if (label === "Active rule version") {
+        const row = data.rules.find(rule => rule.id === selectedId)!;
+        await assertSelectedDescription(select, scope.locator("#ip-active-rule-detail"), selectedId,
+          [row.key, `version ${row.version}`, row.jurisdiction, row.office ?? "", row.status]);
+      } else {
+        const row = data.calendars.find(calendar => calendar.id === selectedId)!;
+        await assertSelectedDescription(select, scope.locator("#ip-active-calendar-detail"), selectedId,
+          [row.name, `version ${row.version}`, row.jurisdiction, row.office ?? "", row.timezone, row.status]);
+      }
     }
   }
   if (!ruleIds.length || !calendarIds.length) {
@@ -169,9 +260,79 @@ async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWork
   return { eligible_rule_ids: ruleIds, active_calendar_ids: calendarIds };
 }
 
-for (const width of [393, 768, 1024, 1280, 1536]) {
+for (const scenario of ["current", "missing-link", "stale-id-same-caption", "wrong-caption", "hidden", "transparent",
+  "clipped", "ellipsis", "absolute", "narrow-outside-form", "outside-form", "outside-viewport", "empty-selection", "button-overflow",
+  "required-no-overflow", "missing-required-no-overflow", "ancestor-clipped", "outside-owner-vertical"] as const) {
+  test(`IP15 geometry guard ${scenario}`, async ({ page }) => {
+    let requests = 0;
+    page.on("request", () => { requests += 1; });
+    await page.setViewportSize({ width: 393, height: 900 });
+    const caption = "Synthetic selected colleague with a long unbroken identity legal-operations-reviewer@example.com";
+    await page.setContent(`<form data-testid="geometry-guard" style="display:grid;gap:8px;width:280px;max-width:100%;margin:0">
+      <select id="guard-choice" aria-describedby="guard-detail" style="box-sizing:border-box;width:100%;height:40px;min-width:0">
+        <option value="">Select a colleague</option><option value="source-a" selected>${caption}</option>
+      </select><p id="guard-detail" data-selected-option-value="source-a"
+        style="margin:0;min-width:0;white-space:normal;overflow-wrap:anywhere;font:14px/20px sans-serif">${caption}</p></form>`);
+    await page.evaluate(kind => {
+      const select = document.querySelector<HTMLSelectElement>("#guard-choice")!;
+      const detail = document.querySelector<HTMLElement>("#guard-detail")!;
+      // Exercise the exception deterministically; native select scroll extents differ by Chromium/platform.
+      Object.defineProperty(select, "scrollWidth", { configurable: true, get: () => select.clientWidth + (kind.endsWith("no-overflow") ? 0 : 140) });
+      if (kind === "missing-link" || kind === "missing-required-no-overflow") select.removeAttribute("aria-describedby");
+      if (kind === "stale-id-same-caption") detail.dataset.selectedOptionValue = "source-b";
+      if (kind === "wrong-caption") detail.textContent = "A different selected colleague";
+      if (kind === "hidden") detail.hidden = true;
+      if (kind === "transparent") detail.style.opacity = "0";
+      if (kind === "clipped") { detail.style.height = "5px"; detail.style.overflow = "hidden"; }
+      if (kind === "ancestor-clipped") {
+        const wrapper = document.createElement("div");
+        wrapper.style.cssText = "height:5px;overflow:hidden";
+        detail.replaceWith(wrapper);
+        wrapper.append(detail);
+      }
+      if (kind === "ellipsis") detail.style.textOverflow = "ellipsis";
+      if (kind === "absolute") detail.style.position = "absolute";
+      if (kind === "narrow-outside-form") {
+        const form = select.closest("form")!;
+        const root = document.createElement("div");
+        root.dataset.testid = "geometry-guard";
+        root.style.cssText = form.style.cssText;
+        root.append(...form.childNodes);
+        form.replaceWith(root);
+        select.style.width = "24px";
+      }
+      if (kind === "outside-form") select.style.marginLeft = "20px";
+      if (kind === "outside-viewport") select.style.transform = "translateX(320px)";
+      if (kind === "outside-owner-vertical") detail.style.transform = "translateY(400px)";
+      if (kind === "empty-selection") select.value = "";
+      if (kind === "button-overflow") {
+        const button = document.createElement("button");
+        button.textContent = "Synthetic action";
+        button.style.cssText = "width:240px;height:40px";
+        Object.defineProperty(button, "scrollWidth", { get: () => button.clientWidth + 100 });
+        select.parentElement!.append(button);
+      }
+    }, scenario);
+    const required = scenario.endsWith("no-overflow") ? ["source-a"] : [];
+    const result = checkGeometry(page, page.getByTestId("geometry-guard"), required);
+    if (scenario === "current" || scenario === "required-no-overflow") {
+      const measurements = await result;
+      if (scenario === "current") expect(measurements[0].scrollWidth).toBeGreaterThan(measurements[0].clientWidth);
+      expect(measurements[0].selectedDetail?.readable).toBe(true);
+    } else {
+      await expect(result).rejects.toThrow(/Every control must have useful width/);
+    }
+    expect(requests, "Geometry guard fixtures must not call CaseOps or external providers.").toBe(0);
+  });
+}
+
+for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 1280, 1281, 1535, 1536, 1537]) {
   test(`IP15 BUG-001..007 governed controls and readable forms at ${width}px`, async ({ page, request, baseURL }, testInfo) => {
     const fixture = await prepare(page, request, baseURL, width);
+    const geometry: Array<{ stage: string; measurements: Awaited<ReturnType<typeof checkGeometry>> }> = [];
+    const captureGeometry = async (stage: string, scope: Locator, requiredSources: readonly string[] = []) => {
+      geometry.push({ stage, measurements: await checkGeometry(page, scope, requiredSources) });
+    };
     try {
       const schedule = `${fixture.web.origin}/app/ip?docket=${fixture.docketId}&view=schedule`;
       let finishRead: () => void = () => {};
@@ -209,7 +370,8 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
         await expect(workspace.getByRole("combobox", { name: "Active rule version", exact: true })).toBeDisabled();
         await expect(workspace.getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
       }
-      await checkGeometry(page, workspace);
+      await captureGeometry("deadline-initial", workspace, [...currentWorkspace.eligible_rule_version_ids,
+        ...currentWorkspace.calendars.filter(row => row.status === "active").map(row => row.id)]);
       const hearingFields = page.getByTestId("ip-hearing-workflow");
       for (const label of ["Hearing date", "Time precision", "IANA timezone", "Forum", "Purpose", "Mode",
         "Location", "Virtual hearing link", "Source", "Reminder offsets (hours)"]) {
@@ -218,8 +380,17 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
           : hearingFields.getByLabel(label, { exact: true });
         await expect(control).toBeVisible();
       }
-      await checkGeometry(page, hearingFields);
-      await checkGeometry(page, page.getByTestId("ip-deadline-governance"));
+      await captureGeometry("hearing-initial", hearingFields);
+      const governance = page.getByTestId("ip-deadline-governance");
+      await captureGeometry("governance-initial", governance);
+      const reviewer = governance.getByRole("combobox", { name: "Independent fixture reviewer", exact: true });
+      const reviewerValue = fixture.local ? fixture.reviewerId : fixture.actor.membership.id;
+      await reviewer.selectOption(reviewerValue);
+      await assertSelectedDescription(reviewer, governance.locator("#rule-fixture-reviewer-selected-description"), reviewerValue, []);
+      await captureGeometry("governance-selected-identity", governance, [reviewerValue]);
+      await reviewer.selectOption("");
+      await expect(governance.locator("#rule-fixture-reviewer-selected-description")).toHaveCount(0);
+      expect(Boolean(await reviewer.getAttribute("aria-describedby")), "Clearing must remove the stale description link.").toBe(false);
 
       const hearing = page.getByTestId("ip-hearing-workflow");
       const purpose = `Synthetic IP15 hearing ${fixture.run}`;
@@ -247,11 +418,11 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
       expect(listed.hearings.find((row: { id: string }) => row.id === savedHearing.id)).toMatchObject({
         hearing_on: "2099-12-20", hearing_time: "10:30:00", timezone: fixture.timezone, purpose,
       });
-      await checkGeometry(page, hearing);
+      await captureGeometry("hearing-reloaded", hearing);
 
       if (fixture.local && fixture.legal) {
       const calendar = await json(await request.post(`${fixture.api.origin}/api/ip/working-calendars`, { headers: fixture.headers, data: {
-        key: "ip15-calendar", name: "Synthetic reviewed working calendar", jurisdiction: "IN", office: "IP India",
+        key: "ip15-calendar", name: "Synthetic reviewed working calendar for independently checked domestic trademark response and renewal operations", jurisdiction: "IN", office: "IP India",
         timezone: "Asia/Kolkata", weekend_days: [5, 6], holidays: [], exceptional_working_days: [],
         source_priority: ["official_gazette"], source_reference: "fixture:ip15-calendar", source_hash: "a".repeat(64), effective_from: "2026-01-01",
       } }), 201);
@@ -263,7 +434,7 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
         duration_unit: "days", calendar_method: "business_days", direction: "after", include_base_date: false,
         next_working_day: true, extension_days: 0, rule_citation: "Synthetic IP15 fixture, not legal advice" };
       const rule = await json(await request.post(`${fixture.api.origin}/api/ip/deadline-rules`, { headers: fixture.headers, data: {
-        key: "ip15-rule", rule_kind: "deadline", jurisdiction: "IN", office: "IP India", right_kind: "trademark",
+        key: `ip15-response-${"reviewed-".repeat(10)}source`, rule_kind: "deadline", jurisdiction: "IN", office: "IP India", right_kind: "trademark",
         proceeding_kind: "application", role: "applicant", stage: "examination", source_record_id: "fixture-ip15-source",
         source_hash: "b".repeat(64), source_reference: "fixture:ip15-rule", effective_from: "2026-01-01",
         engine_compatibility: "caseops-ip-deadline-v1", definition,
@@ -294,14 +465,15 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
       await calendarSelect.press("Home");
       await calendarSelect.press("Enter");
       await expect(calendarSelect).toHaveValue(calendar.id);
-      await expect(workspace.getByText("Synthetic reviewed working calendar · version 1 · Asia/Kolkata", { exact: true })).toBeVisible();
+      await assertSelectedDescription(calendarSelect, workspace.locator("#ip-active-calendar-detail"), calendar.id,
+        [calendar.name, `version ${calendar.version}`, calendar.jurisdiction, calendar.office, calendar.timezone, calendar.status]);
       await workspace.getByLabel("Trigger / base date").fill("2026-10-15");
       const proposal = page.waitForResponse(response => response.url().endsWith(`/dockets/${fixture.docketId}/deadlines`) && response.request().method() === "POST");
       await workspace.getByRole("button", { name: "Calculate deadline proposal" }).click();
       const saved = await json(await proposal, 201);
       expect(saved).toMatchObject({ rule_version_id: rule.id, calendar_version_id: calendar.id, result_on: "2026-10-16", state: "candidate" });
       await expect(workspace.getByTestId(`ip-legal-deadline-${saved.id}`)).toContainText("2026-10-16");
-      await checkGeometry(page, workspace);
+      await captureGeometry("deadline-created-long-values", workspace, [rule.id, calendar.id, fixture.actor.membership.id]);
       await page.reload();
       const persisted: IpDeadlineWorkspace = await json(await request.get(
         `${fixture.api.origin}/api/ip/dockets/${fixture.docketId}/deadline-workspace`, { headers: fixture.headers },
@@ -316,10 +488,11 @@ for (const width of [393, 768, 1024, 1280, 1536]) {
       const opposition = page.getByTestId("ip-opposition-workspace");
       await expect(opposition.getByRole("heading", { name: "Trademark opposition", exact: true })).toBeVisible();
       await expect(opposition.getByRole("button", { name: "Apply stage" })).toBeDisabled();
-      await checkGeometry(page, opposition);
+      await captureGeometry("opposition", opposition);
       await testInfo.attach("ip15-control-coverage", { contentType: "application/json", body: Buffer.from(JSON.stringify({
         width, local: fixture.local, source: "API-backed manual trademark", governance_positive: fixture.local,
         observed_options_after_retry: observedOptions,
+        geometry,
         production_limitation: fixture.local ? null : "Read-only existing rule/calendar eligibility and keyboard selection; no synthetic production governance publication or deadline calculation.",
       })) });
     } finally {

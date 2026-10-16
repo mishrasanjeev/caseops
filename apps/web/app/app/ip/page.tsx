@@ -1999,6 +1999,14 @@ function DeadlineProvenance({
   );
 }
 
+function deadlineRuleCaption(rule: IpDeadlineRuleVersion): string {
+  return `${rule.key} · version ${rule.version} · ${rule.jurisdiction}${rule.office ? ` · ${rule.office}` : ""} · ${rule.status}`;
+}
+
+function workingCalendarCaption(calendar: IpWorkingCalendarVersion): string {
+  return `${calendar.name} · version ${calendar.version} · ${calendar.jurisdiction}${calendar.office ? ` · ${calendar.office}` : ""} · ${calendar.timezone} · ${calendar.status}`;
+}
+
 function DeadlineWorkspaceCard({
   docket,
   enabled,
@@ -2250,7 +2258,7 @@ function DeadlineWorkspaceCard({
                   <option value="">{workspace.isPending ? "Loading deadline rules…" : workspace.isError ? "Deadline rules unavailable" : "No eligible active deadline rule"}</option>
                 ) : null}
                 {activeRules.map((row) => (
-                  <option key={row.id} value={row.id}>{row.key} v{row.version} · {row.jurisdiction} · Active</option>
+                  <option key={row.id} value={row.id}>{deadlineRuleCaption(row)}</option>
                 ))}
               </select>
             </Field>
@@ -2266,7 +2274,7 @@ function DeadlineWorkspaceCard({
                   <option value="">{workspace.isPending ? "Loading working calendars…" : workspace.isError ? "Working calendars unavailable" : "No active working calendar"}</option>
                 ) : null}
                 {activeCalendars.map((row) => (
-                  <option key={row.id} value={row.id}>{row.name} v{row.version} · {row.jurisdiction}</option>
+                  <option key={row.id} value={row.id}>{workingCalendarCaption(row)}</option>
                 ))}
               </select>
             </Field>
@@ -2279,8 +2287,8 @@ function DeadlineWorkspaceCard({
               Critical legal deadline
             </label>
             <div className="col-span-full grid min-w-0 gap-2">
-              {selectedRule ? <p id="ip-active-rule-detail" className="min-w-0 break-words text-sm text-[var(--color-mute)]">{selectedRule.key} · version {selectedRule.version} · {selectedRule.jurisdiction}{selectedRule.office ? ` · ${selectedRule.office}` : ""}</p> : null}
-              {selectedCalendar ? <p id="ip-active-calendar-detail" className="min-w-0 break-words text-sm text-[var(--color-mute)]">{selectedCalendar.name} · version {selectedCalendar.version} · {selectedCalendar.timezone}</p> : null}
+              {selectedRule ? <p id="ip-active-rule-detail" data-selected-option-value={selectedRule.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{deadlineRuleCaption(selectedRule)}</p> : null}
+              {selectedCalendar ? <p id="ip-active-calendar-detail" data-selected-option-value={selectedCalendar.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{workingCalendarCaption(selectedCalendar)}</p> : null}
               {workspace.isSuccess && (!activeRules.length || !activeCalendars.length) ? <p id="ip-deadline-prerequisites" className="text-sm text-[var(--color-mute)]">Independent approval is required before a working calendar or deadline rule can be used. Company policy must select the active rule.</p> : null}
               <Button
                 className="h-auto min-h-10 w-fit max-w-full whitespace-normal py-2 text-left"

@@ -702,8 +702,16 @@ describe("IpDocketPage", () => {
     await userEvent.selectOptions(calendars, "calendar-2");
     expect(rules).toHaveValue("rule-2");
     expect(calendars).toHaveValue("calendar-2");
-    expect(within(workspace).getByText("in-tm-alternate · version 2 · IN · IP India")).toBeVisible();
-    expect(within(workspace).getByText("IP India working calendar · version 2 · Asia/Kolkata")).toBeVisible();
+    const ruleDetail = document.getElementById(rules.getAttribute("aria-describedby") ?? "");
+    const calendarDetail = document.getElementById(calendars.getAttribute("aria-describedby") ?? "");
+    expect(ruleDetail).toBeVisible();
+    expect(ruleDetail).toHaveAttribute("data-selected-option-value", "rule-2");
+    expect(ruleDetail?.textContent).toBe("in-tm-alternate · version 2 · IN · IP India · active");
+    expect(calendarDetail).toBeVisible();
+    expect(calendarDetail).toHaveAttribute("data-selected-option-value", "calendar-2");
+    expect(calendarDetail?.textContent).toBe("IP India working calendar · version 2 · IN · Asia/Kolkata · active");
+    expect((rules as HTMLSelectElement).selectedOptions[0].textContent).toBe(ruleDetail?.textContent);
+    expect((calendars as HTMLSelectElement).selectedOptions[0].textContent).toBe(calendarDetail?.textContent);
     expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeEnabled();
 
     await act(async () => client.setQueryData(["ip", "deadline-workspace", "ip-1"], {
@@ -720,7 +728,66 @@ describe("IpDocketPage", () => {
     await waitFor(() => expect(rules).toBeDisabled());
     expect(rules).toHaveValue("");
     expect(calendars).toHaveValue("");
+    expect(document.getElementById("ip-active-rule-detail")).toBeNull();
+    expect(document.getElementById("ip-active-calendar-detail")).toBeNull();
+    expect(rules).toHaveAttribute("aria-describedby", "ip-deadline-prerequisites");
+    expect(calendars).toHaveAttribute("aria-describedby", "ip-deadline-prerequisites");
     expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
+    expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
+  });
+
+  it("B2-BUG-001/002 keeps complete long rule and calendar captions linked to exact selected IDs", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
+    const rule = {
+      id: "rule-one", rule_set_id: "set-one", key: `rule-${"longkey".repeat(30)}`,
+      version: 7, status: "active", rule_kind: "deadline", jurisdiction: "IN",
+      office: "Intellectual Property Office",
+    };
+    const calendar = {
+      id: "calendar-one", name: `Working calendar ${"longname".repeat(30)}`,
+      version: 8, status: "active", jurisdiction: "IN", office: "Calendar Office",
+      timezone: "Asia/Kolkata",
+    };
+    const data = {
+      docket_id: "ip-1", eligible_rule_version_ids: ["rule-one", "rule-two"],
+      rules: [rule, { ...rule, id: "rule-two", rule_set_id: "set-two" }],
+      calendars: [calendar, { ...calendar, id: "calendar-two" }],
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+    };
+    fetchIpDeadlineWorkspaceMock.mockResolvedValue(data);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><IpDocketPage /></QueryClientProvider>);
+    const workspace = await screen.findByTestId("ip-deadline-workspace");
+    const rules = within(workspace).getByLabelText("Active rule version") as HTMLSelectElement;
+    const calendars = within(workspace).getByLabelText("Active working calendar") as HTMLSelectElement;
+    await waitFor(() => expect(rules).toBeEnabled());
+
+    const assertDetail = (select: HTMLSelectElement, expectedId: string, caption: string) => {
+      expect(select).toHaveValue(expectedId);
+      const detail = document.getElementById(select.getAttribute("aria-describedby") ?? "");
+      expect(detail?.tagName).toBe("P");
+      expect(detail).toBeVisible();
+      expect(detail).toHaveAttribute("data-selected-option-value", expectedId);
+      expect(detail?.textContent).toBe(caption);
+      expect(select.selectedOptions[0].textContent).toBe(caption);
+      expect(detail).toHaveClass("min-w-0", "whitespace-normal", "break-all");
+      expect(detail?.className).not.toMatch(/truncate|line-clamp|overflow-hidden|sr-only/);
+    };
+    const ruleCaption = `${rule.key} · version 7 · IN · Intellectual Property Office · active`;
+    const calendarCaption = `${calendar.name} · version 8 · IN · Calendar Office · Asia/Kolkata · active`;
+    assertDetail(rules, "rule-one", ruleCaption);
+    assertDetail(calendars, "calendar-one", calendarCaption);
+    await userEvent.selectOptions(rules, "rule-two");
+    await userEvent.selectOptions(calendars, "calendar-two");
+    assertDetail(rules, "rule-two", ruleCaption);
+    assertDetail(calendars, "calendar-two", calendarCaption);
+
+    await act(async () => client.setQueryData(["ip", "deadline-workspace", "ip-1"], {
+      ...data, rules: [rule], calendars: [calendar],
+    }));
+    await waitFor(() => expect(rules).toHaveValue("rule-one"));
+    assertDetail(rules, "rule-one", ruleCaption);
+    assertDetail(calendars, "calendar-one", calendarCaption);
     expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
   });
 

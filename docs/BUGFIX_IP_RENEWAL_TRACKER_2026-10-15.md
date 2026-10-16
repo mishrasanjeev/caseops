@@ -275,6 +275,66 @@ were guaranteed. That failure cannot independently diagnose the product. The
 corrected test waits for the actual loaded header; the earlier reports remain
 retained rather than being relabelled as a clean product reproduction.
 
+### October 16 Selected-Value Readability Correction
+
+The `83e2bb01` isolated Docker diagnostic passed all nine selected cases, but
+complete Linux CI38807524492 did not: 564 browser identities contained 542
+passes, 17 explicit skips and five controls failures. All five reported the
+colleague selector; the 1280/1536px cases also reported the calendar selector.
+The old geometry helper retained only concatenated option text, not the failing
+numeric predicate. Its green Windows result was not cross-platform readability
+proof. These CI failures remain retained rather than dismissed or retried away.
+
+An isolated matching Playwright1.60/Chromium148 headless-shell probe produced
+220 measurements: all 90 long-selection failures were scroll-overflow checks,
+while short selections and all box/containment predicates passed. A prior
+Chromium153 probe returned equal scroll/client widths despite visibly clipped
+long text. Both were fixed-HTML diagnostics, not actual app or release
+acceptance. Additional remote-browser app probes stopped in transport/runtime
+observer setup before the original app body and remain inconclusive. They
+created no app fixture or successful product proof.
+
+The resulting correction gives PersonPicker a visible, wrapping current
+identity description. Rule and calendar options reuse their complete typed
+caption in the existing visible detail, including distinguishing source facts.
+Descriptions bind the actual selected source ID; changing or clearing a value
+must not leave stale evidence. Existing membership, eligibility, approval and
+keyboard behavior remain unchanged. There is no CSS overflow-hiding repair.
+
+The browser guard retains useful-width, viewport, form and page bounds. A
+native scroll-overflow result is acceptable only when a unique linked detail
+has the same current source ID and complete caption, is visible in normal
+flow, remains unclipped within its owning layout and overlaps no control.
+Known source-backed choices require this detail even on browsers that report
+no native overflow. Numeric diagnostics omit private option labels and values.
+Eighteen pure-DOM guard regressions cover the valid presentation and missing,
+stale, wrong, hidden, transparent, clipped, ellipsized or absolutely positioned
+details, ancestor clipping, escaped owning-layout bounds, narrow/out-of-bounds
+controls, empty choices and non-select overflow. The ancestor-clipping negative
+first failed against the new guard (16 passes, one failure), then passed after
+the visibility check included the clipping ancestors. That failure is retained.
+The full controls journeys cover 393px and below/at/above 640, 768, 1024, 1280
+and 1536px, with long rule/calendar fixtures and selection/clear checks.
+
+The obsolete `83e2bb01` whole Docker run was intentionally interrupted after
+its complete 3,036-test PostgreSQL gate passed with 9,108 ordered phases and no
+skips/retries. Completed desktop shard1 has 281 passes and two explicit skips;
+the remaining browser run is incomplete and Review did not run. Its retained
+partial inventory is not final release acceptance. All owned processes,
+containers, networks and volumes were removed before source editing. The
+corrected candidate still requires fresh complete Docker, CI, canonical-main
+merge, guarded deployment, exact-serving replay and private-cadence evidence.
+
+Independent joined review also caught a release-consumer mismatch before
+freezing: the expanded controls file defines 34 cases (16 widths and 18 guard
+contracts), while the evidence producer still expected five. The exact dated
+partition is now 42 cases: two hearings, four portfolio, 34 controls and two
+tracker journeys. The reviewed 115/6/42 partition and per-file count fences stay
+strict. Backend consumer regressions reject missing or substituted files, and
+a standard web regression runs the real production configuration's collection,
+not app execution, and checks its exact identities and disjoint file inventory.
+This is collection proof, not successful execution of those 42 journeys.
+
 The empty production selectors also demonstrate why testing only synthetic
 positive options was insufficient. Reconcile the real eligible API identities
 with the loaded native options. Test honest empty, loading and failed requests

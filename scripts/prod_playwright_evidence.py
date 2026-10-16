@@ -46,7 +46,7 @@ TESTER_PARTITIONS = {
     "test-legal-write-oct13": "test-legal-write-prod-chromium",
 }
 # Reviewed exact inventory; any new or removed case requires an explicit update.
-TESTER_PARTITION_COUNTS = {"tester": 115, "tester-index": 6, "test-legal-write-oct13": 13}
+TESTER_PARTITION_COUNTS = {"tester": 115, "tester-index": 6, "test-legal-write-oct13": 42}
 TESTER_CANONICAL_FILES = {"canonical-native-discovery.json", "canonical-discovery.json"}
 INDEX_FILES = {
     "ram-2026-10-10-prod.spec.ts": 4,
@@ -55,7 +55,7 @@ INDEX_FILES = {
 OCT13_FILES = {
     "ram-2026-10-13-hearings.spec.ts": 2,
     "ram-2026-10-13-ip-portfolio.spec.ts": 4,
-    "ram-2026-10-15-ip-controls.spec.ts": 5,
+    "ram-2026-10-15-ip-controls.spec.ts": 34,
     "ram-2026-10-15-ip-renewal-tracker.spec.ts": 2,
 }
 

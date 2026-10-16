@@ -2598,3 +2598,24 @@ requirements when using the fallback.
   the reloaded visible record and native options. Keep POST acknowledgements
   intact. Do not turn a lost CDP response body into an application retry,
   timeout increase, fallback success or a claim that the browser GET was read.
+- Native select scroll extents vary across Chromium versions and platforms;
+  neither a green Windows run nor equal client/scroll widths proves the full
+  selected identity is readable. Show its complete current caption in a normal
+  wrapping accessible description bound to the actual selected source ID.
+  Preserve every useful-width and boundary check; allow native overflow only
+  with that verified presentation, never a blanket select exemption or hidden
+  overflow. Regress stale IDs with identical captions, wrong/hidden/clipped
+  details, clear/change/unavailable selections and adjacent breakpoint widths.
+  Require known source descriptions even when native scroll metrics report no
+  overflow, and retain sanitized numeric evidence instead of private labels.
+- Stopping a known unreleasable candidate does not make its remaining tests
+  pass. Retain completed, skipped, interrupted and unstarted identities and
+  release all owned writers before editing. An operator/browser setup failure
+  with an unstarted app body is not a product reproduction. The corrected
+  candidate still needs its complete fresh release gates and serving replay.
+- Expanding a dated browser journey also changes its release-owned file and
+  partition inventory. Reconcile actual canonical Playwright collection with
+  the evidence producer and its consumer tests before freezing the candidate.
+  Keep a standard Node-capable CI regression that collects the real production
+  config without executing app setup. Do not weaken exact counts, substitute
+  an equal-sized wrong file or silently skip collection when a tool is absent.

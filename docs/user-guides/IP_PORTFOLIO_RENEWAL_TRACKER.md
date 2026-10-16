@@ -142,6 +142,14 @@ provenance, testing, current company selection and server authorization remain
 authoritative. A disabled calculation with a stated missing prerequisite is not
 permission to bypass that prerequisite.
 
+Check the full selected rule or calendar description beneath its control,
+including version, jurisdiction, office, timezone where applicable and status.
+The closed native selector may shorten a long caption; the wrapping description
+retains the complete current choice. Colleague selectors likewise show the
+selected name and email below the control. Changing or clearing the selection
+updates or removes that description. A retained unavailable colleague is
+historical context, not permission to make a new assignment to that person.
+
 ## Operational Acceptance
 
 Before describing the feature as live, the release operator must retain the

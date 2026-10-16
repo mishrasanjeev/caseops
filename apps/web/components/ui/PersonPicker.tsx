@@ -105,6 +105,13 @@ export function PersonPicker({
   const preserveUnavailableSelection = Boolean(
     value && !selectionIsExplicitlyExcluded && !selected,
   );
+  const effectiveValue = selectionIsExplicitlyExcluded ? "" : value;
+  const selectedCaption = effectiveValue
+    ? selected
+      ? personLabel(selected)
+      : unavailableSelectionLabel(effectiveValue, selectedDirectoryUser)
+    : null;
+  const selectedDescriptionId = `${id}-selected-description`;
 
   useEffect(() => {
     // An explicit exclusion is a caller-owned invariant (for example, backup
@@ -135,7 +142,8 @@ export function PersonPicker({
       ) : null}
       <select
         id={id}
-        value={selectionIsExplicitlyExcluded ? "" : value}
+        value={effectiveValue}
+        aria-describedby={selectedCaption ? selectedDescriptionId : undefined}
         disabled={disabled || companyUsers.isLoading || companyUsers.isError}
         onChange={(event) => onChange(event.target.value)}
         className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)] focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
@@ -161,6 +169,15 @@ export function PersonPicker({
           </option>
         ))}
       </select>
+      {selectedCaption ? (
+        <p
+          id={selectedDescriptionId}
+          data-selected-option-value={effectiveValue}
+          className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]"
+        >
+          {selectedCaption}
+        </p>
+      ) : null}
       {!companyUsers.isLoading && !companyUsers.isError && options.length === 0 ? (
         <p className="text-sm text-[var(--color-mute)]">
           {filter.trim()
