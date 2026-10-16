@@ -555,7 +555,7 @@ jobs:
           retention-days: 14
 
   prod-tester-index:
-    name: Prod Playwright (tester-index)
+    name: Prod Playwright (${{ matrix.suite }})
     if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-playwright-shards.result == 'success' || needs.prod-playwright-shards.result == 'failure')
     needs: [resolve-release, prod-playwright-shards]
     runs-on: ubuntu-latest
@@ -570,7 +570,7 @@ jobs:
     steps: *prod-playwright-steps
 
   prod-test-legal-write-oct13:
-    name: Prod Playwright (test-legal-write-oct13)
+    name: Prod Playwright (${{ matrix.suite }})
     if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-tester-index.result == 'success' || needs.prod-tester-index.result == 'failure')
     needs: [resolve-release, prod-tester-index]
     runs-on: ubuntu-latest

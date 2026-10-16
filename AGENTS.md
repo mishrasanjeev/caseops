@@ -1,5 +1,18 @@
 # CaseOps agent instructions
 
+- Surface the first failed required CI gate immediately, with its actual
+  artifact and any still-pending inventory. Do not leave an early-failure file
+  unnoticed while waiting for unrelated jobs. Preserve the failed commit and
+  results before replacing an owned, unmerged candidate. Describe public image
+  checksums as typed immutable references, run the pinned offline secret gate
+  before republishing, and never suppress a scanner finding to clear a release.
+
+- GitHub may append a one-value matrix to a literal job name. Private-resume
+  evidence must match one reviewed role/name form, require completed success
+  and unique positive integer job IDs, and reject duplicate roles even when
+  an alias failed. Use matrix-derived display names and regress captured API
+  payloads, not only names synthesized from the workflow's intended roles.
+
 - A valid Cloud Run job template is not executable worker proof. Exercise the
   immutable image's real console commands with cloud environment strings, not
   integer assignments on mocked Settings. Parse only documented protocol 0/1

@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 17 Remaining Resume Gate
+
+Serving29d's production38942699099 passed all11 required jobs and396 cases
+(378 pass/18 explicit skip,all42 dated). Serial maintenance tctjr/wdnj9 was clean
+with7 candidates each and3 then0 rebuilds. Resume65074 failed before mutation
+on doubled GitHub matrix display names, so private cadence remains PAUSED.
+Review/merge the strict role-identity correction, obtain fresh PR/main CI,
+deploy through the canonical guard and replay all396 production cases before
+later clean maintenance and guarded resume. No direct resume, grant repetition
+or acceptance waiver. See `docs/bugfix-prod-verification-job-identity-2026-10-17.md`.
+
 ## October 16 Production Certification Budget
 
 API/web599defc3 includes merged PR539; local Docker and fresh main gates passed.

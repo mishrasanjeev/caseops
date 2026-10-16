@@ -1,5 +1,15 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 17 Private Resume Identity
+
+**Partially fixed / NO-GO.** Serving29d passed production38942699099:
+11 required jobs,378 pass/18 skip/zero fail or retry,all42 dated. Both later
+maintenance runs were clean (7 candidates;3 then0 rebuilds). Resume65074 still
+failed before mutation on two doubled GitHub matrix names; private cadence
+remains PAUSED. Candidate exact-role matching and matrix-derived names have
+scoped regression proof only, not new whole Docker or production acceptance.
+See `docs/bugfix-prod-verification-job-identity-2026-10-17.md`.
+
 ## October 16 Production Certification Budget
 
 **Partially fixed / NO-GO.** API/web599defc3 contains merged PR539 with green
