@@ -1,5 +1,16 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 17 Resume Identity Coverage
+
+ARCH-OPS-23/QG-SEC-004, J04/M03, J08/M08 and UJ-18: serving29d passed all11
+production38942699099 jobs (378 pass/18 skip,all42 dated), but canonical resume
+rejected two actual doubled matrix names before mutation. Candidate coverage
+uses the captured payload plus all-role missing/outcome/status/ID/time and
+duplicate-alias negatives. Two later maintenance records remain clean7/7,
+rebuilds3/0; private cadence remains PAUSED. Scoped contracts do not replace
+fresh CI/deployment/production acceptance. See
+`docs/bugfix-prod-verification-job-identity-2026-10-17.md`.
+
 ## October 16 Production Certification Budget
 
 ARCH-OPS-23/QG-SEC-004, J04/M03, J08/M08 and UJ-18 remain uncertified on

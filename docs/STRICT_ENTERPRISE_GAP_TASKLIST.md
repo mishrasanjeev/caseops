@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## October 17 Private Resume Identity
+
+**Partially implemented / NO-GO.** Production38942699099 on29d completed all11
+required jobs and396 native cases (378 pass/18 skip), with two later clean
+maintenance runs. Canonical resume65074 rejected actual doubled matrix names
+before mutation. Candidate role matching rejects duplicate aliases, incomplete
+jobs, invalid IDs/times and resolver drift; all preexisting resume fences remain.
+Scoped offline Docker is not a new whole-release gate. Fresh PR/main CI and
+production replay remain required. See
+`docs/bugfix-prod-verification-job-identity-2026-10-17.md`.
+
 ## October 16 Production Certification Budget
 
 **NO-GO for certification, not a rollback claim.** PR539 is merged and serving

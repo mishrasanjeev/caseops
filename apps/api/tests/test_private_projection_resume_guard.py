@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import copy
+import json
 import socket
 import subprocess
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 import yaml
@@ -74,6 +76,7 @@ def evidence(monkeypatch):
         "times": times,
         "records": {},
         "calls": [],
+        "qa_jobs": None,
     }
 
     def report(name: str, rebuilds: int) -> dict:
@@ -125,9 +128,11 @@ def evidence(monkeypatch):
             "headSha": state["qa_sha"], "status": "completed",
             "conclusion": state["qa_conclusion"],
             "workflowName": "Prod verification (Playwright)",
-            "jobs": [{
+            "jobs": copy.deepcopy(state["qa_jobs"]) if state["qa_jobs"] is not None else [{
                 "name": name, "databaseId": index + 101,
-                "conclusion": "success", "completedAt": stamp(state["qa_end"]),
+                "status": "completed", "conclusion": "success",
+                "startedAt": stamp(state["qa_end"] - timedelta(seconds=1)),
+                "completedAt": stamp(state["qa_end"]),
             } for index, name in enumerate(REQUIRED_JOBS)],
         }
 
@@ -280,6 +285,125 @@ def test_private_resume_required_jobs_are_exactly_the_regular_dispatch_inventory
                        for suite in jobs[key]["strategy"]["matrix"]["suite"])
     assert len(regular) == 11 and set(REQUIRED_JOBS) == regular
     assert "Scheduled read-only statute verification" not in regular
+
+
+def captured_jobs():
+    path = Path(__file__).with_name("fixtures") / "prod_verify_38942699099_jobs.json"
+    return json.loads(path.read_text(encoding="utf-8"))["jobs"]
+
+
+def test_private_resume_accepts_captured_successful_matrix_display_names(monkeypatch):
+    inventory, state = evidence(monkeypatch)
+    jobs = captured_jobs()
+    assert len(jobs) == 12
+    assert sum(job["conclusion"] == "success" for job in jobs) == 11
+    state["qa_jobs"] = jobs
+    state["qa_end"] = datetime.fromisoformat("2026-10-16T19:29:46+00:00")
+    for name, minutes in zip(NAMES, (5, 3, -5), strict=True):
+        start = state["qa_end"] + timedelta(minutes=minutes)
+        end = start + timedelta(minutes=1)
+        state["times"][name] = (start, end)
+        state["records"][name].update(
+            started_at=stamp(start + timedelta(seconds=1)),
+            completed_at=stamp(end - timedelta(seconds=1)),
+        )
+    assert resume(inventory)["state"] == "ENABLED"
+
+
+@pytest.mark.parametrize("name", REQUIRED_JOBS)
+@pytest.mark.parametrize("failure", [
+    "duplicate_success", "duplicate_failure", "in_progress", "queued", "missing_status",
+    "bool_id", "zero_id", "negative_id", "float_id", "string_id", "missing_id",
+    "duplicate_id", "unexpected_suffix", "unexpected_prefix", "missing_start",
+    "missing_end", "timezone_free", "reversed_time", "future_time",
+])
+def test_private_resume_rejects_ambiguous_or_incomplete_job_identity(monkeypatch, name, failure):
+    inventory, state = evidence(monkeypatch)
+    original_gh = guard._run_gh
+
+    def changed_qa(arguments):
+        result = original_gh(arguments)
+        if arguments[:2] != ["run", "view"]:
+            return result
+        jobs = result["jobs"]
+        job = next(row for row in jobs if row["name"] == name)
+        if failure.startswith("duplicate_") and failure != "duplicate_id":
+            duplicate = copy.deepcopy(job)
+            duplicate["databaseId"] += 1000
+            if failure == "duplicate_failure":
+                duplicate["conclusion"] = "failure"
+            jobs.append(duplicate)
+        elif failure in {"in_progress", "queued", "missing_status"}:
+            job["status"] = None if failure == "missing_status" else failure
+        elif failure.endswith("_id"):
+            replacements = {
+                "bool_id": True, "zero_id": 0, "negative_id": -1,
+                "float_id": 123.0, "string_id": "123", "missing_id": None,
+                "duplicate_id": next(row["databaseId"] for row in jobs if row is not job),
+            }
+            job["databaseId"] = replacements[failure]
+        elif failure == "unexpected_suffix":
+            job["name"] += " (unreviewed)"
+        elif failure == "unexpected_prefix":
+            job["name"] = "unreviewed " + name
+        elif failure == "missing_start":
+            job.pop("startedAt")
+        elif failure == "missing_end":
+            job.pop("completedAt")
+        elif failure == "timezone_free":
+            job["completedAt"] = "2026-10-16T19:29:46"
+        elif failure == "reversed_time":
+            job["startedAt"] = stamp(state["qa_end"] + timedelta(seconds=1))
+        elif failure == "future_time":
+            job["completedAt"] = stamp(datetime.now(UTC) + timedelta(minutes=1))
+        return result
+
+    monkeypatch.setattr(guard, "_run_gh", changed_qa)
+    with pytest.raises(guard.InventoryError):
+        resume(inventory)
+    assert_no_resume(state)
+
+
+@pytest.mark.parametrize("suite", ["tester-index", "test-legal-write-oct13"])
+@pytest.mark.parametrize("conclusion", ["success", "failure", "cancelled", "skipped"])
+def test_private_resume_rejects_canonical_plus_legacy_alias_even_when_failed(
+    monkeypatch, suite, conclusion,
+):
+    inventory, state = evidence(monkeypatch)
+    original_gh = guard._run_gh
+
+    def changed_qa(arguments):
+        result = original_gh(arguments)
+        if arguments[:2] == ["run", "view"]:
+            job = next(row for row in result["jobs"]
+                       if row["name"] == f"Prod Playwright ({suite})")
+            duplicate = copy.deepcopy(job)
+            duplicate.update(name=job["name"] + f" ({suite})", databaseId=999999,
+                             conclusion=conclusion)
+            result["jobs"].append(duplicate)
+        return result
+
+    monkeypatch.setattr(guard, "_run_gh", changed_qa)
+    with pytest.raises(guard.InventoryError):
+        resume(inventory)
+    assert_no_resume(state)
+
+
+def test_private_resume_rechecks_resolver_identity_before_mutation(monkeypatch):
+    inventory, state = evidence(monkeypatch)
+    calls = []
+
+    def resolver_log(arguments):
+        calls.append(arguments)
+        return state["release_log"] if len(calls) == 1 else (
+            f"release_sha={SHA} api_revision=caseops-api-different"
+        )
+
+    monkeypatch.setattr(guard, "_run_gh_text", resolver_log)
+    with pytest.raises(guard.InventoryError, match="evidence changed"):
+        resume(inventory)
+    assert len(calls) == 2
+    assert_no_resume(state)
 
 
 def test_mutable_service_template_tag_does_not_override_revision_digest(monkeypatch):

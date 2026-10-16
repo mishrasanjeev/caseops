@@ -335,6 +335,7 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
         ("prod-test-legal-write-oct13", "prod-tester-index", "test-legal-write-oct13"),
     ):
         job = jobs[name]
+        assert job["name"] == "Prod Playwright (${{ matrix.suite }})"
         assert job["needs"] == ["resolve-release", predecessor]
         assert "always()" in job["if"] and "!cancelled()" in job["if"]
         assert f"needs.{predecessor}.result == 'failure'" in job["if"]

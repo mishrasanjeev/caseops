@@ -1255,17 +1255,44 @@ def _successful_qa_dispatch(release_sha: str, qa_run_id: int) -> tuple[datetime,
     }
     if not isinstance(jobs, list):
         raise InventoryError("prod-verify job evidence is missing")
+    role_by_name = {name: name for name in required}
+    # GitHub appended the one-value matrix to these literal names on older releases.
+    role_by_name.update({
+        "Prod Playwright (tester-index) (tester-index)": "Prod Playwright (tester-index)",
+        "Prod Playwright (test-legal-write-oct13) (test-legal-write-oct13)":
+        "Prod Playwright (test-legal-write-oct13)",
+    })
     completed: list[datetime] = []
     successful: set[str] = set()
+    seen_ids: set[int] = set()
+    seen_names: set[str] = set()
     release_job_id: int | None = None
     for job in jobs:
         if not isinstance(job, dict):
             raise InventoryError("invalid prod-verify job evidence")
-        if job.get("name") in required and job.get("conclusion") == "success":
-            successful.add(job["name"])
-            completed.append(_evidence_time(job.get("completedAt"), "QA job completion"))
-            if job["name"] == "Resolve exact production release":
-                release_job_id = job.get("databaseId")
+        name, job_id = job.get("name"), job.get("databaseId")
+        if (
+            not isinstance(name, str) or name in seen_names
+            or type(job_id) is not int or job_id <= 0 or job_id in seen_ids
+        ):
+            raise InventoryError("prod-verify required QA job identity is invalid or duplicated")
+        seen_names.add(name)
+        seen_ids.add(job_id)
+        if name == "Scheduled read-only statute verification":
+            continue
+        role = role_by_name.get(name)
+        if role is None or role in successful:
+            raise InventoryError("prod-verify required QA job name is unknown or duplicated")
+        if job.get("status") != "completed" or job.get("conclusion") != "success":
+            raise InventoryError("prod-verify did not complete every required QA job")
+        started = _evidence_time(job.get("startedAt"), "QA job start")
+        ended = _evidence_time(job.get("completedAt"), "QA job completion")
+        if not started <= ended <= datetime.now(UTC):
+            raise InventoryError("prod-verify required QA job timing is invalid")
+        successful.add(role)
+        completed.append(ended)
+        if role == "Resolve exact production release":
+            release_job_id = job_id
     if successful != required:
         raise InventoryError("prod-verify did not complete every required QA job")
     if not isinstance(release_job_id, int) or release_job_id <= 0:
