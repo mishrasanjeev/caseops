@@ -6,6 +6,7 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 
 import pytest
+import yaml
 
 from tests.test_scheduler_inventory import INVENTORY_PATH
 from tests.test_scheduler_inventory import scheduler_inventory as guard
@@ -21,11 +22,14 @@ NAMES = (f"{JOB}-second", f"{JOB}-first", f"{JOB}-historical-blocked")
 REQUIRED_JOBS = (
     "Resolve exact production release",
     "Prod Playwright (tester)",
+    "Prod Playwright (tester-catalog)",
     "Prod Playwright (tester-index)",
     "Prod Playwright (test-legal-write-oct13)",
+    "Prod Playwright (test-legal-readonly)",
     "Prod Playwright (legacy)",
     "Prod Playwright (supporting)",
     "Prod Playwright (patent-statute)",
+    "Prod Playwright (public-pages)",
     "Record exact-release evidence",
 )
 
@@ -238,11 +242,9 @@ def test_private_resume_accepts_two_later_serial_clean_runs_after_historical_bre
     assert inventory == original
 
 
-@pytest.mark.parametrize("name", [
-    "Prod Playwright (tester-index)", "Prod Playwright (test-legal-write-oct13)",
-])
+@pytest.mark.parametrize("name", REQUIRED_JOBS)
 @pytest.mark.parametrize("outcome", ["missing", "failure", "cancelled", "skipped"])
-def test_private_resume_requires_both_serial_partitions_even_with_recorded_evidence(
+def test_private_resume_requires_each_regular_job_even_with_recorded_evidence(
     monkeypatch, name, outcome,
 ):
     inventory, state = evidence(monkeypatch)
@@ -257,15 +259,27 @@ def test_private_resume_requires_both_serial_partitions_even_with_recorded_evide
                 next(job for job in result["jobs"] if job["name"] == name)[
                     "conclusion"
                 ] = outcome
-            assert next(job for job in result["jobs"] if job["name"] == (
-                "Record exact-release evidence"
-            ))["conclusion"] == "success"
+            if name != "Record exact-release evidence":
+                assert next(job for job in result["jobs"] if job["name"] == (
+                    "Record exact-release evidence"
+                ))["conclusion"] == "success"
         return result
 
     monkeypatch.setattr(guard, "_run_gh", changed_qa)
     with pytest.raises(guard.InventoryError, match="every required QA job"):
         resume(inventory)
     assert_no_resume(state)
+
+
+def test_private_resume_required_jobs_are_exactly_the_regular_dispatch_inventory():
+    workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
+    jobs = yaml.safe_load(workflow_path.read_text())["jobs"]
+    regular = {"Resolve exact production release", "Record exact-release evidence"}
+    for key in ("prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13"):
+        regular.update("Prod Playwright (" + suite + ")"
+                       for suite in jobs[key]["strategy"]["matrix"]["suite"])
+    assert len(regular) == 11 and set(REQUIRED_JOBS) == regular
+    assert "Scheduled read-only statute verification" not in regular
 
 
 def test_mutable_service_template_tag_does_not_override_revision_digest(monkeypatch):

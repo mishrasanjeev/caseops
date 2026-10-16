@@ -14,11 +14,16 @@
   retain exact parsed lists and no-network/auth fences, and cover both forms
   in the standard regression suite before a one-shot production mutation.
 
-- A native CI pass with seconds of job-budget margin is fragile acceptance.
+- A native CI or production verification pass with seconds of job-budget margin is fragile acceptance.
   Compare startup, collection, setup, call, teardown and upload across every
   shard and adverse runs. Split the complete canonical inventory without
   increasing concurrency, SQL/race waits or job deadlines; timing models are
   not replacement acceptance. Confirm cancellation from actual annotations.
+- A newly retired revision may not yet have a queryable mature Monitoring
+  interval. Wait inside the original bounded stop-proof deadline before querying,
+  but still require two aligned mature active/idle zero samples. Never treat
+  missing metrics as zero, retry authentication/transport errors as maturity,
+  delay already-mature revisions, or accept future-dated retirement evidence.
 - A Windows cloud CLI argument separator is a shell transport boundary.
   Verify the full received argv through the actual CMD entry point; exit zero
   can conceal a truncated invocation and unintended pipeline commands. Use

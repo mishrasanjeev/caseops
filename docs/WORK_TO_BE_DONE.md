@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 16 Production Certification Budget
+
+API/web599defc3 includes merged PR539; local Docker and fresh main gates passed.
+Production38888165664's complete tester115 has102 passes/13 explicit skips,
+but its job exceeded38 minutes. Certification and private-cadence resume remain
+blocked. Split the canonical tester inventory without losing or repeating cases,
+retain serial mutation and existing deadlines, and fix initial metric-maturity
+waiting without weakening positive stop proof. Candidate regression evidence is
+not production acceptance. See `docs/bugfix-prod-verification-budget-2026-10-16.md`.
+Do not repeat the consumed test-legal grant or alter GBA/provider/source gaps.
+
 ## October 15 IP Controls And Renewal Tracker
 
 Partially implemented under existing J08/M08 and UJ-02/04/26,

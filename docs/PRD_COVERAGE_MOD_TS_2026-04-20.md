@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 16 Production Certification Budget
+
+ARCH-OPS-23/QG-SEC-004, J04/M03, J08/M08 and UJ-18 remain uncertified on
+serving599defc3 despite accepted complete local Docker/current-main gates.
+Production38888165664's tester cases all completed102 pass/13 skip, but its
+38-minute job was cancelled. Complete disjoint serial partitioning and bounded
+initial metric-maturity waiting are candidate corrections, not deployed closure.
+Required native contracts live in the production workflow/evidence and worker
+stop-evidence test modules. See `docs/bugfix-prod-verification-budget-2026-10-16.md`.
+
 ## October 15 IP Controls And Renewal Tracker
 
 Existing J08/M08 and UJ-02/04/26, IPLF-023/030/032/037 retain ownership.

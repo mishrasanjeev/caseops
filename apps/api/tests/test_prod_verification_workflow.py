@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -75,7 +76,7 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
     evidence_step = [step for step in workflow["jobs"]["prod-playwright-shards"]["steps"]
                      if step.get("name") == "Reconcile required native Playwright evidence"]
     assert len(evidence_step) == 1
-    assert 'tester|tester-index|test-legal-write-oct13) required=("$SUITE")' in (
+    assert 'tester|tester-catalog|tester-index|test-legal-write-oct13) required=("$SUITE")' in (
         evidence_step[0]["run"]
     )
 
@@ -326,7 +327,8 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
     jobs = workflow["jobs"]
     original = jobs["prod-playwright-shards"]
     assert original["strategy"]["matrix"]["suite"] == [
-        "tester", "test-legal-readonly", "legacy", "supporting", "patent-statute", "public-pages",
+        "tester", "tester-catalog", "test-legal-readonly", "legacy", "supporting",
+        "patent-statute", "public-pages",
     ]
     for name, predecessor, suite in (
         ("prod-tester-index", "prod-playwright-shards", "tester-index"),
@@ -354,15 +356,77 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
                         if step.get("name") == "Record exact-release public-claims evidence")
     assert union_index < writer_index
     assert "--tester-partition-union" in steps[union_index]["run"]
-    assert "--required tester tester-index test-legal-write-oct13" in steps[union_index]["run"]
+    assert (
+        "--required tester tester-catalog tester-index test-legal-write-oct13"
+        in steps[union_index]["run"]
+    )
     downloaded = {
         step["with"]["name"] for step in steps
         if step.get("uses") == "actions/download-artifact@v4"
     }
     assert downloaded == {
         "prod-playwright-report-tester", "prod-playwright-report-tester-index",
-        "prod-playwright-report-test-legal-write-oct13",
+        "prod-playwright-report-tester-catalog", "prod-playwright-report-test-legal-write-oct13",
     }
+
+
+def test_tester_budget_split_requires_release_owned_contract_before_either_partition() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    job = workflow["jobs"]["prod-playwright-shards"]
+    assert job["strategy"]["matrix"]["suite"][:2] == ["tester", "tester-catalog"]
+    steps = {step.get("name"): step for step in job["steps"]}
+    guard = steps["Require release-owned bounded tester partition contract"]
+    assert guard["if"] == "matrix.suite == 'tester' || matrix.suite == 'tester-catalog'"
+    assert guard["run"].strip() == (
+        "python scripts/prod_playwright_evidence.py tester-partition-contract"
+    )
+    assert job["steps"].index(guard) < job["steps"].index(
+        steps["Run canonical tester production regressions"]
+    )
+    catalog = steps["Run source-bound September 05 catalog regressions"]
+    assert job["steps"].index(guard) < job["steps"].index(catalog)
+    assert catalog["if"] == "matrix.suite == 'tester-catalog'"
+    assert catalog["env"] == steps["Run canonical tester production regressions"]["env"]
+    assert catalog["run"] == (
+        'bash "$RUNNER_TEMP/caseops-prod-playwright" tester-catalog '
+        '--config=playwright.prod-ram.config.ts --project=tester-prod-chromium '
+        '--workers=1 --retries=0 --reporter=list --output=test-results/tester-catalog'
+    )
+
+
+@pytest.mark.parametrize("release_contract", ["current", "old", "missing"])
+def test_release_owned_tester_split_contract_cli_fails_closed_before_browser(
+    tmp_path, release_contract,
+):
+    script = tmp_path / "scripts/prod_playwright_evidence.py"
+    script.parent.mkdir()
+    if release_contract == "current":
+        script.write_bytes((REPO_ROOT / "scripts/prod_playwright_evidence.py").read_bytes())
+    elif release_contract == "old":
+        script.write_text(
+            "import argparse\n"
+            "p=argparse.ArgumentParser(); s=p.add_subparsers(required=True)\n"
+            "s.add_parser('run'); s.add_parser('validate'); p.parse_args()\n"
+            "raise AssertionError('No browser execution is permitted')\n"
+        )
+    result = subprocess.run(
+        [sys.executable, "-B", str(script), "tester-partition-contract"],
+        cwd=tmp_path, capture_output=True, encoding="utf-8", check=False, timeout=15,
+    )
+    assert not (tmp_path / "test-results").exists()
+    if release_contract == "current":
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {
+            "tester_partition_contract": 1,
+            "partitions": {"tester": 97, "tester-catalog": 18,
+                           "tester-index": 6, "test-legal-write-oct13": 42},
+            "catalog_file": "ram-2026-09-05-bugs.spec.ts",
+        }
+    else:
+        assert result.returncode != 0
+        assert "No browser execution is permitted" not in result.stderr
 
 
 def test_public_claims_attestation_requires_exact_release_nonmutating_browser_evidence() -> None:
@@ -516,6 +580,7 @@ def test_exact_release_verification_is_serialized_into_bounded_jobs() -> None:
     assert shard_job["strategy"]["max-parallel"] == 1
     assert shard_job["strategy"]["matrix"]["suite"] == [
         "tester",
+        "tester-catalog",
         "test-legal-readonly",
         "legacy",
         "supporting",

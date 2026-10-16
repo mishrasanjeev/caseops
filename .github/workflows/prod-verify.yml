@@ -113,6 +113,7 @@ jobs:
       matrix:
         suite:
           - tester
+          - tester-catalog
           - test-legal-readonly
           - legacy
           - supporting
@@ -240,9 +241,13 @@ jobs:
           exec npx playwright test "$@"
           SH
 
+      - name: Require release-owned bounded tester partition contract
+        if: matrix.suite == 'tester' || matrix.suite == 'tester-catalog'
+        run: python scripts/prod_playwright_evidence.py tester-partition-contract
+
       - name: Run canonical tester production regressions
         if: matrix.suite == 'tester'
-        env:
+        env: &prod-tester-env
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
@@ -263,6 +268,11 @@ jobs:
           CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
           CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
         run: bash "$RUNNER_TEMP/caseops-prod-playwright" tester --config=playwright.prod-ram.config.ts --project=tester-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester
+
+      - name: Run source-bound September 05 catalog regressions
+        if: matrix.suite == 'tester-catalog'
+        env: *prod-tester-env
+        run: bash "$RUNNER_TEMP/caseops-prod-playwright" tester-catalog --config=playwright.prod-ram.config.ts --project=tester-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester-catalog
 
       - name: Run retained indexing and Contract AI production regressions
         if: matrix.suite == 'tester-index'
@@ -520,7 +530,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$SUITE" in
-            tester|tester-index|test-legal-write-oct13) required=("$SUITE") ;;
+            tester|tester-catalog|tester-index|test-legal-write-oct13) required=("$SUITE") ;;
             legacy|test-legal-readonly) required=("$SUITE") ;;
             supporting)
               required=(notice)
@@ -735,6 +745,12 @@ jobs:
           name: prod-playwright-report-tester-index
           path: test-results/prod-native-evidence
 
+      - name: Retain September 05 catalog partition evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: prod-playwright-report-tester-catalog
+          path: test-results/prod-native-evidence
+
       - name: Retain October 13 partition evidence
         uses: actions/download-artifact@v4
         with:
@@ -746,7 +762,7 @@ jobs:
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
         run: |
           python scripts/prod_playwright_evidence.py validate \
-            --required tester tester-index test-legal-write-oct13 \
+            --required tester tester-catalog tester-index test-legal-write-oct13 \
             --tester-partition-union
 
       - name: Record exact-release public-claims evidence

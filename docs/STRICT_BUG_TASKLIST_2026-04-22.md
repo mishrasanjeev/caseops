@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 16 Production Certification Budget
+
+**Partially fixed / NO-GO.** API/web599defc3 contains merged PR539 with green
+full local Docker/current-main gates. Production38888165664's tester native
+inventory is complete115=102 pass/13 skip/zero fail or retry, but its whole job
+was cancelled for exceeding38 minutes. The remaining production inventory is
+not inferred from that pass. The replacement isolates complete catalogue cases
+and bounds initial metric-maturity waiting without changing test bodies,
+deadlines, retries, provider isolation, grants or stop-proof requirements.
+See `docs/bugfix-prod-verification-budget-2026-10-16.md`; LIFE13-01 is unchanged.
+
 ## October 15 IP Controls And Renewal Tracker
 
 Seven new populated bug rows and the new renewal specification are under

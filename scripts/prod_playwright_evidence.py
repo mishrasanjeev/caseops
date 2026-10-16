@@ -42,11 +42,16 @@ REPORT_FILES = {
 REPORTER = "./scripts/prod_playwright_reporter.cjs"
 TESTER_PARTITIONS = {
     "tester": "tester-prod-chromium",
+    "tester-catalog": "tester-prod-chromium",
     "tester-index": "tester-index-prod-chromium",
     "test-legal-write-oct13": "test-legal-write-prod-chromium",
 }
 # Reviewed exact inventory; any new or removed case requires an explicit update.
-TESTER_PARTITION_COUNTS = {"tester": 115, "tester-index": 6, "test-legal-write-oct13": 42}
+TESTER_PARTITION_COUNTS = {
+    "tester": 97, "tester-catalog": 18, "tester-index": 6, "test-legal-write-oct13": 42,
+}
+TESTER_CATALOG_FILE = "ram-2026-09-05-bugs.spec.ts"
+TESTER_PARTITION_CONTRACT = 1
 TESTER_CANONICAL_FILES = {"canonical-native-discovery.json", "canonical-discovery.json"}
 INDEX_FILES = {
     "ram-2026-10-10-prod.spec.ts": 4,
@@ -80,10 +85,9 @@ def _tester_inventory(canonical):
     rows = [row for row in canonical["tests"] if row["project_name"] in projects]
     if not rows or len({row["id"] for row in rows}) != len(rows):
         raise EvidenceError("empty_or_duplicate_tester_canonical_inventory")
-    expected_counts = Counter({
-        TESTER_PARTITIONS[invocation]: count
-        for invocation, count in TESTER_PARTITION_COUNTS.items()
-    })
+    expected_counts = Counter()
+    for invocation, count in TESTER_PARTITION_COUNTS.items():
+        expected_counts[TESTER_PARTITIONS[invocation]] += count
     if Counter(row["project_name"] for row in rows) != expected_counts:
         raise EvidenceError("reviewed_tester_partition_counts_mismatch")
     semantic_cases = {
@@ -105,7 +109,28 @@ def _tester_inventory(canonical):
     core = [row for row in rows if row["project_name"] == TESTER_PARTITIONS["tester"]]
     if not core or any(Path(row["file"]).name in INDEX_FILES | OCT13_FILES for row in core):
         raise EvidenceError("tester_core_partition_overlap")
+    if sum(Path(row["file"]).name == TESTER_CATALOG_FILE for row in core) != (
+        TESTER_PARTITION_COUNTS["tester-catalog"]
+    ):
+        raise EvidenceError("mandatory_tester_catalog_inventory_mismatch")
     return rows
+
+
+def _tester_selected_rows(canonical, invocation):
+    rows = [row for row in _tester_inventory(canonical)
+            if row["project_name"] == TESTER_PARTITIONS[invocation]]
+    if invocation in {"tester", "tester-catalog"}:
+        rows = [row for row in rows if (Path(row["file"]).name == TESTER_CATALOG_FILE)
+                == (invocation == "tester-catalog")]
+    return rows
+
+
+def _tester_file_filters(binding):
+    invocation = _tester_partition(binding)
+    if invocation not in {"tester", "tester-catalog"}:
+        return []
+    catalog = rf"(?:^|[/\\]){re.escape(TESTER_CATALOG_FILE)}$"
+    return [catalog if invocation == "tester-catalog" else rf"^(?!.*{catalog}).*$"]
 
 
 def _check_tester_selection(binding, discovery, canonical):
@@ -113,8 +138,7 @@ def _check_tester_selection(binding, discovery, canonical):
     if invocation is None:
         raise EvidenceError("unreviewed_tester_partition_binding")
     expected = [
-        _tester_case_identity(row) for row in _tester_inventory(canonical)
-        if row["project_name"] == TESTER_PARTITIONS[invocation]
+        _tester_case_identity(row) for row in _tester_selected_rows(canonical, invocation)
     ]
     if [_tester_case_identity(row) for row in discovery["tests"]] != expected:
         raise EvidenceError("tester_partition_selection_mismatch")
@@ -645,6 +669,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         destination / "invocation.json",
         {
             "binding": public_binding,
+            "source_owned_file_filters": _tester_file_filters(binding),
             "invocation_id": str(uuid4()),
             "started_at": datetime.now(UTC).isoformat(),
         },
@@ -671,12 +696,13 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         child_env["CASEOPS_PW_EVIDENCE_INVOCATION"] = invocation
         child_env["CASEOPS_PW_EVIDENCE_PHASE"] = "discovery"
         discovery_args = [arg for arg in args if not arg.startswith("--reporter=")]
+        selected_args = [*discovery_args, *_tester_file_filters(binding)]
         process = launch(
             [
                 node,
                 str(cli),
                 "test",
-                *discovery_args,
+                *selected_args,
                 "--list",
                 f"--reporter={REPORTER}",
             ],
@@ -755,6 +781,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
             f"--reporter=list,{REPORTER}" if arg == "--reporter=list" else arg
             for arg in args
         ]
+        effective.extend(_tester_file_filters(binding))
         process = launch(
             [node, str(cli), "test", *effective],
             cwd=root,
@@ -983,8 +1010,14 @@ def main() -> int:
     validator = modes.add_parser("validate")
     validator.add_argument("--required", nargs="+", required=True)
     validator.add_argument("--tester-partition-union", action="store_true")
+    modes.add_parser("tester-partition-contract")
     options = parser.parse_args()
     try:
+        if options.mode == "tester-partition-contract":
+            print(json.dumps({"tester_partition_contract": TESTER_PARTITION_CONTRACT,
+                              "partitions": TESTER_PARTITION_COUNTS,
+                              "catalog_file": TESTER_CATALOG_FILE}))
+            return 0
         if options.mode == "validate":
             validation = (
                 validate_tester_partition_union if options.tester_partition_union else validate
