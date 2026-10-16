@@ -149,10 +149,15 @@ def prove_stopped(
     if not revisions:
         return {}
     now = datetime.now(UTC)
+    retired_times = {
+        name: inventory._evidence_time(at, "revision retirement")
+        for name, at in revisions.items()
+    }
+    if any(at > now for at in retired_times.values()):
+        raise inventory.InventoryError("revision retirement is future-dated")
     expired = [
-        name for name, at in revisions.items()
-        if inventory._evidence_time(at, "revision retirement") + timedelta(minutes=30)
-        < now - RETENTION
+        name for name, at in retired_times.items()
+        if at + timedelta(minutes=30) < now - RETENTION
     ]
     if expired:
         raise inventory.InventoryError(
@@ -181,8 +186,11 @@ def prove_stopped(
             if time.monotonic() < next_queries.get(revision, 0):
                 continue
             next_queries[revision] = time.monotonic() + 30
-            retired_at = inventory._evidence_time(retired, "revision retirement")
+            retired_at = retired_times[revision]
             mature_at = datetime.now(UTC) - timedelta(seconds=120)
+            # A just-retired revision has no queryable mature interval yet.
+            if mature_at <= retired_at:
+                continue
             # Transport/auth/envelope failures are not evidence that a
             # running process will become quiescent on the next poll.
             payload = fetch_counts(

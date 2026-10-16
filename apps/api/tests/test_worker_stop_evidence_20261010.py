@@ -4,6 +4,7 @@ import copy
 import importlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -179,6 +180,106 @@ def test_transport_failure_stops_without_retrying_or_waiting(evidence, monkeypat
             project="perfect-period-305406", region="asia-south1",
         )
     assert len(calls) == 1
+
+
+def stop_clock(evidence, monkeypatch, start):
+    elapsed = [0.0]
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return (start + timedelta(seconds=elapsed[0])).astimezone(tz)
+
+    def sleep(seconds):
+        elapsed[0] += seconds
+
+    monkeypatch.setattr(evidence, "datetime", Clock)
+    monkeypatch.setattr(evidence, "time", SimpleNamespace(
+        monotonic=lambda: elapsed[0], sleep=sleep,
+    ))
+    monkeypatch.setattr(evidence.inventory, "run_gcloud", lambda *_, **__: "test-token")
+    return elapsed
+
+
+@pytest.mark.parametrize("retirement_age", [0, 5, 120])
+def test_recent_retirement_waits_for_mature_positive_samples(
+    evidence, monkeypatch, retirement_age,
+):
+    payload, retired = native_payload()
+    start = retired + timedelta(seconds=retirement_age)
+    elapsed = stop_clock(evidence, monkeypatch, start)
+    calls = []
+
+    def fetch(**kwargs):
+        assert kwargs["mature_at"] > kwargs["retired_at"]
+        calls.append(elapsed[0])
+        return payload
+
+    monkeypatch.setattr(evidence, "fetch_counts", fetch)
+    result = evidence.prove_stopped(
+        {"caseops-api-00488-5sd": retired.isoformat()},
+        project="perfect-period-305406", region="asia-south1",
+    )
+    row = result["caseops-api-00488-5sd"]
+    assert calls and elapsed[0] < 600
+    assert calls[0] + retirement_age > 120
+    assert row["active"] == row["idle"] == 0
+    assert row["zero_samples"] == [
+        (retired + timedelta(minutes=i)).isoformat() for i in [2, 3]
+    ]
+
+
+def test_maturity_wait_uses_the_original_total_deadline(evidence, monkeypatch):
+    _, retired = native_payload()
+    elapsed = stop_clock(evidence, monkeypatch, retired)
+    monkeypatch.setattr(evidence, "fetch_counts", lambda **__: pytest.fail("no mature interval"))
+    with pytest.raises(evidence.inventory.InventoryError, match="stop proof timed out"):
+        evidence.prove_stopped(
+            {"caseops-api-00488-5sd": retired.isoformat()},
+            project="perfect-period-305406", region="asia-south1", wait_seconds=5,
+        )
+    assert elapsed[0] == 5
+
+
+def test_recent_retirement_does_not_delay_an_already_mature_revision(evidence, monkeypatch):
+    payload, retired = native_payload()
+    elapsed = stop_clock(evidence, monkeypatch, retired)
+    older = copy.deepcopy(payload)
+    older_retired = retired - timedelta(minutes=10)
+    for row in older["timeSeries"]:
+        row["resource"]["labels"]["revision_name"] = "caseops-api-00487-old"
+        for point in row["points"]:
+            at = datetime.fromisoformat(point["interval"]["endTime"])
+            point["interval"]["endTime"] = (at - timedelta(minutes=10)).isoformat()
+    calls = []
+
+    def fetch(**kwargs):
+        calls.append((kwargs["revision"], elapsed[0]))
+        return older if kwargs["revision"] == "caseops-api-00487-old" else payload
+
+    monkeypatch.setattr(evidence, "fetch_counts", fetch)
+    result = evidence.prove_stopped(
+        {"caseops-api-00488-5sd": retired.isoformat(),
+         "caseops-api-00487-old": older_retired.isoformat()},
+        project="perfect-period-305406", region="asia-south1",
+    )
+    assert calls[0] == ("caseops-api-00487-old", 0)
+    assert set(result) == {"caseops-api-00488-5sd", "caseops-api-00487-old"}
+    assert all(row["active"] == row["idle"] == 0 for row in result.values())
+
+
+def test_future_retirement_fails_before_credentials_or_waiting(evidence, monkeypatch):
+    _, retired = native_payload()
+    stop_clock(evidence, monkeypatch, retired)
+    monkeypatch.setattr(
+        evidence.inventory, "run_gcloud", lambda *_, **__: pytest.fail("future evidence"),
+    )
+    monkeypatch.setattr(evidence.time, "sleep", lambda *_: pytest.fail("no future wait"))
+    with pytest.raises(evidence.inventory.InventoryError, match="future-dated"):
+        evidence.prove_stopped(
+            {"caseops-api-00488-5sd": (retired + timedelta(seconds=1)).isoformat()},
+            project="perfect-period-305406", region="asia-south1",
+        )
 
 
 def test_monitoring_opener_disables_environment_proxies_and_redirects(evidence, monkeypatch):

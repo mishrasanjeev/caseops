@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## October 16 Production Certification Budget
+
+**NO-GO for certification, not a rollback claim.** PR539 is merged and serving
+as599defc3. Complete local Docker and main CI/Security/CodeQL passed, while
+prod38888165664's tester job exceeded38 minutes despite complete102-pass/
+13-skip native evidence. Require the full partition union, retained cancellation,
+unchanged serial mutation/deadlines, successful replacement jobs and later
+clean projection cadences. Initial monitoring maturity may wait only within the
+existing bounded deadline; authentication/transport and positive-zero fences
+remain unchanged. See `docs/bugfix-prod-verification-budget-2026-10-16.md`.
+
 ## October 15 Persistent Renewal And Responsive Control Gap
 
 Partially implemented. Existing versioned IP records and delivery intents do

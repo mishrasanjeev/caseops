@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1080,7 +1081,8 @@ def test_new_native_capture_cli_parses_invocation_and_original_options(capture, 
 def _tester_canonical_rows():
     rows = []
     partitions = {
-        "tester": {"ordinary-prod.spec.ts": 115},
+        "tester": {"ordinary-prod.spec.ts": 97},
+        "tester-catalog": {evidence.TESTER_CATALOG_FILE: 18},
         "tester-index": evidence.INDEX_FILES,
         "test-legal-write-oct13": evidence.OCT13_FILES,
     }
@@ -1102,7 +1104,8 @@ def _tester_canonical_rows():
 
 def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 115, "tester-index": 6, "test-legal-write-oct13": 42,
+        "tester": 97, "tester-catalog": 18,
+        "tester-index": 6, "test-legal-write-oct13": 42,
     }
     assert evidence.OCT13_FILES == {
         "ram-2026-10-13-hearings.spec.ts": 2,
@@ -1113,6 +1116,14 @@ def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
     assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 163
 
 
+def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
+    assert evidence.TESTER_PARTITION_COUNTS == {
+        "tester": 97, "tester-catalog": 18,
+        "tester-index": 6, "test-legal-write-oct13": 42,
+    }
+    assert evidence.TESTER_PARTITIONS["tester-catalog"] == "tester-prod-chromium"
+
+
 def test_tester_partition_selection_preserves_complete_ordered_literal_identities():
     canonical = {"tests": _tester_canonical_rows()}
     for invocation, project in evidence.TESTER_PARTITIONS.items():
@@ -1120,8 +1131,63 @@ def test_tester_partition_selection_preserves_complete_ordered_literal_identitie
             "config": "playwright.prod-ram.config.ts", "invocation": invocation,
             "project": project, "arguments": ["--workers=1", "--retries=0"],
         }
-        selected = {"tests": [row for row in canonical["tests"] if row["project_name"] == project]}
+        selected = {"tests": evidence._tester_selected_rows(canonical, invocation)}
         evidence._check_tester_selection(binding, selected, canonical)
+
+
+@pytest.mark.parametrize("invocation", ["tester", "tester-catalog"])
+def test_tester_file_filters_preserve_whole_catalog_and_do_not_accept_lookalikes(invocation):
+    binding = {
+        "config": "playwright.prod-ram.config.ts", "invocation": invocation,
+        "project": "tester-prod-chromium", "arguments": ["--workers=1", "--retries=0"],
+    }
+    filters = evidence._tester_file_filters(binding)
+    assert len(filters) == 1
+    for path in (
+        "tests/e2e/ram-2026-09-05-bugs.spec.ts",
+        "C:\\repo\\tests\\e2e\\ram-2026-09-05-bugs.spec.ts",
+        "ram-2026-09-05-bugs.spec.ts",
+        "tests/e2e/ram-2026-09-05-bugsXspecYts",
+        "tests/e2e/prefix-ram-2026-09-05-bugs.spec.ts",
+        "tests/e2e/ram-2026-09-05-bugs.spec.ts/other.spec.ts",
+        "tests/e2e/ordinary-prod.spec.ts",
+    ):
+        expected = path.replace("\\", "/").split("/")[-1] == evidence.TESTER_CATALOG_FILE
+        assert bool(re.search(filters[0], path)) == (expected == (invocation == "tester-catalog"))
+
+
+@pytest.mark.parametrize("invocation", ["tester", "tester-catalog"])
+@pytest.mark.parametrize("damage", ["missing", "extra", "foreign", "reordered", "metadata"])
+def test_core_and_catalog_selection_reject_incomplete_or_overlapping_inventory(invocation, damage):
+    canonical = {"tests": _tester_canonical_rows()}
+    selected = copy.deepcopy(evidence._tester_selected_rows(canonical, invocation))
+    other = evidence._tester_selected_rows(
+        canonical, "tester-catalog" if invocation == "tester" else "tester",
+    )[0]
+    if damage == "missing":
+        selected.pop()
+    elif damage == "extra":
+        selected.append(other)
+    elif damage == "foreign":
+        selected[-1] = other
+    elif damage == "reordered":
+        selected.reverse()
+    else:
+        selected[0]["title_path"][-1] += " changed"
+    with pytest.raises(evidence.EvidenceError, match="tester_partition_selection_mismatch"):
+        evidence._check_tester_selection({
+            "config": "playwright.prod-ram.config.ts", "invocation": invocation,
+            "project": "tester-prod-chromium", "arguments": ["--workers=1", "--retries=0"],
+        }, {"tests": selected}, canonical)
+
+
+def test_catalog_cannot_be_replaced_behind_unchanged_canonical_total():
+    rows = _tester_canonical_rows()
+    for row in rows:
+        if row["file"] == evidence.TESTER_CATALOG_FILE:
+            row["file"] = "replacement-prod.spec.ts"
+    with pytest.raises(evidence.EvidenceError, match="mandatory_tester_catalog_inventory_mismatch"):
+        evidence._tester_inventory({"tests": rows})
 
 
 @pytest.mark.parametrize("file", [
@@ -1192,7 +1258,7 @@ def test_native_tester_capture_retains_unfiltered_inventory_before_execution(
     template["config"]["configFile"] = str(config)
     template["config"]["projects"] = [
         {**template["config"]["projects"][0], "id": name, "name": name}
-        for name in evidence.TESTER_PARTITIONS.values()
+        for name in dict.fromkeys(evidence.TESTER_PARTITIONS.values())
     ]
 
     def document(selected, runtime=False):
@@ -1212,7 +1278,7 @@ def test_native_tester_capture_retains_unfiltered_inventory_before_execution(
                             skipped=0 if runtime else len(selected))
         return doc
 
-    selected = [row for row in rows if row["project_name"] == project]
+    selected = evidence._tester_selected_rows({"tests": rows}, invocation)
     state.discovery = document(selected)
     state.runtime = document(selected, runtime=True)
     state.junit_count = len(selected)
@@ -1225,6 +1291,10 @@ def test_native_tester_capture_retains_unfiltered_inventory_before_execution(
         saved = state.discovery
         if canonical:
             assert "--list" in command and not any(arg.startswith("--project=") for arg in command)
+            assert not any(arg in command for arg in evidence._tester_file_filters({
+                "config": config.name, "invocation": invocation, "project": project,
+                "arguments": args,
+            }))
             state.discovery = document(rows[:-1] if damage == "missing_case" else rows)
             if damage == "executed_discovery":
                 state.discovery["suites"][0]["specs"][0]["tests"][0]["results"] = [
@@ -1257,6 +1327,16 @@ def test_native_tester_capture_retains_unfiltered_inventory_before_execution(
         assert (state.path / "exit.json").is_file()
     else:
         assert code == 0 and len(execution) == 1
+        filters = evidence._tester_file_filters({
+            "config": config.name, "invocation": invocation, "project": project,
+            "arguments": args,
+        })
+        assert all(value in execution[0] for value in filters)
+        selected_calls = [command for command, kw in state.calls
+                          if not kw["env"]["CASEOPS_PW_EVIDENCE_INVOCATION"].endswith("-canonical")]
+        assert all(all(value in command for value in filters) for command in selected_calls)
+        receipt = json.loads((state.path / "invocation.json").read_text())
+        assert receipt["source_owned_file_filters"] == filters
         evidence.validate(state.root, [invocation], BASE)
         completion = json.loads((state.path / "completion.json").read_text())
         assert set(completion["sha256"]) == evidence.REPORT_FILES | evidence.TESTER_CANONICAL_FILES
@@ -1334,7 +1414,7 @@ def verified_tester_union(tmp_path, monkeypatch):
         }
         (directory / "results.json").write_text(json.dumps({
             "binding": binding,
-            "tests": [row for row in rows if row["project_name"] == project],
+            "tests": evidence._tester_selected_rows({"tests": rows}, invocation),
         }), encoding="utf-8")
         (directory / "canonical-discovery.json").write_text(
             json.dumps({"tests": rows}), encoding="utf-8"
@@ -1343,13 +1423,33 @@ def verified_tester_union(tmp_path, monkeypatch):
     return SimpleNamespace(root=tmp_path, directories=directories, checked=checked, config=config)
 
 
-def test_verified_tester_union_requires_all_three_envelopes_before_certification(
+def test_verified_tester_union_requires_all_four_envelopes_before_certification(
     verified_tester_union,
 ):
     state = verified_tester_union
     required = list(evidence.TESTER_PARTITIONS)
     evidence.validate_tester_partition_union(state.root, required, BASE)
     assert state.checked == [(state.root, required, BASE)]
+
+
+@pytest.mark.parametrize("invocation", ["tester", "tester-catalog"])
+def test_verified_union_rejects_missing_or_overlapping_core_catalog_envelope(
+    verified_tester_union, invocation,
+):
+    state = verified_tester_union
+    other = "tester-catalog" if invocation == "tester" else "tester"
+    directory = state.directories[invocation]
+    other_result = json.loads((state.directories[other] / "results.json").read_text())
+    result_path = directory / "results.json"
+    result = json.loads(result_path.read_text())
+    result["tests"][0] = other_result["tests"][0]
+    result_path.write_text(json.dumps(result))
+    with pytest.raises(evidence.EvidenceError, match="tester_partition_union_mismatch"):
+        evidence.validate_tester_partition_union(state.root, list(evidence.TESTER_PARTITIONS), BASE)
+    with pytest.raises(evidence.EvidenceError, match="missing_or_duplicate_tester_partition"):
+        evidence.validate_tester_partition_union(
+            state.root, [name for name in evidence.TESTER_PARTITIONS if name != invocation], BASE,
+        )
 
 
 @pytest.mark.parametrize("damage", [
@@ -1456,6 +1556,7 @@ def test_all_production_invocations_have_native_capture_and_success_artifacts():
                 invocations.append(line.split('caseops-prod-playwright" ', 1)[1].split(" ", 1)[0])
     assert invocations == [
         "tester",
+        "tester-catalog",
         "tester-index",
         "test-legal-write-oct13",
         "legacy",
