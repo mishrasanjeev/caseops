@@ -856,14 +856,21 @@ describe("IpDocketPage", () => {
 
   it("confirms an unpublished hearing time and shows the reminder replacement chain", async () => {
     const hearing = unknownTimeHearing();
-    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
-    fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [hearing] });
-    updateIpSharedHearingMock.mockResolvedValue({
+    const rescheduledDate = "2026-12-16";
+    const exactRescheduledDate = "2026-12-17";
+    const confirmed = {
       ...hearing,
+      hearing_on: rescheduledDate,
       time_status: "exact",
       hearing_time: "14:30:00",
       time_confirmation_required: false,
-    });
+    };
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [hearing] });
+    updateIpSharedHearingMock
+      .mockResolvedValueOnce({ ...hearing, hearing_on: rescheduledDate })
+      .mockResolvedValueOnce(confirmed)
+      .mockResolvedValueOnce({ ...confirmed, hearing_on: exactRescheduledDate });
 
     render(withClient(<IpDocketPage />));
 
@@ -875,12 +882,33 @@ describe("IpDocketPage", () => {
     expect(await within(workflow).findByText(/Time confirmation pending/)).toBeVisible();
     expect(within(workflow).getByText("Superseded by generation 2")).toBeVisible();
     expect(within(workflow).getByText("Current schedule")).toBeVisible();
+    const rescheduleDate = within(workflow).getByLabelText("Reschedule Opposition hearing");
+    const publishedTime = within(workflow).getByLabelText("Published time for Opposition hearing");
+    for (const input of [rescheduleDate, publishedTime]) {
+      expect(input).toHaveClass("w-full", "min-w-0", "max-w-full", "sm:w-52", "sm:shrink-0");
+      expect(input).not.toHaveClass("sm:w-auto");
+    }
+    expect(rescheduleDate).toHaveAttribute("type", "date");
+    expect(rescheduleDate).toHaveValue(hearing.hearing_on);
+    expect(publishedTime).toHaveAttribute("type", "time");
+    expect(publishedTime).toHaveValue("");
 
     const confirm = within(workflow).getByRole("button", {
       name: "Confirm published time",
     });
     expect(confirm).toBeDisabled();
-    fireEvent.change(within(workflow).getByLabelText("Published time for Opposition hearing"), {
+    fireEvent.change(rescheduleDate, { target: { value: rescheduledDate } });
+    expect(rescheduleDate).toHaveValue(rescheduledDate);
+    fireEvent.click(within(workflow).getByRole("button", { name: "Reschedule" }));
+    await waitFor(() => expect(updateIpSharedHearingMock).toHaveBeenNthCalledWith(1, {
+      docketId: "ip-1", hearingId: "hearing-1", hearingOn: rescheduledDate,
+    }));
+    const savedHearing = within(workflow).getByTestId("ip-hearing-hearing-1");
+    await waitFor(() => expect(savedHearing).toHaveTextContent(`${rescheduledDate} · Time not published · Asia/Kolkata`));
+    expect(within(workflow).getByText(/Time confirmation pending/)).toBeVisible();
+    expect(confirm).toBeDisabled();
+    expect(publishedTime).toHaveValue("");
+    fireEvent.change(publishedTime, {
       target: { value: "14:30" },
     });
     expect(confirm).toBeEnabled();
@@ -898,6 +926,16 @@ describe("IpDocketPage", () => {
     await waitFor(() =>
       expect(within(workflow).queryByText(/Time confirmation pending/)).not.toBeInTheDocument(),
     );
+    expect(savedHearing).toHaveTextContent(`${rescheduledDate} · 14:30:00 · Asia/Kolkata`);
+    expect(within(workflow).queryByLabelText("Published time for Opposition hearing")).toBeNull();
+    fireEvent.change(rescheduleDate, { target: { value: exactRescheduledDate } });
+    expect(rescheduleDate).toHaveValue(exactRescheduledDate);
+    fireEvent.click(within(workflow).getByRole("button", { name: "Reschedule" }));
+    await waitFor(() => expect(updateIpSharedHearingMock).toHaveBeenNthCalledWith(3, {
+      docketId: "ip-1", hearingId: "hearing-1", hearingOn: exactRescheduledDate,
+    }));
+    await waitFor(() => expect(savedHearing).toHaveTextContent(`${exactRescheduledDate} · 14:30:00 · Asia/Kolkata`));
+    expect(updateIpSharedHearingMock).toHaveBeenCalledTimes(3);
     expect(fetchIpSharedHearingsMock).toHaveBeenCalledTimes(1);
   });
 

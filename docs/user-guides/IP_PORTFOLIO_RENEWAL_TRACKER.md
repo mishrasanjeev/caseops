@@ -150,6 +150,12 @@ selected name and email below the control. Changing or clearing the selection
 updates or removes that description. A retained unavailable colleague is
 historical context, not permission to make a new assignment to that person.
 
+To move an existing IP hearing, change its reschedule date and select
+**Reschedule**. Wait for the saved date to appear before leaving the page, then
+reload when checking the result. Moving the date preserves the hearing's
+existing time precision, exact time and timezone; it does not supply a missing
+published time or confirm an unverified time automatically.
+
 ## Operational Acceptance
 
 Before describing the feature as live, the release operator must retain the

@@ -2619,3 +2619,11 @@ requirements when using the fallback.
   Keep a standard Node-capable CI regression that collects the real production
   config without executing app setup. Do not weaken exact counts, substitute
   an equal-sized wrong file or silently skip collection when a tool is absent.
+- A record's create response is not its state after activation. Assert the
+  returned current transition state, not a retained draft snapshot, and name
+  failed fact fields without logging private values. Audit responsive actions
+  after a child record exists and after reload: a toolbar's `sm:w-auto` can
+  shrink its date/time controls at the breakpoint. Preserve bounded widths and
+  prove a real reschedule acknowledgement, visible date and persisted reload
+  without losing exact time or timezone. Do not lower the layout guard to make
+  a newly discovered narrow control pass.

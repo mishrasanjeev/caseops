@@ -177,7 +177,7 @@ async function checkGeometry(page: Page, scope: Locator, requiredSourceValues: r
         unreadableOverflow: element.scrollWidth > element.clientWidth + 1 && !selectedDetail?.readable,
         requiredCurrentValue: element instanceof HTMLSelectElement && requiredValues.includes(element.value) && !selectedDetail?.readable,
       };
-      return [{ control: element.id || element.getAttribute("aria-label") || `${element.tagName.toLowerCase()}[${index}]`,
+      return [{ control: `${element.tagName.toLowerCase()}${element instanceof HTMLInputElement ? `:${element.type}` : ""}[${index}]`,
         box, parentBox, minimum, clientWidth: element.clientWidth, scrollWidth: element.scrollWidth, selectedDetail, failures }];
     });
   }, requiredSourceValues);
@@ -187,7 +187,7 @@ async function checkGeometry(page: Page, scope: Locator, requiredSourceValues: r
   return measurements;
 }
 
-async function assertSelectedDescription(select: Locator, detail: Locator, expectedValue: string, facts: readonly string[]) {
+async function assertSelectedDescription(select: Locator, detail: Locator, expectedValue: string, facts: Readonly<Record<string, string>>) {
   await expect(select).toBeVisible();
   await expect(detail).toBeVisible();
   expect(await select.inputValue() === expectedValue, "The native selection must retain the current source identity.").toBe(true);
@@ -198,8 +198,11 @@ async function assertSelectedDescription(select: Locator, detail: Locator, expec
   const text = (await detail.textContent() ?? "").replace(/\s+/g, " ").trim();
   const caption = (await select.locator("option:checked").textContent() ?? "").replace(/\s+/g, " ").trim();
   expect(Boolean(text) && text === caption, "The complete selected caption must be visible, not merely present in a native option.").toBe(true);
-  for (const fact of facts.filter(Boolean)) {
-    expect(text.toLowerCase().includes(fact.toLowerCase()), "The current caption must retain every source distinguishing fact.").toBe(true);
+  for (const [field, fact] of Object.entries(facts)) {
+    expect(typeof fact, `Source caption fact '${field}' must be supplied as text.`).toBe("string");
+    if (field === "office" && !fact) continue;
+    expect(Boolean(fact) && text.toLowerCase().includes(fact.toLowerCase()),
+      `The current caption must retain source distinguishing fact '${field}'; private values are omitted.`).toBe(true);
   }
 }
 
@@ -245,11 +248,11 @@ async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWork
       if (label === "Active rule version") {
         const row = data.rules.find(rule => rule.id === selectedId)!;
         await assertSelectedDescription(select, scope.locator("#ip-active-rule-detail"), selectedId,
-          [row.key, `version ${row.version}`, row.jurisdiction, row.office ?? "", row.status]);
+          { key: row.key, version: `version ${row.version}`, jurisdiction: row.jurisdiction, office: row.office ?? "", status: row.status });
       } else {
         const row = data.calendars.find(calendar => calendar.id === selectedId)!;
         await assertSelectedDescription(select, scope.locator("#ip-active-calendar-detail"), selectedId,
-          [row.name, `version ${row.version}`, row.jurisdiction, row.office ?? "", row.timezone, row.status]);
+          { name: row.name, version: `version ${row.version}`, jurisdiction: row.jurisdiction, office: row.office ?? "", timezone: row.timezone, status: row.status });
       }
     }
   }
@@ -267,9 +270,10 @@ for (const scenario of ["current", "missing-link", "stale-id-same-caption", "wro
     let requests = 0;
     page.on("request", () => { requests += 1; });
     await page.setViewportSize({ width: 393, height: 900 });
-    const caption = "Synthetic selected colleague with a long unbroken identity legal-operations-reviewer@example.com";
+    const caption = "Synthetic selected colleague with a long unbroken identity legal-operations-reviewer@example.com · active";
+    const privatePurpose = "Synthetic private hearing purpose that must not enter numeric evidence";
     await page.setContent(`<form data-testid="geometry-guard" style="display:grid;gap:8px;width:280px;max-width:100%;margin:0">
-      <select id="guard-choice" aria-describedby="guard-detail" style="box-sizing:border-box;width:100%;height:40px;min-width:0">
+      <select id="guard-choice" aria-label="${privatePurpose}" aria-describedby="guard-detail" style="box-sizing:border-box;width:100%;height:40px;min-width:0">
         <option value="">Select a colleague</option><option value="source-a" selected>${caption}</option>
       </select><p id="guard-detail" data-selected-option-value="source-a"
         style="margin:0;min-width:0;white-space:normal;overflow-wrap:anywhere;font:14px/20px sans-serif">${caption}</p></form>`);
@@ -319,6 +323,16 @@ for (const scenario of ["current", "missing-link", "stale-id-same-caption", "wro
       const measurements = await result;
       if (scenario === "current") expect(measurements[0].scrollWidth).toBeGreaterThan(measurements[0].clientWidth);
       expect(measurements[0].selectedDetail?.readable).toBe(true);
+      expect(JSON.stringify(measurements)).not.toContain(privatePurpose);
+      expect(JSON.stringify(measurements)).not.toContain(caption);
+      if (scenario === "current") {
+        const createdSnapshot = { status: "draft" };
+        const activatedSnapshot = { status: "active" };
+        const select = page.locator("#guard-choice");
+        const detail = page.locator("#guard-detail");
+        await expect(assertSelectedDescription(select, detail, "source-a", createdSnapshot)).rejects.toThrow(/fact 'status'/);
+        await assertSelectedDescription(select, detail, "source-a", activatedSnapshot);
+      }
     } else {
       await expect(result).rejects.toThrow(/Every control must have useful width/);
     }
@@ -386,7 +400,7 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
       const reviewer = governance.getByRole("combobox", { name: "Independent fixture reviewer", exact: true });
       const reviewerValue = fixture.local ? fixture.reviewerId : fixture.actor.membership.id;
       await reviewer.selectOption(reviewerValue);
-      await assertSelectedDescription(reviewer, governance.locator("#rule-fixture-reviewer-selected-description"), reviewerValue, []);
+      await assertSelectedDescription(reviewer, governance.locator("#rule-fixture-reviewer-selected-description"), reviewerValue, {});
       await captureGeometry("governance-selected-identity", governance, [reviewerValue]);
       await reviewer.selectOption("");
       await expect(governance.locator("#rule-fixture-reviewer-selected-description")).toHaveCount(0);
@@ -419,6 +433,25 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
         hearing_on: "2099-12-20", hearing_time: "10:30:00", timezone: fixture.timezone, purpose,
       });
       await captureGeometry("hearing-reloaded", hearing);
+      const rescheduleDate = persistedHearing.getByLabel(`Reschedule ${purpose}`, { exact: true });
+      await expect(rescheduleDate).toHaveValue("2099-12-20");
+      await rescheduleDate.fill("2099-12-21");
+      const rescheduleResponse = page.waitForResponse(response =>
+        new URL(response.url()).pathname === `/api/ip/hearings/${savedHearing.id}` && response.request().method() === "PATCH");
+      await persistedHearing.getByRole("button", { name: "Reschedule", exact: true }).click();
+      expect(await json(await rescheduleResponse)).toMatchObject({ id: savedHearing.id, hearing_on: "2099-12-21",
+        hearing_time: "10:30:00", time_status: "exact", timezone: fixture.timezone, purpose, status: "scheduled" });
+      await expect(persistedHearing).toContainText(`2099-12-21 · 10:30:00 · ${fixture.timezone}`);
+      await page.reload();
+      await expect(persistedHearing).toContainText(`2099-12-21 · 10:30:00 · ${fixture.timezone}`);
+      await expect(persistedHearing.getByLabel(`Reschedule ${purpose}`, { exact: true })).toHaveValue("2099-12-21");
+      const rescheduled = await json(await request.get(`${fixture.api.origin}/api/ip/hearings?docket_id=${fixture.docketId}`, {
+        headers: fixture.headers,
+      }));
+      expect(rescheduled.hearings.find((row: { id: string }) => row.id === savedHearing.id)).toMatchObject({
+        hearing_on: "2099-12-21", hearing_time: "10:30:00", time_status: "exact", timezone: fixture.timezone, purpose,
+      });
+      await captureGeometry("hearing-rescheduled-reloaded", hearing);
 
       if (fixture.local && fixture.legal) {
       const calendar = await json(await request.post(`${fixture.api.origin}/api/ip/working-calendars`, { headers: fixture.headers, data: {
@@ -466,7 +499,8 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
       await calendarSelect.press("Enter");
       await expect(calendarSelect).toHaveValue(calendar.id);
       await assertSelectedDescription(calendarSelect, workspace.locator("#ip-active-calendar-detail"), calendar.id,
-        [calendar.name, `version ${calendar.version}`, calendar.jurisdiction, calendar.office, calendar.timezone, calendar.status]);
+        { name: calendar.name, version: `version ${calendar.version}`, jurisdiction: calendar.jurisdiction,
+          office: calendar.office ?? "", timezone: calendar.timezone, status: activeCalendar.status });
       await workspace.getByLabel("Trigger / base date").fill("2026-10-15");
       const proposal = page.waitForResponse(response => response.url().endsWith(`/dockets/${fixture.docketId}/deadlines`) && response.request().method() === "POST");
       await workspace.getByRole("button", { name: "Calculate deadline proposal" }).click();

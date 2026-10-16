@@ -1854,7 +1854,7 @@ function HearingWorkflowCard({
                     <>
                       <Input
                         aria-label={`Published time for ${hearing.purpose}`}
-                        className="w-full sm:w-auto"
+                        className="w-full min-w-0 max-w-full sm:w-52 sm:shrink-0"
                         type="time"
                         value={confirmationTimes[hearing.id] ?? ""}
                         onChange={(event) => setConfirmationTimes((current) => ({
@@ -1878,7 +1878,7 @@ function HearingWorkflowCard({
                       </Button>
                     </>
                   ) : null}
-                  <Input aria-label={`Reschedule ${hearing.purpose}`} className="w-full sm:w-auto" type="date" value={rescheduleDates[hearing.id] ?? hearing.hearing_on} onChange={(event) => setRescheduleDates((current) => ({ ...current, [hearing.id]: event.target.value }))} />
+                  <Input aria-label={`Reschedule ${hearing.purpose}`} className="w-full min-w-0 max-w-full sm:w-52 sm:shrink-0" type="date" value={rescheduleDates[hearing.id] ?? hearing.hearing_on} onChange={(event) => setRescheduleDates((current) => ({ ...current, [hearing.id]: event.target.value }))} />
                   <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => update.mutate({ hearingId: hearing.id, hearingOn: rescheduleDates[hearing.id] ?? hearing.hearing_on })}>Reschedule</Button>
                   <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => update.mutate({ hearingId: hearing.id, status: "cancelled" })}>Cancel hearing</Button>
                   {connectedProviders.has("outlook") ? <Button className="w-full sm:w-auto" size="sm" variant="secondary" onClick={() => sync.mutate({ provider: "outlook", hearingId: hearing.id })}>Sync Outlook</Button> : null}

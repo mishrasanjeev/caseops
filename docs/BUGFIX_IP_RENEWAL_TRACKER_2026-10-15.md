@@ -335,6 +335,28 @@ a standard web regression runs the real production configuration's collection,
 not app execution, and checks its exact identities and disjoint file inventory.
 This is collection proof, not successful execution of those 42 journeys.
 
+The subsequent `7357b9bb` full web run passed all 1,451 tests in 209 files,
+both type checks and a fresh build. Its early Docker preview was still NO-GO:
+38 cases completed with 22 passes, 16 failures and no skips or retries. The
+393/639px cases reached a later caption-fact check that reused the calendar's
+original draft status after successful activation. The current active caption
+and approved-workspace checks were correct; this expectation now uses the
+activation response's current status. Fact diagnostics name the field without
+printing its private value. A negative inside the existing guard rejects the
+stale draft expectation and accepts the activated state.
+
+The other fourteen widths failed earlier, at the reloaded hearing's reschedule
+date input: its `sm:w-auto` produced a 149px box against the useful-width
+contract. This is a separate adjacent layout gap, not another activation
+failure. Date/time action controls use stable responsive widths capped by the
+actual available container instead. Each controls journey now changes the
+hearing date through its real action, checks the PATCH acknowledgement and
+visible result, then requires a reload and same-owner API proof that the new
+date retained exact time, timezone and purpose. The 34/42 reviewed case counts
+are unchanged. All sixteen old preview failures remain retained; the full
+Docker gate and Review did not start on that failed candidate. This product
+layout amendment requires fresh full web, CI, Docker and production evidence.
+
 The empty production selectors also demonstrate why testing only synthetic
 positive options was insufficient. Reconcile the real eligible API identities
 with the loaded native options. Test honest empty, loading and failed requests
