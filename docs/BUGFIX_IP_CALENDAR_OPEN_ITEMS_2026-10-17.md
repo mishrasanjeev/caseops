@@ -284,3 +284,23 @@ metadata only, no schema, scope, legal approval, entitlement or live consent.
 Docker03 was stopped before image building or native/browser execution; it is
 another incomplete attempt. The119 affected-source pass and13 native pass on8a
 are retained separately and do not certify this later correction.
+
+The superseded8a hosted PostgreSQL shard2 also recorded one existing compliance
+lock-observation failure. Its final retained snapshot actually contained the
+required458-to457 directed blocker. The contender completed without exception,
+cleanup reported no database error or leaked lock, and a1.622-second Gen2 GC
+pause overran the1.5-second poll window. The observer queried that final state
+but unconditionally raised instead of testing its positive evidence. This is
+an evidenced test-oracle defect, not proof of a lost product lock. The repair
+must examine the same final snapshot, preserve the exact PID edge and existing
+time/query bounds, and retain negative controls; blindly retrying or increasing
+the deadline would not establish the cause.
+
+Docker04 was stopped for that checker correction after its first389-case native
+group completed successfully. Group2 is interrupted, not passed. Its exact
+runtime pointer was resolved and25 files/298 directories were retained through
+the canonical runtime-retention helper in docker-full-04-cancelled-runtime-01.
+The original canceled run and its failed retention attempt against the obsolete
+child1 workspace remain historical evidence. Only this run's Compose resources
+are removed before editing; no unrelated project is reset. Fresh complete gates
+on the amended test source are required before release.

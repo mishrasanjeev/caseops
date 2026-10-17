@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A bounded PostgreSQL lock observer must check its final existing snapshot
+  before declaring a directed edge absent. A GC pause can exhaust the polling
+  window while the required lock is present. Keep the exact waiter/holder PID
+  assertion and snapshot-work bound; regress deadline-edge positives and wrong
+  or absent edges without raising the timeout, then replay the real native race.
+
 - Calendar renewal may advance a claimed credential snapshot only for its own
   rotation or a proven same-consent peer rotation. A new consent needs a distinct
   server-owned encrypted epoch even for the same account at the same timestamp.
