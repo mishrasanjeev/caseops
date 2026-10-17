@@ -219,3 +219,11 @@ untouched. The prior full web result was1523/1523, and the canonical focused
 backend completed315 passed/53 explicit PostgreSQL skips across368 identities.
 Those are prior-candidate scoped results, not substitutes for the corrected
 candidate's fresh complete Docker, hosted, merge and production gates.
+
+CI also exposed an incomplete publication step in this work: the governance
+map was rendered, but its generated runtime data-class projection was not,
+despite the existing repository instruction requiring both. The resulting
+fail-closed CI rejection is retained, not called a Ruff or product failure.
+Both artifacts are now regenerated and the complete contract chain is rerun.
+The generated change carries only the reviewed map/projection fingerprints;
+schema, registered class fields and disposition authority remain unchanged.
