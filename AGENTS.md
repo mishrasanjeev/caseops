@@ -11,6 +11,11 @@
   token. Preserve encrypted uncertainty after failed/stale receipts and lease
   expiry for revoked cleanup as well as connected grants. Repeated cleanup
   must not replay that token POST; new consent may replace the credential.
+- Shared Calendar credential preflight must retain each caller's failure
+  containment. Corrupt tokens and rejected refreshes must leave an unreadable
+  connection unknown while healthy connections continue; an errored grant may
+  authorize no provider read or positive match. Inventory drift, readiness,
+  deletion, manual/bulk sync and reconciliation before the full Docker freeze.
 
 - A Calendar status-load or schema-validation error is not evidence of missing
   OAuth configuration. Reconcile the actual tenant-scoped API response with

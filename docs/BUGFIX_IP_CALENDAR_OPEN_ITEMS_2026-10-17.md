@@ -227,3 +227,41 @@ fail-closed CI rejection is retained, not called a Ruff or product failure.
 Both artifacts are now regenerated and the complete contract chain is rerun.
 The generated change carries only the reviewed map/projection fingerprints;
 schema, registered class fields and disposition authority remain unchanged.
+
+The complete hosted API shard9 then found two real Calendar drift regressions
+on19a862d4: an invalid encrypted envelope and malformed decrypted JSON escaped
+the new preflight before the existing per-connection unreadable boundary. Its
+949-case result was809 passed/138 skipped/2 failed, with all2709 phases
+reconciled. Focused OAuth/refresh suites had omitted this older drift module;
+their green results did not cover this caller. The second Docker attempt was
+stopped during native group2: group1's387 identities remain separately retained,
+the interrupted group's raw runtime/journal was copied, and only the owned
+Compose resources were removed. There was no full Docker pass or deployment.
+
+Expanded local regression also establishes that a rejected refresh must not
+abort other connections, and an already errored grant must remain unreadable.
+All four cases failed before correction. The corrected drift path records only
+an unknown diagnostic after fresh authority checks, never reads with a rejected
+or uncertain token, never promotes an errored grant to a positive match, and
+does not reactivate the connection. Complete affected-caller inventory and
+replacement gates are required before the next Docker freeze.
+
+Readiness has the same adjacent preflight boundary: corrupt credentials must
+clear a previous passed result, while a rejected renewal must not mistake its
+own committed error state for a concurrent consent change. Three failing
+readiness regressions preceded the correction. The helper now carries only its
+own non-stale, hashed connection receipt, captured after flush under its existing
+locks and exposed only after a successful commit. Current membership, step-up,
+probe claim, config and connection checks still decide finalization; a new
+consent, revocation or authority change must win. Native forced-interleaving
+acceptance is required, not inferred from the receipt's shape.
+
+The old 24-module caller run has an incremental journal but no natural session
+completion after the execution context was lost. It is incomplete, not green.
+The committed candidate was recovered in a fresh checkout, and uncommitted
+corrections were recovered from their exact retained patch records. Earlier
+scoped passes remain historical; only fresh current-source gates can authorize
+the merge and release. The original new-consent native race also reused an
+already consumed OAuth code: that is a fixture failure, not evidence that new
+consent was overwritten. Its replacement must prove a genuinely fresh callback
+and persisted credential before asserting the race outcome.

@@ -147,6 +147,12 @@ class CalendarProviderError(RuntimeError):
 class CalendarRefreshError(CalendarProviderError):
     """Credential preflight failed before any event request was sent."""
 
+    def __init__(
+        self, message: str, *, owned_connection_snapshot: tuple[object, ...] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.owned_connection_snapshot = owned_connection_snapshot
+
 
 def _stamp_calendar_token_expiry(payload: dict[str, Any]) -> dict[str, Any]:
     result = dict(payload)
@@ -2314,14 +2320,7 @@ def _test_outlook_tenant_configuration_fenced(
             adp20_readiness="blocked_pending_admin_configuration",
             tested_at=tested_at,
         )
-    connection_snapshot = (
-        connection.id,
-        str(connection.status),
-        _aware(connection.updated_at),
-        hashlib.sha256((connection.encrypted_token_ref or "").encode()).hexdigest(),
-        connection.provider_account_id,
-    )
-    token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+    connection_snapshot = _calendar_credential_snapshot(connection)
     provider = _provider(session, context=context)
     claim_marker = f"outlook_readiness_claim:{uuid4().hex}"
     row.last_test_status = "testing"
@@ -2333,17 +2332,20 @@ def _test_outlook_tenant_configuration_fenced(
     session.commit()
     probe_error: str | None = None
     try:
+        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
         token_payload, renewed = _fresh_calendar_token(
             session, context=context, connection=connection, token_payload=token_payload,
         )
         if renewed:
-            connection_snapshot = (
-                connection.id, str(connection.status), _aware(connection.updated_at),
-                hashlib.sha256((connection.encrypted_token_ref or "").encode()).hexdigest(),
-                connection.provider_account_id,
-            )
+            connection_snapshot = _calendar_credential_snapshot(connection)
         provider.validate_connection(token_payload=token_payload)
     except Exception as exc:  # noqa: BLE001 - provider boundary
+        if isinstance(exc, CalendarRefreshError):
+            owned = exc.owned_connection_snapshot
+            if owned is not None and len(owned) == 5 and owned[0] == connection_id:
+                # Only the refresh's own non-stale write may advance this
+                # expectation. A new consent or revocation must still win.
+                connection_snapshot = owned
         probe_error = _safe_error(exc)
 
     memberships = lock_company_memberships_for_assignment(
@@ -2382,12 +2384,8 @@ def _test_outlook_tenant_configuration_fenced(
         .execution_options(populate_existing=True)
     )
     current_connection_snapshot = (
-        connection.id,
-        str(connection.status),
-        _aware(connection.updated_at),
-        hashlib.sha256((connection.encrypted_token_ref or "").encode()).hexdigest(),
-        connection.provider_account_id,
-    ) if connection is not None else None
+        _calendar_credential_snapshot(connection) if connection is not None else None
+    )
     if (
         row is None
         or row.last_test_status != "testing"
@@ -5247,6 +5245,16 @@ def _calendar_token_due(payload: dict[str, Any], connected_at: datetime | None) 
     return expires <= _current_time() + timedelta(seconds=30)
 
 
+def _calendar_credential_snapshot(connection: UserCalendarConnection) -> tuple[object, ...]:
+    return (
+        connection.id,
+        str(connection.status),
+        _aware(connection.updated_at),
+        hashlib.sha256((connection.encrypted_token_ref or "").encode()).hexdigest(),
+        connection.provider_account_id,
+    )
+
+
 def _calendar_refresh_authority(
     session: Session, *, context: SessionContext, connection_id: str,
     owner_id: str, cleanup: bool,
@@ -5367,9 +5375,18 @@ def _fresh_calendar_token(
                 and row.status == CalendarConnectionStatus.CONNECTED
             ):
                 row.status = CalendarConnectionStatus.ERROR
+            session.flush()
+            owned_snapshot = (
+                _calendar_credential_snapshot(row)
+                if error is not None and not stale
+                and expected_status == CalendarConnectionStatus.CONNECTED
+                and row.status == CalendarConnectionStatus.ERROR
+                else None
+            )
             session.commit()
             raise CalendarRefreshError(
-                "Calendar renewal failed or authority changed. Reconnect the account."
+                "Calendar renewal failed or authority changed. Reconnect the account.",
+                owned_connection_snapshot=owned_snapshot,
             ) from error
         renewed.pop(_CALENDAR_REFRESH_CLAIM_KEY, None)
         row.encrypted_token_ref = _encrypt_token_payload(renewed)
@@ -8427,6 +8444,7 @@ def _claim_calendar_drift_read(
     context: SessionContext,
     sync_id: str,
     allow_refresh: bool = True,
+    credential_unreadable: bool = False,
 ) -> _CalendarDriftClaim | None:
     """Persist one read lease after exact source and authority validation."""
 
@@ -8505,7 +8523,9 @@ def _claim_calendar_drift_read(
         or sync.source_id != source_id
         or sync.sync_status != CalendarEventSyncStatus.SYNCED
         or str(sync.provider_event_id or "") != provider_event_id
-        or connection.status != CalendarConnectionStatus.CONNECTED
+        or connection.status not in {
+            CalendarConnectionStatus.CONNECTED, CalendarConnectionStatus.ERROR,
+        }
         or not connection.encrypted_token_ref
     ):
         session.rollback()
@@ -8535,18 +8555,31 @@ def _claim_calendar_drift_read(
     if actor_generation != generation or owner_generation != generation:
         session.rollback()
         return None
-    token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-    if allow_refresh and _calendar_token_due(token_payload, connection.connected_at):
+    try:
+        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+    except CalendarProviderError:
+        token_payload = None
+        credential_unreadable = True
+    if (
+        allow_refresh
+        and connection.status == CalendarConnectionStatus.CONNECTED
+        and token_payload is not None
+        and _calendar_token_due(token_payload, connection.connected_at)
+    ):
         # All source/access checks above are advisory after this commit. Start
         # the complete graph claim again after the bounded credential rotation.
         session.commit()
         try:
             _fresh_calendar_token(session, context=owner_context,
                                   connection=connection, token_payload=token_payload)
-        except CalendarProviderError as exc:
-            raise HTTPException(status_code=409, detail={
-                "code": "calendar_reconnect_required", "message": str(exc),
-            }) from exc
+        except CalendarProviderError:
+            session.rollback()
+            # Reclaim current authority for an unknown diagnostic, never a
+            # provider read with the old or uncertain credential.
+            return _claim_calendar_drift_read(
+                session, context=context, sync_id=sync_id,
+                allow_refresh=False, credential_unreadable=True,
+            )
         return _claim_calendar_drift_read(session, context=context, sync_id=sync_id,
                                           allow_refresh=False)
     now = _current_time()
@@ -8558,7 +8591,7 @@ def _claim_calendar_drift_read(
     elif current_reason:
         session.rollback()
         return None
-    reader = _drift_provider_reader(
+    reader = None if credential_unreadable else _drift_provider_reader(
         session,
         context=actor_context,
         connection=connection,
@@ -8646,7 +8679,14 @@ def _finalize_calendar_drift_read(
     )
     exact_connection = bool(
         connection is not None
-        and connection.status == CalendarConnectionStatus.CONNECTED
+        and (
+            connection.status == CalendarConnectionStatus.CONNECTED
+            or (
+                connection.status == CalendarConnectionStatus.ERROR
+                and claim.reader is None
+                and drift_status == "unknown"
+            )
+        )
         and _calendar_drift_connection_snapshot(connection)
         == claim.connection_snapshot
     )
