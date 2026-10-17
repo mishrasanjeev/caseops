@@ -12,7 +12,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.
 const projects = {
   "tester-prod-chromium": 115,
   "tester-index-prod-chromium": 6,
-  "test-legal-write-prod-chromium": 42,
+  "test-legal-write-prod-chromium": 50,
 };
 const indexFiles = { "ram-2026-10-10-prod.spec.ts": 4, "ram-2026-10-12-prod.spec.ts": 2 };
 const datedFiles = {
@@ -20,6 +20,9 @@ const datedFiles = {
   "ram-2026-10-13-ip-portfolio.spec.ts": 4,
   "ram-2026-10-15-ip-controls.spec.ts": 34,
   "ram-2026-10-15-ip-renewal-tracker.spec.ts": 2,
+  "ram-2026-10-17-calendar-readiness.spec.ts": 2,
+  "ram-2026-10-17-ip-reminders.spec.ts": 4,
+  "ram-2026-10-17-ip-tracker.spec.ts": 2,
 };
 
 function flatten(suites: NativeSuite[], projectRetries: Record<string, number>, parents: string[] = []): Case[] {
@@ -62,6 +65,7 @@ describe("reviewed production tester source inventory", () => {
     const result = spawnSync(process.execPath, [
       path.join(root, "node_modules/@playwright/test/cli.js"), "test",
       "--config=playwright.prod-ram.config.ts", "--list", "--reporter=json",
+      ...Object.keys(projects).map(project => `--project=${project}`),
     ], { cwd: root, env, encoding: "utf8", timeout: 8_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
@@ -75,9 +79,9 @@ describe("reviewed production tester source inventory", () => {
     cases = flatten(native.suites, projectRetries).filter(row => Object.hasOwn(projects, row.project));
   });
 
-  it("collects the independent reviewed115+6+42 exact partition before production", () => {
+  it("collects the independent reviewed115+6+50 exact partition before production", () => {
     expect(counts(cases.map(row => row.project))).toEqual(projects);
-    expect(cases).toHaveLength(163);
+    expect(cases).toHaveLength(171);
     expect(cases.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
   });
 

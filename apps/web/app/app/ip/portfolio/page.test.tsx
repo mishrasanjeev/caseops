@@ -7,6 +7,7 @@ const {
   createExportMock,
   fetchFamiliesMock,
   fetchPortfolioMock,
+  fetchTrackerMock,
   listExportsMock,
   listViewsMock,
   previewExportMock,
@@ -16,6 +17,7 @@ const {
   createExportMock: vi.fn(),
   fetchFamiliesMock: vi.fn(),
   fetchPortfolioMock: vi.fn(),
+  fetchTrackerMock: vi.fn(),
   listExportsMock: vi.fn(),
   listViewsMock: vi.fn(),
   previewExportMock: vi.fn(),
@@ -26,6 +28,7 @@ const {
 vi.mock("@/lib/api/endpoints", () => ({
   fetchIpPortfolio: fetchPortfolioMock,
   fetchIpPortfolioFamilies: fetchFamiliesMock,
+  fetchIpRenewalTracker: fetchTrackerMock,
   listIpPortfolioSavedViews: listViewsMock,
   listIpPortfolioExports: listExportsMock,
   createIpPortfolioExport: createExportMock,
@@ -166,6 +169,9 @@ describe("IpPortfolioPage", () => {
     fetchPortfolioMock.mockResolvedValue(RESPONSE);
     fetchFamiliesMock.mockReset();
     fetchFamiliesMock.mockResolvedValue(FAMILY_RESPONSE);
+    fetchTrackerMock.mockReset();
+    fetchTrackerMock.mockResolvedValue({ rows: [], next_cursor: null, limit: 50,
+      counts: { upcoming: 0, active: 0, due_today: 0, overdue: 0, missing: 0, failed: 0 } });
     listViewsMock.mockReset();
     listViewsMock.mockResolvedValue({ views: [] });
     listExportsMock.mockReset();
@@ -263,5 +269,45 @@ describe("IpPortfolioPage", () => {
     render(withClient(<IpPortfolioPage />));
     expect(screen.getByText("IP portfolio access required")).toBeInTheDocument();
     expect(fetchPortfolioMock).not.toHaveBeenCalled();
+  });
+
+  it("IP18 restores a tracker-compatible saved view and exports exactly its filters and columns", async () => {
+    const filters = { query: "retained source", application_date_from: "2020-01-01",
+      application_date_to: "2020-12-31", renewal_due_from: "2028-03-01",
+      renewal_due_to: "2028-03-31", renewal_tracker_state: ["upcoming"] };
+    const columns = ["mark", "application_date", "renewal_due_date"];
+    listViewsMock.mockResolvedValue({ views: [{ id: "dates-view", name: "Retained source dates",
+      filters, columns, editable: true, version: 1, scope: "personal" }] });
+    render(withClient(<IpPortfolioPage />));
+    await waitFor(() => expect(listViewsMock).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "Deadline tracker view" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Saved view" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Retained source dates" }));
+    await waitFor(() => expect(fetchTrackerMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ query: filters.query, category: "upcoming", limit: 50, cursor: null,
+        application_date_from: filters.application_date_from, application_date_to: filters.application_date_to,
+        renewal_due_from: filters.renewal_due_from, renewal_due_to: filters.renewal_due_to })));
+    expect(screen.getByRole("region", { name: "Deadline tracker" })).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Search renewal tracker" })).toHaveValue(filters.query);
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    await waitFor(() => expect(previewExportMock).toHaveBeenCalledWith({ filters, columns, rowLimit: 50000 }));
+    fireEvent.click(await screen.findByRole("button", { name: "Queue export" }));
+    await waitFor(() => expect(createExportMock).toHaveBeenCalledWith({ filters, columns,
+      rowLimit: 50000, previewToken: "export-preview-token" }));
+  });
+
+  it("IP18 switches to the full portfolio rather than ignoring unsupported saved-view filters", async () => {
+    const filters = { query: "retained source", jurisdiction: ["GB"], renewal_tracker_state: ["active", "failed"] };
+    listViewsMock.mockResolvedValue({ views: [{ id: "full-view", name: "Full portfolio scope", filters,
+      columns: ["mark"], editable: true, version: 1, scope: "personal" }] });
+    render(withClient(<IpPortfolioPage />));
+    await waitFor(() => expect(listViewsMock).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "Deadline tracker view" }));
+    expect(screen.getByRole("region", { name: "Deadline tracker" })).toBeVisible();
+    fireEvent.click(screen.getByRole("combobox", { name: "Saved view" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Full portfolio scope" }));
+    await waitFor(() => expect(fetchPortfolioMock).toHaveBeenLastCalledWith(filters,
+      expect.objectContaining({ limit: 50, cursor: null })));
+    expect(screen.queryByRole("region", { name: "Deadline tracker" })).not.toBeInTheDocument();
   });
 });

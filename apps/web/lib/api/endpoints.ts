@@ -11245,6 +11245,10 @@ export async function fetchIpRenewalTracker(input: {
   limit?: number;
   cursor?: string | null;
   horizonDays?: number;
+  application_date_from?: string | null;
+  application_date_to?: string | null;
+  renewal_due_from?: string | null;
+  renewal_due_to?: string | null;
 } = {}): Promise<IpRenewalTrackerResponse> {
   const params = new URLSearchParams();
   if (input.category) params.set("category", input.category);
@@ -11252,6 +11256,9 @@ export async function fetchIpRenewalTracker(input: {
   if (input.limit) params.set("limit", String(input.limit));
   if (input.cursor) params.set("cursor", input.cursor);
   if (input.horizonDays) params.set("horizon_days", String(input.horizonDays));
+  for (const key of ["application_date_from", "application_date_to", "renewal_due_from", "renewal_due_to"] as const) {
+    if (input[key]) params.set(key, input[key]);
+  }
   return apiRequest(`/api/ip/portfolio/renewal-tracker?${params.toString()}`);
 }
 

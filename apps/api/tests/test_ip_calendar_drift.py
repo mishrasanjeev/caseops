@@ -650,7 +650,7 @@ def test_uj62_exc03a_an_unreadable_provider_is_unknown_not_matching(
 
 @pytest.mark.parametrize(
     "damaged_token_kind",
-    ["invalid_envelope", "malformed_json"],
+    ["invalid_envelope", "malformed_json", "refresh_rejected", "errored_connection"],
 )
 def test_uj62_exc03a_a_damaged_token_does_not_abort_other_connections(
     client: TestClient,
@@ -667,11 +667,20 @@ def test_uj62_exc03a_a_damaged_token_does_not_abort_other_connections(
         assert damaged_connection is not None
         if damaged_token_kind == "invalid_envelope":
             damaged_connection.encrypted_token_ref = "not-a-fernet-token"
-        else:
+        elif damaged_token_kind == "malformed_json":
             malformed = calendar_sync._fernet().encrypt(b"{not-json")
             damaged_connection.encrypted_token_ref = (
                 "fernet:" + malformed.decode("ascii")
             )
+        elif damaged_token_kind == "refresh_rejected":
+            damaged_connection.encrypted_token_ref = calendar_sync._encrypt_token_payload({
+                "access_token": "expired-fixture-token",
+                "refresh_token": "rejected-fixture-refresh",
+                calendar_sync._CALENDAR_TOKEN_EXPIRES_KEY:
+                    (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+            })
+        else:
+            damaged_connection.status = CalendarConnectionStatus.ERROR
 
         healthy_connection = UserCalendarConnection(
             company_id=seeded["context_ids"][0],
@@ -696,7 +705,14 @@ def test_uj62_exc03a_a_damaged_token_does_not_abort_other_connections(
         session.commit()
         healthy_sync_id = healthy_sync.id
 
-    reader = _Reader(
+    class Reader(_Reader):
+        refresh_calls = 0
+
+        def refresh_access_token(self, *, token_payload: dict, scopes: list[str]):
+            self.refresh_calls += 1
+            raise CalendarProviderError("unsafe-provider-credential must not be echoed")
+
+    reader = Reader(
         {
             "id": "provider-event-healthy",
             "start_date": DUE.isoformat(),
@@ -714,6 +730,16 @@ def test_uj62_exc03a_a_damaged_token_does_not_abort_other_connections(
     assert _drift_status(seeded["sync_id"])[0] == "unknown"
     assert _drift_status(healthy_sync_id)[0] == "matches"
     assert reader.calls == ["provider-event-healthy"]
+    assert reader.refresh_calls == (1 if damaged_token_kind == "refresh_rejected" else 0)
+    assert "unsafe-provider-credential" not in str(findings)
+    with factory() as session:
+        damaged = session.get(UserCalendarConnection, seeded["connection_id"])
+        assert damaged is not None
+        assert damaged.status == (
+            CalendarConnectionStatus.ERROR
+            if damaged_token_kind in {"refresh_rejected", "errored_connection"}
+            else CalendarConnectionStatus.CONNECTED
+        )
 
 
 def test_uj62_exc03a_a_provider_without_a_read_capability_is_unknown(

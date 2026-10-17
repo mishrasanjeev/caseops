@@ -24,6 +24,7 @@ from caseops_api.api.routes import (
     drive,
     email_templates,
     health,
+    in_app_notifications,
     intake,
     integrations,
     intelligent_reviews,
@@ -217,6 +218,9 @@ def register_api_routes(application: FastAPI) -> None:
         notifications.admin_router,
         prefix="/api/admin",
         tags=["notifications"],
+    )
+    application.include_router(
+        in_app_notifications.router, prefix="/api/in-app-notifications", tags=["notifications"],
     )
     application.include_router(
         notifications.rules_router,

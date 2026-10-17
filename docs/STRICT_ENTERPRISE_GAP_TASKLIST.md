@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## October 17 IP Calendar Acceptance Boundaries
+
+**Partially implemented.** The serving6af baseline passed production38989524122
+and canonical guarded private-cadence resume. Do not repeat the older29d blocker.
+Remaining user outcomes require complete recipient dismissal/receipt/recurrence,
+hearing/reminder persistence and authorized bounded tracker filters, views,
+exports and continuation. Positive source verification and external consent are
+separate from UI empty-state correctness; neither may be invented. New source
+changes remain NO-GO until fresh Docker/CI/exact-production evidence. See
+`docs/BUGFIX_IP_CALENDAR_OPEN_ITEMS_2026-10-17.md`.
+
 ## October 17 Private Resume Identity
 
 **Partially implemented / NO-GO.** Production38942699099 on29d completed all11

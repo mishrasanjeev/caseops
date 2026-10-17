@@ -517,7 +517,8 @@ class _FinalizerAudit:
 
     def await_blocker(self, waiter, holder, *, on_observed=None):
         deadline = monotonic() + 1.5
-        while monotonic() < deadline:
+        while True:
+            expired = monotonic() >= deadline
             rows = self.snapshot()
             match = next((row for row in rows if row["pid"] == self.pids.get(waiter)), None)
             if match and self.pids.get(holder) in match["blockers"]:
@@ -528,9 +529,12 @@ class _FinalizerAudit:
                 self.record("directed_blocker", waiter=waiter, holder=holder, activity=rows,
                             observed_at=observed_at, release_signaled=self.release.is_set())
                 return rows
+            if expired:
+                self.record("blocker_not_observed", activity=rows)
+                raise AssertionError(
+                    f"Actual {waiter} -> {holder} PostgreSQL wait was not observed"
+                )
             sleep(0.01)
-        self.record("blocker_not_observed", activity=self.snapshot())
-        raise AssertionError(f"Actual {waiter} -> {holder} PostgreSQL wait was not observed")
 
     def retained_locks(self):
         with self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as observer:

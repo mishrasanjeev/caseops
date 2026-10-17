@@ -3,7 +3,7 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, RefreshCw, Search } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
@@ -25,6 +25,7 @@ import {
   type IpPortfolioDateState,
   type IpRenewalTrackerCategory,
   type IpRenewalTrackerRow,
+  type IpPortfolioFilters,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 
@@ -154,18 +155,25 @@ function ReminderState({ row }: { row: IpRenewalTrackerRow }) {
   );
 }
 
-export function IpPortfolioRenewalTracker({ category, query = null, onQueryChange, onCategoryChange, onEdit }: {
+type TrackerDateFilters = Pick<IpPortfolioFilters,
+  "application_date_from" | "application_date_to" | "renewal_due_from" | "renewal_due_to">;
+
+export function IpPortfolioRenewalTracker({ category, query = null, dateFilters = {}, onDateFiltersChange,
+  onQueryChange, onCategoryChange, onEdit }: {
   category?: IpRenewalTrackerCategory;
   query?: string | null;
+  dateFilters?: TrackerDateFilters;
+  onDateFiltersChange?: (filters: TrackerDateFilters) => void;
   onQueryChange: (query: string | null) => void;
   onCategoryChange: (category?: IpRenewalTrackerCategory) => void;
   onEdit: (row: EditablePortfolioDates) => void;
 }) {
   const [searchDraft, setSearchDraft] = useState(query ?? "");
+  useEffect(() => setSearchDraft(query ?? ""), [query]);
   const listing = useInfiniteQuery({
-    queryKey: ["ip", "portfolio", "renewal-tracker", category ?? "all", query],
+    queryKey: ["ip", "portfolio", "renewal-tracker", category ?? "all", query, dateFilters],
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => fetchIpRenewalTracker({ category, query, limit: 50, cursor: pageParam }),
+    queryFn: ({ pageParam }) => fetchIpRenewalTracker({ category, query, ...dateFilters, limit: 50, cursor: pageParam }),
     getNextPageParam: (page) => page.next_cursor,
   });
   const rows = listing.data?.pages.flatMap((page) => page.rows) ?? [];
@@ -192,6 +200,16 @@ export function IpPortfolioRenewalTracker({ category, query = null, onQueryChang
         </div>
         <Button type="submit" variant="outline" aria-label="Search renewal tracker"><Search className="h-4 w-4" aria-hidden /></Button>
       </form>
+      {onDateFiltersChange ? <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        {([
+          ["application_date_from", "Application Date from"], ["application_date_to", "Application Date to"],
+          ["renewal_due_from", "Renewal Due Date from"], ["renewal_due_to", "Renewal Due Date to"],
+        ] as const).map(([key, label]) => <div key={key} className="min-w-0 space-y-1.5">
+          <Label htmlFor={`tracker-${key}`}>{label}</Label>
+          <Input id={`tracker-${key}`} type="date" value={dateFilters[key] ?? ""}
+            onChange={(event) => onDateFiltersChange({ ...dateFilters, [key]: event.target.value || null })} />
+        </div>)}
+      </div> : null}
       {counts ? <dl className="flex min-w-0 flex-wrap gap-x-6 gap-y-3 border-y border-[var(--color-line)] py-3 text-sm">
         {CATEGORIES.map(([key, title]) => <div key={key}><dt className="text-xs text-[var(--color-mute)]">{title}</dt><dd className="font-semibold tabular-nums">{counts[key]}</dd></div>)}
       </dl> : null}

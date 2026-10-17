@@ -1,5 +1,54 @@
 # CaseOps agent instructions
 
+- Calendar cancellation tests must follow the actual transport boundary. Matter
+  cancellation commits exact `DELETE_PENDING` tombstones; drain the existing
+  bounded worker before asserting provider DELETE, then prove retained
+  sync/source/connection identity and second-drain idempotence. Shared IP hearing
+  cancellation currently drains after commit; preserve that separate contract
+  and never move provider I/O into the lifecycle transaction to satisfy a test.
+
+- A bounded PostgreSQL lock observer must check its final existing snapshot
+  before declaring a directed edge absent. A GC pause can exhaust the polling
+  window while the required lock is present. Keep the exact waiter/holder PID
+  assertion and snapshot-work bound; regress deadline-edge positives and wrong
+  or absent edges without raising the timeout, then replay the real native race.
+
+- Calendar renewal may advance a claimed credential snapshot only for its own
+  rotation or a proven same-consent peer rotation. A new consent needs a distinct
+  server-owned encrypted epoch even for the same account at the same timestamp.
+  Capture immutable receipts under lock before commit; no ORM reload may reopen
+  a transaction before provider I/O. Prove both interleavings on PostgreSQL.
+
+- Signed search continuations must normalize queries exactly like the SQL
+  predicate. Unicode case-folding is not interchangeable with lower-casing;
+  regress distinct search inventories and reject cross-search cursor reuse.
+- Saved recipient labels must resolve from a cold authorized directory even
+  for a read-only viewer with no other mounted directory consumer. A prefilled
+  query cache cannot prove the workflow; cover cold, cached, failed/retry and
+  inactive/missing recipients without rewriting retained assignments.
+- An expired refresh claim is not proof that the provider did not rotate its
+  token. Preserve encrypted uncertainty after failed/stale receipts and lease
+  expiry for revoked cleanup as well as connected grants. Repeated cleanup
+  must not replay that token POST; new consent may replace the credential.
+- Shared Calendar credential preflight must retain each caller's failure
+  containment. Corrupt tokens and rejected refreshes must leave an unreadable
+  connection unknown while healthy connections continue; an errored grant may
+  authorize no provider read or positive match. Inventory drift, readiness,
+  deletion, manual/bulk sync and reconciliation before the full Docker freeze.
+
+- A Calendar status-load or schema-validation error is not evidence of missing
+  OAuth configuration. Reconcile the actual tenant-scoped API response with
+  every response enum, including retained `delete_pending` cleanup rows, and
+  show explicit loading/error/unknown states. Never delete cleanup evidence,
+  relax validation to arbitrary strings or fabricate missing credential names
+  to make readiness appear coherent.
+
+- A response enum's `verified` literal is not an implemented verification
+  workflow or positive source proof. Trace the actual authoritative reader and
+  writer before documenting or testing it. Do not promote supplied portfolio
+  dates from a linked document, a manual correction or an unrelated confirmed
+  deadline without the supported source-specific verification contract.
+
 - Surface the first failed required CI gate immediately, with its actual
   artifact and any still-pending inventory. Do not leave an early-failure file
   unnoticed while waiting for unrelated jobs. Preserve the failed commit and

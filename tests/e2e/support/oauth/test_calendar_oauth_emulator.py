@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from calendar_oauth_emulator import (
@@ -10,6 +11,8 @@ from calendar_oauth_emulator import (
     CLIENT_ID,
     CLIENT_SECRET,
     MODE,
+    OUTLOOK_CALLBACK,
+    OUTLOOK_SCOPES,
     REQUIRED_SCOPES,
     CalendarOAuthEmulator,
     loopback_origin,
@@ -74,11 +77,18 @@ class EmulatorIsolationTests(unittest.TestCase):
             ),
             local + "/userinfo",
         )
+        for remote, mapped in (
+            ("https://www.googleapis.com/calendar/v3/calendars/primary/events", "/google/events"),
+            ("https://graph.microsoft.com/v1.0/me/events/offline-id", "/outlook/events/offline-id"),
+            ("https://login.microsoftonline.com/organizations/oauth2/v2.0/token", "/outlook/token"),
+        ):
+            self.assertEqual(redirected_google_url(remote, local), local + mapped)
         self.assertIsNone(
             redirected_google_url("http://acceptance-case-provider:8080", local)
         )
         for url in (
-            "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+            "https://www.googleapis.com/calendar/v3/calendars/other/events",
+            "https://graph.microsoft.com/v1.0/users/other/events",
             "https://accounts.google.com/o/oauth2/v2/auth",
             "https://oauth2.googleapis.com/token?unexpected=1",
         ):
@@ -90,17 +100,19 @@ class EmulatorProtocolTests(unittest.TestCase):
     def setUp(self) -> None:
         self.emulator = CalendarOAuthEmulator()
 
-    def authorize(self, scopes: str | None = None):
+    def authorize(self, scopes: str | None = None, *, provider: str = "google"):
+        callback = CALLBACK if provider == "google" else OUTLOOK_CALLBACK
+        required = REQUIRED_SCOPES if provider == "google" else OUTLOOK_SCOPES
         return self.emulator.authorize(
             {
                 "client_id": CLIENT_ID,
-                "redirect_uri": "http://127.0.0.1:8000" + CALLBACK,
+                "redirect_uri": "http://127.0.0.1:8000" + callback,
                 "response_type": "code",
                 "state": "server-signed-state-fixture",
                 "scope": scopes
                 if scopes is not None
-                else " ".join(sorted(REQUIRED_SCOPES)),
-            }
+                else " ".join(sorted(required)),
+            }, provider=provider,
         )
 
     def token(self, attempt):
@@ -111,7 +123,7 @@ class EmulatorProtocolTests(unittest.TestCase):
                 "code": attempt.code,
                 "grant_type": "authorization_code",
                 "redirect_uri": attempt.redirect_uri,
-            }
+            }, provider=attempt.provider,
         )
 
     def test_missing_identity_scopes_reproduces_original_401_after_token_success(
@@ -182,6 +194,50 @@ class EmulatorProtocolTests(unittest.TestCase):
             self.assertEqual(
                 json.load(response)["email"], "calendar-emulator@example.test"
             )
+        for provider in ("google", "outlook"):
+            with self.subTest(provider=provider):
+                self.exercise_event_crud_and_expiry(origin, provider)
+
+    def exercise_event_crud_and_expiry(self, origin: str, provider: str) -> None:
+        attempt = self.authorize(provider=provider)
+        self.emulator.consent(attempt.identity, "short_lived")
+        _, original = self.token(attempt)
+        old_access = str(original["access_token"])
+        self.emulator.access_deadlines[old_access] = 0
+        resource = origin + "/" + provider + "/events"
+        with self.assertRaises(HTTPError) as denied:
+            urlopen(Request(resource, data=b"{}", headers={
+                "Authorization": "Bearer " + old_access,
+            }), timeout=2)
+        self.assertEqual(denied.exception.code, 401)
+        refresh = {
+            "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
+            "grant_type": "refresh_token", "refresh_token": str(original["refresh_token"]),
+        }
+        wrong_provider = "outlook" if provider == "google" else "google"
+        self.assertEqual(self.emulator.token(refresh, provider=wrong_provider)[0], 400)
+        token_path = "/token" if provider == "google" else "/outlook/token"
+        with urlopen(Request(origin + token_path, data=urlencode(refresh).encode()), timeout=2) as result:
+            renewed = json.load(result)
+        self.assertNotEqual(renewed["refresh_token"], original["refresh_token"])
+        self.assertEqual(self.emulator.token(refresh, provider=provider)[0], 400)
+        headers = {"Authorization": "Bearer " + renewed["access_token"],
+                   "Content-Type": "application/json"}
+        with urlopen(Request(resource, data=json.dumps({"start": "2030-01-01"}).encode(),
+                             headers=headers), timeout=2) as result:
+            created = json.load(result)
+        event_url = resource + "/" + created["id"]
+        with urlopen(Request(event_url, headers=headers), timeout=2) as result:
+            self.assertEqual(json.load(result)["start"], "2030-01-01")
+        with urlopen(Request(event_url, method="PATCH", data=b'{"start":"2030-01-02"}',
+                             headers=headers), timeout=2) as result:
+            self.assertEqual(json.load(result)["start"], "2030-01-02")
+        with urlopen(Request(event_url, method="DELETE", headers=headers), timeout=2) as result:
+            self.assertEqual((result.status, result.read()), (204, b""))
+        proof = self.emulator.evidence(attempt.identity)
+        self.assertEqual(proof["refresh_calls"], 1)
+        self.assertEqual(proof["event_calls"], ["POST", "GET", "PATCH", "DELETE"])
+        self.assertEqual(proof["events"], [])
 
 
 if __name__ == "__main__":

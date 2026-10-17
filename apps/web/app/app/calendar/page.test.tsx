@@ -77,6 +77,8 @@ vi.mock("@/lib/capabilities", () => ({
 }));
 
 import CalendarPage from "./page";
+import { calendarSyncStatusResponse } from "@/lib/api/schemas";
+import { calendarStatusFixture } from "@/test/calendar-status-fixtures";
 
 function withClient(node: ReactNode): ReactNode {
   const client = new QueryClient({
@@ -133,6 +135,11 @@ describe("CalendarPage", () => {
           provider: "outlook",
           configured: true,
           missing_config_names: [],
+        },
+        {
+          provider: "google_calendar",
+          configured: false,
+          missing_config_names: ["GOOGLE_CALENDAR_CLIENT_ID", "GOOGLE_CALENDAR_CLIENT_SECRET", "GOOGLE_CALENDAR_REDIRECT_URI"],
         },
       ],
       conflict_summary: {
@@ -191,6 +198,103 @@ describe("CalendarPage", () => {
       candidates: [],
     });
     reviewEmailInvitationCandidateMock.mockResolvedValue({});
+  });
+
+  it("keeps configured Google readiness with actual pending-deletion sync rows", async () => {
+    fetchCalendarEventsMock.mockResolvedValue({ range_from: isoToday(), range_to: isoToday(), events: [] });
+    fetchCalendarSyncStatusMock.mockImplementation(async () => calendarSyncStatusResponse.parse(calendarStatusFixture()));
+    render(withClient(<CalendarPage />));
+    await waitFor(() => expect(screen.getByTestId("calendar-google-connect")).toBeEnabled());
+    const panel = screen.getByTestId("calendar-google-panel");
+    expect(within(panel).queryByText(/OAuth is not configured/)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/Missing Google config/)).not.toBeInTheDocument();
+    expect(startGoogleCalendarConnectionMock).not.toHaveBeenCalled();
+    expect(syncGoogleCalendarVisibleRangeMock).not.toHaveBeenCalled();
+  });
+
+  it("shows a readiness load failure without inventing missing credentials and can retry", async () => {
+    fetchCalendarEventsMock.mockResolvedValue({ range_from: isoToday(), range_to: isoToday(), events: [] });
+    fetchCalendarSyncStatusMock.mockRejectedValueOnce(new Error("Synthetic readiness transport failure"))
+      .mockImplementation(async () => calendarSyncStatusResponse.parse(calendarStatusFixture()));
+    render(withClient(<CalendarPage />));
+    const error = await screen.findByTestId("calendar-readiness-error");
+    expect(error).toHaveTextContent("Could not load Calendar connection status");
+    expect(screen.queryByText(/Google Calendar OAuth is not configured/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Missing Google config/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("calendar-google-connect")).toBeDisabled();
+    await userEvent.click(within(error).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.getByTestId("calendar-google-connect")).toBeEnabled());
+    expect(screen.queryByTestId("calendar-readiness-error")).not.toBeInTheDocument();
+    expect(fetchCalendarSyncStatusMock).toHaveBeenCalledTimes(2);
+    expect(startGoogleCalendarConnectionMock).not.toHaveBeenCalled();
+  });
+
+  it("does not label loading readiness as missing Google configuration", async () => {
+    fetchCalendarEventsMock.mockResolvedValue({ range_from: isoToday(), range_to: isoToday(), events: [] });
+    fetchCalendarSyncStatusMock.mockImplementation(() => new Promise(() => {}));
+    render(withClient(<CalendarPage />));
+    expect(await screen.findByText("Checking Google Calendar readiness...")).toBeVisible();
+    expect(screen.queryByText(/Missing Google config/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Google Calendar OAuth is not configured/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("calendar-google-connect")).toBeDisabled();
+  });
+
+  it("keeps a missing provider-status entry unknown rather than inventing configuration facts", async () => {
+    fetchCalendarEventsMock.mockResolvedValue({ range_from: isoToday(), range_to: isoToday(), events: [] });
+    const payload = calendarStatusFixture();
+    payload.provider_config = payload.provider_config?.filter(row => row.provider === "outlook");
+    fetchCalendarSyncStatusMock.mockResolvedValue(calendarSyncStatusResponse.parse(payload));
+    render(withClient(<CalendarPage />));
+    expect(await screen.findByText("Google Calendar readiness is unavailable.")).toBeVisible();
+    expect(screen.queryByText(/Missing Google config/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Google Calendar OAuth is not configured/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("calendar-google-connect")).toBeDisabled();
+  });
+
+  it("keeps Outlook connection errors distinct from disconnected or missing configuration", async () => {
+    fetchCalendarEventsMock.mockResolvedValue({ range_from: isoToday(), range_to: isoToday(), events: [] });
+    listCalendarConnectionsMock.mockRejectedValueOnce(new Error("Synthetic Outlook status failure"));
+    render(withClient(<CalendarPage />));
+    const error = await screen.findByTestId("calendar-outlook-readiness-error");
+    expect(error).toHaveTextContent("Could not load Outlook connection status");
+    expect(screen.getByTestId("calendar-outlook-connect")).toBeDisabled();
+    expect(startOutlookCalendarConnectionMock).not.toHaveBeenCalled();
+    await userEvent.click(within(error).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.getByTestId("calendar-outlook-connect")).toBeEnabled());
+  });
+
+  it("does not enable Outlook connection while its status is still loading", async () => {
+    fetchCalendarEventsMock.mockResolvedValue({ range_from: isoToday(), range_to: isoToday(), events: [] });
+    listCalendarConnectionsMock.mockImplementation(() => new Promise(() => {}));
+    render(withClient(<CalendarPage />));
+    expect(await screen.findByText("Checking connection...")).toBeVisible();
+    expect(screen.getByTestId("calendar-outlook-connect")).toBeDisabled();
+  });
+
+  it("does not invent Gmail credential or webhook failures after a status error", async () => {
+    fetchCalendarEventsMock.mockResolvedValue({ range_from: isoToday(), range_to: isoToday(), events: [] });
+    fetchGmailMailboxStatusMock.mockRejectedValueOnce(new Error("Synthetic Gmail status failure"));
+    render(withClient(<CalendarPage />));
+    const error = await screen.findByTestId("calendar-gmail-readiness-error");
+    expect(error).toHaveTextContent("Could not load Gmail connection status");
+    const panel = screen.getByTestId("calendar-gmail-panel");
+    expect(within(panel).queryByText(/Gmail OAuth is not configured/)).not.toBeInTheDocument();
+    expect(within(panel).queryAllByText(/Missing Gmail config|Gmail webhook blocked/)).toHaveLength(0);
+    expect(screen.getByTestId("calendar-gmail-connect")).toBeDisabled();
+    await userEvent.click(within(error).getByRole("button", { name: "Try again" }));
+    expect(await within(panel).findByText(/Gmail OAuth is not configured/)).toBeVisible();
+    expect(fetchGmailMailboxStatusMock).toHaveBeenCalledTimes(2);
+    expect(startGmailMailboxConnectionMock).not.toHaveBeenCalled();
+  });
+
+  it("does not invent Gmail configuration failures while status is loading", async () => {
+    fetchCalendarEventsMock.mockResolvedValue({ range_from: isoToday(), range_to: isoToday(), events: [] });
+    fetchGmailMailboxStatusMock.mockImplementation(() => new Promise(() => {}));
+    render(withClient(<CalendarPage />));
+    expect(await screen.findByText("Checking Gmail readiness...")).toBeVisible();
+    const panel = screen.getByTestId("calendar-gmail-panel");
+    expect(within(panel).queryAllByText(/Missing Gmail config|Gmail webhook blocked/)).toHaveLength(0);
+    expect(screen.getByTestId("calendar-gmail-connect")).toBeDisabled();
   });
 
   it("renders the current month label and a Today affordance", async () => {

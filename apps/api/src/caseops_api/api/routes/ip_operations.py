@@ -3152,8 +3152,12 @@ async def get_portfolio_renewal_tracker(
     category: TrackerCategory | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     query: Annotated[str | None, Query(max_length=200)] = None,
-    cursor: Annotated[str | None, Query(max_length=36)] = None,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
     horizon_days: Annotated[int, Query(ge=1, le=365)] = 90,
+    application_date_from: date | None = None,
+    application_date_to: date | None = None,
+    renewal_due_from: date | None = None,
+    renewal_due_to: date | None = None,
 ) -> IpRenewalTrackerResponse:
     return await run_in_threadpool(
         list_tracker,
@@ -3164,6 +3168,10 @@ async def get_portfolio_renewal_tracker(
         limit=limit,
         cursor=cursor,
         horizon_days=horizon_days,
+        application_date_from=application_date_from,
+        application_date_to=application_date_to,
+        renewal_due_from=renewal_due_from,
+        renewal_due_to=renewal_due_to,
     )
 
 

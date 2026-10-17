@@ -1010,6 +1010,72 @@ def test_admin_outlook_readiness_test_requires_connection_then_unblocks(
         set_outlook_provider_for_tests(None)
 
 
+@pytest.mark.parametrize(
+    "damaged_token_kind", ["invalid_envelope", "malformed_json", "refresh_rejected"]
+)
+def test_admin_outlook_readiness_corrupt_token_records_safe_failure(
+    client: TestClient, monkeypatch, damaged_token_kind: str,
+) -> None:
+    provider = StubOutlookProvider()
+    set_outlook_provider_for_tests(provider)
+    try:
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        saved = client.patch("/api/admin/outlook-configuration", headers=_auth(token), json={
+            "client_id": "client-id-value", "client_secret": "fixture-credential-value",
+            "tenant_id": "organizations",
+            "redirect_uri": "https://api.example.test/api/calendar/connections/outlook/callback",
+            "scopes": ["offline_access", "User.Read", "Calendars.ReadWrite"],
+            "oauth_consent_model_approved": True, "scopes_approved": True, "enabled": True,
+        })
+        assert saved.status_code == 200, saved.text
+        _connect_outlook(client, token, provider)
+        passed = client.post("/api/admin/outlook-configuration/test", headers=_auth(token))
+        assert passed.status_code == 200 and passed.json()["status"] == "passed"
+        with get_session_factory()() as session:
+            connection = session.scalar(select(UserCalendarConnection))
+            assert connection is not None
+            if damaged_token_kind == "refresh_rejected":
+                damaged = calendar_sync_service._encrypt_token_payload({
+                    "access_token": "expired-fixture-token",
+                    "refresh_token": "rejected-fixture-refresh",
+                    calendar_sync_service._CALENDAR_TOKEN_EXPIRES_KEY:
+                        (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+                })
+            else:
+                damaged = "not-a-fernet-token" if damaged_token_kind == "invalid_envelope" else (
+                    "fernet:"
+                    + calendar_sync_service._fernet().encrypt(b"{not-json").decode("ascii")
+                )
+            connection.encrypted_token_ref = damaged
+            session.commit()
+        provider_calls = []
+
+        def unexpected_probe(**kwargs):
+            provider_calls.append("probe")
+            raise AssertionError("An unreadable credential must not reach the provider.")
+
+        def rejected_refresh(**kwargs):
+            provider_calls.append("refresh")
+            raise calendar_sync_service.CalendarProviderError("unsafe-provider-credential")
+
+        monkeypatch.setattr(provider, "validate_connection", unexpected_probe)
+        monkeypatch.setattr(provider, "refresh_access_token", rejected_refresh, raising=False)
+        failed = client.post("/api/admin/outlook-configuration/test", headers=_auth(token))
+        assert failed.status_code == 200, failed.text
+        assert failed.json()["status"] == "failed"
+        assert failed.json()["adp20_readiness"] == "blocked_pending_admin_configuration"
+        assert provider_calls == (["refresh"] if damaged_token_kind == "refresh_rejected" else [])
+        assert damaged not in failed.text and "fixture-credential-value" not in failed.text
+        assert "unsafe-provider-credential" not in failed.text
+        status = client.get("/api/admin/outlook-configuration", headers=_auth(token))
+        assert status.status_code == 200
+        assert status.json()["last_test_status"] == "failed"
+        assert status.json()["adp20_readiness"] == "blocked_pending_admin_configuration"
+    finally:
+        set_outlook_provider_for_tests(None)
+
+
 def test_durable_outlook_sync_skips_tenants_not_ready_names_only(
     client: TestClient,
 ) -> None:

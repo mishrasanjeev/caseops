@@ -2254,6 +2254,16 @@ export const calendarConnectionStartResponse = z.object({
   unavailable_reason: z.string().nullable().optional(),
 });
 
+export const calendarEventSyncStatus = z.enum([
+  "pending",
+  "synced",
+  "failed",
+  "retry_scheduled",
+  "dead_letter",
+  "deleted",
+  "delete_pending",
+]);
+
 export const calendarEventSyncRecord = z.object({
   id: z.string(),
   company_id: z.string(),
@@ -2261,14 +2271,7 @@ export const calendarEventSyncRecord = z.object({
   source_type: z.enum(["matter_hearing", "matter_deadline", "matter_task"]),
   source_id: z.string(),
   provider_event_id: z.string().nullable(),
-  sync_status: z.enum([
-    "pending",
-    "synced",
-    "failed",
-    "retry_scheduled",
-    "dead_letter",
-    "deleted",
-  ]),
+  sync_status: calendarEventSyncStatus,
   last_error: z.string().nullable(),
   last_synced_at: z.string().nullable(),
   attempts: z.number().int().min(0).default(0),
@@ -2547,15 +2550,7 @@ export const googleWorkspaceReadinessTestResponse = z.object({
 export const outlookBulkSyncItem = z.object({
   source_type: z.enum(["matter_hearing", "matter_deadline", "matter_task"]),
   source_id: z.string(),
-  sync_status: z.enum([
-    "pending",
-    "synced",
-    "failed",
-    "retry_scheduled",
-    "dead_letter",
-    "deleted",
-    "skipped",
-  ]),
+  sync_status: z.union([calendarEventSyncStatus, z.literal("skipped")]),
   matter_id: z.string().nullable(),
   matter_title: z.string().nullable(),
   provider_event_id: z.string().nullable().optional(),
