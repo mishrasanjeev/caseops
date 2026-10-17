@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- Calendar cancellation tests must follow the actual transport boundary. Matter
+  cancellation commits exact `DELETE_PENDING` tombstones; drain the existing
+  bounded worker before asserting provider DELETE, then prove retained
+  sync/source/connection identity and second-drain idempotence. Shared IP hearing
+  cancellation currently drains after commit; preserve that separate contract
+  and never move provider I/O into the lifecycle transaction to satisfy a test.
+
 - A bounded PostgreSQL lock observer must check its final existing snapshot
   before declaring a directed edge absent. A GC pause can exhaust the polling
   window while the required lock is present. Keep the exact waiter/holder PID

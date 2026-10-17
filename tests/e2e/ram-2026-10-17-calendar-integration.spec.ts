@@ -85,6 +85,15 @@ for (const width of [1280, 393]) {
         await expect(page.getByTestId(`calendar-${provider}-panel`)).toContainText("Connected as " + account);
         await page.reload();
         await expect(page.getByTestId(`calendar-${provider}-revoke`)).toBeVisible();
+        const kind = provider === "google" ? "google_calendar" : "outlook";
+        const statusUrl = apiBaseUrl + "/api/calendar/sync-status";
+        const connected = await json(await page.request.get(statusUrl, { headers }), "Connected Calendar identity");
+        expect(connected.connections).toHaveLength(1);
+        const connection = connected.connections[0];
+        expect(connection.id).toEqual(expect.any(String));
+        expect(connection.id).not.toBe("");
+        expect(connection).toMatchObject({ company_id: actor.company.id, membership_id: actor.membership.id,
+          provider: kind, status: "connected", display_email: account });
 
         const matter = await json(await page.request.post(apiBaseUrl + "/api/matters/", { headers,
           data: { matter_code: "CAL17-" + randomUUID(), title: "Offline calendar event",
@@ -103,6 +112,20 @@ for (const width of [1280, 393]) {
         expect(first.sync.sync_status).toBe("synced");
         const eventId = first.sync.provider_event_id;
         expect(eventId).toMatch(/^offline-event-[a-f0-9]{32}$/);
+        expect(first.sync.id).toEqual(expect.any(String));
+        expect(first.sync.id).not.toBe("");
+        const syncIdentity = { id: first.sync.id, company_id: actor.company.id,
+          calendar_connection_id: connection.id, source_type: "matter_hearing", source_id: hearing.id,
+          provider_event_id: eventId };
+        expect(first.sync).toMatchObject(syncIdentity);
+        const readRetainedSync = async (label: string) => {
+          const current = await json(await page.request.get(statusUrl, { headers }), label);
+          expect(current.connections).toEqual([expect.objectContaining({ id: connection.id,
+            company_id: actor.company.id, membership_id: actor.membership.id, provider: kind, status: "connected" })]);
+          expect(current.syncs).toHaveLength(1);
+          expect(current.syncs[0]).toMatchObject(syncIdentity);
+          return current.syncs[0];
+        };
         const initial = await json(await page.request.get(emulator + "/evidence/" + attempt), "Provider evidence");
         expect(initial).toMatchObject({ token_calls: 1, refresh_calls: 1, event_calls: ["POST"] });
         expect(initial.events).toHaveLength(1);
@@ -112,29 +135,76 @@ for (const width of [1280, 393]) {
         });
 
         const updated = await json(await page.request.post(syncUrl, { headers }), "Idempotent event update");
-        expect(updated.sync.provider_event_id).toBe(eventId);
-        await json(await page.request.patch(`${apiBaseUrl}/api/matters/${matter.id}/hearings/${hearing.id}`, {
+        expect(updated.sync).toMatchObject({ ...syncIdentity, sync_status: "synced" });
+        const cancelled = await json(await page.request.patch(`${apiBaseUrl}/api/matters/${matter.id}/hearings/${hearing.id}`, {
           headers, data: { status: "cancelled" },
         }), "Canonical hearing cancellation");
+        expect(cancelled).toMatchObject({ id: hearing.id, matter_id: matter.id, status: "cancelled" });
+        // Matter cancellation commits a tombstone; provider I/O belongs to the later drain.
+        expect(await readRetainedSync("Queued cancellation identity")).toMatchObject({
+          sync_status: "delete_pending", dead_letter_reason: "hearing_cancelled_delete" });
+        const queued = await json(await page.request.get(emulator + "/evidence/" + attempt), "Queued provider evidence");
+        expect(queued.refresh_calls).toBe(1);
+        expect(queued.event_calls).toEqual(["POST", "PATCH"]);
+        expect(queued.events.map((row: { id: string }) => row.id)).toEqual([eventId]);
+        const replayUrl = apiBaseUrl + "/api/admin/" + (
+          provider === "google" ? "google-calendar" : "outlook"
+        ) + "-sync/replay";
+        if (provider === "outlook") {
+          const readiness = await json(await page.request.get(apiBaseUrl + "/api/admin/outlook-configuration", {
+            headers,
+          }), "Outlook durable policy before cleanup drain");
+          expect(readiness).toMatchObject({ configured: true, enabled: true, last_test_status: "not_run",
+            adp20_readiness: "blocked_pending_admin_configuration", missing_config_names: [], missing_approval_keys: [] });
+        }
+        const expectedReplay = { provider: kind, status: provider === "outlook" ? "blocked" : "processed",
+          adp20_readiness: provider === "outlook" ? "blocked_pending_admin_configuration" : "ready_for_adp20_implementation",
+          missing_config_names: [], missing_approval_keys: [], failed: 0, retry_scheduled: 0, dead_lettered: 0 };
+        const drained = await json(await page.request.post(replayUrl, { headers, data: { limit: 1 } }),
+          "Bounded cancellation drain");
+        expect(drained).toMatchObject(expectedReplay);
+        const deletedSync = await readRetainedSync("Retained deleted cancellation identity");
+        expect(deletedSync).toMatchObject({ sync_status: "deleted", last_error: null,
+          next_attempt_at: null, dead_letter_reason: null });
         const deleted = await json(await page.request.get(emulator + "/evidence/" + attempt), "Deletion evidence");
+        expect(deleted.token_calls).toBe(1);
         expect(deleted.refresh_calls).toBe(1);
         expect(deleted.event_calls).toEqual(["POST", "PATCH", "DELETE"]);
         expect(deleted.events).toEqual([]);
+        const replayed = await json(await page.request.post(replayUrl, { headers, data: { limit: 1 } }),
+          "Idempotent cancellation drain");
+        expect(replayed).toMatchObject(expectedReplay);
+        expect(await readRetainedSync("Deleted identity after second drain")).toEqual(deletedSync);
+        expect(await json(await page.request.get(emulator + "/evidence/" + attempt), "Second drain evidence"))
+          .toEqual(deleted);
 
         const retained = await json(await page.request.post(`${apiBaseUrl}/api/matters/${matter.id}/hearings`, {
           headers, data: { hearing_on: date, forum_name: "Delhi High Court", purpose: "Revocation cleanup" },
         }), "Second explicit source");
-        await json(await page.request.post(syncUrl.replace(hearing.id, retained.id), { headers }), "Second event sync");
+        const retainedSync = await json(await page.request.post(syncUrl.replace(hearing.id, retained.id), { headers }),
+          "Second event sync");
+        expect(retainedSync.sync.id).toEqual(expect.any(String));
+        expect(retainedSync.sync.id).not.toBe("");
+        expect(retainedSync.sync.id).not.toBe(syncIdentity.id);
+        expect(retainedSync.sync.provider_event_id).toMatch(/^offline-event-[a-f0-9]{32}$/);
+        expect(retainedSync.sync.provider_event_id).not.toBe(eventId);
+        const retainedIdentity = { id: retainedSync.sync.id, company_id: actor.company.id,
+          calendar_connection_id: connection.id, source_type: "matter_hearing", source_id: retained.id,
+          provider_event_id: retainedSync.sync.provider_event_id };
+        expect(retainedSync.sync).toMatchObject({ ...retainedIdentity, sync_status: "synced" });
         await page.reload();
         await expect(page.getByTestId(`calendar-${provider}-revoke`)).toBeVisible();
         await page.getByTestId(`calendar-${provider}-revoke`).click();
         await expect(connect).toBeVisible();
-        const status = await json(await page.request.get(apiBaseUrl + "/api/calendar/sync-status", { headers }),
+        const status = await json(await page.request.get(statusUrl, { headers }),
           "Readiness after real revocation");
-        const kind = provider === "google" ? "google_calendar" : "outlook";
-        expect(status.connections.find((row: { provider: string }) => row.provider === kind).status).toBe("revoked");
-        expect(status.syncs.find((row: { source_id: string }) => row.source_id === retained.id).sync_status)
-          .toBe("delete_pending");
+        expect(status.connections).toEqual([expect.objectContaining({ id: connection.id,
+          company_id: actor.company.id, membership_id: actor.membership.id, provider: kind, status: "revoked" })]);
+        expect(status.syncs).toHaveLength(2);
+        expect(status.syncs.find((row: { id: string }) => row.id === syncIdentity.id))
+          .toMatchObject(syncIdentity);
+        expect(status.syncs.find((row: { id: string }) => row.id === retainedIdentity.id))
+          .toMatchObject({ ...retainedIdentity, sync_status: "delete_pending" });
         await page.reload();
         await expect(page.getByTestId("calendar-readiness-error")).toHaveCount(0);
         await expect(connect).toBeEnabled();

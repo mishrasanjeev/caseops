@@ -304,3 +304,74 @@ The original canceled run and its failed retention attempt against the obsolete
 child1 workspace remain historical evidence. Only this run's Compose resources
 are removed before editing; no unrelated project is reset. Fresh complete gates
 on the amended test source are required before release.
+
+### Hosted Calendar Cancellation Oracle Follow-Up
+
+The hosted app run on `7ef1080c4dd1ab7708d3194e6002e124f93da365` retained four
+Calendar integration failures: Google and Outlook at1280/393, each at line121
+of `ram-2026-10-17-calendar-integration.spec.ts`, with one attempt per case.
+All four actual contexts report expected POST/PATCH/DELETE but observed only
+POST/PATCH. Full failures and original contexts remain under
+`outputs/ip-calendar-open-items-20261017/ci-7ef1080c-reconciliation-01/failure-review-02/`.
+The later revocation section did not execute; this failure does not establish
+a revoked-cleanup, token-refresh or provider-route defect.
+
+Matter cancellation intentionally queues `DELETE_PENDING` with `commit=False`
+inside the canonical hearing transaction, then commits without provider I/O.
+The existing native
+`test_google_calendar_synced_hearing_is_deleted_when_hearing_is_cancelled`
+already proves the pending tombstone, absence of an immediate delete, explicit
+drain and retained deleted row. The browser's immediate DELETE expectation was
+therefore a test-oracle defect, not a reason to change the service transaction
+boundary or raise a timeout.
+
+The isolated test-only correction asserts the cancelled hearing and exact
+sync/source/provider-connection identity, retained pending row and untouched
+remote event. It invokes the existing tenant-admin provider replay with limit1,
+then checks that same row/event is retained as deleted and the emulator records
+exactly one DELETE. A second bounded replay must preserve the complete sync
+record and provider evidence without another call. Deletion results are not
+included in the normal replay counters, so counters alone cannot prove cleanup.
+The revocation section separately retains both sync identities and the second
+source's exact pending cleanup state. Loopback/release/emulator admission,
+the no-paid-provider marker, both widths, both providers and zero retries stay
+unchanged; this is not live OAuth or external-delivery certification.
+
+The adjacent IP contract remains distinct: shared IP hearing updates commit
+before invoking their synchronous post-commit drain. Existing
+`test_ip_calendar_projection_is_minimal_stable_and_idempotent` asserts immediate
+deletion and retained identity after IP hearing cancellation. That native test
+and all product code remain unchanged. Local four-case browser proof, fresh
+hosted acceptance and the applicable complete gates on the amended candidate
+are pending; no pass, deployment or workbook-verdict upgrade is claimed here.
+
+Focused precommit feedback02 against the unchanged Docker05 API/web at7ef
+completed two Google passes and two Outlook failures, one at each width. Both
+Outlook contexts failed only the line155 prediction that the overall replay
+status would be processed; their later deleted-row and idempotence assertions
+did not execute. The failed execution log remains at
+`outputs/ip-calendar-open-items-20261017/calendar-drain-feedback-02-execution.log`.
+This focused browser result is not full amended-candidate Docker acceptance.
+
+Outlook configuration updates intentionally reset `last_test_status` to
+`not_run`. Its readiness predicate requires configured credentials, approved
+scopes/consent, passing machine controls and an actual passed readiness test.
+Normal durable replay therefore remains blocked pending admin configuration,
+even though the preceding deletion drain is permitted. The corrected oracle
+first reads the existing Outlook admin configuration and requires configured
+and enabled, `last_test_status=not_run`, the exact
+`blocked_pending_admin_configuration` readiness value, and empty missing-config
+and missing-approval arrays. Both bounded replay responses must then have the
+provider-specific exact status/readiness: Outlook blocked with that reason,
+Google processed and ready. This does not accept arbitrary alternative states,
+run a readiness probe, change configuration or skip deletion proof. The same
+deleted identity, exact single DELETE and unchanged second-replay evidence
+remain mandatory for both providers. Fresh complete four-case feedback03
+passed all four Google/Outlook desktop/narrow cases in20.1 seconds, with no
+skips or retries, against the independently running Docker API/web7ef image.
+All three edited files retained their before/after hashes during that run.
+The temporary loopback proxy was stopped and reaped afterwards. This is
+pre-commit focused feedback on unchanged product code, not a whole amended
+candidate's Docker pass, hosted pass, deployment or live OAuth certification.
+The feedback02 failures and the feedback01 wrapper's rejected file-filter
+argument (no browser bodies) remain retained separately.
