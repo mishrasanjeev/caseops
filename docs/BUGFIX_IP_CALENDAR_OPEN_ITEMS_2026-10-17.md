@@ -265,3 +265,22 @@ the merge and release. The original new-consent native race also reused an
 already consumed OAuth code: that is a fixture failure, not evidence that new
 consent was overwritten. Its replacement must prove a genuinely fresh callback
 and persisted credential before asserting the race outcome.
+
+Independent review of8a7973d1 found two additional peer-refresh defects. A
+read-only rollback expired ORM state, so readiness reopened a transaction while
+loading its snapshot before Graph. The same fast path could silently accept a
+replacement consent. Three deterministic PostgreSQL cases reproduced the open
+transaction and both different-account and same-account/same-clock consent
+replacement. All setup/teardown phases passed; all three call phases failed.
+Their failed journal and JUnit remain in recovery-service-review-01/red-01.
+
+The correction returns a credential snapshot captured under lock, not an ORM
+object to reload after releasing authority. An opaque epoch is stamped by the
+server on OAuth completion and preserved by token rotation; provider-returned
+metadata cannot replace it. Original consent identity is checked before the
+peer fast path and again before renewal publication. New consent remains stale
+even when account and timestamp are unchanged. This adds encrypted execution
+metadata only, no schema, scope, legal approval, entitlement or live consent.
+Docker03 was stopped before image building or native/browser execution; it is
+another incomplete attempt. The119 affected-source pass and13 native pass on8a
+are retained separately and do not certify this later correction.

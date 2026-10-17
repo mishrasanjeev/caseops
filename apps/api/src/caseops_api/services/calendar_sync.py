@@ -126,6 +126,7 @@ _CALENDAR_OAUTH_CLAIM_EXPIRES_KEY = "_caseops_calendar_oauth_claim_expires_at"
 _CALENDAR_OAUTH_REVOKED_AT_KEY = "_caseops_calendar_oauth_revoked_at"
 _CALENDAR_REFRESH_CLAIM_KEY = "_caseops_calendar_refresh_claim"
 _CALENDAR_TOKEN_EXPIRES_KEY = "_caseops_calendar_token_expires_at"
+_CALENDAR_CONSENT_EPOCH_KEY = "_caseops_calendar_consent_epoch"
 
 # These are the only coverage states that confer live projection authority.
 # Historical or terminal coverage rows still classify the source as IP-owned,
@@ -2333,11 +2334,11 @@ def _test_outlook_tenant_configuration_fenced(
     probe_error: str | None = None
     try:
         token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        token_payload, renewed = _fresh_calendar_token(
+        token_payload, renewed, refreshed_snapshot = _fresh_calendar_token(
             session, context=context, connection=connection, token_payload=token_payload,
         )
         if renewed:
-            connection_snapshot = _calendar_credential_snapshot(connection)
+            connection_snapshot = refreshed_snapshot
         provider.validate_connection(token_payload=token_payload)
     except Exception as exc:  # noqa: BLE001 - provider boundary
         if isinstance(exc, CalendarRefreshError):
@@ -2988,7 +2989,7 @@ def _process_calendar_deletion_tombstone_by_id(
         session.commit()
         assert provider is not None and token_payload is not None
         try:
-            token_payload, _renewed = _fresh_calendar_token(
+            token_payload, _renewed, _snapshot = _fresh_calendar_token(
                 session, context=context, connection=connection,
                 token_payload=token_payload, cleanup=True,
             )
@@ -5175,9 +5176,10 @@ def _finalize_calendar_oauth(
         key: value for key, value in token_payload.items()
         if key not in {
             _CALENDAR_OAUTH_CLAIM_KEY, _CALENDAR_OAUTH_CLAIM_EXPIRES_KEY,
-            _CALENDAR_OAUTH_REVOKED_AT_KEY,
+            _CALENDAR_OAUTH_REVOKED_AT_KEY, _CALENDAR_CONSENT_EPOCH_KEY,
         }
     }
+    persisted_token[_CALENDAR_CONSENT_EPOCH_KEY] = uuid4().hex
     if _CALENDAR_OAUTH_REVOKED_AT_KEY in prior_token:
         persisted_token[_CALENDAR_OAUTH_REVOKED_AT_KEY] = (
             prior_token[_CALENDAR_OAUTH_REVOKED_AT_KEY]
@@ -5255,6 +5257,18 @@ def _calendar_credential_snapshot(connection: UserCalendarConnection) -> tuple[o
     )
 
 
+def _calendar_consent_snapshot(
+    connection: UserCalendarConnection, token_payload: dict[str, Any],
+) -> tuple[object, ...]:
+    return (
+        connection.id, connection.company_id, connection.membership_id,
+        str(connection.provider), connection.provider_account_id,
+        _aware(connection.connected_at) if connection.connected_at is not None else None,
+        tuple(sorted(connection.scopes_json or [])),
+        token_payload.get(_CALENDAR_CONSENT_EPOCH_KEY),
+    )
+
+
 def _calendar_refresh_authority(
     session: Session, *, context: SessionContext, connection_id: str,
     owner_id: str, cleanup: bool,
@@ -5288,14 +5302,15 @@ def _calendar_refresh_authority(
 def _fresh_calendar_token(
     session: Session, *, context: SessionContext, connection: UserCalendarConnection,
     token_payload: dict[str, Any], cleanup: bool = False,
-) -> tuple[dict[str, Any], bool]:
+) -> tuple[dict[str, Any], bool, tuple[object, ...] | None]:
     """Lease one rotation after the caller's durable claim; never replay a POST."""
     if not _calendar_token_due(token_payload, connection.connected_at):
-        return token_payload, False
+        return token_payload, False, None
     if session.in_transaction():
         raise CalendarRefreshError("Calendar credential preflight requires a completed claim.")
     connection_id, owner_id = connection.id, connection.membership_id
     expected_status = str(connection.status)
+    expected_consent = _calendar_consent_snapshot(connection, token_payload)
     try:
         row, config = _calendar_refresh_authority(
             session, context=context, connection_id=connection_id,
@@ -5309,9 +5324,15 @@ def _fresh_calendar_token(
                 "Calendar authorization must be renewed. Reconnect the account."
             )
         current = _decrypt_token_payload(row.encrypted_token_ref)
+        if (
+            str(row.status) != expected_status
+            or _calendar_consent_snapshot(row, current) != expected_consent
+        ):
+            raise CalendarRefreshError("Calendar consent changed; restart the operation.")
         if not _calendar_token_due(current, row.connected_at):
-            session.rollback()
-            return current, True
+            snapshot = _calendar_credential_snapshot(row)
+            session.commit()
+            return current, True, snapshot
         if current.get(_CALENDAR_REFRESH_CLAIM_KEY):
             # Lease expiry cannot establish whether a token POST rotated its
             # credential. Preserve that uncertainty instead of replaying it.
@@ -5358,6 +5379,8 @@ def _fresh_calendar_token(
             owner_id=owner_id, cleanup=cleanup,
         )
         latest = _decrypt_token_payload(row.encrypted_token_ref)
+        if _calendar_consent_snapshot(row, latest) != expected_consent:
+            raise CalendarRefreshError("Calendar consent changed during renewal.")
         claim = latest.get(_CALENDAR_REFRESH_CLAIM_KEY)
         if not isinstance(claim, dict) or claim.get("id") != marker:
             raise CalendarRefreshError("Calendar credentials changed during renewal.")
@@ -5389,12 +5412,18 @@ def _fresh_calendar_token(
                 owned_connection_snapshot=owned_snapshot,
             ) from error
         renewed.pop(_CALENDAR_REFRESH_CLAIM_KEY, None)
+        if expected_consent[-1] is None:
+            renewed.pop(_CALENDAR_CONSENT_EPOCH_KEY, None)
+        else:
+            renewed[_CALENDAR_CONSENT_EPOCH_KEY] = expected_consent[-1]
         row.encrypted_token_ref = _encrypt_token_payload(renewed)
         record_from_context(session, context, action="calendar.connection.refreshed",
                             target_type="user_calendar_connection", target_id=row.id,
                             metadata={"provider": provider_kind})
+        session.flush()
+        snapshot = _calendar_credential_snapshot(row)
         session.commit()
-        return renewed, True
+        return renewed, True, snapshot
     except Exception:
         session.rollback()
         raise
@@ -7120,7 +7149,7 @@ def _sync_source_to_provider(
     session.commit()
     provider_started = False
     try:
-        token_payload, renewed = _fresh_calendar_token(
+        token_payload, renewed, _snapshot = _fresh_calendar_token(
             session, context=context, connection=connection, token_payload=token_payload,
         )
         if renewed:

@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Calendar renewal may advance a claimed credential snapshot only for its own
+  rotation or a proven same-consent peer rotation. A new consent needs a distinct
+  server-owned encrypted epoch even for the same account at the same timestamp.
+  Capture immutable receipts under lock before commit; no ORM reload may reopen
+  a transaction before provider I/O. Prove both interleavings on PostgreSQL.
+
 - Signed search continuations must normalize queries exactly like the SQL
   predicate. Unicode case-folding is not interchangeable with lower-casing;
   regress distinct search inventories and reject cross-search cursor reuse.
