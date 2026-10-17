@@ -891,6 +891,44 @@ describe("IpDocketPage", () => {
     expect(within(saved).queryByText(/confirmed delivery/i)).not.toBeInTheDocument();
   });
 
+  it("resolves saved recipients from a cold directory for a read-only hearing viewer", async () => {
+    useCapabilityMock.mockImplementation((capability: string) => capability === "ip:read");
+    const hearing = { ...unknownTimeHearing(), reminder_policy: {
+      ...unknownTimeHearing().reminder_policy, recipient_membership_ids: ["member-1"],
+    } };
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [hearing] });
+    render(withClient(<IpDocketPage />));
+    await userEvent.click(await screen.findByRole("tab", { name: "Hearings and deadlines" }));
+    const saved = await screen.findByTestId("ip-hearing-hearing-1");
+    await waitFor(() => expect(within(saved).getByRole("list", { name: "Saved reminder recipients" }))
+      .toHaveTextContent("Priya Raghavan — priya@example.com"));
+    expect(listCompanyUsersMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Preview recipients and policy" })).not.toBeInTheDocument();
+  });
+
+  it("retries a failed saved-recipient directory without changing retained assignments", async () => {
+    useCapabilityMock.mockImplementation((capability: string) => capability === "ip:read");
+    listCompanyUsersMock.mockRejectedValueOnce(new Error("Directory unavailable"));
+    const hearing = { ...unknownTimeHearing(), reminder_policy: {
+      ...unknownTimeHearing().reminder_policy, recipient_membership_ids: ["member-1"],
+    } };
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [hearing] });
+    render(withClient(<IpDocketPage />));
+    await userEvent.click(await screen.findByRole("tab", { name: "Hearings and deadlines" }));
+    const error = await screen.findByTestId("ip-hearing-recipient-error");
+    expect(error).toHaveTextContent("Could not load saved reminder recipients");
+    const saved = await screen.findByTestId("ip-hearing-hearing-1");
+    expect(within(saved).getByTestId("ip-hearing-policy-recipients"))
+      .toHaveAttribute("data-recipient-membership-ids", "member-1");
+    await userEvent.click(within(error).getByRole("button", { name: /^Try again$/ }));
+    await waitFor(() => expect(within(saved).getByRole("list", { name: "Saved reminder recipients" }))
+      .toHaveTextContent("Priya Raghavan — priya@example.com"));
+    expect(listCompanyUsersMock).toHaveBeenCalledTimes(2);
+    expect(updateIpSharedHearingMock).not.toHaveBeenCalled();
+  });
+
   it("preserves unavailable and inactive saved reminder recipients without adding assignment options", async () => {
     const hearing = { ...unknownTimeHearing(), reminder_policy: {
       ...unknownTimeHearing().reminder_policy, recipient_membership_ids: ["inactive-member", "missing-member"],

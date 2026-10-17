@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
-from caseops_api.db.models import CompanyMembership, UserCalendarConnection
+from caseops_api.db.models import CalendarEventSync, CompanyMembership, UserCalendarConnection
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import calendar_sync as calendar
 from tests.test_auth_company import bootstrap_company
@@ -21,6 +21,7 @@ from tests.test_legalworkspace_calendar_sync import (
     _connect_outlook,
     _create_matter,
     _schedule_hearing,
+    _session_context,
 )
 
 
@@ -58,6 +59,8 @@ def expired_calendar(client, request, monkeypatch):
     grant_callback = [None]
     grant_response = [None]
     event_timeout = [False]
+    refresh_timeout = [False]
+    expected_refresh = ["old-refresh"]
     original_send = httpx.Client.send
     active_sessions = WeakSet()
 
@@ -83,10 +86,12 @@ def expired_calendar(client, request, monkeypatch):
             assert not active_sessions, "Token transport retained an application transaction"
             data = parse_qs(req.content.decode())
             assert data["grant_type"] == ["refresh_token"]
-            assert data["refresh_token"] == ["old-refresh"]
+            assert data["refresh_token"] == expected_refresh
             calls.append("refresh")
             if grant_callback[0]:
                 grant_callback[0]()
+            if refresh_timeout[0]:
+                raise httpx.ReadTimeout("offline uncertain token rotation", request=req)
             if grant_response[0]:
                 code, body = grant_response[0]
                 return httpx.Response(code, json=body, request=req)
@@ -108,7 +113,8 @@ def expired_calendar(client, request, monkeypatch):
         yield dict(client=client, kind=kind, token=token, connection_id=connection_id,
                    endpoint=endpoint + hearing["id"], calls=calls, factory=factory,
                    grant_callback=grant_callback, grant_response=grant_response,
-                   event_timeout=event_timeout, matter=matter)
+                   event_timeout=event_timeout, refresh_timeout=refresh_timeout,
+                   expected_refresh=expected_refresh, matter=matter)
     finally:
         setter(None)
         event.remove(Session, "after_begin", began)
@@ -230,6 +236,88 @@ def test_rejected_refresh_has_zero_event_writes_and_requires_reconnect(expired_c
     again = fixture["client"].post(fixture["endpoint"], headers=_auth(fixture["token"]))
     assert again.status_code == 409
     assert fixture["calls"] == ["refresh"]
+
+
+def _revoked_expired_cleanup(fixture):
+    initial = fixture["client"].post(fixture["endpoint"], headers=_auth(fixture["token"]))
+    assert initial.status_code == 200, initial.text
+    assert initial.json()["sync"]["sync_status"] == "synced"
+    sync_id = initial.json()["sync"]["id"]
+    assert fixture["calls"] == ["refresh", "event"]
+    revoked = fixture["client"].delete(
+        "/api/calendar/connections/" + fixture["connection_id"],
+        headers=_auth(fixture["token"]),
+    )
+    assert revoked.status_code == 200, revoked.text
+    with fixture["factory"]() as session:
+        row = session.get(UserCalendarConnection, fixture["connection_id"])
+        assert row.status == "revoked"
+        payload = calendar._decrypt_token_payload(row.encrypted_token_ref)
+        assert payload["refresh_token"] == "new-refresh"
+        payload[calendar._CALENDAR_TOKEN_EXPIRES_KEY] = (
+            datetime.now(UTC) - timedelta(seconds=1)
+        ).isoformat()
+        row.encrypted_token_ref = calendar._encrypt_token_payload(payload)
+        sync = session.get(CalendarEventSync, sync_id)
+        assert sync.sync_status == "delete_pending"
+        assert sync.provider_event_id == "offline-event"
+        session.commit()
+    fixture["calls"].clear()
+    fixture["expected_refresh"][0] = "new-refresh"
+    return sync_id
+
+
+@pytest.mark.parametrize("failure", ["timeout", "invalid_grant"])
+def test_revoked_cleanup_token_post_is_never_replayed(expired_calendar, monkeypatch, failure):
+    fixture = expired_calendar
+    sync_id = _revoked_expired_cleanup(fixture)
+    if failure == "timeout":
+        fixture["refresh_timeout"][0] = True
+    else:
+        fixture["grant_response"][0] = (400, {"error": "invalid_grant"})
+    clock = [datetime.now(UTC)]
+    monkeypatch.setattr(calendar, "_current_time", lambda: clock[0])
+    for attempt in range(3):
+        with fixture["factory"]() as session:
+            connection = session.get(UserCalendarConnection, fixture["connection_id"])
+            context = _session_context(session, connection.company_id)
+            outcome, _ = calendar._process_calendar_deletion_tombstone_by_id(
+                session, context=context, sync_id=sync_id,
+                expected_connection_id=fixture["connection_id"],
+            )
+            assert outcome in {"retry_scheduled", "dead_lettered"}, (attempt, outcome)
+        # Crossing the durable refresh lease must not permit a second token POST.
+        clock[0] += timedelta(minutes=6)
+    assert fixture["calls"] == ["refresh"]
+    with fixture["factory"]() as session:
+        connection = session.get(UserCalendarConnection, fixture["connection_id"])
+        assert connection.status == "revoked"
+        assert connection.encrypted_token_ref.startswith("fernet:")
+        payload = calendar._decrypt_token_payload(connection.encrypted_token_ref)
+        assert payload[calendar._CALENDAR_REFRESH_CLAIM_KEY]
+        assert payload["refresh_token"] == "new-refresh"
+        assert session.get(CalendarEventSync, sync_id).sync_status != "deleted"
+
+
+def test_revoked_cleanup_successful_rotation_deletes_only_known_event(expired_calendar):
+    fixture = expired_calendar
+    sync_id = _revoked_expired_cleanup(fixture)
+    with fixture["factory"]() as session:
+        connection = session.get(UserCalendarConnection, fixture["connection_id"])
+        context = _session_context(session, connection.company_id)
+        outcome, _ = calendar._process_calendar_deletion_tombstone_by_id(
+            session, context=context, sync_id=sync_id,
+            expected_connection_id=fixture["connection_id"],
+        )
+        assert outcome == "deleted"
+    assert fixture["calls"] == ["refresh", "event"]
+    with fixture["factory"]() as session:
+        connection = session.get(UserCalendarConnection, fixture["connection_id"])
+        assert connection.status == "revoked"
+        assert connection.encrypted_token_ref is None
+        sync = session.get(CalendarEventSync, sync_id)
+        assert sync.sync_status == "deleted"
+        assert sync.provider_event_id == "offline-event"
 
 
 @pytest.fixture(params=["google", "outlook"])

@@ -3,6 +3,14 @@
 - Signed search continuations must normalize queries exactly like the SQL
   predicate. Unicode case-folding is not interchangeable with lower-casing;
   regress distinct search inventories and reject cross-search cursor reuse.
+- Saved recipient labels must resolve from a cold authorized directory even
+  for a read-only viewer with no other mounted directory consumer. A prefilled
+  query cache cannot prove the workflow; cover cold, cached, failed/retry and
+  inactive/missing recipients without rewriting retained assignments.
+- An expired refresh claim is not proof that the provider did not rotate its
+  token. Preserve encrypted uncertainty after failed/stale receipts and lease
+  expiry for revoked cleanup as well as connected grants. Repeated cleanup
+  must not replay that token POST; new consent may replace the credential.
 
 - A Calendar status-load or schema-validation error is not evidence of missing
   OAuth configuration. Reconcile the actual tenant-scoped API response with

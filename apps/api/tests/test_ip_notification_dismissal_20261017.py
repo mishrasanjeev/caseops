@@ -303,6 +303,7 @@ def test_current_recipient_source_and_lifecycle_deny_body_and_mutation(
 ):
     client = notification_client
     actor, docket_id, note_id = _delivered(client, monkeypatch)
+    other_id = None
     if change == "recipient":
         created = client.post(
             "/api/companies/current/users",
@@ -328,6 +329,7 @@ def test_current_recipient_source_and_lifecycle_deny_body_and_mutation(
             session.scalars(select(NotificationDeliveryIntent)).one().in_app_notification_id = None
         else:
             # A current viewer is not authorized to operate another recipient's receipt.
+            assert change == "recipient" and other_id is not None
             note.recipient_membership_id = other_id
         session.commit()
     response = client.get(_url(docket_id), headers=actor["headers"])

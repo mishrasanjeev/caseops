@@ -187,3 +187,35 @@ New work is **NO-GO / Inconclusive** until the relevant amended-source gates
 and user-visible outcomes pass. The serving baseline remains separately
 certified with its recorded caveats. No new implementation or acceptance is
 claimed by this planning checkpoint.
+
+### Review Follow-Up Before Release
+
+PR542 review found a revoked-cleanup token-refresh uncertainty path that could
+reuse an old refresh token after an indeterminate provider outcome. It also
+found that saved recipient labels depended on a directory cache populated by
+another mounted workflow. The latter reproduced in two cold-cache read-only
+and failed-read/retry tests; the complete IP page replacement passed57/57 after
+enabling the shared read only when saved recipients need resolution. Existing
+cached identities still avoid a duplicate request; unknown/inactive assignments
+remain retained, and retry performs no hearing or membership mutation.
+
+The refresh regression's first six-case run retained four failures and two
+successful cleanup controls. For both providers, three cleanup attempts could
+make three token POSTs after an uncertain failure. The correction retains the
+encrypted own claim after failed/stale completion and lease expiry; revoked
+status remains revoked. A successful rotation still clears its own claim.
+Fresh consent, rather than an elapsed lease, owns replacing uncertain tokens.
+The replacement complete-module and native checks are distinct required gates.
+
+CodeQL583 identified a potentially uninitialized test fixture recipient ID.
+Explicit initialization and a branch assertion preserve the recipient-isolation
+test rather than suppressing the diagnostic. A fresh analyzer result is required.
+
+The first full Docker attempt at `a874fb3e` was intentionally interrupted during
+image building before PostgreSQL or browser bodies ran. Its log is retained as
+incomplete evidence, not a successful gate. The exact two empty run-owned
+networks were checked and removed; unrelated containers and volumes were left
+untouched. The prior full web result was1523/1523, and the canonical focused
+backend completed315 passed/53 explicit PostgreSQL skips across368 identities.
+Those are prior-candidate scoped results, not substitutes for the corrected
+candidate's fresh complete Docker, hosted, merge and production gates.

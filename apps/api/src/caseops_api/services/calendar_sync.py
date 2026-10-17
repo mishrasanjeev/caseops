@@ -5317,11 +5317,12 @@ def _fresh_calendar_token(
             if not active:
                 if row.status == CalendarConnectionStatus.CONNECTED:
                     row.status = CalendarConnectionStatus.ERROR
-                current.pop(_CALENDAR_REFRESH_CLAIM_KEY, None)
+                # Expiry cannot prove the token POST did not rotate remotely.
+                # Retain the encrypted claim even for revoked deletion cleanup.
                 row.encrypted_token_ref = _encrypt_token_payload(current)
                 session.commit()
             raise CalendarRefreshError(
-                "Calendar renewal is pending or uncertain; reconnect after it finishes."
+                "Calendar renewal is pending or uncertain; reconnect the account."
             )
         provider = _provider_for(row.provider, session, context=context)
         if not provider.configured:
@@ -5352,13 +5353,14 @@ def _fresh_calendar_token(
         claim = latest.get(_CALENDAR_REFRESH_CLAIM_KEY)
         if not isinstance(claim, dict) or claim.get("id") != marker:
             raise CalendarRefreshError("Calendar credentials changed during renewal.")
-        latest.pop(_CALENDAR_REFRESH_CLAIM_KEY, None)
         stale = (
             str(row.status) != expected_status or latest_config != config
             or row.provider != provider_kind
             or _aware(datetime.fromisoformat(claim["expires_at"])) <= _current_time()
         )
         if error is not None or stale:
+            # A failed/stale receipt must never authorize replay of this POST.
+            # A later successful consent owns replacing the complete credential.
             row.encrypted_token_ref = _encrypt_token_payload(latest)
             if (
                 str(row.status) == expected_status

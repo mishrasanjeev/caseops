@@ -46,6 +46,19 @@ def test_native_revocation_wins(expired_calendar):
     )
 
 
+@pytest.mark.parametrize("failure", ["timeout", "invalid_grant"])
+def test_native_revoked_cleanup_never_replays_token(expired_calendar, monkeypatch, failure):
+    refresh_assertions.test_revoked_cleanup_token_post_is_never_replayed(
+        expired_calendar, monkeypatch, failure,
+    )
+
+
+def test_native_revoked_cleanup_successful_rotation(expired_calendar):
+    refresh_assertions.test_revoked_cleanup_successful_rotation_deletes_only_known_event(
+        expired_calendar
+    )
+
+
 def test_pending_refresh_claim_prevents_a_second_token_post(expired_calendar):
     from caseops_api.services import calendar_sync as calendar
 

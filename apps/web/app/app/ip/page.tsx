@@ -1666,7 +1666,9 @@ function HearingWorkflowCard({
   const colleagues = useQuery({
     queryKey: ["company-users"],
     queryFn: () => listCompanyUsers(),
-    enabled: false,
+    enabled: Boolean(hearings.data?.hearings.some((hearing) =>
+      hearing.reminder_policy?.recipient_membership_ids?.length)),
+    retry: false,
   });
 
   const refresh = () =>
@@ -1811,6 +1813,10 @@ function HearingWorkflowCard({
 
         {hearings.isPending ? <p className="text-sm">Loading hearings…</p> : null}
         {hearings.isError ? <p className="break-words text-sm text-red-700">{apiErrorMessage(hearings.error, "Hearings could not be loaded.")}</p> : null}
+        {colleagues.isError ? <div data-testid="ip-hearing-recipient-error">
+          <QueryErrorState error={colleagues.error} title="Could not load saved reminder recipients"
+            onRetry={() => colleagues.refetch()} />
+        </div> : null}
         <div className="flex min-w-0 flex-col gap-3">
           {(hearings.data?.hearings ?? []).map((hearing: IpSharedHearing) => {
             const reminderGenerations = [...new Set(
@@ -1833,7 +1839,8 @@ function HearingWorkflowCard({
                         {(hearing.reminder_policy.recipient_membership_ids ?? []).map((membershipId) => {
                           const colleague = colleagues.data?.users.find((row) => row.membership_id === membershipId);
                           return <li key={membershipId} data-membership-id={membershipId} className="whitespace-normal break-words">
-                            {colleague ? personLabel(colleague) : "Recipient details unavailable (retained assignment)"}
+                            {colleague ? personLabel(colleague) : colleagues.isPending
+                              ? "Loading recipient details..." : "Recipient details unavailable (retained assignment)"}
                             {colleague && (!colleague.membership_active || !colleague.user_active) ? " (inactive; retained assignment)" : ""}
                           </li>;
                         })}
