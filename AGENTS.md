@@ -1,5 +1,22 @@
 # CaseOps agent instructions
 
+- Signed search continuations must normalize queries exactly like the SQL
+  predicate. Unicode case-folding is not interchangeable with lower-casing;
+  regress distinct search inventories and reject cross-search cursor reuse.
+
+- A Calendar status-load or schema-validation error is not evidence of missing
+  OAuth configuration. Reconcile the actual tenant-scoped API response with
+  every response enum, including retained `delete_pending` cleanup rows, and
+  show explicit loading/error/unknown states. Never delete cleanup evidence,
+  relax validation to arbitrary strings or fabricate missing credential names
+  to make readiness appear coherent.
+
+- A response enum's `verified` literal is not an implemented verification
+  workflow or positive source proof. Trace the actual authoritative reader and
+  writer before documenting or testing it. Do not promote supplied portfolio
+  dates from a linked document, a manual correction or an unrelated confirmed
+  deadline without the supported source-specific verification contract.
+
 - Surface the first failed required CI gate immediately, with its actual
   artifact and any still-pending inventory. Do not leave an early-failure file
   unnoticed while waiting for unrelated jobs. Preserve the failed commit and

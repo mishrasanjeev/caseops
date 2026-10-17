@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 17 Remaining IP Calendar Coverage
+
+J08/M08 and UJ-02/04/26, IPLF-023/030/032/037: baseline6af production verification
+and guarded maintenance passed. New closure scope requires actual recipient
+dismissal/recurrence, complete hearing/reminder fields, filter/view/export and
+category continuation parity, genuine source/provenance positives and external
+Calendar acceptance. Missing sources/consent and unknown historical causality
+remain explicit. New candidate coverage is not yet accepted. See
+`docs/BUGFIX_IP_CALENDAR_OPEN_ITEMS_2026-10-17.md`.
+
 ## October 17 Resume Identity Coverage
 
 ARCH-OPS-23/QG-SEC-004, J04/M03, J08/M08 and UJ-18: serving29d passed all11

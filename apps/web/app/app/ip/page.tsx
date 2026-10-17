@@ -17,6 +17,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { InAppNotificationCenter } from "@/components/app/InAppNotificationCenter";
 import { Button } from "@/components/ui/Button";
 import { IpAccessWorkspace } from "@/components/ip/IpAccessWorkspace";
 import { IpDomainAvailability } from "@/components/ip/IpDomainAvailability";
@@ -30,7 +31,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PersonName, PersonPicker } from "@/components/ui/PersonPicker";
+import { PersonName, PersonPicker, personLabel } from "@/components/ui/PersonPicker";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -50,6 +51,7 @@ import {
   createIpDeadlineIncident,
   createManualTrademarkApplication,
   createIpSharedHearing,
+  listCompanyUsers,
   correctIpCostItem,
   correctIpIdentifier,
   decideIpCoverageTransfer,
@@ -1570,6 +1572,7 @@ function DocketWorkspace({
         </TabsContent>
         <TabsContent value="schedule">
           <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+            <InAppNotificationCenter key={`${docket.id}:${currentMembershipId}`} docketId={docket.id} membershipId={currentMembershipId} />
             <HearingWorkflowCard
               docket={docket}
               enabled={canWrite}
@@ -1660,6 +1663,11 @@ function HearingWorkflowCard({
     ...(inAppReminder ? (["in_app"] as const) : []),
   ];
   const recipientIds = currentMembershipId ? [currentMembershipId] : [];
+  const colleagues = useQuery({
+    queryKey: ["company-users"],
+    queryFn: () => listCompanyUsers(),
+    enabled: false,
+  });
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: hearingQueryKey });
@@ -1814,6 +1822,24 @@ function HearingWorkflowCard({
                   <div className="min-w-0">
                     <h4 className="break-words font-semibold">{hearing.purpose}</h4>
                     <p className="break-words text-xs text-[var(--color-mute)]">{hearing.hearing_on} · {hearing.time_status === "exact" ? hearing.hearing_time : hearing.session_label ?? "Time not published"} · {hearing.timezone} · {hearing.forum_name} · {hearing.hearing_mode}</p>
+                    <p className="mt-1 break-words text-xs">Source: {hearing.source}</p>
+                    {hearing.reminder_policy ? <div className="mt-1 space-y-1 break-words text-xs" data-testid="ip-hearing-saved-policy">
+                      <p>Reminder offsets: {(hearing.reminder_policy.offsets_hours ?? []).join(", ")} hours</p>
+                      <p>Channels: {(hearing.reminder_policy.channels ?? []).join(", ")}</p>
+                      <p data-testid="ip-hearing-policy-recipients" data-recipient-membership-ids={(hearing.reminder_policy.recipient_membership_ids ?? []).join(",")}>
+                        Recipients: {hearing.reminder_policy.recipient_membership_ids?.length ?? 0}
+                      </p>
+                      <ul aria-label="Saved reminder recipients" className="min-w-0 space-y-1">
+                        {(hearing.reminder_policy.recipient_membership_ids ?? []).map((membershipId) => {
+                          const colleague = colleagues.data?.users.find((row) => row.membership_id === membershipId);
+                          return <li key={membershipId} data-membership-id={membershipId} className="whitespace-normal break-words">
+                            {colleague ? personLabel(colleague) : "Recipient details unavailable (retained assignment)"}
+                            {colleague && (!colleague.membership_active || !colleague.user_active) ? " (inactive; retained assignment)" : ""}
+                          </li>;
+                        })}
+                      </ul>
+                      {hearing.time_status !== "exact" ? <p>Date-based delivery: {hearing.reminder_policy.date_reminder_local_time ?? "18:00:00"} · {hearing.timezone}</p> : null}
+                    </div> : null}
                     {hearing.time_confirmation_required ? (
                       <p className="mt-1 text-xs font-semibold text-amber-800">Time confirmation pending. Date-based reminders remain active.</p>
                     ) : null}

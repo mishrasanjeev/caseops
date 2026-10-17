@@ -2423,6 +2423,7 @@ class NotificationRuleEventType(StrEnum):
 class InAppNotificationStatus(StrEnum):
     UNREAD = "unread"
     READ = "read"
+    DISMISSED = "dismissed"
 
 
 class NotificationDeliveryChannel(StrEnum):

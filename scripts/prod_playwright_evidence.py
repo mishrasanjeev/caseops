@@ -48,7 +48,7 @@ TESTER_PARTITIONS = {
 }
 # Reviewed exact inventory; any new or removed case requires an explicit update.
 TESTER_PARTITION_COUNTS = {
-    "tester": 97, "tester-catalog": 18, "tester-index": 6, "test-legal-write-oct13": 42,
+    "tester": 97, "tester-catalog": 18, "tester-index": 6, "test-legal-write-oct13": 50,
 }
 TESTER_CATALOG_FILE = "ram-2026-09-05-bugs.spec.ts"
 TESTER_PARTITION_CONTRACT = 1
@@ -62,6 +62,9 @@ OCT13_FILES = {
     "ram-2026-10-13-ip-portfolio.spec.ts": 4,
     "ram-2026-10-15-ip-controls.spec.ts": 34,
     "ram-2026-10-15-ip-renewal-tracker.spec.ts": 2,
+    "ram-2026-10-17-calendar-readiness.spec.ts": 2,
+    "ram-2026-10-17-ip-reminders.spec.ts": 4,
+    "ram-2026-10-17-ip-tracker.spec.ts": 2,
 }
 
 

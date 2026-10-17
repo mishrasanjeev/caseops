@@ -10,6 +10,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
+vi.mock("@/components/app/InAppNotificationCenter", () => ({
+  InAppNotificationCenter: () => <section aria-label="Your in-app alerts" />,
+}));
+
 const {
   enableIpWorkspaceMock,
   fetchIpDeadlineDependenciesMock,
@@ -195,10 +199,14 @@ vi.mock("@/lib/use-session", () => ({
 
 import IpDocketPage from "@/app/app/ip/page";
 
-function withClient(children: ReactNode) {
+function withClient(children: ReactNode, companyUsers?: unknown) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  if (companyUsers) {
+    client.setQueryDefaults(["company-users"], { staleTime: Infinity });
+    client.setQueryData(["company-users"], companyUsers);
+  }
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
@@ -852,6 +860,53 @@ describe("IpDocketPage", () => {
         sourcePendingIdentifierAllocation: false,
       }),
     );
+  });
+
+  it("shows saved hearing source and complete reminder policy without treating queued as delivered", async () => {
+    const colleagues = { users: [{ membership_id: "membership-1", full_name: "Current reminder owner",
+      email: "reminder-owner@example.com", membership_active: true, user_active: true }] };
+    const hearing = {
+      ...unknownTimeHearing(),
+      reminder_policy: { offsets_hours: [48, 24], channels: ["in_app"],
+        recipient_membership_ids: ["membership-1"], date_reminder_local_time: "18:00:00" },
+    };
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [hearing] });
+    render(withClient(<IpDocketPage />, colleagues));
+    await userEvent.click(await screen.findByRole("tab", { name: "Hearings and deadlines" }));
+    const saved = await screen.findByTestId("ip-hearing-hearing-1");
+    expect(within(saved).getByText("Source: registry_notice")).toBeVisible();
+    expect(within(saved).getByText("Reminder offsets: 48, 24 hours")).toBeVisible();
+    expect(within(saved).getByText("Channels: in_app")).toBeVisible();
+    expect(within(saved).getByText("Date-based delivery: 18:00:00 · Asia/Kolkata")).toBeVisible();
+    expect(within(saved).getByTestId("ip-hearing-policy-recipients")).toHaveAttribute(
+      "data-recipient-membership-ids", "membership-1",
+    );
+    expect(within(saved).getByText("Recipients: 1")).toBeVisible();
+    expect(within(saved).getByRole("list", { name: "Saved reminder recipients" })).toHaveTextContent(
+      "Current reminder owner — reminder-owner@example.com",
+    );
+    expect(listCompanyUsersMock).not.toHaveBeenCalled();
+    expect(within(saved).getByRole("group", { name: "Reminder delivery for Opposition hearing" })).toHaveTextContent("queued");
+    expect(within(saved).queryByText(/confirmed delivery/i)).not.toBeInTheDocument();
+  });
+
+  it("preserves unavailable and inactive saved reminder recipients without adding assignment options", async () => {
+    const hearing = { ...unknownTimeHearing(), reminder_policy: {
+      ...unknownTimeHearing().reminder_policy, recipient_membership_ids: ["inactive-member", "missing-member"],
+    } };
+    listCompanyUsersMock.mockResolvedValue({ users: [{ membership_id: "inactive-member", full_name: "Former colleague",
+      email: "former@example.com", membership_active: false, user_active: true }] });
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    fetchIpSharedHearingsMock.mockResolvedValue({ docket_id: "ip-1", hearings: [hearing] });
+    render(withClient(<IpDocketPage />));
+    await userEvent.click(await screen.findByRole("tab", { name: "Hearings and deadlines" }));
+    const saved = await screen.findByTestId("ip-hearing-hearing-1");
+    const recipients = within(saved).getByRole("list", { name: "Saved reminder recipients" });
+    expect(recipients).toHaveTextContent("Former colleague — former@example.com (inactive; retained assignment)");
+    expect(recipients).toHaveTextContent("Recipient details unavailable (retained assignment)");
+    expect(recipients.querySelector('[data-membership-id="missing-member"]')).toBeVisible();
+    expect(within(saved).queryByRole("option", { name: /Former colleague/ })).not.toBeInTheDocument();
   });
 
   it("confirms an unpublished hearing time and shows the reminder replacement chain", async () => {

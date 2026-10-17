@@ -22,7 +22,10 @@ from fastapi import HTTPException, Request  # noqa: E402
 from fastapi.responses import HTMLResponse, RedirectResponse  # noqa: E402
 
 from caseops_api.main import app  # noqa: E402
-from caseops_api.services.calendar_sync import GoogleCalendarProvider  # noqa: E402
+from caseops_api.services.calendar_sync import (  # noqa: E402
+    GoogleCalendarProvider,
+    MicrosoftGraphOutlookProvider,
+)
 from drive_import_emulator import install_drive_import_emulator  # noqa: E402
 
 install_drive_import_emulator(app)
@@ -32,6 +35,7 @@ transport_origin = emulator.start()
 atexit.register(emulator.stop)
 original_send = httpx.Client.send
 original_authorization_url = GoogleCalendarProvider.authorization_url
+original_outlook_authorization_url = MicrosoftGraphOutlookProvider.authorization_url
 
 
 def offline_send(
@@ -63,8 +67,18 @@ def offline_authorization_url(self: GoogleCalendarProvider, *, state: str) -> st
     )
 
 
+def offline_outlook_authorization_url(self: MicrosoftGraphOutlookProvider, *, state: str) -> str:
+    config = self._runtime_config()
+    if config.client_id != CLIENT_ID or config.tenant_id != "organizations":
+        raise RuntimeError("Only the offline Outlook tenant can use this harness.")
+    parsed = urlsplit(original_outlook_authorization_url(self, state=state))
+    origin = urlsplit(loopback_origin(str(config.redirect_uri)))
+    return urlunsplit((origin.scheme, origin.netloc, PREFIX + "/outlook/authorize", parsed.query, ""))
+
+
 httpx.Client.send = offline_send
 GoogleCalendarProvider.authorization_url = offline_authorization_url
+MicrosoftGraphOutlookProvider.authorization_url = offline_outlook_authorization_url
 
 
 @app.get(PREFIX + "/health", include_in_schema=False)
@@ -73,9 +87,11 @@ def offline_health() -> dict[str, str]:
 
 
 @app.get(PREFIX + "/authorize", response_class=HTMLResponse, include_in_schema=False)
+@app.get(PREFIX + "/outlook/authorize", response_class=HTMLResponse, include_in_schema=False)
 def offline_authorize(request: Request) -> HTMLResponse:
     try:
-        attempt = emulator.authorize(dict(request.query_params))
+        attempt = emulator.authorize(dict(request.query_params),
+            provider="outlook" if request.url.path.endswith("/outlook/authorize") else "google")
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     buttons = "".join(
@@ -85,6 +101,8 @@ def offline_authorize(request: Request) -> HTMLResponse:
             ("decline", "Decline consent"),
             ("identity_failure", "Simulate identity rejection"),
             ("hold", "Hold token exchange"),
+            ("short_lived", "Allow short-lived calendar access"),
+            ("revoked_refresh", "Allow revoked-refresh fixture"),
         )
     )
     return HTMLResponse(

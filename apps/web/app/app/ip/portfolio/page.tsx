@@ -278,6 +278,13 @@ export default function IpPortfolioPage() {
     setFilters(view.filters);
     setQueryDraft(view.filters.query ?? "");
     setColumns(view.columns.filter(isColumnKey));
+    if (viewMode === "tracker") {
+      const supported = new Set(["query", "renewal_tracker_state", "application_date_from",
+        "application_date_to", "renewal_due_from", "renewal_due_to"]);
+      const incompatible = Object.entries(view.filters).some(([key, value]) =>
+        !supported.has(key) && (Array.isArray(value) ? value.length > 0 : Boolean(value)));
+      if (incompatible || (view.filters.renewal_tracker_state?.length ?? 0) > 1) setViewMode("list");
+    }
   };
 
   if (!canView) {
@@ -326,12 +333,26 @@ export default function IpPortfolioPage() {
               </Button>
               <Button size="sm" variant={viewMode === "tracker" ? "secondary" : "ghost"}
                 aria-label="Deadline tracker view" title="Deadline tracker view" onClick={() => {
-                  setFilters({ query: filters.query ?? null, renewal_tracker_state: filters.renewal_tracker_state ?? [] });
+                  setFilters({ query: filters.query ?? null, renewal_tracker_state: filters.renewal_tracker_state?.slice(0, 1) ?? [],
+                    application_date_from: filters.application_date_from, application_date_to: filters.application_date_to,
+                    renewal_due_from: filters.renewal_due_from, renewal_due_to: filters.renewal_due_to });
+                  setSelectedViewId("none");
                   setViewMode("tracker");
                 }}>
                 <CalendarClock className="h-4 w-4" aria-hidden />
               </Button>
             </div>
+            <Select value={selectedViewId} onValueChange={applyView}>
+              <SelectTrigger aria-label="Saved view" className="w-full min-w-0 sm:w-44">
+                <SelectValue placeholder="Saved view" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Current filters</SelectItem>
+                {(savedViews.data?.views ?? []).map((view) => (
+                  <SelectItem key={view.id} value={view.id}>{view.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button size="sm" variant="outline" href="/app/ip/portfolio/imports">
               <Upload className="h-4 w-4" aria-hidden /> Import
             </Button>
@@ -400,19 +421,6 @@ export default function IpPortfolioPage() {
               options={[["all", "All statuses"], ["draft", "Draft"], ["ready", "Ready"], ["on_hold", "On hold"], ["closed", "Closed"]]}
               onChange={(value) => setFilters((current) => ({ ...current, docket_status: one(value) }))}
             />
-            <Select value={selectedViewId} onValueChange={applyView}>
-              <SelectTrigger aria-label="Saved view" className="w-full min-w-0 2xl:w-44">
-                <SelectValue placeholder="Saved view" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Current filters</SelectItem>
-                {(savedViews.data?.views ?? []).map((view) => (
-                  <SelectItem key={view.id} value={view.id}>
-                    {view.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <DropdownMenu>
@@ -564,6 +572,9 @@ export default function IpPortfolioPage() {
       </section> : null}
 
       {viewMode === "tracker" ? <IpPortfolioRenewalTracker category={filters.renewal_tracker_state?.[0]} query={filters.query ?? null}
+        dateFilters={{ application_date_from: filters.application_date_from, application_date_to: filters.application_date_to,
+          renewal_due_from: filters.renewal_due_from, renewal_due_to: filters.renewal_due_to }}
+        onDateFiltersChange={(dates) => setFilters((current) => ({ ...current, ...dates }))}
         onQueryChange={(query) => { setQueryDraft(query ?? ""); setFilters((current) => ({ ...current, query })); }}
         onCategoryChange={(category) => setFilters((current) => ({ ...current, renewal_tracker_state: category ? [category] : [] }))}
         onEdit={setEditingDates} /> : viewMode === "families" ? (

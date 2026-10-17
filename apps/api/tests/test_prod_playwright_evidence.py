@@ -1105,21 +1105,24 @@ def _tester_canonical_rows():
 def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
     assert evidence.TESTER_PARTITION_COUNTS == {
         "tester": 97, "tester-catalog": 18,
-        "tester-index": 6, "test-legal-write-oct13": 42,
+        "tester-index": 6, "test-legal-write-oct13": 50,
     }
     assert evidence.OCT13_FILES == {
         "ram-2026-10-13-hearings.spec.ts": 2,
         "ram-2026-10-13-ip-portfolio.spec.ts": 4,
         "ram-2026-10-15-ip-controls.spec.ts": 34,
         "ram-2026-10-15-ip-renewal-tracker.spec.ts": 2,
+        "ram-2026-10-17-calendar-readiness.spec.ts": 2,
+        "ram-2026-10-17-ip-reminders.spec.ts": 4,
+        "ram-2026-10-17-ip-tracker.spec.ts": 2,
     }
-    assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 163
+    assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 171
 
 
 def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
     assert evidence.TESTER_PARTITION_COUNTS == {
         "tester": 97, "tester-catalog": 18,
-        "tester-index": 6, "test-legal-write-oct13": 42,
+        "tester-index": 6, "test-legal-write-oct13": 50,
     }
     assert evidence.TESTER_PARTITIONS["tester-catalog"] == "tester-prod-chromium"
 
@@ -1193,6 +1196,9 @@ def test_catalog_cannot_be_replaced_behind_unchanged_canonical_total():
 @pytest.mark.parametrize("file", [
     "ram-2026-10-15-ip-controls.spec.ts",
     "ram-2026-10-15-ip-renewal-tracker.spec.ts",
+    "ram-2026-10-17-calendar-readiness.spec.ts",
+    "ram-2026-10-17-ip-reminders.spec.ts",
+    "ram-2026-10-17-ip-tracker.spec.ts",
 ])
 def test_oct15_ip_file_cannot_disappear_behind_unchanged_partition_total(file):
     rows = _tester_canonical_rows()
@@ -1206,7 +1212,7 @@ def test_oct15_ip_file_cannot_disappear_behind_unchanged_partition_total(file):
     replacement["title_path"][-1] += " substitute"
     rows.append(replacement)
     project = evidence.TESTER_PARTITIONS["test-legal-write-oct13"]
-    assert sum(row["project_name"] == project for row in rows) == 42
+    assert sum(row["project_name"] == project for row in rows) == 50
     with pytest.raises(
         evidence.EvidenceError, match="mandatory_tester_partition_inventory_mismatch"
     ):

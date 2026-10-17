@@ -1,12 +1,18 @@
 """Tenant/ACL-first SQL tracker counts and keyset-paginated current facts."""
 
+import hashlib
+import hmac
+import json
+from base64 import b64decode, urlsafe_b64encode
 from calendar import monthrange
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import and_, case, func, or_, select
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     InAppNotification,
     IpDocketRecord,
@@ -17,6 +23,7 @@ from caseops_api.db.models import (
     Matter,
     NotificationDeliveryEvent,
     NotificationDeliveryIntent,
+    NotificationDeliveryStatus,
 )
 from caseops_api.schemas.ip_renewal_tracker import IpRenewalTrackerResponse, IpRenewalTrackerRow
 from caseops_api.services import ip_renewal_tracker
@@ -77,9 +84,9 @@ def _operational_predicate(due):
     )
 
 
-def category_predicates(*, session, context, horizon_days=90, now=None):
+def category_predicates(*, session, context, horizon_days=90, now=None, settings=None):
     now = now or ip_renewal_tracker._now()
-    settings = policy(session, company=context.company)
+    settings = settings or policy(session, company=context.company)
     zone = ZoneInfo(settings["timezone"])
     today = now.astimezone(zone).date()
     year, month = (today.year + 1, 1) if today.month == 12 else (today.year, today.month + 1)
@@ -125,7 +132,7 @@ def category_predicates(*, session, context, horizon_days=90, now=None):
         "failed": and_(
             eligible,
             latest_intent_column(NotificationDeliveryIntent.status).in_(
-                ("retry_scheduled", "failed", "blocked", "dead_lettered")
+                ("retry_scheduled", "failed", "blocked", NotificationDeliveryStatus.DEAD_LETTER)
             ),
             func.coalesce(latest_intent_column(NotificationDeliveryIntent.suppression_reason), "")
             != "renewal_quiet_hours",
@@ -220,7 +227,8 @@ def _row(
         status = "cancelled"
     if latest and status not in {"cancelled", "missing_date", "overdue"}:
         if (
-            latest.status in {"retry_scheduled", "failed", "blocked", "dead_lettered"}
+            latest.status
+            in {"retry_scheduled", "failed", "blocked", NotificationDeliveryStatus.DEAD_LETTER}
             and latest.suppression_reason != "renewal_quiet_hours"
         ):
             status = "failed"
@@ -252,8 +260,48 @@ def _row(
     )
 
 
+def _tracker_cursor(*, docket_id, scope):
+    payload = json.dumps([docket_id, scope], separators=(",", ":")).encode()
+    signature = hmac.new(get_settings().auth_secret.encode(), payload, hashlib.sha256).hexdigest()
+    return urlsafe_b64encode(payload).decode() + "." + signature
+
+
+def _tracker_cursor_id(cursor, *, scope):
+    try:
+        if not isinstance(cursor, str) or len(cursor) > 512:
+            raise ValueError
+        encoded, signature = cursor.split(".")
+        payload = b64decode(encoded, altchars=b"-_", validate=True)
+        expected = hmac.new(
+            get_settings().auth_secret.encode(), payload, hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(expected, signature):
+            raise ValueError
+        docket_id, prior_scope = json.loads(payload)
+        if not isinstance(docket_id, str) or str(UUID(docket_id)) != docket_id:
+            raise ValueError
+    except (ValueError, TypeError, UnicodeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid tracker continuation.") from exc
+    if prior_scope != scope:
+        raise HTTPException(
+            status_code=400, detail="Tracker continuation no longer matches these filters."
+        )
+    return docket_id
+
+
 def list_tracker(
-    session, *, context, category=None, query=None, limit=50, cursor=None, horizon_days=90
+    session,
+    *,
+    context,
+    category=None,
+    query=None,
+    limit=50,
+    cursor=None,
+    horizon_days=90,
+    application_date_from=None,
+    application_date_to=None,
+    renewal_due_from=None,
+    renewal_due_to=None,
 ):
     if (
         not 1 <= limit <= 100
@@ -261,15 +309,59 @@ def list_tracker(
         or (query is not None and len(query) > 200)
     ):
         raise HTTPException(status_code=422, detail="Invalid tracker bounds.")
+    ranges = (
+        ("application_date", application_date_from, application_date_to),
+        ("renewal_due_date", renewal_due_from, renewal_due_to),
+    )
+    for _, lower, upper in ranges:
+        if any(value is not None and type(value) is not date for value in (lower, upper)):
+            raise HTTPException(
+                status_code=422, detail="Use ISO calendar dates for tracker ranges."
+            )
+        if lower and upper and lower > upper:
+            raise HTTPException(status_code=422, detail="Date range start must not follow its end.")
     now = ip_renewal_tracker._now()
+    settings = policy(session, company=context.company)
+    scope = hashlib.sha256(
+        json.dumps(
+            {
+                "version": 1,
+                "company": context.company.id,
+                "member": context.membership.id,
+                "category": category,
+                "query": (query or "").strip().lower(),
+                "ranges": [
+                    [
+                        field,
+                        lower.isoformat() if lower else None,
+                        upper.isoformat() if upper else None,
+                    ]
+                    for field, lower, upper in ranges
+                ],
+                "limit": limit,
+                "horizon": horizon_days,
+                "local_day": now.astimezone(ZoneInfo(settings["timezone"])).date().isoformat(),
+                "policy": settings,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    after_id = _tracker_cursor_id(cursor, scope=scope) if cursor else None
     predicates = category_predicates(
-        session=session, context=context, horizon_days=horizon_days, now=now
+        session=session, context=context, horizon_days=horizon_days, now=now, settings=settings
     )
     statement = scoped_tracker_query(session, context=context)
     if query and query.strip():
         statement = statement.where(
             portfolio_target_search_predicate(company_id=context.company.id, query=query)
         )
+    for field, lower, upper in ranges:
+        expression = date_expression(field)
+        if lower:
+            statement = statement.where(expression >= lower.isoformat())
+        if upper:
+            statement = statement.where(expression <= upper.isoformat())
     count_columns = [
         func.coalesce(func.sum(case((predicate, 1), else_=0)), 0).label(key)
         for key, predicate in predicates.items()
@@ -281,18 +373,17 @@ def list_tracker(
         if category not in predicates:
             raise HTTPException(status_code=422, detail="Unknown tracker category.")
         statement = statement.where(predicates[category])
-    if cursor:
-        if len(cursor) != 36:
-            raise HTTPException(status_code=400, detail="Invalid tracker cursor.")
-        statement = statement.where(IpDocketRecord.id > cursor)
+    if after_id:
+        statement = statement.where(IpDocketRecord.id > after_id)
     page = list(session.execute(statement.order_by(IpDocketRecord.id).limit(limit + 1)))
-    settings = policy(session, company=context.company)
     rows = _hydrate_page(session, context=context, page=page[:limit], settings=settings, now=now)
     return IpRenewalTrackerResponse(
         rows=rows,
         counts=counts,
         limit=limit,
-        next_cursor=page[limit - 1][0].id if len(page) > limit else None,
+        next_cursor=_tracker_cursor(docket_id=page[limit - 1][0].id, scope=scope)
+        if len(page) > limit
+        else None,
     )
 
 

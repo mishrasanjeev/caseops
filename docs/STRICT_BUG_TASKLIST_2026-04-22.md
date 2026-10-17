@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 17 IP Calendar Remaining Rows
+
+**Partially fixed / new acceptance pending.** Current main/API/web6af has
+production38989524122 and guarded maintenance acceptance; older29d recovery
+entries below remain history. Ten open workbook rows overlap source-data,
+external Calendar, full hearing/reminder, actual dismissal and tracker
+filter/view/export/paging outcomes. New fixes require fresh Docker and deployed
+Playwright proof. No genuine reviewed source, external consent or historical
+Matter identity may be invented to upgrade a verdict. See
+`docs/BUGFIX_IP_CALENDAR_OPEN_ITEMS_2026-10-17.md` for the exact inventory.
+
 ## October 17 Private Resume Identity
 
 **Partially fixed / NO-GO.** Serving29d passed production38942699099:

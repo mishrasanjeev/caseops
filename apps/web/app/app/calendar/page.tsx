@@ -374,7 +374,11 @@ export default function CalendarPage() {
   const syncStatus = syncStatusQuery.data;
   const durableAutomation = syncStatus?.capabilities.durable_automation;
   const durableAutomationLabel =
-    durableAutomation === "caseops_to_outlook_hearings_ready"
+    syncStatusQuery.isPending
+      ? "Checking status"
+      : syncStatusQuery.isError || !durableAutomation
+      ? "Status unavailable"
+      : durableAutomation === "caseops_to_outlook_hearings_ready"
       ? "CaseOps-to-Outlook hearing sync ready"
       : "Pending provider approval";
   const providerConfigs = syncStatus?.provider_config ?? [];
@@ -384,12 +388,8 @@ export default function CalendarPage() {
     providerConfigs.find((item) => item.provider === "google_calendar") ?? null;
   const missingConfigNames = outlookProviderConfig?.missing_config_names ?? [];
   const googleMissingConfigNames =
-    googleProviderConfig?.missing_config_names ?? [
-      "GOOGLE_CALENDAR_CLIENT_ID",
-      "GOOGLE_CALENDAR_CLIENT_SECRET",
-      "GOOGLE_CALENDAR_REDIRECT_URI",
-    ];
-  const googleConfigured = googleProviderConfig?.configured ?? false;
+    googleProviderConfig?.missing_config_names ?? [];
+  const googleConfigured = syncStatusQuery.isSuccess && (googleProviderConfig?.configured ?? false);
   const calendarConnections =
     syncStatus?.connections ?? connectionsQuery.data?.connections ?? [];
   const outlookConnections = calendarConnections.filter(
@@ -402,19 +402,12 @@ export default function CalendarPage() {
   const connectedGmailConnection =
     gmailStatus?.connections.find((connection) => connection.status === "connected") ??
     null;
-  const gmailConfigured = gmailStatus?.configured ?? false;
-  const gmailWebhookConfigured = gmailStatus?.webhook_configured ?? false;
+  const gmailConfigured = gmailStatusQuery.isSuccess && (gmailStatus?.configured ?? false);
+  const gmailWebhookConfigured = gmailStatusQuery.isSuccess && (gmailStatus?.webhook_configured ?? false);
   const gmailMissingConfigNames =
-    gmailStatus?.missing_config_names ?? [
-      "GMAIL_CLIENT_ID",
-      "GMAIL_CLIENT_SECRET",
-      "GMAIL_REDIRECT_URI",
-    ];
+    gmailStatus?.missing_config_names ?? [];
   const gmailMissingWebhookConfigNames =
-    gmailStatus?.missing_webhook_config_names ?? [
-      "GMAIL_PUBSUB_TOPIC",
-      "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
-    ];
+    gmailStatus?.missing_webhook_config_names ?? [];
   const connectedOutlookConnection =
     outlookConnections.find((connection) => connection.status === "connected") ?? null;
   const connectedGoogleConnection =
@@ -538,6 +531,34 @@ export default function CalendarPage() {
         })}
       </div>
 
+      {syncStatusQuery.isError ? (
+        <div data-testid="calendar-readiness-error">
+          <QueryErrorState
+            title="Could not load Calendar connection status"
+            error={new Error("Current provider readiness could not be verified.")}
+            onRetry={() => syncStatusQuery.refetch()}
+          />
+        </div>
+      ) : null}
+      {connectionsQuery.isError ? (
+        <div data-testid="calendar-outlook-readiness-error">
+          <QueryErrorState
+            title="Could not load Outlook connection status"
+            error={new Error("Current Outlook connection status could not be verified.")}
+            onRetry={() => connectionsQuery.refetch()}
+          />
+        </div>
+      ) : null}
+      {gmailStatusQuery.isError ? (
+        <div data-testid="calendar-gmail-readiness-error">
+          <QueryErrorState
+            title="Could not load Gmail connection status"
+            error={new Error("Current Gmail readiness could not be verified.")}
+            onRetry={() => gmailStatusQuery.refetch()}
+          />
+        </div>
+      ) : null}
+
       <section
         className="rounded-lg border border-[var(--color-line-2)] bg-white px-4 py-3"
         data-testid="calendar-outlook-panel"
@@ -551,6 +572,8 @@ export default function CalendarPage() {
             <div className="mt-1 text-xs text-[var(--color-mute)]">
               {connectionsQuery.isPending ? (
                 "Checking connection..."
+              ) : connectionsQuery.isError ? (
+                "Outlook connection status is unavailable."
               ) : connectionsQuery.data?.provider_available === false ? (
                 connectionsQuery.data.unavailable_reason ??
                 "Microsoft Graph configuration required."
@@ -764,7 +787,7 @@ export default function CalendarPage() {
                   <button
                     type="button"
                     onClick={() => syncRangeMutation.mutate()}
-                    disabled={syncRangeMutation.isPending}
+                    disabled={syncRangeMutation.isPending || !connectionsQuery.isSuccess || connectionsQuery.data?.provider_available !== true || !syncStatusQuery.isSuccess}
                     className="inline-flex h-8 items-center rounded-md bg-[var(--color-ink)] px-3 text-xs font-medium text-white hover:bg-[var(--color-ink-2)] disabled:opacity-60"
                     data-testid="calendar-outlook-sync-range"
                     aria-label={`Sync visible range ${label} to Outlook`}
@@ -791,7 +814,8 @@ export default function CalendarPage() {
                   onClick={() => startOutlookMutation.mutate()}
                   disabled={
                     startOutlookMutation.isPending ||
-                    connectionsQuery.data?.provider_available === false
+                    !connectionsQuery.isSuccess ||
+                    connectionsQuery.data?.provider_available !== true
                   }
                   className="inline-flex h-8 items-center rounded-md bg-[var(--color-ink)] px-3 text-xs font-medium text-white hover:bg-[var(--color-ink-2)] disabled:opacity-60"
                   data-testid="calendar-outlook-connect"
@@ -817,6 +841,8 @@ export default function CalendarPage() {
             <div className="mt-1 text-xs text-[var(--color-mute)]">
               {syncStatusQuery.isPending ? (
                 "Checking Google Calendar readiness..."
+              ) : syncStatusQuery.isError || !googleProviderConfig ? (
+                "Google Calendar readiness is unavailable."
               ) : !googleConfigured ? (
                 "Google Calendar OAuth is not configured. The authenticated .ics export remains available as a one-time download."
               ) : connectedGoogleConnection ? (
@@ -833,7 +859,7 @@ export default function CalendarPage() {
                 "Manual hearing, task, and deadline sync is available after a Google Calendar connection is added."
               )}
             </div>
-            {googleMissingConfigNames.length > 0 ? (
+            {syncStatusQuery.isSuccess && googleMissingConfigNames.length > 0 ? (
               <div
                 className="mt-1 text-xs text-[var(--color-mute)]"
                 data-testid="calendar-google-provider-config-status"
@@ -871,7 +897,7 @@ export default function CalendarPage() {
                   <button
                     type="button"
                     onClick={() => syncGoogleRangeMutation.mutate()}
-                    disabled={syncGoogleRangeMutation.isPending}
+                    disabled={syncGoogleRangeMutation.isPending || !googleConfigured}
                     className="inline-flex h-8 items-center rounded-md bg-[var(--color-ink)] px-3 text-xs font-medium text-white hover:bg-[var(--color-ink-2)] disabled:opacity-60"
                     data-testid="calendar-google-sync-range"
                     aria-label={`Sync visible range ${label} to Google Calendar`}
@@ -921,6 +947,8 @@ export default function CalendarPage() {
             <div className="mt-1 text-xs text-[var(--color-mute)]">
               {gmailStatusQuery.isPending ? (
                 "Checking Gmail readiness..."
+              ) : gmailStatusQuery.isError ? (
+                "Gmail readiness is unavailable."
               ) : !gmailConfigured ? (
                 "Gmail OAuth is not configured. Imported email candidates remain available from manual imports."
               ) : connectedGmailConnection ? (
@@ -941,7 +969,7 @@ export default function CalendarPage() {
                 "Connect Gmail to import message metadata into the review-first mailbox queue."
               )}
             </div>
-            {gmailMissingConfigNames.length > 0 ? (
+            {gmailStatusQuery.isSuccess && gmailMissingConfigNames.length > 0 ? (
               <div
                 className="mt-1 text-xs text-[var(--color-mute)]"
                 data-testid="calendar-gmail-provider-config-status"
@@ -949,7 +977,7 @@ export default function CalendarPage() {
                 Missing Gmail config: {gmailMissingConfigNames.join(", ")}
               </div>
             ) : null}
-            {!gmailWebhookConfigured ? (
+            {gmailStatusQuery.isSuccess && !gmailWebhookConfigured ? (
               <div
                 className="mt-1 text-xs text-[var(--color-mute)]"
                 data-testid="calendar-gmail-webhook-config-status"
@@ -970,7 +998,7 @@ export default function CalendarPage() {
                   <button
                     type="button"
                     onClick={() => importGmailMutation.mutate()}
-                    disabled={importGmailMutation.isPending}
+                    disabled={importGmailMutation.isPending || !gmailConfigured}
                     className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--color-ink)] px-3 text-xs font-medium text-white hover:bg-[var(--color-ink-2)] disabled:opacity-60"
                     data-testid="calendar-gmail-import"
                   >

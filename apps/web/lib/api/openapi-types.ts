@@ -4460,6 +4460,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/in-app-notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Current Receipts */
+        get: operations["list_current_receipts_api_in_app_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/in-app-notifications/{notification_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change Receipt Status */
+        patch: operations["change_receipt_status_api_in_app_notifications__notification_id__patch"];
+        trace?: never;
+    };
     "/api/intake/requests": {
         parameters: {
             query?: never;
@@ -23190,6 +23224,19 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** InAppNotificationUpdate */
+        InAppNotificationUpdate: {
+            /**
+             * Expected Status
+             * @enum {string}
+             */
+            expected_status: "unread" | "read" | "dismissed";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "unread" | "read" | "dismissed";
         };
         /** InboundEmailAliasCreateRequest */
         InboundEmailAliasCreateRequest: {
@@ -44039,6 +44086,36 @@ export interface components {
             /** Release Sha */
             release_sha: string | "unavailable";
         };
+        /** RecipientNotificationPage */
+        RecipientNotificationPage: {
+            /** Items */
+            items?: components["schemas"]["RecipientNotificationRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** RecipientNotificationRecord */
+        RecipientNotificationRecord: {
+            /** Body */
+            body: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Id */
+            id: string;
+            /** Read At */
+            read_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "unread" | "read" | "dismissed";
+            /** Title */
+            title: string;
+        };
         /** RecommendationAnalysisRecord */
         RecommendationAnalysisRecord: {
             /** Confidence Explanation */
@@ -56513,6 +56590,77 @@ export interface operations {
             };
         };
     };
+    list_current_receipts_api_in_app_notifications_get: {
+        parameters: {
+            query: {
+                cursor?: string | null;
+                dismissed?: boolean;
+                docket_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipientNotificationPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_receipt_status_api_in_app_notifications__notification_id__patch: {
+        parameters: {
+            query: {
+                docket_id: string;
+            };
+            header?: never;
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InAppNotificationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipientNotificationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_intake_requests_api_intake_requests_get: {
         parameters: {
             query?: {
@@ -63853,11 +64001,15 @@ export interface operations {
     get_portfolio_renewal_tracker_api_ip_portfolio_renewal_tracker_get: {
         parameters: {
             query?: {
+                application_date_from?: string | null;
+                application_date_to?: string | null;
                 category?: ("upcoming" | "active" | "due_today" | "overdue" | "missing" | "failed") | null;
                 cursor?: string | null;
                 horizon_days?: number;
                 limit?: number;
                 query?: string | null;
+                renewal_due_from?: string | null;
+                renewal_due_to?: string | null;
             };
             header?: never;
             path?: never;

@@ -21,11 +21,14 @@ Refresh the record before making a new decision. Do not repeatedly submit a
 stale version. Read-only users do not receive the edit action; closed or
 otherwise restricted records remain protected by the server.
 
-Date labels distinguish missing, manual, imported-unverified and verified facts.
-Entering a manual date does not verify its legal basis. CaseOps does not derive
-a renewal date from an application date or turn an imported date into a legally
-verified deadline. Original import values and unrelated record details remain
-part of their existing history.
+The current portfolio editor records missing, manual-unverified and
+imported-unverified dates. It does not provide a date-verification command.
+The response contract reserves a verified state, but that literal is not proof
+that a supplied portfolio date has been verified. Legal-deadline confirmation
+belongs to the separate governed workflow and does not automatically verify
+these supplied dates. CaseOps does not derive a renewal date from an application
+date or turn an imported date into a legally verified deadline. Original import
+values and unrelated record details remain part of their existing history.
 
 ## Reminder Schedule
 
@@ -73,6 +76,24 @@ Renewal Date. Closed, renewed or cancelled records stop their applicable
 pre-renewal sequence. After the due date, the tracker shows Overdue; this does
 not create a new legal deadline or automatically authorize a late filing.
 
+## Dismiss Or Restore An Alert
+
+1. Open the relevant IP docket, then **Hearings and deadlines**.
+2. In **Your in-app alerts**, review the actual delivered alert under
+   **Active alerts**. **Mark read** changes only its read state.
+3. Select **Dismiss alert** to remove that occurrence from the active list.
+   Reload to check that it remains dismissed.
+4. Open **Dismissed alerts** and select **Restore alert** when it should return
+   to the active list. Restoration makes the retained occurrence unread; it
+   does not create another delivery or replace its original content.
+
+These are your own current authorized receipts for this docket, not another
+colleague's inbox. A source correction, closure or access revocation can make an
+old receipt unavailable. Dismissal never deletes the delivery evidence, alters
+the renewal date or cancels the recurring series. Tomorrow's eligible occurrence
+has its own identity and delivery decision. A stale-status rejection requires a
+reload, not repeated submissions.
+
 ## Use The Deadline Tracker
 
 Select the calendar-clock action labelled **Deadline tracker view** in the
@@ -101,6 +122,13 @@ Calendar connection. External email/calendar delivery still depends on its
 separate configured integration and consent. This feature does not enable an
 unconfigured sender, provider, paid service or external calendar.
 
+On **Calendar**, a readiness load failure displays an explicit error with
+**Try again**. Loading or unavailable status is not proof of missing OAuth
+credentials. Do not revoke an account or replace credentials solely to clear a
+load error. A configured provider, a currently connected account and successful
+external delivery are different states. Pending external cleanup stays retained;
+its presence must not make the entire readiness panel disappear.
+
 If the chosen delivery time falls inside quiet hours, delivery waits for the
 quiet window to end, including the following morning. The original occurrence
 remains in history. Missed occurrences are superseded rather than delivered as
@@ -115,6 +143,19 @@ date-range filters, selected columns and supported renewal categories can be
 retained through the existing saved-view and export workflows. Verify the
 selected scope before exporting. Registry synchronization status is separate
 from date completeness or reminder delivery.
+
+In tracker view, set the Application Date and Renewal Due Date lower and upper
+bounds independently. Dates are inclusive. The category counters use those same
+date/search bounds; the selected category controls the displayed records.
+**Load more** continues the same scope. If the workspace policy, local date or
+filters change, refresh rather than reusing an old continuation.
+
+Use **Saved view** to restore retained filters and column choices before
+exporting. A saved view with filters unsupported by tracker mode opens the
+regular list instead of silently discarding those filters. Confirm the selected
+category and date bounds, preview the export, then download its completed job.
+Export preview and download recheck current access and source state; a saved
+view is not a frozen authorization grant.
 
 Use explicit supported dates, preferably ISO `YYYY-MM-DD`, in an import. Native
 Excel date cells retain their date meaning. Missing optional date columns or
@@ -141,6 +182,12 @@ when they are not eligible for calculation. Independent review, source
 provenance, testing, current company selection and server authorization remain
 authoritative. A disabled calculation with a stated missing prerequisite is not
 permission to bypass that prerequisite.
+
+Official source discovery for the October 17 review is retained in
+`docs/IP_CALENDAR_SOURCE_REVIEW_2026-10-17.md`. That record distinguishes the
+annual holiday memorandum, later office-specific notices, a reviewed rule and
+an individual registration's actual date evidence. Finding a public document
+does not replace independent approval or verify a manually supplied date.
 
 Check the full selected rule or calendar description beneath its control,
 including version, jurisdiction, office, timezone where applicable and status.

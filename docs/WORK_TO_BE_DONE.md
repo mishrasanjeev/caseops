@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 17 IP And Calendar Follow-Up
+
+Partially implemented under J08/M08 and UJ-02/04/26. The serving6af release has
+complete production38989524122 and guarded cadence proof; older release-blocked
+checkpoints below are historical. Remaining source work targets actual dismissal
+without cancelling recurrence, full hearing/reminder save/reload and authorized
+tracker filter/view/export/paging parity. Genuine approved-source positives,
+external Calendar consent and the unidentified historical incident remain
+distinct evidence boundaries. Require fresh amended-source Docker/CI and exact
+production acceptance. See `docs/BUGFIX_IP_CALENDAR_OPEN_ITEMS_2026-10-17.md`.
+
 ## October 17 Remaining Resume Gate
 
 Serving29d's production38942699099 passed all11 required jobs and396 cases

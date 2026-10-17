@@ -145,4 +145,17 @@ describe("Portfolio renewal corrections through the real HTTP client", () => {
     expect(url.pathname).toBe("/api/ip/portfolio/renewal-tracker");
     expect(Object.fromEntries(url.searchParams)).toEqual({ category: "missing", limit: "50", cursor: "server-owned-cursor", horizon_days: "90" });
   });
+
+  it("IP18 keeps all source-date ranges and the opaque continuation in tracker reads", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ rows: [] }), { status: 200 }));
+    await fetchIpRenewalTracker({ query: "supplied source", category: "upcoming", limit: 50,
+      cursor: "signed-current-scope.cursor", application_date_from: "2020-01-01",
+      application_date_to: "2020-12-31", renewal_due_from: "2028-03-01", renewal_due_to: "2028-03-31" });
+    expect(fetch).toHaveBeenCalledOnce();
+    const url = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
+    expect(url.pathname).toBe("/api/ip/portfolio/renewal-tracker");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ query: "supplied source", category: "upcoming",
+      limit: "50", cursor: "signed-current-scope.cursor", application_date_from: "2020-01-01",
+      application_date_to: "2020-12-31", renewal_due_from: "2028-03-01", renewal_due_to: "2028-03-31" });
+  });
 });
