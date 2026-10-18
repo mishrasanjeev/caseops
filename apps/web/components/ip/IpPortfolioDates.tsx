@@ -173,7 +173,8 @@ export function IpPortfolioRenewalTracker({ category, query = null, dateFilters 
   const listing = useInfiniteQuery({
     queryKey: ["ip", "portfolio", "renewal-tracker", category ?? "all", query, dateFilters],
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => fetchIpRenewalTracker({ category, query, ...dateFilters, limit: 50, cursor: pageParam }),
+    queryFn: ({ pageParam, signal }) => fetchIpRenewalTracker(
+      { category, query, ...dateFilters, limit: 50, cursor: pageParam }, { signal }),
     getNextPageParam: (page) => page.next_cursor,
   });
   const rows = listing.data?.pages.flatMap((page) => page.rows) ?? [];

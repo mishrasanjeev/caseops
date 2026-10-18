@@ -1,4 +1,5 @@
-import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
+import { expect, request, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 
 type Matter = { id: string; status: string; updated_at: string; court_name: string;

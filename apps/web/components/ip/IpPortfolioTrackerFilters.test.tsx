@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -40,7 +40,8 @@ describe("IP15-018 tracker filters and continuation", () => {
       onDateFiltersChange={vi.fn()} onQueryChange={vi.fn()} onCategoryChange={vi.fn()} onEdit={vi.fn()} />));
     await screen.findByText("Current source one");
     expect(fetchTracker).toHaveBeenCalledWith(expect.objectContaining({ category: "upcoming",
-      query: "Current source", ...dateFilters, limit: 50, cursor: null }));
+      query: "Current source", ...dateFilters, limit: 50, cursor: null }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(screen.getByLabelText("Application Date from", { exact: true })).toHaveValue("2020-01-01");
     expect(screen.getByLabelText("Renewal Due Date to", { exact: true })).toHaveValue("2028-03-31");
     expect(screen.queryByText("Verified", { exact: true })).not.toBeInTheDocument();
@@ -58,11 +59,12 @@ describe("IP15-018 tracker filters and continuation", () => {
     render(wrap(<Controlled />));
     fireEvent.click(await screen.findByRole("button", { name: "Load more renewal records" }));
     await screen.findByText("Current source two");
-    expect(fetchTracker).toHaveBeenLastCalledWith(expect.objectContaining({ ...dateFilters, cursor: "signed-current-scope" }));
+    expect(fetchTracker).toHaveBeenLastCalledWith(expect.objectContaining({ ...dateFilters, cursor: "signed-current-scope" }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }));
     fireEvent.change(screen.getByLabelText("Renewal Due Date to", { exact: true }), { target: { value: "2028-04-30" } });
     await waitFor(() => expect(fetchTracker).toHaveBeenLastCalledWith(expect.objectContaining({
       ...dateFilters, renewal_due_to: "2028-04-30", cursor: null,
-    })));
+    }), expect.objectContaining({ signal: expect.any(AbortSignal) })));
     expect(screen.queryByText("Current source two")).not.toBeInTheDocument();
   });
 
@@ -75,5 +77,40 @@ describe("IP15-018 tracker filters and continuation", () => {
     await screen.findByText("Current source one");
     view.rerender(content("restored source"));
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Search renewal tracker" })).toHaveValue("restored source"));
+  });
+
+  it("cancels superseded filter reads and cannot display a late broader response", async () => {
+    const pending: { signal?: AbortSignal; resolve: (value: unknown) => void }[] = [];
+    fetchTracker.mockImplementation((_input, options?: { signal?: AbortSignal }) =>
+      new Promise((resolve) => pending.push({ signal: options?.signal, resolve })));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const content = (filters: IpPortfolioFilters, category?: "missing") =>
+      <QueryClientProvider client={client}>
+        <IpPortfolioRenewalTracker query="Current source" category={category} dateFilters={filters}
+          onQueryChange={vi.fn()} onCategoryChange={vi.fn()} onEdit={vi.fn()} />
+      </QueryClientProvider>;
+    const view = render(content({}));
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].signal).toBeInstanceOf(AbortSignal);
+    view.rerender(content(dateFilters));
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect(pending[0].signal?.aborted).toBe(true);
+    view.rerender(content(dateFilters, "missing"));
+    await waitFor(() => expect(pending).toHaveLength(3));
+    expect(pending[1].signal?.aborted).toBe(true);
+    expect(pending[2].signal?.aborted).toBe(false);
+    await act(async () => pending[2].resolve({ rows: [{ ...row, docket_title: "Final current scope" }],
+      counts: { ...counts, missing: 1 }, limit: 50, next_cursor: null }));
+    await screen.findByText("Final current scope");
+    await act(async () => {
+      for (const earlier of pending.slice(0, 2)) {
+        earlier.resolve({ rows: [row], counts, limit: 50, next_cursor: "obsolete-cursor" });
+      }
+    });
+    expect(screen.getByText("Final current scope")).toBeInTheDocument();
+    expect(screen.queryByText("Current source one")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more renewal records" })).not.toBeInTheDocument();
+    view.unmount();
+    client.clear();
   });
 });

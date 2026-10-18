@@ -158,4 +158,13 @@ describe("Portfolio renewal corrections through the real HTTP client", () => {
       limit: "50", cursor: "signed-current-scope.cursor", application_date_from: "2020-01-01",
       application_date_to: "2020-12-31", renewal_due_from: "2028-03-01", renewal_due_to: "2028-03-31" });
   });
+
+  it("IP18 forwards tracker query cancellation to the existing transport", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ rows: [] }), { status: 200 }));
+    const controller = new AbortController();
+    controller.abort();
+    await fetchIpRenewalTracker({ query: "supplied source", category: "missing" }, { signal: controller.signal });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(vi.mocked(fetch).mock.calls[0][1]?.signal?.aborted).toBe(true);
+  });
 });

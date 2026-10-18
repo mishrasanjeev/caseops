@@ -1,5 +1,20 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 18 Serving Acceptance Reconciliation
+
+J08/M08, UJ-02/04/26 and IPLF-023/030/032/037: PR542 serves `ee351e0c`, with
+tree-identical full Docker acceptance and green actual-main CI. Production
+39042539115 completed404 cases (383P/3F/18 reasoned skips), dated47/50passed.
+Two tracker widths failed at initial50rows; the mobile Calendar case failed at
+initial3month chips. Later unchanged Calendar2/2 is diagnostic only. These failed
+and unexecuted downstream outcomes cannot be credited as complete coverage.
+The scoped1345-record native tracker RED/GREEN now proves bounded shared source
+facts and exact counts/50+1identities; family filter/validation/OpenAPI contract
+passes all seven cases. Full frontend1529/1529 and current typechecks/build pass,
+but are not Docker or deployed acceptance. Adjacent native performance, complete replacement live journeys and
+guarded private maintenance/resume remain pending. Other source/consent/history
+gaps are unchanged. See `docs/BUGFIX_IP_TRACKER_PRODUCTION_SCALE_2026-10-17.md`.
+
 ## October 17 Remaining IP Calendar Coverage
 
 J08/M08 and UJ-02/04/26, IPLF-023/030/032/037: baseline6af production verification

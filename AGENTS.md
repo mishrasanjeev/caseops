@@ -844,6 +844,23 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- Shared UI filters require route-to-service contract parity on every view,
+  including grouped families and export; accepting an unknown query silently
+  is not evidence that it was applied. Prove exact identities and continuation,
+  reject changed cursor scope, and encode the database's actual sort key rather
+  than a different Python Unicode normalization.
+- Paging correctness on a small fixture does not prove interactive tracker
+  performance on a retained tenant. Seed observed current-record volume plus
+  valid provenance history, measure actual PostgreSQL plans, work and runtime,
+  and bound compiled predicate expansion as well as query count. Keep exact
+  category counts, current access/source checks and complete continuation; a
+  longer timeout, approximate count or disabled safety predicate is not a fix.
+- A successful unchanged production replay cannot explain an earlier failed
+  journey. Retain the original complete result, distinguish loading/error/data
+  evidence, and collect bounded sanitized primitives at the failing boundary.
+  Diagnostic replays do not replace the complete exact-release certification
+  or authorize private-maintenance resume from a failed QA run.
+
 - A short directed-lock oracle must begin at the observed exact participant SQL
   admission, not an upstream worker callback that still has bounded preflight
   work to perform. Keep a separate bounded admission handshake, prove a delayed

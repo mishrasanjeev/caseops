@@ -4,6 +4,19 @@ import { diagnosticProblem, diagnosticRequestId, diagnosticRoute, diagnosticTran
 import { createPatentApplicationWithEvidence } from "../../../tests/e2e/support/prod-api-response-evidence";
 
 describe("production failure metadata minimization", () => {
+  it("categorizes Calendar and tracker reads without leaking their source scope", () => {
+    const origins = ["https://api.caseops.ai"];
+    expect(diagnosticRoute("https://api.caseops.ai/api/calendar/events?from=2026-10-15&matter=PRIVATE", origins))
+      .toBe("calendar/events");
+    expect(diagnosticRoute("https://api.caseops.ai/api/ip/portfolio/renewal-tracker?query=PRIVATE&cursor=SECRET", origins))
+      .toBe("ip/renewal-tracker");
+    for (const url of [
+      "https://api.caseops.ai/api/calendar/events/private-record",
+      "https://api.caseops.ai/api/ip/portfolio/renewal-tracker/export?query=PRIVATE",
+      "https://accounts.google.com/api/calendar/events?code=SECRET",
+      "https://api.caseops.ai/api/calendar/google/callback?code=SECRET",
+    ]) expect(diagnosticRoute(url, origins)).toBeNull();
+  });
   it("categorizes authorized paths without retaining identifiers or queries", () => {
     expect(diagnosticRoute("https://api.caseops.ai/api/matters/private-client/attachments?token=secret", ["https://api.caseops.ai"]))
       .toBe("matter/attachment");

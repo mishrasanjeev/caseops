@@ -63952,6 +63952,8 @@ export interface operations {
     get_ip_portfolio_families_api_ip_portfolio_families_get: {
         parameters: {
             query?: {
+                application_date_from?: string | null;
+                application_date_to?: string | null;
                 asset_kind?: string[] | null;
                 client?: string[] | null;
                 cursor?: string | null;
@@ -63969,6 +63971,9 @@ export interface operations {
                 proprietor?: string[] | null;
                 query?: string | null;
                 registry_sync_state?: string[] | null;
+                renewal_due_from?: string | null;
+                renewal_due_to?: string | null;
+                renewal_tracker_state?: ("upcoming" | "active" | "due_today" | "overdue" | "missing" | "failed")[] | null;
                 responsible_membership_id?: string[] | null;
                 team_id?: string[] | null;
             };

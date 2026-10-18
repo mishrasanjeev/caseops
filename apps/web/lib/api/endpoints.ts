@@ -11249,7 +11249,7 @@ export async function fetchIpRenewalTracker(input: {
   application_date_to?: string | null;
   renewal_due_from?: string | null;
   renewal_due_to?: string | null;
-} = {}): Promise<IpRenewalTrackerResponse> {
+} = {}, options?: { signal?: AbortSignal }): Promise<IpRenewalTrackerResponse> {
   const params = new URLSearchParams();
   if (input.category) params.set("category", input.category);
   if (input.query?.trim()) params.set("query", input.query.trim());
@@ -11259,7 +11259,7 @@ export async function fetchIpRenewalTracker(input: {
   for (const key of ["application_date_from", "application_date_to", "renewal_due_from", "renewal_due_to"] as const) {
     if (input[key]) params.set(key, input[key]);
   }
-  return apiRequest(`/api/ip/portfolio/renewal-tracker?${params.toString()}`);
+  return apiRequest(`/api/ip/portfolio/renewal-tracker?${params.toString()}`, { signal: options?.signal });
 }
 
 export async function updateIpPortfolioDates(docketId: string, payload: IpPortfolioDatesUpdate): Promise<IpPortfolioDatesResponse> {

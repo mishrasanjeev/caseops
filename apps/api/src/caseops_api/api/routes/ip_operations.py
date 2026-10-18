@@ -1920,6 +1920,11 @@ async def get_ip_portfolio_families(
     opposition_only: bool = False,
     registry_sync_state: Annotated[list[str] | None, Query()] = None,
     include_inactive: bool = False,
+    application_date_from: date | None = None,
+    application_date_to: date | None = None,
+    renewal_due_from: date | None = None,
+    renewal_due_to: date | None = None,
+    renewal_tracker_state: Annotated[list[TrackerCategory] | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
     cursor: str | None = None,
 ) -> IpPortfolioFamilyResponse:
@@ -1940,6 +1945,11 @@ async def get_ip_portfolio_families(
         opposition_only=opposition_only,
         registry_sync_state=registry_sync_state or [],
         include_inactive=include_inactive,
+        application_date_from=application_date_from,
+        application_date_to=application_date_to,
+        renewal_due_from=renewal_due_from,
+        renewal_due_to=renewal_due_to,
+        renewal_tracker_state=renewal_tracker_state or [],
     )
     return list_ip_portfolio_families(
         session,

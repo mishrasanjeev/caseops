@@ -1,5 +1,21 @@
 # CaseOps  - Work To Be Done
 
+## October 18 Production Acceptance Repair
+
+J08/M08 and UJ-02/04/26 are Partially implemented at serving `ee351e0c`.
+PR542 deployment is complete, certification is not: production39042539115
+finished383P/3F/18 reasoned skips, including47/50 dated passes. Fix the measured
+retained-volume tracker latency without weakening source/access/date checks or
+raising timeouts. Scoped1345-record native RED/GREEN now measures and removes
+repeated source-fact expansion while preserving exact counts and50+1identities.
+The family API's omitted five shared filters have seven passing contract cases;
+fullfrontend1529passes, current typechecks and build do not replace fresh release
+gates. Investigate the separate mobile Calendar failure; its unchanged
+2/2 diagnostic replay does not establish cause. Fresh combined Docker/CI/main/
+deployment/live and private-cadence proof remain required. Do not repeat the
+test-legal grant or invent legal approval, verified source dates or OAuth consent.
+See `docs/BUGFIX_IP_TRACKER_PRODUCTION_SCALE_2026-10-17.md`.
+
 ## October 17 IP And Calendar Follow-Up
 
 Partially implemented under J08/M08 and UJ-02/04/26. The serving6af release has

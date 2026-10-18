@@ -77,7 +77,7 @@ vi.mock("@/lib/capabilities", () => ({
 }));
 
 import CalendarPage from "./page";
-import { calendarSyncStatusResponse } from "@/lib/api/schemas";
+import { calendarEventListResponse, calendarSyncStatusResponse } from "@/lib/api/schemas";
 import { calendarStatusFixture } from "@/test/calendar-status-fixtures";
 
 function withClient(node: ReactNode): ReactNode {
@@ -820,27 +820,66 @@ describe("CalendarPage", () => {
   });
 
   it("does not report an empty calendar while its events request is delayed", async () => {
-    const today = isoToday();
-    const response = {
-      range_from: today, range_to: today,
-      events: [{ id: "hearing:delayed", kind: "hearing", occurs_on: today,
-        title: "Delayed hearing", matter_id: "delayed-matter", matter_code: "CAL-DELAY",
-        matter_title: "Delayed matter" }],
-    };
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 17, 12));
+    const events = [15, 16].flatMap(day => Array.from({ length: 8 }, (_, index) => ({
+      id: `hearing:delayed-${day}-${index}`, kind: "hearing", occurs_on: `2026-10-${day}`,
+      title: "Delayed hearing", matter_id: `delayed-matter-${Math.floor(index / 2)}`,
+      matter_code: `CAL-DELAY-${Math.floor(index / 2)}`, matter_title: "Delayed matter",
+      status: "scheduled", court_label: `Configured court ${Math.floor(index / 2)}`,
+      court_identity: `Configured court ${Math.floor(index / 2)}`, forum_display_order: Math.floor(index / 2),
+      time_status: "exact", hearing_time: index % 2 === 0 ? "09:30:00" : "10:30:00",
+      session_label: null, timezone: "Asia/Kolkata",
+    })));
+    const response = calendarEventListResponse.parse({
+      range_from: "2026-09-28", range_to: "2026-11-08",
+      events: [...events, { ...events[0], id: "hearing:delayed-session", occurs_on: "2026-10-17",
+        time_status: "session", hearing_time: null, session_label: "Afternoon session" }],
+    });
     let resolveEvents!: (value: typeof response) => void;
     fetchCalendarEventsMock.mockReturnValueOnce(new Promise<typeof response>(resolve => {
       resolveEvents = resolve;
     }));
+    try {
+      render(withClient(<CalendarPage />));
+      await waitFor(() => expect(fetchCalendarEventsMock).toHaveBeenCalledExactlyOnceWith({
+        from: "2026-09-28", to: "2026-11-08",
+      }));
+      expect(screen.getByTestId("calendar-month-label")).toHaveTextContent("October 2026");
+      expect(screen.getAllByTestId(/^calendar-month-day-/)).toHaveLength(42);
+      expect(screen.queryByTestId("calendar-empty-state")).not.toBeInTheDocument();
+      expect(screen.queryByText("Could not load calendar")).not.toBeInTheDocument();
+      expect(screen.queryAllByTestId(/^calendar-event-/)).toHaveLength(0);
+      await act(async () => resolveEvents(response));
+      for (const day of [15, 16]) {
+        const cell = within(screen.getByTestId(`calendar-month-day-2026-10-${day}`));
+        const chips = await cell.findAllByTestId(/^calendar-event-/);
+        expect(chips.map(chip => chip.getAttribute("data-testid")))
+          .toEqual([0, 1, 2].map(index => `calendar-event-hearing:delayed-${day}-${index}`));
+        expect(cell.getByRole("button", { name: `Show 5 more events on 2026-10-${day}` })).toBeEnabled();
+      }
+      expect(screen.getByTestId("calendar-event-hearing:delayed-session"))
+        .toHaveAttribute("title", expect.stringContaining("Afternoon session"));
+      await userEvent.setup().click(screen.getByRole("button", { name: "View all events on 2026-10-17" }));
+      const dialog = await screen.findByRole("dialog", { name: "Events on 2026-10-17" });
+      expect(within(dialog).getByTestId("calendar-event-hearing:delayed-session"))
+        .toHaveTextContent("Afternoon session");
+      expect(screen.queryByTestId("calendar-empty-state")).not.toBeInTheDocument();
+      expect(fetchCalendarEventsMock).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("shows schema-rejected event responses as errors, never as empty success", async () => {
+    fetchCalendarEventsMock.mockImplementationOnce(async () => calendarEventListResponse.parse({
+      range_from: isoToday(), range_to: isoToday(),
+      events: [{ id: "hearing:invalid", kind: "hearing", occurs_on: isoToday(),
+        title: "Invalid fixture", matter_id: "invalid-matter", matter_code: "CAL-INVALID",
+        matter_title: "Invalid matter", time_status: "invalid_precision" }],
+    }));
     render(withClient(<CalendarPage />));
-    await waitFor(() => expect(fetchCalendarEventsMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByTestId("calendar-month-label")).toBeVisible();
+    expect(await screen.findByText("Could not load calendar")).toBeVisible();
     expect(screen.queryByTestId("calendar-empty-state")).not.toBeInTheDocument();
-    expect(screen.queryByText("Could not load calendar")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("calendar-event-hearing:delayed")).not.toBeInTheDocument();
-    await act(async () => resolveEvents(response));
-    expect(await screen.findByTestId("calendar-event-hearing:delayed"))
-      .toHaveAttribute("href", "/app/matters/delayed-matter/hearings");
-    expect(screen.queryByTestId("calendar-empty-state")).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId(/^calendar-event-/)).toHaveLength(0);
     expect(fetchCalendarEventsMock).toHaveBeenCalledTimes(1);
   });
 

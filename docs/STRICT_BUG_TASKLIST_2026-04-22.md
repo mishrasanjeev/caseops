@@ -1,5 +1,22 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 18 Exact-Serving Tracker And Calendar Failure
+
+**Partially fixed / NO-GO.** PR542 serves `ee351e0c`, but production39042539115
+completed383 passed/3 failed/18 explicit skips. The dated partition was47/50
+passed, with two first-page tracker failures and one mobile month-chip failure.
+Tracker data is present; observed retained-volume requests exceeded the visible
+budget. Native1345-record RED measured1.39MB count SQL/29.11seconds execution;
+scoped GREEN stages authorized current source facts once, retaining exact counts
+and50+1identities at0.63-1.67second HTTP reads. Frontend superseded reads now
+receive their cancellation signal. The family API's missing five shared filters
+also have seven passing route/validation/OpenAPI cases. Fullfrontend1529passes,
+typechecks and build are source-only proof. A later unchanged Calendar2/2 pass does not explain
+the original failure. Require complete replacement Docker/CI/live acceptance,
+then guarded maintenance/cadence; keep private scheduling paused meanwhile.
+Do not upgrade source, consent, verified-date writer or historical Matter gaps.
+See `docs/BUGFIX_IP_TRACKER_PRODUCTION_SCALE_2026-10-17.md` for retained proof.
+
 ## October 17 IP Calendar Remaining Rows
 
 **Partially fixed / new acceptance pending.** Current main/API/web6af has

@@ -286,7 +286,8 @@ describe("IpPortfolioPage", () => {
     await waitFor(() => expect(fetchTrackerMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ query: filters.query, category: "upcoming", limit: 50, cursor: null,
         application_date_from: filters.application_date_from, application_date_to: filters.application_date_to,
-        renewal_due_from: filters.renewal_due_from, renewal_due_to: filters.renewal_due_to })));
+        renewal_due_from: filters.renewal_due_from, renewal_due_to: filters.renewal_due_to }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })));
     expect(screen.getByRole("region", { name: "Deadline tracker" })).toBeVisible();
     expect(screen.getByRole("textbox", { name: "Search renewal tracker" })).toHaveValue(filters.query);
     fireEvent.click(screen.getByRole("button", { name: "Export" }));

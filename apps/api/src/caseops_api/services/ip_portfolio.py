@@ -11,14 +11,18 @@ as a redacted teaser.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
-from base64 import urlsafe_b64decode, urlsafe_b64encode
+from base64 import b64decode, urlsafe_b64decode, urlsafe_b64encode
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import Select, String, and_, case, false, func, literal, or_, select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     Client,
     CompanyMembership,
@@ -97,30 +101,70 @@ def _decode_cursor(cursor: str) -> tuple[datetime, str]:
     return parsed, application_id
 
 
-def _encode_family_cursor(member_count: int, label: str, family_key: str) -> str:
+def _family_cursor_scope(*, context, grouping, filters, limit, category_context):
     raw = json.dumps(
-        [member_count, label.casefold(), family_key],
-        ensure_ascii=True,
+        {
+            "version": 1,
+            "purpose": "ip-portfolio-family",
+            "company": context.company.id,
+            "member": context.membership.id,
+            "grouping": grouping,
+            "filters": filters.model_dump(mode="json"),
+            "limit": limit,
+            "category_context": category_context,
+        },
+        sort_keys=True,
         separators=(",", ":"),
     ).encode()
-    return urlsafe_b64encode(raw).decode()
+    return hashlib.sha256(raw).hexdigest()
 
 
-def _decode_family_cursor(cursor: str) -> tuple[int, str, str]:
+def _encode_family_cursor(member_count: int, label: str, family_key: str, *, scope) -> str:
+    raw = json.dumps(
+        [1, "ip-portfolio-family", scope, member_count, label, family_key],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode()
+    signature = hmac.new(get_settings().auth_secret.encode(), raw, hashlib.sha256).hexdigest()
+    return urlsafe_b64encode(raw).decode() + "." + signature
+
+
+def _decode_family_cursor(cursor: str, *, scope) -> tuple[int, str, str]:
     try:
-        member_count, label, family_key = json.loads(
-            urlsafe_b64decode(cursor.encode()).decode()
-        )
+        if not isinstance(cursor, str) or len(cursor) > 8192:
+            raise ValueError
+        encoded, signature = cursor.split(".")
+        if len(signature) != 64 or any(char not in "0123456789abcdef" for char in signature):
+            raise ValueError
+        raw = b64decode(encoded.encode("ascii"), altchars=b"-_", validate=True)
+        expected = hmac.new(get_settings().auth_secret.encode(), raw, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            raise ValueError
+        payload = json.loads(raw)
+        if not isinstance(payload, list) or len(payload) != 6:
+            raise ValueError
+        version, purpose, prior_scope, member_count, label, family_key = payload
         if (
-            not isinstance(member_count, int)
-            or member_count < 1
+            type(version) is not int
+            or version != 1
+            or purpose != "ip-portfolio-family"
+            or not isinstance(prior_scope, str)
+            or len(prior_scope) != 64
+            or any(char not in "0123456789abcdef" for char in prior_scope)
+            or type(member_count) is not int
+            or not 1 <= member_count <= 2**63 - 1
             or not isinstance(label, str)
+            or len(label) > 1024
             or not isinstance(family_key, str)
-            or not family_key
+            or not 1 <= len(family_key) <= 1024
         ):
             raise ValueError
-    except Exception as exc:  # noqa: BLE001 - opaque cursor is a client contract
+    except (ValueError, TypeError, UnicodeError, RecursionError) as exc:
         raise HTTPException(status_code=400, detail="Invalid family cursor.") from exc
+    if not hmac.compare_digest(prior_scope, scope):
+        raise HTTPException(
+            status_code=400, detail="Family continuation no longer matches this scope."
+        )
     return member_count, label, family_key
 
 
@@ -409,48 +453,6 @@ def _scoped_query(
         statement = statement.where(
             or_(*[_registry_state_predicate(state) for state in filters.registry_sync_state])
         )
-    if any(
-        (
-            filters.application_date_from,
-            filters.application_date_to,
-            filters.renewal_due_from,
-            filters.renewal_due_to,
-            filters.renewal_tracker_state,
-        )
-    ):
-        from caseops_api.db.models import IpPortfolioRenewalSeries
-        from caseops_api.services.ip_portfolio_dates import date_expression
-        from caseops_api.services.ip_renewal_tracker_read import category_predicates
-
-        statement = statement.join(
-            IpTrademarkParticularVersion,
-            and_(
-                IpTrademarkParticularVersion.company_id == IpDocketRecord.company_id,
-                IpTrademarkParticularVersion.docket_id == IpDocketRecord.id,
-                IpTrademarkParticularVersion.version == IpDocketRecord.current_version,
-            ),
-        )
-        for field, lower, upper in (
-            ("application_date", filters.application_date_from, filters.application_date_to),
-            ("renewal_due_date", filters.renewal_due_from, filters.renewal_due_to),
-        ):
-            expression = date_expression(field)
-            if lower:
-                statement = statement.where(expression >= lower.isoformat())
-            if upper:
-                statement = statement.where(expression <= upper.isoformat())
-        if filters.renewal_tracker_state:
-            statement = statement.outerjoin(
-                IpPortfolioRenewalSeries,
-                and_(
-                    IpPortfolioRenewalSeries.company_id == IpDocketRecord.company_id,
-                    IpPortfolioRenewalSeries.docket_id == IpDocketRecord.id,
-                ),
-            )
-            predicates = category_predicates(session=session, context=context)
-            statement = statement.where(
-                or_(*(predicates[key] for key in filters.renewal_tracker_state))
-            )
     if filters.query:
         like = f"%{filters.query.strip().lower()}%"
         party_match = (
@@ -520,6 +522,55 @@ def _scoped_query(
                 team_match,
             )
         )
+    if any(
+        (
+            filters.application_date_from,
+            filters.application_date_to,
+            filters.renewal_due_from,
+            filters.renewal_due_to,
+            filters.renewal_tracker_state,
+        )
+    ):
+        from caseops_api.db.models import IpPortfolioRenewalSeries
+        from caseops_api.services.ip_portfolio_dates import current_date_facts
+        from caseops_api.services.ip_renewal_tracker_read import (
+            category_predicates,
+            tracker_source_facts,
+        )
+
+        # Stage distinct dockets only after the complete portfolio/ACL scope;
+        # retain the outer application predicates for per-application semantics.
+        if filters.renewal_tracker_state:
+            facts = tracker_source_facts(statement, company_id=context.company.id)
+        else:
+            dates = current_date_facts(statement, company_id=context.company.id)
+            facts = select(dates).subquery()
+        statement = statement.join(facts, facts.c.docket_id == IpDocketRecord.id)
+        for expression, lower, upper in (
+            (facts.c.application_on, filters.application_date_from, filters.application_date_to),
+            (facts.c.renewal_due_on, filters.renewal_due_from, filters.renewal_due_to),
+        ):
+            if lower:
+                statement = statement.where(expression >= lower.isoformat())
+            if upper:
+                statement = statement.where(expression <= upper.isoformat())
+        if filters.renewal_tracker_state:
+            statement = statement.outerjoin(
+                IpPortfolioRenewalSeries,
+                and_(
+                    IpPortfolioRenewalSeries.company_id == IpDocketRecord.company_id,
+                    IpPortfolioRenewalSeries.docket_id == IpDocketRecord.id,
+                ),
+            )
+            predicates = category_predicates(
+                session=session,
+                context=context,
+                due=facts.c.renewal_due_on,
+                stop_reason=facts.c.stop_reason,
+            )
+            statement = statement.where(
+                or_(*(predicates[key] for key in filters.renewal_tracker_state))
+            )
     return statement
 
 
@@ -974,7 +1025,9 @@ def list_ip_portfolio(
     from caseops_api.services.ip_renewals import portfolio_source_renewal_details
 
     source_renewals = portfolio_source_renewal_details(
-        session, context=context, docket_ids=docket_ids,
+        session,
+        context=context,
+        docket_ids=docket_ids,
     )
     from caseops_api.services.ip_portfolio_dates import page_date_details
 
@@ -1080,6 +1133,26 @@ def list_ip_portfolio_families(
             detail=f"Family limit must be between 1 and {MAX_FAMILY_LIMIT}.",
         )
 
+    category_context = None
+    if filters.renewal_tracker_state:
+        from caseops_api.services import ip_renewal_tracker
+
+        settings = ip_renewal_tracker.policy(session, company=context.company)
+        category_context = {
+            "policy": settings,
+            "local_day": ip_renewal_tracker._now()
+            .astimezone(ZoneInfo(settings["timezone"]))
+            .date()
+            .isoformat(),
+        }
+    scope = _family_cursor_scope(
+        context=context,
+        grouping=grouping,
+        filters=filters,
+        limit=limit,
+        category_context=category_context,
+    )
+    continuation = _decode_family_cursor(cursor, scope=scope) if cursor else None
     statement = _scoped_query(session, context=context, filters=filters)
     if grouping == "mark":
         family_key_expression = TrademarkApplication.asset_id
@@ -1095,13 +1168,14 @@ def list_ip_portfolio_families(
         statement.with_only_columns(
             family_key_expression.label("family_key"),
             family_label_expression.label("family_label"),
+            label_sort_expression.label("family_sort_label"),
             member_count_expression.label("member_count"),
         )
         .where(family_key_expression.is_not(None))
         .group_by(family_key_expression, family_label_expression)
     )
-    if cursor:
-        cursor_count, cursor_label, cursor_key = _decode_family_cursor(cursor)
+    if continuation:
+        cursor_count, cursor_label, cursor_key = continuation
         family_statement = family_statement.having(
             or_(
                 member_count_expression < cursor_count,
@@ -1157,9 +1231,7 @@ def list_ip_portfolio_families(
     primary_identifiers = _primary_application_identifiers(
         session,
         company_id=context.company.id,
-        application_ids=[
-            application.id for application, _asset, _docket, _family_key in visible
-        ],
+        application_ids=[application.id for application, _asset, _docket, _family_key in visible],
     )
 
     grouped: dict[str, dict] = {}
@@ -1194,9 +1266,7 @@ def list_ip_portfolio_families(
             distinct_jurisdictions=sorted(
                 {m.jurisdiction for m in bucket["members"] if m.jurisdiction}
             ),
-            distinct_filing_phases=sorted(
-                {m.filing_phase for m in bucket["members"]}
-            ),
+            distinct_filing_phases=sorted({m.filing_phase for m in bucket["members"]}),
             members=sorted(
                 bucket["members"], key=lambda m: (m.jurisdiction or "", m.application_id)
             ),
@@ -1204,18 +1274,27 @@ def list_ip_portfolio_families(
         for key, bucket in grouped.items()
     }
     families = [
-        family_by_key[row.family_key]
-        for row in family_rows
-        if row.family_key in family_by_key
+        family_by_key[row.family_key] for row in family_rows if row.family_key in family_by_key
     ]
     next_cursor = None
     if has_more and family_rows:
         last = family_rows[-1]
         next_cursor = _encode_family_cursor(
             int(last.member_count),
-            last.family_label or "",
+            last.family_sort_label,
             last.family_key,
+            scope=scope,
         )
+    if category_context is not None:
+        # Do not seal a page whose time-dependent predicate crossed a local day.
+        local_day = (
+            ip_renewal_tracker._now()
+            .astimezone(ZoneInfo(category_context["policy"]["timezone"]))
+            .date()
+            .isoformat()
+        )
+        if local_day != category_context["local_day"]:
+            raise HTTPException(status_code=400, detail="Family filter day changed; reload.")
     return IpPortfolioFamilyResponse(
         grouping=grouping,
         families=families,

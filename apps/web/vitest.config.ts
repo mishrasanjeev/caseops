@@ -16,6 +16,8 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     css: false,
     include: ["components/**/*.test.{ts,tsx}", "app/**/*.test.{ts,tsx}", "lib/**/*.test.{ts,tsx}"],
+    // Bound coverage fan-out without extending child collection or UI deadlines.
+    maxWorkers: 2,
     // AQ-002 (2026-04-25): default per-test timeout was 5000ms.
     // Form / dialog tests that type ~30+ characters with userEvent
     // sit under 2 s on a bare run but cross 5 s under v8 coverage

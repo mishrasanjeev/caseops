@@ -1,5 +1,23 @@
 # Strict Enterprise Gap Tasklist
 
+## October 18 Retained-Volume Acceptance Gap
+
+**Partially implemented / NO-GO.** Serving `ee351e0c` passed local Docker and
+actual-main gates but failed production39042539115 (383P/3F/18 explicit skips).
+The tracker API returns correct50+1 fixture identities yet incurs excessive
+latency at1345 retained current records. Compiled SQL expands shared date and
+provenance predicates. The isolated1345-record native RED now measures the actual
+29.11second plan,28.18seconds JIT and1.39MB SQL; staged source-fact GREEN retains
+exact identities/counts with29KB SQL and12.027ms count execution. This is not a
+production EXPLAIN or whole-release proof. The family route additionally dropped
+five shared filters; its seven route/validation/OpenAPI cases now pass.
+Acceptance must cover realistic current-record width and immutable provenance,
+measure actual PostgreSQL plans/work/runtime, and preserve exact category totals,
+access rechecks and signed continuation semantics. Calendar's separate failure
+remains unexplained despite a scoped2/2 replay. Final release evidence was skipped;
+private cadence stays paused until fresh full certification and guarded resume.
+See `docs/BUGFIX_IP_TRACKER_PRODUCTION_SCALE_2026-10-17.md`.
+
 ## October 17 IP Calendar Acceptance Boundaries
 
 **Partially implemented.** The serving6af baseline passed production38989524122
