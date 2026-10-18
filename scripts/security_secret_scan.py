@@ -18,6 +18,10 @@ GITLEAKS_IMAGE = (
     "e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055"
 )
 SHA = re.compile(r"[0-9a-f]{40}\Z")
+MAX_FINDINGS = 500
+MAX_BLOB_BYTES = 8 * 1024 * 1024
+MAX_CACHE_BYTES = 64 * 1024 * 1024
+MAX_REPORT_BYTES = 64 * 1024 * 1024
 
 
 class ScanError(RuntimeError):
@@ -49,7 +53,9 @@ def commit_id(value: object) -> str:
     return value
 
 
-def history_selection(repo: Path, head: str, event_name: str, event: dict) -> tuple[str, list[str]]:
+def history_selection(
+    repo: Path, head: str, event_name: str, event: dict
+) -> tuple[str, list[str]]:
     head = commit_id(head)
     if git(repo, "rev-parse", "HEAD").decode().strip() != head:
         raise ScanError("Checkout HEAD differs from the triggering candidate")
@@ -74,8 +80,16 @@ def history_selection(repo: Path, head: str, event_name: str, event: dict) -> tu
         selection = "--all"
     else:
         raise ScanError("Unsupported secret-scan event")
-    ids = git(repo, "rev-list", "--reverse", "--topo-order", selection).decode().splitlines()
-    if not ids or len(ids) != len(set(ids)) or any(not SHA.fullmatch(item) for item in ids):
+    ids = (
+        git(repo, "rev-list", "--reverse", "--topo-order", selection)
+        .decode()
+        .splitlines()
+    )
+    if (
+        not ids
+        or len(ids) != len(set(ids))
+        or any(not SHA.fullmatch(item) for item in ids)
+    ):
         raise ScanError("History inventory is empty or malformed")
     return selection, ids
 
@@ -147,7 +161,9 @@ def scanner_receipt(output: bytes, *, history: bool) -> dict:
         raise ScanError("Scanner reported an error or partial scan")
     # 8.24.3 prints the exact integer BEFORE 'bytes'; the parentheses are
     # human-readable units (including '0'), not an integer-byte receipt.
-    bytes_found = re.findall(r"scanned ~(\d+) bytes \((?:0|[\d.]+ (?:bytes|KB|MB|GB))\)", text)
+    bytes_found = re.findall(
+        r"scanned ~(\d+) bytes \((?:0|[\d.]+ (?:bytes|KB|MB|GB))\)", text
+    )
     commits = re.findall(r"(?:^|\s)(\d+) commits scanned\.", text)
     if len(bytes_found) != 1 or int(bytes_found[0]) <= 0:
         raise ScanError("Scanner did not attest nonzero scanned bytes")
@@ -159,35 +175,92 @@ def scanner_receipt(output: bytes, *, history: bool) -> dict:
     }
 
 
-def tree_policy_provenance(
-    repo: Path, tree: Path, findings: list[dict], output: Path, head: str
+def policy_provenance(
+    repo: Path,
+    tree: Path,
+    findings: list[dict],
+    output: Path,
+    head: str,
+    *,
+    kind: str,
+    selected_commits: set[str] | None = None,
 ) -> str:
     """Apply existing commit fingerprints only to unchanged, fully attributed spans."""
     policy = (tree / ".gitleaksignore").read_bytes()
     reviewed = set(policy.decode("utf-8").splitlines())
-    if not findings or len(findings) > 500:
-        raise ScanError("Tree finding inventory is empty or exceeds bounded policy review")
+    if not isinstance(findings, list) or not findings or len(findings) > MAX_FINDINGS:
+        raise ScanError("Finding inventory is empty or exceeds bounded policy review")
     proofs = []
     translated = set()
-    original_blobs = {}
+    blobs = {}
+    cache_bytes = 0
+
+    def blob(commit: str, path: str) -> list[bytes]:
+        nonlocal cache_bytes
+        key = (commit, path)
+        if key not in blobs:
+            spec = commit + ":" + path
+            if git(repo, "cat-file", "-t", spec).strip() != b"blob":
+                raise ScanError("Finding provenance does not identify a blob")
+            size = int(git(repo, "cat-file", "-s", spec))
+            if not 0 < size <= MAX_BLOB_BYTES or cache_bytes + size > MAX_CACHE_BYTES:
+                raise ScanError("Finding provenance exceeds bounded blob review")
+            data = git(repo, "show", spec)
+            if len(data) != size:
+                raise ScanError("Finding provenance blob size changed")
+            cache_bytes += size
+            blobs[key] = data.splitlines(keepends=True)
+        return blobs[key]
+
     for finding in findings:
-        location = finding["locations"][0]["physicalLocation"]
-        path = location["artifactLocation"]["uri"]
-        region = location["region"]
-        start, end = region["startLine"], region["endLine"]
+        try:
+            if len(finding["locations"]) != 1:
+                raise ScanError("Finding must identify exactly one source span")
+            location = finding["locations"][0]["physicalLocation"]
+            path = location["artifactLocation"]["uri"]
+            region = location["region"]
+            start, end = region["startLine"], region["endLine"]
+            rule = finding["ruleId"]
+            source = head
+            if kind == "history":
+                source = commit_id(finding["partialFingerprints"]["commitSha"])
+                if selected_commits is None or source not in selected_commits:
+                    raise ScanError("Finding commit is outside the selected history")
+        except (KeyError, TypeError, IndexError) as exc:
+            raise ScanError("Finding has malformed source provenance") from exc
+        if not isinstance(path, str) or not isinstance(rule, str):
+            raise ScanError("Finding has invalid path/rule provenance")
         relative = PurePosixPath(path)
         if (
-            relative.is_absolute()
-            or ".." in relative.parts
+            not path
+            or len(path) > 1024
+            or str(relative) != path
+            or relative.is_absolute()
+            or any(part in {"..", ".git"} for part in relative.parts)
             or "\\" in path
-            or not isinstance(start, int)
-            or not isinstance(end, int)
+            or ":" in path
+            or any(ord(char) < 32 for char in path)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", rule)
+            or type(start) is not int
+            or type(end) is not int
             or start <= 0
             or end < start
             or end - start > 100
         ):
-            raise ScanError("Tree finding has invalid path/span provenance")
-        data = (tree / path).read_bytes().splitlines(keepends=True)
+            raise ScanError("Finding has invalid path/span provenance")
+        data = blob(source, path)
+        if kind == "tree":
+            captured = tree / path
+            if (
+                not captured.is_file()
+                or captured.stat().st_size > MAX_BLOB_BYTES
+                or captured.read_bytes() != b"".join(data)
+            ):
+                raise ScanError(
+                    "Captured tree differs from immutable finding provenance"
+                )
+        if end > len(data):
+            raise ScanError("Finding span exceeds its immutable blob")
         blame = git(
             repo,
             "-c",
@@ -196,7 +269,7 @@ def tree_policy_provenance(
             "--line-porcelain",
             "-L",
             f"{start},{end}",
-            head,
+            source,
             "--",
             path,
         ).splitlines()
@@ -222,7 +295,7 @@ def tree_policy_provenance(
             first = attributed[0]
             origin = first["commit"]
             origin_start = first["original_line"]
-            fingerprint = f"{origin}:{path}:{finding['ruleId']}:{origin_start}"
+            fingerprint = f"{origin}:{path}:{rule}:{origin_start}"
             consecutive = all(
                 row
                 == {
@@ -234,43 +307,99 @@ def tree_policy_provenance(
                 for index, row in enumerate(attributed)
             )
             if consecutive and fingerprint in reviewed:
-                key = (origin, path)
-                if key not in original_blobs:
-                    original_blobs[key] = git(repo, "show", origin + ":" + path).splitlines(
-                        keepends=True
-                    )
-                original = original_blobs[key][origin_start - 1 : origin_start + end - start]
+                original = blob(origin, path)[
+                    origin_start - 1 : origin_start + end - start
+                ]
                 captured = data[start - 1 : end]
                 accepted = len(original) == end - start + 1 and captured == original
         proofs.append(
             {
                 "path": path,
-                "rule": finding["ruleId"],
+                "rule": rule,
                 "start_line": start,
                 "end_line": end,
                 "existing_fingerprint": fingerprint,
                 "accepted_existing_policy": accepted,
-                "span_sha256": hashlib.sha256(b"".join(data[start - 1 : end])).hexdigest(),
+                "span_sha256": hashlib.sha256(
+                    b"".join(data[start - 1 : end])
+                ).hexdigest(),
             }
         )
+        if kind == "history":
+            proofs[-1]["reported_commit"] = source
         if accepted:
-            translated.add(f"{path}:{finding['ruleId']}:{start}")
-    (output / "tree-policy-provenance.json").write_text(
+            prefix = source + ":" if kind == "history" else ""
+            translated.add(f"{prefix}{path}:{rule}:{start}")
+    (output / (kind + "-policy-provenance.json")).write_text(
         json.dumps(
             {
                 "candidate_policy_sha256": hashlib.sha256(policy).hexdigest(),
                 "findings": proofs,
-                "accepted_existing_policy": sum(row["accepted_existing_policy"] for row in proofs),
+                "accepted_existing_policy": sum(
+                    row["accepted_existing_policy"] for row in proofs
+                ),
             },
             indent=2,
         )
         + "\n"
     )
     if not all(row["accepted_existing_policy"] for row in proofs):
-        raise ScanError("Tree has unreviewed findings; no new suppression is permitted")
-    target = tree.parent / "tree-policy.ignore"
+        raise ScanError(
+            f"{kind.title()} has unreviewed findings; no new suppression is permitted"
+        )
+    target = tree.parent / (kind + "-policy.ignore")
     target.write_bytes(policy + b"\n" + "\n".join(sorted(translated)).encode() + b"\n")
-    return "/scan/tree-policy.ignore"
+    return "/scan/" + target.name
+
+
+def tree_policy_provenance(
+    repo: Path, tree: Path, findings: list[dict], output: Path, head: str
+) -> str:
+    return policy_provenance(repo, tree, findings, output, head, kind="tree")
+
+
+def history_policy_provenance(
+    repo: Path,
+    tree: Path,
+    findings: list[dict],
+    output: Path,
+    head: str,
+    selection: str,
+) -> str:
+    commits = git(repo, "rev-list", selection).decode().splitlines()
+    if (
+        not commits
+        or len(commits) > 100_000
+        or any(not SHA.fullmatch(item) for item in commits)
+    ):
+        raise ScanError(
+            "History provenance inventory is empty or exceeds bounded review"
+        )
+    return policy_provenance(
+        repo,
+        tree,
+        findings,
+        output,
+        head,
+        kind="history",
+        selected_commits=set(commits),
+    )
+
+
+def report_findings(report: Path) -> list[dict]:
+    if not report.is_file() or not 0 < report.stat().st_size <= MAX_REPORT_BYTES:
+        raise ScanError("Scanner SARIF is missing or exceeds bounded review")
+    try:
+        sarif = json.loads(report.read_bytes())
+        runs = sarif["runs"]
+        if sarif["version"] != "2.1.0" or not isinstance(runs, list) or len(runs) != 1:
+            raise ScanError("Scanner SARIF has an unexpected run inventory")
+        findings = runs[0]["results"]
+        if not isinstance(findings, list) or len(findings) > MAX_FINDINGS:
+            raise ScanError("Scanner SARIF has an invalid finding inventory")
+        return findings
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ScanError("Scanner SARIF is missing or malformed") from exc
 
 
 def scan_boundary(
@@ -283,7 +412,7 @@ def scan_boundary(
     docker: str,
     timeout: int,
     head: str,
-    _tree_ignore: str | None = None,
+    _policy_ignore: str | None = None,
 ) -> dict:
     name = "caseops-secret-" + uuid.uuid4().hex
     report = workspace / (kind + ".sarif")
@@ -307,7 +436,7 @@ def scan_boundary(
         "dir" if kind == "tree" else "git",
         ".",
         "--config=/scan/tree/.gitleaks.toml",
-        "--gitleaks-ignore-path=" + (_tree_ignore or "/scan/tree/.gitleaksignore"),
+        "--gitleaks-ignore-path=" + (_policy_ignore or "/scan/tree/.gitleaksignore"),
         "--redact=100",
         "--no-banner",
         "--no-color",
@@ -374,20 +503,33 @@ def scan_boundary(
         r"\d+ commits scanned\.|scanned ~\d+ bytes \([^\r\n)]*\)",
         text,
     )
-    if report.exists():
+    if report.is_file() and report.stat().st_size <= MAX_REPORT_BYTES:
         data = report.read_bytes()
         (output / report.name).write_bytes(data)
         receipt["report_sha256"] = hashlib.sha256(data).hexdigest()
     (output / (kind + "-receipt.json")).write_text(json.dumps(receipt, indent=2) + "\n")
-    if kind == "tree" and result.returncode == 2 and _tree_ignore is None:
-        # The directory scanner cannot interpret commit-bound fingerprints.
-        # Keep its original native report, prove existing policy provenance,
-        # then rescan the SAME immutable tree with only those exact translations.
-        (output / "tree-initial.sarif").write_bytes(report.read_bytes())
-        (output / "tree-initial-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
-        scanner_receipt(result.stdout + result.stderr, history=False)
-        findings = json.loads(report.read_bytes())["runs"][0]["results"]
-        resolved = tree_policy_provenance(repo, workspace / "tree", findings, output, head)
+    if result.returncode == 2 and _policy_ignore is None:
+        # Preserve the native RED, prove existing immutable origin spans, then
+        # rescan the SAME boundary with only exact fingerprint translations.
+        findings = report_findings(report)
+        receipt.update(
+            scanner_receipt(result.stdout + result.stderr, history=kind == "history")
+        )
+        (output / (kind + "-initial.sarif")).write_bytes(report.read_bytes())
+        (output / (kind + "-initial-receipt.json")).write_text(
+            json.dumps(receipt, indent=2) + "\n"
+        )
+        (output / (kind + "-initial-cleanup.json")).write_bytes(
+            (output / (kind + "-cleanup.json")).read_bytes()
+        )
+        if kind == "tree":
+            resolved = tree_policy_provenance(
+                repo, workspace / "tree", findings, output, head
+            )
+        else:
+            resolved = history_policy_provenance(
+                repo, workspace / "tree", findings, output, head, selection
+            )
         final = scan_boundary(
             repo,
             workspace,
@@ -397,22 +539,22 @@ def scan_boundary(
             docker=docker,
             timeout=timeout,
             head=head,
-            _tree_ignore=resolved,
+            _policy_ignore=resolved,
         )
         final["existing_policy_translations"] = len(findings)
+        (output / (kind + "-receipt.json")).write_text(
+            json.dumps(final, indent=2) + "\n"
+        )
         return final
     if result.returncode != 0:
         raise ScanError(
             f"{kind} scanner failed (exit {result.returncode}); redacted report retained"
         )
-    try:
-        sarif = json.loads(report.read_bytes())
-        runs = sarif["runs"]
-        if sarif["version"] != "2.1.0" or not runs or any(run["results"] for run in runs):
-            raise ScanError("Scanner SARIF is not a clean completed report")
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        raise ScanError("Scanner SARIF is missing or malformed") from exc
-    receipt.update(scanner_receipt(result.stdout + result.stderr, history=kind == "history"))
+    if report_findings(report):
+        raise ScanError("Scanner SARIF is not a clean completed report")
+    receipt.update(
+        scanner_receipt(result.stdout + result.stderr, history=kind == "history")
+    )
     (output / (kind + "-receipt.json")).write_text(json.dumps(receipt, indent=2) + "\n")
     return receipt
 
@@ -455,7 +597,9 @@ def run_scan(
                 for name in (".gitleaks.toml", ".gitleaksignore")
             }
             if any((repo / name).read_bytes() != data for name, data in policy.items()):
-                raise ScanError("Working secret-scan policy differs from candidate blobs")
+                raise ScanError(
+                    "Working secret-scan policy differs from candidate blobs"
+                )
             inventory = {
                 "head": head,
                 "tree": tree,
@@ -465,7 +609,9 @@ def run_scan(
                 "files": entries,
                 "tracked_bytes": sum(item["bytes"] for item in entries),
             }
-            (output / "inventory.json").write_text(json.dumps(inventory, indent=2) + "\n")
+            (output / "inventory.json").write_text(
+                json.dumps(inventory, indent=2) + "\n"
+            )
             record(
                 {
                     "event": "inventory",
@@ -502,7 +648,9 @@ def run_scan(
                 "tracked_bytes": inventory["tracked_bytes"],
                 "boundaries": receipts,
             }
-            (output / "completion.json").write_text(json.dumps(summary, indent=2) + "\n")
+            (output / "completion.json").write_text(
+                json.dumps(summary, indent=2) + "\n"
+            )
             record({"event": "scan_completed", "exit_code": 0, **summary})
             return summary
     except BaseException as exc:
@@ -530,8 +678,17 @@ def main() -> int:
             event=json.loads(args.event_path.read_bytes()),
             output=args.output,
         )
-    except (ScanError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-        print("Secret scan failed or incomplete; inspect the retained inventory/redacted reports.")
+    except (
+        ScanError,
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        subprocess.SubprocessError,
+    ):
+        print(
+            "Secret scan failed or incomplete; inspect the retained inventory/redacted reports."
+        )
         return 1
     print(
         f"Secret scan complete: {summary['files']} tracked files, "
