@@ -6,6 +6,40 @@ Write50 naturally completed47P/3F, zero skips/retries, not a timeout. The two
 tracker cases failed at their first50-row assertion; the Calendar case is separate.
 Private maintenance remains paused; no scheduler resume or workbook upgrade.
 
+## October 18 CodeQL Gate Repair
+
+Candidate1954cd14/PR543 is NOT accepted. Hosted API8879passes, PostgreSQL3129
+passes/9387phases and browser588passes/17reasoned skips completed, but the separate
+CodeQL result check117572089685 failed on alert584 at ip_portfolio.py:1291.
+Its analysis-upload workflow was green; that was not a complete security verdict.
+The conditional import precedes the only assignment making category_context
+non-null, so a runtime uninitialized-variable failure was not demonstrated.
+Initialization is now explicit without weakening policy or day fences;
+fresh hosted analysis, not a suppression or a fabricated runtime RED, must clear it.
+
+Two additional behavior controls passed on the unchanged service before this
+structural clarification: unfiltered pages require no renewal policy/clock, and
+an in-request local-day change rejects the page without emitting a cursor while
+the next fresh read succeeds. After the clarification, all32 selected default
+family/cursor/route cases passed, with19 native variants deselected rather than
+claimed as executed. These are behavior-preservation proofs, not a runtime RED
+or a clean CodeQL result. The next candidate still needs fresh complete gates.
+
+Alert584 was created03:12UTC and its data acquired03:13; actionable parent
+notification was delayed until04:25 while unrelated CI continued. That was an
+operator failure. Early check-run/ref-alert monitoring and immediate failed-verdict
+handoff are now required before the next costly Docker gate.
+
+Docker07 on this unreleasable candidate was explicitly operator-cancelled.
+Four complete native groups passed1565cases; groups05/06 are interrupted,
+07/08 and every browser phase unstarted. These are incomplete, not product
+failures or accepted replacement coverage. Child06 was canonically retained,
+all owned processes reaped and exact-project resources removed. C source held;
+the sealed proof is docker07-reconciliation-01/operator-cancelled-final.
+No merge, replacement deployment, scheduler resume or workbook upgrade occurred.
+
+## Earlier Source And Performance Evidence
+
 The retained read-only diagnosis proves the exact tracker API returns the right
 50+1 fixture identities and source states in6.2-9.7seconds. Initial unfiltered UI
 loading took40.3seconds over a retained portfolio of1345 records. Five rapid filter

@@ -645,6 +645,12 @@
 - A green CodeQL job is not a zero-alert security inventory. Reconcile fresh
   main alert states and original taint/dependency paths; suppressions and
   moving imports inside functions do not establish a permanent fix.
+  Check head and virtual-merge check runs plus fresh ref-specific alerts as soon
+  as analysis exists, before expensive acceptance. Persisting an early failure
+  is not notifying its owner: stop and hand off the failed required verdict
+  immediately instead of waiting for unrelated CI. A shared local import reused
+  under a derived guard must be definitely initialized; preserve optional policy
+  behavior, test both branches and require actual fresh analyzer closure.
 
 - A public authentication entry page that must disappear from search needs a
   crawler-readable noindex, not a robots.txt block that hides that directive.

@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 from base64 import urlsafe_b64decode, urlsafe_b64encode
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import IpAsset, IpDocketRecord, IpWorkspaceConfiguration
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import ip_renewal_tracker
 from tests.test_ip_portfolio_spec_20261013 import _actor, _commit, _upload
 from tests.test_ip_recipient_renewal_content_20261014 import _bootstrap_foreign
 from tests.test_ip_renewal_tracker_20261015 import _clock
@@ -72,14 +73,17 @@ def _member_headers(client, actor):
     created = client.post(
         "/api/companies/current/users",
         headers=actor["headers"],
-        json={"full_name": "Family cursor member", "email": email,
-              "password": password, "role": "admin"},
+        json={
+            "full_name": "Family cursor member",
+            "email": email,
+            "password": password,
+            "role": "admin",
+        },
     )
     assert created.status_code == 200, created.text
     login = client.post(
         "/api/auth/login",
-        json={"email": email, "password": password,
-              "company_slug": actor["company"]["slug"]},
+        json={"email": email, "password": password, "company_slug": actor["company"]["slug"]},
     )
     assert login.status_code == 200, login.text
     headers = {
@@ -115,9 +119,7 @@ def test_unicode_family_pages_use_exact_emitted_sql_sort_value(family_scope):
     assert complete.status_code == 200, complete.text
     assert seen == [group["family_key"] for group in complete.json()["families"]]
     assert sorted(
-        member["docket_id"]
-        for group in complete.json()["families"]
-        for member in group["members"]
+        member["docket_id"] for group in complete.json()["families"] for member in group["members"]
     ) == sorted(ids)
     with get_session_factory()() as session:
         sql_label = session.scalar(
@@ -128,6 +130,41 @@ def test_unicode_family_pages_use_exact_emitted_sql_sort_value(family_scope):
         )
     payload = json.loads(urlsafe_b64decode(cursor.split(".")[0]))
     assert payload[-2] == sql_label
+
+
+def test_unfiltered_family_page_does_not_read_renewal_policy_or_clock(family_scope, monkeypatch):
+    client, actor, _ids = family_scope
+
+    def unexpected(*_args, **_kwargs):
+        raise AssertionError("Unfiltered family reads must not resolve renewal policy or time.")
+
+    monkeypatch.setattr(ip_renewal_tracker, "policy", unexpected)
+    monkeypatch.setattr(ip_renewal_tracker, "_now", unexpected)
+    body = _first(client, actor)
+    assert len(body["families"]) == 1 and body["next_cursor"]
+
+
+def test_family_page_rejects_a_local_day_change_during_the_request(family_scope, monkeypatch):
+    client, actor, _ids = family_scope
+    before = datetime(2028, 1, 1, 4, tzinfo=UTC)
+    after = before + timedelta(days=1)
+    calls = []
+
+    def now():
+        calls.append(True)
+        return before if len(calls) < 3 else after
+
+    monkeypatch.setattr(ip_renewal_tracker, "_now", now)
+    params = {"renewal_tracker_state": "upcoming"}
+    response = _page(client, actor["headers"], **params)
+    assert len(calls) >= 3
+    assert response.status_code == 400, response.text
+    body = response.json()
+    assert body["detail"] == "Family filter day changed; reload."
+    assert "families" not in body and "next_cursor" not in body
+    fresh = _page(client, actor["headers"], **params)
+    assert fresh.status_code == 200, fresh.text
+    assert len(fresh.json()["families"]) == 1 and fresh.json()["next_cursor"]
 
 
 @pytest.mark.parametrize(
@@ -164,8 +201,10 @@ def test_family_cursor_rejects_another_authenticated_actor(family_scope, other_a
         with TestClient(client.app) as foreign_client:
             other = _bootstrap_foreign(foreign_client)
             assert other["company"]["id"] != actor["company"]["id"]
-            headers = {"Authorization": f"Bearer {other['access_token']}",
-                       "X-CaseOps-Automated-Test": "no-paid-providers"}
+            headers = {
+                "Authorization": f"Bearer {other['access_token']}",
+                "X-CaseOps-Automated-Test": "no-paid-providers",
+            }
             response = _page(foreign_client, headers, cursor=first["next_cursor"])
             fresh = _page(foreign_client, headers)
             assert fresh.status_code == 200 and fresh.json()["families"] == []
@@ -195,7 +234,8 @@ def test_category_family_cursor_rejects_changed_policy_or_local_day(
                 config.timezone = "UTC"
             else:
                 config.renewal_reminder_policy_json = {
-                    **config.renewal_reminder_policy_json, "cadence_days": 2
+                    **config.renewal_reminder_policy_json,
+                    "cadence_days": 2,
                 }
             config.version += 1
             session.commit()
@@ -262,5 +302,6 @@ def test_family_continuation_rechecks_current_acl(family_scope):
     assert next_page.json()["families"] == [] and next_page.json()["next_cursor"] is None
     fresh = _page(client, headers, limit=100)
     assert fresh.status_code == 200, fresh.text
-    assert [member["docket_id"] for group in fresh.json()["families"]
-            for member in group["members"]] == [retained_id]
+    assert [
+        member["docket_id"] for group in fresh.json()["families"] for member in group["members"]
+    ] == [retained_id]

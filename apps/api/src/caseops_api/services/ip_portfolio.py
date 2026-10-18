@@ -1133,10 +1133,10 @@ def list_ip_portfolio_families(
             detail=f"Family limit must be between 1 and {MAX_FAMILY_LIMIT}.",
         )
 
+    from caseops_api.services import ip_renewal_tracker
+
     category_context = None
     if filters.renewal_tracker_state:
-        from caseops_api.services import ip_renewal_tracker
-
         settings = ip_renewal_tracker.policy(session, company=context.company)
         category_context = {
             "policy": settings,
