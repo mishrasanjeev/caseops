@@ -2,6 +2,33 @@
 
 ## October 18 Document Snapshot Failure
 
+C3's required trusted company scope precedes ranking and latest-only
+materialization. Its original59 native cases/177 phases passed the assertions
+executed, with15 actual plans retained, but the total-work oracle omitted Bitmap
+Index Scan children and missed nested opaque TextualSelect DML. Actual typed
+helper SQL is read-only; no product mutation is inferred. Reported24,580 was an
+undercount, not proof of33,028. Corrected RED6 completed3P/3F across18 phases:
+foreign-default work40,998/40,999>33,028. Raw Job work16,387<=16,514, rank
+input8,193 and latest16 remain valid. Ordered six-key index EMPTY/RETAINED modes
+each completed3P/3F and12 plans (24 plans/36 phases total), insufficient
+receipt0a0e6608cf906b80; exact evidence is in the bug doc below. Both LIMIT
+variants failed3P/3F. The narrow company/type index passed both six-case timings,
+default16,418 and worst adverse24,612<=33,028, exact DTOs preserved. Causal
+receipt087c2764140591d9 is not migration or full native acceptance. The separate
+native result follows. C2 failures stay retained;
+full candidate/main/deployed gates remain required; scoped proof is recorded below.
+Serving P is still failed, private cadence PAUSED, manual-IP grant unreplayed
+and workbooks56/23 unchanged. Original work budgets are not waived.
+Actual101/303 completed82P/19F, including32 migration and10 legacy passes.
+Eighteen HTTP setup paths failed under long Windows temp storage; one upload
+barrier remains unclassified because its Future exception was not surfaced.
+Retain7e79a3fd failed history and require full short-root replay with four
+diagnostic controls, unchanged20-second barriers and all original identities.
+The complete replacement now passes105/315, zero skips/retries/errors, with
+all15 plans,32 migration and10 legacy cases passed. Receipt99f2c417488ae98b
+retains the actual frozen source and cleanup. Old101/UNKNOWN history remains;
+full Docker, green candidate/main CI and exact-live/cadence proof still gate release.
+
 **Partially fixed in source / NO-GO.** Serving9cf production39143613520 has
 385P/1F/18 unverified skips; all50 mandatory dated and47 public cases pass.
 The remaining Matter393 index assertion is not a durable-loss diagnosis:

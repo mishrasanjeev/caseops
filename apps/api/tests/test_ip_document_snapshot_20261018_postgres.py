@@ -20,6 +20,7 @@ from caseops_api.db.models import (
     IpDocumentVersion,
 )
 from caseops_api.services import document_jobs, ip_document_workflow
+from tests.processing_snapshot_barriers import wait_for_processing_barrier
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_ip_document_workflow import _upload
 
@@ -74,7 +75,9 @@ def _seed(client, engine, monkeypatch):
         dispatched.append(job_id)
 
     monkeypatch.setattr(ip_operations, "dispatch_document_processing_job", capture_dispatch)
-    return SimpleNamespace(headers=headers, docket_id=docket_id, dispatched=dispatched)
+    return SimpleNamespace(
+        headers=headers, docket_id=docket_id, dispatched=dispatched, company_id=company_id
+    )
 
 
 def _get(client, fixture, document_id):
@@ -254,7 +257,8 @@ def test_http_ip_version_job_snapshot_and_fresh_quality(
     boundary = {}
     original = ip_document_workflow.load_latest_processing_jobs
 
-    def paused(session, *, target_type, attachment_ids):
+    def paused(session, *, company_id, target_type, attachment_ids):
+        assert company_id == fixture.company_id
         if version_id in attachment_ids and not entered.is_set():
             cached = next(
                 row
@@ -272,13 +276,20 @@ def test_http_ip_version_job_snapshot_and_fresh_quality(
             assert boundary["isolation"] == "read committed"
             entered.set()
             assert release.wait(20), "IP GET worker commit barrier was not released"
-        return original(session, target_type=target_type, attachment_ids=attachment_ids)
+        return original(
+            session,
+            company_id=company_id,
+            target_type=target_type,
+            attachment_ids=attachment_ids,
+        )
 
     monkeypatch.setattr(ip_document_workflow, "load_latest_processing_jobs", paused)
     with ThreadPoolExecutor(max_workers=1) as pool:
         pending = pool.submit(_get, client, fixture, document_id)
         try:
-            assert entered.wait(20), "IP GET did not materialize the target version"
+            wait_for_processing_barrier(
+                entered, pending, "IP GET did not materialize the target version"
+            )
             boundary.update(_complete_worker(engine, version_id, job_id, content))
             assert boundary["reader_pid"] != boundary["worker_probe_pid"]
         finally:
@@ -386,7 +397,9 @@ def test_http_ip_upload_receipts_remain_one_frozen_version_snapshot(
     with ThreadPoolExecutor(max_workers=1) as pool:
         pending = pool.submit(request)
         try:
-            assert entered.wait(20), "IP upload did not return its version DTO"
+            wait_for_processing_barrier(
+                entered, pending, "IP upload did not return its version DTO"
+            )
             boundary.update(
                 _complete_worker(
                     engine,

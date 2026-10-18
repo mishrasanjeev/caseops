@@ -2,6 +2,33 @@
 
 ## October 18 Processing Read Consistency
 
+C3 strengthens the internal company contract, but full release acceptance remains
+blocked. Its original59 native cases/177 phases passed the assertions executed;
+all15 plans remain retained. The oracle omitted Bitmap Index Scan work and
+missed nested opaque TextualSelect DML, not an observed product mutation: actual
+helper SQL is typed/read-only. Reported24,580 total was undercounted. Corrected
+RED6 completed3P/3F across18 phases; foreign-default40,998/40,999 exceeds the
+unchanged33,028 bound. Raw Job work16,387<=16,514, rank input8,193 and latest16
+remain valid, including the8,192-job foreign cohort. Ordered six-key index
+EMPTY/RETAINED modes each yielded3P/3F and12 plans (24 plans/36 phases total),
+insufficient receipt0a0e6608cf906b80; exact evidence is in the bug doc below.
+C2 failures remain preserved. Both LIMIT variants completed3P/3F; the narrow
+company/type index passed both six-case timings with default16,418 and adverse
+maximum24,612<=33,028, exact DTOs retained. Causal receipt087c2764140591d9 is not
+migration or full native acceptance. Full release acceptance remains outstanding.
+Serving P remains
+failed, private cadence PAUSED, manual-IP grant unreplayed, workbooks56/23
+unchanged. Partially implemented / NO-GO until complete
+Docker/CI/live/cadence proof, without weakening original work limits.
+Actual101/303 is82P/19F:32 migration and10 legacy passes are scoped proof, not
+full acceptance. Eighteen HTTP setup paths hit long Windows temp storage; one
+upload barrier's original Future exception remains unclassified. Retain7e79a3fd
+and rerun the entire inventory on short owned storage plus diagnostic controls.
+The complete replacement is105P/315 phases, zero skips/retries/errors, all15
+plans and32+10 migration cases passed. Receipt99f2c417488ae98b proves frozen
+native scope and source/execution-chain/cleanup integrity only. Preserve failed101
+and UNKNOWN history; full Docker, candidate/main CI and exact-live/cadence remain gates.
+
 **Partially implemented / NO-GO.** Worker atomicity exists, but separate source
 and job SELECTs can produce an internally inconsistent workspace. Controlled
 native Matter/Contract HTTP REDs establish this gap. Repair includes all shared

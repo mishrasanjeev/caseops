@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import and_, delete, inspect, or_, select, text, update
+from sqlalchemy import and_, delete, func, inspect, or_, select, text, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
@@ -259,6 +259,7 @@ def _job_record(job: DocumentProcessingJob) -> DocumentProcessingJobRecord:
 def load_latest_processing_jobs(
     session: Session,
     *,
+    company_id: str,
     target_type: str,
     attachment_ids: list[str],
 ) -> dict[str, DocumentProcessingJobRecord]:
@@ -309,32 +310,43 @@ def load_latest_processing_jobs(
             status_code=409,
             detail="Document processing state changed. Reload this workspace.",
         )
-    latest_query = (
-        select(DocumentProcessingJob.id)
-        .where(
-            DocumentProcessingJob.company_id == company_column,
-            DocumentProcessingJob.target_type == target_type,
-            DocumentProcessingJob.attachment_id == source_model.id,
-        )
-        .order_by(
-            DocumentProcessingJob.queued_at.desc(),
-            DocumentProcessingJob.updated_at.desc(),
-            DocumentProcessingJob.id.desc(),
-        )
-        .limit(1)
-    )
-    if parent_model is None:
-        latest_query = latest_query.correlate(source_model)
-    else:
-        latest_query = latest_query.correlate(source_model, parent_model)
-    latest_id = latest_query.scalar_subquery()
     job_fields = tuple(DocumentProcessingJobRecord.model_fields)
+    ranked_jobs = (
+        select(
+            *(getattr(DocumentProcessingJob, field)
+              for field in job_fields if field != "requested_by_name"),
+            func.row_number().over(
+                partition_by=(
+                    DocumentProcessingJob.company_id,
+                    DocumentProcessingJob.target_type,
+                    DocumentProcessingJob.attachment_id,
+                ),
+                order_by=(
+                    DocumentProcessingJob.queued_at.desc(),
+                    DocumentProcessingJob.updated_at.desc(),
+                    DocumentProcessingJob.id.desc(),
+                ),
+            ).label("receipt_rank"),
+        )
+        .where(
+            DocumentProcessingJob.company_id == company_id,
+            DocumentProcessingJob.target_type == target_type,
+            DocumentProcessingJob.attachment_id.in_(attachment_ids),
+        )
+        .subquery("ranked_processing_receipts")
+    )
+    # Reduce history before materialization; never rescan it once per source.
+    latest_jobs = (
+        select(*(ranked_jobs.c[field] for field in job_fields if field != "requested_by_name"))
+        .where(ranked_jobs.c.receipt_rank == 1)
+        .cte("latest_processing_receipts")
+        .prefix_with("MATERIALIZED", dialect="postgresql")
+    )
     statement = (
         select(
             source_model.id.label("source_id"),
             *(getattr(source_model, field).label(f"source_{field}") for field in source_fields),
-            *(getattr(DocumentProcessingJob, field).label(field)
-              for field in job_fields if field != "requested_by_name"),
+            *(latest_jobs.c[field] for field in job_fields if field != "requested_by_name"),
             User.full_name.label("requested_by_name"),
         )
         .select_from(source_model)
@@ -343,16 +355,23 @@ def load_latest_processing_jobs(
         statement = statement.join(parent_model, parent_model.id == parent_key)
     statement = (
         statement
-        .outerjoin(DocumentProcessingJob, DocumentProcessingJob.id == latest_id)
+        .outerjoin(
+            latest_jobs,
+            and_(
+                latest_jobs.c.company_id == company_column,
+                latest_jobs.c.target_type == target_type,
+                latest_jobs.c.attachment_id == source_model.id,
+            ),
+        )
         .outerjoin(
             CompanyMembership,
             and_(
-                CompanyMembership.id == DocumentProcessingJob.requested_by_membership_id,
+                CompanyMembership.id == latest_jobs.c.requested_by_membership_id,
                 CompanyMembership.company_id == company_column,
             ),
         )
         .outerjoin(User, User.id == CompanyMembership.user_id)
-        .where(source_model.id.in_(attachment_ids))
+        .where(company_column == company_id, source_model.id.in_(attachment_ids))
     )
     with session.no_autoflush:
         rows = session.execute(statement).mappings().all()

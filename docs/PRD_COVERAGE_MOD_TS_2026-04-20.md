@@ -2,6 +2,32 @@
 
 ## October 18 Processing Snapshot Coverage
 
+C3's original59 unique native cases/177 phases passed the assertions executed
+across four explicit files, preserving all original50 and prior adverse3
+identities. The total-work oracle omitted Bitmap Index Scan children, and its
+read-only guard missed nested opaque TextualSelect DML; actual typed helper SQL
+is read-only. The reported24,580 total does not prove33,028. Corrected RED6 is
+3P/3F across18 phases, with foreign-default work40,998/40,999>33,028. Raw Job
+work16,387<=16,514, rank input8,193 and materialized latest16 remain valid.
+Ordered six-key index EMPTY/RETAINED modes each yielded3P/3F and12 plans
+(24 plans/36 phases total); insufficient receipt0a0e6608cf906b80 is linked in the
+bug doc below. C2 failures and all original15 plans stay retained. Both LIMIT
+variants completed3P/3F. The narrow company/type index passed six cases in each
+empty/retained timing, default16,418 and adverse maximum24,612<=33,028 with exact
+DTO equivalence. Receipt087c2764140591d9 is causal probe evidence, not migration
+or full native acceptance; the separate native result is recorded below.
+Serving P remains failed; private cadence PAUSED, manual-IP grant unreplayed,
+workbooks56/23 unchanged. Corrected scoped and full Docker/hosted/live/cadence
+proof remain pending with the original work budgets unchanged.
+Actual101/303 completed82P/19F:32 new migration and10 legacy cases passed;
+18 HTTP cases hit long Windows temp paths before admission, and one upload
+barrier's lost Future exception remains unclassified. Failed receipt7e79a3fd
+is retained; full short-root replay plus four diagnostic controls is pending.
+That full replacement now passes105 cases/315 phases across seven modules,
+zero skips/retries/errors. All15 plans and32+10 migration cases pass; original
+identities and failed101 history are preserved. Receipt99f2c417488ae98b is scoped
+native proof, not full Docker, CI/main or production/cadence certification.
+
 J04/M03/US-007..009/FT-011..015: serving9cf production39143613520 completed
 385P/1F/18 reasoned skips, all50 dated and47 public cases passed. Two controlled
 native HTTP REDs prove source/latest-job read tearing; ten controls pass.

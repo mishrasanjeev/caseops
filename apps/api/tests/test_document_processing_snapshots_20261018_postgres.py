@@ -16,6 +16,9 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import delete, event, func, inspect, select
 from sqlalchemy.orm import Session, defer, raiseload
+from sqlalchemy.sql import visitors
+from sqlalchemy.sql.elements import TextClause
+from sqlalchemy.sql.selectable import TextualSelect
 
 from caseops_api.db.models import (
     CompanyMembership,
@@ -77,6 +80,7 @@ def _source(engine, target):
 def _read(session, fixture):
     return document_jobs.load_latest_processing_jobs(
         session,
+        company_id=fixture.company,
         target_type=fixture.target_type,
         attachment_ids=[fixture.source],
     )
@@ -173,13 +177,31 @@ def _receipt(fixture, source_id, *, queued_at, job_id=None, **overrides):
     } | overrides
 
 
+def _is_read_only_select(statement):
+    return bool(
+        statement is not None
+        and getattr(statement, "is_select", False)
+        and not any(
+            getattr(node, "is_dml", False) or isinstance(node, (TextClause, TextualSelect))
+            for node in visitors.iterate(statement)
+        )
+    )
+
+
 @contextmanager
 def _observe(session):
     statements, materialized = [], []
     connection = session.connection()
 
-    def sql(_conn, _cursor, statement, parameters, _context, _many):
-        statements.append({"statement": statement, "parameters": deepcopy(parameters)})
+    def sql(_conn, _cursor, statement, parameters, context, _many):
+        compiled = context.compiled.statement if context.compiled is not None else None
+        statements.append(
+            {
+                "statement": statement,
+                "parameters": deepcopy(parameters),
+                "read_only_select": _is_read_only_select(compiled),
+            }
+        )
 
     def loaded(_session, instance):
         materialized.append(type(instance).__name__)
@@ -196,7 +218,7 @@ def _observe(session):
 def _assert_scalar_read(statements, materialized):
     assert len(statements) == 1
     statement = statements[0]["statement"].lower()
-    assert statement.lstrip().startswith("select ")
+    assert statements[0]["read_only_select"]
     assert "extracted_text" not in statement and "attachment_chunks" not in statement
     assert materialized == [], materialized
 
@@ -284,6 +306,7 @@ def test_missing_source_409_leaves_entire_cached_batch_unchanged(
             with pytest.raises(HTTPException) as rejected:
                 document_jobs.load_latest_processing_jobs(
                     reader,
+                    company_id=fixture.company,
                     target_type=fixture.target_type,
                     attachment_ids=[fixture.source, requested_missing],
                 )
@@ -371,12 +394,71 @@ def test_latest_receipt_is_bound_to_parent_company_and_source_kind(pg_engine, ta
         assert result.requested_by_membership_id == fixture.actor
 
 
+@pytest.mark.parametrize("target", TARGETS)
+def test_wrong_company_kind_and_mixed_sources_reject_entire_cached_batch(
+    pg_engine,
+    monkeypatch,
+    target,
+):
+    own = _source(pg_engine, target)
+    foreign = _source(pg_engine, target)
+    assert own.company != foreign.company and own.source != foreign.source
+    wrong_kind = "matter_attachment" if target == "contract" else "contract_attachment"
+    with Session(pg_engine, autoflush=True) as reader:
+        sources = [_cached_source(reader, fixture) for fixture in (own, foreign)]
+        cached_jobs = [reader.get(DocumentProcessingJob, fixture.job) for fixture in (own, foreign)]
+        fresh = [_complete(monkeypatch, pg_engine, fixture) for fixture in (own, foreign)]
+        assert all(row["processing_status"] == "indexed" for row in fresh)
+        fields = list(fresh[0])
+        assert all(source.processing_status == "pending" for source in sources)
+        before = [{field: getattr(source, field) for field in fields} for source in sources]
+        sources[0].original_filename = "Uncommitted tenant-boundary metadata.txt"
+        history = inspect(sources[0]).attrs.original_filename.history
+        identities = set(reader.identity_map)
+        requests = (
+            ("wrong-company", foreign.company, own.target_type, [own.source]),
+            ("mixed-own-first", own.company, own.target_type, [own.source, foreign.source]),
+            ("mixed-foreign-first", own.company, own.target_type, [foreign.source, own.source]),
+            ("wrong-kind", own.company, wrong_kind, [own.source]),
+        )
+        for label, company_id, target_type, attachment_ids in requests:
+            with _observe(reader) as (statements, materialized):
+                with pytest.raises(HTTPException) as rejected:
+                    document_jobs.load_latest_processing_jobs(
+                        reader,
+                        company_id=company_id,
+                        target_type=target_type,
+                        attachment_ids=attachment_ids,
+                    )
+            assert rejected.value.status_code == 409, label
+            assert "Reload" in rejected.value.detail, label
+            _assert_scalar_read(statements, materialized)
+            assert [
+                {field: getattr(source, field) for field in fields} for source in sources
+            ] == before, label
+            assert all(job.status == "queued" for job in cached_jobs), label
+            assert set(reader.identity_map) == identities, label
+            assert inspect(sources[0]).attrs.original_filename.history == history, label
+            assert reader.is_modified(sources[0]), label
+            assert all("extracted_text" in inspect(source).unloaded for source in sources), label
+        with Session(pg_engine) as observer:
+            assert observer.get(own.model, own.source).original_filename != (
+                "Uncommitted tenant-boundary metadata.txt"
+            )
+            for fixture in (own, foreign):
+                assert observer.get(fixture.model, fixture.source).processing_status == "indexed"
+
+
 def test_empty_and_unsupported_source_kinds_have_explicit_no_sql_contract(pg_engine):
+    with Session(pg_engine) as seed:
+        company_id = _seed_company(seed)
+        seed.commit()
     with Session(pg_engine) as session, _observe(session) as (statements, materialized):
         for kind in ("matter_attachment", "contract_attachment", "ip_document_version", "unknown"):
             assert (
                 document_jobs.load_latest_processing_jobs(
                     session,
+                    company_id=company_id,
                     target_type=kind,
                     attachment_ids=[],
                 )
@@ -385,6 +467,7 @@ def test_empty_and_unsupported_source_kinds_have_explicit_no_sql_contract(pg_eng
         with pytest.raises(ValueError, match="Unsupported document processing source type"):
             document_jobs.load_latest_processing_jobs(
                 session,
+                company_id=company_id,
                 target_type="unknown",
                 attachment_ids=[str(uuid4())],
             )
@@ -433,6 +516,7 @@ def test_dirty_processing_rejects_whole_batch_without_flushing_or_clobbering(
                 with pytest.raises(HTTPException) as rejected:
                     document_jobs.load_latest_processing_jobs(
                         reader,
+                        company_id=fixture.company,
                         target_type=fixture.target_type,
                         attachment_ids=[fixture.source, other_id],
                     )
@@ -448,6 +532,7 @@ def test_dirty_processing_rejects_whole_batch_without_flushing_or_clobbering(
         with _observe(reader) as (statements, materialized):
             jobs = document_jobs.load_latest_processing_jobs(
                 reader,
+                company_id=fixture.company,
                 target_type=fixture.target_type,
                 attachment_ids=[fixture.source, other_id],
             )
@@ -459,12 +544,12 @@ def test_dirty_processing_rejects_whole_batch_without_flushing_or_clobbering(
         if target != "ip":
             service = matters if target == "matter" else contracts
             with _observe(reader) as (statements, materialized):
-                records = service._attachment_record_map(reader, [source, other])
+                records = service._attachment_record_map(
+                    reader, [source, other], company_id=fixture.company
+                )
             assert records[0].original_filename == "Uncommitted metadata must remain local.txt"
             assert records[0].latest_job.id == fixture.job and records[1].latest_job is None
-            assert all(
-                row["statement"].lstrip().lower().startswith("select ") for row in statements
-            )
+            assert statements and all(row["read_only_select"] for row in statements)
             assert "DocumentProcessingJob" not in materialized
             assert inspect(other).attrs.uploaded_by_membership.history == relationship_history
         assert inspect(source).attrs.original_filename.history == metadata_history
@@ -577,6 +662,7 @@ def test_retained_history_batch_has_bounded_scalar_plan_and_materialization(
             started = perf_counter()
             jobs = document_jobs.load_latest_processing_jobs(
                 reader,
+                company_id=fixture.company,
                 target_type=fixture.target_type,
                 attachment_ids=ids,
             )

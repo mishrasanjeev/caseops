@@ -1,5 +1,36 @@
 # CaseOps agent instructions
 
+- One SQL statement is not a bounded-work proof. A correlated latest-row
+  lookup can repeat a broad index scan per source under another valid plan.
+  Pass the trusted tenant explicitly, filter it before ranking, reduce latest
+  rows before materialization and charge removed rows, loops and history-sized
+  CTE/intermediate work. Regress ordinary/adverse plans plus foreign same-ID
+  histories without raising the original bounds or changing production planner
+  settings. A local focused pass cannot waive a full-suite plan failure.
+
+- History-work observers must attribute Bitmap Index Scan children to their
+  owning Job relation even without a Relation Name, and charge loop-weighted
+  intermediate/CTE work. Reject opaque TextualSelect/TextClause wrappers in a
+  read-only AST guard, including nested DML, while positively testing the real
+  typed materialized SELECT. Preserve the earlier undercounted green as scoped
+  evidence, not proof of the corrected work bound.
+- An index declaration is not proof of a bounded query plan. Capture complete
+  default and adverse plans with the index created both before and after fixture
+  seeding. A wider ordered index may lose to broad bitmap scans; accept only the
+  measured tenant-scoped path without statistics, planner or deadline waivers.
+
+- Windows acceptance must use a fresh short owned temporary root, separate from
+  the longer retained-report path. Verify realistic nested document paths before
+  launch and retain/copy sidecars durably. A long --basetemp that fails mkdir
+  before attachment admission is failed setup, not a reproduced product defect;
+  preserve its complete report and rerun the entire intended inventory.
+- A missing concurrency barrier must surface a completed request Future's
+  exception before reporting the barrier timeout. ThreadPoolExecutor teardown
+  waits but does not propagate stored exceptions. Keep the original timeout,
+  finally-release and normal result checks, with deterministic early-failure,
+  completed-without-barrier, pending and reached-barrier regressions. Never infer
+  an unobserved exception from sibling failures.
+
 - A parameterized fixture still needs an explicit supported-input domain.
   Reject unsupported targets before admission and assign response-derived IDs
   inside the branch that creates that response. A green exercised subset does

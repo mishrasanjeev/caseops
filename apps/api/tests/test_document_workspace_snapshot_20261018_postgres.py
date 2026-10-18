@@ -24,6 +24,7 @@ from caseops_api.db.models import (
     MatterAttachment,
 )
 from caseops_api.services import contracts, document_jobs, matters
+from tests.processing_snapshot_barriers import wait_for_processing_barrier
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 pytestmark = pytest.mark.postgres
@@ -145,7 +146,8 @@ def test_http_workspace_never_tears_worker_snapshot(
     boundary = {}
     original = fixture.service.load_latest_processing_jobs
 
-    def paused(session, *, target_type, attachment_ids):
+    def paused(session, *, company_id, target_type, attachment_ids):
+        assert company_id == str(fixture.actor["company"]["id"])
         if fixture.id in attachment_ids and not entered.is_set():
             source = next(
                 a
@@ -162,13 +164,20 @@ def test_http_workspace_never_tears_worker_snapshot(
             assert boundary["isolation"] == "read committed"
             entered.set()
             assert release.wait(20), "Worker commit barrier was not released"
-        return original(session, target_type=target_type, attachment_ids=attachment_ids)
+        return original(
+            session,
+            company_id=company_id,
+            target_type=target_type,
+            attachment_ids=attachment_ids,
+        )
 
     monkeypatch.setattr(fixture.service, "load_latest_processing_jobs", paused)
     with ThreadPoolExecutor(max_workers=1) as pool:
         read = pool.submit(_row, client, fixture)
         try:
-            assert entered.wait(20), "HTTP workspace did not reach materialized-source boundary"
+            wait_for_processing_barrier(
+                entered, read, "HTTP workspace did not reach materialized-source boundary"
+            )
             with Session(engine) as check:
                 job = check.get(DocumentProcessingJob, fixture.job)
                 assert job.status == "queued" and job.no_paid_providers is True
@@ -222,7 +231,9 @@ def test_snapshot_does_not_overwrite_unrelated_dirty_metadata(
     with Session(http_pg_engine, autoflush=False, expire_on_commit=False) as session:
         source = session.get(fixture.model, fixture.id)
         source.original_filename = "unsaved-local-metadata.txt"
-        fixture.service._attachment_record_map(session, [source])
+        fixture.service._attachment_record_map(
+            session, [source], company_id=str(fixture.actor["company"]["id"])
+        )
         assert source.original_filename == "unsaved-local-metadata.txt"
         assert session.is_modified(source)
         with Session(http_pg_engine) as observer:

@@ -311,6 +311,7 @@ def _serialize_document_snapshot(
     )
     jobs = load_latest_processing_jobs(
         session,
+        company_id=context.company.id,
         target_type=DocumentProcessingTargetType.IP_DOCUMENT_VERSION,
         attachment_ids=[row.id for row in versions],
     )
