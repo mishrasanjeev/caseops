@@ -1,5 +1,22 @@
 # CaseOps  - Work To Be Done
 
+## October 19 CI Correction
+
+Release remains NO-GO: C3ed13138d failed compiled-projection validation and
+historical compliance-tail concurrent-index call phases. The corrected source
+must regenerate/validate the runtime projection before Docker and separate the
+paused historical fence from the post-join captured-head upgrade, retaining raw
+rows, the negative baseline and original lock budget. Docker13 was deliberately
+stopped and is incomplete. Complete new gates before merge/deploy/certification;
+do not replay the consumed test-legal-only manual-IP grant. Serving9cf/private
+PAUSED and the two workbooks56/23 remain actual truth, not the next candidate.
+
+The scoped correction now passes the whole74-case module/222 phases plus two
+genuine0003 negative controls, sealed26125c6550f3424c. All17 CI preflight
+commands and104 adjacent Docker guard controls pass. The invalid earlier
+guarded baseline remains retained. Full Docker/current hosted/main/live and
+cadence acceptance still gate release; no provider/legal verdict is upgraded.
+
 ## October 18 Processing Snapshot Blocker
 
 C3 remains release NO-GO pending full gates. Original59 native cases/177 phases passed the

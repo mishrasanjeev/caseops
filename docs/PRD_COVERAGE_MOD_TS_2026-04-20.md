@@ -1,5 +1,20 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 19 CI Correction
+
+J04/M03 remains source-only/NO-GO. C3ed13138d CI39173686953 failed compiled
+projection validation and historical-tail migration calls while a frozen worker
+held a transaction. Regeneration plus pre-build validation and exact historical
+fence/post-join captured-head assertions need new complete gates. The index,
+lock budget, negative baseline and raw-row safety remain unchanged. Docker13
+was deliberately stopped; its401 complete cases and142 prefix cases are not
+full Docker or browser acceptance. Serving9cf/workbooks56/23 remain unchanged.
+
+The whole affected74-case module/222 phases now passes; separate baseline02
+fails both intended0003 cases because55000 is absent. Sealed26125c6550f3424c
+retains source/chain/cleanup and invalid earlier-control history. CI preflight
+17/17 and104 isolated Docker controls pass, not full release acceptance.
+
 ## October 18 Processing Snapshot Coverage
 
 C3's original59 unique native cases/177 phases passed the assertions executed

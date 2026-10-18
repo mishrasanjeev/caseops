@@ -1,5 +1,21 @@
 # Strict Enterprise Gap Tasklist
 
+## October 19 CI Correction
+
+**Partially implemented / NO-GO.** C3ed13138d required CI failed a stale compiled
+governance projection and historical frozen-worker migration calls. Regenerate
+and validate before Docker; retain the exact historical fence during the pause
+and prove the full captured-head upgrade after join, raw rows unchanged. Do not
+raise the concurrent-index lock budget or weaken legacy rejection. Docker13's
+operator-stopped prefix is incomplete, not current candidate acceptance.
+Fresh complete gates, canonical main, exact-live QA and private cadence remain
+required. Serving9cf and the two workbook56/23 checkpoints are unchanged.
+
+Scoped proof now passes74/222 plus two genuine expected baseline failures,
+sealed26125c6550f3424c; all17 CI preflight commands and104 isolated Docker
+guard controls pass. Preserve the invalid guarded baseline and incomplete
+runner attempt. This does not certify full Docker/hosted/main/production.
+
 ## October 18 Processing Read Consistency
 
 C3 strengthens the internal company contract, but full release acceptance remains

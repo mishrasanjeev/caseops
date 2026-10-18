@@ -1,8 +1,60 @@
 # Document Processing Snapshot Consistency
 
-Status: source correction / NO-GO; total-work acceptance remains blocked and
-production is not certified. Journey J04, module M03,
+Status: source correction / NO-GO; scoped total-work acceptance passed, but
+required CI and full release acceptance failed or remain incomplete.
+Production is not certified. Journey J04, module M03,
 US-007..009 and FT-011..015; adjacent IP document/version serialization.
+
+## Current CI Correction
+
+Candidate `ed13138dc4f91838ae1ada40b4ba0c5eb2a40aa0` failed required CI
+39173686953: the generated runtime data-class projection was not refreshed
+after the index/governance-map amendment. This is an operator omission, not
+permission to bypass the projection check. Canonical regeneration and an early
+fail-closed Docker pre-build check now pass isolated verification.
+
+Seven captured native call failures are independently retained across six CI
+shards. Each is in the historical compliance-tail module: its paused frozen
+3db worker retains a transaction while `_install(head)` now attempts the later
+concurrent index build. The correction installs exactly the historical
+20261010_0004 fence during each paused journey, preserves the 55000 rejection,
+raw-row immutability and unguarded 0003 baseline, then releases/joins the worker
+and upgrades to the captured current head with raw-row/revision assertions.
+The migration and its lock budget are unchanged. The original failure remains
+retained. Scoped replacement results follow; full release gates are still required.
+
+Docker13 was deliberately stopped after required CI failed: group1 completed
+401 cases/1,203 phases, group2's retained prefix has142 cases/426 phases; the
+remaining native groups and browsers did not run. No native failed phase was
+observed in that partial packet. Its parent was reaped and the isolated project
+removed before source editing. It is incomplete, not failed product proof or
+acceptance transferable to the next candidate. Preserve its actual receipts.
+
+The complete affected module passed 74 identities/222 setup/call/teardown
+phases, without failure, skip or retry. All nine changed cases retain actual
+`20261010_0004` -> `20261019_0001` boundary pairs, exact SQLSTATE `55000` rejection
+and raw-row preservation. Separately isolated baseline02 selects exactly two
+existing IDs, passes `unguarded` to the actual pytest child and installs
+`20261010_0003`. Both calls fail
+specifically with DID NOT RAISE DBAPIError; setups/teardowns pass and retained
+raw snapshots contain the legacy extraction, model, work and delivery effects.
+The source-owned receipt is `26125c6550f3424cd223e41362d65f4c838a9430c1b0da9a2bdb2edbfb7ea717`.
+
+The first scoped runner attempt stopped before test execution because of its
+old output-name binding. Baseline01 then ran two guarded cases because its
+controller flag was not propagated to the pytest child; both passed. Those are
+respectively incomplete setup and invalid negative-control evidence, not
+product failures or an expected RED. Both remain preserved. Baseline02 fixes
+only that transport and retains its exact effective flag, selection and schema.
+All source/chain checks and owned process/container/network closure passed.
+
+The actual 17-command CI preflight passes, including all 12 control-plane commands,
+both change gates, projection, full API Ruff and four offline gates
+(receipt `3f56e13b59c2679a`). The six adjacent Docker guard commands pass 104
+isolated controls (receipt `bc6bb9040e2acb18`); the eight source/projection controls
+also pass on Windows PowerShell 5 and 7. Only three generated fingerprints change; reviewed
+sets, fields and policies do not. These scoped results cannot certify the next
+full Docker/hosted/main/live release or authorize private-cadence resume.
 
 ## Serving Evidence
 

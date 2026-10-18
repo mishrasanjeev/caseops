@@ -1,5 +1,19 @@
 # CaseOps agent instructions
 
+- A frozen historical-worker migration test must install its exact historical
+  fence while that worker is paused, then release/join the worker and prove the
+  complete captured current-head upgrade preserves the retained raw rows.
+  Unrelated later concurrent-index builds must not run behind that deliberately
+  held snapshot. Preserve the negative baseline, exact rejection SQLSTATE and
+  migration lock budgets; pinning the fence alone cannot replace current-head
+  coverage. Validate the compiled governance projection before Docker build,
+  not just the human-readable map or an agent's manual checklist.
+- An environment-driven negative control must verify the actual flag at the
+  final pytest child, not only the controller environment. A green control
+  that still installed the guarded schema is invalid counterfactual evidence.
+  Retain it, correct only the transport and require the intended failure plus
+  its actual schema boundary and raw effects in a fresh isolated database.
+
 - One SQL statement is not a bounded-work proof. A correlated latest-row
   lookup can repeat a broad index scan per source under another valid plan.
   Pass the trusted tenant explicitly, filter it before ranking, reduce latest

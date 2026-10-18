@@ -165,6 +165,18 @@ function Assert-CandidateSourceUnchanged {
     }
 }
 
+function Assert-CandidateDataClassProjection {
+    $ProjectionArguments = @(
+        (Join-Path $RepoRoot "scripts\ip_data_class_projection.py")
+        "validate"
+    )
+    & $ApiPython @ProjectionArguments
+    $ProjectionExitCode = $LASTEXITCODE
+    if ($ProjectionExitCode -ne 0) {
+        throw "Candidate data-class projection validation failed (exit $ProjectionExitCode). Regenerate and commit the reviewed projection before Docker acceptance."
+    }
+}
+
 function Test-PathWithinRoot {
     param(
         [Parameter(Mandatory=$true)][AllowEmptyString()][string]$Path,
@@ -913,6 +925,7 @@ try {
     if (-not (Test-PathWithinRoot -Path $ApiPackage -Root $ApiDir)) {
         throw "Host API fixtures import caseops_api from '$ApiPackage', outside the candidate $ApiDir."
     }
+    Assert-CandidateDataClassProjection
     Assert-CandidatePlaywrightSuite -Arguments $PlaywrightArgs
 
     Write-Host "[docker-acceptance] resetting isolated project $ComposeProject"

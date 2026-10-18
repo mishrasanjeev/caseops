@@ -1,5 +1,25 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 19 CI Correction
+
+**Scoped correction verified / release NO-GO.** C3ed13138d CI39173686953 failed the
+compiled governance projection check and seven retained historical compliance
+tail call phases while a new concurrent index waited behind a frozen legacy
+transaction. Regenerate the projection and machine-check it before Docker;
+install the exact historical fence during the pause, then prove the complete
+captured-head upgrade after join without raw-row changes. No migration budget,
+negative baseline or 55000 rejection is weakened. Docker13 was operator-stopped
+after401 complete cases plus142 prefix cases; its remainder/browser inventory
+is incomplete. Fresh affected-file, full Docker/CI/main/live/cadence gates are
+required. Serving9cf and both workbooks56/23 remain unchanged. See
+`docs/bugfix-document-workspace-snapshot-2026-10-18.md`.
+
+Whole affected module74P/222 phases and genuine baseline02 expected RED2 now
+pass their intended contracts, source/cleanup sealed26125c6550f3424c. Actual
+CI preflight17/17 and adjacent Docker guard104 controls also pass. Retain the
+operator-incomplete first attempt and invalid guarded baseline01; full release
+gates and original legal/Calendar/history dependencies remain open.
+
 ## October 18 Document Snapshot Failure
 
 C3's required trusted company scope precedes ranking and latest-only
