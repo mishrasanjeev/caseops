@@ -1,5 +1,20 @@
 # Strict Enterprise Gap Tasklist
 
+## October 18 Processing Read Consistency
+
+**Partially implemented / NO-GO.** Worker atomicity exists, but separate source
+and job SELECTs can produce an internally inconsistent workspace. Controlled
+native Matter/Contract HTTP REDs establish this gap. Repair includes all shared
+readers, IP OCR eligibility and deriving top-level IP receipts from the frozen
+matching version, without autoflush, source-body/history materialization or
+weakening access/lifecycle/claim fences. Serving9cf failed one of404 production
+cases, despite50/50 dated and47/47 public passes. Full replacement release and
+clean guarded cadence are pending; no broader product/provider certification.
+See `docs/bugfix-document-workspace-snapshot-2026-10-18.md`.
+Scoped combined-02 passes50 native cases/150 phases, including OCR denial,
+tenant/type binding, dirty-state preservation and retained-history plans. Its
+local fixture measurements do not establish production plan performance.
+
 ## October 18 Retained-Volume Acceptance Gap
 
 **Partially implemented / NO-GO.** Serving `ee351e0c` passed local Docker and

@@ -1,5 +1,19 @@
 # CaseOps  - Work To Be Done
 
+## October 18 Processing Snapshot Blocker
+
+J04/M03 is Partially implemented. Latest serving9cf has production39143613520
+NO-GO:385P/1F/18 explicit skips. All50 IP/Calendar dated cases pass; source-only
+snapshot repair addresses the remaining reproduced Matter/Contract read race
+and adjacent IP frozen-receipt/OCR consistency. Complete current native/Docker/
+CI, merge canonical main, guarded deployment and exact-live replay, then the
+held private-cadence recovery/guarded resume. Do not mark source, consent,
+verified-date-writer or unidentified reopening dependencies closed. See
+`docs/bugfix-document-workspace-snapshot-2026-10-18.md`.
+Scoped combined-02 is complete:50 native cases/150 phases all passed, zero
+skips/retries/errors, frozen source and reaped resources. Fresh full Docker,
+CI, canonical merge, deployment, live replay and cadence remain required.
+
 ## October 18 Production Acceptance Repair
 
 J08/M08 and UJ-02/04/26 are Partially implemented at serving `ee351e0c`.

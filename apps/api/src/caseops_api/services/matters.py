@@ -1196,15 +1196,16 @@ def _attachment_record_map(
     session: Session,
     attachments: list[MatterAttachment],
 ) -> list[MatterAttachmentRecord]:
-    latest_jobs = load_latest_processing_jobs(
-        session,
-        target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
-        attachment_ids=[attachment.id for attachment in attachments],
-    )
-    return [
-        _attachment_record(attachment, latest_job=latest_jobs.get(attachment.id))
-        for attachment in attachments
-    ]
+    with session.no_autoflush:
+        latest_jobs = load_latest_processing_jobs(
+            session,
+            target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
+            attachment_ids=[attachment.id for attachment in attachments],
+        )
+        return [
+            _attachment_record(attachment, latest_job=latest_jobs.get(attachment.id))
+            for attachment in attachments
+        ]
 
 
 def _task_sort_key(task: MatterTask) -> tuple[int, date, datetime]:

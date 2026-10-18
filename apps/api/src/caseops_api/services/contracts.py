@@ -352,15 +352,16 @@ def _attachment_record_map(
     session: Session,
     attachments: list[ContractAttachment],
 ) -> list[ContractAttachmentRecord]:
-    latest_jobs = load_latest_processing_jobs(
-        session,
-        target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
-        attachment_ids=[attachment.id for attachment in attachments],
-    )
-    return [
-        _attachment_record_with_job(attachment, latest_job=latest_jobs.get(attachment.id))
-        for attachment in attachments
-    ]
+    with session.no_autoflush:
+        latest_jobs = load_latest_processing_jobs(
+            session,
+            target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
+            attachment_ids=[attachment.id for attachment in attachments],
+        )
+        return [
+            _attachment_record_with_job(attachment, latest_job=latest_jobs.get(attachment.id))
+            for attachment in attachments
+        ]
 
 
 def _get_company_membership(

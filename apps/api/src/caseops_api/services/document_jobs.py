@@ -4,7 +4,8 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, delete, or_, select, text, update
+from fastapi import HTTPException
+from sqlalchemy import and_, delete, inspect, or_, select, text, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
@@ -31,6 +32,7 @@ from caseops_api.db.models import (
     Matter,
     MatterActivity,
     MatterAttachment,
+    User,
     utcnow,
 )
 from caseops_api.db.session import get_session_factory
@@ -260,32 +262,116 @@ def load_latest_processing_jobs(
     target_type: str,
     attachment_ids: list[str],
 ) -> dict[str, DocumentProcessingJobRecord]:
+    """Read source processing fields and receipts from one statement snapshot.
+
+    Callers may already have materialized their sources before a worker commits.
+    Refresh only those cached processing scalars, never unrelated pending edits.
+    """
     if not attachment_ids:
         return {}
-
-    jobs = list(
-        session.scalars(
-            select(DocumentProcessingJob)
-            .options(
-                joinedload(DocumentProcessingJob.requested_by_membership).joinedload(
-                    CompanyMembership.user
-                )
-            )
-            .where(
-                DocumentProcessingJob.target_type == target_type,
-                DocumentProcessingJob.attachment_id.in_(attachment_ids),
-            )
-            .order_by(
-                DocumentProcessingJob.queued_at.desc(),
-                DocumentProcessingJob.updated_at.desc(),
-            )
-        )
+    source_model = {
+        DocumentProcessingTargetType.MATTER_ATTACHMENT: MatterAttachment,
+        DocumentProcessingTargetType.CONTRACT_ATTACHMENT: ContractAttachment,
+        DocumentProcessingTargetType.IP_DOCUMENT_VERSION: IpDocumentVersion,
+    }.get(target_type)
+    if source_model is None:
+        raise ValueError("Unsupported document processing source type.")
+    parent_model = None
+    parent_key = None
+    if source_model is MatterAttachment:
+        parent_model = Matter
+        parent_key = MatterAttachment.matter_id
+        company_column = Matter.company_id
+    elif source_model is ContractAttachment:
+        parent_model = Contract
+        parent_key = ContractAttachment.contract_id
+        company_column = Contract.company_id
+    else:
+        company_column = IpDocumentVersion.company_id
+    source_fields: tuple[str, ...] = (
+        "processing_status", "sha256_hex", "extracted_char_count",
+        "extraction_error", "processed_at",
     )
-
+    if source_model is IpDocumentVersion:
+        source_fields += ("ocr_quality_score",)
+    cached_sources = {
+        source_id: session.identity_map.get(
+            session.identity_key(class_=source_model, ident=source_id)
+        )
+        for source_id in set(attachment_ids)
+    }
+    if any(
+        inspect(source).attrs[field].history.has_changes()
+        for source in cached_sources.values() if source is not None
+        for field in source_fields
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Document processing state changed. Reload this workspace.",
+        )
+    latest_query = (
+        select(DocumentProcessingJob.id)
+        .where(
+            DocumentProcessingJob.company_id == company_column,
+            DocumentProcessingJob.target_type == target_type,
+            DocumentProcessingJob.attachment_id == source_model.id,
+        )
+        .order_by(
+            DocumentProcessingJob.queued_at.desc(),
+            DocumentProcessingJob.updated_at.desc(),
+            DocumentProcessingJob.id.desc(),
+        )
+        .limit(1)
+    )
+    if parent_model is None:
+        latest_query = latest_query.correlate(source_model)
+    else:
+        latest_query = latest_query.correlate(source_model, parent_model)
+    latest_id = latest_query.scalar_subquery()
+    job_fields = tuple(DocumentProcessingJobRecord.model_fields)
+    statement = (
+        select(
+            source_model.id.label("source_id"),
+            *(getattr(source_model, field).label(f"source_{field}") for field in source_fields),
+            *(getattr(DocumentProcessingJob, field).label(field)
+              for field in job_fields if field != "requested_by_name"),
+            User.full_name.label("requested_by_name"),
+        )
+        .select_from(source_model)
+    )
+    if parent_model is not None:
+        statement = statement.join(parent_model, parent_model.id == parent_key)
+    statement = (
+        statement
+        .outerjoin(DocumentProcessingJob, DocumentProcessingJob.id == latest_id)
+        .outerjoin(
+            CompanyMembership,
+            and_(
+                CompanyMembership.id == DocumentProcessingJob.requested_by_membership_id,
+                CompanyMembership.company_id == company_column,
+            ),
+        )
+        .outerjoin(User, User.id == CompanyMembership.user_id)
+        .where(source_model.id.in_(attachment_ids))
+    )
+    with session.no_autoflush:
+        rows = session.execute(statement).mappings().all()
+    if {row["source_id"] for row in rows} != set(attachment_ids):
+        raise HTTPException(
+            status_code=409,
+            detail="Document processing state changed. Reload this workspace.",
+        )
     latest_by_attachment: dict[str, DocumentProcessingJobRecord] = {}
-    for job in jobs:
-        if job.attachment_id not in latest_by_attachment:
-            latest_by_attachment[job.attachment_id] = _job_record(job)
+    for row in rows:
+        source_id = row["source_id"]
+        source = cached_sources[source_id]
+        if source is not None:
+            for field in source_fields:
+                set_committed_value(source, field, row[f"source_{field}"])
+        if row["id"] is not None:
+            latest_by_attachment[source_id] = DocumentProcessingJobRecord(
+                **{field: row[field] for field in job_fields}
+            )
     return latest_by_attachment
 
 

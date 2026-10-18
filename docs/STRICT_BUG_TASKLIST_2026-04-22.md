@@ -1,5 +1,22 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 18 Document Snapshot Failure
+
+**Partially fixed in source / NO-GO.** Serving9cf production39143613520 has
+385P/1F/18 unverified skips; all50 mandatory dated and47 public cases pass.
+The remaining Matter393 index assertion is not a durable-loss diagnosis:
+later read-only metadata is correct and its original tuple member is redacted.
+Two controlled PostgreSQL HTTP REDs establish torn source/receipt reads under
+READ COMMITTED; ten adjacent controls pass. The shared snapshot and IP response
+correction still need full replacement native, Docker, CI and live acceptance,
+then guarded maintenance/resume. Retain earlier test-assumption failures and
+historical evidence; do not replay the manual-IP grant or close legal/consent/
+writer/reopening dependencies. See
+`docs/bugfix-document-workspace-snapshot-2026-10-18.md`.
+The complete scoped replacement passes50 native cases/150 phases, with no
+skip/retry/error or source drift; prior failed attempts remain retained. This
+is not production closure and does not authorize private-cadence resume.
+
 ## October 18 Exact-Serving Tracker And Calendar Failure
 
 **Partially fixed / NO-GO.** PR542 serves `ee351e0c`, but production39042539115

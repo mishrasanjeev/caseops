@@ -1,5 +1,17 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 18 Processing Snapshot Coverage
+
+J04/M03/US-007..009/FT-011..015: serving9cf production39143613520 completed
+385P/1F/18 reasoned skips, all50 dated and47 public cases passed. Two controlled
+native HTTP REDs prove source/latest-job read tearing; ten controls pass.
+Shared snapshot/OCR/IP frozen-response repair remains source-only until complete
+replacement gates and exact-live proof. The original redacted field is unknown;
+private cadence and genuine legal/consent/history dependencies stay held/open.
+See `docs/bugfix-document-workspace-snapshot-2026-10-18.md`.
+Combined-02 reconciles50/50 native identities and150/150 passed phases across
+the three explicit files; whole Docker/CI/live coverage remains pending.
+
 ## October 18 Serving Acceptance Reconciliation
 
 J08/M08, UJ-02/04/26 and IPLF-023/030/032/037: PR542 serves `ee351e0c`, with

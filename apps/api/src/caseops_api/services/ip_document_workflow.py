@@ -286,6 +286,16 @@ def _serialize_document(
     context: SessionContext,
     document: IpDocument,
 ) -> IpDocumentRecord:
+    with session.no_autoflush:
+        return _serialize_document_snapshot(session, context=context, document=document)
+
+
+def _serialize_document_snapshot(
+    session: Session,
+    *,
+    context: SessionContext,
+    document: IpDocument,
+) -> IpDocumentRecord:
     taxonomy = session.get(IpDocumentTaxonomyEntry, document.taxonomy_entry_id)
     if taxonomy is None or taxonomy.company_id != document.company_id:
         raise HTTPException(status_code=500, detail="Document taxonomy integrity failure.")
@@ -855,15 +865,20 @@ def upload_ip_document(
         commit_attempted = True
         session.commit()
         stored_key = None
+        document_record = _serialize_document(session, context=context, document=document)
+        version_record = next(
+            (row for row in document_record.versions if row.id == version.id), None
+        )
+        if version_record is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Document processing state changed. Reload this workspace.",
+            )
         return (
             IpDocumentUploadResponse(
                 outcome="created",
-                document=_serialize_document(session, context=context, document=document),
-                processing_job=load_latest_processing_jobs(
-                    session,
-                    target_type=DocumentProcessingTargetType.IP_DOCUMENT_VERSION,
-                    attachment_ids=[version.id],
-                ).get(version.id),
+                document=document_record,
+                processing_job=version_record.latest_processing_job,
             ),
             job.id,
         )
@@ -1065,15 +1080,20 @@ def upload_ip_document_version(
         commit_attempted = True
         session.commit()
         stored_key = None
+        document_record = _serialize_document(session, context=context, document=document)
+        version_record = next(
+            (row for row in document_record.versions if row.id == version.id), None
+        )
+        if version_record is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Document processing state changed. Reload this workspace.",
+            )
         return (
             IpDocumentUploadResponse(
                 outcome="created",
-                document=_serialize_document(session, context=context, document=document),
-                processing_job=load_latest_processing_jobs(
-                    session,
-                    target_type=DocumentProcessingTargetType.IP_DOCUMENT_VERSION,
-                    attachment_ids=[version.id],
-                ).get(version.id),
+                document=document_record,
+                processing_job=version_record.latest_processing_job,
             ),
             job.id,
         )

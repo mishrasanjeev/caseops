@@ -857,6 +857,22 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- An atomic document-worker commit does not make a DTO assembled by separate
+  READ COMMITTED statements coherent. Read source processing fields and the
+  latest receipt together, include OCR policy inputs, and reuse the matching
+  frozen IP version receipt. Prove initial-index interleavings through real
+  PostgreSQL HTTP before claiming a fix; a delayed assertion or browser retry
+  hides the defect. Preserve unrelated dirty state and fail closed on conflicts.
+- Redacted production errors need distinct field-level assertion locations.
+  Keep the original unknown tuple member unknown; later correct retained data
+  does not reconstruct its HTTP response. A company-owned admitted worker may
+  retain inactive-actor provenance while interactive access stays denied; new
+  negative tests must respect that contract and pre-claim lifecycle neutralization.
+- Completion-only agent waits do not deliver intermediate failed-shard status.
+  Observe retained job-status checkpoints during a long verification, report the
+  first real failure promptly, then reconcile every sibling and the complete
+  replacement inventory. Never upgrade a release from its passing dated subset.
+
 - Shared UI filters require route-to-service contract parity on every view,
   including grouped families and export; accepting an unknown query silently
   is not evidence that it was applied. Prove exact identities and continuation,
