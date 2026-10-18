@@ -32,9 +32,14 @@ class GitFixture(unittest.TestCase):
         if evidence_root:
 
             def retain():
-                target = Path(evidence_root) / hashlib.sha256(self.id().encode()).hexdigest()[:20]
+                target = (
+                    Path(evidence_root)
+                    / hashlib.sha256(self.id().encode()).hexdigest()[:20]
+                )
                 target.mkdir(parents=True, exist_ok=False)
-                (target / "identity.json").write_text(json.dumps({"identity": self.id()}))
+                (target / "identity.json").write_text(
+                    json.dumps({"identity": self.id()})
+                )
                 for source in self.root.glob("*/progress.jsonl"):
                     shutil.copytree(source.parent, target / source.parent.name)
 
@@ -68,7 +73,9 @@ class GitFixture(unittest.TestCase):
             check=False,
         )
         if check and result.returncode:
-            self.fail(f"Native fixture Git failed: {args[0]} (exit {result.returncode})")
+            self.fail(
+                f"Native fixture Git failed: {args[0]} (exit {result.returncode})"
+            )
         return result.stdout.decode().strip()
 
     def write(self, path, content):
@@ -131,7 +138,9 @@ class SelectionTests(GitFixture):
     def test_normal_push_exact_changed_inventory(self):
         self.write("record.txt", "changed\n")
         head = self.commit("changed")
-        selection, ids = scan.history_selection(self.repo, head, "push", self.push(head))
+        selection, ids = scan.history_selection(
+            self.repo, head, "push", self.push(head)
+        )
         self.assertEqual(selection, self.base + ".." + head)
         self.assertEqual(ids, [head])
 
@@ -140,7 +149,8 @@ class SelectionTests(GitFixture):
         _, ids = scan.history_selection(self.repo, head, "push", self.push(head))
         self.assertEqual(ids, [first, second, head])
         self.assertEqual(
-            self.git("rev-list", "--no-merges", "--first-parent", first + "^.." + head), ""
+            self.git("rev-list", "--no-merges", "--first-parent", first + "^.." + head),
+            "",
         )
 
     def test_pull_request_uses_actual_merge_and_both_parent_lineages(self):
@@ -150,7 +160,10 @@ class SelectionTests(GitFixture):
         self.assertEqual(set(ids), {side, merged})
 
     def test_initial_push_and_schedule_inventory(self):
-        for event_name, event in [("push", self.push(self.base, "0" * 40)), ("schedule", {})]:
+        for event_name, event in [
+            ("push", self.push(self.base, "0" * 40)),
+            ("schedule", {}),
+        ]:
             _, ids = scan.history_selection(self.repo, self.base, event_name, event)
             self.assertEqual(ids, [self.base])
 
@@ -170,7 +183,9 @@ class SelectionTests(GitFixture):
 
     def test_missing_base_fails_closed(self):
         with self.assertRaises(scan.ScanError):
-            scan.history_selection(self.repo, self.base, "push", self.push(self.base, "a" * 40))
+            scan.history_selection(
+                self.repo, self.base, "push", self.push(self.base, "a" * 40)
+            )
 
     def test_wrong_checkout_and_unsupported_event_fail_closed(self):
         with self.assertRaises(scan.ScanError):
@@ -214,7 +229,10 @@ class SelectionTests(GitFixture):
 
 class TreeTests(GitFixture):
     def test_exact_blobs_ignore_dirty_untracked_export_and_checkout_filters(self):
-        self.write(".gitattributes", "record.txt export-ignore\nrecord.txt filter=unavailable\n")
+        self.write(
+            ".gitattributes",
+            "record.txt export-ignore\nrecord.txt filter=unavailable\n",
+        )
         head = self.commit("attributes")
         self.write("record.txt", "dirty not candidate\n")
         self.write("untracked.txt", "untracked not candidate\n")
@@ -224,7 +242,9 @@ class TreeTests(GitFixture):
         self.assertNotIn("untracked.txt", [item["path"] for item in entries])
         self.assertGreater(sum(item["bytes"] for item in entries), 0)
         for policy in (".gitleaks.toml", ".gitleaksignore"):
-            self.assertEqual((target / policy).read_bytes(), (self.repo / policy).read_bytes())
+            self.assertEqual(
+                (target / policy).read_bytes(), (self.repo / policy).read_bytes()
+            )
 
     def test_symlink_blob_is_literal_and_never_followed(self):
         oid = self.git("hash-object", "-w", "record.txt")
@@ -237,8 +257,16 @@ class TreeTests(GitFixture):
         self.assertEqual((target / "link").read_bytes(), b"original\n")
 
     def test_empty_and_malformed_tree_inventory_fail_closed(self):
-        for raw in (b"", b"not terminated", b"broken\0", b"100644 blob invalid\tfile\0"):
-            with patch.object(scan, "git", return_value=raw), self.assertRaises(scan.ScanError):
+        for raw in (
+            b"",
+            b"not terminated",
+            b"broken\0",
+            b"100644 blob invalid\tfile\0",
+        ):
+            with (
+                patch.object(scan, "git", return_value=raw),
+                self.assertRaises(scan.ScanError),
+            ):
                 scan.tracked_tree(self.repo, self.base, self.root / "snapshot")
 
     def test_submodule_and_unsafe_paths_fail_closed(self):
@@ -249,7 +277,10 @@ class TreeTests(GitFixture):
             ("100644", "blob", ".git/config"),
         ]:
             raw = f"{mode} {kind} {'a' * 40}\t{name}\0".encode()
-            with patch.object(scan, "git", return_value=raw), self.assertRaises(scan.ScanError):
+            with (
+                patch.object(scan, "git", return_value=raw),
+                self.assertRaises(scan.ScanError),
+            ):
                 scan.tracked_tree(self.repo, self.base, self.root / "snapshot")
 
 
@@ -257,12 +288,17 @@ class ReceiptTests(unittest.TestCase):
     def test_positive_receipts(self):
         output = b"INF 3 commits scanned.\nINF scanned ~24 bytes (24 bytes) in 1ms\n"
         self.assertEqual(
-            scan.scanner_receipt(output, history=True), {"scanned_bytes": 24, "scanned_commits": 3}
+            scan.scanner_receipt(output, history=True),
+            {"scanned_bytes": 24, "scanned_commits": 3},
         )
 
     def test_exact_byte_integer_survives_human_readable_large_units(self):
-        output = b"INF 3 commits scanned.\nINF scanned ~1234567 bytes (1.18 MB) in 1ms\n"
-        self.assertEqual(scan.scanner_receipt(output, history=True)["scanned_bytes"], 1234567)
+        output = (
+            b"INF 3 commits scanned.\nINF scanned ~1234567 bytes (1.18 MB) in 1ms\n"
+        )
+        self.assertEqual(
+            scan.scanner_receipt(output, history=True)["scanned_bytes"], 1234567
+        )
 
     def test_zero_missing_malformed_and_duplicate_receipts_fail_closed(self):
         for output in (
@@ -352,7 +388,9 @@ class FailureTests(GitFixture):
             with self.subTest(error=type(error).__name__):
                 cleanup_calls = []
 
-                def interrupted(args, _error=error, _cleanup_calls=cleanup_calls, **kwargs):
+                def interrupted(
+                    args, _error=error, _cleanup_calls=cleanup_calls, **kwargs
+                ):
                     if args[:2] == ["docker", "run"]:
                         raise _error
                     if args[:2] == ["docker", "rm"]:
@@ -372,7 +410,9 @@ class FailureTests(GitFixture):
                     )
                 self.assertEqual(len(cleanup_calls), 1)
                 self.assertTrue(cleanup_calls[0][-1].startswith("caseops-secret-"))
-                self.assertFalse((self.root / type(error).__name__ / "completion.json").exists())
+                self.assertFalse(
+                    (self.root / type(error).__name__ / "completion.json").exists()
+                )
 
     def test_existing_evidence_cannot_be_overwritten(self):
         output = self.root / "evidence"
@@ -407,7 +447,9 @@ class FailureTests(GitFixture):
     def test_failed_cleanup_is_not_misclassified_as_absent_container(self):
         def unavailable(args, **kwargs):
             if args[:2] in (["docker", "rm"], ["docker", "inspect"]):
-                return subprocess.CompletedProcess(args, 1, b"", b"Cannot connect to Docker daemon")
+                return subprocess.CompletedProcess(
+                    args, 1, b"", b"Cannot connect to Docker daemon"
+                )
             return self.fake_run(args, **kwargs)
 
         with (
@@ -456,7 +498,11 @@ class RealGitleaksTests(GitFixture):
         self.assertEqual(inventory["commits"], [first, second, head])
         self.assertIn(
             "tree",
-            [row.get("kind") for row in self.progress() if row["event"] == "boundary_completed"],
+            [
+                row.get("kind")
+                for row in self.progress()
+                if row["event"] == "boundary_completed"
+            ],
         )
 
     def test_real_merge_only_resolution_secret_is_found_in_candidate_tree(self):
@@ -495,14 +541,22 @@ class RealGitleaksTests(GitFixture):
         )
         return origin, self.commit("existing exact reviewed fingerprint")
 
-    def test_real_existing_commit_fingerprint_keeps_exact_unchanged_tree_provenance(self):
+    def test_real_existing_commit_fingerprint_keeps_exact_unchanged_tree_provenance(
+        self,
+    ):
         origin, _ = self.reviewed_fixture()
         self.write("record.txt", "# harmless inserted line\n" + self.canary())
         head = self.commit("shift unchanged reviewed line")
         result = self.run_scan(head)
-        self.assertGreater(result["boundaries"]["tree"]["existing_policy_translations"], 0)
-        provenance = json.loads((self.root / "evidence/tree-policy-provenance.json").read_text())
-        self.assertTrue(all(row["accepted_existing_policy"] for row in provenance["findings"]))
+        self.assertGreater(
+            result["boundaries"]["tree"]["existing_policy_translations"], 0
+        )
+        provenance = json.loads(
+            (self.root / "evidence/tree-policy-provenance.json").read_text()
+        )
+        self.assertTrue(
+            all(row["accepted_existing_policy"] for row in provenance["findings"])
+        )
         self.assertTrue(
             all(
                 row["existing_fingerprint"].startswith(origin + ":")
@@ -511,7 +565,9 @@ class RealGitleaksTests(GitFixture):
         )
         self.assertTrue((self.root / "evidence/tree-initial.sarif").exists())
 
-    def test_real_future_secret_same_path_line_is_not_covered_by_historical_fingerprint(self):
+    def test_real_future_secret_same_path_line_is_not_covered_by_historical_fingerprint(
+        self,
+    ):
         self.reviewed_fixture()
         replacement = (
             "payment_key = sk_"
@@ -524,7 +580,9 @@ class RealGitleaksTests(GitFixture):
         with self.assertRaisesRegex(scan.ScanError, "unreviewed findings"):
             self.run_scan(head)
         self.assert_incomplete()
-        provenance = json.loads((self.root / "evidence/tree-policy-provenance.json").read_text())
+        provenance = json.loads(
+            (self.root / "evidence/tree-policy-provenance.json").read_text()
+        )
         self.assertEqual(provenance["accepted_existing_policy"], 0)
 
     def reviewed_multiline_checksum_fixture(self):
@@ -544,7 +602,9 @@ class RealGitleaksTests(GitFixture):
             self.assertGreater(boundary["scanned_bytes"], 0)
             self.assertTrue(boundary["cleanup_confirmed"])
         self.assertGreater(result["boundaries"]["history"]["scanned_commits"], 0)
-        provenance = json.loads((self.root / "evidence/tree-policy-provenance.json").read_text())
+        provenance = json.loads(
+            (self.root / "evidence/tree-policy-provenance.json").read_text()
+        )
         self.assertEqual(provenance["accepted_existing_policy"], 1)
         self.assertEqual(
             provenance["findings"],
@@ -570,16 +630,299 @@ class RealGitleaksTests(GitFixture):
         with self.assertRaisesRegex(scan.ScanError, "unreviewed findings"):
             self.run_scan(head)
         self.assert_incomplete()
-        provenance = json.loads((self.root / "evidence/tree-policy-provenance.json").read_text())
+        provenance = json.loads(
+            (self.root / "evidence/tree-policy-provenance.json").read_text()
+        )
         self.assertEqual(provenance["accepted_existing_policy"], 0)
         self.assertEqual(len(provenance["findings"]), 1)
         finding = provenance["findings"][0]
         self.assertEqual((finding["start_line"], finding["end_line"]), (1, 2))
-        self.assertNotEqual(finding["span_sha256"], hashlib.sha256(original.encode()).hexdigest())
+        self.assertNotEqual(
+            finding["span_sha256"], hashlib.sha256(original.encode()).hexdigest()
+        )
         self.assertFalse((self.root / "evidence/history.sarif").exists())
         receipt = json.loads((self.root / "evidence/tree-receipt.json").read_text())
         self.assertEqual(receipt["exit_code"], 2)
         self.assertTrue(receipt["cleanup_confirmed"])
+
+    def test_real_schedule_translates_reviewed_merge_and_line_drift_not_history_scope(
+        self,
+    ):
+        origin, _ = self.reviewed_fixture()
+        self.git("checkout", "-b", "reviewed-side")
+        self.write("record.txt", "# harmless line drift\n" + self.canary())
+        shifted = self.commit("shift reviewed fixture")
+        self.git("checkout", "main")
+        self.git("rm", "record.txt")
+        self.write("other.txt", "independent clean main change\n")
+        self.commit("independent main change")
+        self.git("merge", "--no-ff", "reviewed-side", check=False)
+        self.assertEqual(self.git("rev-parse", "MERGE_HEAD"), shifted)
+        self.write("record.txt", "# harmless line drift\n" + self.canary())
+        merged = self.commit("resolve with the reviewed side span")
+        self.git("checkout", "-b", "empty-diff-side")
+        self.write("temporary.txt", "clean transient side change\n")
+        self.commit("transient clean side addition")
+        self.git("rm", "temporary.txt")
+        self.commit("remove transient clean side addition")
+        self.git("checkout", "main")
+        self.git(
+            "merge", "--no-ff", "empty-diff-side", "-m", "empty first-parent merge diff"
+        )
+        empty_merge = self.git("rev-parse", "HEAD")
+        self.git("commit", "--allow-empty", "-m", "empty history commit")
+        head = self.git("rev-parse", "HEAD")
+        result = self.run_scan(head, {}, "schedule")
+        inventory = json.loads((self.root / "evidence/inventory.json").read_text())
+        self.assertEqual(inventory["history_selection"], "--all")
+        self.assertIn(origin, inventory["commits"])
+        self.assertIn(shifted, inventory["commits"])
+        self.assertIn(merged, inventory["commits"])
+        self.assertIn(empty_merge, inventory["commits"])
+        self.assertIn(head, inventory["commits"])
+        # Pinned gitleaks omits the empty commit, empty-diff merge and the
+        # deletion-only side commit, while all remain in the selected DAG.
+        self.assertEqual(
+            result["boundaries"]["history"]["scanned_commits"],
+            len(inventory["commits"]) - 3,
+        )
+        output = self.root / "evidence"
+        initial = json.loads((output / "history-initial-receipt.json").read_text())
+        self.assertEqual(initial["exit_code"], 2)
+        self.assertGreater(initial["scanned_bytes"], 0)
+        proofs = json.loads((output / "history-policy-provenance.json").read_text())
+        self.assertGreater(proofs["accepted_existing_policy"], 0)
+        self.assertTrue(
+            all(
+                row["existing_fingerprint"].startswith(origin + ":")
+                for row in proofs["findings"]
+            )
+        )
+        self.assertIn(merged, {row["reported_commit"] for row in proofs["findings"]})
+        for suffix in ("initial-cleanup", "cleanup"):
+            self.assertTrue(
+                json.loads((output / f"history-{suffix}.json").read_text())[
+                    "cleanup_confirmed"
+                ]
+            )
+        self.assertEqual(
+            json.loads((output / "history.sarif").read_text())["runs"][0]["results"], []
+        )
+        self.assertEqual(result["boundaries"]["history"]["exit_code"], 0)
+
+    def test_real_unreviewed_changed_span_removed_from_head_still_blocks_history(self):
+        self.reviewed_fixture()
+        changed = self.canary().replace(
+            hashlib.sha256(b"offline-canary").hexdigest()[:24],
+            hashlib.sha256(b"changed-history-canary").hexdigest()[:24],
+        )
+        self.write("record.txt", changed)
+        unreviewed = self.commit("new unreviewed historical span")
+        self.write("record.txt", "clean current head\n")
+        head = self.commit("remove unreviewed historical span")
+        with self.assertRaisesRegex(scan.ScanError, "History has unreviewed findings"):
+            self.run_scan(head, {}, "schedule")
+        self.assert_redacted_failure("history-initial.sarif")
+        proof = json.loads(
+            (self.root / "evidence/history-policy-provenance.json").read_text()
+        )
+        self.assertTrue(
+            any(
+                row["reported_commit"] == unreviewed
+                and not row["accepted_existing_policy"]
+                for row in proof["findings"]
+            )
+        )
+
+
+class HistoryProvenanceTests(GitFixture):
+    def setUp(self):
+        super().setUp()
+        self.original = "reviewed first line\nreviewed second line\n"
+        self.write("record.txt", self.original)
+        self.origin = self.commit("reviewed original span")
+        self.write(".gitleaksignore", f"{self.origin}:record.txt:generic-api-key:1\n")
+        self.review = self.commit("existing reviewed origin fingerprint")
+
+    def finding(self, commit, start=1, end=2):
+        return {
+            "ruleId": "generic-api-key",
+            "partialFingerprints": {"commitSha": commit},
+            "locations": [
+                {
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": "record.txt"},
+                        "region": {"startLine": start, "endLine": end},
+                    }
+                }
+            ],
+        }
+
+    def resolve(self, head, findings, selection="--all"):
+        tree = self.root / "tree"
+        scan.tracked_tree(self.repo, head, tree)
+        output = self.root / "evidence"
+        output.mkdir(exist_ok=True)
+        return scan.history_policy_provenance(
+            self.repo, tree, findings, output, head, selection
+        )
+
+    def assert_blocked(self, head, findings, selection="--all"):
+        with self.assertRaises(scan.ScanError):
+            self.resolve(head, findings, selection)
+        self.assertFalse((self.root / "history-policy.ignore").exists())
+
+    def test_exact_immutable_whole_span_at_shifted_historical_commit(self):
+        self.write("record.txt", "inserted\n" + self.original)
+        shifted = self.commit("line drift")
+        self.write("record.txt", "removed from final head\n")
+        head = self.commit("remove historical record")
+        self.assertEqual(
+            self.resolve(head, [self.finding(shifted, 2, 3)]),
+            "/scan/history-policy.ignore",
+        )
+        proof = json.loads(
+            (self.root / "evidence/history-policy-provenance.json").read_text()
+        )["findings"][0]
+        self.assertEqual(proof["reported_commit"], shifted)
+        self.assertEqual(
+            proof["existing_fingerprint"], f"{self.origin}:record.txt:generic-api-key:1"
+        )
+        self.assertEqual(
+            proof["span_sha256"], hashlib.sha256(self.original.encode()).hexdigest()
+        )
+        self.assertIn(
+            f"{shifted}:record.txt:generic-api-key:2",
+            (self.root / "history-policy.ignore").read_text(),
+        )
+        self.assertEqual(
+            (self.repo / ".gitleaksignore").read_bytes(),
+            scan.git(self.repo, "show", self.review + ":.gitleaksignore"),
+        )
+
+    def test_changed_second_line_and_mixed_origin_are_not_inherited(self):
+        self.write("record.txt", "reviewed first line\nunreviewed changed suffix\n")
+        head = self.commit("new suffix")
+        self.assert_blocked(head, [self.finding(head)])
+
+    def test_identical_span_hash_reintroduced_by_new_origin_is_not_reviewed(self):
+        self.write("record.txt", "removed\n")
+        self.commit("remove reviewed lines")
+        self.write("record.txt", self.original)
+        head = self.commit("unrelated identical introduction")
+        self.assert_blocked(head, [self.finding(head)])
+        proof = json.loads(
+            (self.root / "evidence/history-policy-provenance.json").read_text()
+        )["findings"][0]
+        self.assertEqual(
+            proof["span_sha256"], hashlib.sha256(self.original.encode()).hexdigest()
+        )
+        self.assertFalse(proof["accepted_existing_policy"])
+
+    def test_new_unreviewed_rule_cannot_inherit_another_rule(self):
+        finding = self.finding(self.review)
+        finding["ruleId"] = "another-rule"
+        self.assert_blocked(self.review, [finding])
+
+    def test_valid_commit_outside_selected_range_is_forged_provenance(self):
+        self.assert_blocked(
+            self.review, [self.finding(self.origin)], self.origin + ".." + self.review
+        )
+
+    def test_nonexistent_commit_and_missing_commit_fail_closed(self):
+        for value in ("a" * 40, "HEAD", "0" * 40, None, True):
+            with self.subTest(value=value):
+                self.assert_blocked(self.review, [self.finding(value)])
+        finding = self.finding(self.review)
+        del finding["partialFingerprints"]
+        self.assert_blocked(self.review, [finding])
+
+    def test_malformed_path_span_rule_or_locations_fail_closed(self):
+        changes = [
+            ("path", "../record.txt"),
+            ("path", "/record.txt"),
+            ("path", "./record.txt"),
+            ("path", "record.txt\nforged"),
+            ("path", "C:record.txt"),
+            ("rule", "generic-api-key\nforged"),
+            ("start", True),
+            ("start", 0),
+            ("end", 200),
+            ("end", 3),
+            ("end", "2"),
+            ("locations", []),
+        ]
+        for field, value in changes:
+            finding = self.finding(self.review)
+            physical = finding["locations"][0]["physicalLocation"]
+            if field == "path":
+                physical["artifactLocation"]["uri"] = value
+            elif field == "rule":
+                finding["ruleId"] = value
+            elif field == "locations":
+                finding["locations"] = value
+            else:
+                physical["region"][field + "Line"] = value
+            with self.subTest(field=field, value=value):
+                self.assert_blocked(self.review, [finding])
+
+    def test_mixed_reviewed_and_unreviewed_inventory_has_no_partial_translation(self):
+        finding = self.finding(self.review)
+        other = self.finding(self.review)
+        other["ruleId"] = "new-unreviewed-rule"
+        self.assert_blocked(self.review, [finding, other])
+
+    def test_unknown_blame_and_changed_origin_bytes_fail_closed(self):
+        native = scan.git
+        for bad_blame in (True, False):
+
+            def altered(repo, *args, **kwargs):
+                if bad_blame and "blame" in args:
+                    return b"malformed blame\n"
+                data = native(repo, *args, **kwargs)
+                if not bad_blame and args == ("show", self.origin + ":record.txt"):
+                    return data.replace(b"first", b"other")
+                return data
+
+            with (
+                self.subTest(bad_blame=bad_blame),
+                patch.object(scan, "git", side_effect=altered),
+            ):
+                self.assert_blocked(self.review, [self.finding(self.review)])
+
+    def test_findings_blob_and_cache_bounds_fail_closed(self):
+        for attr, value, findings in (
+            ("MAX_FINDINGS", 1, [self.finding(self.review)] * 2),
+            ("MAX_BLOB_BYTES", 1, [self.finding(self.review)]),
+            ("MAX_CACHE_BYTES", 1, [self.finding(self.review)]),
+        ):
+            with self.subTest(bound=attr), patch.object(scan, attr, value):
+                self.assert_blocked(self.review, findings)
+
+    def test_multiple_sarif_runs_are_not_silently_dropped(self):
+        report = self.root / "report.sarif"
+        report.write_text(
+            json.dumps(
+                {
+                    "version": "2.1.0",
+                    "runs": [{"results": []}, {"results": [self.finding(self.review)]}],
+                }
+            )
+        )
+        with self.assertRaises(scan.ScanError):
+            scan.report_findings(report)
+
+    def test_exported_tree_bytes_must_still_match_the_immutable_source(self):
+        tree = self.root / "tree"
+        scan.tracked_tree(self.repo, self.review, tree)
+        (tree / "record.txt").write_text("unreviewed first line\nunreviewed suffix\n")
+        output = self.root / "evidence"
+        output.mkdir()
+        with self.assertRaisesRegex(scan.ScanError, "Captured tree differs"):
+            scan.tree_policy_provenance(
+                self.repo, tree, [self.finding(self.review)], output, self.review
+            )
+        self.assertFalse((self.root / "tree-policy.ignore").exists())
 
 
 class ProvenanceTests(GitFixture):
@@ -608,7 +951,9 @@ class ProvenanceTests(GitFixture):
             scan.tree_policy_provenance(self.repo, tree, [finding], output, head)
         self.assertFalse((tree.parent / "tree-policy.ignore").exists())
 
-    def test_unrelated_equal_literal_cannot_use_another_commits_reviewed_fingerprint(self):
+    def test_unrelated_equal_literal_cannot_use_another_commits_reviewed_fingerprint(
+        self,
+    ):
         self.write("record.txt", "reviewed equal literal\n")
         origin = self.commit("reviewed original")
         self.write("record.txt", "removed\n")
@@ -658,7 +1003,9 @@ class ProvenanceTests(GitFixture):
         ):
             self.run_scan(head, timeout=1)
         self.assert_incomplete()
-        absence = REAL_RUN(["docker", "inspect", names[0]], capture_output=True, timeout=30)
+        absence = REAL_RUN(
+            ["docker", "inspect", names[0]], capture_output=True, timeout=30
+        )
         self.assertNotEqual(absence.returncode, 0)
         self.assertIn(f"no such object: {names[0]}".encode(), absence.stderr.lower())
 
@@ -711,7 +1058,9 @@ class ProvenanceTests(GitFixture):
         ):
             self.run_scan(head)
         self.assert_incomplete()
-        absence = REAL_RUN(["docker", "inspect", names[0]], capture_output=True, timeout=30)
+        absence = REAL_RUN(
+            ["docker", "inspect", names[0]], capture_output=True, timeout=30
+        )
         self.assertNotEqual(absence.returncode, 0)
         self.assertIn(f"no such object: {names[0]}".encode(), absence.stderr.lower())
 

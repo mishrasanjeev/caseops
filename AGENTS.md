@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- A reviewed origin fingerprint may recur at a historical merge or shifted
+  line. Translate only after the reported immutable commit is in the selected
+  history and the complete byte-identical span has one contiguous reviewed
+  blame origin. Equal hashes alone, mixed origins and unknown provenance never
+  authorize an exception. Retain the initial native failure and rescan the same
+  full history; reconcile empty-diff commits separately from scanner counters.
+
 - Calendar cancellation tests must follow the actual transport boundary. Matter
   cancellation commits exact `DELETE_PENDING` tombstones; drain the existing
   bounded worker before asserting provider DELETE, then prove retained

@@ -23,8 +23,35 @@ redacted native findings are retained; a temporary tree-only fingerprint is
 derived only when native blame proves the complete finding span is unchanged
 from the exact reviewed commit/path/line and immutable original blob. The same
 captured tree is then rescanned. New tokens at an old path/line, changed
-multiline spans and newly reintroduced literals still fail. History uses the
-original policy unchanged. No new reviewed exception or alert dismissal exists.
+multiline spans and newly reintroduced literals still fail. Historical findings
+use the same complete-span boundary, additionally requiring the reported
+immutable commit to belong to the selected history. Only an unchanged span with
+one contiguous reviewed blame origin can receive a temporary exact
+reported-commit/path/rule/line translation. The same complete history is then
+rescanned natively; no report is filtered into a clean result. Both initial and
+final native reports, receipts and owned-container cleanup are retained.
+No tracked policy exception or alert dismissal is added.
+
+## Scheduled History Origin Drift (2026-10-18)
+
+Scheduled Security run `39113604226` on main
+`2b34c5167def1d92c8b5c10896b2e92e7a7ca5a2` actually failed: the immutable tree
+passed after 24 existing translations, but full `--all` history returned native
+exit 2 with 29 `generic-api-key` findings. These 29 historical reported spans
+resolve to 23 already-reviewed origin fingerprints, with complete contiguous
+blame and byte-identical immutable spans. The initial scheduled failure remains
+retained; this is not an invented runtime regression or a new credential waiver.
+
+Bounded provenance review rejects changed bytes, identical literals introduced
+by a new origin, mixed origins, unreviewed rules, malformed locations, missing or
+out-of-range commits and unknown blame. Blob, cache, report and finding limits
+fail closed. Selected Git commit counts include empty-diff commits and merges;
+the pinned scanner counts commits with eligible non-deleted, non-binary diffs.
+Retain and reconcile both inventories rather than narrowing traversal to make
+the counters equal. Focused and full-schedule candidate evidence belongs under
+`outputs/ip-calendar-open-items-20261017/security-history-origin-20261018-01`.
+Local candidate proof does not certify a hosted replacement scheduled run or
+authorize deployment.
 
 ## Native Evidence
 
