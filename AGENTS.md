@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A parameterized fixture still needs an explicit supported-input domain.
+  Reject unsupported targets before admission and assign response-derived IDs
+  inside the branch that creates that response. A green exercised subset does
+  not clear a static uninitialized-variable finding; preserve the failed
+  candidate and rerun fresh complete gates without scanner suppression.
+
 - A reviewed origin fingerprint may recur at a historical merge or shifted
   line. Translate only after the reported immutable commit is in the selected
   history and the complete byte-identical span has one contiguous reviewed

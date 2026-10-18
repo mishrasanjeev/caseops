@@ -53,6 +53,8 @@ def _row(client, fixture):
 
 
 def _fixture(client, monkeypatch, target, *, linked=False):
+    if target not in {"matter", "contract"}:
+        raise ValueError("Unsupported snapshot fixture target.")
     # Admit through the production HTTP route, but release the real worker only
     # at the barrier. This intercepts dispatch, not indexing or serialization.
     for route in (matter_routes, contract_routes):
@@ -88,7 +90,10 @@ def _fixture(client, monkeypatch, target, *, linked=False):
             },
         )
         assert response.status_code == 200, response.text
-    parent_id = matter_id if target == "matter" else response.json()["id"]
+        parent_id = response.json()["id"]
+    else:
+        assert matter_id is not None
+        parent_id = matter_id
     path = f"/api/{'matters' if target == 'matter' else 'contracts'}/{parent_id}"
     upload = client.post(
         path + "/attachments",

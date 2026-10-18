@@ -82,6 +82,18 @@ RFC 7807's string `detail` as nested metadata. Only that test was corrected to
 assert the canonical top-level code/action/reasons, then the complete 50-case
 inventory was rerun. API behavior and OCR eligibility were not weakened.
 
+The first published candidate `450fcbf5` was blocked by CodeQL check117762796712:
+the new fixture's response variable was not defined for unsupported targets.
+Reject unsupported targets explicitly and assign the parent identity inside
+each admitted branch; do not suppress the finding or weaken the HTTP oracle.
+Its earlier 50-case results remain scoped to the preceding fixture bytes.
+Docker11 was deliberately cancelled before complete native/browser acceptance,
+with its original source, partial journals and collection retained. Only the
+checked native child tree was stopped; the canonical shell performed cleanup,
+was reaped and its exact project had zero remaining containers/networks/volumes.
+The replacement must pass fresh full gates. The earlier output-wrapper Docker10
+argument-binding failure is operator evidence, not a product regression.
+
 ## Required Closure
 
 Fresh controlled GREEN must cover the original HTTP races, adjacent IP reads and
