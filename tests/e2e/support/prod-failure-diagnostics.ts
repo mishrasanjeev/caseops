@@ -5,6 +5,8 @@ const routes: Array<[RegExp, string]> = [
   [/^\/api\/notices\/[^/]+\/attachments$/, "notice/attachment"],
   [/^\/api\/ip\/dockets\/[^/]+\/title-interests$/, "ip/title-interest"],
   [/^\/api\/ip\/patents\/applications$/, "ip/application"],
+  [/^\/api\/calendar\/events$/, "calendar/events"],
+  [/^\/api\/ip\/portfolio\/renewal-tracker$/, "ip/renewal-tracker"],
   [/^\/sign-in\/?$/, "web/sign-in"],
   [/^\/app(?:\/|$)/, "web/app-navigation"],
 ];

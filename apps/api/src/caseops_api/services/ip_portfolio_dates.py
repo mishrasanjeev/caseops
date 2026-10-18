@@ -113,15 +113,77 @@ def valid_iso_date_expression(raw):
     )
 
 
-def date_expression(field):
-    data = IpTrademarkParticularVersion.representation_json
+def raw_date_expression(field, *, data=None, imported_proven=None):
+    if data is None:
+        data = IpTrademarkParticularVersion.representation_json
+    if imported_proven is None:
+        imported_proven = imported_proof_expression()
     manual = data["portfolio_dates"][field]
-    raw = case(
+    return case(
         (manual["origin"].as_string() == "manual", manual["value"].as_string()),
-        (imported_proof_expression(), data["portfolio_import"][field].as_string()),
+        (imported_proven, data["portfolio_import"][field].as_string()),
         else_=literal(None),
     )
-    return valid_iso_date_expression(raw)
+
+
+def date_expression(field):
+    return valid_iso_date_expression(raw_date_expression(field))
+
+
+def _source_fact_stage(statement):
+    return statement.cte(nesting=True).prefix_with("MATERIALIZED", dialect="postgresql")
+
+
+def current_date_facts(candidates, *, company_id):
+    """Resolve proof and safe current dates once for the already authorized scope."""
+    scoped = _source_fact_stage(
+        candidates.with_only_columns(
+            IpDocketRecord.id.label("docket_id"), maintain_column_froms=True
+        )
+        .order_by(None)
+        .distinct()
+    )
+    proof = _source_fact_stage(
+        select(
+            IpDocketRecord.id.label("docket_id"),
+            IpTrademarkParticularVersion.id.label("version_id"),
+            IpTrademarkParticularVersion.representation_json.label("data"),
+            imported_proof_expression().label("import_proven"),
+        )
+        .select_from(IpDocketRecord)
+        .join(scoped, scoped.c.docket_id == IpDocketRecord.id)
+        .join(
+            IpTrademarkParticularVersion,
+            and_(
+                IpTrademarkParticularVersion.company_id == IpDocketRecord.company_id,
+                IpTrademarkParticularVersion.docket_id == IpDocketRecord.id,
+                IpTrademarkParticularVersion.version == IpDocketRecord.current_version,
+            ),
+        )
+        .where(IpDocketRecord.company_id == company_id)
+    )
+    raw = _source_fact_stage(
+        select(
+            proof.c.docket_id,
+            proof.c.version_id,
+            proof.c.import_proven,
+            raw_date_expression(
+                "application_date", data=proof.c.data, imported_proven=proof.c.import_proven
+            ).label("application_raw"),
+            raw_date_expression(
+                "renewal_due_date", data=proof.c.data, imported_proven=proof.c.import_proven
+            ).label("renewal_raw"),
+        )
+    )
+    return _source_fact_stage(
+        select(
+            raw.c.docket_id,
+            raw.c.version_id,
+            raw.c.import_proven,
+            valid_iso_date_expression(raw.c.application_raw).label("application_on"),
+            valid_iso_date_expression(raw.c.renewal_raw).label("renewal_due_on"),
+        )
+    )
 
 
 def page_date_details(session, *, company_id, docket_ids):

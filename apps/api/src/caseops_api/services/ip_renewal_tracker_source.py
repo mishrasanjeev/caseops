@@ -12,7 +12,7 @@ from caseops_api.db.models import (
 )
 
 
-def source_stop_reason_expression(due):
+def source_stop_reason_expression(due, *, correlate_sources=()):
     applications = (
         select(TrademarkApplication.id)
         .where(
@@ -33,7 +33,7 @@ def source_stop_reason_expression(due):
             deadline.company_id == IpDocketRecord.company_id,
             cast(deadline.result_on, String) == due,
         )
-        .correlate(IpDocketRecord, IpTrademarkParticularVersion)
+        .correlate(IpDocketRecord, IpTrademarkParticularVersion, *correlate_sources)
         .scalar_subquery()
     )
     current_terms = (
@@ -46,7 +46,7 @@ def source_stop_reason_expression(due):
             cast(IpDeadline.result_on, String) == due,
             IpRenewalTerm.term_sequence == latest_sequence,
         )
-        .correlate(IpDocketRecord, IpTrademarkParticularVersion)
+        .correlate(IpDocketRecord, IpTrademarkParticularVersion, *correlate_sources)
     )
     stopped = or_(
         IpRenewalTerm.state.in_(("completed", "cancelled")),

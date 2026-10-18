@@ -66,8 +66,8 @@ async function select(page: Page, name: string, option: string) {
   await page.getByRole("option", { name: option, exact: true }).click();
 }
 
-async function trackerIds(tracker: Locator) {
-  return tracker.locator('tbody a[href^="/app/ip?docket="]').evaluateAll(links =>
+async function docketIds(region: Locator) {
+  return region.locator('a[href^="/app/ip?docket="]').evaluateAll(links =>
     links.map(link => new URL((link as HTMLAnchorElement).href).searchParams.get("docket")));
 }
 
@@ -101,7 +101,7 @@ for (const width of [1280, 393]) {
       await expect(tracker.locator("tbody tr")).toHaveCount(50);
       await tracker.getByRole("button", { name: "Load more renewal records", exact: true }).click();
       await expect(tracker.locator("tbody tr")).toHaveCount(51);
-      expect((await trackerIds(tracker)).sort()).toEqual([...fixture.missingIds].sort());
+      expect((await docketIds(tracker)).sort()).toEqual([...fixture.missingIds].sort());
       await expect(tracker.getByRole("button", { name: "Load more renewal records" })).toHaveCount(0);
       await expect(tracker.getByText("Verified", { exact: true })).toHaveCount(0);
       const filters = { query: fixture.prefix, application_date_from: "2020-01-01",
@@ -115,6 +115,19 @@ for (const width of [1280, 393]) {
       expect(apiPage.counts.missing).toBe(51);
       expect(apiPage.rows.every(row => row.source_application_state === "imported_unverified"
         && row.source_renewal_state === "missing")).toBe(true);
+      await page.getByRole("button", { name: "Family view", exact: true }).click();
+      const families = page.getByRole("region", { name: "Application families", exact: true });
+      await expect(families.locator('[data-testid^="ip-family-"]')).toHaveCount(25);
+      for (const count of [50, 51]) {
+        await families.getByRole("button", { name: "Load more families", exact: true }).click();
+        await expect(families.locator('[data-testid^="ip-family-"]')).toHaveCount(count);
+      }
+      expect((await docketIds(families)).sort()).toEqual([...fixture.missingIds].sort());
+      await expect(families.getByRole("button", { name: "Load more families", exact: true })).toHaveCount(0);
+      await page.getByRole("button", { name: "Deadline tracker view", exact: true }).click();
+      await expect(tracker.getByRole("textbox", { name: "Search renewal tracker", exact: true })).toHaveValue(fixture.prefix);
+      await expect(tracker.getByLabel("Application Date from", { exact: true })).toHaveValue("2020-01-01");
+      await expect(tracker.getByLabel("Application Date to", { exact: true })).toHaveValue("2020-12-31");
       const viewName = `IP18 dates ${workspace.run}`;
       await page.getByRole("button", { name: "Save view", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Save current view", exact: true });
@@ -139,7 +152,7 @@ for (const width of [1280, 393]) {
       await expect(tracker.locator("tbody tr")).toHaveCount(50);
       await tracker.getByRole("button", { name: "Load more renewal records", exact: true }).click();
       await expect(tracker.locator("tbody tr")).toHaveCount(51);
-      expect((await trackerIds(tracker)).sort()).toEqual([...fixture.missingIds].sort());
+      expect((await docketIds(tracker)).sort()).toEqual([...fixture.missingIds].sort());
       const previewed = page.waitForResponse(response => new URL(response.url()).pathname === "/api/ip/portfolio/exports/preview"
         && response.request().method() === "POST");
       await page.getByRole("button", { name: "Export", exact: true }).click();

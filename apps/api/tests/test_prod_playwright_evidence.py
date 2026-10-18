@@ -1047,10 +1047,10 @@ def test_complete_native_reporter_pre_disk_privacy_contracts(tmp_path, record_pr
     path = tmp_path / "native-reporter.tap"
     path.write_text(result.stdout + result.stderr, encoding="utf-8")
     record_property("native_reporter_inventory", str(path))
-    record_property("native_reporter_test_count", "32")
+    record_property("native_reporter_test_count", "33")
     assert result.returncode == 0, result.stdout + result.stderr
     assert (
-        "# tests 32" in result.stdout
+        "# tests 33" in result.stdout
         and "# fail 0" in result.stdout
         and "# skipped 0" in result.stdout
     )

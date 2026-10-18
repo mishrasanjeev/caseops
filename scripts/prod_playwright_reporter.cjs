@@ -9,7 +9,8 @@ const root = path.resolve(__dirname, "..");
 const limit = 64 * 1024 * 1024;
 const diagnosticLimit = 64 * 1024;
 const routes = new Set(["auth/session", "matter/bulk-update", "matter/attachment", "notice/attachment",
-  "ip/title-interest", "ip/application", "web/sign-in", "web/app-navigation"]);
+  "ip/title-interest", "ip/application", "calendar/events", "ip/renewal-tracker",
+  "web/sign-in", "web/app-navigation"]);
 const problems = new Set(["database_lock_timeout", "database_busy", "database_unavailable", "invalid_token",
   "missing_bearer_token", "rate_limited", "capability_required", "role_required", "step_up_required",
   "mfa_enrollment_required", "validation_error"]);

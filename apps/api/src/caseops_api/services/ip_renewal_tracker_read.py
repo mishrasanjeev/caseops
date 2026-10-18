@@ -30,10 +30,10 @@ from caseops_api.services import ip_renewal_tracker
 from caseops_api.services.ip_coverage_read import _TERMINAL_DOCKET_STATUSES
 from caseops_api.services.ip_domain_policy import TRADEMARK_RECORD_TYPES
 from caseops_api.services.ip_portfolio_dates import (
+    current_date_facts,
     current_dates,
     date_expression,
     docket_date_edit_operational,
-    imported_proof_expression,
 )
 from caseops_api.services.ip_portfolio_search import portfolio_target_search_predicate
 from caseops_api.services.ip_renewal_tracker import month_start, policy
@@ -72,7 +72,9 @@ def latest_intent_column(column):
     )
 
 
-def _operational_predicate(due):
+def _operational_predicate(due, *, stop_reason=None):
+    if stop_reason is None:
+        stop_reason = source_stop_reason_expression(due)
     return and_(
         IpDocketRecord.is_active.is_(True),
         IpDocketRecord.status.not_in(_TERMINAL_DOCKET_STATUSES),
@@ -80,11 +82,13 @@ def _operational_predicate(due):
             IpPortfolioRenewalSeries.cancelled_at.is_(None),
             IpPortfolioRenewalSeries.cancellation_reason.in_(("source_overdue", "missing_date")),
         ),
-        source_stop_reason_expression(due).is_(None),
+        stop_reason.is_(None),
     )
 
 
-def category_predicates(*, session, context, horizon_days=90, now=None, settings=None):
+def category_predicates(
+    *, session, context, horizon_days=90, now=None, settings=None, due=None, stop_reason=None
+):
     now = now or ip_renewal_tracker._now()
     settings = settings or policy(session, company=context.company)
     zone = ZoneInfo(settings["timezone"])
@@ -93,7 +97,8 @@ def category_predicates(*, session, context, horizon_days=90, now=None, settings
     last = monthrange(year, month)[1]
     day = last if today.day == monthrange(today.year, today.month)[1] else min(today.day, last)
     active_until = today.replace(year=year, month=month, day=day)
-    due = date_expression("renewal_due_date")
+    if due is None:
+        due = date_expression("renewal_due_date")
     day_start = datetime.combine(today, time(), zone).astimezone(UTC)
     day_end = datetime.combine(today + timedelta(days=1), time(), zone).astimezone(UTC)
     occurrence_today = (
@@ -108,7 +113,7 @@ def category_predicates(*, session, context, horizon_days=90, now=None, settings
         .correlate(IpDocketRecord, IpPortfolioRenewalSeries)
         .exists()
     )
-    eligible = _operational_predicate(due)
+    eligible = _operational_predicate(due, stop_reason=stop_reason)
     active = and_(eligible, due >= today.isoformat(), due <= active_until.isoformat())
     return {
         "upcoming": and_(
@@ -140,30 +145,10 @@ def category_predicates(*, session, context, horizon_days=90, now=None, settings
     }
 
 
-def scoped_tracker_query(session, *, context):
-    return (
-        select(
-            IpDocketRecord,
-            IpTrademarkParticularVersion,
-            IpPortfolioRenewalSeries,
-            imported_proof_expression().label("import_proven"),
-            source_stop_reason_expression(date_expression("renewal_due_date")).label("stop_reason"),
-        )
-        .join(
-            IpTrademarkParticularVersion,
-            and_(
-                IpTrademarkParticularVersion.company_id == IpDocketRecord.company_id,
-                IpTrademarkParticularVersion.docket_id == IpDocketRecord.id,
-                IpTrademarkParticularVersion.version == IpDocketRecord.current_version,
-            ),
-        )
-        .outerjoin(
-            IpPortfolioRenewalSeries,
-            and_(
-                IpPortfolioRenewalSeries.company_id == IpDocketRecord.company_id,
-                IpPortfolioRenewalSeries.docket_id == IpDocketRecord.id,
-            ),
-        )
+def _scoped_tracker_candidates(session, *, context, query=None, docket_id=None):
+    statement = (
+        select(IpDocketRecord.id)
+        .select_from(IpDocketRecord)
         .outerjoin(
             Matter,
             and_(
@@ -184,6 +169,67 @@ def scoped_tracker_query(session, *, context):
             ),
         )
     )
+    if query and query.strip():
+        statement = statement.where(
+            portfolio_target_search_predicate(company_id=context.company.id, query=query)
+        )
+    if docket_id is not None:
+        statement = statement.where(IpDocketRecord.id == docket_id)
+    return statement
+
+
+def tracker_source_facts(candidates, *, company_id):
+    dates = current_date_facts(candidates, company_id=company_id)
+    stopped = (
+        select(
+            dates,
+            source_stop_reason_expression(dates.c.renewal_due_on, correlate_sources=(dates,)).label(
+                "stop_reason"
+            ),
+        )
+        .select_from(dates)
+        .join(IpDocketRecord, IpDocketRecord.id == dates.c.docket_id)
+        .where(IpDocketRecord.company_id == company_id)
+        .cte(nesting=True)
+        .prefix_with("MATERIALIZED", dialect="postgresql")
+    )
+    return select(stopped).subquery()
+
+
+def scoped_tracker_query(session, *, context, query=None, docket_id=None):
+    candidates = _scoped_tracker_candidates(
+        session, context=context, query=query, docket_id=docket_id
+    )
+    facts = tracker_source_facts(candidates, company_id=context.company.id)
+    statement = (
+        select(
+            IpDocketRecord,
+            IpTrademarkParticularVersion,
+            IpPortfolioRenewalSeries,
+            facts.c.import_proven,
+            facts.c.stop_reason,
+        )
+        .select_from(IpDocketRecord)
+        .join(facts, facts.c.docket_id == IpDocketRecord.id)
+        .join(
+            IpTrademarkParticularVersion,
+            and_(
+                IpTrademarkParticularVersion.company_id == IpDocketRecord.company_id,
+                IpTrademarkParticularVersion.docket_id == IpDocketRecord.id,
+                IpTrademarkParticularVersion.version == IpDocketRecord.current_version,
+                IpTrademarkParticularVersion.id == facts.c.version_id,
+            ),
+        )
+        .outerjoin(
+            IpPortfolioRenewalSeries,
+            and_(
+                IpPortfolioRenewalSeries.company_id == IpDocketRecord.company_id,
+                IpPortfolioRenewalSeries.docket_id == IpDocketRecord.id,
+            ),
+        )
+        .where(IpDocketRecord.company_id == context.company.id)
+    )
+    return statement, facts
 
 
 def _row(
@@ -348,16 +394,22 @@ def list_tracker(
         ).encode()
     ).hexdigest()
     after_id = _tracker_cursor_id(cursor, scope=scope) if cursor else None
+    statement, facts = scoped_tracker_query(session, context=context, query=query)
     predicates = category_predicates(
-        session=session, context=context, horizon_days=horizon_days, now=now, settings=settings
+        session=session,
+        context=context,
+        horizon_days=horizon_days,
+        now=now,
+        settings=settings,
+        due=facts.c.renewal_due_on,
+        stop_reason=facts.c.stop_reason,
     )
-    statement = scoped_tracker_query(session, context=context)
-    if query and query.strip():
-        statement = statement.where(
-            portfolio_target_search_predicate(company_id=context.company.id, query=query)
-        )
+    expressions = {
+        "application_date": facts.c.application_on,
+        "renewal_due_date": facts.c.renewal_due_on,
+    }
     for field, lower, upper in ranges:
-        expression = date_expression(field)
+        expression = expressions[field]
         if lower:
             statement = statement.where(expression >= lower.isoformat())
         if upper:
@@ -525,9 +577,8 @@ def _hydrate_page(session, *, context, page, settings, now):
 
 
 def tracker_row(session, *, context, docket_id):
-    record = session.execute(
-        scoped_tracker_query(session, context=context).where(IpDocketRecord.id == docket_id)
-    ).one_or_none()
+    statement, _facts = scoped_tracker_query(session, context=context, docket_id=docket_id)
+    record = session.execute(statement).one_or_none()
     if record is None:
         raise HTTPException(status_code=404, detail="IP docket record not found.")
     return _hydrate_page(
