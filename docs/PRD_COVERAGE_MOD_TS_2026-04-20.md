@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 19 Specialist Read Recovery
+
+IPLF-090/091 and UJ-30/41 reuse the existing specialist reader/access owner.
+Docker15 fails its actual390055>2048 work bound after1603 passes; no remaining
+local/browser coverage is implied. The ordered one-key barrier preserves all
+current ACL/lifecycle predicates. Complete scoped native25/75 and two compile
+guards pass, four plans1000-1485. Full replacement release/live proof is still
+pending;9cf76f2b is last observed serving. No entitlement, legal-source or Google
+consent gap is closed. See `docs/bugfix-specialist-docket-seek-2026-10-19.md`.
+
 ## October 19 CI Correction
 
 J04/M03 remains source-only/NO-GO. C3ed13138d CI39173686953 failed compiled

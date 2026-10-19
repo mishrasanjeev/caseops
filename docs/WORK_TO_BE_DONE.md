@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 19 Specialist Read Recovery
+
+Merged401d1615 is not deployable: Docker15 completed1603P/1F with the rest
+incomplete. The actual10k specialist plan charged390055>2048 work. A bounded
+ordered key lookup followed by unchanged exact-identity/tenant/ACL checks now
+passes the complete25-case native module/75 phases, four plans1000-1485 and two
+compile guards. This is source-only proof; new browser list acceptance, full
+Docker, candidate/main CI and exact-live certification remain required. Manual
+IP stays test-legal-only/already consumed; private cadence is paused. Scope and
+failed evidence: `docs/bugfix-specialist-docket-seek-2026-10-19.md`.
+
 ## October 19 CI Correction
 
 Release remains NO-GO: C3ed13138d failed compiled-projection validation and

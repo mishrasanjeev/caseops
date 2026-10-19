@@ -1,5 +1,15 @@
 # Strict Enterprise Gap Tasklist
 
+## October 19 Specialist Read Recovery
+
+**Partially implemented / release NO-GO.** Docker15 exposed390055 units of
+specialist docket work against2048 despite green hosted same-source CI. A
+tenant/status scan repeated52 times. One ordered PK candidate must precede
+exact identity/tenant/current policy checks; a LIMIT alone was insufficient.
+Full scoped25/75 native and two SQL-composition guards pass, unchanged budget,
+four plans1000-1485. Full Docker/CI/main/live/cadence gates remain outstanding.
+See `docs/bugfix-specialist-docket-seek-2026-10-19.md`; no broader readiness claim.
+
 ## October 19 CI Correction
 
 **Partially implemented / NO-GO.** C3ed13138d required CI failed a stale compiled

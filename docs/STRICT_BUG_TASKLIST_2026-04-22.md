@@ -1,5 +1,17 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 19 Specialist Docket Work
+
+**Partially fixed in source / release NO-GO.** Merged401d1615 equals C5, but
+Docker15 failed the10k specialist query work390055>2048. The retained plan shows
+52 tenant-index loops removing7487 rows per loop. The repair seeks one ordered
+PK row before exact-identity/tenant/current policy checks. Complete native25/75
+passes, four plans1000-1485, two compile guards pass; full replacement gates and
+deployed list acceptance remain pending. Preserve the original failure, the
+18P/1F shape baseline and the19P/6F new-test UUID expectation failure separately.
+No production verdict is upgraded from scoped results. See
+`docs/bugfix-specialist-docket-seek-2026-10-19.md`.
+
 ## October 19 CI Correction
 
 C4 `ce938d24` is additionally blocked by CodeQL alert586

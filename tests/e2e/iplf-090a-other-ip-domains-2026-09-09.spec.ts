@@ -86,6 +86,32 @@ for (const { width, group, groupIndex } of responsiveGroups) {
       await patentScreenshot(page, info, `${domain}-${width}.png`);
 
       if (domain !== "design") continue;
+      await page.goto("/app/ip/specialist");
+      await page.getByLabel("Domain", { exact: true }).selectOption(domain);
+      const recordList = page.getByRole("list", { name: "Specialist records" });
+      await expect(recordList).toBeVisible();
+      const listedRecord = recordList.locator(`a[href="/app/ip/specialist/${record.id}"]`);
+      for (let pageIndex = 0; pageIndex < 20 && await listedRecord.count() === 0; pageIndex++) {
+        const next = page.getByRole("button", { name: "Next page", exact: true });
+        if (await next.isDisabled()) break;
+        const following = page.waitForResponse((result) =>
+          new URL(result.url()).pathname === "/api/ip/specialist/records"
+          && result.request().method() === "GET"
+          && new URL(result.url()).searchParams.has("cursor"));
+        await next.click();
+        const followingResponse = await following;
+        expect(followingResponse.status()).toBe(200);
+        const followingPage = await followingResponse.json();
+        expect(followingPage.records.length).toBeGreaterThan(0);
+        await expect(recordList.getByRole("link").first())
+          .toHaveAttribute("href", `/app/ip/specialist/${followingPage.records[0].id}`);
+      }
+      await expect(listedRecord).toBeVisible();
+      await expect(listedRecord).toHaveText(title);
+      await assertPatentControlsFit(page);
+      await patentScreenshot(page, info, `design-list-${width}.png`);
+      await listedRecord.click();
+      await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
       await page.getByRole("tab", { name: "evidence", exact: true }).click();
       const bytes = Buffer.from(`Private acceptance source ${runId}. No legal determination.\n`.repeat(20));
       await page.getByLabel("Evidence file", { exact: true }).setInputFiles({ name: `${runId}.txt`, mimeType: "text/plain", buffer: bytes });

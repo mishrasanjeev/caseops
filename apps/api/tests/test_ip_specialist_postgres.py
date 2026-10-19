@@ -3,22 +3,26 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from hashlib import sha256
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import event, func, insert, select, text
+from sqlalchemy import event, func, insert, literal, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import visitors
 
 from caseops_api.db.models import (
     Client,
     Company,
+    CompanyMembership,
+    EthicalWall,
     IpAsset,
     IpDocketRecord,
     IpSpecialistRecord,
     IpSpecialistVersion,
     MatterAccessGrant,
+    MembershipRole,
     Team,
     TeamMembership,
 )
@@ -27,6 +31,7 @@ from caseops_api.schemas.ip_specialist import SpecialistCorrection, SpecialistFa
 from caseops_api.services.idempotency import canonical_json_sha256
 from caseops_api.services.ip_lifecycle import transition_ip_docket_lifecycle
 from caseops_api.services.ip_specialist import correct_record, create_record, list_records
+from caseops_api.services.record_access_policy import visible_ip_dockets_filter
 from tests import test_ip_specialist as journeys
 from tests.test_postgres_validation import (
     _ensure_migrations,  # noqa: F401
@@ -437,6 +442,11 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
         assert docket_nodes and all(node["Actual Loops"] <= 128 for node in docket_nodes)
         assert all("Index" in node["Node Type"] for node in docket_nodes)
         assert all(
+            "id" in node.get("Index Cond", "") and ">=" in node.get("Index Cond", "")
+            for node in docket_nodes
+        ), docket_nodes
+        assert all(node["Actual Rows"] <= 1 for node in docket_nodes)
+        assert all(
             node["Actual Loops"] == 0 for node in nodes if node.get("Relation Name") == "teams"
         )
 
@@ -507,6 +517,11 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
             assert work <= 2048
             assert dockets and all(node["Actual Loops"] <= 128 for node in dockets)
             assert all("Index" in node["Node Type"] for node in dockets)
+            assert all(
+                "id" in node.get("Index Cond", "") and ">=" in node.get("Index Cond", "")
+                for node in dockets
+            ), dockets
+            assert all(node["Actual Rows"] <= 1 for node in dockets)
             if label.startswith("empty"):
                 assert all(
                     node["Actual Loops"] == 0
@@ -517,3 +532,184 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
                 assert first_ids.isdisjoint(row.id for row in following.records)
             else:
                 assert first_ids == {row.id for row in following.records}
+
+
+def _assert_specialist_base_acl_parity(session, context, record_id, *, allowed, closed=False):
+    header = session.get(IpSpecialistRecord, record_id)
+    docket = session.get(IpDocketRecord, header.docket_id)
+    canonical = session.scalar(
+        select(IpDocketRecord.id).where(
+            IpDocketRecord.id == header.docket_id,
+            IpDocketRecord.company_id == context.company.id,
+            visible_ip_dockets_filter(session, context=context),
+        )
+    )
+    assert (canonical is not None) is allowed
+    assert docket.is_active is (not closed)
+    if closed:
+        assert docket.status == "closed"
+    for include_closed in (False, True):
+        page = list_records(
+            session, context=context, domain="design", limit=25,
+            include_closed=include_closed,
+        )
+        expected = [UUID(record_id)] if allowed and (not closed or include_closed) else []
+        assert [row.id for row in page.records] == expected
+        assert page.next_cursor is None
+        if expected:
+            summary = page.records[0]
+            assert (summary.title, summary.lifecycle_status, summary.version) == (
+                docket.title, docket.status, docket.current_version,
+            )
+
+
+@pytest.mark.parametrize(
+    "scenario", ["owner_ungranted", "member_wall", "team_wall", "include_closed"]
+)
+def test_specialist_list_matches_base_acl_after_docket_adaptation(
+    pg_engine, registered_intake, scenario
+):
+    company, actor, record = _seed(pg_engine)
+    with Session(pg_engine) as session:
+        session.get(CompanyMembership, actor).role = MembershipRole.OWNER
+        grant = session.scalars(
+            select(MatterAccessGrant).where(
+                MatterAccessGrant.company_id == company,
+                MatterAccessGrant.ip_docket_id == str(record.docket_id),
+                MatterAccessGrant.membership_id == actor,
+                MatterAccessGrant.revoked_at.is_(None),
+            )
+        ).one()
+        session.commit()
+        context = _ip_race_context(session, company_id=company, membership_id=actor)
+        record_id = str(record.id)
+        _assert_specialist_base_acl_parity(session, context, record_id, allowed=True)
+        if scenario == "owner_ungranted":
+            grant.revoked_at = datetime.now(UTC)
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=False)
+        elif scenario in {"member_wall", "team_wall"}:
+            wall_subject = {"excluded_membership_id": actor}
+            team = None
+            if scenario == "team_wall":
+                team = Team(company_id=company, name="Alias wall team",
+                            slug=f"alias-wall-{uuid4().hex}", is_active=True)
+                session.add(team)
+                session.flush()
+                session.add(TeamMembership(team_id=team.id, membership_id=actor))
+                wall_subject = {"excluded_team_id": team.id}
+            wall = EthicalWall(
+                company_id=company, ip_docket_id=str(record.docket_id),
+                created_by_membership_id=actor, **wall_subject,
+            )
+            session.add(wall)
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=False)
+            if team is not None:
+                team.is_active = False
+            else:
+                wall.revoked_at = datetime.now(UTC)
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=True)
+        else:
+            transition_ip_docket_lifecycle(
+                session,
+                context=context,
+                docket_id=str(record.docket_id),
+                payload=IpLifecycleTransitionRequest(
+                    expected_lifecycle_version=record.lifecycle_version,
+                    to_status="closed", effective_at=datetime.now(UTC),
+                    reason="Local fixture closure for list and retained ACL parity.",
+                    outcome="closed", source="local_fixture",
+                    evidence_ref="fixture:specialist-list-alias",
+                    linked_matter_handling="reviewed",
+                ),
+            )
+            session.commit()
+            _assert_specialist_base_acl_parity(
+                session, context, record_id, allowed=True, closed=True
+            )
+            grant.revoked_at = datetime.now(UTC)
+            session.commit()
+            _assert_specialist_base_acl_parity(
+                session, context, record_id, allowed=False, closed=True
+            )
+        versions = session.scalar(
+            select(func.count()).select_from(IpSpecialistVersion).where(
+                IpSpecialistVersion.record_id == record_id,
+                IpSpecialistVersion.company_id == company,
+            )
+        )
+        assert versions == 1
+
+
+@pytest.mark.parametrize("neighbor_scope", ["own", "foreign"])
+def test_specialist_list_rejects_a_present_nonmatching_docket_successor(
+    pg_engine, registered_intake, neighbor_scope
+):
+    company, actor, record = _seed(pg_engine)
+    with Session(pg_engine) as session:
+        neighbor_company, neighbor_actor = company, actor
+        if neighbor_scope == "foreign":
+            neighbor_company = _seed_company(session)
+            neighbor_actor = _seed_membership(session, neighbor_company, role="admin")
+        base = uuid4().int & ~((1 << 32) - 1)
+        absent_id, neighbor_id = [str(UUID(int=base + offset)) for offset in (2, 3)]
+        absent = session.get(IpDocketRecord, absent_id)
+        assert absent is None
+        session.add(
+            IpDocketRecord(
+                id=neighbor_id, company_id=neighbor_company,
+                title="Present successor must not supply specialist facts",
+                record_type="design_intake", restricted=True,
+            )
+        )
+        session.flush()
+        session.add(
+            MatterAccessGrant(
+                company_id=neighbor_company, ip_docket_id=neighbor_id,
+                membership_id=neighbor_actor, granted_by_membership_id=neighbor_actor,
+            )
+        )
+        session.commit()
+        successor = session.scalar(
+            select(IpDocketRecord.id).where(IpDocketRecord.id >= absent_id)
+            .order_by(IpDocketRecord.id).limit(1)
+        )
+        assert successor == neighbor_id
+        context = _ip_race_context(session, company_id=company, membership_id=actor)
+        clauses = []
+
+        def capture(_connection, clause, _multiparams, _params, _options):
+            if any(
+                column.get("entity") is IpSpecialistRecord
+                for column in getattr(clause, "column_descriptions", ())
+            ):
+                clauses.append(clause)
+
+        bind = session.get_bind()
+        event.listen(bind, "before_execute", capture)
+        try:
+            admitted = list_records(session, context=context, domain="design", limit=25)
+        finally:
+            event.remove(bind, "before_execute", capture)
+        assert [row.id for row in admitted.records] == [record.id]
+        assert len(clauses) == 1
+        # Probe the actual captured query without corrupting FK-backed fixture rows.
+        replacement = literal(absent_id, type_=IpSpecialistRecord.__table__.c.docket_id.type)
+        replaced = 0
+
+        def replace(node):
+            nonlocal replaced
+            if (
+                getattr(node, "table", None) is IpSpecialistRecord.__table__
+                and getattr(node, "key", None) == "docket_id"
+            ):
+                replaced += 1
+                return replacement
+            return None
+
+        missing_target_clause = visitors.replacement_traverse(clauses[0], {}, replace)
+        assert replaced > 0
+        rejected = session.execute(missing_target_clause).all()
+        assert rejected == []

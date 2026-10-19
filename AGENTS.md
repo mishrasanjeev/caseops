@@ -1,5 +1,25 @@
 # CaseOps agent instructions
 
+- Current workflow acceptance and an unidentified historical incident are
+  separate claims. Reconcile each row against the complete exact-serving
+  journey before retaining a stale unexecuted qualifier. An unrelated global
+  release failure does not erase a passed row-specific result, and individual
+  passes do not make the full release green. Preserve both scopes and history.
+
+- Hash-pinned contract files must retain their canonical bytes across checkout
+  platforms. Pin their Git line endings and prove the exact stored hashes;
+  never accept a platform-normalized digest or rewrite reviewed fingerprints
+  to hide checkout conversion. Preserve the failed run and replay its complete
+  inventory after restoring only unchanged canonical document bytes.
+
+- A correlated LIMIT does not bound inspected rows when policy filters can
+  choose a broad tenant index. Seek one ordered primary-key candidate first,
+  then require its exact identity, tenant and complete current policy outside
+  that barrier. Retain full default/stale plans and unchanged work budgets.
+  ClauseAdapter does not adapt a bare ORM Boolean attribute as a root clause:
+  use explicit Boolean expressions and prove no unrelated base-table FROM
+  remains. Regress wrong successors, walls, grant revocation and closed reads.
+
 - Keep SQL DML construction and other potentially effectful calls outside an
   assertion, even in a compile-only negative oracle. Assert the captured result
   instead. Do not dismiss a required scanner finding because the current test
