@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Keep SQL DML construction and other potentially effectful calls outside an
+  assertion, even in a compile-only negative oracle. Assert the captured result
+  instead. Do not dismiss a required scanner finding because the current test
+  never executes that statement; preserve that no-I/O distinction and rerun the
+  required scan on the corrected source without suppressing the rule.
+
 - A frozen historical-worker migration test must install its exact historical
   fence while that worker is paused, then release/join the worker and prove the
   complete captured current-head upgrade preserves the retained raw rows.

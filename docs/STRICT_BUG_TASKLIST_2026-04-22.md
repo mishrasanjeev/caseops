@@ -2,6 +2,16 @@
 
 ## October 19 CI Correction
 
+C4 `ce938d24` is additionally blocked by CodeQL alert586
+(`py/side-effect-in-assert`) in the compile-only history-work oracle. The call
+constructs a SQLAlchemy DELETE AST; it does not execute a deletion. Capture the
+statement before asserting its rejection, with the same oracle and no scanner
+suppression. Docker14 was deliberately stopped after346 passed calls and1,037
+passed setup/call/teardown prefix phases; no completion event or native failure
+was recorded. The rest of its3,208-case inventory and all605 browser tests are
+unverified. Preserve this incomplete run and its operator cancellation attempts.
+The replacement candidate still requires fresh complete release gates.
+
 **Scoped correction verified / release NO-GO.** C3ed13138d CI39173686953 failed the
 compiled governance projection check and seven retained historical compliance
 tail call phases while a new concurrent index waited behind a frozen legacy

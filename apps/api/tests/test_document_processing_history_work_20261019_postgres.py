@@ -147,7 +147,8 @@ def _verify_oracles(retained_count):
         assert _is_read_only_select(statement.compile(dialect=postgresql.dialect()).statement)
     assert nested_dml.is_select
     assert not _is_read_only_select(nested_dml.compile(dialect=postgresql.dialect()).statement)
-    assert not _is_read_only_select(delete(DocumentProcessingJob))
+    delete_statement = delete(DocumentProcessingJob)
+    assert not _is_read_only_select(delete_statement)
     assert not _is_read_only_select(text("WITH readable AS (SELECT 1) SELECT * FROM readable"))
     assert not _is_read_only_select(None)
     for sql in (
