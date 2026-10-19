@@ -2,6 +2,7 @@ import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { expect, request, type APIRequestContext, type APIResponse, type Page } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./cost-controls";
+import { assertPublicReleaseIdentity } from "./public-release-identity";
 
 type Credentials = { email: string; password: string };
 type Identity = {
@@ -104,13 +105,9 @@ export class NoticeAcceptance {
     }
   }
 
-  async assertRelease(api: APIRequestContext = this.ownerApi) {
+  async assertRelease(_api?: APIRequestContext) {
     if (!this.expectedSha) return; // Unstamped loopback is local evidence only.
-    for (const endpoint of [`${this.apiUrl}/api/build`, `${this.webUrl}/api/release-identity`]) {
-      const response = await api.get(endpoint, { headers: noPaidProviderHeaders });
-      await status(response, 200, "read exact serving release");
-      expect((await response.json()).release_sha, endpoint).toBe(this.expectedSha);
-    }
+    await assertPublicReleaseIdentity([`${this.apiUrl}/api/build`, `${this.webUrl}/api/release-identity`], this.expectedSha);
   }
 
   private async authenticate(credentials: Credentials): Promise<[Identity, APIRequestContext]> {

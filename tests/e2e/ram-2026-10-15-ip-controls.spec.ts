@@ -6,11 +6,14 @@ import { request as playwrightRequest, type APIRequestContext, type APIResponse,
 import type { IpCoreRecords, IpDeadlineWorkspace } from "../../apps/web/lib/api/endpoints";
 
 import { expect, test } from "./support/prod-diagnostic-test";
-import { noPaidProviderHeaders } from "./support/cost-controls";
+import { localTransportHeaders, noPaidProviderHeaders } from "./support/cost-controls";
 import { e2eEnv, repoRoot } from "./support/env";
 import { createIp15ManualTrademark, prepareIp15Workspace } from "./support/ip15-workspace";
 
-test.use({ extraHTTPHeaders: noPaidProviderHeaders, storageState: { cookies: [], origins: [] },
+test.use({ extraHTTPHeaders: async ({ baseURL }, use) => {
+  if (!baseURL) throw new Error("IP15 requires a configured baseURL.");
+  await use(localTransportHeaders(baseURL));
+}, storageState: { cookies: [], origins: [] },
   trace: "off", screenshot: "off", video: "off" });
 test.describe.configure({ mode: "default", retries: 0 });
 

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 import { apiBaseUrl as localApiBaseUrl } from "./env";
 import { noPaidProviderHeaders } from "./cost-controls";
+import { assertPublicReleaseIdentity } from "./public-release-identity";
 import {
   bootstrapIntelligentReviewTenant,
   enableIntelligentReviewIpWorkspace,
@@ -19,18 +20,14 @@ function required(name: string): string {
   return value;
 }
 
-export async function assertPatentRelease(api: APIRequestContext) {
+export async function assertPatentRelease(_api: APIRequestContext) {
   if (!existingQa) return;
   const expected = required("CASEOPS_EXPECTED_RELEASE_SHA");
   expect(expected).toMatch(/^[0-9a-f]{40}$/);
-  for (const url of [
+  await assertPublicReleaseIdentity([
     `${apiBaseUrl}/api/build`,
     `${required("PROD_BASE_URL")}/api/release-identity`,
-  ]) {
-    const response = await api.get(url, { headers: noPaidProviderHeaders });
-    expect(response.status()).toBe(200);
-    expect((await response.json()).release_sha).toBe(expected);
-  }
+  ], expected);
 }
 
 async function existingSession(api: APIRequestContext, other: boolean) {

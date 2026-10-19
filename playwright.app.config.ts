@@ -27,6 +27,7 @@ export default defineConfig({
     /public-content\.spec\.ts/,
     /seo_demo_\d{8}\.spec\.ts$/,
     /prod-failure-diagnostics\.spec\.ts$/,
+    /release-identity-transport\.spec\.ts$/,
     /app-spine\.spec\.ts/,
     /functional-qa-regression\.spec\.ts/,
     /a11y\.spec\.ts/,

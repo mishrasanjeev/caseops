@@ -1,5 +1,31 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 19 Public Identity Transport Correction
+
+**Implemented in test source; release NO-GO pending complete replacement
+gates.** C8 hosted CI passed, but local Docker02 completed native3226 cases /
+9678 phases and then failed one IP15 1281px setup public-web identity GET.
+Desktop results were590 passed /1 error /10 skipped;4 mobile cases did not run.
+The application assertions in that failed case were not reached. Preserve the
+failed run; its historical reset cause remains Inconclusive.
+
+Actual wire tests prove that IP15's marker-only spec option replaces the
+config's loopback close policy. Public identity reads now use credential-free
+per-endpoint contexts, the existing origin-scoped headers and fatal exact-SHA
+checks with no redirects or retries. New contexts still share a socket pool.
+All five workspace consumers preserve their resolved baseURL policy; adjacent
+notice/patent readers share the same public helper. No product/API/native,
+legal-source, entitlement, dependency or execution-script contract changed.
+
+Parent's final combined E2E/web typechecks passed. The full six-module unit
+replacement passed142/142, including the unchanged four inventory assertions
+within their existing8-second child bound. Earlier133P/four-unexecuted evidence
+and the isolated ETIMEDOUT remain; the original exception was not retained and
+no cache-cause conclusion is established. Thirteen real wire regressions pass;
+standard collection is618 cases, retaining all original605 identities. These
+are not full application or production acceptance. See
+`docs/bugfix-ip15-public-identity-transport-2026-10-19.md`.
+
 ## October 19 SQL Read Oracle Correction
 
 **Partially fixed in test source / release NO-GO.** C7 `d5ecdab2`

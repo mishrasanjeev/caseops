@@ -2862,3 +2862,11 @@ requirements when using the fallback.
   or malformed identities before authentication or role mutation. Reconcile
   every full-suite failure before blaming the tested authentication boundary;
   a fixture that fails earlier has not exercised that boundary at all.
+- Public release-identity reads must not borrow authenticated fixture headers
+  or cookies. Spec-level header options replace config defaults; per-call
+  headers merge, and page headers do not change an isolated API fixture.
+  Preserve the existing origin-scoped loopback close policy, exact API/web SHA
+  checks and one-attempt failures. Prove actual wire behavior and cleanup.
+  Fresh API contexts isolate credentials, not Playwright's shared socket pool;
+  never promise a fresh first socket or retry an uncertain mutation. An
+  injected reuse fault does not establish an untraced historical reset cause.
