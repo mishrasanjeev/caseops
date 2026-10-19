@@ -1,5 +1,28 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 19 Web Builder Closure Correction
+
+**Implemented in build/test source; release NO-GO.** C9 `862b9cee`
+canonical Docker03 failed web TypeScript with TS2307 and its TS7006 cascade:
+the real static unit import's public identity helper was absent from the
+explicit builder/context closure. Native and browser execution were both zero.
+Host typechecks and focused units had not proved the Docker input boundary.
+Preserve the full failed proof; do not transfer C8 native results.
+
+Add only the exact helper to the builder COPY and both root ignore allowlists.
+The existing standard-discovered closure contract retains runner exclusion,
+strict typechecking and narrow direct/transitive inputs. Two complete RED calls
+identify the missing input. Replacement22 cases/66 phases, all142 units across
+the intended six modules, both TypeScript checks and a real fresh web image
+build passed on the captured dirty source. That image used a source fingerprint,
+not an invented release SHA. No application/provider/legal behavior changed.
+
+Focused receipt: `outputs/bugs-l-20261019/web-builder-closure-c10-01/RECONCILED.json`,
+SHA256 `622c55ca80f9ec77e2206a38b269877688c46033de2e138ad044aea17e264ecc`.
+Full canonical replacement, green exact-source CI, main merge, deployment and
+exact-serving acceptance remain required. The abandoned alternate supplied no
+accepted carry results. See the dated transport postmortem below.
+
 ## October 19 Public Identity Transport Correction
 
 **Implemented in test source; release NO-GO pending complete replacement

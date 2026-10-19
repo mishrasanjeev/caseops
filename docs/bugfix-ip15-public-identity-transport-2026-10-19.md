@@ -89,15 +89,46 @@ Source-pinned proof is under
 `outputs/bugs-l-20261019/public-release-identity-hardening-01/`,
 `parent-final-transport-checks-01/` and `parent-full-six-units-01/`.
 
+## Docker Builder Omission And Correction
+
+C9 `862b9cee31ff91c4a69083c79f0415c86137f81c`, tree
+`b098993f4646fa7464f219996ea39267f7560340`, failed canonical Docker03
+at the web build. The real static import in the new colocated unit required
+`tests/e2e/support/public-release-identity.ts`, absent from the explicit builder
+COPY and both Docker/cloud context allowlists. TS2307 caused the downstream
+TS7006. Native/browser execution remained zero; collection of618 is not execution.
+
+This was our missed integration boundary: host typechecks had the full checkout,
+whereas the real builder deliberately admits a narrow closure. The correction
+adds only that helper to the three existing build-input declarations. The
+existing standard-discovered contract gains four cases covering the literal
+import, cost-controls dependency and omitted COPY/context entries. It still
+rejects broad test admission and runner copies; static imports and Next's
+strict typecheck remain intact.
+
+The retained RED has two failed calls and all six phases. On the corrected
+dirty source,22 closure cases/66 phases, all142 units in the same six modules,
+both TypeScript checks and `docker build --pull` completed successfully.
+The existing audit found215 colocated test files and seven external inputs.
+All2970 tracked raw-byte hashes stayed stable during the checks. The image used
+the actual source fingerprint, not a final commit label; no app/container or
+provider ran. Owned build/test processes, temporary roots and the tag closed.
+
+Focused proof: `outputs/bugs-l-20261019/web-builder-closure-c10-01/RECONCILED.json`,
+SHA256 `622c55ca80f9ec77e2206a38b269877688c46033de2e138ad044aea17e264ecc`.
+Docker03 failed proof remains
+`docker03-reconciliation-01/final-build-failed-01/FINAL-PROOF.json`, SHA256
+`90b8e0e68a5a3e0d8aee79fa2d2b645a7e3a5b2148ca8e4a027d234c6c189c8a`.
+
 ## Release Boundary
 
-Fresh CI, full intended Docker browser acceptance, normal canonical-main merge
-and exact-serving production replay remain pending. Earlier native success is
-still C8 evidence. Any proposed source-equivalent native/browser composite must
-prove actual runtime/image equality, preserve every non-native gate and disclose
-its post-run environment qualification. It is never a canonical C9 PASS; any
-unexplained relevant drift requires the full canonical gate. No release is
-authorized by this document.
+Fresh CI, the full canonical Docker native/browser inventory, normal
+canonical-main merge and exact-serving production replay remain pending.
+Earlier native success is still C8 evidence. The attempted alternate refused
+before Docker for mounted runtime membership/bytes; its historical cause is
+unproven. It was permanently abandoned, supplied no accepted carry results and
+will not be patched around. Run the unchanged full canonical replacement.
+No release is authorized by this document.
 
 The last observed production API/web SHA is
 `9cf76f2b420fcb38a9aaa4b87ac63270bb3c0535` at11:58UTC. Ram's historical

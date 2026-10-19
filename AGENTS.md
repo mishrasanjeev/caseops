@@ -2870,3 +2870,9 @@ requirements when using the fallback.
   Fresh API contexts isolate credentials, not Playwright's shared socket pool;
   never promise a fresh first socket or retry an uncertain mutation. An
   injected reuse fault does not establish an untraced historical reset cause.
+- A colocated unit test can add production builder inputs even when application
+  code is unchanged. Trace its direct and transitive external imports, admit
+  only that exact closure in the builder COPY and both Docker/cloud allowlists,
+  and keep it out of the runner. Preserve static imports and strict typechecks;
+  host TypeScript success is not proof that the real Docker build can resolve
+  those files. Regress omitted inputs in every build context before release.
