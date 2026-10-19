@@ -2,6 +2,12 @@
 
 ## October 19 BUG-008 Import Review
 
+Release **NO-GO**: later source-identical specialist CI failed2109 >2048;
+valid ordered PostgreSQL RED confirms2346 >2048. Earlier fixture failures
+remain separate, not product reproductions. Candidate canonical active-team
+SQL is shared per statement; full replacement gates remain pending. PR546 is
+draft. See `docs/bugfix-ip-statement-team-plan-2026-10-19.md`.
+
 **Inconclusive pending committed exact-serving production proof.** Candidate
 source implements the bounded review/recovery UX. Mixed historical
 missing-context report and confirmed raw-warning UX. Serving9cf already stages

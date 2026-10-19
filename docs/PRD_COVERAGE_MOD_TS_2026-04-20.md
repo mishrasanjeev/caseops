@@ -235,6 +235,12 @@ See `docs/runbooks/test-legal-manual-ip-qa-grant.md` for the operator procedure.
 
 ## October 19 Import Review Recovery
 
+Canonical IP/IPLF-090/091 remains release-blocked by source-identical CI2109
+and ordered2346-work RED. Candidate statement-local active-team evaluation
+preserves ACL and2048/128 work/probe fences. Four compiler checks passed;
+shared-policy/full release proof is pending. See
+`docs/bugfix-ip-statement-team-plan-2026-10-19.md`.
+
 UJ-02/04/26, J08/M08 and IPLF-030/032/037 retain existing ownership. BUG-008's
 blocking-issue/non-blocking-note UI and saved-preview recovery have focused
 source regressions; original backend incident cause is unconfirmed. Four IP13

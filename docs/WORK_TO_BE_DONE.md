@@ -2,6 +2,14 @@
 
 ## October 19 Import Review Recovery
 
+Do not merge/deploy C6 on earlier green: source-identical CI and deterministic
+PostgreSQL RED exceed the unchanged work cap. PR546 is draft. Corrected PR547
+combines the import UX with statement-local canonical active-team SQL. Four
+compiler checks and42 focused PostgreSQL cases/126 phases passed, including
+16 normal/stale-statistics plans. Broader shared-policy, full Docker, hosted
+and exact production gates remain pending. External cleanup remains owner-deferred.
+See `docs/bugfix-ip-statement-team-plan-2026-10-19.md`.
+
 Overall BUG-008 verdict is **Inconclusive**, pending committed exact-serving
 production proof. Candidate source implements the bounded review/recovery UX;
 it is not a released fix. Existing runtime already admits incomplete draft/image

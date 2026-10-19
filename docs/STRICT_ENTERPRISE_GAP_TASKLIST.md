@@ -2,6 +2,12 @@
 
 ## October 19 Import Review Recovery
 
+Canonical IP read-policy work remains release-blocking. Repeated actor-team
+eligibility made continuation acceptance order-sensitive (CI2109, ordered2346,
+cap2048). Candidate anonymous statement-local CTE preserves the existing ACL;
+shared-consumer and exact-serving proof are required before release. See
+`docs/bugfix-ip-statement-team-plan-2026-10-19.md`.
+
 **Inconclusive / candidate implementation pending exact-serving proof.** BUG-008's UI now
 distinguishes non-blocking source notes from errors and exposes existing saved
 preview refresh. No backend context/legal policy or schema changed. Current

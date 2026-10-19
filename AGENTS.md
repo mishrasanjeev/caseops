@@ -1,5 +1,15 @@
 # CaseOps agent instructions
 
+- Alternating grants by insertion order do not bound UUID-ordered pagination.
+  Regress known sorted record/docket identities and adversarial continuation
+  pages, retain every actual plan, and keep total-work limits unchanged. Share
+  canonical actor/tenant active-team SQL once per statement, never across
+  requests. Prove actor composition and reauthorization after another committed
+  grant, wall, team or membership change using the same prebuilt statement.
+  Earlier random-fixture green cannot erase a source-identical later failure.
+  Parametrizing a reused test also changes its direct wrapper contract;
+  inventory those callers and execute every intended layout explicitly.
+
 - Import validation errors and non-blocking source notes are separate facts.
   Pin the serving revision and saved original rows before diagnosing historical
   missing context. Revalidate retained originals after legitimate configuration
