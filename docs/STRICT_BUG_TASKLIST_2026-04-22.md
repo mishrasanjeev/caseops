@@ -1,5 +1,39 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 19 Browser Runner Compatibility
+
+**Implemented in workflow/test source; release NO-GO pending fresh complete
+gates.** C11 `a5cc8301` CI39285487552 job118189765017 failed Chromium install
+on the observed ubuntu-26.04 image20261012.163.1 with locked Playwright1.60.0.
+Hosted browser execution was zero. Completed sibling metadata is33 successful
+jobs/one known failure/one skip, Security8/8 successful; separate CodeQL native
+SARIF0/0/0 and current-PR open0 do not make the required browser gate pass.
+
+Pin only six browser jobs in CI, production/manual/scheduled verification and
+release verification to ubuntu-24.04. Preserve every other workflow field,
+dependency, budget, install/runtime/no-paid/source fence and scheduled-step
+digest. The guard now discovers all yml/yaml workflows, including shared-step
+consumers; real filesystem controls fail under the old three-file loader.
+Both complete targeted modules passed92 cases/276 phases, zero skips/errors.
+A real Ubuntu24.04.4/Node22.14.0/lockedSDK1.60 Chromium smoke passed with network
+none. It predates only the final test-helper delta; immutable runtime inputs
+are proven equal, not relabelled as final-tree application acceptance.
+
+The optional five-module Windows audit was deliberately narrowed, not passed:
+599 collected,302 passed/one existing skip/one interrupted/295 unexecuted,
+909 phases with no failed phase. Its full prefix remains retained. The complete
+five-file inventory is now601 after the two filesystem controls and remains
+required in fresh full CI. Full unchanged canonical06 also remains mandatory;
+there is no coverage waiver or native carry. Focused receipt SHA256:
+`a2ec9120655b619d1a4fb7bf7385c4bf7063b96ab8d87c2f99294a100fb2e52d`.
+
+C11 Docker05 was separately operator-superseded:404 complete-group cases/1212
+phases plus402 interrupted-group calls/1206 phases without group completion,
+2420 unexecuted identities and all618 browser cases unstarted. No failed native
+phase was observed. Parent60685 reaped naturally after canonical cleanup;
+source/resource/reader closure seal26e82e7e2ce9934d80ce3e5de1a213a7d713399dc6539b3b16565a97649339a5
+resolves the earlier pending-reap note. No production release is claimed.
+
 ## October 19 Leftover Verification Imports
 
 **Corrected in test source; release NO-GO pending fresh complete gates.**

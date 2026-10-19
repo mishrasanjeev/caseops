@@ -160,6 +160,58 @@ Corrected focused proof:
 `outputs/bugs-l-20261019/codeql-unused-headers-c11-focused-01/FINAL-RECEIPT.json`,
 SHA256 `8f3e81b391be16bddbfbaf17c36e22a99b91ec199a89b60b7980a20c4bf1c2dd`.
 
+## Browser Runner Platform Drift
+
+C11's required app job118189765017 in CI39285487552 failed before any browser
+case. The actual runner log identifies ubuntu-26.04/image20261012.163.1;
+Chromium installation rejected `ubuntu26.04-x64`. The lock resolves all three
+Playwright packages to1.60.0. Its real installed host detector selects that key,
+but the [versioned Chromium registry](https://raw.githubusercontent.com/microsoft/playwright/v1.60.0/packages/playwright-core/src/server/registry/index.ts)
+has Ubuntu24 targets and no Ubuntu26 target. Current documentation for a newer
+SDK is not evidence for the locked version. No global migration cause beyond
+the observed job image is asserted.
+
+Our workflow used a floating runner. The correction pins exactly six browser
+jobs to ubuntu-24.04: CI e2e; production shards, both shared-step follow-ups and
+scheduled statutes; and release-playwright. All non-runner fields, caches,
+dependencies, timeout/skip/no-paid/runtime guards and release-owned checkout
+rules stay unchanged. Other runners are outside this defect's scope.
+
+The first guard draft read only the three known workflow files. Parent and
+independent review caught that future-file blind spot before commit. It now
+parses all yml/yaml files. Real tmp_path new-yml/new-yaml controls fail with the
+old loader and pass after correction, without writes to the source workflows.
+Both complete affected/browser-contract modules passed92 cases/276 phases,
+zero skips/errors. The original assertions and scheduled-step digest remain.
+Retained focused receipt:
+`outputs/bugs-l-20261019/browser-runner-os-c12-01/FINAL-RECEIPT.json`, SHA256
+`a2ec9120655b619d1a4fb7bf7385c4bf7063b96ab8d87c2f99294a100fb2e52d`.
+
+A real Ubuntu24.04.4 container with Node22.14.0 and exact locked SDK1.60.0
+launched Chromium148, asserted static page content and closed it with network
+none. The smoke preceded only the last test-helper delta; exact runner pins,
+lock, SDK and smoke inputs are proven unchanged. This is an explicit input
+qualification, not final-tree or product acceptance. Browser installation may
+reuse the base image; no cold browser download is claimed. Owned resources
+and processes closed.
+
+The initial optional599-case Windows deployment audit was narrowed while its
+extra simulations were running. Retained outcomes:302 passed, one existing
+Windows setup skip, one interrupted and295 unexecuted;909 phases, no failed
+phases. It is incomplete, never green. The two final full modules passed92;
+the original five-file inventory plus two new controls (601) and entire API
+still require fresh hosted acceptance. No source assertion or budget is waived.
+
+Canonical Docker05 was also operator-superseded, with404 complete-group cases
+and402 interrupted-group calls but no group02 completion;2420 identities had
+no executed phase and all618 browsers were unstarted. No failed native phase
+was observed. The native-driver stop caused the missing aggregate journal.
+The wrapper ran canonical cleanup and exited1 naturally. All2970 source hashes
+were unchanged; sourcehold release SHA256
+`26e82e7e2ce9934d80ce3e5de1a213a7d713399dc6539b3b16565a97649339a5`
+resolves the earlier final proof's pending parent-reap qualification.
+There is no native carry or production acceptance from these runs.
+
 ## Release Boundary
 
 Fresh CI, the full canonical Docker native/browser inventory, normal
@@ -167,7 +219,7 @@ canonical-main merge and exact-serving production replay remain pending.
 Earlier native success is still C8 evidence. The attempted alternate refused
 before Docker for mounted runtime membership/bytes; its historical cause is
 unproven. It was permanently abandoned, supplied no accepted carry results and
-will not be patched around. Run the unchanged full canonical05 replacement
+will not be patched around. Run the unchanged full canonical06 replacement
 and reconcile fresh current-ref CodeQL findings, not just workflow conclusions.
 No release is authorized by this document.
 

@@ -100,7 +100,7 @@ jobs:
     name: Prod Playwright (${{ matrix.suite }})
     if: github.event_name == 'workflow_dispatch'
     needs: resolve-release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # GitHub-hosted execution is capped at 40 minutes for this repository.
     # Keep each shard below that boundary and serialize mutation-capable QA
     # work so persistent test tenants cannot race each other.
@@ -558,7 +558,7 @@ jobs:
     name: Prod Playwright (${{ matrix.suite }})
     if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-playwright-shards.result == 'success' || needs.prod-playwright-shards.result == 'failure')
     needs: [resolve-release, prod-playwright-shards]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 38
     env:
       CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
@@ -573,7 +573,7 @@ jobs:
     name: Prod Playwright (${{ matrix.suite }})
     if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-tester-index.result == 'success' || needs.prod-tester-index.result == 'failure')
     needs: [resolve-release, prod-tester-index]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 38
     env:
       CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
@@ -588,7 +588,7 @@ jobs:
     name: Scheduled read-only statute verification
     if: github.event_name == 'schedule'
     needs: resolve-release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}

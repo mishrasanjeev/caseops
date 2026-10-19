@@ -2882,3 +2882,10 @@ requirements when using the fallback.
   still-used provider-isolation imports. A successful CodeQL analysis job also
   does not prove zero findings: reconcile native SARIF and alerts on the exact
   current PR ref, not an empty unscoped alert listing or an earlier peer review.
+- A floating runner label is an operating-system dependency change. Pin every
+  browser-executing job to an OS supported by the exact locked SDK, including
+  scheduled jobs and consumers of shared YAML steps. Inspect the actual runner
+  image and versioned SDK registry, not only current vendor documentation.
+  Inventory every workflow file and regress real new-file discovery. Preserve
+  real browser launch, no-paid and release-source fences; never fake the host
+  platform, skip browser readiness or raise budgets to mask incompatibility.
