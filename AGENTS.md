@@ -1,5 +1,14 @@
 # CaseOps agent instructions
 
+- Before starting an expensive replacement release gate, read the latest
+  source-bound CI failure handoff and current required-check state. A known
+  failed security gate is not an in-progress gate. Preserve and supersede the
+  old run safely instead of spending hours testing an already rejected lock.
+  For dependency remediation, audit the entire resolved lock and the actual
+  platform-installed inventory; a Windows freeze cannot certify Linux CI.
+  Keep existing exceptions unchanged and prove native SDK compatibility plus
+  the upstream failure boundary, not only a version string or a mocked client.
+
 - A query-shape change requires an audit of every adjacent SQL observer, not
   only the changed query's tests. SELECT-prefix filters can reject or omit
   legitimate typed WITH reads, but WITH is not inherently read-only. Reuse the

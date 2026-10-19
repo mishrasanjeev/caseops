@@ -1,5 +1,37 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 20 Dependency Security Release Blocker
+
+**Implemented and focused-tested in replacement source, not fixed in the
+serving release; full gates remain pending.** C12 `d7aec233` required Security run39298948341/job118218732094
+failed strict pip-audit on locked aiohttp3.14.3. Three distinct upstream
+advisories identify3.14.4 as patched. This is a real dependency finding, not
+an audit outage, severity-policy exception or demonstrated production exploit.
+The direct dependency and Voyage import path both retain the affected package.
+
+The replacement is aiohttp3.14.4 and its required yarl1.25.1 companion, with
+only the aiohttp declared floor raised. All other lock records are unchanged.
+The complete three-module focused run passed69 cases/207 setup/call/teardown
+phases, zero skips/errors, with matching ordered collection and JUnit. It proves
+real native SDK/client compatibility and the genuinely shared Secure-cookie
+cached-path boundary; the same test bytes retain the old-version cookie RED.
+Final-source strict audits covered162 registry-lock packages and138 Windows
+default/dev installed packages, zero findings/skips/missing identities. Final
+proof SHA2563ead6498e6cce6b7012b70ea3a41483fa5723cea81f685b4bd1225fa6e667592.
+This is source-only acceptance, not Linux CI or production acceptance. All
+fresh required CI and canonical Docker07 plus exact-serving replay remain required.
+No dependency exception, legal-source, provider-cost or release fence changes.
+See `docs/bugfix-aiohttp-security-2026-10-20.md`.
+
+C12 canonical Docker06 was operator-superseded after its build and canonical
+native collection, before any test phase. All3226 native identities and618
+browser cases remain incomplete. Canonical cleanup completed and parent91987
+reaped exit1; the missing aggregate journal follows the explicit driver stop,
+not a diagnosed product failure. All2970 raw source hashes matched twice and
+owned resources/readers closed. Sourcehold release seal:
+`362323205a68e7c3ed79cfa67695df39203c7745a6f0553a6882c25c81724dc3`.
+Fresh C12 raw CodeQL0/0/0 and current-ref open0 do not clear Security failure.
+
 ## October 19 Browser Runner Compatibility
 
 **Implemented in workflow/test source; release NO-GO pending fresh complete
@@ -23,7 +55,7 @@ The optional five-module Windows audit was deliberately narrowed, not passed:
 599 collected,302 passed/one existing skip/one interrupted/295 unexecuted,
 909 phases with no failed phase. Its full prefix remains retained. The complete
 five-file inventory is now601 after the two filesystem controls and remains
-required in fresh full CI. Full unchanged canonical06 also remains mandatory;
+required in fresh full CI. Full replacement canonical acceptance remains mandatory;
 there is no coverage waiver or native carry. Focused receipt SHA256:
 `a2ec9120655b619d1a4fb7bf7385c4bf7063b96ab8d87c2f99294a100fb2e52d`.
 

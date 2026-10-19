@@ -219,9 +219,16 @@ canonical-main merge and exact-serving production replay remain pending.
 Earlier native success is still C8 evidence. The attempted alternate refused
 before Docker for mounted runtime membership/bytes; its historical cause is
 unproven. It was permanently abandoned, supplied no accepted carry results and
-will not be patched around. Run the unchanged full canonical06 replacement
-and reconcile fresh current-ref CodeQL findings, not just workflow conclusions.
-No release is authorized by this document.
+will not be patched around. C12 canonical06 was later operator-superseded for
+a separate required dependency-security failure before any native test phase;
+its3226 collected identities and618 browser cases are all incomplete. Parent
+91987 reaped exit1 after canonical cleanup, all2970 raw files matched twice,
+and sourcehold release362323205a68e7c3ed79cfa67695df39203c7745a6f0553a6882c25c81724dc3
+closed owned resources/readers. The missing aggregate journal follows that
+explicit stop. There is no carry. See the separately scoped dependency diagnosis
+in `docs/bugfix-aiohttp-security-2026-10-20.md`. Fresh canonical07 and required
+current-ref checks remain mandatory; successful CodeQL does not waive a failed
+Security gate. No release is authorized by this document.
 
 The last observed production API/web SHA is
 `9cf76f2b420fcb38a9aaa4b87ac63270bb3c0535` at11:58UTC. Ram's historical
