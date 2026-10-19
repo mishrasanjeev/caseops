@@ -2,7 +2,7 @@
 import type { APIRequestContext, APIResponse, Locator, Page } from "@playwright/test";
 
 import { expect, test } from "./support/prod-diagnostic-test";
-import { localTransportHeaders, noPaidProviderHeaders } from "./support/cost-controls";
+import { localTransportHeaders } from "./support/cost-controls";
 import { createIp15ManualTrademark, prepareIp15Workspace, type Ip15Workspace } from "./support/ip15-workspace";
 
 test.use({ extraHTTPHeaders: async ({ baseURL }, use) => {

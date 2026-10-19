@@ -2876,3 +2876,9 @@ requirements when using the fallback.
   and keep it out of the runner. Preserve static imports and strict typechecks;
   host TypeScript success is not proof that the real Docker build can resolve
   those files. Regress omitted inputs in every build context before release.
+- After replacing a shared test helper, run semantic unused-import diagnostics
+  over every changed consumer before an expensive release gate. A passing
+  typecheck with unused checks disabled does not cover that boundary. Preserve
+  still-used provider-isolation imports. A successful CodeQL analysis job also
+  does not prove zero findings: reconcile native SARIF and alerts on the exact
+  current PR ref, not an empty unscoped alert listing or an earlier peer review.

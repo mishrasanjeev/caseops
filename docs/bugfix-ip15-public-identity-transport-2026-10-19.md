@@ -120,6 +120,46 @@ Docker03 failed proof remains
 `docker03-reconciliation-01/final-build-failed-01/FINAL-PROOF.json`, SHA256
 `90b8e0e68a5a3e0d8aee79fa2d2b645a7e3a5b2148ca8e4a027d234c6c189c8a`.
 
+## Leftover Imports And Review Failure
+
+C10 `1610d3005042905ac03e97a48518c9b42c3a471d`, tree
+`dae5b36cf2fa476b5f6ba4c211778abccfcfb89d`, still had three unused
+`noPaidProviderHeaders` imports in the renewal-tracker, reminders and tracker
+specs. The helper switch had removed their uses, not the imports. Fresh exact-ref
+CodeQL alerts587-589 and native SARIF0/3/0 (Python/JS-TS/Actions) establish that
+miss. The original13-file review failed to catch it. The later four-file
+packaging review did not cover those consumers and never admitted a release.
+A green analysis/check and an empty unscoped alert response were not clearance.
+
+The correction removes only those three named imports. The real used import
+in IP controls, all five localTransportHeaders fixtures, no-paid markers,
+shared helper bodies, assertions and budgets remain unchanged. An independent
+semantic compiler comparison covers all13 changed TS paths in the real E2E/web
+programs; only these three unused diagnostics were introduced. Five unrelated
+baseline diagnostics are retained explicitly; no compiler/detector rule is
+suppressed. The corrected source passed all142 units/six modules, both
+TypeScript checks,13 real wire cases and exact618 standard-discovery parity.
+Discovery remains separate from application execution.
+
+The C10 canonical Docker04 was stopped as known unreleasable after its raw
+prefix was sealed. Three groups completed1211 cases/3633 phases. Group04 had
+135 passed calls/406 phases and no completion;1879 identities had no executed
+phase and one was partial. No failed native phase was observed. All618 browsers
+were unstarted. The parent terminated only its identified native-driver tree;
+the original PowerShell wrapper then ran canonical cleanup and exited1 naturally.
+Its missing aggregate journal is that operator stop's consequence, not a new
+product test failure. All2970 source hashes stayed unchanged and owned readers,
+processes and project resources closed before edits. None of this is carried
+to the corrected candidate.
+
+Retained failed CodeQL handoff SHA256:
+`89fb4548b421826be3a5899851ccc3de5324815a09a273119b88a2fcdb8a235e`.
+Operator-superseded final04 proof SHA256:
+`cff0714c0e308f12c0828285fc37ae326a02e073313303a3cf49f0ce32d3a014`.
+Corrected focused proof:
+`outputs/bugs-l-20261019/codeql-unused-headers-c11-focused-01/FINAL-RECEIPT.json`,
+SHA256 `8f3e81b391be16bddbfbaf17c36e22a99b91ec199a89b60b7980a20c4bf1c2dd`.
+
 ## Release Boundary
 
 Fresh CI, the full canonical Docker native/browser inventory, normal
@@ -127,7 +167,8 @@ canonical-main merge and exact-serving production replay remain pending.
 Earlier native success is still C8 evidence. The attempted alternate refused
 before Docker for mounted runtime membership/bytes; its historical cause is
 unproven. It was permanently abandoned, supplied no accepted carry results and
-will not be patched around. Run the unchanged full canonical replacement.
+will not be patched around. Run the unchanged full canonical05 replacement
+and reconcile fresh current-ref CodeQL findings, not just workflow conclusions.
 No release is authorized by this document.
 
 The last observed production API/web SHA is

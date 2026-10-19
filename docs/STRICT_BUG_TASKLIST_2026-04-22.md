@@ -1,5 +1,35 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 19 Leftover Verification Imports
+
+**Corrected in test source; release NO-GO pending fresh complete gates.**
+C10 `1610d300` has three exact-current-ref CodeQL alerts587-589 for unused
+`noPaidProviderHeaders` imports after the fixture-header replacement. Actual
+SARIF counts are Python0 / JavaScript-TypeScript3 / Actions0. A successful
+analysis/check or an empty unscoped alert response did not clear those findings.
+The earlier13-file source review missed them; its limited GO cannot override
+the actual detector. No runtime exploit or credential exposure is established.
+
+Remove only those three unused names; retain the used IP-controls import,
+all five scoped transport fixtures and every no-paid marker. The independent
+real TypeScript semantic comparison of C8/C10 covers all13 changed paths and
+finds only those three introduced unused diagnostics. Five existing unrelated
+baseline diagnostics are recorded, not suppressed or silently called clean.
+After the removals,142 units/six modules, both TypeScript checks and13 real
+wire cases passed;618 standard discovery identities remain unchanged.
+
+Docker04 was operator-superseded, not passed:1211 completed-group cases/3633
+phases,135 further passed calls with an interrupted group and no completion,
+1879 unexecuted identities and one partial identity; all618 browser cases were
+unstarted. No failed native test phases were observed. The missing aggregate
+journal followed the explicit driver stop, not a product reproduction.
+Retained final proof SHA256:
+`cff0714c0e308f12c0828285fc37ae326a02e073313303a3cf49f0ce32d3a014`.
+Focused correction receipt SHA256:
+`8f3e81b391be16bddbfbaf17c36e22a99b91ec199a89b60b7980a20c4bf1c2dd`.
+Require fresh exact-source CodeQL clearance and full unchanged canonical05;
+there is no native carry, detector waiver, main merge or production acceptance.
+
 ## October 19 Web Builder Closure Correction
 
 **Implemented in build/test source; release NO-GO.** C9 `862b9cee`
