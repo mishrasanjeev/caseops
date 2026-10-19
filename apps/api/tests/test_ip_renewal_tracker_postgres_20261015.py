@@ -14,6 +14,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import ip_renewal_tracker, private_retrieval
+from tests.sql_observation import is_read_only_select
 from tests.test_ip_renewal_tracker_20261015 import _clock, _dispatch, _imported
 
 pytestmark = pytest.mark.postgres
@@ -144,7 +145,7 @@ def test_actual_source_edit_wins_after_discovery_before_worker_lock(
 
 
 def test_dense_retained_history_bounds_actual_current_reads_and_catchup(
-    isolated_postgres_client, monkeypatch
+    isolated_postgres_client, monkeypatch, request
 ):
     import json
     import os
@@ -268,10 +269,14 @@ def test_dense_retained_history_bounds_actual_current_reads_and_catchup(
         session.execute(text("ANALYZE notification_delivery_intents"))
         session.commit()
     statements = {}
+    all_statements = []
     engine = get_engine()
 
     def capture(connection, cursor, statement, parameters, context, executemany):
         sql = statement.lower()
+        compiled = getattr(context, "compiled", None)
+        read_only = is_read_only_select(getattr(compiled, "statement", None))
+        all_statements.append({"statement": statement, "read_only_select": read_only})
         label = None
         if (
             sql.startswith("update notification_delivery_intents")
@@ -279,25 +284,29 @@ def test_dense_retained_history_bounds_actual_current_reads_and_catchup(
         ):
             label = "catchup_cleanup"
         elif (
-            sql.startswith("select") and "sum(" in sql and "ip_portfolio_renewal_occurrences" in sql
+            read_only and "sum(" in sql and "ip_portfolio_renewal_occurrences" in sql
         ):
             label = "category_counts"
-        elif sql.startswith(
-            "select ip_docket_records.id, (select notification_delivery_intents.id"
+        elif (
+            read_only
+            and "select ip_docket_records.id, (select notification_delivery_intents.id" in sql
         ):
             label = "current_hydration"
-        elif sql.startswith(
-            "select ip_portfolio_renewal_series.docket_id, "
-            "notification_delivery_intents.delivered_at"
+        elif (
+            read_only
+            and "select ip_portfolio_renewal_series.docket_id, "
+            "notification_delivery_intents.delivered_at" in sql
         ):
             label = "confirmed_history"
         elif (
-            sql.startswith("select notification_delivery_intents.id ")
+            read_only
+            and "select notification_delivery_intents.id " in sql
             and "join in_app_notifications" in sql
         ):
             label = "same_day_dedupe"
         elif (
-            sql.startswith("select notification_delivery_intents.id ")
+            read_only
+            and "select notification_delivery_intents.id " in sql
             and "join ip_portfolio_renewal_occurrences" in sql
         ):
             label = "current_pending_keys"
@@ -334,6 +343,9 @@ def test_dense_retained_history_bounds_actual_current_reads_and_catchup(
             session.rollback()
     finally:
         event.remove(engine, "before_cursor_execute", capture)
+        request.node.user_properties.append((
+            "dense_history_statements", json.dumps(all_statements, sort_keys=True),
+        ))
     assert set(statements) == {
         "catchup_cleanup",
         "category_counts",
@@ -341,7 +353,7 @@ def test_dense_retained_history_bounds_actual_current_reads_and_catchup(
         "confirmed_history",
         "same_day_dedupe",
         "current_pending_keys",
-    }
+    }, all_statements
     plans = {}
     with engine.begin() as connection:
         for label, (statement, parameters) in statements.items():

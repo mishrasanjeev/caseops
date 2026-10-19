@@ -1,5 +1,19 @@
 # Strict Enterprise Gap Tasklist
 
+## October 19 SQL Observation Integrity
+
+**Partially implemented / release NO-GO.** C7 complete CI failed four SQL
+observation cases despite all16 specialist plans passing. We missed adjacent
+SELECT-prefix collectors during the CTE change; targeted plan/ACL proof did not
+certify their measurement integrity. C8 is test-only: exact shared AST guard,
+nested DML/TextClause/TextualSelect rejection, retained raw events and unchanged
+or stronger all-statement budgets. Separate completed runs passed29 unit cases,72 PostgreSQL cases/216 phases
+in six files and79 SQLite cases/237 phases in five files. Their inventories and
+source checks agree; operator-superseded C7 Docker remains incomplete.
+The corrected candidate still requires fresh complete release gates. Serving P9cf,
+private Scheduler hold, no QA-grant replay and user-deferred external cleanup
+remain unchanged. See `docs/bugfix-sql-read-oracles-2026-10-19.md`.
+
 ## October 19 Import Review Recovery
 
 Canonical IP read-policy work remains release-blocking. Repeated actor-team

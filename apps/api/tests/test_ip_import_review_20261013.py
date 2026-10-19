@@ -328,8 +328,7 @@ def test_same_mark_real_materialization_has_one_bounded_candidate_scan(client):
     hydrated_candidates = []
 
     def observe(conn, cursor, statement, parameters, context, executemany):
-        if statement.lstrip().upper().startswith("SELECT"):
-            statements.append(statement)
+        statements.append(statement)
         compiled = getattr(context, "compiled", None)
         columns = getattr(getattr(compiled, "statement", None), "selected_columns", ())
         if (
@@ -352,4 +351,4 @@ def test_same_mark_real_materialization_has_one_bounded_candidate_scan(client):
     assert len(hydrated_candidates) <= 1, (
         f"Repeated current-particular candidate hydration: {len(hydrated_candidates)}"
     )
-    assert len(statements) <= 180 * 50 + 200
+    assert len(statements) <= 180 * 50 + 200, statements

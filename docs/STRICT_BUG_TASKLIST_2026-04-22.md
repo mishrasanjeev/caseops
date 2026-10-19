@@ -1,5 +1,20 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 19 SQL Read Oracle Correction
+
+**Partially fixed in test source / release NO-GO.** C7 `d5ecdab2`
+CI39212375169 completed with four failed cases: hydration on SQLite/PostgreSQL,
+missing retained-scale initial SQL and missing dense-history category_counts.
+All16 specialist plans passed; this is a confirmed SQL-observer defect, not an
+established production regression. Actual retained RED proves three typed
+SELECTs, the third starting WITH ... AS MATERIALIZED. C8 changes tests only:
+extract the exact existing AST guard, preserve its alias, reject nested DML/text,
+and repair six adjacent collectors without cap increases. 29 compiler/unit cases,72 focused PostgreSQL cases/216 phases and79
+focused SQLite cases/237 phases passed in separate completed runs. These are
+not full release acceptance; fresh complete gates remain pending. Keep all failed phases
+and operator-superseded C7 Docker evidence. See
+`docs/bugfix-sql-read-oracles-2026-10-19.md`; older entries below are history.
+
 ## October 19 BUG-008 Import Review
 
 Release **NO-GO**: later source-identical specialist CI failed2109 >2048;

@@ -1,5 +1,13 @@
 # CaseOps agent instructions
 
+- A query-shape change requires an audit of every adjacent SQL observer, not
+  only the changed query's tests. SELECT-prefix filters can reject or omit
+  legitimate typed WITH reads, but WITH is not inherently read-only. Reuse the
+  structural AST guard, reject nested DML and opaque TextClause/TextualSelect,
+  retain every actual SQL event and charge all-statement budgets without
+  ignoring CTEs or raising caps. Reconcile every failed case and all
+  setup/call/teardown phases, not only the first failure or a green prefix.
+
 - Alternating grants by insertion order do not bound UUID-ordered pagination.
   Regress known sorted record/docket identities and adversarial continuation
   pages, retain every actual plan, and keep total-work limits unchanged. Share

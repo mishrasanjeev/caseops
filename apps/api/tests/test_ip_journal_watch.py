@@ -1059,8 +1059,7 @@ def test_ingestion_is_bounded_and_batches_profile_publication_lookups(
             event.remove(session.bind, "before_cursor_execute", capture_statement)
     assert response.status_code == 201, response.text
     assert response.json()["hits"] == []
-    select_count = sum(statement.lstrip().upper().startswith("SELECT") for statement in statements)
-    assert select_count <= 24
+    assert len(statements) <= 24, statements
 
     _profile(
         client,

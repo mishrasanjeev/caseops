@@ -1,5 +1,6 @@
 """IP13-07/08/09: Portfolio reads only the recipient's delivered current source alert."""
 
+import json
 from copy import deepcopy
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -24,6 +25,7 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_engine, get_session_factory
 from caseops_api.services import ip_lifecycle, ip_renewals, notification_delivery
 from caseops_api.services.session_context import SessionContext
+from tests.sql_observation import is_read_only_select
 from tests.test_auth_company import auth_headers
 from tests.test_clients import _mk_matter
 from tests.test_ip_current_source_reminders_20261013 import (
@@ -451,7 +453,9 @@ def test_lifecycle_and_capability_revocation_preserve_notes_not_operational_aler
         assert session.get(InAppNotification, note_id).body == body
 
 
-def test_source_body_hydration_is_three_read_queries_for_one_or_many_dockets(source_client):
+def test_source_body_hydration_is_three_read_queries_for_one_or_many_dockets(
+    source_client, request
+):
     client = source_client
     actor, imported = _import_source(client)
     first_docket = imported["created_docket_id"]
@@ -479,20 +483,32 @@ def test_source_body_hydration_is_three_read_queries_for_one_or_many_dockets(sou
         context = SessionContext(company=session.get(Company, actor["company"]["id"]),
                                  membership=member, user=session.get(User, member.user_id))
         statements = []
+        observations = []
         def capture(_connection, _cursor, statement, _parameters, _context, _many):
             statements.append(statement)
+            compiled = getattr(getattr(_context, "compiled", None), "statement", None)
+            observations.append({
+                "sql": statement, "compiled_type": type(compiled).__name__,
+                "is_select": bool(getattr(compiled, "is_select", False)),
+                "is_dml": bool(getattr(compiled, "is_dml", False)),
+                "read_only_select": is_read_only_select(compiled),
+            })
         engine = get_engine()
         event.listen(engine, "before_cursor_execute", capture)
         try:
             for ids in ([first_docket], docket_ids):
                 statements.clear()
+                observations.clear()
                 details = ip_renewals.portfolio_source_renewal_details(
                     session, context=context, docket_ids=ids,
                 )
                 assert set(details) == set(ids)
                 assert all(details[id]["source_renewal_alert_body"] for id in ids)
+                request.node.user_properties.append(("source_body_sql_observation", json.dumps({
+                    "docket_count": len(ids), "queries": observations,
+                }, sort_keys=True)))
                 assert len(statements) == 3
-                assert all(sql.lstrip().upper().startswith("SELECT") for sql in statements)
+                assert all(row["read_only_select"] for row in observations), observations
             statements.clear()
             assert ip_renewals.portfolio_source_renewal_details(
                 session, context=context, docket_ids=[],

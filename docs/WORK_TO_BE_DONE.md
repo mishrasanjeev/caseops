@@ -1,5 +1,21 @@
 # CaseOps  - Work To Be Done
 
+## October 19 SQL Read Oracle Recovery
+
+C7 `d5ecdab2` is NO-GO: completed CI39212375169 has API8904P/1F/3232S
+and native3223P/3F across9678 complete native phases; browsers did not execute.
+Web1535P and all16 specialist plans do not waive the four failed SQL-observer
+cases. A retained one-case RED establishes the prefix defect with actual typed
+WITH SQL. C8 is a test-only extraction/collector correction, runtime unchanged.
+Separate focused runs completed29 compiler/unit,72 PostgreSQL/216 phases
+and79 SQLite/237 phases with no skips or failures and stable source checks. Reconcile the full
+replacement inventory, then fresh C8 Docker/CI/main/security/CodeQL/tree and
+exact-serving acceptance before any release claim. Preserve failed C7 and its
+operator-superseded incomplete Docker; do not reuse C7 deploy pins for C8.
+No merge/deploy or QA-grant replay is admitted by these checks; last observed P9cf
+and user-deferred external cleanup remain unchanged. See
+`docs/bugfix-sql-read-oracles-2026-10-19.md`.
+
 ## October 19 Import Review Recovery
 
 Do not merge/deploy C6 on earlier green: source-identical CI and deterministic

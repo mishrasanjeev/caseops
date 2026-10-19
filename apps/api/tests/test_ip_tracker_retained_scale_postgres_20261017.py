@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import event, text
 
 from caseops_api.db.session import get_engine
+from tests.sql_observation import is_read_only_select
 from tests.test_ip_portfolio_spec_20261013 import _actor, _commit, _upload
 from tests.test_ip_renewal_tracker_20261015 import _clock
 
@@ -75,14 +76,14 @@ def _fixture(client, monkeypatch):
     return actor, prefix, target_ids
 
 
-def _shape(statement):
-    lowered = statement.lower()
-    if not lowered.lstrip().startswith("select"):
+def _shape(statement, *, read_only):
+    if not read_only:
         return None
+    lowered = statement.lower()
     if "sum(case" in lowered and "ip_docket_records" in lowered:
         return "counts"
     if (
-        lowered.lstrip().startswith("select ip_docket_records.id")
+        "select ip_docket_records.id" in lowered
         and "ip_trademark_particular_versions.id" in lowered
     ):
         return "page"
@@ -153,19 +154,32 @@ def test_retained_width_tracker_bounds_source_fact_work_and_visible_latency(
     )
     active = {"label": None}
     observed = {}
+    all_statements = {}
+    statement_counts = {}
     select_counts = {}
 
     def before(connection, cursor, statement, parameters, context, executemany):
-        if active["label"] and statement.lstrip().lower().startswith("select"):
-            select_counts[active["label"]] = select_counts.get(active["label"], 0) + 1
-        if active["label"] and _shape(statement):
+        label = active["label"]
+        if label is None:
+            return
+        compiled = getattr(context, "compiled", None)
+        read_only = is_read_only_select(getattr(compiled, "statement", None))
+        all_statements.setdefault(label, []).append(
+            {"statement": statement, "read_only_select": read_only}
+        )
+        statement_counts[label] = statement_counts.get(label, 0) + 1
+        if read_only:
+            select_counts[label] = select_counts.get(label, 0) + 1
+        context.tracker_measure_kind = _shape(statement, read_only=read_only)
+        if context.tracker_measure_kind:
             context.tracker_measure_started = perf_counter()
 
     def after(connection, cursor, statement, parameters, context, executemany):
-        if active["label"] and _shape(statement):
+        kind = getattr(context, "tracker_measure_kind", None)
+        if active["label"] and kind:
             observed.setdefault(active["label"], []).append(
                 {
-                    "kind": _shape(statement),
+                    "kind": kind,
                     "statement": statement,
                     "parameters": parameters,
                     "cursor_seconds": perf_counter() - context.tracker_measure_started,
@@ -357,6 +371,8 @@ def test_retained_width_tracker_bounds_source_fact_work_and_visible_latency(
         _save(directory, "all-observed-statements.json", observed)
         _save(directory, "all-request-timings.json", reports)
         _save(directory, "all-select-counts.json", select_counts)
+        _save(directory, "all-statement-counts.json", statement_counts)
+        _save(directory, "all-cursor-statements.json", all_statements)
 
     plans = {}
     with engine.begin() as connection:
@@ -421,8 +437,13 @@ def test_retained_width_tracker_bounds_source_fact_work_and_visible_latency(
     for report in reports:
         if report["http_seconds"] >= VISIBLE_BUDGET_SECONDS:
             problems.append(f"{report['profile']} exceeded existing visible10s budget")
-        if select_counts[report["profile"]] > 64:
-            problems.append(f"{report['profile']} exceeded64 SELECT bounded-page work")
+        label = report["profile"]
+        captured = all_statements.get(label, [])
+        if not 0 < statement_counts.get(label, 0) <= 64:
+            problems.append(f"{label} exceeded64 total cursor statements or captured no SQL")
+        # Export preview deliberately persists an audit event; GET profiles do not.
+        if label != "export-preview" and not all(row["read_only_select"] for row in captured):
+            problems.append(f"{label} executed untyped or non-read-only SQL: {captured}")
     for key, plan in plans.items():
         if plan["sql_bytes"] > SQL_TEXT_BUDGET_BYTES:
             problems.append(f"{key} SQL text exceeds64KiB work-shape bound")

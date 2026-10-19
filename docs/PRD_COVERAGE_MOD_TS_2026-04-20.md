@@ -1,5 +1,20 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 19 SQL Oracle Coverage Correction
+
+UJ-30/41, IPLF-090/091 and adjacent IP renewal/portfolio/report/import readers:
+C7 complete CI fails four observation cases, not a newly established product
+or legal-data defect. All16 specialist plans pass, but prefix-based collectors
+miss legitimate WITH reads. C8 shares the exact existing structural AST guard
+and repairs six adjacent test collectors; runtime/API/schema/dependency and
+legal-source contracts are unchanged. Parent-reported29 unit passes are scoped.
+The72-case/six-file PostgreSQL run completed216 passed phases; the separate
+79-case/five-file SQLite run completed237 passed phases, both with zero skips
+or failures and stable source checks. Fresh full release gates remain pending. Neither C7 browser acceptance
+(zero executed) nor deployed C8 acceptance exists at this checkpoint. Preserve
+all failed phases, counters, plans and the owner-deferred cleanup boundary.
+See `docs/bugfix-sql-read-oracles-2026-10-19.md`; earlier results remain history.
+
 ## October 19 Specialist Read Recovery
 
 IPLF-090/091 and UJ-30/41 reuse the existing specialist reader/access owner.
