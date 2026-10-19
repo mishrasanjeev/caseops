@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 19 BUG-008 Import Review
+
+**Inconclusive pending committed exact-serving production proof.** Candidate
+source implements the bounded review/recovery UX. Mixed historical
+missing-context report and confirmed raw-warning UX. Serving9cf already stages
+135 valid/three blank rows; the retained committed job created zero and skipped
+135 duplicates. Parent desktop/mobile read-only diagnostic confirms raw notes,
+not a backend failure or committed acceptance. Separate notes from issues and
+refresh saved originals; preserve expiry, context, draft and image fences.
+Evidence and adjacent paths: `docs/bugfix-ip-import-recovery-2026-10-19.md`.
+
 ## October 19 Specialist Docket Work
 
 **Partially fixed in source / release NO-GO.** Merged401d1615 equals C5, but

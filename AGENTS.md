@@ -1,5 +1,17 @@
 # CaseOps agent instructions
 
+- Import validation errors and non-blocking source notes are separate facts.
+  Pin the serving revision and saved original rows before diagnosing historical
+  missing context. Revalidate retained originals after legitimate configuration
+  changes without overwriting explicit source values or weakening expiry,
+  draft/image and ambiguity fences. Valid rows and duplicate-skipped rows are
+  not created records; read-only production diagnosis is not commit acceptance.
+  Retained source notes must not claim the lifecycle or current date of a linked
+  existing record; upload valid-row counts must never promise new records.
+  Preserve legitimate multi-jurisdiction settings and require missing per-row
+  context. Before/after query equality must match the known fixture identity;
+  independently reread every created sibling after a duplicate-only import.
+
 - Current workflow acceptance and an unidentified historical incident are
   separate claims. Reconcile each row against the complete exact-serving
   journey before retaining a stale unexecuted qualifier. An unrelated global

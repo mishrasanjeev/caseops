@@ -11,6 +11,7 @@ import {
   LoaderCircle,
   Pencil,
   RefreshCw,
+  Settings,
   Upload,
   XCircle,
 } from "lucide-react";
@@ -65,13 +66,47 @@ function rowWarnings(row: IpImportRow): Array<{ field: string; code: string }> {
   return Array.isArray(value) ? value : [];
 }
 
+function validationMessage(issue: { field?: string; code?: string }, row: IpImportRow): string {
+  const field = issue.field ?? "row";
+  const labels: Record<string, string> = {
+    class_number: "Class", class_numbers: "Classes", image_reference: "Image reference",
+    applicant_name: "Applicant", mark_text: "Mark", application_date: "Application date",
+    renewal_due_date: "Renewal due date",
+  };
+  const label = labels[field] ?? `${field.charAt(0).toUpperCase()}${field.slice(1).replaceAll("_", " ")}`;
+  let message: string;
+  switch (issue.code) {
+    case "workspace_context_required":
+      message = "Missing from source and no single workspace value was available.";
+      break;
+    case "configured_workspace_context":
+      message = `Using workspace context (${textValue(row, field)}).`;
+      break;
+    case "source_incomplete_draft":
+      message = "Not supplied; new imported records remain drafts.";
+      break;
+    case "source_reference_only":
+      message = "Source text retained; no image downloaded or attached.";
+      break;
+    case "invalid_optional_date":
+      message = "Source date not recognized; it is not imported.";
+      break;
+    case "blank_row":
+      message = "Blank source row; excluded from import.";
+      break;
+    default:
+      message = (issue.code ?? "invalid").replaceAll("_", " ");
+  }
+  return `${label}: ${message}`;
+}
+
 function resultSummary(preview: IpImportPreview): string {
   const created = preview.rows.filter((row) => row.created_docket_id).length;
   const linked = preview.rows.filter((row) => row.commit_status === "committed" && !row.created_docket_id).length;
   const skipped = preview.rows.filter((row) => row.commit_status === "skipped").length;
   const duplicates = preview.rows.filter((row) => row.commit_status === "skipped" && row.commit_error_code === "duplicate_skipped").length;
   const warnings = preview.rows.filter((row) => rowWarnings(row).length).length;
-  return `${created} created; ${linked} linked; ${skipped} skipped (${duplicates} duplicates); ${warnings} with warnings; ${preview.job.failed_rows} failed.`;
+  return `${created} created; ${linked} linked; ${skipped} skipped (${duplicates} duplicates); ${warnings} with notes; ${preview.job.failed_rows} failed.`;
 }
 
 function statusTone(status: string): "success" | "warning" | "neutral" {
@@ -94,6 +129,7 @@ function downloadBlob(blob: Blob, filename: string) {
 export default function IpPortfolioImportsPage() {
   const canRead = useCapability("ip:read");
   const canWrite = useCapability("ip:write");
+  const canConfigure = useCapability("ip:taxonomy_admin");
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<IpImportPreview | null>(null);
@@ -128,7 +164,7 @@ export default function IpPortfolioImportsPage() {
     onSuccess: async (result) => {
       applyPreview(result);
       await queryClient.invalidateQueries({ queryKey: ["ip-portfolio-imports"] });
-      toast.success(`${result.job.valid_rows} eligible rows; ${result.job.invalid_rows} unusable rows will be skipped.`);
+      toast.success(`${result.job.valid_rows} valid source rows; ${result.job.invalid_rows} blocked rows. Duplicates and blocked rows are skipped by default.`);
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not validate the portfolio file.")),
   });
@@ -144,7 +180,7 @@ export default function IpPortfolioImportsPage() {
     onSuccess: async (result) => {
       applyPreview(result);
       await queryClient.invalidateQueries({ queryKey: ["ip-portfolio-imports"] });
-      toast.success("Preview refreshed against current portfolio data.");
+      toast.success("Preview refreshed against current workspace and portfolio data. Review the updated rows and duplicate decisions.");
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not refresh the import preview.")),
   });
@@ -232,7 +268,8 @@ export default function IpPortfolioImportsPage() {
     revalidateMutation.isPending ||
     reconcileMutation.isPending ||
     commitMutation.isPending;
-  const terminal = preview?.job.status === "committed" || preview?.job.status === "committed_with_errors";
+  const terminal = preview?.job.status === "committed" || preview?.job.status === "committed_with_errors" || preview?.job.status === "cancelled";
+  const contextBlocked = preview?.rows.some((row) => row.errors.some((error) => error.code === "workspace_context_required"));
   const canCommit = Boolean(
     preview &&
       (preview.job.status === "preview_ready" ||
@@ -363,7 +400,7 @@ export default function IpPortfolioImportsPage() {
                   {downloading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Error CSV
                 </Button>
               ) : null}
-              {preview.preview_expired && !terminal ? (
+              {!terminal ? (
                 <Button variant="outline" disabled={!canWrite || pending} onClick={() => revalidateMutation.mutate(preview.job.id)}>
                   <RefreshCw className="h-4 w-4" /> Refresh preview
                 </Button>
@@ -376,7 +413,7 @@ export default function IpPortfolioImportsPage() {
             <Metric label="Valid" value={preview.job.valid_rows} tone="success" />
             <Metric label="Unusable" value={preview.job.invalid_rows} tone="warning" />
             <Metric label="Duplicates" value={duplicateRows.length} tone={duplicateRows.length ? "warning" : "neutral"} />
-            <Metric label="Warnings" value={preview.rows.filter((row) => rowWarnings(row).length).length} tone="warning" />
+            <Metric label="Rows with notes" value={preview.rows.filter((row) => rowWarnings(row).length).length} />
           </div>
 
           {Array.isArray(preview.rows[0]?.normalized._column_mapping) ? (
@@ -393,6 +430,21 @@ export default function IpPortfolioImportsPage() {
           {preview.preview_expired ? (
             <div className="mt-4 flex gap-2 border border-[var(--color-warning-300)] bg-[var(--color-warning-50)] p-3 text-sm">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> This preview expired. Refresh it before committing; duplicate matches will be recalculated.
+            </div>
+          ) : null}
+
+          {contextBlocked && !terminal ? (
+            <div className="mt-4 flex min-w-0 flex-wrap items-start justify-between gap-3 border-y border-[var(--color-line)] py-3" role="region" aria-label="Workspace context recovery">
+              <div className="min-w-0 flex-1 basis-64 text-sm">
+                <h3 className="font-semibold">Workspace context needs review</h3>
+                <p className="mt-1 text-[var(--color-mute)]">
+                  This saved preview has missing jurisdiction or office values. Only an existing, unambiguous workspace value can supply a missing field. For a multi-jurisdiction or multi-office workspace, provide the correct values in each source row.
+                </p>
+                <p className="mt-1 text-[var(--color-mute)]">
+                  {canConfigure ? "Review existing workspace context, then refresh this preview after any legitimate configuration correction." : "Ask a workspace administrator to review existing context, then refresh this preview after any legitimate configuration correction."} Original source values are retained; refresh also recalculates duplicate decisions.
+                </p>
+              </div>
+              {canConfigure ? <Button href="/app/ip" variant="outline"><Settings className="h-4 w-4" /> IP workspace</Button> : null}
             </div>
           ) : null}
 
@@ -463,10 +515,20 @@ function ImportRow({ row, decision, disabled, canEditDate, onDecision }: { row: 
         {row.normalized.renewal_due_date ? <span className="text-xs text-[var(--color-mute)]">Source date, unverified</span> : null}
         {row.normalized._renewal_reminder ? <span className="block text-xs text-[var(--color-mute)]">Alert: {String((row.normalized._renewal_reminder as { status: string }).status).replaceAll("_", " ")}</span> : null}
       </td>
-      <td className="px-3 py-3">
+      <td className="min-w-[240px] max-w-sm break-words px-3 py-3">
         <Badge tone={statusTone(row.validation_status)}>{row.validation_status}</Badge>
-        {row.errors.map((error, index) => <p key={`${error.field}-${error.code}-${index}`} className="mt-1 text-xs text-[var(--color-danger-600)]">{error.field ?? "row"}: {(error.code ?? "invalid").replaceAll("_", " ")}</p>)}
-        {rowWarnings(row).map((warning, index) => <p key={`warning-${index}`} className="mt-1 text-xs text-[var(--color-warning-700)]">{warning.field}: {warning.code.replaceAll("_", " ")}</p>)}
+        {row.errors.length ? (
+          <div role="group" aria-label={`Blocking issues for row ${row.row_number}`} className="mt-2 text-xs text-[var(--color-danger-600)]">
+            <p className="font-semibold">Blocking issues</p>
+            <ul className="mt-1 space-y-1">{row.errors.map((error, index) => <li key={`${error.field}-${error.code}-${index}`}>{validationMessage(error, row)}</li>)}</ul>
+          </div>
+        ) : null}
+        {rowWarnings(row).length ? (
+          <div role="group" aria-label={`Non-blocking notes for row ${row.row_number}`} className="mt-2 text-xs text-[var(--color-mute)]">
+            <p className="font-semibold">Non-blocking notes</p>
+            <ul className="mt-1 space-y-1">{rowWarnings(row).map((warning, index) => <li key={`warning-${index}`}>{validationMessage(warning, row)}</li>)}</ul>
+          </div>
+        ) : null}
         {row.normalized._source_values ? (
           <details className="mt-2 text-xs">
             <summary className="cursor-pointer">Source values</summary>

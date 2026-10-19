@@ -278,12 +278,12 @@ test("IPLF-030B completes UJ-04 normal and exception workflow", async ({ page })
   expect(saved.rows.map((row: { commit_status: string }) => row.commit_status)).toEqual(["committed", "committed"]);
   await expect(
     page.getByRole("region", { name: "Review iplf-030b-register.csv", exact: true })
-      .getByText("1 created; 1 linked; 0 skipped (0 duplicates); 0 with warnings; 0 failed.", { exact: true }),
+      .getByText("1 created; 1 linked; 0 skipped (0 duplicates); 0 with notes; 0 failed.", { exact: true }),
   ).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: /iplf-030b-register\.csv/ }).click();
   await expect(page.getByRole("region", { name: "Review iplf-030b-register.csv", exact: true })
-    .getByText("1 created; 1 linked; 0 skipped (0 duplicates); 0 with warnings; 0 failed.", { exact: true })).toBeVisible();
+    .getByText("1 created; 1 linked; 0 skipped (0 duplicates); 0 with notes; 0 failed.", { exact: true })).toBeVisible();
   const retained = await api.get(`${apiBaseUrl}/api/ip/imports/${preview.job.id}`, { headers });
   expect(retained.status(), await retained.text()).toBe(200);
   expect((await retained.json()).rows).toEqual(saved.rows);

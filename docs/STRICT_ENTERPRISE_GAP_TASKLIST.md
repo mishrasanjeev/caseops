@@ -1,5 +1,14 @@
 # Strict Enterprise Gap Tasklist
 
+## October 19 Import Review Recovery
+
+**Inconclusive / candidate implementation pending exact-serving proof.** BUG-008's UI now
+distinguishes non-blocking source notes from errors and exposes existing saved
+preview refresh. No backend context/legal policy or schema changed. Current
+read-only production diagnosis cannot certify mutation/reload/replay; neither
+valid counts nor duplicate skips are created records. Preserve existing C6 gate
+ownership. See `docs/bugfix-ip-import-recovery-2026-10-19.md`.
+
 ## October 19 Specialist Read Recovery
 
 **Partially implemented / release NO-GO.** Docker15 exposed390055 units of

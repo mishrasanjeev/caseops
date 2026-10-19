@@ -233,6 +233,15 @@ Docker/CI, canonical merge, guarded execution and exact live browser replay
 remain required. The historical unidentified reopening remains Inconclusive.
 See `docs/runbooks/test-legal-manual-ip-qa-grant.md` for the operator procedure.
 
+## October 19 Import Review Recovery
+
+UJ-02/04/26, J08/M08 and IPLF-030/032/037 retain existing ownership. BUG-008's
+blocking-issue/non-blocking-note UI and saved-preview recovery have focused
+source regressions; original backend incident cause is unconfirmed. Four IP13
+dated identities are extended in place, not counted as deployed acceptance.
+Exact-release production regression remains pending. See
+`docs/bugfix-ip-import-recovery-2026-10-19.md`.
+
 ## October 13 IP And Calendar Scope
 
 J08/M08/MOD-TS-006, US-022/023/024/025 and FT-042/043/078..082 now include

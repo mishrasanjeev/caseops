@@ -1,5 +1,15 @@
 # CaseOps  - Work To Be Done
 
+## October 19 Import Review Recovery
+
+Overall BUG-008 verdict is **Inconclusive**, pending committed exact-serving
+production proof. Candidate source implements the bounded review/recovery UX;
+it is not a released fix. Existing runtime already admits incomplete draft/image
+references as notes; parent read-only diagnostic is not mutation acceptance.
+Keep absent/ambiguous context fail-closed and preserve original rows, expiry,
+duplicates and zero-created history. No C6 release prerequisite or workbook
+change. See `docs/bugfix-ip-import-recovery-2026-10-19.md` for bounded proof.
+
 ## October 19 Specialist Read Recovery
 
 Merged401d1615 is not deployable: Docker15 completed1603P/1F with the rest
