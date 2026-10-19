@@ -351,16 +351,20 @@ def _raise_processing_permission_error() -> None:
 def _attachment_record_map(
     session: Session,
     attachments: list[ContractAttachment],
+    *,
+    company_id: str,
 ) -> list[ContractAttachmentRecord]:
-    latest_jobs = load_latest_processing_jobs(
-        session,
-        target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
-        attachment_ids=[attachment.id for attachment in attachments],
-    )
-    return [
-        _attachment_record_with_job(attachment, latest_job=latest_jobs.get(attachment.id))
-        for attachment in attachments
-    ]
+    with session.no_autoflush:
+        latest_jobs = load_latest_processing_jobs(
+            session,
+            company_id=company_id,
+            target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
+            attachment_ids=[attachment.id for attachment in attachments],
+        )
+        return [
+            _attachment_record_with_job(attachment, latest_job=latest_jobs.get(attachment.id))
+            for attachment in attachments
+        ]
 
 
 def _get_company_membership(
@@ -1052,7 +1056,9 @@ def get_contract_workspace(
         ),
         owner=_membership_summary(contract.owner_membership) if contract.owner_membership else None,
         available_owners=available_owners,
-        attachments=_attachment_record_map(session, contract.attachments),
+        attachments=_attachment_record_map(
+            session, contract.attachments, company_id=context.company.id
+        ),
         clauses=[_clause_record(clause) for clause in contract.clauses],
         obligations=[_obligation_record(obligation) for obligation in contract.obligations],
         playbook_rules=[_playbook_rule_record(rule) for rule in contract.playbook_rules],
@@ -1490,6 +1496,7 @@ def update_contract_attachment_metadata(
     )
     latest_jobs = load_latest_processing_jobs(
         session,
+        company_id=context.company.id,
         target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
         attachment_ids=[refreshed.id],
     )
@@ -1749,6 +1756,7 @@ def create_contract_attachment(
     assert refreshed_attachment is not None
     latest_jobs = load_latest_processing_jobs(
         session,
+        company_id=context.company.id,
         target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
         attachment_ids=[refreshed_attachment.id],
     )
@@ -1812,6 +1820,7 @@ def request_contract_attachment_processing(
     )
     latest_jobs = load_latest_processing_jobs(
         session,
+        company_id=context.company.id,
         target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
         attachment_ids=[refreshed_attachment.id],
     )

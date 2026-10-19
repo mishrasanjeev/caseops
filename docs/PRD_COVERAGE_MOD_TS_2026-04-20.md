@@ -1,5 +1,58 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 19 CI Correction
+
+J04/M03 remains source-only/NO-GO. C3ed13138d CI39173686953 failed compiled
+projection validation and historical-tail migration calls while a frozen worker
+held a transaction. Regeneration plus pre-build validation and exact historical
+fence/post-join captured-head assertions need new complete gates. The index,
+lock budget, negative baseline and raw-row safety remain unchanged. Docker13
+was deliberately stopped; its401 complete cases and142 prefix cases are not
+full Docker or browser acceptance. Serving9cf/workbooks56/23 remain unchanged.
+
+The whole affected74-case module/222 phases now passes; separate baseline02
+fails both intended0003 cases because55000 is absent. Sealed26125c6550f3424c
+retains source/chain/cleanup and invalid earlier-control history. CI preflight
+17/17 and104 isolated Docker controls pass, not full release acceptance.
+
+## October 18 Processing Snapshot Coverage
+
+C3's original59 unique native cases/177 phases passed the assertions executed
+across four explicit files, preserving all original50 and prior adverse3
+identities. The total-work oracle omitted Bitmap Index Scan children, and its
+read-only guard missed nested opaque TextualSelect DML; actual typed helper SQL
+is read-only. The reported24,580 total does not prove33,028. Corrected RED6 is
+3P/3F across18 phases, with foreign-default work40,998/40,999>33,028. Raw Job
+work16,387<=16,514, rank input8,193 and materialized latest16 remain valid.
+Ordered six-key index EMPTY/RETAINED modes each yielded3P/3F and12 plans
+(24 plans/36 phases total); insufficient receipt0a0e6608cf906b80 is linked in the
+bug doc below. C2 failures and all original15 plans stay retained. Both LIMIT
+variants completed3P/3F. The narrow company/type index passed six cases in each
+empty/retained timing, default16,418 and adverse maximum24,612<=33,028 with exact
+DTO equivalence. Receipt087c2764140591d9 is causal probe evidence, not migration
+or full native acceptance; the separate native result is recorded below.
+Serving P remains failed; private cadence PAUSED, manual-IP grant unreplayed,
+workbooks56/23 unchanged. Corrected scoped and full Docker/hosted/live/cadence
+proof remain pending with the original work budgets unchanged.
+Actual101/303 completed82P/19F:32 new migration and10 legacy cases passed;
+18 HTTP cases hit long Windows temp paths before admission, and one upload
+barrier's lost Future exception remains unclassified. Failed receipt7e79a3fd
+is retained; full short-root replay plus four diagnostic controls is pending.
+That full replacement now passes105 cases/315 phases across seven modules,
+zero skips/retries/errors. All15 plans and32+10 migration cases pass; original
+identities and failed101 history are preserved. Receipt99f2c417488ae98b is scoped
+native proof, not full Docker, CI/main or production/cadence certification.
+
+J04/M03/US-007..009/FT-011..015: serving9cf production39143613520 completed
+385P/1F/18 reasoned skips, all50 dated and47 public cases passed. Two controlled
+native HTTP REDs prove source/latest-job read tearing; ten controls pass.
+Shared snapshot/OCR/IP frozen-response repair remains source-only until complete
+replacement gates and exact-live proof. The original redacted field is unknown;
+private cadence and genuine legal/consent/history dependencies stay held/open.
+See `docs/bugfix-document-workspace-snapshot-2026-10-18.md`.
+Combined-02 reconciles50/50 native identities and150/150 passed phases across
+the three explicit files; whole Docker/CI/live coverage remains pending.
+
 ## October 18 Serving Acceptance Reconciliation
 
 J08/M08, UJ-02/04/26 and IPLF-023/030/032/037: PR542 serves `ee351e0c`, with

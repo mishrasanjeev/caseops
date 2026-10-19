@@ -10066,6 +10066,7 @@ class DocumentProcessingJob(Base):
     __table_args__ = (
         Index("ix_document_processing_jobs_queue", "status", "queued_at", "id"),
         Index("ix_document_processing_jobs_recovery", "status", "started_at", "id"),
+        Index("ix_document_processing_jobs_company_target", "company_id", "target_type"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

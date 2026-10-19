@@ -13,7 +13,6 @@ from sqlalchemy.engine import make_url
 from alembic import command
 from caseops_api.core.settings import get_settings
 from caseops_api.db.session import clear_engine_cache
-from caseops_api.scripts.check_database_indexes import build_index_health_report
 from tests.fixtures_postgres_client import temporary_http_database
 
 TABLES = {"ip_portfolio_renewal_series", "ip_portfolio_renewal_occurrences"}
@@ -99,14 +98,8 @@ def test_fresh_upgrade_preserves_catalog_and_empty_downgrade(kind, tmp_path, mon
             for row in schema.get_indexes("ip_portfolio_renewal_occurrences")
         }
         with engine.connect() as connection:
-            health = build_index_health_report(connection)
-            if os.environ.get("CASEOPS_TEST_RESULT_JOURNAL"):
-                target = (
-                    Path(os.environ["CASEOPS_TEST_RESULT_JOURNAL"]).parent
-                    / f"index-health-{kind}.json"
-                )
-                target.write_text(json.dumps(health, indent=2), encoding="utf-8")
-            assert health["status"] == "ok", health
+            # Current-model health is a separate fresh-head rehearsal; this
+            # dated catalog/roundtrip contract stays pinned to its own revision.
             assert (
                 connection.execute(
                     text("SELECT id, normalized_alias FROM forum_catalog_aliases ORDER BY id")

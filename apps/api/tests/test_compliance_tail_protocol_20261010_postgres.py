@@ -266,16 +266,27 @@ def _legacy(database):
     return module
 
 
-def _install(database):
-    target = (
-        "20261010_0003" if os.getenv("CASEOPS_COMPLIANCE_TAIL_BASELINE") == "unguarded" else "head"
-    )
+def _install(database, *, frozen_in_flight=False):
+    if os.getenv("CASEOPS_COMPLIANCE_TAIL_BASELINE") == "unguarded":
+        target = "20261010_0003"
+    else:
+        # Install only the historical fence while the historical transaction is
+        # paused. Later concurrent-index DDL must wait for that worker to end.
+        target = "20261010_0004" if frozen_in_flight else database.current_head
     before = _snapshot(database)
     command.upgrade(database.cfg, target)
-    if target == "head":
+    if target != "20261010_0003":
         for row in before["matter_compliance_extraction_runs"]:
             row["persistence_protocol"] = None
     assert _snapshot(database) == before, "Installing a protocol must not rewrite historical rows"
+    with database.engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == target
+    print(json.dumps({
+        "event": "native_tail_schema_boundary",
+        "target": target,
+        "frozen_in_flight": frozen_in_flight,
+        "captured_current_head": database.current_head,
+    }))
 
 
 def _snapshot(database, *, connection=None):
@@ -451,7 +462,7 @@ def test_actual_full_3db_extraction_cannot_create_tail_outputs(
         future = pool.submit(_invoke, legacy, database, source)
         try:
             assert entered.wait(10)
-            _install(database)
+            _install(database, frozen_in_flight=True)
             # The new nullable column is the only allowed historical-row delta.
             before = _snapshot(database)
             release.set()
@@ -461,6 +472,7 @@ def test_actual_full_3db_extraction_cannot_create_tail_outputs(
             assert _snapshot(database) == before
         finally:
             release.set()
+    _install(database)
 
 
 @pytest.mark.parametrize("outcome", ["valid", "failure"])
@@ -500,7 +512,7 @@ def test_actual_full_3db_worker_post_index_tail_is_rejected(tail_database, monke
             future = pool.submit(invoke)
             try:
                 assert entered.wait(10)
-                _install(database)
+                _install(database, frozen_in_flight=True)
                 before = _snapshot(database)
                 assert before["jobs"][0]["status"] == "completed"
                 assert before["index"][0]["extracted_text"] == _TEXT
@@ -516,6 +528,7 @@ def test_actual_full_3db_worker_post_index_tail_is_rejected(tail_database, monke
                 release.set()
     finally:
         event.remove(database.engine, "handle_error", error)
+    _install(database)
 
 
 @pytest.mark.parametrize("status", ["completed", "failed", "skipped"])
@@ -645,7 +658,7 @@ def test_full_frozen_attachment_resuming_from_provider_cannot_persist(tail_datab
         future = pool.submit(_invoke, legacy, database, "attachment")
         try:
             assert entered.wait(10)
-            _install(database)
+            _install(database, frozen_in_flight=True)
             before = _snapshot(database)
             release.set()
             with pytest.raises(DBAPIError) as rejected:
@@ -655,6 +668,7 @@ def test_full_frozen_attachment_resuming_from_provider_cannot_persist(tail_datab
             assert _snapshot(database) == before
         finally:
             release.set()
+    _install(database)
 
 
 def test_actual_3db_run_creation_prevents_retroactive_ddl_acceptance(tail_database, monkeypatch):

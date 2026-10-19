@@ -1,5 +1,79 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 19 CI Correction
+
+C4 `ce938d24` is additionally blocked by CodeQL alert586
+(`py/side-effect-in-assert`) in the compile-only history-work oracle. The call
+constructs a SQLAlchemy DELETE AST; it does not execute a deletion. Capture the
+statement before asserting its rejection, with the same oracle and no scanner
+suppression. Docker14 was deliberately stopped after346 passed calls and1,037
+passed setup/call/teardown prefix phases; no completion event or native failure
+was recorded. The rest of its3,208-case inventory and all605 browser tests are
+unverified. Preserve this incomplete run and its operator cancellation attempts.
+The replacement candidate still requires fresh complete release gates.
+
+**Scoped correction verified / release NO-GO.** C3ed13138d CI39173686953 failed the
+compiled governance projection check and seven retained historical compliance
+tail call phases while a new concurrent index waited behind a frozen legacy
+transaction. Regenerate the projection and machine-check it before Docker;
+install the exact historical fence during the pause, then prove the complete
+captured-head upgrade after join without raw-row changes. No migration budget,
+negative baseline or 55000 rejection is weakened. Docker13 was operator-stopped
+after401 complete cases plus142 prefix cases; its remainder/browser inventory
+is incomplete. Fresh affected-file, full Docker/CI/main/live/cadence gates are
+required. Serving9cf and both workbooks56/23 remain unchanged. See
+`docs/bugfix-document-workspace-snapshot-2026-10-18.md`.
+
+Whole affected module74P/222 phases and genuine baseline02 expected RED2 now
+pass their intended contracts, source/cleanup sealed26125c6550f3424c. Actual
+CI preflight17/17 and adjacent Docker guard104 controls also pass. Retain the
+operator-incomplete first attempt and invalid guarded baseline01; full release
+gates and original legal/Calendar/history dependencies remain open.
+
+## October 18 Document Snapshot Failure
+
+C3's required trusted company scope precedes ranking and latest-only
+materialization. Its original59 native cases/177 phases passed the assertions
+executed, with15 actual plans retained, but the total-work oracle omitted Bitmap
+Index Scan children and missed nested opaque TextualSelect DML. Actual typed
+helper SQL is read-only; no product mutation is inferred. Reported24,580 was an
+undercount, not proof of33,028. Corrected RED6 completed3P/3F across18 phases:
+foreign-default work40,998/40,999>33,028. Raw Job work16,387<=16,514, rank
+input8,193 and latest16 remain valid. Ordered six-key index EMPTY/RETAINED modes
+each completed3P/3F and12 plans (24 plans/36 phases total), insufficient
+receipt0a0e6608cf906b80; exact evidence is in the bug doc below. Both LIMIT
+variants failed3P/3F. The narrow company/type index passed both six-case timings,
+default16,418 and worst adverse24,612<=33,028, exact DTOs preserved. Causal
+receipt087c2764140591d9 is not migration or full native acceptance. The separate
+native result follows. C2 failures stay retained;
+full candidate/main/deployed gates remain required; scoped proof is recorded below.
+Serving P is still failed, private cadence PAUSED, manual-IP grant unreplayed
+and workbooks56/23 unchanged. Original work budgets are not waived.
+Actual101/303 completed82P/19F, including32 migration and10 legacy passes.
+Eighteen HTTP setup paths failed under long Windows temp storage; one upload
+barrier remains unclassified because its Future exception was not surfaced.
+Retain7e79a3fd failed history and require full short-root replay with four
+diagnostic controls, unchanged20-second barriers and all original identities.
+The complete replacement now passes105/315, zero skips/retries/errors, with
+all15 plans,32 migration and10 legacy cases passed. Receipt99f2c417488ae98b
+retains the actual frozen source and cleanup. Old101/UNKNOWN history remains;
+full Docker, green candidate/main CI and exact-live/cadence proof still gate release.
+
+**Partially fixed in source / NO-GO.** Serving9cf production39143613520 has
+385P/1F/18 unverified skips; all50 mandatory dated and47 public cases pass.
+The remaining Matter393 index assertion is not a durable-loss diagnosis:
+later read-only metadata is correct and its original tuple member is redacted.
+Two controlled PostgreSQL HTTP REDs establish torn source/receipt reads under
+READ COMMITTED; ten adjacent controls pass. The shared snapshot and IP response
+correction still need full replacement native, Docker, CI and live acceptance,
+then guarded maintenance/resume. Retain earlier test-assumption failures and
+historical evidence; do not replay the manual-IP grant or close legal/consent/
+writer/reopening dependencies. See
+`docs/bugfix-document-workspace-snapshot-2026-10-18.md`.
+The complete scoped replacement passes50 native cases/150 phases, with no
+skip/retry/error or source drift; prior failed attempts remain retained. This
+is not production closure and does not authorize private-cadence resume.
+
 ## October 18 Exact-Serving Tracker And Calendar Failure
 
 **Partially fixed / NO-GO.** PR542 serves `ee351e0c`, but production39042539115

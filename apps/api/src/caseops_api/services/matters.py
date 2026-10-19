@@ -1195,16 +1195,20 @@ def _clean_attachment_text(value: str | None) -> str | None:
 def _attachment_record_map(
     session: Session,
     attachments: list[MatterAttachment],
+    *,
+    company_id: str,
 ) -> list[MatterAttachmentRecord]:
-    latest_jobs = load_latest_processing_jobs(
-        session,
-        target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
-        attachment_ids=[attachment.id for attachment in attachments],
-    )
-    return [
-        _attachment_record(attachment, latest_job=latest_jobs.get(attachment.id))
-        for attachment in attachments
-    ]
+    with session.no_autoflush:
+        latest_jobs = load_latest_processing_jobs(
+            session,
+            company_id=company_id,
+            target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
+            attachment_ids=[attachment.id for attachment in attachments],
+        )
+        return [
+            _attachment_record(attachment, latest_job=latest_jobs.get(attachment.id))
+            for attachment in attachments
+        ]
 
 
 def _task_sort_key(task: MatterTask) -> tuple[int, date, datetime]:
@@ -3637,7 +3641,9 @@ def get_matter_workspace(
         court_orders=[_court_order_record(order) for order in matter.court_orders],
         court_sync_runs=[_court_sync_run_record(run) for run in matter.court_sync_runs],
         court_sync_jobs=[_court_sync_job_record(job) for job in matter.court_sync_jobs],
-        attachments=_attachment_record_map(session, matter.attachments),
+        attachments=_attachment_record_map(
+            session, matter.attachments, company_id=context.company.id
+        ),
         time_entries=[_time_entry_record(time_entry) for time_entry in matter.time_entries],
         invoices=[_invoice_record(invoice) for invoice in matter.invoices],
         notes=[_note_record(note) for note in matter.notes],
@@ -5853,6 +5859,7 @@ def create_matter_attachment(
     assert refreshed_attachment is not None
     latest_jobs = load_latest_processing_jobs(
         session,
+        company_id=context.company.id,
         target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
         attachment_ids=[refreshed_attachment.id],
     )
@@ -6061,6 +6068,7 @@ def update_matter_attachment_metadata(
     session.refresh(attachment)
     latest_jobs = load_latest_processing_jobs(
         session,
+        company_id=context.company.id,
         target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
         attachment_ids=[attachment.id],
     )
@@ -6129,6 +6137,7 @@ def request_matter_attachment_processing(
     )
     latest_jobs = load_latest_processing_jobs(
         session,
+        company_id=context.company.id,
         target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
         attachment_ids=[refreshed_attachment.id],
     )

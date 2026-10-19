@@ -1,5 +1,62 @@
 # CaseOps agent instructions
 
+- Keep SQL DML construction and other potentially effectful calls outside an
+  assertion, even in a compile-only negative oracle. Assert the captured result
+  instead. Do not dismiss a required scanner finding because the current test
+  never executes that statement; preserve that no-I/O distinction and rerun the
+  required scan on the corrected source without suppressing the rule.
+
+- A frozen historical-worker migration test must install its exact historical
+  fence while that worker is paused, then release/join the worker and prove the
+  complete captured current-head upgrade preserves the retained raw rows.
+  Unrelated later concurrent-index builds must not run behind that deliberately
+  held snapshot. Preserve the negative baseline, exact rejection SQLSTATE and
+  migration lock budgets; pinning the fence alone cannot replace current-head
+  coverage. Validate the compiled governance projection before Docker build,
+  not just the human-readable map or an agent's manual checklist.
+- An environment-driven negative control must verify the actual flag at the
+  final pytest child, not only the controller environment. A green control
+  that still installed the guarded schema is invalid counterfactual evidence.
+  Retain it, correct only the transport and require the intended failure plus
+  its actual schema boundary and raw effects in a fresh isolated database.
+
+- One SQL statement is not a bounded-work proof. A correlated latest-row
+  lookup can repeat a broad index scan per source under another valid plan.
+  Pass the trusted tenant explicitly, filter it before ranking, reduce latest
+  rows before materialization and charge removed rows, loops and history-sized
+  CTE/intermediate work. Regress ordinary/adverse plans plus foreign same-ID
+  histories without raising the original bounds or changing production planner
+  settings. A local focused pass cannot waive a full-suite plan failure.
+
+- History-work observers must attribute Bitmap Index Scan children to their
+  owning Job relation even without a Relation Name, and charge loop-weighted
+  intermediate/CTE work. Reject opaque TextualSelect/TextClause wrappers in a
+  read-only AST guard, including nested DML, while positively testing the real
+  typed materialized SELECT. Preserve the earlier undercounted green as scoped
+  evidence, not proof of the corrected work bound.
+- An index declaration is not proof of a bounded query plan. Capture complete
+  default and adverse plans with the index created both before and after fixture
+  seeding. A wider ordered index may lose to broad bitmap scans; accept only the
+  measured tenant-scoped path without statistics, planner or deadline waivers.
+
+- Windows acceptance must use a fresh short owned temporary root, separate from
+  the longer retained-report path. Verify realistic nested document paths before
+  launch and retain/copy sidecars durably. A long --basetemp that fails mkdir
+  before attachment admission is failed setup, not a reproduced product defect;
+  preserve its complete report and rerun the entire intended inventory.
+- A missing concurrency barrier must surface a completed request Future's
+  exception before reporting the barrier timeout. ThreadPoolExecutor teardown
+  waits but does not propagate stored exceptions. Keep the original timeout,
+  finally-release and normal result checks, with deterministic early-failure,
+  completed-without-barrier, pending and reached-barrier regressions. Never infer
+  an unobserved exception from sibling failures.
+
+- A parameterized fixture still needs an explicit supported-input domain.
+  Reject unsupported targets before admission and assign response-derived IDs
+  inside the branch that creates that response. A green exercised subset does
+  not clear a static uninitialized-variable finding; preserve the failed
+  candidate and rerun fresh complete gates without scanner suppression.
+
 - A reviewed origin fingerprint may recur at a historical merge or shifted
   line. Translate only after the reported immutable commit is in the selected
   history and the complete byte-identical span has one contiguous reviewed
@@ -856,6 +913,22 @@ spreadsheet skill's formatting, formula, inspection, and visual-verification
 requirements when using the fallback.
 
 ## Permanent regression learnings
+
+- An atomic document-worker commit does not make a DTO assembled by separate
+  READ COMMITTED statements coherent. Read source processing fields and the
+  latest receipt together, include OCR policy inputs, and reuse the matching
+  frozen IP version receipt. Prove initial-index interleavings through real
+  PostgreSQL HTTP before claiming a fix; a delayed assertion or browser retry
+  hides the defect. Preserve unrelated dirty state and fail closed on conflicts.
+- Redacted production errors need distinct field-level assertion locations.
+  Keep the original unknown tuple member unknown; later correct retained data
+  does not reconstruct its HTTP response. A company-owned admitted worker may
+  retain inactive-actor provenance while interactive access stays denied; new
+  negative tests must respect that contract and pre-claim lifecycle neutralization.
+- Completion-only agent waits do not deliver intermediate failed-shard status.
+  Observe retained job-status checkpoints during a long verification, report the
+  first real failure promptly, then reconcile every sibling and the complete
+  replacement inventory. Never upgrade a release from its passing dated subset.
 
 - Shared UI filters require route-to-service contract parity on every view,
   including grouped families and export; accepting an unknown query silently

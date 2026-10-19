@@ -117,10 +117,13 @@ for (const target of ["matter", "contract"] as const) {
             expect(attachment.latest_job.action).toBe(action);
             if (attachment.latest_job.status === "failed") throw new Error(`Index job failed: ${attachment.latest_job.error_message}`);
             if (attachment.latest_job.status === "completed") {
-              expect(attachment).toMatchObject({ processing_status: "indexed", sha256_hex: digest,
-                extracted_char_count: body.length });
-              expect(attachment.latest_job).toMatchObject({ processed_char_count: body.length,
-                error_message: null, attempt_count: 1 });
+              // Separate locations identify a failed invariant even when production errors are redacted.
+              expect(attachment.processing_status, "Completed job source is indexed").toBe("indexed");
+              expect(attachment.sha256_hex === digest, "Retained source hash matches the original upload").toBe(true);
+              expect(attachment.extracted_char_count, "Retained extracted length matches the synthetic source").toBe(body.length);
+              expect(attachment.latest_job.processed_char_count, "Completed job extracted length matches its source").toBe(body.length);
+              expect(attachment.latest_job.error_message, "Completed job has no extraction error").toBeNull();
+              expect(attachment.latest_job.attempt_count, "Original processing attempt completes without a retry").toBe(1);
               return;
             }
             expect(["queued", "processing"]).toContain(attachment.latest_job.status);

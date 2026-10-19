@@ -1,5 +1,63 @@
 # CaseOps  - Work To Be Done
 
+## October 19 CI Correction
+
+Release remains NO-GO: C3ed13138d failed compiled-projection validation and
+historical compliance-tail concurrent-index call phases. The corrected source
+must regenerate/validate the runtime projection before Docker and separate the
+paused historical fence from the post-join captured-head upgrade, retaining raw
+rows, the negative baseline and original lock budget. Docker13 was deliberately
+stopped and is incomplete. Complete new gates before merge/deploy/certification;
+do not replay the consumed test-legal-only manual-IP grant. Serving9cf/private
+PAUSED and the two workbooks56/23 remain actual truth, not the next candidate.
+
+The scoped correction now passes the whole74-case module/222 phases plus two
+genuine0003 negative controls, sealed26125c6550f3424c. All17 CI preflight
+commands and104 adjacent Docker guard controls pass. The invalid earlier
+guarded baseline remains retained. Full Docker/current hosted/main/live and
+cadence acceptance still gate release; no provider/legal verdict is upgraded.
+
+## October 18 Processing Snapshot Blocker
+
+C3 remains release NO-GO pending full gates. Original59 native cases/177 phases passed the
+assertions executed, but the oracle omitted Bitmap Index Scan work and nested
+opaque TextualSelect DML. Actual typed helper SQL is read-only; no mutation is
+inferred. Reported24,580 was undercounted. Corrected RED6 completed3P/3F across
+18 phases, foreign-default40,998/40,999>33,028. Raw Job work16,387<=16,514,
+rank input8,193 and latest16 remain valid. Ordered six-key index EMPTY/RETAINED
+modes each yielded3P/3F and12 plans (24 plans/36 phases total), insufficient
+receipt0a0e6608cf906b80; see the bug doc below. Preserve prior failures and all15
+original plans. Both LIMIT variants completed3P/3F. The narrow company/type
+index passed both six-case timings, default16,418 and worst adverse24,612<=33,028,
+exact DTOs preserved. Causal receipt087c2764140591d9 is not migration or full
+native acceptance. Full release acceptance remains outstanding. Keep company
+scoping/latest-only
+materialization and original16,514/33,028 budgets. Serving P remains failed,
+private cadence PAUSED, manual-IP grant unreplayed, workbooks56/23 unchanged.
+Complete Docker/hosted candidate/main, exact live replay
+and guarded cadence recovery/resume remain required before verdict upgrades.
+The actual first101/303 run is82P/19F, with32 migration and10 legacy passes.
+Eighteen HTTP setup paths hit the operator's long Windows temp storage; one
+upload barrier remains unclassified after its Future exception was lost. Keep
+failed7e79a3fd evidence and require full short-root replay plus four diagnostic
+controls without weakening the original barriers, inventory or work bounds.
+Complete replacement now passes105/315, zero skips/retries/errors, with all15
+plans and32+10 migration cases passed. Source-owned receipt99f2c417488ae98b is
+not full Docker/hosted/main/live certification. Preserve failed101/UNKNOWN
+history; commit the frozen candidate, complete fresh gates, then guarded release.
+
+J04/M03 is Partially implemented. Latest serving9cf has production39143613520
+NO-GO:385P/1F/18 explicit skips. All50 IP/Calendar dated cases pass; source-only
+snapshot repair addresses the remaining reproduced Matter/Contract read race
+and adjacent IP frozen-receipt/OCR consistency. Complete current native/Docker/
+CI, merge canonical main, guarded deployment and exact-live replay, then the
+held private-cadence recovery/guarded resume. Do not mark source, consent,
+verified-date-writer or unidentified reopening dependencies closed. See
+`docs/bugfix-document-workspace-snapshot-2026-10-18.md`.
+Scoped combined-02 is complete:50 native cases/150 phases all passed, zero
+skips/retries/errors, frozen source and reaped resources. Fresh full Docker,
+CI, canonical merge, deployment, live replay and cadence remain required.
+
 ## October 18 Production Acceptance Repair
 
 J08/M08 and UJ-02/04/26 are Partially implemented at serving `ee351e0c`.
