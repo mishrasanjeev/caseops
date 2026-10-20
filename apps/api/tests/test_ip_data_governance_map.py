@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import json
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -70,6 +71,55 @@ def test_sendgrid_leaf_keeps_existing_provider_class_and_requires_change_review(
         [transport, "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"],
         source_by_path={transport: source},
     ) == []
+
+
+def test_activity_report_delivery_inventory_matches_private_scheduler_contract() -> None:
+    data = _map()
+    report = next(
+        row for row in data["non_sql_data_classes"]
+        if row["id"] == "operational-activity-report-delivery"
+    )
+    inventory = json.loads(
+        (REPO_ROOT / "infra/cloudrun/scheduler-inventory.json").read_text(encoding="utf-8")
+    )
+    jobs = [job for job in inventory["jobs"] if job["run_job_name"] == "caseops-activity-report"]
+    assert len(jobs) == 1
+    job = jobs[0]
+    delivery = report["delivery_contract"]
+    assert delivery["scheduler_name"] == job["scheduler_name"] == "caseops-activity-report-0800-ist"
+    assert delivery["run_job_name"] == job["run_job_name"]
+    assert delivery["schedule"] == job["schedule"] == "30 7 * * *"
+    assert delivery["time_zone"] == job["time_zone"] == "Asia/Kolkata"
+    assert delivery["max_retries"] == job["bootstrap"]["max_retries"] == 0
+    assert delivery["recipient_setting"] == "CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL"
+    assert delivery["configured_recipients"] == job["bootstrap"]["environment"][
+        delivery["recipient_setting"]
+    ].split(";") == [
+        "mishra.sanjeev@gmail.com", "sanjeev@orchestrum.in",
+        "ram.gupta@edumatica.io", "uday.chauhan@edumatica.io",
+    ]
+    assert delivery["max_unique_recipients"] == 4
+    assert delivery["http_posts_per_send"] == delivery["to_per_personalization"] == 1
+    assert delivery["cc_bcc"] is False
+    assert delivery["success_means"] == "provider_http_acceptance_not_inbox_delivery"
+    assert report["kind"] == "provider_held_object"
+    assert report["sensitivity"] == "confidential_cross_account_operational_and_financial_data"
+    assert "not a tenant-scoped export" in report["access_boundary"]
+    assert "no per-recipient tenant ACL" in report["access_boundary"]
+    assert "SQL aggregates" in report["source_provenance"]
+    assert "no stored report or delivery receipt" in report["source_provenance"]
+    assert "https://api.sendgrid.com/v3/mail/send" in report["region_subprocessor"]
+    assert "No approved automated retention duration." in report["default_retention"]
+    assert report["status"] == "inventory_registered_runtime_policy_unapproved"
+    assert report["disposition_handler_id"] == "registry_fail_closed"
+    assert report["tenant_configurable"] is False
+    assert data["policy_status"] == "pending_named_human_approval"
+    assert {
+        "apps/api/src/caseops_api/core/settings.py",
+        "apps/api/src/caseops_api/services/activity_reports.py",
+        "apps/api/src/caseops_api/scripts/send_activity_report.py",
+        "infra/cloudrun/scheduler-inventory.json",
+    }.issubset(report["implementation_refs"])
 
 
 def test_hold_release_evidence_is_registered_without_disposition_admission() -> None:

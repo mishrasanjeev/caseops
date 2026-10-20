@@ -592,6 +592,53 @@
     },
     {
       "legal_policy_basis": "Pending named Records/Privacy/Legal/Security approval; this inventory is not an asserted legal retention basis or policy activation.",
+      "default_retention": "No approved automated retention duration. Report content exists in memory and is disclosed to SendGrid and recipient mailboxes; this sender provides no provider/mailbox deletion, expiry, hold or retention enforcement. Existing source SQL and job-log policies are unchanged; do not invent a report lifetime or deletion guarantee.",
+      "tenant_configurable": false,
+      "tenant_retention_bounds": "No tenant override is available until an approved versioned policy defines per-tenant bounds and authority.",
+      "disposition": "registry_fail_closed prevents a Definition-of-Ready pass for an unregistered class; it does not perform data I/O.",
+      "hold_behavior": "A future approved hold must block conflicting disposition. This inventory does not activate or execute a hold.",
+      "region_subprocessor": "SendGrid receives sender/recipient addresses, subject and rendered plain-text/HTML cross-account report in one HTTPS POST to https://api.sendgrid.com/v3/mail/send; recipient mail providers subsequently hold the message. The endpoint does not prove a residency region. Retention, transfers and subprocessors remain subject to provider/recipient-mailbox terms and pending approved policy; no guarantee is asserted. HTTP acceptance (legacy status sent) is not inbox or delivery proof; suppressions may prevent delivery. No automatic transport retry is added and the existing job uses max_retries=0; this does not create exactly-once scheduling or safe replay after a lost acknowledgement.",
+      "owner": "Codex",
+      "disposition_handler_id": "registry_fail_closed",
+      "status": "inventory_registered_runtime_policy_unapproved",
+      "id": "operational-activity-report-delivery",
+      "kind": "provider_held_object",
+      "purpose": "Existing cross-account operational dashboard email, not a new SQL or object-storage class. It reports named law-firm and corporate-legal accounts (including inactive accounts), active/inactive status, per-account and segment activity counts, billable hours, INR invoicing/collection/outstanding values, document counts/storage and current workload snapshots. Completed day/week/month and till-date windows use Asia/Kolkata. Accounts with smoke/csrf/test/debug/e2e in their names are excluded; this name filter is not an authorization boundary. The 2026-10-20 correction changes the existing job from 08:00 to 07:30 and from one configured recipient to at most four validated, ordered, case-insensitively unique semicolon-separated recipients. The legacy single-address default remains supported.",
+      "sensitivity": "confidential_cross_account_operational_and_financial_data",
+      "source_licence_limits": "An existing operator-controlled cross-account disclosure, not a tenant-scoped export. Only rendered account summaries are sent: no document bytes/text, matter titles, individual user identities, raw audit payloads or credentials. Recipient addresses are personal/contact data. Each personalization has one To and no CC/BCC, hiding other recipients from each recipient, not from SendGrid. Invalid/control/display-name/empty/over-limit addresses are rejected before transport without DNS queries. This map records actual behavior, not a new legal basis, provider approval, tenant consent, generic export permission or suppression bypass.",
+      "access_boundary": "The scheduled caseops-send-activity-report command reads across account SQL records using the existing job's database credentials and runtime service account; it is not a tenant-scoped export or an interactive tenant-user endpoint. Operator configuration selects recipients; there is no per-recipient tenant ACL or per-tenant consent check in this sender. The four explicitly requested operational recipients are below. Email delivery gives each recipient the same cross-account content. No new user capability or entitlement is introduced.",
+      "source_provenance": "Derived SQL aggregates from existing Company/membership, Matter/task/hearing/attachment/notice/time-entry/invoice/payment-attempt and AuditEvent records; generated_at and reporting-period bounds identify the snapshot, not a signed source or delivery manifest. Company IDs remain in the in-memory report but are not rendered into the mail. The command closes its database session before sending, creates no stored report or delivery receipt, and logs only account_count, generated_at and status, never account names, IDs, activity, financial values or recipient addresses. Existing source records and operational logs retain their existing owners and retention controls.",
+      "delivery_contract": {
+        "scheduler_name": "caseops-activity-report-0800-ist",
+        "run_job_name": "caseops-activity-report",
+        "schedule": "30 7 * * *",
+        "time_zone": "Asia/Kolkata",
+        "recipient_setting": "CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL",
+        "configured_recipients": [
+          "mishra.sanjeev@gmail.com",
+          "sanjeev@orchestrum.in",
+          "ram.gupta@edumatica.io",
+          "uday.chauhan@edumatica.io"
+        ],
+        "max_unique_recipients": 4,
+        "http_posts_per_send": 1,
+        "to_per_personalization": 1,
+        "cc_bcc": false,
+        "max_retries": 0,
+        "success_means": "provider_http_acceptance_not_inbox_delivery"
+      },
+      "implementation_refs": [
+        "apps/api/src/caseops_api/core/settings.py",
+        "apps/api/src/caseops_api/services/activity_reports.py",
+        "apps/api/src/caseops_api/scripts/send_activity_report.py",
+        "apps/api/tests/test_activity_reports.py",
+        "apps/api/tests/test_send_activity_report_script.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "infra/cloudrun/scheduler-inventory.json"
+      ]
+    },
+    {
+      "legal_policy_basis": "Pending named Records/Privacy/Legal/Security approval; this inventory is not an asserted legal retention basis or policy activation.",
       "default_retention": "No approved automated retention duration. Do not schedule deletion, expiry, provider deletion, or backup destruction from this registry.",
       "tenant_configurable": false,
       "tenant_retention_bounds": "No tenant override is available until an approved versioned policy defines per-tenant bounds and authority.",

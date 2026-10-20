@@ -1,5 +1,17 @@
 # Activity Report: Four Private Recipients at 07:30 IST
 
+## Governance Correction
+
+C16 `94db8c27` failed its required governance change-map check before Docker09
+started. Upcoming C17 registers the existing confidential cross-account report
+as an unreviewed non-SQL inventory class and updates the generated map and runtime
+metadata. This is not deletion admission, tenant consent, a retention policy or
+a delivery guarantee. The local correction `a6659663` passed84 tests/252 phases
+across seven full governance modules and all12 committed-HEAD CI governance
+commands plus scheduler validation. These focused results do not replace fresh
+combined Docker09, CI, merge and production acceptance. The earlier C16 staging
+and failure packets remain preserved and are not carried as acceptance.
+
 ## Combined Candidate Checkpoint
 
 The implementation snapshot below records the separate branch at05:01 UTC.

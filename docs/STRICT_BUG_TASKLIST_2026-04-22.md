@@ -1,5 +1,25 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 20 Governance Correction Checkpoint
+
+At05:32 UTC C16 `94db8c27` is NO-GO: CI39373277832/job118465761974
+failed the data-governance change gate for the new settings, report sender and
+scheduler changes. No Docker09 run or production release was started. This
+is not a Ruff diagnosis and no sibling outcome is inferred from it.
+
+The local-only correction `a6659663` inventories the actual cross-account
+SendGrid disclosure without inventing retention, residency, tenant ACLs or
+delivery guarantees. Existing classes and disposition admission remain
+unchanged; the new non-SQL inventory remains unreviewed and unadmitted. Existing
+generators updated the map view and compiled metadata projection. All84 tests
+and252 phases across seven complete governance modules passed, including the
+explicit non-admission control. All12 actual committed-HEAD CI governance
+commands plus scheduler validation passed against canonical origin/main. Parent
+reviewed the full six-file diff, source/artifact pins, genuine red failure and
+class-aware exact collection/JUnit identities. These are focused local results,
+not replacement CI/Docker or production acceptance. Upcoming C17 requires all
+fresh gates. Earlier failed, interrupted and unverified evidence is preserved.
+
 ## October 20 Combined Candidate Checkpoint
 
 At 05:07 UTC the upcoming C16 combines Ram's retained fixes with the newly

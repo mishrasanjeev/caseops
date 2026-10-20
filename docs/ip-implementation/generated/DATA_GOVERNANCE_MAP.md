@@ -6,12 +6,12 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `130d2fa78f83213417780b75e9eb816999dda20c98147bfeb95a562b5492576c`
+- Canonical map SHA-256: `cf8584844b1f64de34ad3da2163a179696d81bf97d1e93bf71b6b42f6153b75a`
 - SQL tables: `339`
 - SQL columns: `5379`
 - ORM indexes: `1778`
 - Alembic/raw index declarations: `1562`
-- Non-SQL data classes: `12`
+- Non-SQL data classes: `13`
 
 ## Boundary
 
@@ -376,6 +376,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `audit-export-artifacts` | `export_artifact` | `registry_fail_closed` |
 | `llm-and-embedding-provider-held-content` | `provider_held_object` | `registry_fail_closed` |
 | `connector-and-payment-provider-held-records` | `provider_held_object` | `registry_fail_closed` |
+| `operational-activity-report-delivery` | `provider_held_object` | `registry_fail_closed` |
 | `database-and-object-backups` | `backup` | `registry_fail_closed` |
 
 ## Change control

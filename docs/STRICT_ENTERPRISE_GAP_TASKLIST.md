@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## October 20 Activity Report Governance Admission
+
+**Partially implemented / release NO-GO.** C16 `94db8c27` failed the required
+data-governance change gate: recipient settings, the SendGrid sender and scheduler
+cadence changed without a canonical map update. Docker09 was not launched.
+J14/M14/US-040/042 now records the existing confidential cross-account report,
+operator-only recipient configuration (not tenant ACL/consent), SQL aggregate
+provenance, external SendGrid/mailbox disclosure, private personalizations and
+zero task retries. No retention duration, deletion, residency or inbox-delivery
+guarantee is added. The generated view and metadata regression must agree;
+the exact HEAD-only change CLI requires a fresh post-commit rerun. Focused local
+checks do not replace candidate CI, Docker, deployment or delivery acceptance.
+
 ## October 19 SQL Observation Integrity
 
 **Partially implemented / release NO-GO.** C7 complete CI failed four SQL

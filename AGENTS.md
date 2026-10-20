@@ -2925,3 +2925,8 @@ requirements when using the fallback.
   strings or compare explicitly normalized UTC values. Modern ConvertFrom-Json
   can silently produce DateTime values. Prove the real matching PID/start/hash
   and reject reused PIDs with different start times or commands before control.
+- Operational recipient, shared-settings and scheduler changes are data-bearing
+  even without a schema change. Inventory their real disclosure and retention
+  limits in the canonical governance map, regenerate its projections, and run
+  the actual committed-HEAD CI contract sequence before starting a long gate.
+  An unstaged-map predicate test is not a passing HEAD-only change-gate CLI.
