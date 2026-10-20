@@ -31,6 +31,10 @@ from caseops_api.services.court_sync_sources import get_court_sync_adapter
 from caseops_api.services.matters import _persist_court_sync_import
 from caseops_api.workers import court_sync
 from tests.test_court_sync_execution_20261010_postgres import _result
+from tests.test_document_execution_protocol_20261010_postgres import (
+    _historical_identity_columns,
+    _wait_for_legacy_boundary,
+)
 from tests.test_document_finalizer_overlap_20261009_postgres import (
     finalizer_audit as _finalizer_audit_fixture,
 )
@@ -231,10 +235,11 @@ def test_native_first_court_rollout_requires_legacy_executor_quiescence(
             },
         )
         with audit.pool() as (pool, futures):
-            future = pool.submit(old, job_id)
-            futures.append(future)
             try:
-                assert entered.wait(5)
+                with _historical_identity_columns(engine):
+                    future = pool.submit(old, job_id)
+                    futures.append(future)
+                    _wait_for_legacy_boundary(entered, future, timeout=5)
                 command.upgrade(config, "head")
                 with Session(engine) as session:
                     job = session.get(MatterCourtSyncJob, job_id)

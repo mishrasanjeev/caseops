@@ -1060,12 +1060,12 @@ def start_password_reset(
     )
     if admin_id is None:
         session.rollback()
-        return
+        return None
     try:
         admin, user = _locked_admin(session, admin_id)
     except ProblemHTTPException:
         session.rollback()
-        return
+        return None
     # Durable per-principal cooldown bounds mail even across multiple workers.
     recent = session.scalar(
         select(PlatformConsoleToken.id)
@@ -1078,7 +1078,7 @@ def start_password_reset(
     )
     if recent:
         session.rollback()
-        return
+        return None
     _, raw, claim, delivery = _new_token(session, admin, user, purpose="password_reset")
     delivery_id, send_email, send_name = delivery.id, user.email, user.full_name
     _audit(session, admin, "console.password_reset_requested")

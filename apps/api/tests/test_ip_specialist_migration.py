@@ -13,6 +13,9 @@ from caseops_api.db.index_coverage import database_foreign_key_gaps
 from caseops_api.db.models import IpSpecialistObservation, IpSpecialistRecord, IpSpecialistVersion
 from tests import test_ip_specialist as journeys
 from tests.fixtures_postgres_client import temporary_http_database
+from tests.test_document_execution_protocol_20261010_postgres import (
+    _historical_identity_columns,
+)
 from tests.test_ip_specialist_postgres import _seed
 from tests.test_ip_specialist_schema import MODELS, assert_schema
 
@@ -68,7 +71,8 @@ def test_specialist_migration_fresh_upgrade_empty_downgrade_and_restore(
         assert set(inspect(engine).get_table_names()) == before
         command.upgrade(config, "20260909_0005")
         assert set(inspect(engine).get_table_names()) == before | tables
-        _, _, record = _seed(engine)
+        with _historical_identity_columns(engine):
+            _, _, record = _seed(engine)
         with pytest.raises(
             RuntimeError, match="Retained specialist evidence prevents destructive downgrade"
         ):

@@ -33,7 +33,7 @@ from caseops_api.services.security import _decrypt_secret, _hotp
 from tests import test_platform_console as cases
 from tests.test_platform_console import report_console as report_console
 
-__all__ = ["report_console"]
+__all__ = ["pytestmark", "report_console"]
 pytestmark = pytest.mark.postgres
 
 

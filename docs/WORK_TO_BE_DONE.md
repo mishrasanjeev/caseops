@@ -1,5 +1,17 @@
 # CaseOps  - Work To Be Done
 
+## October 20 Current Release Gate
+
+C19 `d8ba7fb0` cannot deploy: required historical-worker tests fail before their
+boundary because a modern User mapping reads a column absent from the old
+schema. Retain its failed evidence and require the corrected historical
+dependency fixture's complete replacement CI/Docker inventories, normal
+protected merge, exact-main deploy and production replay. Keep the session
+revocation control, physical old schema and original concurrency assertions.
+Details and current qualifications are in
+`docs/platform-report-admin-2026-10-20.md`. No production admin grant or new
+four-recipient report delivery is implied by local implementation.
+
 ## October 20 Report And Admin Extension
 
 Partially implemented under J14/M14/US-040/042: repair the confirmed solo

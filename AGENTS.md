@@ -2975,3 +2975,16 @@ requirements when using the fallback.
   limits in the canonical governance map, regenerate its projections, and run
   the actual committed-HEAD CI contract sequence before starting a long gate.
   An unstaged-map predicate test is not a passing HEAD-only change-gate CLI.
+- Historical worker regressions must retain the actual pre-feature schema and
+  its dependency column set. A modern ORM field cannot be read from that old
+  schema or replaced with an invented null to make the fixture pass. Scope
+  compatibility reads to the isolated historical engine, reject unexpected
+  new-field access and restore normal loading afterward. When a concurrency
+  boundary is not reached, inspect the Future's exception or early return;
+  do not diagnose a wait assertion by increasing its timeout.
+- A new authentication realm still uses the shared raw HTTP deadline boundary,
+  not tenant refresh or a duplicated direct fetch. Keep its body consumer,
+  cancellation and strict bounded error parser inside that deadline. Register
+  exact own-auth routes with positive denial and non-prefix regressions; do not
+  exempt a whole namespace. Static audit-write checks must distinguish actual
+  constructor identities and aliases from longer record names and comments.

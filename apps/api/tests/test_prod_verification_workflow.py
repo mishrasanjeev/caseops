@@ -448,7 +448,14 @@ def test_public_claims_attestation_requires_exact_release_nonmutating_browser_ev
     assert "--workers=1 --retries=0 --reporter=list" in selected["run"]
     assert selected["env"]["CASEOPS_WEB_BASE_URL"] == "https://caseops.ai"
     reconcile = steps["Reconcile required native Playwright evidence"]["run"]
-    assert "public-pages) required=(public-pages)" in reconcile
+    public_branch = reconcile.split("public-pages)", 1)[1].split(";;", 1)[0]
+    assert " ".join(public_branch.split()) == (
+        'required=(public-pages) '
+        'if [[ "$PLATFORM_REPORT_READY" == true ]]; then required+=(platform-reports); fi'
+    )
+    assert steps["Reconcile required native Playwright evidence"]["env"][
+        "PLATFORM_REPORT_READY"
+    ] == "${{ steps.platform-report-prerequisites.outputs.ready }}"
     config = (REPO_ROOT / "playwright.public-seo.config.ts").read_text()
     assert "public-content\\.spec\\.ts" in config
     assert "seo_demo_20261009\\.spec\\.ts" in config

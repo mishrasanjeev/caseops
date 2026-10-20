@@ -1574,6 +1574,7 @@ def test_all_production_invocations_have_native_capture_and_success_artifacts():
         "patent",
         "statute-sources",
         "public-pages",
+        "platform-reports",
     ]
 
 

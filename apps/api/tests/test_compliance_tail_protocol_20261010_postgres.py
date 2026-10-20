@@ -57,6 +57,10 @@ from caseops_api.services.compliance_tail_protocol import (
 )
 from caseops_api.services.llm import LLMCompletion, LLMProviderError
 from tests.test_compliance_participant_fence_20261010_postgres import _mutate, _seed, _UploadPhase
+from tests.test_document_execution_protocol_20261010_postgres import (
+    _historical_identity_columns,
+    _wait_for_legacy_boundary,
+)
 from tests.test_document_worker_claims_20261010_postgres import _parsed, _worker
 from tests.test_matter_writer_admission_postgres import _fixture
 from tests.test_postgres_validation import _ip_race_context
@@ -215,7 +219,8 @@ def tail_database(pg_engine, monkeypatch):
             engine=engine, cfg=cfg, fixture=fixture, legacy_run=LegacyRun,
             current_head=current_head,
         )
-        yield database
+        with _historical_identity_columns(engine):
+            yield database
     finally:
         try:
             if database is not None:
@@ -461,7 +466,7 @@ def test_actual_full_3db_extraction_cannot_create_tail_outputs(
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(_invoke, legacy, database, source)
         try:
-            assert entered.wait(10)
+            _wait_for_legacy_boundary(entered, future)
             _install(database, frozen_in_flight=True)
             # The new nullable column is the only allowed historical-row delta.
             before = _snapshot(database)
@@ -511,7 +516,7 @@ def test_actual_full_3db_worker_post_index_tail_is_rejected(tail_database, monke
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(invoke)
             try:
-                assert entered.wait(10)
+                _wait_for_legacy_boundary(entered, future)
                 _install(database, frozen_in_flight=True)
                 before = _snapshot(database)
                 assert before["jobs"][0]["status"] == "completed"
@@ -657,7 +662,7 @@ def test_full_frozen_attachment_resuming_from_provider_cannot_persist(tail_datab
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(_invoke, legacy, database, "attachment")
         try:
-            assert entered.wait(10)
+            _wait_for_legacy_boundary(entered, future)
             _install(database, frozen_in_flight=True)
             before = _snapshot(database)
             release.set()
@@ -689,7 +694,7 @@ def test_actual_3db_run_creation_prevents_retroactive_ddl_acceptance(tail_databa
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(_invoke, legacy, database, "attachment")
         try:
-            assert entered.wait(10)
+            _wait_for_legacy_boundary(entered, future)
             with pytest.raises(DBAPIError) as blocked:
                 command.upgrade(database.cfg, "head")
             assert blocked.value.orig.sqlstate == "55P03"

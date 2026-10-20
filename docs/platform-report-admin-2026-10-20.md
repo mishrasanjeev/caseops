@@ -2,6 +2,89 @@
 
 Status: Partially implemented. No production certification for this extension.
 
+## Historical Compatibility Gate Correction
+
+Candidate `d8ba7fb0` is not release-admitted. Its required CI run
+`39401705619` exposed historical worker/compliance failures before their
+intended concurrency boundary. A retained PostgreSQL replay surfaces the
+actual exception: the current User mapping selects `sessions_valid_after`
+from a genuinely older schema that does not contain that column. This is
+fixture dependency drift, not proof that the worker arbitration fence failed.
+
+The replacement keeps the physical old schema and frozen source hashes.
+Historical reads omit absent User fields only on that isolated engine and
+raise on unexpected access rather than invent a cutoff. Regression coverage
+must prove the real absence, normal loading outside the scoped fixture and
+all original worker, migration and stale-writer assertions. A missed boundary
+now exposes its Future exception, early return or still-pending state without
+raising the wait budget. The two non-security CodeQL notes are addressed by
+explicit `None` reset returns and the public pytest-marker export; no auth
+policy, alert dismissal or security waiver is introduced.
+
+Preserve C19's failed CI and incomplete/superseded Docker attempt separately.
+Fresh complete replacement CI and Docker acceptance remain mandatory before
+merge, guarded exact-main deployment and production replay. Focused green
+results and the earlier local browser journeys are not release certificates.
+
+## Why The Release Gate Reopened
+
+- The new global User revocation field changed historical ORM reads. Focused
+  console tests did not exercise every older-schema worker and migration
+  fixture. Keep the old schema real and prove each affected dependency path.
+- The report client duplicated the existing HTTP deadline boundary. Its
+  30-second timer was bounded, but this still violated the shared transport
+  contract. Share the complete response-consumer boundary, not a headers-only
+  wrapper that loses body cancellation or crosses into tenant refresh.
+- The production verification step changed without updating all its ordered
+  invocation and branch assertions. Repair those complete inventories and
+  preserve exact-release prerequisite checks rather than weakening evidence.
+- The audit scanner used a substring, confusing the distinct global
+  PlatformReportAuditEvent with the tenant AuditEvent constructor. Exact AST
+  calls and imported aliases now distinguish them without permitting a tenant
+  audit-write bypass. Console own-auth exceptions are exact reviewed paths,
+  never a namespace exemption; matching-CSRF/no-session tests retain denial.
+- The parent local wrapper itself merged four PowerShell arguments into one
+  invalid base directory. All 165 setup failures remain preserved, not relabelled
+  as product defects. The corrected wrapper independently records all eleven
+  native arguments and requires nonempty complete collection.
+
+The four complete API contract modules then passed 324 tests and 972 phases,
+with zero failures/skips and matching JUnit identities in
+`outputs/bugs-l-20261019/c20-parent-ci-contracts-02/PARENT-PROOF.json`.
+That scoped result is not a complete candidate or production certificate.
+Historical rollback must also distinguish its pinned old revision from
+current-head index health; require a real later upgrade for the latter.
+
+## October 20 Local Convergence Checkpoint
+
+At 10:50 UTC the replacement's complete five-module backend selection passed
+330 tests/990 phases, with all 14 dependency pins unchanged. Four additional
+historical/migration modules plus six helper controls passed 43 tests/129
+phases, including both court and document rolling variants, retained specialist
+evidence, and actual current-head health after the historical rollback. Their
+frozen bodies, original wait budgets, physical schemas and cleanup checks held.
+The 324-test contract selection above remains separate; overlapping helper
+controls must not be counted twice as unique coverage.
+
+The shared response-consumer now owns the console's unchanged 30-second
+deadline through body parsing without adopting tenant refresh. Its 220-case
+focused selection retains the earlier 188 identities; fresh whole-web coverage
+passes all 1,740 tests in 238 files, with no failures/skips/global errors and
+unchanged thresholds. The fresh build is `lHuZjDlTO92Kjw8O6IwHF`.
+All are pinned, uncommitted local snapshots, not complete release acceptance.
+See `c20-complete-modules-01`, `c20-additional-pg-gate-01` and
+`platform-shared-deadline-fix-01` under `outputs/bugs-l-20261019/`.
+
+The original C19 result remains NO-GO: all 13 API and 16 native CI shards
+reconcile to 9,266 passed/5 failed/3,252 skipped and 3,217 passed/29 failed,
+respectively. Hosted web was 1,737 passed, not the earlier 1,722 snapshot.
+Docker09 is incomplete with 652 observed passes, one genuine historical
+specialist-fixture failure and all 623 browser cases unstarted; its operator
+stop is not a replacement result. Fresh committed-candidate CI, complete
+Docker10, canonical merge and guarded exact-release production replay are
+still mandatory. No production deployment, manager grant or new report batch
+is certified by this checkpoint.
+
 ## Ownership And Request
 
 Owner request dated October 20, 2026 extends J14/M14, US-040/042 and

@@ -1,5 +1,27 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 20 Historical Worker Gate
+
+Replacement local selections have completed without failures/skips: 330 cases
+across five backend modules, 43 additional historical/migration/helper cases,
+324 cases across the four CI-contract modules, and fresh whole-web coverage
+of 1,740 cases in all 238 files. These inventories overlap and are not summed
+as unique coverage. Historical reads retain real absent columns and reject
+unexpected access; the report client shares the full-body deadline without
+tenant refresh. Source pins and owned cleanup held. The release verdict stays
+NO-GO pending fresh full committed CI/Docker and exact-production proof; see
+the current evidence pointers in `docs/platform-report-admin-2026-10-20.md`.
+
+**Inconclusive / release NO-GO.** C19 `d8ba7fb0` required CI exposes older-schema
+fixtures loading the new User session-revocation column before the historical
+worker boundary. A diagnostic replay retains the actual UndefinedColumn
+exception; increasing a timeout would conceal the cause. The replacement
+preserves the physical historical schema and frozen sources, scopes its read
+column compatibility to that isolated engine and rejects unexpected new-field
+access. Whole replacement CI/Docker and exact-serving browser proof remain
+required. See `docs/platform-report-admin-2026-10-20.md`; no earlier failed
+evidence or Ram/IP/Calendar verdict is erased or upgraded.
+
 ## October 20 Solo Report And Delegated Console
 
 Local convergence checkpoint: the full dated console journeys passed on

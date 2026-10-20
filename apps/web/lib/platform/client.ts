@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { API_BASE_URL } from "@/lib/api/config";
+import { consumeResponseWithTimeout } from "@/lib/api/client";
+import { API_BASE_URL, NetworkError } from "@/lib/api/config";
 
 import { activityReport } from "./activity-schema";
 import {
@@ -66,36 +67,33 @@ async function request<T>(path: string, schema: z.ZodType<T>, options: { body?: 
       headers["X-Console-CSRF-Token"] = csrf;
     }
   }
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  if (options.signal?.aborted) controller.abort();
-  options.signal?.addEventListener("abort", abort, { once: true });
-  const timer = setTimeout(abort, 30_000);
   try {
-    const response = await fetch(`${API_BASE_URL.replace(/\/$/, "")}${PREFIX}${path}`, {
+    return await consumeResponseWithTimeout(`${API_BASE_URL.replace(/\/$/, "")}${PREFIX}${path}`, {
       method: mutation ? "POST" : "GET", credentials: "include", cache: "no-store", referrerPolicy: "no-referrer",
-      headers, body: mutation ? JSON.stringify(options.body) : undefined, signal: controller.signal,
+      headers, body: mutation ? JSON.stringify(options.body) : undefined, signal: options.signal,
+    }, 30_000, async (response, signal) => {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      if (!response.ok) {
+        // A rejected factor is not revocation of the limited console session.
+        const invalidFactor = response.status === 401 && mutation && path === "/auth/mfa/verify" && await isInvalidMfaFactor(response);
+        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+        if (invalidFactor) throw new ConsoleError(401, "mfa_invalid");
+        if (response.status === 401 && requestEpoch === authEpoch && typeof window !== "undefined") window.dispatchEvent(new Event(PLATFORM_SESSION_INVALIDATED));
+        throw new ConsoleError(response.status, response.status === 401 ? "unauthorized" : response.status === 403 ? "forbidden" : response.status < 500 ? "invalid" : "unavailable");
+      }
+      const text = await response.text();
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      if (text.length > 2_000_000) throw new ConsoleError(0, "contract");
+      let data: unknown;
+      try { data = JSON.parse(text); } catch { throw new ConsoleError(0, "contract"); }
+      const parsed = schema.safeParse(data);
+      if (!parsed.success) throw new ConsoleError(0, "contract");
+      return parsed.data;
     });
-    if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
-    if (!response.ok) {
-      // A rejected factor is not revocation of the limited console session.
-      const invalidFactor = response.status === 401 && mutation && path === "/auth/mfa/verify" && await isInvalidMfaFactor(response);
-      if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
-      if (invalidFactor) throw new ConsoleError(401, "mfa_invalid");
-      if (response.status === 401 && requestEpoch === authEpoch && typeof window !== "undefined") window.dispatchEvent(new Event(PLATFORM_SESSION_INVALIDATED));
-      throw new ConsoleError(response.status, response.status === 401 ? "unauthorized" : response.status === 403 ? "forbidden" : response.status < 500 ? "invalid" : "unavailable");
-    }
-    const text = await response.text();
-    if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
-    if (text.length > 2_000_000) throw new ConsoleError(0, "contract");
-    let data: unknown;
-    try { data = JSON.parse(text); } catch { throw new ConsoleError(0, "contract"); }
-    const parsed = schema.safeParse(data);
-    if (!parsed.success) throw new ConsoleError(0, "contract");
-    return parsed.data;
-  } finally {
-    clearTimeout(timer);
-    options.signal?.removeEventListener("abort", abort);
+  } catch (error) {
+    // Keep console cancellation semantics; the shared deadline reports NetworkError.
+    if (options.signal?.aborted || error instanceof NetworkError) throw new DOMException("Aborted", "AbortError");
+    throw error;
   }
 }
 

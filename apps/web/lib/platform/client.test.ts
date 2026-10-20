@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as transport from "@/lib/api/client";
+
 import { ConsoleError, PLATFORM_SESSION_INVALIDATED, advancePlatformSessionEpoch, consoleErrorMessage, platformApi } from "./client";
 
 const admin = { id: "report-admin", email: "manager@example.invalid", full_name: "Report manager", role: "manager" };
@@ -13,7 +15,59 @@ describe("independent platform client", () => {
     document.cookie = "caseops_console_csrf=; Max-Age=0; Path=/";
     document.cookie = "caseops_csrf=tenant-csrf; Path=/";
   });
-  afterEach(() => { vi.unstubAllGlobals(); document.cookie = "caseops_console_csrf=; Max-Age=0; Path=/"; });
+  afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals(); document.cookie = "caseops_console_csrf=; Max-Age=0; Path=/"; });
+  it("uses the canonical response-consumption deadline without adopting tenant authentication", async () => {
+    const boundary = vi.spyOn(transport, "consumeResponseWithTimeout");
+    fetcher.mockResolvedValue(response(auth));
+    await platformApi.login({ email: admin.email, password: "ephemeral-input" });
+    expect(boundary).toHaveBeenCalledTimes(1);
+    expect(boundary).toHaveBeenCalledWith(expect.stringMatching(/\/api\/platform-console\/auth\/login$/), expect.objectContaining({
+      method: "POST", credentials: "include", cache: "no-store", referrerPolicy: "no-referrer",
+    }), 30_000, expect.any(Function));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][1].headers).not.toHaveProperty("Authorization");
+    expect(fetcher.mock.calls[0][1].headers).not.toHaveProperty("X-CSRF-Token");
+  });
+  it("aborts an unfinished successful response body at the unchanged 30-second deadline without replay", async () => {
+    vi.useFakeTimers();
+    let signal!: AbortSignal;
+    let reading!: () => void;
+    const started = new Promise<void>((resolve) => { reading = resolve; });
+    fetcher.mockImplementation((_url, init) => {
+      signal = init.signal;
+      const body = new ReadableStream<Uint8Array>({ start(controller) {
+        signal.addEventListener("abort", () => controller.error(new DOMException("Aborted", "AbortError")), { once: true });
+      }, pull() { reading(); } }, { highWaterMark: 0 });
+      return Promise.resolve(new Response(body, { status: 200 }));
+    });
+    const outcome = platformApi.session().catch((error: unknown) => error);
+    await started;
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(signal.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await outcome).toMatchObject({ name: "AbortError" });
+    expect(signal.aborted).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("keeps external cancellation connected after headers while the response body is unread", async () => {
+    const external = new AbortController();
+    let signal!: AbortSignal;
+    let reading!: () => void;
+    const started = new Promise<void>((resolve) => { reading = resolve; });
+    fetcher.mockImplementation((_url, init) => {
+      signal = init.signal;
+      const body = new ReadableStream<Uint8Array>({ start(controller) {
+        signal.addEventListener("abort", () => controller.error(new DOMException("Aborted", "AbortError")), { once: true });
+      }, pull() { reading(); } }, { highWaterMark: 0 });
+      return Promise.resolve(new Response(body, { status: 200 }));
+    });
+    const outcome = platformApi.session(external.signal).catch((error: unknown) => error);
+    await started;
+    external.abort();
+    expect(await outcome).toMatchObject({ name: "AbortError" });
+    expect(signal.aborted).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   it("posts login only to the independent namespace without a tenant field or bearer token", async () => {
     fetcher.mockResolvedValue(response(auth));
     await platformApi.login({ email: admin.email, password: "ephemeral-input" });

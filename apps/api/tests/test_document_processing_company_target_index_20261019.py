@@ -528,9 +528,29 @@ def test_ordinary_drop_rolls_back_with_later_historical_refusal(database, record
     assert _shape(engine) == shape and _receipt_snapshot(engine) == before
     with engine.connect() as connection:
         assert connection.execute(catalog_sql).all() == catalog
+        historical_health = build_index_health_report(connection)
+    record_property("historical_health_after_refusal_rollback", historical_health)
+    heads = ScriptDirectory.from_config(config).get_heads()
+    assert len(heads) == 1 and heads != [REVISION]
+    assert historical_health["status"] == "failed", historical_health
+    assert historical_health["required_schema_revision"] == heads[0]
+    assert historical_health["schema_revisions"] == [REVISION]
+    assert historical_health["schema_revision_mismatch"] == [REVISION]
+    for key in (
+        "foreign_key_gaps",
+        "missing_declared_indexes",
+        "mismatched_declared_indexes",
+        "invalid_indexes",
+    ):
+        assert historical_health[key] == [], historical_health
+    command.upgrade(config, "head")
+    assert _version(engine) == heads[0]
+    assert _shape(engine) == shape and _receipt_snapshot(engine) == before
+    with engine.connect() as connection:
+        assert connection.execute(catalog_sql).all() == catalog
         health = build_index_health_report(connection)
     assert health["status"] == "ok", health
-    assert health["schema_revisions"] == [REVISION]
+    assert health["schema_revisions"] == heads == [health["required_schema_revision"]]
     record_property("current_head_health_after_refusal_rollback", health)
     record_property("transactional_drop_rollback", observed)
 
