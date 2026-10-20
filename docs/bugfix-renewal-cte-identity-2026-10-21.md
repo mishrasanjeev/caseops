@@ -72,6 +72,40 @@ whole-suite count and are not Docker, hosted CI or production certification.
 
 ## Release Boundary
 
+C22 `30d9ba70b3212df60b72416fca149ba6294a9eae` completed a fresh standard-config
+build and all four dated IP portfolio browser cases at 1280px/393px, with zero
+skips, retries or global errors. Native collection, JSON, JUnit, progress and
+all 3,058 source hashes reconcile. This is focused C22 proof, not acceptance
+for a later dependency revision or the whole release.
+
+C22 Security39490391664 subsequently failed on critical
+[GHSA-6q48-6c7w-9gw2](https://github.com/advisories/GHSA-6q48-6c7w-9gw2),
+published October20. Its frozen certifi2026.2.25 includes the affected trust
+root; the first patched release is
+[2026.10.19](https://pypi.org/project/certifi/2026.10.19/).
+Patch that dependency and rebuild images without disabling TLS verification
+or changing the audit policy. Preserve the original scan and require fresh
+complete gates on the actual replacement commit.
+
+The local follow-up updates only certifi's lock entry and official artifacts;
+both hashes match PyPI. All 137 other installed third-party versions remain
+unchanged, and the normal 139-distribution environment includes the restored
+editable application. Two offline trust-bundle regressions pass six phases:
+the compromised G3 root is absent and certificate/hostname verification remains
+required. The hash-pinned old bundle fails the root exclusion control without
+downgrading the active environment. Strict OSV audit passes for the same 138
+non-editable dependencies selected by the canonical CI workflow. This is
+scoped local security evidence, not replacement hosted or image acceptance.
+
+Docker12 stopped before application tests because the operator selected
+Windows PowerShell5 rather than Docker11's actual accepted bundled PowerShell7
+host. An isolated control reproduces stderr from a native exit0 becoming
+NativeCommandError on5, while7 accepts exit0 and rejects exit17 explicitly.
+Docker13 used the accepted host, but was deliberately superseded after the
+critical dependency finding. Its owned native child was stopped, canonical
+cleanup ran and its parent was reaped. Neither run provides native PostgreSQL
+or browser acceptance; retain both and start the replacement from fresh images.
+
 C21's accepted Docker11 and candidate CI do not override R21's failed main
 replay and cannot certify changed source. Require fresh combined Docker/CI,
 normal main merge, exact-tree confirmation, current-main release guards and

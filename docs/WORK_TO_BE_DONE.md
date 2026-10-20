@@ -2,6 +2,13 @@
 
 ## October 21 Current Release Blocker
 
+Follow-up checkpoint: C22 `30d9ba70` passes the complete four-case dated IP
+browser focus, but Security39490391664 finds newly published critical
+GHSA-6q48-6c7w-9gw2 in certifi2026.2.25. The replacement must use the patched
+2026.10.19 trust bundle and fresh images/security/full gates. Docker12 is an
+operator host failure; Docker13 was superseded for this dependency change.
+Neither is a completed Docker gate. Production is unchanged.
+
 R21 `f4fa6dcd` is NO-GO: main CI39465871860 failed one dated renewal browser
 case despite C21's completed Docker11 and candidate CI. Preserve those distinct
 results. Correct nested CTE identity and notification timestamp ambiguity,

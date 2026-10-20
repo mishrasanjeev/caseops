@@ -1,5 +1,16 @@
 # CaseOps agent instructions
 
+- Reuse the actual previously accepted executable/version for release-test
+  hosts, not an advertised minimum version. Native tools can emit successful
+  diagnostics on stderr; preserve the log and check the real exit status,
+  including a nonzero control, rather than treating stderr text as failure.
+- Compare process identity timestamps as exact UTC round-trip strings. A UTC
+  DateTime and a locally parsed `Z` literal can represent the same instant but
+  compare unequal before normalization. Recheck ancestry, command and creation
+  identity before stopping only an owned native child; keep its cleanup parent.
+- Security evidence expires when a new upstream advisory affects the frozen
+  dependency set. Patch the affected lock entry, retain the failed scan and
+  rebuild every shipping image; an earlier green scan is not a waiver.
 - A database error response does not prove a mutation rolled back. Read the
   persisted version and audit before replaying a save; a post-commit response
   query can fail independently. Staged portfolio facts need distinct stable CTE

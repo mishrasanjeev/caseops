@@ -2,6 +2,12 @@
 
 ## October 21 Cross-Dialect Renewal Responses
 
+The complete C22 focused browser replay now passes4/4, but its security scan
+fails newly published critical GHSA-6q48-6c7w-9gw2. Frozen certifi2026.2.25
+must be replaced by patched2026.10.19 and all shipping images rebuilt, with
+fresh audit/full gates. No TLS bypass or audit exclusion is authorized.
+Docker12/13 remain incomplete for the retained operator/supersession reasons.
+
 **Partially implemented / release NO-GO.** R21's main browser failure is not a
 SQLite lock diagnosis: local evidence proves a committed write followed by a
 circular-reference failure in the shared tracker query. Distinct staged CTE

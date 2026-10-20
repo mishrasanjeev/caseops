@@ -2,6 +2,14 @@
 
 ## October 21 Post-Commit Renewal Query
 
+Scoped follow-up: C22 `30d9ba70` passes all four original dated IP portfolio
+journeys with a fresh standard-config build, zero skips/retries/errors and
+stable source. The release remains NO-GO: Security39490391664 reports the
+new critical certifi trust-root advisory GHSA-6q48-6c7w-9gw2. Preserve the
+failure, patch the lock and rebuild all release images; do not relabel the
+operator-failed Docker12 or superseded Docker13 as acceptance. See the same
+evidence document below. No original workbook verdict is upgraded.
+
 **Inconclusive / release NO-GO.** R21 main CI39465871860 collected 623 browser
 cases: 605 passed, 17 explicitly skipped and one failed, with no retries. The
 failed 393px imported-portfolio journey received 503 from a renewal correction.
