@@ -2,6 +2,11 @@
 
 ## October 21 Post-Commit Renewal Query
 
+C23's certifi patch is not whole-image remediation: pinned web Node still
+trusts the affected root on reachable HTTPS paths. Its Docker14 run was
+deliberately stopped with the partial journals retained and all owned
+resources cleaned up. A corrected candidate needs fresh complete gates.
+
 Scoped follow-up: C22 `30d9ba70` passes all four original dated IP portfolio
 journeys with a fresh standard-config build, zero skips/retries/errors and
 stable source. The release remains NO-GO: Security39490391664 reports the

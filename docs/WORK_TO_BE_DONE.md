@@ -2,6 +2,10 @@
 
 ## October 21 Current Release Blocker
 
+C23 patches Python certifi but leaves the affected anchor in pinned Node's
+web HTTPS defaults. Close both trust stores before fresh combined gates;
+Docker14 is preserved as deliberately superseded/incomplete, not a pass.
+
 Follow-up checkpoint: C22 `30d9ba70` passes the complete four-case dated IP
 browser focus, but Security39490391664 finds newly published critical
 GHSA-6q48-6c7w-9gw2 in certifi2026.2.25. The replacement must use the patched

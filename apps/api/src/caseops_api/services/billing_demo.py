@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
 from uuid import uuid4
 
+import certifi
 from fastapi import HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
@@ -128,7 +129,7 @@ def _send_notification(enrollment_id: str) -> None:
         f"Enrollment {enrollment_id} is saved. Review it in the protected platform-admin workspace: https://caseops.ai/app/platform-admin\n"
     )
     transport = smtplib.SMTP_SSL if port == 465 else smtplib.SMTP
-    context = ssl.create_default_context()
+    context = ssl.create_default_context(cafile=certifi.where())
     tls_options = {"context": context} if port == 465 else {}
     with transport(host, port, timeout=8, **tls_options) as smtp:
         if port != 465:

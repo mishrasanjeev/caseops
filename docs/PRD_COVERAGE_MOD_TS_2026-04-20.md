@@ -2,6 +2,10 @@
 
 ## October 21 Renewal Response Coverage
 
+QG-SEC-004 adds exact-image Node default HTTPS/fetch trust-store controls
+beside the existing Python certifi regression. An added CA file alone must
+not retain the compromised bundled or system anchor. Release proof is pending.
+
 UJ-02/04/26 and IPLF-037 require atomic source-date version/audit persistence,
 successful post-commit tracker hydration, current list/count/category parity
 and unambiguous UTC notification receipts on both database dialects. Retain

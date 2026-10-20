@@ -1,5 +1,10 @@
 # CaseOps agent instructions
 
+- Trust-store remediation must cover each reachable TLS runtime, not only the
+  package named by an advisory. Python certifi does not update Node's bundled
+  roots. Prove the effective image defaults with HTTPS and fetch controls,
+  preserve hostname/certificate verification and reject additive CA overrides;
+  `tls.rootCertificates` alone does not describe the selected OpenSSL store.
 - Reuse the actual previously accepted executable/version for release-test
   hosts, not an advertised minimum version. Native tools can emit successful
   diagnostics on stderr; preserve the log and check the real exit status,

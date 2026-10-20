@@ -112,3 +112,44 @@ normal main merge, exact-tree confirmation, current-main release guards and
 the exact-serving production journey. Production remains `9cf76f2b` at this
 checkpoint. Preserve independent legal-source, Calendar cleanup, unknown
 historical incident and initial manager setup qualifications in all workbooks.
+
+## Independent TLS Stores
+
+The C23 adjacent audit found the compromised root in both pinned Node22.14.0
+and the API image's system SSL store. Reachable web demo/readiness requests
+use default HTTPS fetch; the optional demo SMTP sender used default Python
+SSL. Updating certifi alone therefore did not close these paths. This is
+candidate-image evidence, not evidence of exploitation or a serving-image
+inspection. Docker14 was deliberately superseded: 1,221 native cases finished,
+271 more calls passed before interruption, and all 623 browser cases remained
+unstarted. Its partial journals and clean resource/source closure are retained.
+
+The replacement web base generates a hash-pinned 148-root bundle from exactly
+the existing 149 roots, excluding only the compromised G3 fingerprint. It uses
+OpenSSL's explicit file and empty directory before npm/build and at runtime.
+An explicit startup preload rejects missing/tampered data and additive or
+competing CA settings; verification is never disabled. The Web CI runtime is
+pinned to the same shipping Node version. See the exact-version
+[CA selection contract](https://nodejs.org/download/release/v22.14.0/docs/api/cli.html#--use-bundled-ca---use-openssl-ca).
+
+`apps/web/lib/node-trust.test.ts` is discovered by the standard Vitest config.
+It and the two adjacent client/demo modules pass 40 cases without skips.
+Network-disabled Linux-image controls prove default fetch and HTTPS accept a
+local trusted fixture and reject an untrusted fixture and wrong hostname.
+Synthetic TLS selection and immutable production-bundle exclusion are separate
+proofs; the tests do not possess the compromised authority's private key.
+
+The SMTP sender now explicitly selects certifi's reviewed bundle. The original
+code fails both 465/587 trust assertions; the three complete related modules
+pass 93 cases/279 phases, including PostgreSQL. Socket guards prevent external
+delivery. S3 is unchanged: the inspected botocore active and fallback stores
+already exclude the affected root. Sender approval/live delivery stays open.
+
+The newly published moderate
+[Vite/launch-editor advisory](https://github.com/advisories/GHSA-698v-4r3x-3vcv)
+is also patched at Vite8.1.6. Its 24 changed lock entries are all existing
+MIT-licensed Vite dependencies; 356 entries remain unchanged, with no added
+packages. Full npm audit reports zero findings and the dependency contracts
+pass 252 cases. These are scoped preflight results, not complete replacement
+Docker/hosted/main or production acceptance. Preserve incomplete diagnostic
+launches and require fresh gates on the combined commit.

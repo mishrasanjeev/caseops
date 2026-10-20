@@ -2,6 +2,12 @@
 
 ## October 21 Cross-Dialect Renewal Responses
 
+C23's adjacent audit finds the same compromised root in Node22.14.0's
+bundled and image system stores, with reachable web-to-API HTTPS fetches.
+The Python fix does not remove that trust. Require a reviewed replacement
+default store and actual offline HTTPS/fetch positive/negative checks;
+certificate/hostname verification and the existing audit policy stay enabled.
+
 The complete C22 focused browser replay now passes4/4, but its security scan
 fails newly published critical GHSA-6q48-6c7w-9gw2. Frozen certifi2026.2.25
 must be replaced by patched2026.10.19 and all shipping images rebuilt, with
