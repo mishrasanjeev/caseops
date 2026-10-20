@@ -1,13 +1,16 @@
 /** Reviewed Drive import through real HTTP and storage, without Google transport. */
 import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, repoRoot } from "./support/env";
-import { persistFixtureProcessEvidence } from "./support/fixture-process";
+import {
+  DRIVE_ISOLATION_UNIT_NAMES, persistFixtureProcessEvidence, reviewDriveSupervisor,
+} from "./support/fixture-process";
 
 const fixtureRoot = apiBaseUrl + "/_e2e/drive-import/fixtures";
 const password = "DriveBrowserRegression123!";
@@ -89,9 +92,71 @@ async function prepare(page: Page, scenario = "success"): Promise<DriveFixture> 
   return fixture;
 }
 
-test("Drive browser emulator cannot activate in production or fetch other fixture bytes", async ({ baseURL }, testInfo) => {
+test("Drive browser emulator cannot activate in production or fetch other fixture bytes", async ({ baseURL, playwright }, testInfo) => {
   requireLoopback(apiBaseUrl);
   requireLoopback(baseURL!);
+  // Exercise the actual running entrypoint instead of cold-starting a second app.
+  const client = await playwright.request.newContext({
+    extraHTTPHeaders: { Connection: "close" },
+    storageState: { cookies: [], origins: [] },
+    maxRedirects: 0,
+  });
+  const checks: Array<{ name: string; status: number }> = [];
+  const body = { matter_id: "00000000-0000-0000-0000-000000000001" };
+  const invalid = { Authorization: "Bearer invalid-offline-token" };
+  try {
+    const health = await client.get(apiBaseUrl + "/_e2e/calendar-oauth/health", {
+      headers: noPaidProviderHeaders,
+    });
+    checks.push({ name: "actual-entrypoint-health", status: health.status() });
+    expect(health.status()).toBe(200);
+
+    // This one unmarked negative request is loopback-only and must reject before transport.
+    const unmarked = await client.post(fixtureRoot, { headers: invalid, data: body });
+    checks.push({ name: "unmarked-rejected", status: unmarked.status() });
+    expect(unmarked.status()).toBe(403);
+    expect((await unmarked.json()).detail).toContain("no-paid-provider marker");
+    const badToken = { ...noPaidProviderHeaders, ...invalid };
+    const rejectedPost = await client.post(fixtureRoot, { headers: badToken, data: body });
+    checks.push({ name: "invalid-token-post-rejected", status: rejectedPost.status() });
+    expect(rejectedPost.status()).toBe(401);
+    const rejectedGet = await client.get(fixtureRoot + "/unknown", { headers: badToken });
+    checks.push({ name: "invalid-token-get-rejected", status: rejectedGet.status() });
+    expect(rejectedGet.status()).toBe(401);
+
+    const suffix = randomUUID().slice(0, 12);
+    const ordinary = await client.post(apiBaseUrl + "/api/bootstrap/company", {
+      headers: noPaidProviderHeaders,
+      data: {
+        company_name: "Ordinary local isolation control", company_slug: "ordinary-drive-control-" + suffix,
+        company_type: "law_firm", owner_full_name: "Isolation Control Owner",
+        owner_email: "ordinary-drive-control-" + suffix + "@example.com", owner_password: password,
+      },
+    });
+    checks.push({ name: "ordinary-local-owner-created", status: ordinary.status() });
+    expect(ordinary.status()).toBe(200);
+    const ordinaryBody = await ordinary.json();
+    expect(typeof ordinaryBody.access_token).toBe("string");
+    const ownerHeaders = { ...noPaidProviderHeaders, Authorization: "Bearer " + ordinaryBody.access_token };
+    const invalidBody = await client.post(fixtureRoot, {
+      headers: ownerHeaders, data: { matter_id: "short" },
+    });
+    checks.push({ name: "typed-fixture-body-validated", status: invalidBody.status() });
+    expect(invalidBody.status()).toBe(422);
+    const ordinaryRejected = await client.post(fixtureRoot, { headers: ownerHeaders, data: body });
+    checks.push({ name: "ordinary-tenant-fixture-write-rejected", status: ordinaryRejected.status() });
+    expect(ordinaryRejected.status()).toBe(403);
+    expect((await ordinaryRejected.json()).detail).toContain("fresh offline Drive fixture owner");
+  } finally {
+    try {
+      await testInfo.attach("drive-real-entrypoint-contract", {
+        body: Buffer.from(JSON.stringify({ event: "drive_entrypoint_checked", loopback_only: true, checks })),
+        contentType: "application/json",
+      });
+    } finally {
+      await client.dispose();
+    }
+  }
   const python = process.env.CASEOPS_E2E_PYTHON ?? path.join(
     repoRoot, "apps", "api", ".venv", process.platform === "win32" ? "Scripts" : "bin",
     process.platform === "win32" ? "python.exe" : "python",
@@ -103,11 +168,12 @@ test("Drive browser emulator cannot activate in production or fetch other fixtur
   const started = performance.now();
   const result = project && file ? spawnSync("docker", [
     "compose", "--project-name", project, "--file", file, "exec", "-T", "api",
-    "python", "-m", "unittest", "discover", "-s", "/oauth-harness",
-    "-p", "test_drive_import_emulator.py", "-v",
+    "python", "/oauth-harness/fixture_supervisor.py", "--start-directory", "/oauth-harness",
+    "--pattern", "test_drive_import_emulator.py", "--expected-tests", String(DRIVE_ISOLATION_UNIT_NAMES.length),
   ], { cwd: repoRoot, encoding: "utf8", timeout: 60_000 }) : spawnSync(python, [
-    "-m", "unittest", "discover", "-s", "tests/e2e/support/oauth",
-    "-p", "test_drive_import_emulator.py", "-v",
+    path.join(repoRoot, "tests/e2e/support/oauth/fixture_supervisor.py"),
+    "--start-directory", path.join(repoRoot, "tests/e2e/support/oauth"),
+    "--pattern", "test_drive_import_emulator.py", "--expected-tests", String(DRIVE_ISOLATION_UNIT_NAMES.length),
   ], {
     cwd: repoRoot, encoding: "utf8", timeout: 60_000,
     env: {
@@ -115,13 +181,21 @@ test("Drive browser emulator cannot activate in production or fetch other fixtur
       PYTHONPATH: [path.join(repoRoot, "apps", "api", "src"), process.env.PYTHONPATH].filter(Boolean).join(path.delimiter),
     },
   });
-  const output = result.stdout + result.stderr;
+  const output = (result.stdout ?? "") + (result.stderr ?? "");
   await persistFixtureProcessEvidence(
-    testInfo, "drive-isolation-process", result, startedAt, performance.now() - started, output,
+    testInfo, "drive-isolation-process", result, startedAt, performance.now() - started, result.stderr ?? "",
   );
+  const supervision = reviewDriveSupervisor(result.stdout ?? "");
+  await testInfo.attach("drive-isolation-supervision", {
+    body: Buffer.from(JSON.stringify(supervision)), contentType: "application/json",
+  });
   expect(result.error, output).toBeUndefined();
   expect(result.status, output).toBe(0);
-  expect(output).toContain("Ran 7 tests");
+  expect(supervision.complete).toBe(true);
+  expect(supervision.source_sha256).toBe(createHash("sha256").update(await readFile(
+    path.join(repoRoot, "tests/e2e/support/oauth/test_drive_import_emulator.py"),
+  )).digest("hex"));
+  expect(output).toContain(`Ran ${DRIVE_ISOLATION_UNIT_NAMES.length} tests`);
 });
 
 for (const viewport of [{ width: 1280, height: 900 }, { width: 393, height: 851 }]) {

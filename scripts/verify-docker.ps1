@@ -314,7 +314,22 @@ function Invoke-CandidatePlaywright {
     if (@($Arguments | Where-Object { $_ -match "^--reporter(?:=|$)" }).Count) {
         throw "Docker acceptance owns its structured Playwright reporters."
     }
-    $ReportStem = Join-Path $ResultsDirectory ("playwright-" + [Guid]::NewGuid().ToString("N"))
+    $Invocation = "playwright-" + [Guid]::NewGuid().ToString("N")
+    $ReportStem = Join-Path $ResultsDirectory $Invocation
+    $NativeReporter = Join-Path $RepoRoot "scripts/prod_playwright_reporter.cjs"
+    if (-not (Test-Path -LiteralPath $NativeReporter -PathType Leaf) -or
+        (Get-Item -LiteralPath $NativeReporter -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "Candidate native Playwright reporter is missing or linked."
+    }
+    $NativeDirectory = Join-Path $RepoRoot "test-results/prod-native-evidence/$Invocation"
+    # Reporter construction precedes Playwright's output cleanup. Never place
+    # its open journal beneath the directory that the SDK is about to remove.
+    $ArtifactOutput = Join-Path $RepoRoot "test-results/docker-artifacts"
+    if (@($Arguments | Where-Object { $_ -match '^--output(?:=|$)' }).Count) {
+        throw "Docker acceptance owns its artifact output directory."
+    }
+    [void][IO.Directory]::CreateDirectory((Split-Path -Parent $NativeDirectory))
+    [void](New-Item -ItemType Directory -Path $NativeDirectory -ErrorAction Stop)
     # Playwright clears project output directories at the next invocation. Keep
     # all bytes, including unattached originals, before another shard can start.
     $RetainArtifacts = {
@@ -346,18 +361,11 @@ function Invoke-CandidatePlaywright {
                 Where-Object { -not $SelectedProjects.Count -or $_.name -in $SelectedProjects } |
                 ForEach-Object { $_.outputDir } |
                 Where-Object { $_ } | Sort-Object -Unique -CaseSensitive)
-            if (-not $OutputDirs.Count) {
-                $InventoryPath = Join-Path $ResultsDirectory "playwright-inventory.json"
-                if (Test-Path -LiteralPath $InventoryPath -PathType Leaf) {
-                    $Inventory = Get-Content -LiteralPath $InventoryPath -Raw -Encoding UTF8 | ConvertFrom-Json
-                    $OutputDirs = @($Inventory.config.projects |
-                        Where-Object { -not $SelectedProjects.Count -or $_.name -in $SelectedProjects } |
-                        ForEach-Object { $_.outputDir } |
-                        Where-Object { $_ } | Sort-Object -Unique -CaseSensitive)
-                }
-            }
             $ResolvedOutputs = $OutputDirs.Count -gt 0
-            if (-not $ResolvedOutputs) { $OutputDirs = @(Join-Path $RepoRoot "test-results") }
+            # Discovery precedes the execution-only --output override. Its old
+            # outputDir may contain other invocations, so never archive it here.
+            if (-not $ResolvedOutputs) { $OutputDirs = @($ArtifactOutput) }
+            $OutputDirs = @($OutputDirs + $NativeDirectory | Sort-Object -Unique -CaseSensitive)
             $SnapshotTree = {
                 param([string]$Root)
 
@@ -529,6 +537,13 @@ function Invoke-CandidatePlaywright {
     $ReportEnvironment = @{
         PLAYWRIGHT_JSON_OUTPUT_FILE = "$ReportStem.json"
         PLAYWRIGHT_JUNIT_OUTPUT_FILE = "$ReportStem.xml"
+        PLAYWRIGHT_JSON_OUTPUT_DIR = $null
+        PLAYWRIGHT_JSON_OUTPUT_NAME = $null
+        CASEOPS_EXPECTED_RELEASE_SHA = $ReleaseSha
+        CASEOPS_PW_EVIDENCE_PHASE = "execution"
+        CASEOPS_PW_EVIDENCE_INVOCATION = $Invocation
+        CASEOPS_PW_EVIDENCE_JSON_FILE = (Join-Path $NativeDirectory "native-results.json")
+        CASEOPS_PW_EVIDENCE_JUNIT_FILE = (Join-Path $NativeDirectory "native-results.xml")
     }
     $SavedReportEnvironment = @{}
     foreach ($Name in $ReportEnvironment.Keys) {
@@ -541,13 +556,17 @@ function Invoke-CandidatePlaywright {
     try {
         Push-Location -LiteralPath $RepoRoot
         $LocationPushed = $true
-        & $NodePath $PlaywrightCli test --config $PlaywrightConfig --reporter=list,json,junit @Arguments
+        & $NodePath $PlaywrightCli test --config $PlaywrightConfig `
+            "--reporter=list,json,junit,$NativeReporter" --output $ArtifactOutput @Arguments
         $PlaywrightExitCode = $LASTEXITCODE
         $ArtifactReport = $null
         try { $ArtifactReport = Get-Content -LiteralPath "$ReportStem.json" -Raw -Encoding UTF8 | ConvertFrom-Json }
         catch { } # Keep failed-run output even when the final reporter is incomplete.
         $ArtifactsManifest = & $RetainArtifacts $ArtifactReport
-        foreach ($ReportPath in $ReportEnvironment.Values) {
+        foreach ($ReportPath in @("$ReportStem.json", "$ReportStem.xml",
+            (Join-Path $NativeDirectory "native-results.json"),
+            (Join-Path $NativeDirectory "native-results.xml"),
+            (Join-Path $NativeDirectory "progress.jsonl"))) {
             if (-not (Test-Path -LiteralPath $ReportPath -PathType Leaf)) {
                 throw "Playwright execution is incomplete: missing report $ReportPath."
             }
@@ -595,6 +614,96 @@ function Invoke-CandidatePlaywright {
         )) {
             throw "Playwright exit zero disagrees with its failed structured results."
         }
+        # Validate the existing reporter protocol, not console text or generic
+        # attachments. No final receipt may certify a truncated live journal.
+        $ValidateNative = @'
+const fs = require('node:fs');
+const path = require('node:path');
+const { isDeepStrictEqual: equal } = require('node:util');
+try {
+const [directory, sha, invocation, rawPath, configPath] = process.argv.slice(1);
+const fail = () => { throw new Error('Native Playwright progress is incomplete or inconsistent.'); };
+function text(file) {
+  const bytes = fs.readFileSync(file);
+  if (!bytes.length || bytes.length > 64 * 1024 * 1024) fail();
+  return new TextDecoder('utf-8', {fatal: true}).decode(bytes);
+}
+const raw = JSON.parse(text(rawPath));
+const native = JSON.parse(text(path.join(directory, 'native-results.json')));
+const stream = text(path.join(directory, 'progress.jsonl'));
+if (!stream.endsWith('\n')) fail();
+const packets = stream.slice(0, -1).split('\n').map(line => JSON.parse(line));
+const started = packets.shift(), finished = packets.pop();
+if (!equal(started, {event: 'invocation_started', release_sha: sha, invocation}) ||
+    native.release_sha !== sha || native.invocation !== invocation || native.phase !== 'execution' ||
+    path.resolve(native.config.configFile) !== path.resolve(configPath)) fail();
+function cases(doc) {
+  const rows = [];
+  function visit(suites) {
+    for (const suite of suites || []) {
+      for (const spec of suite.specs || []) for (const test of spec.tests || []) {
+        if (typeof spec.id !== 'string' || !spec.id || typeof test.projectName !== 'string') fail();
+        rows.push({id: spec.id, file: spec.file, line: spec.line, column: spec.column, test});
+      }
+      visit(suite.suites);
+    }
+  }
+  visit(doc.suites);
+  if (!rows.length || new Set(rows.map(row => row.id)).size !== rows.length) fail();
+  return rows;
+}
+const expected = cases(native), actual = cases(raw);
+const identity = row => [row.id, row.file, row.line, row.column, row.test.projectName];
+const root = path.dirname(path.resolve(configPath));
+const inside = value => { const relative = path.relative(root, path.resolve(value));
+  return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative); };
+if (!inside(native.config.rootDir) || native.config.projects.some(p => !inside(p.testDir)) ||
+    path.resolve(raw.config.configFile) !== path.resolve(configPath) ||
+    expected.some(row => !native.config.projects.some(p => p.name === row.test.projectName) ||
+      !inside(path.resolve(native.config.rootDir, row.file)) ||
+      !fs.statSync(path.resolve(native.config.rootDir, row.file)).isFile())) fail();
+if (!equal(expected.map(identity), actual.map(identity))) fail();
+for (let i = 0; i < expected.length; i++) {
+  const a = expected[i].test, b = actual[i].test;
+  if (a.expectedStatus !== b.expectedStatus || a.status !== b.status ||
+      a.results.length !== 1 || b.results.length !== 1 ||
+      a.results[0].status !== b.results[0].status || a.results[0].retry !== 0 || b.results[0].retry !== 0) fail();
+}
+for (const field of ['expected', 'unexpected', 'skipped', 'flaky']) {
+  if (native.stats[field] !== raw.stats[field]) fail();
+}
+if (!equal(finished, {event: 'session_finished', status: native.status, test_count: expected.length})) fail();
+const collection = packets.shift();
+if (!collection || collection.event !== 'collection' || collection.release_sha !== sha ||
+    collection.invocation !== invocation) fail();
+const collected = cases(collection);
+if (!equal(collected.map(identity), expected.map(identity)) || collected.some(row => row.test.results.length)) fail();
+const observed = new Set(), errors = [];
+const byId = new Map(expected.map(row => [row.id, row]));
+for (const packet of packets) {
+  if (packet.event === 'global_error') { errors.push(packet.error); continue; }
+  if (packet.event !== 'test_end') fail();
+  const rows = cases(packet);
+  if (rows.length !== 1 || observed.has(rows[0].id) ||
+      !equal(rows[0], byId.get(rows[0].id))) fail();
+  observed.add(rows[0].id);
+}
+if (observed.size !== expected.length || !equal(errors, native.errors) || errors.length !== raw.errors.length) fail();
+process.stdout.write('native-progress-verified');
+} catch {
+  process.stderr.write('Native Playwright progress is incomplete or inconsistent.\n');
+  process.exitCode = 1;
+}
+'@
+        $NativeValidation = & $NodePath -e $ValidateNative $NativeDirectory $ReleaseSha $Invocation "$ReportStem.json" $PlaywrightConfig
+        if ($LASTEXITCODE -ne 0 -or $NativeValidation -cne 'native-progress-verified') {
+            throw "Native Playwright progress is incomplete or inconsistent."
+        }
+        try { [xml]$NativeJUnit = Get-Content -LiteralPath (Join-Path $NativeDirectory "native-results.xml") -Raw }
+        catch { throw "Native Playwright progress has invalid JUnit." }
+        if ($NativeJUnit.SelectNodes('/testsuites/testsuite/testcase').Count -ne $BrowserTests) {
+            throw "Native Playwright progress has disagreeing JUnit totals."
+        }
         # Write completion only after both final reports reconcile; a nonzero
         # process exit still fails the caller's gate. Preserve every invocation.
         [ordered]@{
@@ -609,6 +718,9 @@ function Invoke-CandidatePlaywright {
             json = "$ReportStem.json"
             junit = "$ReportStem.xml"
             artifacts_manifest = $ArtifactsManifest
+            native_json = (Join-Path $NativeDirectory "native-results.json")
+            native_junit = (Join-Path $NativeDirectory "native-results.xml")
+            progress = (Join-Path $NativeDirectory "progress.jsonl")
         } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath "$ReportStem.completion.json" -Encoding UTF8
         Write-Host "[docker-acceptance] browser execution reports: $ReportStem ($BrowserTests tests)"
     }

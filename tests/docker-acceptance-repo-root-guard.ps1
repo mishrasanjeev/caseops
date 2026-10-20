@@ -56,6 +56,7 @@ $CandidatePython = [IO.Path]::Combine($RepoRoot, "apps", "api", ".venv", "python
 $ForeignPython = [IO.Path]::Combine($Foreign, "apps", "api", ".venv", "python")
 $DecoyMarker = [IO.Path]::Combine($Work, "decoy-used.txt")
 $InvocationLog = [IO.Path]::Combine($Work, "invocations.jsonl")
+$ReleaseSha = '1111111111111111111111111111111111111111'
 
 $CandidateCli = @'
 const fs = require("fs");
@@ -67,7 +68,9 @@ fs.appendFileSync(
     json: process.env.PLAYWRIGHT_JSON_OUTPUT_FILE,
     jsonDir: process.env.PLAYWRIGHT_JSON_OUTPUT_DIR,
     jsonName: process.env.PLAYWRIGHT_JSON_OUTPUT_NAME,
-    junit: process.env.PLAYWRIGHT_JUNIT_OUTPUT_FILE }) + "\n",
+    junit: process.env.PLAYWRIGHT_JUNIT_OUTPUT_FILE,
+    native: process.env.CASEOPS_PW_EVIDENCE_JSON_FILE,
+    invocation: process.env.CASEOPS_PW_EVIDENCE_INVOCATION }) + "\n",
 );
 if (args.includes("--list")) {
   const mode = process.env.CASEOPS_GUARD_MODE || "candidate";
@@ -115,8 +118,17 @@ if (args.includes("--list")) {
   else process.stdout.write(listing);
 } else {
   const mode = process.env.CASEOPS_GUARD_MODE || "candidate";
+  const project = args.includes('--project=app-mobile') ? 'app-mobile' : 'app-chromium';
+  const output = args[args.indexOf('--output') + 1];
+  const rootDir = path.join(process.cwd(), 'tests/e2e');
+  fs.rmSync(output, {recursive: true, force: true});
+  fs.mkdirSync(output, {recursive: true});
   const report = {
-    suites: mode === "empty-execution" ? [] : [{ specs: [{ tests: [{
+    config: {configFile: args[args.indexOf('--config') + 1], rootDir, workers: 1,
+      projects: [{name: project, testDir: rootDir, outputDir: output, retries: 0, repeatEach: 1, timeout: 1000}]},
+    suites: mode === "empty-execution" ? [] : [{file: 'candidate.spec.ts', specs: [{
+      id: 'offline-case', file: 'candidate.spec.ts', line: 1, column: 1, title: 'candidate', tests: [{
+      projectName: project, expectedStatus: 'passed', status: 'expected',
       results: mode === "missing-result" ? [] : [{ status: "passed" }],
     }] }] }],
     errors: [],
@@ -130,6 +142,64 @@ if (args.includes("--list")) {
     report.suites[0].specs[0].tests[0].results[0].status =
       mode === "interrupted-result" ? "interrupted" : "unknown";
   }
+  if (mode === 'expected-failed' || mode === 'skipped') {
+    const test = report.suites[0].specs[0].tests[0];
+    test.expectedStatus = mode === 'skipped' ? 'skipped' : 'failed';
+    test.results[0].status = test.expectedStatus;
+    test.status = mode === 'skipped' ? 'skipped' : 'expected';
+    if (mode === 'skipped') { report.stats.expected = 0; report.stats.skipped = 1; }
+  }
+  if (mode === 'early-unexpected') {
+    const test = report.suites[0].specs[0].tests[0];
+    test.results[0].status = 'failed'; test.status = 'unexpected';
+    report.stats.expected = 0; report.stats.unexpected = 1;
+  }
+  const reporterPath = args.find(arg => arg.startsWith('--reporter=')).slice('--reporter='.length)
+    .split(',').find(file => file.endsWith('prod_playwright_reporter.cjs'));
+  if (reporterPath !== path.join(process.cwd(), 'scripts/prod_playwright_reporter.cjs')) {
+    throw new Error('Reporter escaped the candidate source');
+  }
+  const Reporter = require(reporterPath);
+  const reporter = new Reporter();
+  const cases = [];
+  for (const suite of report.suites) for (const spec of suite.specs) for (const test of spec.tests) {
+    for (const run of test.results) Object.assign(run, {retry: 0, workerIndex: 0, parallelIndex: 0,
+      startTime: new Date('2026-10-20T00:00:00Z'), duration: 1, annotations: [], attachments: [], errors: []});
+    const results = [];
+    const testcase = {id: spec.id, title: spec.title, expectedStatus: test.expectedStatus,
+      annotations: [], tags: [], retries: 0, repeatEachIndex: 0, timeout: 1000, results,
+      parent: {project: () => report.config.projects[0]},
+      location: {file: path.join(rootDir, spec.file), line: 1, column: 1},
+      titlePath: () => ['', project, spec.file, spec.title],
+      outcome: () => results.length ? test.status : 'skipped', ok: () => test.status !== 'unexpected'};
+    cases.push({testcase, runs: test.results});
+  }
+  reporter.onBegin(report.config, {allTests: () => cases.map(c => c.testcase)});
+  for (const {testcase, runs} of cases) for (const run of runs) {
+    testcase.results.push(run); reporter.onTestEnd(testcase, run);
+  }
+  const progress = path.join(path.dirname(process.env.CASEOPS_PW_EVIDENCE_JSON_FILE), 'progress.jsonl');
+  const early = fs.readFileSync(progress, 'utf8').trim().split('\n').map(JSON.parse);
+  if (early.some(row => row.event === 'session_finished') ||
+      (cases.length && cases[0].runs.length && !early.some(row => row.event === 'test_end'))) {
+    throw new Error('Test-end evidence was not readable before session completion');
+  }
+  if (mode === 'early-unexpected' && early[2].suites[0].specs[0].tests[0].status !== 'unexpected') {
+    throw new Error('Early unexpected result was not durably recorded');
+  }
+  reporter.onEnd({status: mode === 'early-unexpected' ? 'failed' : 'passed', startTime: new Date(), duration: 1});
+  const packets = fs.readFileSync(progress, 'utf8').trim().split('\n').map(JSON.parse);
+  if (mode === 'stale-sha') packets[0].release_sha = '2'.repeat(40);
+  if (mode === 'stale-invocation') packets[0].invocation = 'foreign';
+  if (mode === 'missing-collection') packets.splice(1, 1);
+  if (mode === 'duplicate-ids') packets.splice(3, 0, packets[2]);
+  if (['stale-sha', 'stale-invocation', 'missing-collection', 'duplicate-ids'].includes(mode)) {
+    fs.writeFileSync(progress, packets.map(row => JSON.stringify(row)).join('\n') + '\n');
+  }
+  if (mode === 'partial-utf8-line') fs.appendFileSync(progress, Buffer.from([0xe2, 0x82]));
+  if (mode === 'missing-progress') fs.unlinkSync(progress);
+  if (mode === 'missing-native-json') fs.unlinkSync(process.env.CASEOPS_PW_EVIDENCE_JSON_FILE);
+  if (mode === 'missing-native-junit') fs.unlinkSync(process.env.CASEOPS_PW_EVIDENCE_JUNIT_FILE);
   if (mode !== "missing-json") {
     fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE,
       mode === "malformed-json" ? "{" : JSON.stringify(report));
@@ -141,7 +211,7 @@ if (args.includes("--list")) {
       mode === "malformed-xml" ? "<testsuites>" : `<testsuites><testsuite>${cases}</testsuite></testsuites>`);
   }
 }
-process.exit(Number(process.env.CASEOPS_GUARD_EXIT || 0));
+process.exit(process.env.CASEOPS_GUARD_MODE === 'early-unexpected' ? 1 : Number(process.env.CASEOPS_GUARD_EXIT || 0));
 '@
 $DecoyCli = @'
 require("fs").writeFileSync(process.env.CASEOPS_GUARD_DECOY, process.argv.slice(2).join(" "));
@@ -151,7 +221,9 @@ process.exit(1);
 $GuardVariables = @(
     "CASEOPS_E2E_PYTHON", "CASEOPS_GUARD_LOG", "CASEOPS_GUARD_MODE",
     "CASEOPS_GUARD_EXIT", "CASEOPS_GUARD_DECOY", "PLAYWRIGHT_JSON_OUTPUT_FILE",
-    "PLAYWRIGHT_JUNIT_OUTPUT_FILE", "PLAYWRIGHT_JSON_OUTPUT_DIR", "PLAYWRIGHT_JSON_OUTPUT_NAME"
+    "PLAYWRIGHT_JUNIT_OUTPUT_FILE", "PLAYWRIGHT_JSON_OUTPUT_DIR", "PLAYWRIGHT_JSON_OUTPUT_NAME",
+    "CASEOPS_EXPECTED_RELEASE_SHA", "CASEOPS_PW_EVIDENCE_PHASE", "CASEOPS_PW_EVIDENCE_INVOCATION",
+    "CASEOPS_PW_EVIDENCE_JSON_FILE", "CASEOPS_PW_EVIDENCE_JUNIT_FILE"
 )
 $SavedEnvironment = @{}
 foreach ($Name in $GuardVariables) {
@@ -198,6 +270,11 @@ try {
         [void](New-Item -ItemType Directory -Force -Path $Directory)
     }
     [IO.File]::WriteAllText($PlaywrightConfig, "// candidate config")
+    [void][IO.Directory]::CreateDirectory((Join-Path $RepoRoot 'scripts'))
+    [void][IO.Directory]::CreateDirectory((Join-Path $RepoRoot 'tests/e2e'))
+    [IO.File]::WriteAllText((Join-Path $RepoRoot 'tests/e2e/candidate.spec.ts'), '// offline source identity')
+    Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $ScriptPath) 'prod_playwright_reporter.cjs') `
+        -Destination (Join-Path $RepoRoot 'scripts/prod_playwright_reporter.cjs')
     [IO.File]::WriteAllText($PlaywrightCli, $CandidateCli)
     [IO.File]::WriteAllText($CandidatePython, "")
     [IO.File]::WriteAllText([IO.Path]::Combine($Foreign, "playwright.docker.config.ts"), "// decoy config")
@@ -255,7 +332,7 @@ try {
             throw "Browser invocations did not retain unique report files."
         }
         foreach ($Invocation in $BrowserInvocations) {
-            if ($Invocation.args -notcontains "--reporter=list,json,junit") {
+            if (-not @($Invocation.args | Where-Object { $_ -like '--reporter=list,json,junit,*prod_playwright_reporter.cjs' }).Count) {
                 throw "The launcher omitted required structured reporters."
             }
             $Completion = Get-Content -LiteralPath ($Invocation.json -replace '\.json$', '.completion.json') -Raw |
@@ -268,6 +345,28 @@ try {
             throw "The launcher did not restore the caller's reporter environment."
         }
         $Cases++
+        foreach ($Mode in @('expected-failed', 'skipped', 'early-unexpected')) {
+            [Environment]::SetEnvironmentVariable('CASEOPS_GUARD_MODE', $Mode, 'Process')
+            Invoke-CandidatePlaywright -Arguments @('--project=app-chromium')
+            if ($LASTEXITCODE -ne $(if ($Mode -eq 'early-unexpected') { 1 } else { 0 })) {
+                throw 'Expected/skipped/unexpected result classification changed.'
+            }
+            $Cases++
+        }
+        foreach ($Mode in @('stale-sha', 'stale-invocation', 'partial-utf8-line', 'duplicate-ids', 'missing-collection')) {
+            [Environment]::SetEnvironmentVariable('CASEOPS_GUARD_MODE', $Mode, 'Process')
+            Assert-Refused 'progress is incomplete' { Invoke-CandidatePlaywright -Arguments @('--project=app-chromium') }
+        }
+        foreach ($Mode in @('missing-progress', 'missing-native-json', 'missing-native-junit')) {
+            [Environment]::SetEnvironmentVariable('CASEOPS_GUARD_MODE', $Mode, 'Process')
+            Assert-Refused 'missing report' { Invoke-CandidatePlaywright -Arguments @('--project=app-chromium') }
+        }
+        [Environment]::SetEnvironmentVariable('CASEOPS_GUARD_MODE', $null, 'Process')
+        $ReporterPath = Join-Path $RepoRoot 'scripts/prod_playwright_reporter.cjs'
+        if (-not (Test-PathWithinRoot -Path $ReporterPath -Root $Work)) { throw 'Reporter move escaped guard root.' }
+        Move-Item -LiteralPath $ReporterPath -Destination "$ReporterPath.missing"
+        try { Assert-Refused 'reporter is missing' { Invoke-CandidatePlaywright -Arguments @('--project=app-chromium') } }
+        finally { Move-Item -LiteralPath "$ReporterPath.missing" -Destination $ReporterPath }
         foreach ($Case in @(
             @{ Mode = "missing-json"; Fragment = "missing report" },
             @{ Mode = "missing-xml"; Fragment = "missing report" },

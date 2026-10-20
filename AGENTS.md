@@ -2898,3 +2898,16 @@ requirements when using the fallback.
   Inventory every workflow file and regress real new-file discovery. Preserve
   real browser launch, no-paid and release-source fences; never fake the host
   platform, skip browser readiness or raise budgets to mask incompatibility.
+- A browser isolation check must not cold-start a second full application when
+  the canonical Docker API is already running. Promote its real route, typed
+  body, authentication and tenant checks to that HTTP surface; keep every pure
+  security unit separately inventoried. Bound the inner process tree below the
+  unchanged outer deadline, prove owned cleanup on Linux and Windows, and keep
+  incomplete runs incomplete. A later passing cold-start probe does not explain
+  an earlier timeout. Consume source-bound per-case progress as it is written;
+  invocation-end JSON alone can hide a failure for the remainder of a shard.
+- New test fixtures must preserve the existing retained-result contract.
+  Pytest unittest subtests can emit several call reports for one collected ID;
+  a green process is not proof that the whole-gate reader accepts that evidence.
+  Replay the unchanged reader, preserve every boundary assertion and explicit
+  loop-completion counts, and never weaken phase reconciliation to hide drift.

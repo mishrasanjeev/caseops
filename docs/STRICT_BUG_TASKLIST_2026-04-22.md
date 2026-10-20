@@ -1,5 +1,19 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 20 Drive Docker Release Blocker
+
+**Release NO-GO.** C13 hosted CI/security/CodeQL passed, but full Docker07
+completed3226 native passes and then failed one nested Drive process timeout:
+desktop603P/1F/10 explicit skips, four mobile cases unstarted. Historical timeout
+cause remains unproven; the separate29.621-second cold diagnostic is not a
+replacement gate. Parent99137 exited1/reaped and owned source/resources closed.
+The narrow test-only replacement promotes existing route checks to real HTTP,
+retains six pure security units under owned bounded supervision, and consumes
+the existing native per-case reporter. Application/dependency/provider/security
+budgets are unchanged. Fresh full gates and serving replay remain required.
+See `docs/bugfix-drive-docker-boundary-2026-10-20.md`; do not relabel the failed
+gate or Ram's unknown historical evidence as fixed.
+
 ## October 20 Dependency Security Release Blocker
 
 **Implemented and focused-tested in replacement source, not fixed in the
