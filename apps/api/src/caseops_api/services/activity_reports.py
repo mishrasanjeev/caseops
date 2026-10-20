@@ -10,7 +10,7 @@ import httpx
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
-from caseops_api.core.settings import get_settings
+from caseops_api.core.settings import get_settings, parse_activity_report_recipients
 from caseops_api.db.models import (
     AuditEvent,
     AuditResult,
@@ -795,9 +795,10 @@ def send_activity_report(report: dict) -> str:
         raise RuntimeError(
             "SendGrid is not configured (CASEOPS_SENDGRID_API_KEY and sender email are required)"
         )
+    recipients = parse_activity_report_recipients(settings.activity_report_recipient_email)
     text, html = render_report(report)
     payload = {
-        "personalizations": [{"to": [{"email": settings.activity_report_recipient_email}]}],
+        "personalizations": [{"to": [{"email": recipient}]} for recipient in recipients],
         "from": {
             "email": settings.sendgrid_sender_email,
             "name": settings.sendgrid_sender_name,
@@ -818,4 +819,5 @@ def send_activity_report(report: dict) -> str:
         timeout=30,
     )
     response.raise_for_status()
+    # Preserve the caller contract: provider HTTP acceptance, not inbox delivery.
     return "sent"

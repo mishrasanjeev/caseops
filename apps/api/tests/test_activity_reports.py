@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import httpx
+import pytest
+from email_validator import deliverability
+
+from caseops_api.core.settings import Settings
 from caseops_api.db.models import (
     Company,
     CompanyMembership,
@@ -13,6 +18,7 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import activity_reports
 from caseops_api.services.activity_reports import (
     ACTIVITY_METRICS,
     SNAPSHOT_METRICS,
@@ -259,3 +265,174 @@ def test_build_activity_report_excludes_non_production_account_names(client) -> 
     assert [account["name"] for account in accounts] == ["Production Legal"]
     assert report["segments"]["law_firms"]["company_count"] == 1
     assert report["segments"]["general_counsels"]["company_count"] == 0
+
+
+@pytest.fixture
+def report_sender(monkeypatch):
+    settings = Settings(
+        _env_file=None,
+        env="local",
+        activity_report_enabled=True,
+        sendgrid_api_key="offline-report-key",
+        sendgrid_sender_email="sender@example.com",
+        sendgrid_sender_name="Offline CaseOps",
+    )
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append((url, kwargs))
+        return httpx.Response(202, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(activity_reports, "get_settings", lambda: settings)
+    monkeypatch.setattr(activity_reports.httpx, "post", post)
+    return settings, calls
+
+
+def test_sender_uses_one_post_with_four_private_personalizations(report_sender) -> None:
+    settings, calls = report_sender
+    recipients = [
+        "mishra.sanjeev@gmail.com", "sanjeev@orchestrum.in",
+        "ram.gupta@edumatica.io", "uday.chauhan@edumatica.io",
+    ]
+    settings.activity_report_recipient_email = ";".join(recipients)
+
+    assert activity_reports.send_activity_report(_report()) == "sent"
+
+    assert len(calls) == 1
+    url, arguments = calls[0]
+    assert url == "https://api.sendgrid.com/v3/mail/send"
+    assert arguments["timeout"] == 30
+    assert arguments["headers"] == {
+        "Authorization": "Bearer offline-report-key", "Content-Type": "application/json",
+    }
+    payload = arguments["json"]
+    assert payload["personalizations"] == [
+        {"to": [{"email": recipient}]} for recipient in recipients
+    ]
+    assert "to" not in payload and "cc" not in payload and "bcc" not in payload
+    assert payload["from"] == {"email": "sender@example.com", "name": "Offline CaseOps"}
+    assert payload["subject"].startswith("CaseOps Account Activity Dashboard - ")
+    text, html = render_report(_report())
+    assert payload["content"] == [
+        {"type": "text/plain", "value": text}, {"type": "text/html", "value": html},
+    ]
+
+
+def test_sender_preserves_legacy_default_recipient(report_sender) -> None:
+    settings, calls = report_sender
+    assert settings.activity_report_recipient_email == "mishra.sanjeev@gmail.com"
+    assert activity_reports.send_activity_report(_report()) == "sent"
+    assert calls[0][1]["json"]["personalizations"] == [
+        {"to": [{"email": "mishra.sanjeev@gmail.com"}]},
+    ]
+    assert len(calls) == 1
+
+
+def test_sender_trims_and_deduplicates_in_first_seen_order_without_dns(
+    report_sender, monkeypatch,
+) -> None:
+    settings, calls = report_sender
+
+    def forbidden_dns(*_args, **_kwargs):
+        pytest.fail("Recipient syntax validation must not perform DNS checks")
+
+    monkeypatch.setattr(deliverability, "validate_email_deliverability", forbidden_dns)
+    settings.activity_report_recipient_email = (
+        " First@EXAMPLE.COM ; second@example.com ;first@example.com;"
+        "third@example.com;fourth@example.com;SECOND@example.com "
+    )
+    normalized = Settings(
+        _env_file=None, env="local",
+        activity_report_recipient_email=settings.activity_report_recipient_email,
+    )
+    assert normalized.activity_report_recipient_email == (
+        "First@example.com;second@example.com;third@example.com;fourth@example.com"
+    )
+    assert activity_reports.send_activity_report(_report()) == "sent"
+    assert calls[0][1]["json"]["personalizations"] == [
+        {"to": [{"email": recipient}]} for recipient in (
+            "First@example.com", "second@example.com", "third@example.com", "fourth@example.com",
+        )
+    ]
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("recipients", [
+    pytest.param("", id="empty"),
+    pytest.param("   ", id="spaces-only"),
+    pytest.param(";one@example.com", id="leading-empty"),
+    pytest.param("one@example.com;", id="trailing-empty"),
+    pytest.param("one@example.com;;two@example.com", id="middle-empty"),
+    pytest.param("one@example.com,two@example.com", id="comma-list"),
+    pytest.param("Operator <one@example.com>", id="display-name"),
+    pytest.param("<one@example.com>", id="angle-address"),
+    pytest.param("one@example.com\r\nBcc: other@example.com", id="header-injection"),
+    pytest.param("\tone@example.com", id="control-tab"),
+    pytest.param("one@example.com\x00", id="control-nul"),
+    pytest.param("one@example.com\u0085", id="control-c1"),
+    pytest.param("one@example.com\u200b", id="control-format"),
+    pytest.param("one@example.com\u2028", id="line-separator"),
+    pytest.param("one@example.com\u2029", id="paragraph-separator"),
+    pytest.param("not-an-email", id="invalid-address"),
+    pytest.param("one@localhost", id="invalid-domain"),
+    pytest.param(";".join(f"user{i}@example.com" for i in range(5)), id="five-unique"),
+    pytest.param("x" * 1025, id="raw-input-bound"),
+])
+def test_sender_rejects_invalid_settings_before_transport(report_sender, recipients) -> None:
+    settings, calls = report_sender
+    with pytest.raises(ValueError):
+        Settings(_env_file=None, env="local", activity_report_recipient_email=recipients)
+    # Defend the transport boundary even when a test/operator mutates cached settings.
+    settings.activity_report_recipient_email = recipients
+    with pytest.raises(ValueError, match="^Invalid activity report recipients\\.$"):
+        activity_reports.send_activity_report(_report())
+    assert calls == []
+
+
+def test_disabled_report_never_sends(report_sender) -> None:
+    settings, calls = report_sender
+    settings.activity_report_enabled = False
+    settings.activity_report_recipient_email = "invalid"
+    assert activity_reports.send_activity_report(_report()) == "disabled"
+    assert calls == []
+
+
+@pytest.mark.parametrize("missing", ["sendgrid_api_key", "sendgrid_sender_email"])
+def test_sender_rejects_missing_configuration_without_transport(report_sender, missing) -> None:
+    settings, calls = report_sender
+    setattr(settings, missing, None)
+    with pytest.raises(RuntimeError, match="SendGrid is not configured"):
+        activity_reports.send_activity_report(_report())
+    assert calls == []
+
+
+@pytest.mark.parametrize("status", [400, 429, 500])
+def test_sender_preserves_provider_rejection_without_retry(
+    report_sender, monkeypatch, status,
+) -> None:
+    _settings, calls = report_sender
+
+    def rejected(url, **kwargs):
+        calls.append((url, kwargs))
+        return httpx.Response(status, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(activity_reports.httpx, "post", rejected)
+    with pytest.raises(httpx.HTTPStatusError):
+        activity_reports.send_activity_report(_report())
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("error", [httpx.ReadTimeout, httpx.ConnectError])
+def test_sender_preserves_uncertain_transport_failure_without_retry(
+    report_sender, monkeypatch, error,
+) -> None:
+    _settings, calls = report_sender
+
+    def failed(url, **kwargs):
+        calls.append((url, kwargs))
+        raise error("offline transport failure", request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(activity_reports.httpx, "post", failed)
+    with pytest.raises(error):
+        activity_reports.send_activity_report(_report())
+    assert len(calls) == 1

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from caseops_api.scripts import send_activity_report as command
 
 
@@ -45,3 +47,34 @@ def test_command_logs_only_bounded_delivery_metadata(monkeypatch, capsys) -> Non
     assert "Tenant Secret Name" not in output
     assert "tenant-secret-id" not in output
     assert "outstanding_amount_minor" not in output
+
+
+def test_command_dry_run_never_calls_the_sender(monkeypatch, capsys) -> None:
+    report = {"generated_at": "2026-10-20T07:30:00+05:30", "segments": {}}
+    monkeypatch.setattr(command, "get_session_factory", lambda: _SessionContext)
+    monkeypatch.setattr(command, "build_activity_report", lambda _session: report)
+
+    def forbidden_send(_report):
+        pytest.fail("Dry run must not call the email transport")
+
+    monkeypatch.setattr(command, "send_activity_report", forbidden_send)
+    assert command.main(["--dry-run"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "account_count": 0, "generated_at": report["generated_at"], "status": "dry_run",
+    }
+
+
+def test_command_does_not_claim_sent_after_uncertain_failure(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(command, "get_session_factory", lambda: _SessionContext)
+    monkeypatch.setattr(command, "build_activity_report", lambda _session: {"segments": {}})
+    calls = []
+
+    def failed_send(_report):
+        calls.append("attempted")
+        raise RuntimeError("Offline uncertain acceptance")
+
+    monkeypatch.setattr(command, "send_activity_report", failed_send)
+    with pytest.raises(RuntimeError, match="Offline uncertain acceptance"):
+        command.main([])
+    assert calls == ["attempted"]
+    assert capsys.readouterr().out == ""

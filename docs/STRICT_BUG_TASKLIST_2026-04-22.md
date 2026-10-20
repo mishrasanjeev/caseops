@@ -1,5 +1,40 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 20 Combined Candidate Checkpoint
+
+At 05:07 UTC the upcoming C16 combines Ram's retained fixes with the newly
+requested activity-report correction. C15 Docker08 was deliberately stopped
+for this scope change: 3226 intended native cases, group01 404 complete passes,
+group02 218 passing three-phase cases without session completion, 2604 native
+cases unobserved and all621 browser cases unstarted. No failed product phase
+was observed. Parent67262 and observer46137 are reaped; both raw2975-file source
+comparisons, physical archive and exact-project resource closure passed. The
+run is incomplete, never acceptance or carry. C15 whole hosted CI was also
+left unreconciled at its final browser job and is not C16 evidence.
+
+The dashboard correction independently passed105 host tests/315 phases with
+zero skips; parent reconciled exact collection, JUnit and raw phases. The owner
+explicitly authorized removal of only the Gmail global unsubscribe; DELETE204
+and subsequent GET200/empty object were verified at04:47:51 UTC. Other
+suppression lists were untouched. Four-recipient daily configuration, fresh
+combined Docker09, green CI, main merge and exact-release production acceptance
+remain pending. Previously partial or inconclusive legal/Calendar rows are not
+upgraded. Evidence: `outputs/bugs-l-20261019/docker08-c15-reconciliation-01/`
+`final-closure-02/SOURCEHOLD-RELEASE.json` and
+`outputs/bugs-l-20261019/activity-report-0730-implementation-01/FINAL-PROOF.json`.
+
+## October 20 Activity Dashboard Email
+
+**Inconclusive for production delivery.** Parent diagnosis identifies a Gmail
+global unsubscribe on October 18-20, not a failed report-generation job.
+The separate C15-based feature branch implements the requested four-recipient
+07:30 IST configuration with bounded validation, private personalizations and
+zero task retries. Neither a successful job nor the retained `sent` status
+proves inbox delivery. Parent owns the explicitly authorized Gmail-only global
+unsubscribe removal; this branch performs no provider/suppression operation.
+Review local evidence and later targeted Docker/deployed acceptance separately
+from frozen C15 release gates. See `docs/activity-report-0730-2026-10-20.md`.
+
 ## October 20 Drive Docker Release Blocker
 
 Later C14 `dd2756f2` remains NO-GO: findings check118440204670 failed on an

@@ -76,7 +76,7 @@
     {
       "scheduler_name": "caseops-activity-report-0800-ist",
       "run_job_name": "caseops-activity-report",
-      "schedule": "0 8 * * *",
+      "schedule": "30 7 * * *",
       "time_zone": "Asia/Kolkata",
       "desired_state": "ENABLED",
       "task_timeout_seconds": 900,
@@ -90,7 +90,7 @@
           "CASEOPS_AUTO_MIGRATE": "false",
           "CASEOPS_SENDGRID_SENDER_EMAIL": "hearings@caseops.ai",
           "CASEOPS_SENDGRID_SENDER_NAME": "CaseOps",
-          "CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL": "mishra.sanjeev@gmail.com",
+          "CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL": "mishra.sanjeev@gmail.com;sanjeev@orchestrum.in;ram.gupta@edumatica.io;uday.chauhan@edumatica.io",
           "CASEOPS_ACTIVITY_REPORT_ENABLED": "true"
         },
         "secrets": {
@@ -102,7 +102,7 @@
         "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
         "cpu": "1",
         "memory": "2Gi",
-        "max_retries": 1
+        "max_retries": 0
       }
     },
     {

@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 20 Operational Report Coverage
+
+J14/M14/US-040/042 operational oversight, not a new reminder module: existing
+activity reporting is extended to four private recipients at 07:30 IST using
+the same scheduler. Legacy configuration, report contents, period calculations
+and sanitized command logs remain covered. The exact sender, validation,
+scheduler and secret-manifest test inventory is mapped in
+`docs/activity-report-0730-2026-10-20.md`. Local proof is not production or
+frozen-C15 acceptance; actual deployed cadence and recipient delivery are open.
+
 ## October 19 SQL Oracle Coverage Correction
 
 UJ-30/41, IPLF-090/091 and adjacent IP renewal/portfolio/report/import readers:

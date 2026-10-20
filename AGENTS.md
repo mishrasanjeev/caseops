@@ -2915,3 +2915,13 @@ requirements when using the fallback.
   is an `OSError`, so catch interruption before the broad transport/start error.
   Regress both interrupt classes, the ordinary error and mandatory owned cleanup;
   green process-tree tests do not establish untested cancellation semantics.
+- A multi-recipient operational report must validate the entire bounded address
+  set before transport and keep each recipient in a private one-To
+  personalization. Preserve legacy configuration and the existing scheduler
+  identity when retiming a cadence. Provider HTTP acceptance is not inbox
+  delivery; never replay an uncertain send or clear unrelated suppressions to
+  make a delivery check pass. Prove exact recipients, cron, timezone and retries.
+- PowerShell process-identity guards must preserve serialized ISO timestamps as
+  strings or compare explicitly normalized UTC values. Modern ConvertFrom-Json
+  can silently produce DateTime values. Prove the real matching PID/start/hash
+  and reject reused PIDs with different start times or commands before control.

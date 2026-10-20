@@ -1,5 +1,14 @@
 # CaseOps  - Work To Be Done
 
+## October 20 Activity Report Cadence
+
+J14/M14/US-040/042: review the separate C15-based activity-report branch's
+bounded four-recipient/private-send contract, same-scheduler 07:30 IST cadence
+and zero task retries. Host tests are scoped evidence only; parent review,
+fresh combined-C16 Docker09 and deployment/delivery acceptance remain pending.
+Do not confuse provider acceptance with inbox receipt or carry this feature
+into frozen C15 proof. See `docs/activity-report-0730-2026-10-20.md`.
+
 ## October 19 SQL Read Oracle Recovery
 
 C7 `d5ecdab2` is NO-GO: completed CI39212375169 has API8904P/1F/3232S
