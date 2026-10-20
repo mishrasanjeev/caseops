@@ -1,5 +1,17 @@
 # CaseOps  - Work To Be Done
 
+## October 20 Report And Admin Extension
+
+Partially implemented under J14/M14/US-040/042: repair the confirmed solo
+category omission across the complete report, expose evidence-based dormant
+accounts without removing their metrics, and deliver the named manager's
+invited, MFA-protected, reports-only console. Follow PRA-01..08 in
+`docs/platform-report-admin-2026-10-20.md`. The earlier founder console exists;
+delegation and tenant-independent report login are the new boundaries, not
+missing tenant administration. Do not deploy C17 as proof of this extension.
+Fresh full Docker/CI, guarded main release and production replay remain open,
+as do the separate owner setup and truthful mail-delivery outcomes.
+
 ## October 20 Activity Report Cadence
 
 J14/M14/US-040/042: review the separate C15-based activity-report branch's

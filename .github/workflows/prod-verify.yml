@@ -520,6 +520,29 @@ jobs:
           test -f playwright.public-seo.config.ts
           bash "$RUNNER_TEMP/caseops-prod-playwright" public-pages --config=playwright.public-seo.config.ts --workers=1 --retries=0 --reporter=list --output=test-results/public-pages
 
+      - name: Check release-owned report-console acceptance
+        id: platform-report-prerequisites
+        if: always() && !cancelled() && matrix.suite == 'public-pages' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        run: |
+          if [[ -f tests/e2e/platform-report-admin-2026-10-20.prod.spec.ts ]]; then
+            test -f playwright.prod-ram.config.ts
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::The exact serving checkout predates report-console acceptance; do not execute newer branch tests against it."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Report-console production acceptance not run: absent from the exact serving release." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Run exact-release report-console read-only acceptance
+        if: always() && !cancelled() && matrix.suite == 'public-pages' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.platform-report-prerequisites.outputs.ready == 'true'
+        env:
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: |
+          test "${{ steps.native-evidence.outputs.mode }}" = native
+          bash "$RUNNER_TEMP/caseops-prod-playwright" platform-reports --config=playwright.prod-ram.config.ts --project=platform-reports-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/platform-reports
+
       - name: Reconcile required native Playwright evidence
         if: always() && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.native-evidence.outputs.mode == 'native'
         env:
@@ -527,6 +550,7 @@ jobs:
           HISTORICAL_A0: ${{ inputs.run_historical_a0_gate }}
           RENEWAL_CONFIGURED: ${{ steps.renewal-prerequisites.outputs.configured }}
           COST_CONFIGURED: ${{ steps.ip-cost-prerequisites.outputs.configured }}
+          PLATFORM_REPORT_READY: ${{ steps.platform-report-prerequisites.outputs.ready }}
         run: |
           set -euo pipefail
           case "$SUITE" in
@@ -539,7 +563,10 @@ jobs:
               if [[ "$COST_CONFIGURED" == true ]]; then required+=(ip-cost); fi
               ;;
             patent-statute) required=(patent statute-sources) ;;
-            public-pages) required=(public-pages) ;;
+            public-pages)
+              required=(public-pages)
+              if [[ "$PLATFORM_REPORT_READY" == true ]]; then required+=(platform-reports); fi
+              ;;
             *) exit 1 ;;
           esac
           python scripts/prod_playwright_evidence.py validate --required "${required[@]}"

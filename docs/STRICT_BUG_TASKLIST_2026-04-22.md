@@ -1,5 +1,29 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 20 Solo Report And Delegated Console
+
+Local convergence checkpoint: the full dated console journeys passed on
+desktop and Pixel 5 in `platform-pw-local-06` (2/2, no skips/retries). They are
+host-only deterministic acceptance, not Docker or production proof. Retained
+earlier failures led to complete replacement-link, UTC serialization,
+invitation replay, MFA-retry and precise-money regressions. The final focused
+client/session set is 188/188; backend console112 plus native invitation races2
+is 114/114. See the exact scoped evidence and qualifications in
+`docs/platform-report-admin-2026-10-20.md`. Fresh complete release gates and
+production grant/setup remain open; no Ram historical verdict is upgraded.
+
+**Not fixed on production.** The serving report on `9cf76f2b` explicitly restricts
+CompanyType to law_firm and corporate_legal, while segment construction and
+HTML/plain-text totals repeat that restriction. Solo accounts are omitted at
+multiple layers; adding only a selector option would be incomplete. Dormant
+account grouping and delegated report admins are valid enhancements. Parent
+contract PRA-01..08 is recorded before implementation under J14/M14/US-040/042.
+Require complete category and metric parity, rolling-cutoff evidence, profile-
+less owner login audit, protected invitations/reset/MFA/revocation and fresh
+desktop/mobile local-Docker plus exact-production browser proof. Do not close
+these items from source code, email HTTP acceptance or an earlier candidate's
+green checks. No original Ram/IP/Calendar row is upgraded by this extension.
+
 ## October 20 Governance Correction Checkpoint
 
 At05:32 UTC C16 `94db8c27` is NO-GO: CI39373277832/job118465761974

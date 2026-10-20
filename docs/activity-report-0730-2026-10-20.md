@@ -1,5 +1,21 @@
 # Activity Report: Four Private Recipients at 07:30 IST
 
+## October 20 Report And Console Integration
+
+The solo/unknown category and rolling recorded-activity extension is now part
+of the local report-console integration, not frozen C17 acceptance. All four
+categories, unknown-history handling, selected-account audit aggregation and
+profile-less owner login recording share the canonical report service.
+Scheduled email retains its existing name exclusions; the independently
+authorized console includes all registered accounts and reports that scope.
+Known-inactive HTML groups retain complete plain-text/stripped-markup fallback.
+Email-client collapse compatibility and corrected production delivery remain
+unverified. The PRA-01..08 contract and implementation boundaries are in
+`docs/platform-report-admin-2026-10-20.md`; operator instructions are in
+`docs/user-guides/PLATFORM_REPORTS_ADMINISTRATION.md`. Older checkpoint sections
+below remain historical. Fresh combined Docker/CI and exact-main production
+acceptance are still required; no earlier candidate result is carried forward.
+
 ## Governance Correction
 
 C16 `94db8c27` failed its required governance change-map check before Docker09

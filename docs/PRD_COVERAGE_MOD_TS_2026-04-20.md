@@ -1,5 +1,17 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 20 Delegated Report Acceptance
+
+J14/M14, US-040/042 and FT-060/061 now include PRA-01..08 in
+`docs/platform-report-admin-2026-10-20.md`: all persisted account categories,
+rolling-30-day human engagement, dormant-group presentation, independent
+reports-only admin login/MFA, invitation/reset/revocation and cross-account
+report views. Existing founder/tenant authority is not extended. Complete
+functional/security/migration/PostgreSQL and desktop/mobile browser acceptance
+is required on the final combined candidate and exact deployed main SHA.
+Status is Partially implemented; C17 preparation is not acceptance for this
+new scope, and no production report-admin grant has been made.
+
 ## October 20 Operational Report Coverage
 
 J14/M14/US-040/042 operational oversight, not a new reminder module: existing

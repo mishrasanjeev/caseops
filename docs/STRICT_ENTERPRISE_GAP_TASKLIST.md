@@ -1,5 +1,29 @@
 # Strict Enterprise Gap Tasklist
 
+## October 20 Delegated Report Security Boundary
+
+The local implementation now passes both complete dated desktop/mobile
+journeys (`platform-pw-local-06`, 2/2 without skips/retries), including live
+local realm denials, one-use setup/reset, used-factor rejection and revocation.
+Pending invitation replay preserves its delivery and cannot reactivate a
+revoked grant; two PostgreSQL overlaps prove one admitted send. A real-client
+session regression distinguishes the exact typed MFA factor refusal from
+revoked/expired/unverifiable 401 responses. These are scoped local results,
+not a deployed authority grant or final release certificate. Full current
+CI/coverage, Docker and production acceptance remain required; the initial
+manager must choose their own credential and MFA after the explicit bootstrap.
+
+**Partially implemented / release NO-GO.** The existing founder-only console
+does not implement invited reports-only administrators or independent global
+report login. The owner authorizes `sanjeev@orchestrum.in` as the initial
+manager, not a tenant permission bypass. PRA-01..08 requires separate live
+delegation, token/cookie realm, mandatory MFA, one-use invitation/reset,
+revocation and audit, bounded account/report reads and no paid-provider or
+founder-write capabilities. Preserve existing founder seeding and tenant
+session fences. No production grant, new initial-password email or release
+acceptance has occurred. Map every new security class before CI and retain
+fresh migration, PostgreSQL race, browser and exact-release evidence.
+
 ## October 20 Activity Report Governance Admission
 
 **Partially implemented / release NO-GO.** C16 `94db8c27` failed the required

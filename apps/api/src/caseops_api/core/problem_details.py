@@ -304,6 +304,12 @@ def problem_json(
             }
         )
     merged_headers["X-Request-ID"] = request_id
+    # Unhandled/server errors can be produced outside request middleware.
+    if request.url.path == "/api/platform-console" or request.url.path.startswith(
+        "/api/platform-console/"
+    ):
+        merged_headers["Cache-Control"] = "private, no-store"
+        merged_headers["Referrer-Policy"] = "no-referrer"
     return JSONResponse(
         status_code=status_code,
         content=body,
@@ -333,9 +339,14 @@ def register_problem_handlers(
     async def _validation_exception(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:  # pragma: no cover
+        # Pydantic inputs/contexts can contain passwords or one-use tokens.
+        errors = [
+            {key: error[key] for key in ("loc", "msg", "type") if key in error}
+            for error in exc.errors()
+        ]
         return problem_json(
             422,
-            detail=exc.errors(),
+            detail=errors,
             request=request,
         )
 

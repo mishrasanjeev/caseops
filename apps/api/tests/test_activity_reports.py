@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import copy
+from datetime import UTC, datetime, timedelta
+from html.parser import HTMLParser
 
 import httpx
 import pytest
 from email_validator import deliverability
+from sqlalchemy import event
 
 from caseops_api.core.settings import Settings
 from caseops_api.db.models import (
+    AuditActorType,
+    AuditEvent,
+    AuditResult,
     Company,
     CompanyMembership,
     CompanyNotice,
@@ -25,6 +31,7 @@ from caseops_api.services.activity_reports import (
     build_activity_report,
     render_report,
 )
+from tests.sql_observation import is_read_only_select
 
 
 def _period(**overrides: int | float) -> dict[str, int | float]:
@@ -265,6 +272,456 @@ def test_build_activity_report_excludes_non_production_account_names(client) -> 
     assert [account["name"] for account in accounts] == ["Production Legal"]
     assert report["segments"]["law_firms"]["company_count"] == 1
     assert report["segments"]["general_counsels"]["company_count"] == 0
+
+
+def _report_account(session, index: int, company_type="solo", *, active=True):
+    company = Company(
+        name=f"Practice {index}", slug=f"practice-{index}", tenant_key=f"practice-{index}",
+        company_type=company_type, is_active=active,
+    )
+    user = User(
+        email=f"practice-{index}@example.com", full_name="Report Owner", password_hash="unused"
+    )
+    session.add_all([company, user])
+    session.flush()
+    membership = CompanyMembership(company_id=company.id, user_id=user.id, role="owner")
+    session.add(membership)
+    session.flush()
+    return company, membership
+
+
+def _activity(session, membership, at, *, action="employee.login", actor="human", result="success",
+              company_id=None, matter_id=None):
+    session.add(AuditEvent(
+        company_id=company_id or membership.company_id, actor_membership_id=membership.id,
+        actor_type=actor, action=action, target_type="employee", result=result,
+        created_at=at.astimezone(UTC), matter_id=matter_id,
+    ))
+
+
+def test_internal_scope_bypasses_names_only_and_conserves_real_account_metrics(client) -> None:
+    assert client.app is not None
+    now = datetime(2026, 10, 20, 4, 30, tzinfo=UTC)
+    activity_at = now - timedelta(hours=1)
+    types = [*CompanyType, "legacy-unclassified", ""]
+    internal_names = [
+        "Smoke Practice", "CSRF Practice", "test-legal", "Debug Practice", "E2E Practice",
+    ]
+    with get_session_factory()() as session:
+        for index, kind in enumerate(types):
+            for internal in (False, True):
+                company, membership = _report_account(
+                    session, index * 2 + int(internal), kind, active=not internal,
+                )
+                if internal:
+                    company.name = internal_names[index]
+                membership.created_at = activity_at
+                session.add(Matter(
+                    company_id=company.id, title="Scope report matter", matter_code="SCOPE-001",
+                    practice_area="Litigation", forum_level="high_court", created_at=activity_at,
+                ))
+                _activity(session, membership, activity_at)
+        session.commit()
+        default = build_activity_report(session, now=now)
+        email = build_activity_report(session, now=now, include_internal_accounts=False)
+        all_accounts = build_activity_report(session, now=now, include_internal_accounts=True)
+
+    assert default == email
+    assert email["account_scope"] == "operational_email"
+    assert email["excluded_account_count"] == 5
+    assert all_accounts["account_scope"] == "all_registered_accounts"
+    assert all_accounts["excluded_account_count"] == 0
+    flattened = {
+        account["company_id"]: account
+        for segment in all_accounts["segments"].values() for account in segment["accounts"]
+    }
+    assert len(flattened) == 10
+    assert {account["company_type"] for account in flattened.values()} == {str(t) for t in types}
+    assert all(account["usage_status"] == "recent" for account in flattened.values())
+    assert sum(not account["is_active"] for account in flattened.values()) == 5
+    for key, complete in all_accounts["segments"].items():
+        operational = email["segments"][key]
+        assert complete["company_count"] == len(complete["accounts"])
+        assert complete["company_count"] == operational["company_count"] * 2
+        assert complete["company_names"] == [account["name"] for account in complete["accounts"]]
+        for account in operational["accounts"]:
+            assert account == flattened[account["company_id"]]
+            assert account["current"]["active_matters"] == 1
+            assert account["periods"]["till_date"]["matters_created"] == 1
+            assert account["periods"]["till_date"]["users_added"] == 1
+            assert account["periods"]["till_date"]["audit_events"] == 1
+        for period in activity_reports.PERIODS:
+            for metric, _label, _kind in ACTIVITY_METRICS:
+                assert complete["periods"][period][metric] == sum(
+                    account["periods"][period][metric] for account in complete["accounts"]
+                )
+                assert complete["periods"][period][metric] == (
+                    operational["periods"][period][metric] * 2
+                )
+    for report in (email, all_accounts):
+        text, html = render_report(report)
+        expected_scope = (
+            "All registered accounts (0 excluded)" if report is all_accounts
+            else "Operational email; 5 accounts excluded"
+        )
+        assert expected_scope in text and expected_scope in html
+        for name in internal_names:
+            assert (name in text) == (report is all_accounts)
+            assert (name in html) == (report is all_accounts)
+
+
+def test_report_includes_every_enum_and_other_once_with_conserved_metrics(
+    client, monkeypatch,
+) -> None:
+    assert client.app is not None
+    now = datetime(2026, 10, 20, 4, 30, tzinfo=UTC)
+    types = [*CompanyType, "legacy-unclassified", ""]
+
+    def periods(_session, accounts, *, period, start, end):
+        assert start < end
+        for index, account in enumerate(accounts.values(), 1):
+            account["periods"][period] = {key: index for key, _label, _kind in ACTIVITY_METRICS}
+
+    def snapshot(_session, accounts, *, today):
+        assert today == now.astimezone(activity_reports.IST).date()
+        for index, account in enumerate(accounts.values(), 1):
+            account["current"] = {key: index for key, _label, _kind in SNAPSHOT_METRICS}
+
+    monkeypatch.setattr(activity_reports, "_populate_period_activity", periods)
+    monkeypatch.setattr(activity_reports, "_populate_current_snapshot", snapshot)
+    with get_session_factory()() as session:
+        companies = [_report_account(session, index, kind)[0] for index, kind in enumerate(types)]
+        session.commit()
+        report = build_activity_report(session, now=now)
+        assert {company.company_type for company in companies} == {str(kind) for kind in types}
+    assert list(report["segments"]) == ["law_firms", "general_counsels", "solo_lawyers", "other"]
+    accounts = [a for segment in report["segments"].values() for a in segment["accounts"]]
+    assert len(accounts) == len(types) == len({a["company_id"] for a in accounts})
+    assert {a["company_type"] for a in accounts} == {str(kind) for kind in types}
+    assert report["segments"]["solo_lawyers"]["company_count"] == 1
+    assert report["segments"]["other"]["company_count"] == 2
+    for segment in report["segments"].values():
+        assert segment["company_count"] == len(segment["accounts"])
+        for period in activity_reports.PERIODS:
+            for key, _label, _kind in ACTIVITY_METRICS:
+                assert segment["periods"][period][key] == sum(
+                    a["periods"][period][key] for a in segment["accounts"]
+                )
+    text, html = render_report(report)
+    assert "Solo Lawyers" in html and "Other / Unclassified" in html
+    assert f">{len(types)}</strong><span>Total accounts" in html
+    for account in accounts:
+        assert account["name"] in html and account["name"] in text
+
+
+@pytest.mark.parametrize("offset,status", [
+    (timedelta(days=-30), "recent"),
+    (timedelta(days=-30, microseconds=-1), "inactive"),
+    (timedelta(hours=-1), "recent"),
+    (timedelta(), "recent"),
+    (timedelta(microseconds=1), "unknown"),
+])
+@pytest.mark.parametrize("now_zone", [UTC, activity_reports.IST])
+def test_usage_is_rolling_thirty_elapsed_days_through_now(
+    client, offset, status, now_zone,
+) -> None:
+    assert client.app is not None
+    now = datetime(2026, 10, 20, 4, 30, tzinfo=UTC).astimezone(now_zone)
+    with get_session_factory()() as session:
+        _company, membership = _report_account(session, 1, active=False)
+        _activity(session, membership, now + offset)
+        session.commit()
+        report = build_activity_report(session, now=now)
+    account = report["segments"]["solo_lawyers"]["accounts"][0]
+    assert account["is_active"] is False
+    assert account["usage_status"] == status
+    expected = (
+        None if status == "unknown"
+        else (now + offset).astimezone(activity_reports.IST).isoformat()
+    )
+    assert account["last_meaningful_activity_at"] == expected
+    assert report["activity_window"]["cutoff"] == "2026-09-20T10:00:00+05:30"
+    assert report["activity_window"]["as_of"] == report["generated_at"]
+    assert report["generated_at"] == "2026-10-20T10:00:00+05:30"
+    assert report["activity_window"]["days"] == 30
+    assert report["activity_window"]["time_zone"] == "Asia/Kolkata"
+    assert report["activity_window"]["basis"] == "successful_human_audit_events"
+
+
+@pytest.mark.parametrize("action,actor,result", [
+    ("matter.created", AuditActorType.SYSTEM, AuditResult.SUCCESS),
+    ("matter.created", AuditActorType.SERVICE, AuditResult.SUCCESS),
+    ("matter.created", AuditActorType.AGENT, AuditResult.SUCCESS),
+    ("matter.created", AuditActorType.HUMAN, AuditResult.DENIED),
+    ("matter.created", AuditActorType.HUMAN, AuditResult.FAILED),
+    *[(action, AuditActorType.HUMAN, AuditResult.SUCCESS) for action in (
+        "case_tracking.poll_run", "case_tracking.update_detected",
+        "case_tracking.identity_converged",
+        "case_tracking.verification_fixture_refresh", "case_tracking.source_text_backfilled",
+        "calendar.sync.succeeded", "calendar.connection.refreshed",
+        "calendar.durable_google_calendar_sync.processed", "calendar_event_sync.drift_detected",
+        "notification.in_app.created", "mailbox.gmail.webhook_processed",
+    )],
+])
+def test_usage_ignores_background_and_unsuccessful_audits(client, action, actor, result) -> None:
+    assert client.app is not None
+    now = datetime(2026, 10, 20, 4, 30, tzinfo=UTC)
+    old = now - timedelta(days=31)
+    with get_session_factory()() as session:
+        _company, membership = _report_account(session, 1)
+        _activity(session, membership, old, action="matter.created")
+        _activity(session, membership, now, action=action, actor=actor, result=result)
+        session.commit()
+        account = build_activity_report(session, now=now)["segments"]["solo_lawyers"]["accounts"][0]
+    assert account["usage_status"] == "inactive"
+    assert account["last_meaningful_activity_at"] == (
+        old.astimezone(activity_reports.IST).isoformat()
+    )
+
+
+def test_usage_without_trusted_history_is_unknown_not_inferred_from_rows(client) -> None:
+    assert client.app is not None
+    now = datetime(2026, 10, 20, 4, 30, tzinfo=UTC)
+    with get_session_factory()() as session:
+        company, _membership = _report_account(session, 1)
+        _foreign, foreign_membership = _report_account(session, 2)
+        session.add(Matter(
+            company_id=company.id, title="Historic work", matter_code="OLD-1",
+            practice_area="Litigation", forum_level="high_court",
+            created_at=now-timedelta(days=90), updated_at=now,
+        ))
+        _activity(session, foreign_membership, now, company_id=company.id)
+        session.add(AuditEvent(
+            company_id=company.id, actor_type=AuditActorType.HUMAN,
+            actor_membership_id=None, action="matter.created", target_type="matter",
+            result=AuditResult.SUCCESS, created_at=now,
+        ))
+        session.commit()
+        report = build_activity_report(session, now=now)
+    account = next(
+        a for a in report["segments"]["solo_lawyers"]["accounts"] if a["name"] == "Practice 1"
+    )
+    assert account["current"]["active_matters"] == 1
+    assert account["periods"]["till_date"]["matters_created"] == 1
+    assert account["usage_status"] == "unknown"
+    assert account["last_meaningful_activity_at"] is None
+
+
+@pytest.mark.parametrize("action", [
+    "case_tracking.search", "ip_document.uploaded",
+    "calendar.connection.connected", "notification_preferences.user_updated",
+    "case_tracking.refresh", "case_tracking.bookmark_created", "mailbox.gmail.imported",
+    "mailbox.gmail.watch_started", "mailbox.outlook_candidate.created",
+    "domain_outbox.dead_letter.replayed", "calendar_event_sync.drift_reconciliation_decided",
+])
+def test_successful_human_business_actions_remain_meaningful(client, action) -> None:
+    assert client.app is not None
+    now = datetime(2026, 10, 20, 4, 30, tzinfo=UTC)
+    with get_session_factory()() as session:
+        _company, membership = _report_account(session, 1)
+        _activity(session, membership, now, action=action)
+        session.commit()
+        report = build_activity_report(session, now=now)
+    assert report["segments"]["solo_lawyers"]["accounts"][0]["usage_status"] == "recent"
+
+
+def test_automatic_bookmark_creation_does_not_impersonate_human_engagement(client) -> None:
+    assert client.app is not None
+    now = datetime(2026, 10, 20, 4, 30, tzinfo=UTC)
+    old = now - timedelta(days=31)
+    with get_session_factory()() as session:
+        company, membership = _report_account(session, 1)
+        matter = Matter(
+            company_id=company.id, title="Auto-link fixture", matter_code="AUTO-1",
+            practice_area="Litigation", forum_level="high_court",
+        )
+        session.add(matter)
+        session.flush()
+        _activity(session, membership, old, action="matter.created")
+        _activity(session, membership, now, action="case_tracking.bookmark_created",
+                  matter_id=matter.id)
+        session.commit()
+        report = build_activity_report(session, now=now)
+    account = report["segments"]["solo_lawyers"]["accounts"][0]
+    assert account["usage_status"] == "inactive"
+    assert account["last_meaningful_activity_at"] == (
+        old.astimezone(activity_reports.IST).isoformat()
+    )
+
+
+@pytest.mark.parametrize("include_internal_accounts", [False, True])
+def test_report_query_budget_does_not_grow_per_account(client, include_internal_accounts) -> None:
+    assert client.app is not None
+    now = datetime(2026, 10, 20, 4, 30, tzinfo=UTC)
+    with get_session_factory()() as session:
+        _company, membership = _report_account(session, 0)
+        _activity(session, membership, now)
+        session.commit()
+        engine = session.get_bind()
+
+        def observed_report():
+            statements = []
+            clauses = []
+
+            def observe(_connection, _cursor, statement, _parameters, _context, _many):
+                statements.append(statement)
+
+            def observe_clause(_connection, clause, _multiparams, _params, _options):
+                clauses.append(clause)
+
+            event.listen(engine, "before_cursor_execute", observe)
+            event.listen(engine, "before_execute", observe_clause)
+            try:
+                result = build_activity_report(
+                    session, now=now, include_internal_accounts=include_internal_accounts,
+                )
+            finally:
+                event.remove(engine, "before_cursor_execute", observe)
+                event.remove(engine, "before_execute", observe_clause)
+            assert len(statements) == 58
+            assert sum("max(audit_events.created_at)" in sql for sql in statements) == 1
+            assert len(clauses) == len(statements)
+            assert all(is_read_only_select(clause) for clause in clauses)
+            return result
+
+        first = observed_report()
+        for index in range(1, 41):
+            _company, membership = _report_account(session, index)
+            _activity(session, membership, now)
+        session.commit()
+        second = observed_report()
+    assert first["segments"]["solo_lawyers"]["company_count"] == 1
+    assert second["segments"]["solo_lawyers"]["company_count"] == 41
+
+
+def test_usage_aggregate_filters_selected_accounts_despite_heavy_excluded_history(client) -> None:
+    assert client.app is not None
+    now = datetime(2026, 10, 20, 4, 30, tzinfo=UTC)
+    with get_session_factory()() as session:
+        selected, actor = _report_account(session, 1)
+        internal, internal_actor = _report_account(session, 2)
+        internal.name = "test-legal"
+        _activity(session, actor, now - timedelta(days=31))
+        for _index in range(512):
+            _activity(session, internal_actor, now)
+        session.commit()
+        selected_id, internal_id = selected.id, internal.id
+        statements = []
+
+        def observe(_connection, clause, _multiparams, _params, _options):
+            if "max(audit_events.created_at)" in str(clause):
+                statements.append(clause)
+
+        engine = session.get_bind()
+        event.listen(engine, "before_execute", observe)
+        try:
+            report = build_activity_report(session, now=now)
+        finally:
+            event.remove(engine, "before_execute", observe)
+    assert len(statements) == 1
+    assert is_read_only_select(statements[0])
+    compiled = statements[0].compile()
+    assert "audit_events.company_id IN" in str(compiled)
+    assert compiled.params["company_id_1"] == [selected_id]
+    assert internal_id not in compiled.params["company_id_1"]
+    account = report["segments"]["solo_lawyers"]["accounts"][0]
+    assert account["company_id"] == selected_id and account["usage_status"] == "inactive"
+    assert report["excluded_account_count"] == 1
+
+
+def test_usage_empty_scope_performs_no_query(client, monkeypatch) -> None:
+    assert client.app is not None
+    with get_session_factory()() as session:
+        def forbidden_query(*_args, **_kwargs):
+            pytest.fail("Empty account scope must not execute an activity aggregate")
+
+        monkeypatch.setattr(session, "execute", forbidden_query)
+        activity_reports._populate_usage(session, {}, now=datetime(2026, 10, 20, tzinfo=UTC))
+
+
+@pytest.mark.parametrize("action", [
+    "new_worker.periodic_completed", "matter.future_automatic_maintenance",
+    "calendar.connection.future_refresh",
+])
+def test_unknown_successful_human_action_does_not_invent_engagement(client, action) -> None:
+    assert client.app is not None
+    now = datetime(2026, 10, 20, 4, 30, tzinfo=UTC)
+    with get_session_factory()() as session:
+        _company, actor = _report_account(session, 1)
+        _activity(session, actor, now, action=action)
+        session.commit()
+        report = build_activity_report(session, now=now)
+    account = report["segments"]["solo_lawyers"]["accounts"][0]
+    assert account["usage_status"] == "unknown"
+    assert account["last_meaningful_activity_at"] is None
+
+
+class _EmailText(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.text = []
+        self.disclosures = []
+        self.in_details = 0
+        self.collapsed_text = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "details":
+            self.disclosures.append(dict(attrs))
+            self.in_details += 1
+
+    def handle_endtag(self, tag):
+        if tag == "details":
+            self.in_details -= 1
+
+    def handle_data(self, data):
+        self.text.append(data)
+        if self.in_details:
+            self.collapsed_text.append(data)
+
+
+def test_email_collapses_only_known_inactive_and_preserves_complete_fallback() -> None:
+    report = _report()
+    report["activity_window"] = {
+        "days": 30, "cutoff": "2026-06-10T08:00:00+05:30",
+        "as_of": report["generated_at"], "time_zone": "Asia/Kolkata",
+        "basis": "successful_human_audit_events",
+    }
+    base = report["segments"]["law_firms"]["accounts"][0]
+    for key in ("law_firms", "general_counsels", "solo_lawyers", "other"):
+        accounts = []
+        for status in ("recent", "inactive", "unknown"):
+            account = copy.deepcopy(base)
+            account.update(
+                name=f"{key} {status} <&>", usage_status=status,
+                last_meaningful_activity_at=(
+                    None if status == "unknown" else "2026-05-01T08:00:00+05:30"
+                ),
+            )
+            accounts.append(account)
+        report["segments"][key] = {
+            "company_count": 3, "company_names": [a["name"] for a in accounts],
+            "periods": copy.deepcopy(base["periods"]), "accounts": accounts,
+        }
+    before = copy.deepcopy(report)
+    text, html = render_report(report)
+    assert report == before
+    parsed = _EmailText()
+    parsed.feed(html)
+    assert len(parsed.disclosures) == 4
+    assert all("open" not in attrs for attrs in parsed.disclosures)
+    assert html.count("<summary>") == 4
+    assert "2026-06-10T08:00:00+05:30" in html and "2026-06-10T08:00:00+05:30" in text
+    assert "Usage: Unknown" in text and "No recorded meaningful activity" in html
+    assert "<script" not in html and "onclick=" not in html
+    assert "display:none" not in html.replace(" ", "")
+    fallback = " ".join(parsed.text)  # No disclosure/CSS semantics: all retained text is readable.
+    for segment in report["segments"].values():
+        for account in segment["accounts"]:
+            assert account["name"] in text and account["name"] in fallback
+            assert (account["name"] in " ".join(parsed.collapsed_text)) == (
+                account["usage_status"] == "inactive"
+            )
+    assert ">12</strong><span>Total accounts" in html
 
 
 @pytest.fixture

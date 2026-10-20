@@ -37,6 +37,7 @@ export default defineConfig({
     /baad-appeal\.spec\.ts/,
     /oc-portal\.spec\.ts/,
     /portal-invite-access\.spec\.ts/,
+    /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
     /bootstrap-and-upload\.spec\.ts/,
     /m2-polish\.spec\.ts/,
     /intake\.spec\.ts/,
@@ -141,7 +142,10 @@ export default defineConfig({
     {
       name: "app-mobile",
       grep: /\[mobile\]/,
-      testMatch: [/mobile-responsive\.spec\.ts/],
+      testMatch: [
+        /mobile-responsive\.spec\.ts/,
+        /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
+      ],
       use: {
         ...devices["Pixel 5"],
       },

@@ -8,7 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.core.settings import get_settings
@@ -2311,6 +2311,29 @@ def _extract_first(payload: dict[str, object], *keys: str) -> str | None:
     return None
 
 
+def platform_mrr_minor(session: Session) -> int:
+    # Catalogue interval alternatives are not additional subscriptions.
+    prices = session.execute(
+        select(BillingPlanPrice.interval, func.sum(BillingPlanPrice.amount_minor))
+        .join(
+            BillingSubscription,
+            and_(
+                BillingSubscription.plan_version_id == BillingPlanPrice.plan_version_id,
+                BillingSubscription.billing_interval == BillingPlanPrice.interval,
+            ),
+        )
+        .where(
+            BillingSubscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES),
+            BillingPlanPrice.interval.in_(("month", "year")),
+        )
+        .group_by(BillingPlanPrice.interval)
+    )
+    return sum(
+        int(amount or 0) if interval == "month" else round(int(amount or 0) / 12)
+        for interval, amount in prices
+    )
+
+
 def platform_overview(session: Session) -> PlatformOverviewResponse:
     active_subscriptions = int(
         session.scalar(
@@ -2336,25 +2359,7 @@ def platform_overview(session: Session) -> PlatformOverviewResponse:
         )
         or 0
     )
-    monthly_rows = list(
-        session.execute(
-            select(BillingPlanPrice.interval, func.sum(BillingPlanPrice.amount_minor))
-            .join(BillingPlanVersion, BillingPlanVersion.id == BillingPlanPrice.plan_version_id)
-            .join(
-                BillingSubscription,
-                BillingSubscription.plan_version_id == BillingPlanVersion.id,
-            )
-            .where(BillingSubscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES))
-            .group_by(BillingPlanPrice.interval)
-        )
-    )
-    mrr = 0
-    for interval, amount in monthly_rows:
-        value = int(amount or 0)
-        if interval == "month":
-            mrr += value
-        elif interval == "year":
-            mrr += round(value / 12)
+    mrr = platform_mrr_minor(session)
     profit_rows = list(session.scalars(select(BillingProfitRollup)))
     recognized = sum(row.recognized_revenue_minor for row in profit_rows)
     gross_revenue = sum(row.gross_revenue_minor for row in profit_rows)
@@ -2617,20 +2622,22 @@ def platform_provider_events(
     ]
 
 
-def platform_usage_report(session: Session) -> list[dict[str, Any]]:
-    rows = list(
-        session.execute(
-            select(
-                BillingUsageAttribution.company_id,
-                BillingUsageAttribution.feature_key,
-                func.coalesce(func.sum(BillingUsageAttribution.provider_units), 0),
-                func.coalesce(func.sum(BillingUsageAttribution.credits_debited), 0),
-                func.coalesce(func.sum(BillingUsageAttribution.estimated_internal_cost_minor), 0),
-            )
-            .group_by(BillingUsageAttribution.company_id, BillingUsageAttribution.feature_key)
-            .order_by(BillingUsageAttribution.company_id.asc())
+def platform_usage_report_statement():
+    return (
+        select(
+            BillingUsageAttribution.company_id,
+            BillingUsageAttribution.feature_key,
+            func.coalesce(func.sum(BillingUsageAttribution.provider_units), 0),
+            func.coalesce(func.sum(BillingUsageAttribution.credits_debited), 0),
+            func.coalesce(func.sum(BillingUsageAttribution.estimated_internal_cost_minor), 0),
         )
+        .group_by(BillingUsageAttribution.company_id, BillingUsageAttribution.feature_key)
+        .order_by(BillingUsageAttribution.company_id.asc())
     )
+
+
+def platform_usage_report(session: Session) -> list[dict[str, Any]]:
+    rows = list(session.execute(platform_usage_report_statement()))
     return [
         {
             "company_id": company_id,
@@ -2643,14 +2650,16 @@ def platform_usage_report(session: Session) -> list[dict[str, Any]]:
     ]
 
 
-def platform_profit_report(session: Session) -> list[dict[str, Any]]:
-    rows = list(
-        session.execute(
-            select(BillingProfitRollup, Company.name)
-            .join(Company, BillingProfitRollup.company_id == Company.id, isouter=True)
-            .order_by(BillingProfitRollup.period_start.desc(), BillingProfitRollup.company_id.asc())
-        )
+def platform_profit_report_statement():
+    return (
+        select(BillingProfitRollup, Company.name)
+        .join(Company, BillingProfitRollup.company_id == Company.id, isouter=True)
+        .order_by(BillingProfitRollup.period_start.desc(), BillingProfitRollup.company_id.asc())
     )
+
+
+def platform_profit_report(session: Session) -> list[dict[str, Any]]:
+    rows = list(session.execute(platform_profit_report_statement()))
     return [_profit_rollup_record(row, company_name=company_name) for row, company_name in rows]
 
 

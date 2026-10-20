@@ -147,6 +147,11 @@
   },
   "table_policy_profile_overrides": {
     "ai_feedback_items": "tenant_operational_record",
+    "platform_report_admins": "security_identity_control",
+    "platform_console_sessions": "security_identity_control",
+    "platform_console_tokens": "security_identity_control",
+    "platform_console_deliveries": "security_identity_control",
+    "platform_report_audit_events": "security_identity_control",
     "ip_cost_item_corrections": "tenant_restricted_legal_content",
     "legal_hold_release_requests": "security_identity_control",
     "private_index_generations": "security_identity_control",
@@ -160,6 +165,20 @@
     "private_index_projections": "private_retrieval_disposition"
   },
   "column_category_overrides": {
+    "platform_console_sessions": {
+      "csrf_hash": "security_secret_or_credential",
+      "credential_hash": "security_secret_or_credential",
+      "factor_hash": "security_secret_or_credential"
+    },
+    "platform_console_tokens": {
+      "credential_hash": "security_secret_or_credential"
+    },
+    "platform_console_deliveries": {
+      "claim_hash": "security_secret_or_credential"
+    },
+    "platform_report_audit_events": {
+      "reason": "privileged_or_raw_content"
+    },
     "matter_compliance_extraction_runs": {
       "persistence_protocol": "configuration_or_state_metadata"
     },
@@ -320,6 +339,11 @@
     }
   },
   "table_purpose_overrides": {
+    "platform_report_admins": "Global operational reports-only grants linked to an existing or explicitly invited User, the configured founder provenance and, for viewers, the inviting report manager. Manager/viewer roles, pending/active/revoked status and credential epoch are not tenant membership, client-document access, founder billing authority or impersonation. This security class also owns encrypted realm-specific TOTP enrollment, accepted counter, hashed single-use recovery codes and bounded factor-failure lockout metadata. Passwords remain in the existing User credential class; ordinary tenant login and founder seeding do not create these grants. Named initial provisioning is a separately admitted post-release operational action, never startup seeding. No retention or disposition authority is added.",
+    "platform_console_sessions": "Reports-only session admission receipts: hashed random session and CSRF identities, credential/factor fingerprints, grant epoch, challenge/authenticated purpose, issue/expiry and revocation times. The independent audience/issuer and HttpOnly cookie cannot authorize tenant, portal or founder routes. Each request rechecks current grant, root, user and credential validity; MFA is required for cross-account reports. Session expiry limits authentication, not storage retention or deletion. No raw cookie, bearer token, password or MFA secret is stored here.",
+    "platform_console_tokens": "Hash-only, expiring, single-use report-console invitation and password-reset receipts bound to current report grant epoch and credential fingerprint. Link consumption, revocation and issue/expiry metadata prevent stale or repeated acceptance. A pending new identity may initialize a password; an invitation to an existing identity must prove its existing credential, not silently overwrite it. Reset changes the authoritative User credential/session fence without granting tenant membership or bypassing report MFA. Link expiry is not a record deletion policy.",
+    "platform_console_deliveries": "Durable, bounded pre-transport claims for report-console invitation/reset email. Only token receipt identity, claim digest/expiry, pending/accepted/failed/unknown outcome, sanitized error code and optional provider message identifier are stored. Sender inputs are captured before commit and transport owns no SQL transaction. Expired/uncertain claims are reconciled as unknown, never automatically resent. Provider acceptance is not mailbox delivery, link use or account activation. The raw one-use link is disclosed to SendGrid and the requested mailbox under the separately inventoried provider class, not persisted in this SQL class. No provider/mailbox deletion or approved retention period is added.",
+    "platform_report_audit_events": "Global security and operational report access evidence: report administrator and User identifiers, fixed action/result, bounded target identifier, timestamps and optional operator reason. It records delegation, authentication/MFA, link/delivery outcomes, revocation and report reads without copying tenant audit payloads, client documents, passwords or raw links. Free-text reasons are potentially sensitive and are not report content or a generic cross-tenant export. Existing registry_fail_closed retention/disposition restrictions remain; no automated purge or new legal hold activation is authorized.",
     "billing_subscriptions": "Existing subscription and entitlement state. The explicit test-legal-only nonbillable manual-IP operator updates the existing ip_workspace override and normal timestamp under tenant-first locking, preserving all other billing/provider/plan/status/override fields. Exact identifiers and before-state fingerprint fence one retained authorization; no default or scheduled grant, account creation or paid activation is introduced.",
     "audit_events": "Existing audit evidence. The manual-IP QA operator inserts one deterministic, immutable receipt atomically with the existing subscription override. Minimal operation/tenant/subscription identifiers and request/before/after fingerprints preserve attribution without contact, legal or credential content. Consumed replay cannot regrant revoked access; existing retention, hold and disposition restrictions are unchanged.",
     "matter_bulk_update_operations": "Tenant-scoped bulk-update operation history. Forward revision 20260925_0001 adds row_results_json to databases that applied 20260924_0001 before that column was introduced; historical rows receive an empty result list rather than invented row evidence.",
@@ -333,6 +357,30 @@
     "rule": "A changed Alembic migration or registered storage/provider/telemetry boundary must change this map and use the migration marker. A future runtime operation may replace the fail-closed handler only after the required machine policy, dry-run, and exact-release checks pass."
   },
   "non_sql_data_classes": [
+    {
+      "legal_policy_basis": "Owner-requested operational report-console invitation/reset workflow dated 2026-10-20; this inventory is not an asserted platform-wide legal basis, approved subprocessor policy, tenant consent or data-disposition activation.",
+      "default_retention": "No approved provider/mailbox retention duration. One-use links expire for authentication but mailbox copies and provider records are not deleted by link expiry. Keep existing security receipts under their registered fail-closed SQL owners.",
+      "tenant_configurable": false,
+      "tenant_retention_bounds": "No tenant retention override or per-tenant export boundary is introduced.",
+      "disposition": "registry_fail_closed inventories this disclosure without performing deletion, expiry, purge, export, offboarding or provider disposition.",
+      "hold_behavior": "No hold is activated or executed; any future approved hold must prevent conflicting disposition.",
+      "region_subprocessor": "SendGrid receives the sender, invited or resetting recipient email/name, fixed subject and one-use setup/reset link in a bounded HTTPS mail/send request; the recipient mailbox subsequently holds that message. Endpoint location is not a residency guarantee. Transfers, subprocessors and mailbox/provider retention require their existing reviewed terms and applicable policy; no guarantee is asserted.",
+      "owner": "Codex",
+      "disposition_handler_id": "registry_fail_closed",
+      "status": "inventory_registered_runtime_policy_unapproved",
+      "id": "platform-console-account-link-delivery",
+      "kind": "provider_held_object",
+      "purpose": "Security-sensitive email for reports-only administrator invitations and password reset. No raw password, TOTP secret, recovery code, client content, report body or tenant audit payload is sent. Raw link material exists in process memory and the outbound message, while SQL retains its digest, expiry/consumption, current credential/grant fingerprint and bounded delivery claim/outcome only. Existing identities prove their current password when accepting an invitation; a password reset is a separate one-use operation and never bypasses MFA.",
+      "sensitivity": "restricted_authentication_link_and_personal_contact_data",
+      "source_licence_limits": "An explicitly admitted manager invitation or user-initiated generic reset request is required. Transport must not retain a database transaction, expose link material through logs/referrers or bypass suppression. An unknown or expired transport claim cannot be automatically replayed. Provider HTTP acceptance is not delivery, identity ownership, link consumption or MFA enrollment. Automated local acceptance uses a production-ineligible deterministic mail fixture, not a real provider send.",
+      "implementation_refs": [
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/core/console_auth.py",
+        "apps/api/src/caseops_api/services/platform_console.py",
+        "apps/api/src/caseops_api/services/sendgrid_transport.py",
+        "docs/platform-report-admin-2026-10-20.md"
+      ]
+    },
     {
       "legal_policy_basis": "Pending named Records/Privacy/Legal/Security approval; this inventory is not an asserted legal retention basis or policy activation.",
       "default_retention": "No approved automated retention duration. Do not schedule deletion, expiry, provider deletion, or backup destruction from this registry.",
@@ -603,7 +651,7 @@
       "status": "inventory_registered_runtime_policy_unapproved",
       "id": "operational-activity-report-delivery",
       "kind": "provider_held_object",
-      "purpose": "Existing cross-account operational dashboard email, not a new SQL or object-storage class. It reports named law-firm and corporate-legal accounts (including inactive accounts), active/inactive status, per-account and segment activity counts, billable hours, INR invoicing/collection/outstanding values, document counts/storage and current workload snapshots. Completed day/week/month and till-date windows use Asia/Kolkata. Accounts with smoke/csrf/test/debug/e2e in their names are excluded; this name filter is not an authorization boundary. The 2026-10-20 correction changes the existing job from 08:00 to 07:30 and from one configured recipient to at most four validated, ordered, case-insensitively unique semicolon-separated recipients. The legacy single-address default remains supported.",
+      "purpose": "Existing cross-account operational dashboard email, not a new SQL or object-storage class. It reports named law-firm, corporate-legal and solo-lawyer accounts (including inactive accounts), active/inactive status, per-account and segment activity counts, billable hours, INR invoicing/collection/outstanding values, document counts/storage and current workload snapshots. Unknown persisted categories remain explicit rather than omitted. Completed day/week/month and till-date metric windows use Asia/Kolkata. Dormancy separately uses evidenced meaningful successful human engagement over the rolling 30 elapsed days ending at generated_at; unknown history is not asserted inactive. Collapsed presentation retains all accounts and totals, with full plain-text and markup-stripped email fallbacks and no universal email-client collapse guarantee. Accounts with smoke/csrf/test/debug/e2e in their names remain excluded; this name filter is not an authorization boundary. The 2026-10-20 correction changes the existing job from 08:00 to 07:30 and from one configured recipient to at most four validated, ordered, case-insensitively unique semicolon-separated recipients. The legacy single-address default remains supported.",
       "sensitivity": "confidential_cross_account_operational_and_financial_data",
       "source_licence_limits": "An existing operator-controlled cross-account disclosure, not a tenant-scoped export. Only rendered account summaries are sent: no document bytes/text, matter titles, individual user identities, raw audit payloads or credentials. Recipient addresses are personal/contact data. Each personalization has one To and no CC/BCC, hiding other recipients from each recipient, not from SendGrid. Invalid/control/display-name/empty/over-limit addresses are rejected before transport without DNS queries. This map records actual behavior, not a new legal basis, provider approval, tenant consent, generic export permission or suppression bypass.",
       "access_boundary": "The scheduled caseops-send-activity-report command reads across account SQL records using the existing job's database credentials and runtime service account; it is not a tenant-scoped export or an interactive tenant-user endpoint. Operator configuration selects recipients; there is no per-recipient tenant ACL or per-tenant consent check in this sender. The four explicitly requested operational recipients are below. Email delivery gives each recipient the same cross-account content. No new user capability or entitlement is introduced.",
@@ -25100,6 +25148,188 @@
       }
     },
     {
+      "id": "platform_console_deliveries",
+      "table_name": "platform_console_deliveries",
+      "purpose": "Durable, bounded pre-transport claims for report-console invitation/reset email. Only token receipt identity, claim digest/expiry, pending/accepted/failed/unknown outcome, sanitized error code and optional provider message identifier are stored. Sender inputs are captured before commit and transport owns no SQL transaction. Expired/uncertain claims are reconciled as unknown, never automatically resent. Provider acceptance is not mailbox delivery, link use or account activation. The raw one-use link is disclosed to SendGrid and the requested mailbox under the separately inventoried provider class, not persisted in this SQL class. No provider/mailbox deletion or approved retention period is added.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "claim_expires_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "claim_hash": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "completed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "error_code": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "provider_message_id": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(255)",
+          "nullable": true
+        },
+        "started_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "token_id": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "platform_console_sessions",
+      "table_name": "platform_console_sessions",
+      "purpose": "Reports-only session admission receipts: hashed random session and CSRF identities, credential/factor fingerprints, grant epoch, challenge/authenticated purpose, issue/expiry and revocation times. The independent audience/issuer and HttpOnly cookie cannot authorize tenant, portal or founder routes. Each request rechecks current grant, root, user and credential validity; MFA is required for cross-account reports. Session expiry limits authentication, not storage retention or deletion. No raw cookie, bearer token, password or MFA secret is stored here.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "auth_epoch": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "credential_hash": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "csrf_hash": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "expires_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "factor_hash": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "issued_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "purpose": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "report_admin_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "revoked_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "secret_hash": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "platform_console_tokens",
+      "table_name": "platform_console_tokens",
+      "purpose": "Hash-only, expiring, single-use report-console invitation and password-reset receipts bound to current report grant epoch and credential fingerprint. Link consumption, revocation and issue/expiry metadata prevent stale or repeated acceptance. A pending new identity may initialize a password; an invitation to an existing identity must prove its existing credential, not silently overwrite it. Reset changes the authoritative User credential/session fence without granting tenant membership or bypassing report MFA. Link expiry is not a record deletion policy.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "auth_epoch": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "consumed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "credential_hash": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "expires_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "purpose": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "report_admin_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "revoked_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "token_hash": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "platform_operational_readiness_evidence",
       "table_name": "platform_operational_readiness_evidence",
       "purpose": "Repository SQL persistence class `platform_operational_readiness_evidence`; its exact column inventory is intentionally versioned below.",
@@ -25175,6 +25405,154 @@
           "category_id": "temporal_or_version_metadata",
           "sql_type": "DATETIME",
           "nullable": false
+        }
+      }
+    },
+    {
+      "id": "platform_report_admins",
+      "table_name": "platform_report_admins",
+      "purpose": "Global operational reports-only grants linked to an existing or explicitly invited User, the configured founder provenance and, for viewers, the inviting report manager. Manager/viewer roles, pending/active/revoked status and credential epoch are not tenant membership, client-document access, founder billing authority or impersonation. This security class also owns encrypted realm-specific TOTP enrollment, accepted counter, hashed single-use recovery codes and bounded factor-failure lockout metadata. Passwords remain in the existing User credential class; ordinary tenant login and founder seeding do not create these grants. Named initial provisioning is a separately admitted post-release operational action, never startup seeding. No retention or disposition authority is added.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "auth_epoch": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "created_by_report_admin_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "encrypted_totp_secret": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "initializes_password": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "last_totp_counter": {
+          "category_id": "domain_attribute",
+          "sql_type": "BIGINT",
+          "nullable": true
+        },
+        "login_failures": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "login_locked_until": {
+          "category_id": "domain_attribute",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "mfa_failures": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "mfa_locked_until": {
+          "category_id": "domain_attribute",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "mfa_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "recovery_code_hashes": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "role": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "root_platform_admin_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "user_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "platform_report_audit_events",
+      "table_name": "platform_report_audit_events",
+      "purpose": "Global security and operational report access evidence: report administrator and User identifiers, fixed action/result, bounded target identifier, timestamps and optional operator reason. It records delegation, authentication/MFA, link/delivery outcomes, revocation and report reads without copying tenant audit payloads, client documents, passwords or raw links. Free-text reasons are potentially sensitive and are not report content or a generic cross-tenant export. Existing registry_fail_closed retention/disposition restrictions remain; no automated purge or new legal hold activation is authorized.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "action": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(100)",
+          "nullable": false
+        },
+        "actor_user_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "reason": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "report_admin_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "result": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "target_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
         }
       }
     },
@@ -30529,6 +30907,11 @@
           "category_id": "security_secret_or_credential",
           "sql_type": "VARCHAR(512)",
           "nullable": false
+        },
+        "sessions_valid_after": {
+          "category_id": "domain_attribute",
+          "sql_type": "DATETIME",
+          "nullable": true
         }
       }
     },
@@ -30607,12 +30990,12 @@
       }
     }
   ],
-  "schema_fingerprint": "de637a251f88b4ac6c82e6e865224213f53fb14ae81c115cd24095903ab44574",
+  "schema_fingerprint": "41e0caf4fad57829a96cf6ee3364c1425051454f30a5858a41610f40559adc8a",
   "index_inventory": {
-    "orm_index_count": 1778,
-    "orm_index_fingerprint": "69e3e3ef77bb48f26d78f5e1799e01c6a81adf704475659901b4b5d26bd1278c",
-    "migration_index_count": 1562,
-    "migration_index_fingerprint": "7f6b068cd1587d7051c810ceb0dd8553a2f76232fe71844393324777d313a2ce",
+    "orm_index_count": 1787,
+    "orm_index_fingerprint": "104d75f14f54ed97a99cc2d4841bdd8d6ed80e0adc597d9c41514d98bdfc917d",
+    "migration_index_count": 1571,
+    "migration_index_fingerprint": "15b6a420017a9985977ecdccd20dbf9c4f54279c480ba1023ad0a357986cb152",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

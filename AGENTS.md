@@ -1,5 +1,50 @@
 # CaseOps agent instructions
 
+- Cross-dialect report acceptance must use populated canonical API responses,
+  not only empty pages or simplified frontend fixtures. SQLite can return naive
+  datetimes from UTC persistence; normalize known UTC fields at the response
+  boundary without relaxing offset-aware frontend validation. Prove every
+  report type, persisted dates and visible amounts after reload on both dialects.
+- A fresh one-use setup or reset link can navigate within the same browser
+  pathname without remounting React. Consume and scrub that new fragment,
+  discard the previous form and fence stale responses. A forced page reload in
+  the regression would hide the original failure.
+- Replaying an invitation must not send another email, rotate its token or
+  reactivate a revoked grant. Retain the original delivery's actual state,
+  including failed or unknown sends. Only an explicit, bounded pending-link
+  resend may issue a replacement; prove overlapping requests on PostgreSQL.
+- A financial display regression must compare independent literal amounts,
+  including sub-rupee costs, rather than reuse the formatter under test. Retain
+  paise in recorded reports and provider unit warnings; rounding a positive
+  charge to zero is not an acceptable dashboard simplification.
+- An invalid MFA factor is not proof that its verification session was revoked.
+  Exercise the real API client with its session provider, not only a mocked
+  verification method. Preserve explicit retry only for the exact typed factor
+  refusal; expired, revoked, malformed and unrelated 401 responses still clear
+  access. Never reflect error-body secrets or retry verification automatically.
+
+- Session-revocation acceptance must isolate the credential being probed. A
+  password-reset response can set a fresh cookie that correctly takes priority
+  over a stale Bearer header. Prove that precedence control, clear the cookie,
+  then reject every retained tenant token and report session independently;
+  preserve the original failed evidence rather than changing auth precedence.
+- Cross-account reports must reconcile every persisted account category across
+  source selection, segment construction, totals, HTML and plain text. A test
+  with only law-firm and corporate fixtures cannot prove solo-lawyer coverage.
+  Inactivity is evidenced human engagement over an explicit rolling window,
+  not an account enablement flag, a completed calendar month, a polling audit
+  or an arbitrary update timestamp. Collapsing a group must not remove its
+  accounts or metrics, and email-client limitations remain explicit.
+- Delegated operational reporting is not founder authority or tenant access.
+  Keep its principal, token realm, cookies, MFA and live revocation fence
+  explicit; never fabricate a tenant membership or widen founder-only billing
+  mutations to make an admin dashboard convenient. Invitation/reset acceptance
+  and report reads need negative cross-realm and stale-grant regressions.
+- Public validation errors must retain field locations and actionable messages,
+  never submitted input objects or validator contexts. Passwords and one-use
+  tokens can otherwise be reflected in a nested 422 response. Prove this at
+  the shared HTTP handler, not only in a form's error presentation.
+
 - Before starting an expensive replacement release gate, read the latest
   source-bound CI failure handoff and current required-check state. A known
   failed security gate is not an in-progress gate. Preserve and supersede the

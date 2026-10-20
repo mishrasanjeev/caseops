@@ -12554,6 +12554,261 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-console/admins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admins */
+        get: operations["admins_api_platform_console_admins_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/admins/{admin_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke */
+        post: operations["revoke_api_platform_console_admins__admin_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/admins/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Invite */
+        post: operations["invite_api_platform_console_admins_invitations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/auth/invitations/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Invitation */
+        post: operations["complete_invitation_api_platform_console_auth_invitations_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/auth/invitations/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resend Invitation */
+        post: operations["resend_invitation_api_platform_console_auth_invitations_resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Login */
+        post: operations["login_api_platform_console_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout */
+        post: operations["logout_api_platform_console_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/auth/mfa/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enroll */
+        post: operations["enroll_api_platform_console_auth_mfa_enroll_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/auth/mfa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify */
+        post: operations["verify_api_platform_console_auth_mfa_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/auth/password-reset/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Reset */
+        post: operations["complete_reset_api_platform_console_auth_password_reset_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/auth/password-reset/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Reset */
+        post: operations["start_reset_api_platform_console_auth_password_reset_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current Session */
+        get: operations["current_session_api_platform_console_auth_session_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/reports/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Financial Report */
+        get: operations["financial_report_api_platform_console_reports__kind__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/reports/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Activity */
+        get: operations["activity_api_platform_console_reports_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/reports/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Overview Report */
+        get: operations["overview_report_api_platform_console_reports_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/portal/auth/logout": {
         parameters: {
             query?: never;
@@ -13993,6 +14248,175 @@ export interface components {
             password: string;
             /** Token */
             token: string;
+        };
+        /** ActivityAccount */
+        ActivityAccount: {
+            /** Company Id */
+            company_id: string;
+            /** Company Type */
+            company_type: string;
+            current: components["schemas"]["ActivitySnapshot"];
+            /** Is Active */
+            is_active: boolean;
+            /** Last Meaningful Activity At */
+            last_meaningful_activity_at: string | null;
+            /** Name */
+            name: string;
+            periods: components["schemas"]["ActivityPeriods"];
+            /**
+             * Usage Status
+             * @enum {string}
+             */
+            usage_status: "recent" | "inactive" | "unknown";
+        };
+        /** ActivityMetrics */
+        ActivityMetrics: {
+            /** Audit Events */
+            audit_events: number;
+            /** Billable Hours */
+            billable_hours: number;
+            /** Collections Minor */
+            collections_minor: number;
+            /** Documents Uploaded */
+            documents_uploaded: number;
+            /** Failed Or Denied Events */
+            failed_or_denied_events: number;
+            /** Hearings Created */
+            hearings_created: number;
+            /** Invoiced Amount Minor */
+            invoiced_amount_minor: number;
+            /** Invoices Issued */
+            invoices_issued: number;
+            /** Matters Created */
+            matters_created: number;
+            /** Notices Received */
+            notices_received: number;
+            /** Notices Sent */
+            notices_sent: number;
+            /** Payments Received */
+            payments_received: number;
+            /** Tasks Completed */
+            tasks_completed: number;
+            /** Tasks Created */
+            tasks_created: number;
+            /** Time Entries */
+            time_entries: number;
+            /** Users Added */
+            users_added: number;
+        };
+        /** ActivityPeriodBounds */
+        ActivityPeriodBounds: {
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Start Date */
+            start_date: string | null;
+        };
+        /** ActivityPeriods */
+        ActivityPeriods: {
+            day: components["schemas"]["ActivityMetrics"];
+            month: components["schemas"]["ActivityMetrics"];
+            till_date: components["schemas"]["ActivityMetrics"];
+            week: components["schemas"]["ActivityMetrics"];
+        };
+        /** ActivityReportingPeriods */
+        ActivityReportingPeriods: {
+            day: components["schemas"]["ActivityPeriodBounds"];
+            month: components["schemas"]["ActivityPeriodBounds"];
+            till_date: components["schemas"]["ActivityPeriodBounds"];
+            week: components["schemas"]["ActivityPeriodBounds"];
+        };
+        /** ActivityReportResponse */
+        ActivityReportResponse: {
+            /**
+             * Account Scope
+             * @enum {string}
+             */
+            account_scope: "all_registered_accounts" | "operational_email";
+            activity_window: components["schemas"]["ActivityWindow"];
+            /** Excluded Account Count */
+            excluded_account_count: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            reporting_periods: components["schemas"]["ActivityReportingPeriods"];
+            segments: components["schemas"]["ActivitySegments"];
+        };
+        /** ActivitySegment */
+        ActivitySegment: {
+            /** Accounts */
+            accounts: components["schemas"]["ActivityAccount"][];
+            /** Company Count */
+            company_count: number;
+            /** Company Names */
+            company_names: string[];
+            periods: components["schemas"]["ActivityPeriods"];
+        };
+        /** ActivitySegments */
+        ActivitySegments: {
+            general_counsels: components["schemas"]["ActivitySegment"];
+            law_firms: components["schemas"]["ActivitySegment"];
+            other: components["schemas"]["ActivitySegment"];
+            solo_lawyers: components["schemas"]["ActivitySegment"];
+        };
+        /** ActivitySnapshot */
+        ActivitySnapshot: {
+            /** Active Matters */
+            active_matters: number;
+            /** Active Users */
+            active_users: number;
+            /** Documents Total */
+            documents_total: number;
+            /** Open Invoices */
+            open_invoices: number;
+            /** Open Notices */
+            open_notices: number;
+            /** Open Tasks */
+            open_tasks: number;
+            /** Outstanding Amount Minor */
+            outstanding_amount_minor: number;
+            /** Overdue Notice Replies */
+            overdue_notice_replies: number;
+            /** Overdue Tasks */
+            overdue_tasks: number;
+            /** Storage Bytes */
+            storage_bytes: number;
+            /** Upcoming Hearings 30D */
+            upcoming_hearings_30d: number;
+        };
+        /** ActivityWindow */
+        ActivityWindow: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Basis
+             * @constant
+             */
+            basis: "successful_human_audit_events";
+            /**
+             * Cutoff
+             * Format: date-time
+             */
+            cutoff: string;
+            /**
+             * Days
+             * @constant
+             */
+            days: 30;
+            /** Limitations */
+            limitations: string;
+            /**
+             * Time Zone
+             * @constant
+             */
+            time_zone: "Asia/Kolkata";
         };
         /** AddOnCheckoutRequest */
         AddOnCheckoutRequest: {
@@ -19270,6 +19694,381 @@ export interface components {
         ConnectorRegistryResponse: {
             /** Connectors */
             connectors: components["schemas"]["ConnectorRecord"][];
+        };
+        /** ConsoleAcceptedResponse */
+        ConsoleAcceptedResponse: {
+            /**
+             * Status
+             * @default accepted
+             * @constant
+             */
+            status: "accepted";
+        };
+        /** ConsoleAdminRecord */
+        ConsoleAdminRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email: string;
+            /** Full Name */
+            full_name: string;
+            /** Id */
+            id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "manager" | "viewer";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "active" | "revoked";
+        };
+        /** ConsoleAdminSelf */
+        ConsoleAdminSelf: {
+            /** Email */
+            email: string;
+            /** Full Name */
+            full_name: string;
+            /** Id */
+            id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "manager" | "viewer";
+        };
+        /** ConsoleAdminsResponse */
+        ConsoleAdminsResponse: {
+            /** Items */
+            items: components["schemas"]["ConsoleAdminRecord"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** ConsoleAuthState */
+        ConsoleAuthState: {
+            admin: components["schemas"]["ConsoleAdminSelf"] | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Recovery Codes */
+            recovery_codes?: string[] | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "mfa_enrollment_required" | "mfa_challenge_required" | "authenticated";
+        };
+        /** ConsoleCompanyProfitRecord */
+        ConsoleCompanyProfitRecord: {
+            /** Case Refresh Cost Minor */
+            case_refresh_cost_minor: number | null;
+            /** Company Id */
+            company_id: string;
+            /** Company Name */
+            company_name: string;
+            /** Discounts Minor */
+            discounts_minor: number | null;
+            /** Document Processing Cost Minor */
+            document_processing_cost_minor: number | null;
+            /** Embedding Cost Minor */
+            embedding_cost_minor: number | null;
+            /** Gross Margin Bps */
+            gross_margin_bps: number | null;
+            /** Gross Profit Minor */
+            gross_profit_minor: number | null;
+            /** Gross Revenue Minor */
+            gross_revenue_minor: number | null;
+            /** Llm Cost Minor */
+            llm_cost_minor: number | null;
+            /** Loss Risk */
+            loss_risk: boolean | null;
+            /** Manual Research Cost Minor */
+            manual_research_cost_minor: number | null;
+            /** Manual Support Cost Minor */
+            manual_support_cost_minor: number | null;
+            /** Payment Gateway Cost Minor */
+            payment_gateway_cost_minor: number | null;
+            /** Payment Provider Cost Minor */
+            payment_provider_cost_minor: number | null;
+            /** Recognized Revenue Minor */
+            recognized_revenue_minor: number | null;
+            /** Rollup Count */
+            rollup_count: number;
+            /** Storage Cost Minor */
+            storage_cost_minor: number | null;
+            /** Tax Minor */
+            tax_minor: number | null;
+            /** Total Variable Cost Minor */
+            total_variable_cost_minor: number | null;
+        };
+        /** ConsoleCostGuardrailAlert */
+        ConsoleCostGuardrailAlert: {
+            /** Category */
+            category: string;
+            /** Message */
+            message: string;
+            /** Provider */
+            provider: string;
+            /**
+             * Severity
+             * @constant
+             */
+            severity: "warning";
+            /**
+             * Type
+             * @constant
+             */
+            type: "case_refresh_cost_guardrail";
+            /** Unit Amount Minor */
+            unit_amount_minor: number;
+        };
+        /** ConsoleEmptyRequest */
+        ConsoleEmptyRequest: Record<string, never>;
+        /** ConsoleInvitationResponse */
+        ConsoleInvitationResponse: {
+            admin: components["schemas"]["ConsoleAdminRecord"];
+            /**
+             * Delivery Status
+             * @enum {string}
+             */
+            delivery_status: "pending" | "accepted" | "failed" | "outcome_unknown";
+        };
+        /** ConsoleInviteCompleteRequest */
+        ConsoleInviteCompleteRequest: {
+            /** Full Name */
+            full_name: string;
+            /** Password */
+            password: string;
+            /** Token */
+            token: string;
+        };
+        /** ConsoleInviteRequest */
+        ConsoleInviteRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Full Name */
+            full_name: string;
+        };
+        /** ConsoleLoginRequest */
+        ConsoleLoginRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Password */
+            password: string;
+        };
+        /** ConsoleLogoutResponse */
+        ConsoleLogoutResponse: {
+            /**
+             * Status
+             * @default signed_out
+             * @constant
+             */
+            status: "signed_out";
+        };
+        /** ConsoleMarginAlert */
+        ConsoleMarginAlert: {
+            /** Company Id */
+            company_id: string;
+            /** Gross Margin Bps */
+            gross_margin_bps: number | null;
+            /** Gross Profit Minor */
+            gross_profit_minor: number;
+        };
+        /** ConsoleMFAEnrollmentResponse */
+        ConsoleMFAEnrollmentResponse: {
+            /** Otpauth Url */
+            otpauth_url: string;
+            /** Secret */
+            secret: string;
+        };
+        /** ConsoleMFAVerifyRequest */
+        ConsoleMFAVerifyRequest: {
+            /** Code */
+            code?: string | null;
+            /** Recovery Code */
+            recovery_code?: string | null;
+        };
+        /** ConsoleOKResponse */
+        ConsoleOKResponse: {
+            /**
+             * Status
+             * @default complete
+             * @constant
+             */
+            status: "complete";
+        };
+        /** ConsoleOverviewResponse */
+        ConsoleOverviewResponse: {
+            /** Active Subscriptions */
+            active_subscriptions: number;
+            /** Arr Minor */
+            arr_minor: number;
+            /**
+             * Coverage
+             * @default recorded_rollups
+             * @constant
+             */
+            coverage: "recorded_rollups";
+            /** Failed Payments */
+            failed_payments: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Gross Margin Bps */
+            gross_margin_bps: number | null;
+            /** Gross Profit Minor */
+            gross_profit_minor: number | null;
+            /** Gross Revenue Minor */
+            gross_revenue_minor: number | null;
+            /** Margin Alerts */
+            margin_alerts: (components["schemas"]["ConsoleMarginAlert"] | components["schemas"]["ConsoleCostGuardrailAlert"])[];
+            /** Margin Alerts Has More */
+            margin_alerts_has_more: boolean;
+            /** Mrr Minor */
+            mrr_minor: number;
+            /** Recognized Revenue Minor */
+            recognized_revenue_minor: number | null;
+            /** Rollup Count */
+            rollup_count: number;
+            /** Total Variable Cost Minor */
+            total_variable_cost_minor: number | null;
+            /** Trial Count */
+            trial_count: number;
+        };
+        /** ConsoleProfitRecord */
+        ConsoleProfitRecord: {
+            /** Case Refresh Cost Minor */
+            case_refresh_cost_minor: number;
+            /** Company Id */
+            company_id: string;
+            /** Company Name */
+            company_name: string | null;
+            /** Discount Minor */
+            discount_minor: number;
+            /** Discounts Minor */
+            discounts_minor: number;
+            /** Document Processing Cost Minor */
+            document_processing_cost_minor: number;
+            /** Embedding Cost Minor */
+            embedding_cost_minor: number;
+            /** Gross Margin Bps */
+            gross_margin_bps: number | null;
+            /** Gross Profit Minor */
+            gross_profit_minor: number;
+            /** Gross Revenue Minor */
+            gross_revenue_minor: number;
+            /** Llm Cost Minor */
+            llm_cost_minor: number;
+            /** Manual Research Cost Minor */
+            manual_research_cost_minor: number;
+            /** Manual Support Cost Minor */
+            manual_support_cost_minor: number;
+            /** Payment Gateway Cost Minor */
+            payment_gateway_cost_minor: number;
+            /** Payment Provider Cost Minor */
+            payment_provider_cost_minor: number;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /** Recognized Revenue Minor */
+            recognized_revenue_minor: number;
+            /** Status */
+            status: string;
+            /** Storage Cost Minor */
+            storage_cost_minor: number;
+            /** Tax Collected Minor */
+            tax_collected_minor: number;
+            /** Tax Minor */
+            tax_minor: number;
+            /** Total Variable Cost Minor */
+            total_variable_cost_minor: number;
+        };
+        /** ConsoleReportPage */
+        ConsoleReportPage: {
+            /**
+             * Coverage
+             * @enum {string}
+             */
+            coverage: "recorded_usage" | "recorded_rollups" | "recorded_payments";
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: (components["schemas"]["ConsoleUsageRecord"] | components["schemas"]["ConsoleProfitRecord"] | components["schemas"]["ConsoleRevenueRecord"] | components["schemas"]["ConsoleCompanyProfitRecord"])[];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** ConsoleResetStartRequest */
+        ConsoleResetStartRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+        };
+        /** ConsoleRevenueRecord */
+        ConsoleRevenueRecord: {
+            /** Amount Paid Minor */
+            amount_paid_minor: number;
+            /** Company Id */
+            company_id: string;
+            /** Merchant Reference */
+            merchant_reference: string;
+            /** Paid At */
+            paid_at: string | null;
+            /** Tax Amount Minor */
+            tax_amount_minor: number;
+        };
+        /** ConsoleRevokeRequest */
+        ConsoleRevokeRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /** ConsoleTokenCompleteRequest */
+        ConsoleTokenCompleteRequest: {
+            /** Password */
+            password: string;
+            /** Token */
+            token: string;
+        };
+        /** ConsoleUsageRecord */
+        ConsoleUsageRecord: {
+            /** Company Id */
+            company_id: string;
+            /** Credits */
+            credits: number;
+            /** Estimated Internal Cost Minor */
+            estimated_internal_cost_minor: number;
+            /** Feature Key */
+            feature_key: string;
+            /** Quantity */
+            quantity: number;
         };
         /** ContractActivityRecord */
         ContractActivityRecord: {
@@ -73798,6 +74597,451 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    admins_api_platform_console_admins_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleAdminsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_api_platform_console_admins__admin_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                admin_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleRevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleAdminRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invite_api_platform_console_admins_invitations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleInviteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleInvitationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_invitation_api_platform_console_auth_invitations_complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleInviteCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleAuthState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_invitation_api_platform_console_auth_invitations_resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleResetStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleAcceptedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_api_platform_console_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleAuthState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_platform_console_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleLogoutResponse"];
+                };
+            };
+        };
+    };
+    enroll_api_platform_console_auth_mfa_enroll_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleEmptyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleMFAEnrollmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_api_platform_console_auth_mfa_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleMFAVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleAuthState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_reset_api_platform_console_auth_password_reset_complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleTokenCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleOKResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_reset_api_platform_console_auth_password_reset_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleResetStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleAcceptedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_session_api_platform_console_auth_session_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleAuthState"];
+                };
+            };
+        };
+    };
+    financial_report_api_platform_console_reports__kind__get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleReportPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activity_api_platform_console_reports_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityReportResponse"];
+                };
+            };
+        };
+    };
+    overview_report_api_platform_console_reports_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleOverviewResponse"];
                 };
             };
         };
