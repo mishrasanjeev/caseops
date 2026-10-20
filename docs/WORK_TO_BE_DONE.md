@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 21 Current Release Blocker
+
+R21 `f4fa6dcd` is NO-GO: main CI39465871860 failed one dated renewal browser
+case despite C21's completed Docker11 and candidate CI. Preserve those distinct
+results. Correct nested CTE identity and notification timestamp ambiguity,
+replay the complete dated journey, then require fresh combined Docker/CI,
+normal main merge, guarded deployment and exact-release production evidence.
+Details: `docs/bugfix-renewal-cte-identity-2026-10-21.md`. Production, initial
+manager setup, four-recipient delivery and genuine legal/external partials are
+not upgraded by local diagnosis.
+
 ## October 20 Current Release Gate
 
 Source-freeze checkpoint, October 20 14:37 UTC: C20 `2948b3a6` completed CI,

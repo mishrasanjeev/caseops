@@ -190,7 +190,7 @@ def tracker_source_facts(candidates, *, company_id):
         .select_from(dates)
         .join(IpDocketRecord, IpDocketRecord.id == dates.c.docket_id)
         .where(IpDocketRecord.company_id == company_id)
-        .cte(nesting=True)
+        .cte(name="ip_tracker_stopped", nesting=True)
         .prefix_with("MATERIALIZED", dialect="postgresql")
     )
     return select(stopped).subquery()

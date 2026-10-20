@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 21 Cross-Dialect Renewal Responses
+
+**Partially implemented / release NO-GO.** R21's main browser failure is not a
+SQLite lock diagnosis: local evidence proves a committed write followed by a
+circular-reference failure in the shared tracker query. Distinct staged CTE
+identities must preserve tenant/ACL/current-source fences and PostgreSQL work
+bounds. The subsequent full-journey failure also requires explicit UTC offsets
+on known persisted notification timestamps, not a timezone-specific browser
+exception. Fresh complete gates and exact-serving replay are still required;
+production remains `9cf76f2b`. Evidence and regression scope are recorded in
+`docs/bugfix-renewal-cte-identity-2026-10-21.md`.
+
 ## October 20 Delegated Report Security Boundary
 
 The local implementation now passes both complete dated desktop/mobile

@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 21 Renewal Response Coverage
+
+UJ-02/04/26 and IPLF-037 require atomic source-date version/audit persistence,
+successful post-commit tracker hydration, current list/count/category parity
+and unambiguous UTC notification receipts on both database dialects. Retain
+the complete desktop/393px dated portfolio journey, including delivery/body
+and reload assertions. R21 main CI39465871860 failed; the current correction
+is not production-certified. See
+`docs/bugfix-renewal-cte-identity-2026-10-21.md`.
+
 ## October 20 Delegated Report Acceptance
 
 J14/M14, US-040/042 and FT-060/061 now include PRA-01..08 in

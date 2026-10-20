@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
 from pathlib import PurePosixPath
-from typing import BinaryIO, Literal
+from typing import BinaryIO, Literal, NoReturn
 from xml.sax.saxutils import escape
 
 from defusedxml import ElementTree
@@ -271,7 +271,7 @@ class ExistingMatterCandidate:
     case_number: str | None
 
 
-def _raise_bad_request(message: str) -> None:
+def _raise_bad_request(message: str) -> NoReturn:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
 

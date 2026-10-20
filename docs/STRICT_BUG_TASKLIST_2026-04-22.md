@@ -1,5 +1,19 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 21 Post-Commit Renewal Query
+
+**Inconclusive / release NO-GO.** R21 main CI39465871860 collected 623 browser
+cases: 605 passed, 17 explicitly skipped and one failed, with no retries. The
+failed 393px imported-portfolio journey received 503 from a renewal correction.
+Local replay proves the correction committed before a tracker SELECT failed
+with SQLite circular CTE references. A five-stage-name diagnostic subsequently
+completed all three corrections with HTTP200, but the complete journey then
+failed on an offsetless notification timestamp across IST midnight. Neither
+diagnostic is a clean full gate or production acceptance. Preserve both failure
+artifacts; fix shared tracker/list/count identities and UTC receipt output,
+without replaying committed writes or weakening the dated assertion. See
+`docs/bugfix-renewal-cte-identity-2026-10-21.md`.
+
 ## October 20 Docker Evidence Ordering
 
 **Inconclusive / release NO-GO at source freeze.** Docker10 on C20 `2948b3a6`

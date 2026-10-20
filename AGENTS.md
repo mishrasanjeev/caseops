@@ -1,5 +1,15 @@
 # CaseOps agent instructions
 
+- A database error response does not prove a mutation rolled back. Read the
+  persisted version and audit before replaying a save; a post-commit response
+  query can fail independently. Staged portfolio facts need distinct stable CTE
+  identities across warm tracker, list and count compilation. Preserve nested
+  scope, PostgreSQL materialization and every ACL/source predicate; removing an
+  unused response read alone does not fix its shared query.
+- Notification receipts must expose known UTC persistence timestamps with an
+  explicit offset on both SQLite and PostgreSQL. Regress alert-day arithmetic
+  before and after local midnight, including a non-UTC client timezone. Do not
+  relax offset validation or reinterpret date-only legal inputs as UTC instants.
 - Cross-dialect report acceptance must use populated canonical API responses,
   not only empty pages or simplified frontend fixtures. SQLite can return naive
   datetimes from UTC persistence; normalize known UTC fields at the response

@@ -130,8 +130,9 @@ def date_expression(field):
     return valid_iso_date_expression(raw_date_expression(field))
 
 
-def _source_fact_stage(statement):
-    return statement.cte(nesting=True).prefix_with("MATERIALIZED", dialect="postgresql")
+def _source_fact_stage(statement, *, name):
+    # Distinct stage identities prevent nested CTE references from shadowing.
+    return statement.cte(name=name, nesting=True).prefix_with("MATERIALIZED", dialect="postgresql")
 
 
 def current_date_facts(candidates, *, company_id):
@@ -141,7 +142,8 @@ def current_date_facts(candidates, *, company_id):
             IpDocketRecord.id.label("docket_id"), maintain_column_froms=True
         )
         .order_by(None)
-        .distinct()
+        .distinct(),
+        name="ip_date_scoped",
     )
     proof = _source_fact_stage(
         select(
@@ -160,7 +162,8 @@ def current_date_facts(candidates, *, company_id):
                 IpTrademarkParticularVersion.version == IpDocketRecord.current_version,
             ),
         )
-        .where(IpDocketRecord.company_id == company_id)
+        .where(IpDocketRecord.company_id == company_id),
+        name="ip_date_proof",
     )
     raw = _source_fact_stage(
         select(
@@ -173,7 +176,8 @@ def current_date_facts(candidates, *, company_id):
             raw_date_expression(
                 "renewal_due_date", data=proof.c.data, imported_proven=proof.c.import_proven
             ).label("renewal_raw"),
-        )
+        ),
+        name="ip_date_raw",
     )
     return _source_fact_stage(
         select(
@@ -182,7 +186,8 @@ def current_date_facts(candidates, *, company_id):
             raw.c.import_proven,
             valid_iso_date_expression(raw.c.application_raw).label("application_on"),
             valid_iso_date_expression(raw.c.renewal_raw).label("renewal_due_on"),
-        )
+        ),
+        name="ip_date_validated",
     )
 
 

@@ -19,7 +19,7 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
 from sqlalchemy.orm import selectinload
 
@@ -95,6 +95,13 @@ AdminContext = Annotated[SessionContext, Depends(require_capability("notificatio
 PreferenceContext = Annotated[SessionContext, Depends(require_capability("calendar:view"))]
 
 
+def _aware(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+PersistedUTCTimestamp = Annotated[datetime, AfterValidator(_aware)]
+
+
 class HearingReminderRecord(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -105,7 +112,7 @@ class HearingReminderRecord(BaseModel):
     hearing_id: str
     recipient_email: str | None
     channel: str
-    scheduled_for: datetime
+    scheduled_for: PersistedUTCTimestamp
     status: Literal[
         "queued",
         "sent",
@@ -117,10 +124,10 @@ class HearingReminderRecord(BaseModel):
     provider_message_id: str | None
     last_error: str | None
     attempts: int
-    sent_at: datetime | None
-    delivered_at: datetime | None
-    created_at: datetime
-    updated_at: datetime
+    sent_at: PersistedUTCTimestamp | None
+    delivered_at: PersistedUTCTimestamp | None
+    created_at: PersistedUTCTimestamp
+    updated_at: PersistedUTCTimestamp
     intent_ids: list[str] = Field(default_factory=list)
     delivery_status: str | None = None
     destination_version: int | None = None
@@ -135,7 +142,7 @@ class NotificationIntentRecord(BaseModel):
     event_type: str
     source_type: str
     source_id: str
-    scheduled_for: datetime | None
+    scheduled_for: PersistedUTCTimestamp | None
     attempts: int
     destination_version: int
     destination: str | None
@@ -145,8 +152,8 @@ class NotificationIntentRecord(BaseModel):
     superseded_by_intent_id: str | None
     recovery_of_intent_id: str | None
     last_error_redacted: str | None
-    created_at: datetime
-    updated_at: datetime
+    created_at: PersistedUTCTimestamp
+    updated_at: PersistedUTCTimestamp
 
 
 class EmailSuppressionRecord(BaseModel):
@@ -154,10 +161,10 @@ class EmailSuppressionRecord(BaseModel):
     provider: str
     category: str
     affected_address: str
-    first_occurrence: datetime
-    last_occurrence: datetime
+    first_occurrence: PersistedUTCTimestamp
+    last_occurrence: PersistedUTCTimestamp
     recovery_action: str | None
-    recovered_at: datetime | None
+    recovered_at: PersistedUTCTimestamp | None
     fallback_sent: bool
 
 
@@ -235,10 +242,6 @@ def _intent_record(intent: NotificationDeliveryIntent) -> NotificationIntentReco
         created_at=intent.created_at,
         updated_at=intent.updated_at,
     )
-
-
-def _aware(value: datetime) -> datetime:
-    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def _recovery_snapshot_value(value: object) -> object:
