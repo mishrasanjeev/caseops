@@ -9,18 +9,21 @@ These tests prove:
     *eventually* written by the background task (Starlette's TestClient
     runs background tasks after the response, before the call returns),
   * a membership with no EmployeeProfile (e.g. the bootstrap owner)
-    still logs in cleanly and the background task no-ops.
+    still logs in cleanly and records activity without fabricating an HR row.
 """
 from __future__ import annotations
 
 import inspect
+from datetime import UTC
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from caseops_api.api.routes import auth as auth_routes
-from caseops_api.db.models import AuditEvent, EmployeeProfile
+from caseops_api.db.models import AuditEvent, Company, CompanyMembership, EmployeeProfile, User
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.activity_reports import IST, build_activity_report
 from caseops_api.services.employees import record_employee_login_async
 from caseops_api.services.identity import authenticate_user
 from tests.test_auth_company import auth_headers, bootstrap_company
@@ -175,10 +178,16 @@ def test_authenticate_user_does_not_write_synchronously(
 def test_login_without_employee_profile_still_succeeds(
     client: TestClient,
 ) -> None:
-    """The bootstrap owner has no EmployeeProfile. Login must still 200
-    and the background task must no-op without error (record_employee_login
-    early-returns when profile is None)."""
-    bootstrap_company(client)
+    """An owner login is human activity even without an HR profile."""
+    bootstrap = bootstrap_company(client)
+    membership_id = str(bootstrap["membership"]["id"])
+    with get_session_factory()() as session:
+        assert session.scalar(select(EmployeeProfile).where(
+            EmployeeProfile.membership_id == membership_id,
+        )) is None
+        assert session.scalar(select(AuditEvent).where(
+            AuditEvent.action == "employee.login", AuditEvent.actor_membership_id == membership_id,
+        )) is None
     # bootstrap_company's fixed owner credentials.
     login = client.post(
         "/api/auth/login",
@@ -190,3 +199,43 @@ def test_login_without_employee_profile_still_succeeds(
     )
     assert login.status_code == 200, login.text
     assert login.json()["access_token"]
+    with get_session_factory()() as session:
+        audit = session.scalar(select(AuditEvent).where(
+            AuditEvent.action == "employee.login", AuditEvent.actor_membership_id == membership_id,
+        ))
+        assert audit is not None and audit.actor_type == "human" and audit.result == "success"
+        report = build_activity_report(session, now=audit.created_at.replace(tzinfo=UTC))
+        account = next(
+            account for account in report["segments"]["law_firms"]["accounts"]
+            if account["company_id"] == audit.company_id
+        )
+        assert account["usage_status"] == "recent"
+        assert account["last_meaningful_activity_at"] == (
+            audit.created_at.replace(tzinfo=UTC).astimezone(IST).isoformat()
+        )
+        assert session.scalar(select(EmployeeProfile).where(
+            EmployeeProfile.membership_id == membership_id,
+        )) is None
+
+
+@pytest.mark.parametrize("revoked", ["membership", "user", "company", "deleted"])
+def test_deferred_login_does_not_record_activity_after_revocation(client, revoked) -> None:
+    bootstrap = bootstrap_company(client)
+    membership_id = str(bootstrap["membership"]["id"])
+    with get_session_factory()() as session:
+        membership = session.get(CompanyMembership, membership_id)
+        assert membership is not None
+        if revoked == "membership":
+            membership.is_active = False
+        elif revoked == "user":
+            session.get(User, membership.user_id).is_active = False
+        elif revoked == "company":
+            session.get(Company, membership.company_id).is_active = False
+        else:
+            session.delete(membership)
+        session.commit()
+    record_employee_login_async(membership_id)
+    with get_session_factory()() as session:
+        assert session.scalar(select(AuditEvent).where(
+            AuditEvent.action == "employee.login", AuditEvent.actor_membership_id == membership_id,
+        )) is None

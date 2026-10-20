@@ -1,5 +1,83 @@
 # CaseOps  - Work To Be Done
 
+## October 20 Current Release Gate
+
+C19 `d8ba7fb0` cannot deploy: required historical-worker tests fail before their
+boundary because a modern User mapping reads a column absent from the old
+schema. Retain its failed evidence and require the corrected historical
+dependency fixture's complete replacement CI/Docker inventories, normal
+protected merge, exact-main deploy and production replay. Keep the session
+revocation control, physical old schema and original concurrency assertions.
+Details and current qualifications are in
+`docs/platform-report-admin-2026-10-20.md`. No production admin grant or new
+four-recipient report delivery is implied by local implementation.
+
+## October 20 Report And Admin Extension
+
+Partially implemented under J14/M14/US-040/042: repair the confirmed solo
+category omission across the complete report, expose evidence-based dormant
+accounts without removing their metrics, and deliver the named manager's
+invited, MFA-protected, reports-only console. Follow PRA-01..08 in
+`docs/platform-report-admin-2026-10-20.md`. The earlier founder console exists;
+delegation and tenant-independent report login are the new boundaries, not
+missing tenant administration. Do not deploy C17 as proof of this extension.
+Fresh full Docker/CI, guarded main release and production replay remain open,
+as do the separate owner setup and truthful mail-delivery outcomes.
+
+## October 20 Activity Report Cadence
+
+J14/M14/US-040/042: review the separate C15-based activity-report branch's
+bounded four-recipient/private-send contract, same-scheduler 07:30 IST cadence
+and zero task retries. Host tests are scoped evidence only; parent review,
+fresh combined-C16 Docker09 and deployment/delivery acceptance remain pending.
+Do not confuse provider acceptance with inbox receipt or carry this feature
+into frozen C15 proof. See `docs/activity-report-0730-2026-10-20.md`.
+
+## October 19 SQL Read Oracle Recovery
+
+C7 `d5ecdab2` is NO-GO: completed CI39212375169 has API8904P/1F/3232S
+and native3223P/3F across9678 complete native phases; browsers did not execute.
+Web1535P and all16 specialist plans do not waive the four failed SQL-observer
+cases. A retained one-case RED establishes the prefix defect with actual typed
+WITH SQL. C8 is a test-only extraction/collector correction, runtime unchanged.
+Separate focused runs completed29 compiler/unit,72 PostgreSQL/216 phases
+and79 SQLite/237 phases with no skips or failures and stable source checks. Reconcile the full
+replacement inventory, then fresh C8 Docker/CI/main/security/CodeQL/tree and
+exact-serving acceptance before any release claim. Preserve failed C7 and its
+operator-superseded incomplete Docker; do not reuse C7 deploy pins for C8.
+No merge/deploy or QA-grant replay is admitted by these checks; last observed P9cf
+and user-deferred external cleanup remain unchanged. See
+`docs/bugfix-sql-read-oracles-2026-10-19.md`.
+
+## October 19 Import Review Recovery
+
+Do not merge/deploy C6 on earlier green: source-identical CI and deterministic
+PostgreSQL RED exceed the unchanged work cap. PR546 is draft. Corrected PR547
+combines the import UX with statement-local canonical active-team SQL. Four
+compiler checks and42 focused PostgreSQL cases/126 phases passed, including
+16 normal/stale-statistics plans. Broader shared-policy, full Docker, hosted
+and exact production gates remain pending. External cleanup remains owner-deferred.
+See `docs/bugfix-ip-statement-team-plan-2026-10-19.md`.
+
+Overall BUG-008 verdict is **Inconclusive**, pending committed exact-serving
+production proof. Candidate source implements the bounded review/recovery UX;
+it is not a released fix. Existing runtime already admits incomplete draft/image
+references as notes; parent read-only diagnostic is not mutation acceptance.
+Keep absent/ambiguous context fail-closed and preserve original rows, expiry,
+duplicates and zero-created history. No C6 release prerequisite or workbook
+change. See `docs/bugfix-ip-import-recovery-2026-10-19.md` for bounded proof.
+
+## October 19 Specialist Read Recovery
+
+Merged401d1615 is not deployable: Docker15 completed1603P/1F with the rest
+incomplete. The actual10k specialist plan charged390055>2048 work. A bounded
+ordered key lookup followed by unchanged exact-identity/tenant/ACL checks now
+passes the complete25-case native module/75 phases, four plans1000-1485 and two
+compile guards. This is source-only proof; new browser list acceptance, full
+Docker, candidate/main CI and exact-live certification remain required. Manual
+IP stays test-legal-only/already consumed; private cadence is paused. Scope and
+failed evidence: `docs/bugfix-specialist-docket-seek-2026-10-19.md`.
+
 ## October 19 CI Correction
 
 Release remains NO-GO: C3ed13138d failed compiled-projection validation and

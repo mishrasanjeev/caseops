@@ -1,5 +1,109 @@
 # CaseOps agent instructions
 
+- Cross-dialect report acceptance must use populated canonical API responses,
+  not only empty pages or simplified frontend fixtures. SQLite can return naive
+  datetimes from UTC persistence; normalize known UTC fields at the response
+  boundary without relaxing offset-aware frontend validation. Prove every
+  report type, persisted dates and visible amounts after reload on both dialects.
+- A fresh one-use setup or reset link can navigate within the same browser
+  pathname without remounting React. Consume and scrub that new fragment,
+  discard the previous form and fence stale responses. A forced page reload in
+  the regression would hide the original failure.
+- Replaying an invitation must not send another email, rotate its token or
+  reactivate a revoked grant. Retain the original delivery's actual state,
+  including failed or unknown sends. Only an explicit, bounded pending-link
+  resend may issue a replacement; prove overlapping requests on PostgreSQL.
+- A financial display regression must compare independent literal amounts,
+  including sub-rupee costs, rather than reuse the formatter under test. Retain
+  paise in recorded reports and provider unit warnings; rounding a positive
+  charge to zero is not an acceptable dashboard simplification.
+- An invalid MFA factor is not proof that its verification session was revoked.
+  Exercise the real API client with its session provider, not only a mocked
+  verification method. Preserve explicit retry only for the exact typed factor
+  refusal; expired, revoked, malformed and unrelated 401 responses still clear
+  access. Never reflect error-body secrets or retry verification automatically.
+
+- Session-revocation acceptance must isolate the credential being probed. A
+  password-reset response can set a fresh cookie that correctly takes priority
+  over a stale Bearer header. Prove that precedence control, clear the cookie,
+  then reject every retained tenant token and report session independently;
+  preserve the original failed evidence rather than changing auth precedence.
+- Cross-account reports must reconcile every persisted account category across
+  source selection, segment construction, totals, HTML and plain text. A test
+  with only law-firm and corporate fixtures cannot prove solo-lawyer coverage.
+  Inactivity is evidenced human engagement over an explicit rolling window,
+  not an account enablement flag, a completed calendar month, a polling audit
+  or an arbitrary update timestamp. Collapsing a group must not remove its
+  accounts or metrics, and email-client limitations remain explicit.
+- Delegated operational reporting is not founder authority or tenant access.
+  Keep its principal, token realm, cookies, MFA and live revocation fence
+  explicit; never fabricate a tenant membership or widen founder-only billing
+  mutations to make an admin dashboard convenient. Invitation/reset acceptance
+  and report reads need negative cross-realm and stale-grant regressions.
+- Public validation errors must retain field locations and actionable messages,
+  never submitted input objects or validator contexts. Passwords and one-use
+  tokens can otherwise be reflected in a nested 422 response. Prove this at
+  the shared HTTP handler, not only in a form's error presentation.
+
+- Before starting an expensive replacement release gate, read the latest
+  source-bound CI failure handoff and current required-check state. A known
+  failed security gate is not an in-progress gate. Preserve and supersede the
+  old run safely instead of spending hours testing an already rejected lock.
+  For dependency remediation, audit the entire resolved lock and the actual
+  platform-installed inventory; a Windows freeze cannot certify Linux CI.
+  Keep existing exceptions unchanged and prove native SDK compatibility plus
+  the upstream failure boundary, not only a version string or a mocked client.
+
+- A query-shape change requires an audit of every adjacent SQL observer, not
+  only the changed query's tests. SELECT-prefix filters can reject or omit
+  legitimate typed WITH reads, but WITH is not inherently read-only. Reuse the
+  structural AST guard, reject nested DML and opaque TextClause/TextualSelect,
+  retain every actual SQL event and charge all-statement budgets without
+  ignoring CTEs or raising caps. Reconcile every failed case and all
+  setup/call/teardown phases, not only the first failure or a green prefix.
+
+- Alternating grants by insertion order do not bound UUID-ordered pagination.
+  Regress known sorted record/docket identities and adversarial continuation
+  pages, retain every actual plan, and keep total-work limits unchanged. Share
+  canonical actor/tenant active-team SQL once per statement, never across
+  requests. Prove actor composition and reauthorization after another committed
+  grant, wall, team or membership change using the same prebuilt statement.
+  Earlier random-fixture green cannot erase a source-identical later failure.
+  Parametrizing a reused test also changes its direct wrapper contract;
+  inventory those callers and execute every intended layout explicitly.
+
+- Import validation errors and non-blocking source notes are separate facts.
+  Pin the serving revision and saved original rows before diagnosing historical
+  missing context. Revalidate retained originals after legitimate configuration
+  changes without overwriting explicit source values or weakening expiry,
+  draft/image and ambiguity fences. Valid rows and duplicate-skipped rows are
+  not created records; read-only production diagnosis is not commit acceptance.
+  Retained source notes must not claim the lifecycle or current date of a linked
+  existing record; upload valid-row counts must never promise new records.
+  Preserve legitimate multi-jurisdiction settings and require missing per-row
+  context. Before/after query equality must match the known fixture identity;
+  independently reread every created sibling after a duplicate-only import.
+
+- Current workflow acceptance and an unidentified historical incident are
+  separate claims. Reconcile each row against the complete exact-serving
+  journey before retaining a stale unexecuted qualifier. An unrelated global
+  release failure does not erase a passed row-specific result, and individual
+  passes do not make the full release green. Preserve both scopes and history.
+
+- Hash-pinned contract files must retain their canonical bytes across checkout
+  platforms. Pin their Git line endings and prove the exact stored hashes;
+  never accept a platform-normalized digest or rewrite reviewed fingerprints
+  to hide checkout conversion. Preserve the failed run and replay its complete
+  inventory after restoring only unchanged canonical document bytes.
+
+- A correlated LIMIT does not bound inspected rows when policy filters can
+  choose a broad tenant index. Seek one ordered primary-key candidate first,
+  then require its exact identity, tenant and complete current policy outside
+  that barrier. Retain full default/stale plans and unchanged work budgets.
+  ClauseAdapter does not adapt a bare ORM Boolean attribute as a root clause:
+  use explicit Boolean expressions and prove no unrelated base-table FROM
+  remains. Regress wrong successors, walls, grant revocation and closed reads.
+
 - Keep SQL DML construction and other potentially effectful calls outside an
   assertion, even in a compile-only negative oracle. Assert the captured result
   instead. Do not dismiss a required scanner finding because the current test
@@ -2812,3 +2916,75 @@ requirements when using the fallback.
   or malformed identities before authentication or role mutation. Reconcile
   every full-suite failure before blaming the tested authentication boundary;
   a fixture that fails earlier has not exercised that boundary at all.
+- Public release-identity reads must not borrow authenticated fixture headers
+  or cookies. Spec-level header options replace config defaults; per-call
+  headers merge, and page headers do not change an isolated API fixture.
+  Preserve the existing origin-scoped loopback close policy, exact API/web SHA
+  checks and one-attempt failures. Prove actual wire behavior and cleanup.
+  Fresh API contexts isolate credentials, not Playwright's shared socket pool;
+  never promise a fresh first socket or retry an uncertain mutation. An
+  injected reuse fault does not establish an untraced historical reset cause.
+- A colocated unit test can add production builder inputs even when application
+  code is unchanged. Trace its direct and transitive external imports, admit
+  only that exact closure in the builder COPY and both Docker/cloud allowlists,
+  and keep it out of the runner. Preserve static imports and strict typechecks;
+  host TypeScript success is not proof that the real Docker build can resolve
+  those files. Regress omitted inputs in every build context before release.
+- After replacing a shared test helper, run semantic unused-import diagnostics
+  over every changed consumer before an expensive release gate. A passing
+  typecheck with unused checks disabled does not cover that boundary. Preserve
+  still-used provider-isolation imports. A successful CodeQL analysis job also
+  does not prove zero findings: reconcile native SARIF and alerts on the exact
+  current PR ref, not an empty unscoped alert listing or an earlier peer review.
+- A floating runner label is an operating-system dependency change. Pin every
+  browser-executing job to an OS supported by the exact locked SDK, including
+  scheduled jobs and consumers of shared YAML steps. Inspect the actual runner
+  image and versioned SDK registry, not only current vendor documentation.
+  Inventory every workflow file and regress real new-file discovery. Preserve
+  real browser launch, no-paid and release-source fences; never fake the host
+  platform, skip browser readiness or raise budgets to mask incompatibility.
+- A browser isolation check must not cold-start a second full application when
+  the canonical Docker API is already running. Promote its real route, typed
+  body, authentication and tenant checks to that HTTP surface; keep every pure
+  security unit separately inventoried. Bound the inner process tree below the
+  unchanged outer deadline, prove owned cleanup on Linux and Windows, and keep
+  incomplete runs incomplete. A later passing cold-start probe does not explain
+  an earlier timeout. Consume source-bound per-case progress as it is written;
+  invocation-end JSON alone can hide a failure for the remainder of a shard.
+- New test fixtures must preserve the existing retained-result contract.
+  Pytest unittest subtests can emit several call reports for one collected ID;
+  a green process is not proof that the whole-gate reader accepts that evidence.
+  Replay the unchanged reader, preserve every boundary assertion and explicit
+  loop-completion counts, and never weaken phase reconciliation to hide drift.
+- Exception handlers must respect the actual class hierarchy. `InterruptedError`
+  is an `OSError`, so catch interruption before the broad transport/start error.
+  Regress both interrupt classes, the ordinary error and mandatory owned cleanup;
+  green process-tree tests do not establish untested cancellation semantics.
+- A multi-recipient operational report must validate the entire bounded address
+  set before transport and keep each recipient in a private one-To
+  personalization. Preserve legacy configuration and the existing scheduler
+  identity when retiming a cadence. Provider HTTP acceptance is not inbox
+  delivery; never replay an uncertain send or clear unrelated suppressions to
+  make a delivery check pass. Prove exact recipients, cron, timezone and retries.
+- PowerShell process-identity guards must preserve serialized ISO timestamps as
+  strings or compare explicitly normalized UTC values. Modern ConvertFrom-Json
+  can silently produce DateTime values. Prove the real matching PID/start/hash
+  and reject reused PIDs with different start times or commands before control.
+- Operational recipient, shared-settings and scheduler changes are data-bearing
+  even without a schema change. Inventory their real disclosure and retention
+  limits in the canonical governance map, regenerate its projections, and run
+  the actual committed-HEAD CI contract sequence before starting a long gate.
+  An unstaged-map predicate test is not a passing HEAD-only change-gate CLI.
+- Historical worker regressions must retain the actual pre-feature schema and
+  its dependency column set. A modern ORM field cannot be read from that old
+  schema or replaced with an invented null to make the fixture pass. Scope
+  compatibility reads to the isolated historical engine, reject unexpected
+  new-field access and restore normal loading afterward. When a concurrency
+  boundary is not reached, inspect the Future's exception or early return;
+  do not diagnose a wait assertion by increasing its timeout.
+- A new authentication realm still uses the shared raw HTTP deadline boundary,
+  not tenant refresh or a duplicated direct fetch. Keep its body consumer,
+  cancellation and strict bounded error parser inside that deadline. Register
+  exact own-auth routes with positive denial and non-prefix regressions; do not
+  exempt a whole namespace. Static audit-write checks must distinguish actual
+  constructor identities and aliases from longer record names and comments.

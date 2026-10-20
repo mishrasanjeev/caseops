@@ -1,4 +1,5 @@
 docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md text eol=lf
+docs/ip-implementation/child-prds/*.md text eol=lf
 apps/api/src/caseops_api/governance/generated_data_class_projection.py text eol=lf
 *.sh text eol=lf
 apps/web/public/third-party-notices/** -text

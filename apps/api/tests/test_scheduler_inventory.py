@@ -149,6 +149,31 @@ def test_release_hold_pauses_only_the_named_effective_scheduler() -> None:
     assert sum(job["desired_state"] == "PAUSED" for job in effective["jobs"]) == 3
 
 
+def test_activity_report_reuses_its_scheduler_at_0730_with_four_private_recipients() -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    reports = [job for job in inventory["jobs"] if job["run_job_name"] == "caseops-activity-report"]
+    assert len(reports) == 1
+    report = reports[0]
+    assert report["scheduler_name"] == "caseops-activity-report-0800-ist"
+    assert report["schedule"] == "30 7 * * *"
+    assert report["time_zone"] == "Asia/Kolkata"
+    assert report["bootstrap"]["max_retries"] == 0
+    assert report["bootstrap"]["environment"]["CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL"] == (
+        "mishra.sanjeev@gmail.com;sanjeev@orchestrum.in;"
+        "ram.gupta@edumatica.io;uday.chauhan@edumatica.io"
+    )
+    arguments = scheduler_inventory._bootstrap_arguments(
+        report, action="update", project="offline-project", region="asia-south1",
+        image="asia-south1-docker.pkg.dev/project/repo/api@sha256:" + "a" * 64,
+    )
+    environment = arguments[arguments.index("--set-env-vars") + 1]
+    assert (
+        "CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL="
+        + report["bootstrap"]["environment"]["CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL"]
+    ) in environment.split(",")
+    assert len(inventory["jobs"]) == 11
+
+
 def test_release_hold_rejects_an_unknown_scheduler() -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
 

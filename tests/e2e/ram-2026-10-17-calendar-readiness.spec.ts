@@ -1,9 +1,12 @@
 /** CAL13-04: actual backend readiness must survive retained cleanup states. */
 import { expect, test } from "./support/prod-diagnostic-test";
-import { noPaidProviderHeaders } from "./support/cost-controls";
+import { localTransportHeaders } from "./support/cost-controls";
 import { prepareIp15Workspace } from "./support/ip15-workspace";
 
-test.use({ extraHTTPHeaders: noPaidProviderHeaders, storageState: { cookies: [], origins: [] },
+test.use({ extraHTTPHeaders: async ({ baseURL }, use) => {
+  if (!baseURL) throw new Error("IP15 requires a configured baseURL.");
+  await use(localTransportHeaders(baseURL));
+}, storageState: { cookies: [], origins: [] },
   trace: "off", screenshot: "off", video: "off" });
 test.describe.configure({ retries: 0, mode: "default" });
 

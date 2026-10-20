@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import importlib
 import unittest
 from time import monotonic
 from types import SimpleNamespace
@@ -9,6 +8,8 @@ from unittest.mock import Mock, patch
 
 from drive_import_emulator import DriveImportEmulator, install_drive_import_emulator
 
+# Real entrypoint/lifespan and authenticated HTTP assertions are promoted to
+# ram-2026-10-08-drive.spec.ts against the already-running canonical API.
 
 class DriveImportIsolationTests(unittest.TestCase):
     def fetch(self, emulator, fixture, **changes):
@@ -28,6 +29,7 @@ class DriveImportIsolationTests(unittest.TestCase):
             "CASEOPS_ENV": "e2e", "CASEOPS_E2E_OAUTH_EMULATOR": "calendar-20261008",
             "CASEOPS_PUBLIC_APP_URL": "http://127.0.0.1:3100",
             "CASEOPS_DATABASE_URL": "sqlite+pysqlite:///offline-drive.db",
+            "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
         }
         for changes in (
             {"CASEOPS_ENV": "production"}, {"CASEOPS_ENV": "local"},
@@ -83,57 +85,6 @@ class DriveImportIsolationTests(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(RuntimeError):
                 self.fetch(emulator, fixture, **changes)
         self.assertEqual(emulator.evidence(fixture.file_id)["fetch_calls"], 0)
-
-    def test_actual_entrypoint_starts_and_resolves_authenticated_fixture_routes(self) -> None:
-        environment = {
-            "CASEOPS_ENV": "e2e", "CASEOPS_E2E_OAUTH_EMULATOR": "calendar-20261008",
-            "CASEOPS_PUBLIC_APP_URL": "http://127.0.0.1:3100",
-            "CASEOPS_DATABASE_URL": "sqlite+pysqlite:///:memory:",
-            "CASEOPS_AUTO_MIGRATE": "false",
-            "CASEOPS_AUTH_SECRET": "offline-drive-entrypoint-unit-secret-at-least-32-characters",
-        }
-        with patch.dict(os.environ, environment, clear=True):
-            entrypoint = importlib.import_module("oauth_emulator_api")
-            from fastapi.testclient import TestClient
-            from caseops_api.db.session import get_db_session
-            from caseops_api.services.calendar_sync import GoogleCalendarProvider
-            from caseops_api.services.drive_sync import set_google_drive_provider_for_tests
-
-            app = entrypoint.app
-            routes = [route for route in app.routes if route.path.startswith("/_e2e/drive-import/")]
-            self.assertEqual(len(routes), 2)
-            seed = next(route for route in routes if "POST" in route.methods)
-            self.assertEqual(seed.endpoint.__annotations__["payload"].__name__, "FixtureRequest")
-            self.assertFalse(any(isinstance(value, str) for value in seed.endpoint.__annotations__.values()))
-            headers = {
-                "X-CaseOps-Automated-Test": "no-paid-providers",
-                "Authorization": "Bearer invalid-offline-token",
-            }
-            body = {"matter_id": "00000000-0000-0000-0000-000000000001"}
-            try:
-                # Keep startup's real mapper/lifespan work, but never resolve a model in a unit test.
-                with patch("caseops_api.main.warm_reranker", return_value=None) as warm, TestClient(app) as client:
-                    self.assertEqual(client.get("/_e2e/calendar-oauth/health").status_code, 200)
-                    unmarked = client.post(seed.path, headers={"Authorization": headers["Authorization"]}, json=body)
-                    self.assertEqual(unmarked.status_code, 403)
-                    self.assertIn("no-paid-provider marker", unmarked.json()["detail"])
-                    self.assertEqual(client.post(seed.path, headers=headers, json=body).status_code, 401)
-                    self.assertEqual(client.get(seed.path + "/unknown", headers=headers).status_code, 401)
-                    owner = next(dependency.call for dependency in seed.dependant.dependencies if dependency.name == "context")
-                    app.dependency_overrides[owner] = lambda: SimpleNamespace(
-                        membership=SimpleNamespace(role="owner"), company=SimpleNamespace(slug="ordinary-tenant"),
-                    )
-                    app.dependency_overrides[get_db_session] = lambda: None
-                    self.assertEqual(client.post(seed.path, headers=headers, json={"matter_id": "short"}).status_code, 422)
-                    self.assertEqual(client.post(seed.path, headers=headers, json=body).status_code, 403)
-                warm.assert_called_once()
-            finally:
-                app.dependency_overrides.clear()
-                entrypoint.emulator.stop()
-                entrypoint.httpx.Client.send = entrypoint.original_send
-                GoogleCalendarProvider.authorization_url = entrypoint.original_authorization_url
-                set_google_drive_provider_for_tests(None)
-
 
 if __name__ == "__main__":
     unittest.main()

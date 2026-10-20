@@ -4,8 +4,9 @@ import path from "node:path";
 import { expect, type APIRequestContext, type APIResponse, type Page } from "@playwright/test";
 
 import type { IpDocket } from "../../../apps/web/lib/api/endpoints";
-import { noPaidProviderHeaders } from "./cost-controls";
+import { localTransportHeaders, noPaidProviderHeaders } from "./cost-controls";
 import { e2eEnv, repoRoot } from "./env";
+import { assertPublicReleaseIdentity } from "./public-release-identity";
 
 type Ip15Actor = {
   company: { id: string; slug: string };
@@ -108,10 +109,7 @@ export async function prepareIp15Workspace(
     : required("CASEOPS_EXPECTED_RELEASE_SHA");
   if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error("IP15 requires the exact expected 40-hex release.");
   const release = async () => {
-    for (const url of [`${api.origin}/api/build`, `${web.origin}/api/release-identity`]) {
-      const identity = await body(await request.get(url, { headers: noPaidProviderHeaders }), "Release identity read");
-      expect(identity.release_sha, "Serving release changed during IP15 acceptance.").toBe(sha);
-    }
+    await assertPublicReleaseIdentity([`${api.origin}/api/build`, `${web.origin}/api/release-identity`], sha);
   };
   await release();
   const run = randomUUID();
@@ -158,7 +156,7 @@ export async function prepareIp15Workspace(
     expect(readiness.configuration_status.configuration.enabled_automations_json).toEqual([]);
   }
   await page.setViewportSize({ width, height: 1000 });
-  await page.setExtraHTTPHeaders(noPaidProviderHeaders);
+  await page.setExtraHTTPHeaders(localTransportHeaders(web.origin));
   await page.goto(`${web.origin}/sign-in`);
   await page.locator("#company-slug").fill(credentials.slug);
   await page.locator("#email").fill(credentials.email);

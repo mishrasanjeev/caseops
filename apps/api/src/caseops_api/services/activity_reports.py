@@ -10,8 +10,9 @@ import httpx
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
-from caseops_api.core.settings import get_settings
+from caseops_api.core.settings import get_settings, parse_activity_report_recipients
 from caseops_api.db.models import (
+    AuditActorType,
     AuditEvent,
     AuditResult,
     Company,
@@ -33,6 +34,69 @@ from caseops_api.db.models import (
 
 IST = ZoneInfo("Asia/Kolkata")
 PERIODS = ("day", "week", "month", "till_date")
+SEGMENT_TYPES = {
+    "law_firms": CompanyType.LAW_FIRM.value,
+    "general_counsels": CompanyType.CORPORATE_LEGAL.value,
+    "solo_lawyers": CompanyType.SOLO.value,
+    "other": None,
+}
+SEGMENT_TITLES = {
+    "law_firms": "Law Firms",
+    "general_counsels": "In-house Legal / General Counsels",
+    "solo_lawyers": "Solo Lawyers",
+    "other": "Other / Unclassified",
+}
+# Exact reviewed request/login actions, not a prefix-based admission rule. New
+# actions stay ineligible until their caller provenance has been reviewed.
+MEANINGFUL_ACTIVITY_ACTIONS = (
+    "employee.login", "employee.created", "employee.updated", "employee.deactivated",
+    "employee.offboarding.previewed", "employee.offboarding.committed",
+    "team.created", "team.updated", "team.deleted", "team_membership.added",
+    "team_membership.removed", "team_scoping.toggled",
+    "matter.created", "matter.claim_amount.updated", "matter.forum.updated",
+    "matter_task.created", "matter_task.updated", "matter_task.completed",
+    "matter_task.cancelled", "matter_task.reopened",
+    "hearing.completed", "hearing.cancelled", "hearing.updated",
+    "matter_court_order.created", "matter_court_order.metadata.updated",
+    "matter_court_order.stay.updated", "matter_attachment.metadata.updated",
+    "matter_invoice.created", "matter_invoice.pdf.downloaded",
+    "matter_billing.profile.created", "matter_billing.profile.updated",
+    "matter_billing.rate.created",
+    "matter.bulk_import.dry_run", "matter.import.validated", "matter.import.row_created",
+    "matter.import.completed", "matter.import.cancelled", "matter.import.error_report_downloaded",
+    "case_tracking.search", "case_tracking.search_replay", "case_tracking.bookmark_created",
+    "case_tracking.bookmark_updated", "case_tracking.refresh", "case_tracking.source_downloaded",
+    "calendar.connection.connected", "calendar.connection.revoked",
+    "calendar_event_sync.drift_reconciliation_decided",
+    "mailbox.gmail.connected", "mailbox.gmail.revoked", "mailbox.gmail.imported",
+    "mailbox.gmail.watch_started", "mailbox.message.ignored",
+    "mailbox.message.content_import_requested", "mailbox.outlook_candidate.created",
+    "ip_document.uploaded", "ip_document.version_uploaded", "ip_document.links_added",
+    "ip_document.state_transitioned", "ip_document.bulk_updated",
+    "notification_preferences.tenant_updated", "notification_preferences.user_updated",
+    "notification_rule.created", "notification_rule.updated", "notification_rule.deleted",
+    "domain_outbox.dead_letter.replayed",
+)
+# These operations also run unattended using a retained human context. Their
+# audit actor alone is therefore not evidence of a person's engagement.
+BACKGROUND_ACTIVITY_ACTIONS = (
+    "case_tracking.poll_run",
+    "case_tracking.identity_converged", "case_tracking.legacy_matter_link_reconciled",
+    "case_tracking.notification_enqueued", "case_tracking.source_text_backfilled",
+    "case_tracking.update_detected", "case_tracking.snapshot_ignored",
+    "case_tracking.release_smoke", "case_tracking.verification_fixture_refresh",
+    "calendar.connection.refreshed", "calendar_event_sync.drift_detected",
+    "mailbox.gmail.webhook_processed",
+)
+BACKGROUND_ACTIVITY_PREFIXES = (
+    "calendar.sync.", "calendar.durable_", "calendar.projection.",
+    "calendar.deletion_tombstone.", "notification.", "notification_delivery.",
+)
+ACTIVITY_LIMITATIONS = (
+    "Reviewed recorded successful human audit activity only; background and unknown actions "
+    "are excluded. "
+    "Missing or incomplete history is not proof of non-use. Account enablement is separate."
+)
 
 # The kind controls display formatting while the stored report remains machine-readable.
 ACTIVITY_METRICS = (
@@ -494,33 +558,76 @@ def _populate_current_snapshot(
             account["current"]["outstanding_amount_minor"] += int(outstanding_value or 0)
 
 
-def build_activity_report(session: Session, *, now: datetime | None = None) -> dict:
+def _populate_usage(session: Session, accounts: dict[str, dict], *, now: datetime) -> None:
+    if not accounts:
+        return
+    cutoff = now - timedelta(days=30)
+    # One set-based aggregate, never an account-by-account query or audit-payload
+    # load. The membership join rejects foreign/null actor attribution while
+    # retaining historical activity after a legitimate membership deactivation.
+    statement = (
+        select(AuditEvent.company_id, func.max(AuditEvent.created_at))
+        .join(CompanyMembership, (CompanyMembership.id == AuditEvent.actor_membership_id)
+              & (CompanyMembership.company_id == AuditEvent.company_id))
+        .where(
+            AuditEvent.company_id.in_(accounts),
+            AuditEvent.actor_type == AuditActorType.HUMAN,
+            AuditEvent.result == AuditResult.SUCCESS,
+            AuditEvent.created_at <= now,
+            AuditEvent.action.in_(MEANINGFUL_ACTIVITY_ACTIONS),
+            AuditEvent.action.not_in(BACKGROUND_ACTIVITY_ACTIONS),
+            # Manual bookmarks reject a Matter ID; automatic creation/backfill
+            # carry one. Use that persisted provenance, not raw audit metadata.
+            or_(AuditEvent.action != "case_tracking.bookmark_created",
+                AuditEvent.matter_id.is_(None)),
+            *(~AuditEvent.action.startswith(prefix, autoescape=True)
+              for prefix in BACKGROUND_ACTIVITY_PREFIXES),
+        )
+        .group_by(AuditEvent.company_id)
+    )
+    for company_id, last_activity in session.execute(statement):
+        account = accounts.get(str(company_id))
+        if account is None or last_activity is None:
+            continue
+        # SQLite returns naive UTC values for timezone-aware SQL columns.
+        if last_activity.tzinfo is None:
+            last_activity = last_activity.replace(tzinfo=UTC)
+        last_activity = last_activity.astimezone(UTC)
+        account["last_meaningful_activity_at"] = last_activity.astimezone(IST).isoformat()
+        account["usage_status"] = "recent" if last_activity >= cutoff else "inactive"
+
+
+def build_activity_report(
+    session: Session, *, now: datetime | None = None, include_internal_accounts: bool = False,
+) -> dict:
     now = now or datetime.now(UTC)
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("Activity report generation time must include a timezone.")
+    now = now.astimezone(UTC)
     windows = {period: _window(now, period) for period in PERIODS}
     companies = list(
         session.scalars(
             select(Company)
-            .where(
-                Company.company_type.in_(
-                    (CompanyType.LAW_FIRM.value, CompanyType.CORPORATE_LEGAL.value)
-                )
-            )
             .order_by(Company.company_type, Company.name, Company.id)
         )
     )
-    companies = [
-        company
-        for company in companies
-        if not any(
-            term in company.name.casefold() for term in EXCLUDED_ACCOUNT_NAME_TERMS
-        )
-    ]
+    registered_account_count = len(companies)
+    if not include_internal_accounts:
+        companies = [
+            company
+            for company in companies
+            if not any(
+                term in company.name.casefold() for term in EXCLUDED_ACCOUNT_NAME_TERMS
+            )
+        ]
     accounts = {
         company.id: {
             "company_id": company.id,
             "name": company.name,
             "company_type": company.company_type,
             "is_active": company.is_active,
+            "last_meaningful_activity_at": None,
+            "usage_status": "unknown",
             "current": _empty_snapshot(),
             "periods": {period: _empty_period() for period in PERIODS},
         }
@@ -536,6 +643,7 @@ def build_activity_report(session: Session, *, now: datetime | None = None) -> d
             end=end,
         )
     _populate_current_snapshot(session, accounts, today=now.astimezone(IST).date())
+    _populate_usage(session, accounts, now=now)
 
     reporting_periods: dict[str, dict[str, str | None]] = {}
     for period, (start, end) in windows.items():
@@ -551,13 +659,12 @@ def build_activity_report(session: Session, *, now: datetime | None = None) -> d
         }
 
     segments: dict[str, dict] = {}
-    segment_types = {
-        "law_firms": CompanyType.LAW_FIRM.value,
-        "general_counsels": CompanyType.CORPORATE_LEGAL.value,
-    }
-    for label, company_type in segment_types.items():
+    known_types = {value for value in SEGMENT_TYPES.values() if value is not None}
+    for label, company_type in SEGMENT_TYPES.items():
         segment_accounts = [
-            account for account in accounts.values() if account["company_type"] == company_type
+            account for account in accounts.values()
+            if (account["company_type"] == company_type if company_type is not None
+                else account["company_type"] not in known_types)
         ]
         totals: dict[str, dict[str, int | float]] = {}
         for period in PERIODS:
@@ -574,6 +681,18 @@ def build_activity_report(session: Session, *, now: datetime | None = None) -> d
 
     return {
         "generated_at": now.astimezone(IST).isoformat(),
+        "account_scope": (
+            "all_registered_accounts" if include_internal_accounts else "operational_email"
+        ),
+        "excluded_account_count": registered_account_count - len(companies),
+        "activity_window": {
+            "days": 30,
+            "cutoff": (now - timedelta(days=30)).astimezone(IST).isoformat(),
+            "as_of": now.astimezone(IST).isoformat(),
+            "time_zone": "Asia/Kolkata",
+            "basis": "successful_human_audit_events",
+            "limitations": ACTIVITY_LIMITATIONS,
+        },
         "reporting_periods": reporting_periods,
         "segments": segments,
     }
@@ -656,8 +775,34 @@ def _snapshot_html(current: dict) -> str:
     )
 
 
+def _usage_label(account: dict) -> str:
+    last = account.get("last_meaningful_activity_at")
+    if last is None:
+        return "Usage: Unknown (no qualifying recorded activity)"
+    status = "Recent" if account.get("usage_status") == "recent" else "Inactive"
+    return f"Usage: {status}; last recorded meaningful activity: {last}"
+
+
+def _account_html(report: dict, account: dict) -> str:
+    status = "Active" if account.get("is_active") else "Inactive"
+    raw_type = account.get("company_type", "")
+    return (
+        '<table class="segment account" width="100%" cellspacing="0" cellpadding="0">'
+        '<tr><td colspan="5" class="account-title">'
+        f"<strong>{escape(str(account['name']))}</strong><span>Account: {status}</span></td></tr>"
+        '<tr><td colspan="5">'
+        f"Organization type: {escape(str(raw_type)) if raw_type else '(empty)'}<br>"
+        f"{escape(_usage_label(account))}</td></tr>"
+        '<tr><td colspan="5" class="snapshot-cell">'
+        f"{_snapshot_html(account['current'])}</td></tr>"
+        '<tr class="column-head"><th scope="col">Activity</th>'
+        f"{_activity_headers(report)}</tr>"
+        f"{_activity_rows_html(account['periods'])}</table>"
+    )
+
+
 def _segment_html(report: dict, key: str, data: dict) -> str:
-    title = {"law_firms": "Law Firms", "general_counsels": "General Counsels"}[key]
+    title = SEGMENT_TITLES.get(key, SEGMENT_TITLES["other"])
     count = _format_value(data["company_count"], "count")
     summary = (
         '<table class="segment" width="100%" cellspacing="0" cellpadding="0">'
@@ -667,22 +812,26 @@ def _segment_html(report: dict, key: str, data: dict) -> str:
         f"{_activity_headers(report)}</tr>"
         f"{_activity_rows_html(data['periods'])}</table>"
     )
-    account_tables: list[str] = []
+    visible: list[str] = []
+    inactive: list[str] = []
     for account in data.get("accounts", []):
-        status = "Active" if account.get("is_active") else "Inactive"
-        account_tables.append(
-            '<table class="segment account" width="100%" cellspacing="0" cellpadding="0">'
-            '<tr><td colspan="5" class="account-title">'
-            f"<strong>{escape(str(account['name']))}</strong><span>{status}</span></td></tr>"
-            '<tr><td colspan="5" class="snapshot-cell">'
-            f"{_snapshot_html(account['current'])}</td></tr>"
-            '<tr class="column-head"><th scope="col">Activity</th>'
-            f"{_activity_headers(report)}</tr>"
-            f"{_activity_rows_html(account['periods'])}</table>"
+        known_inactive = (
+            account.get("usage_status") == "inactive"
+            and account.get("last_meaningful_activity_at") is not None
         )
-    if not account_tables:
-        account_tables.append('<p class="empty">No accounts recorded.</p>')
-    return summary + "".join(account_tables)
+        target = inactive if known_inactive else visible
+        target.append(_account_html(report, account))
+    if inactive:
+        # Native disclosure only: sanitizers removing this wrapper retain the
+        # ordinary tables. No CSS/script hiding or inaccessible checkbox hack.
+        visible.append(
+            '<details class="inactive-accounts"><summary>'
+            f"No recorded meaningful activity in the last 30 days ({len(inactive)} accounts)"
+            f"</summary>{''.join(inactive)}</details>"
+        )
+    if not visible:
+        visible.append('<p class="empty">No accounts recorded.</p>')
+    return summary + "".join(visible)
 
 
 def _activity_table_text(periods: dict) -> list[str]:
@@ -697,17 +846,36 @@ def render_report(report: dict) -> tuple[str, str]:
     generated_at = datetime.fromisoformat(report["generated_at"]).astimezone(IST)
     generated_label = generated_at.strftime("%d %b %Y, %I:%M %p IST")
     lines = ["CASEOPS ACCOUNT ACTIVITY DASHBOARD", f"Generated: {generated_label}", ""]
+    scope_text = ""
+    if report.get("account_scope") == "all_registered_accounts":
+        scope_text = "Account scope: All registered accounts (0 excluded)."
+    elif report.get("account_scope") == "operational_email":
+        scope_text = (
+            "Account scope: Operational email; "
+            f"{report['excluded_account_count']} accounts excluded by the "
+            "internal/test name policy."
+        )
+    if scope_text:
+        lines.extend([scope_text, ""])
     lines.append("Reporting periods:")
     for period in PERIODS:
         heading, date_range = _period_label(report, period)
         lines.append(f"- {heading}: {date_range}")
     lines.append("")
 
-    titles = {"law_firms": "LAW FIRMS", "general_counsels": "GENERAL COUNSELS"}
+    window = report.get("activity_window", {})
+    window_text = (
+        f"Recorded activity window: {window['cutoff']} through {window['as_of']} "
+        "(30 elapsed days, inclusive). " + ACTIVITY_LIMITATIONS
+        if window else ""
+    )
+    if window_text:
+        lines.extend([window_text, ""])
     for key, data in report["segments"].items():
         lines.extend(
             [
-                f"{titles[key]} ({_format_value(data['company_count'], 'count')} accounts)",
+                f"{SEGMENT_TITLES.get(key, SEGMENT_TITLES['other']).upper()} "
+                f"({_format_value(data['company_count'], 'count')} accounts)",
                 "Segment totals",
                 *_activity_table_text(data["periods"]),
                 "",
@@ -716,6 +884,8 @@ def render_report(report: dict) -> tuple[str, str]:
         for account in data.get("accounts", []):
             status = "Active" if account.get("is_active") else "Inactive"
             lines.extend([f"ACCOUNT: {account['name']} ({status})", "Current snapshot:"])
+            lines.append(_usage_label(account))
+            lines.append(f"Organization type: {account.get('company_type') or '(empty)'}")
             lines.extend(
                 f"- {label}: {_format_value(account['current'].get(metric), kind)}"
                 for metric, label, kind in SNAPSHOT_METRICS
@@ -725,9 +895,12 @@ def render_report(report: dict) -> tuple[str, str]:
             lines.extend(["No accounts recorded.", ""])
     text = "\n".join(lines)
 
-    law_firms = report["segments"].get("law_firms", {})
-    general_counsels = report["segments"].get("general_counsels", {})
-    total = int(law_firms.get("company_count", 0)) + int(general_counsels.get("company_count", 0))
+    total = sum(int(data.get("company_count", 0)) for data in report["segments"].values())
+    segment_counts = "".join(
+        f"<td><strong>{_format_value(data.get('company_count'), 'count')}</strong>"
+        f"<span>{escape(SEGMENT_TITLES.get(key, SEGMENT_TITLES['other']))}</span></td>"
+        for key, data in report["segments"].items()
+    )
     sections = "".join(_segment_html(report, key, data) for key, data in report["segments"].items())
     styles = """
 <style>
@@ -752,6 +925,7 @@ width:24%}
 .snapshot{table-layout:fixed}.snapshot-item{background:#f8fafc;border:1px solid #e2e8f0!important;
 vertical-align:top}.snapshot-item span{display:block;color:#64748b;font-size:10px}
 .snapshot-item strong{display:block;margin-top:3px;font-size:13px}.empty{color:#64748b!important}
+.inactive-accounts{margin-bottom:24px}.inactive-accounts summary{padding:12px;font-weight:700}
 .footer{padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;
 font-size:12px;line-height:18px}
 @media(max-width:680px){.content,.header,.footer{padding-left:10px!important;padding-right:10px!important}
@@ -774,10 +948,9 @@ display:block;margin-top:4px}}
         '<tr><td class="content"><table role="presentation" class="summary" width="100%" '
         'cellspacing="6" cellpadding="0"><tr>'
         f"<td><strong>{total:,}</strong><span>Total accounts</span></td>"
-        f"<td><strong>{_format_value(law_firms.get('company_count'), 'count')}</strong>"
-        "<span>Law firms</span></td>"
-        f"<td><strong>{_format_value(general_counsels.get('company_count'), 'count')}</strong>"
-        "<span>General counsels</span></td></tr></table>"
+        f"{segment_counts}</tr></table>"
+        f"<p>{escape(scope_text)}</p>"
+        f"<p>{escape(window_text)}</p>"
         f"{sections}</td></tr>"
         '<tr><td class="footer">Daily, weekly and monthly columns cover the last completed '
         "calendar period in Asia/Kolkata; till date includes activity through generation time. "
@@ -795,9 +968,10 @@ def send_activity_report(report: dict) -> str:
         raise RuntimeError(
             "SendGrid is not configured (CASEOPS_SENDGRID_API_KEY and sender email are required)"
         )
+    recipients = parse_activity_report_recipients(settings.activity_report_recipient_email)
     text, html = render_report(report)
     payload = {
-        "personalizations": [{"to": [{"email": settings.activity_report_recipient_email}]}],
+        "personalizations": [{"to": [{"email": recipient}]} for recipient in recipients],
         "from": {
             "email": settings.sendgrid_sender_email,
             "name": settings.sendgrid_sender_name,
@@ -818,4 +992,5 @@ def send_activity_report(report: dict) -> str:
         timeout=30,
     )
     response.raise_for_status()
+    # Preserve the caller contract: provider HTTP acceptance, not inbox delivery.
     return "sent"

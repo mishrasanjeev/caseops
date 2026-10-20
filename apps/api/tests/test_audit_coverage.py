@@ -15,6 +15,7 @@ the coverage floor for services that were silent before Pass 3.
 """
 from __future__ import annotations
 
+import ast
 import importlib
 from pathlib import Path
 
@@ -65,6 +66,44 @@ def test_service_writes_at_least_one_audit_row(service_name: str) -> None:
     )
 
 
+def _constructs_tenant_audit_event(source: str) -> bool:
+    tree = ast.parse(source)
+    names = {"AuditEvent"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            names.update(
+                alias.asname or alias.name for alias in node.names if alias.name == "AuditEvent"
+            )
+    return any(
+        isinstance(node, ast.Call)
+        and (
+            isinstance(node.func, ast.Name) and node.func.id in names
+            or isinstance(node.func, ast.Attribute) and node.func.attr == "AuditEvent"
+        )
+        for node in ast.walk(tree)
+    )
+
+
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        ("AuditEvent(company_id='tenant')", True),
+        ("models.AuditEvent(company_id='tenant')", True),
+        ("from models import AuditEvent as Event\nEvent(company_id='tenant')", True),
+        (
+            "from models import AuditEvent as PlatformReportAuditEvent\nPlatformReportAuditEvent()",
+            True,
+        ),
+        ("PlatformReportAuditEvent(root_platform_admin_id='root')", False),
+        ("models.PlatformReportAuditEvent(root_platform_admin_id='root')", False),
+        ("# AuditEvent() is a comment\nvalue = 'AuditEvent('", False),
+        ("select(AuditEvent)", False),
+    ],
+)
+def test_tenant_audit_constructor_scan_preserves_exact_record_identity(source, expected):
+    assert _constructs_tenant_audit_event(source) is expected
+
+
 def test_audit_service_itself_remains_the_only_write_path() -> None:
     """Sanity: no code path INSERTs directly into AuditEvent outside
     of services/audit.py. Everything routes through the helpers so
@@ -74,8 +113,8 @@ def test_audit_service_itself_remains_the_only_write_path() -> None:
     for py_file in _SERVICES_DIR.rglob("*.py"):
         if py_file.name == "audit.py":
             continue
-        text = py_file.read_text(encoding="utf-8")
-        if "AuditEvent(" in text:
+        source = py_file.read_text(encoding="utf-8")
+        if _constructs_tenant_audit_event(source):
             offenders.append(str(py_file.relative_to(_SERVICES_DIR.parents[2])))
     assert not offenders, (
         "AuditEvent should only be instantiated in services/audit.py. "

@@ -7,6 +7,7 @@ from sqlalchemy import event
 
 from caseops_api.db.models import IpRenewalTerm
 from caseops_api.db.session import get_engine, get_session_factory
+from tests.sql_observation import is_read_only_select
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_ip_portfolio_listing import _application
 from tests.test_ip_portfolio_workflow import _rich_portfolio_fixture
@@ -186,22 +187,23 @@ def test_iplf_req_report_01_renewal_report_returns_canonical_evidence(
         )
         session.commit()
 
-    instruction_selects = 0
+    statements = []
 
     def count_instruction_selects(
         _connection: object,
         _cursor: object,
         statement: str,
         _parameters: object,
-        _context: object,
+        context: object,
         _executemany: object,
     ) -> None:
-        nonlocal instruction_selects
-        if (
-            statement.lstrip().upper().startswith("SELECT")
-            and "ip_client_instructions" in statement
-        ):
-            instruction_selects += 1
+        compiled = getattr(context, "compiled", None)
+        statements.append(
+            {
+                "statement": statement,
+                "read_only_select": is_read_only_select(getattr(compiled, "statement", None)),
+            }
+        )
 
     engine = get_engine()
     event.listen(engine, "before_cursor_execute", count_instruction_selects)
@@ -227,4 +229,8 @@ def test_iplf_req_report_01_renewal_report_returns_canonical_evidence(
     assert body["rows"][0]["docket_id"] == ids["docket"]
     assert body["rows"][0]["renewal_deadline"]["source_version"]
     assert any(row["fee"] and row["fee"]["evidence_reference"] for row in body["rows"])
-    assert instruction_selects == 1
+    instructions = [
+        row for row in statements if "ip_client_instructions" in row["statement"].lower()
+    ]
+    assert len(instructions) == 1, statements
+    assert all(row["read_only_select"] for row in instructions), statements

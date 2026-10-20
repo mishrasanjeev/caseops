@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { buildContentSecurityPolicy } from "@/lib/security-headers";
+import { platformPrivacyHeaders } from "@/lib/platform/privacy";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -33,6 +34,9 @@ export function proxy(request: NextRequest) {
     },
   });
   response.headers.set("Content-Security-Policy", contentSecurityPolicy);
+  for (const [name, value] of Object.entries(platformPrivacyHeaders(request.nextUrl.pathname))) {
+    response.headers.set(name, value);
+  }
   return response;
 }
 

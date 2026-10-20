@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event
@@ -15,11 +16,12 @@ from uuid import uuid4
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import MetaData, Table, create_engine, event, select, text
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.orm import Session, registry, relationship, sessionmaker
+from sqlalchemy import MetaData, Table, create_engine, event, inspect, select, text
+from sqlalchemy.exc import DBAPIError, InvalidRequestError, ProgrammingError
+from sqlalchemy.orm import Load, Session, joinedload, registry, relationship, sessionmaker
 
 from alembic import command
+from caseops_api.core.security import hash_password
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     Company,
@@ -28,8 +30,10 @@ from caseops_api.db.models import (
     DocumentProcessingJob,
     MatterActivity,
     PrivateProjectionEvent,
+    User,
 )
 from caseops_api.services import document_jobs, document_processing, embeddings
+from tests.fixtures_historical_migrations import historical_database
 from tests.fixtures_postgres_client import temporary_http_database
 from tests.test_document_worker_claims_20261010_postgres import _activity_source, _parsed
 from tests.test_matter_writer_admission_postgres import _fixture
@@ -38,6 +42,81 @@ from tests.test_postgres_validation import _ensure_migrations  # noqa: F401
 pytestmark = pytest.mark.postgres
 
 LEGACY_SHA256 = "c4acf5992cf7e73c62702c2420a7468beb1358723dca4db4f674bc179cf0f78f"
+
+
+def _wait_for_legacy_boundary(entered, future, *, timeout=10):
+    if entered.wait(timeout):
+        return
+    if future.done():
+        result = future.result()
+        pytest.fail(f"Frozen worker returned before its required boundary: {result!r}")
+    pytest.fail("Frozen worker did not reach its required boundary; Future remains pending.")
+
+
+@pytest.mark.parametrize("outcome", ["error", "returned", "pending", "entered"])
+def test_legacy_boundary_reports_early_future_outcome(outcome):
+    entered, future = Event(), Future()
+    if outcome == "error":
+        future.set_exception(RuntimeError("actual frozen worker failure"))
+        with pytest.raises(RuntimeError, match="actual frozen worker failure"):
+            _wait_for_legacy_boundary(entered, future, timeout=0)
+    elif outcome == "returned":
+        future.set_result(None)
+        with pytest.raises(pytest.fail.Exception, match="returned before.*None"):
+            _wait_for_legacy_boundary(entered, future, timeout=0)
+    elif outcome == "pending":
+        with pytest.raises(pytest.fail.Exception, match="Future remains pending"):
+            _wait_for_legacy_boundary(entered, future, timeout=0)
+    else:
+        entered.set()
+        _wait_for_legacy_boundary(entered, future, timeout=0)
+
+
+@contextmanager
+def _historical_identity_columns(engine):
+    columns = frozenset(column["name"] for column in inspect(engine).get_columns("users"))
+    absent = tuple(
+        prop.key for prop in inspect(User).column_attrs if prop.columns[0].name not in columns
+    )
+    assert "sessions_valid_after" not in columns
+
+    def historical_reads(state):
+        if not state.is_select or state.session.get_bind() is not engine:
+            return
+        options = []
+        for description in state.statement.column_descriptions:
+            entity = description.get("entity")
+            if entity is None or description.get("expr") is not entity:
+                continue
+            mapper = inspect(entity).mapper
+            if mapper.class_ is User:
+                loader, target = Load(entity), entity
+            elif mapper.class_ is CompanyMembership:
+                loader, target = Load(entity).defaultload(entity.user), User
+            elif (
+                "requested_by_membership" in mapper.relationships
+                and mapper.relationships["requested_by_membership"].mapper.class_
+                is CompanyMembership
+            ):
+                loader, target = (
+                    Load(entity).defaultload(entity.requested_by_membership)
+                    .defaultload(CompanyMembership.user), User,
+                )
+            else:
+                continue
+            for key in absent:
+                loader = loader.defer(getattr(target, key), raiseload=True)
+            options.append(loader)
+        if options:
+            state.statement = state.statement.options(*options)
+
+    # Freeze only this historical database's read dependency column set. An
+    # unexpected new-field read raises; it must never fabricate a null cutoff.
+    event.listen(Session, "do_orm_execute", historical_reads)
+    try:
+        yield columns
+    finally:
+        event.remove(Session, "do_orm_execute", historical_reads)
 
 
 @pytest.fixture
@@ -66,7 +145,8 @@ def protocol_database(pg_engine, monkeypatch):
                 foreign_keys=[table.c.requested_by_membership_id]),
         })
         command.upgrade(cfg, "20261010_0002")
-        yield SimpleNamespace(engine=engine, cfg=cfg, legacy_job=LegacyJob)
+        with _historical_identity_columns(engine):
+            yield SimpleNamespace(engine=engine, cfg=cfg, legacy_job=LegacyJob)
     finally:
         mapper.dispose()
         engine.dispose()
@@ -88,6 +168,88 @@ def _legacy_module(database, clock):
     )
     module.utcnow = lambda: clock[0]
     return module
+
+
+def test_historical_identity_has_real_columns_and_rejects_new_cutoff_access(protocol_database):
+    engine = protocol_database.engine
+    fixture = _fixture(engine, active=False)
+    columns = {column["name"] for column in inspect(engine).get_columns("users")}
+    assert "sessions_valid_after" not in columns
+    statements = []
+
+    def observed(_conn, _cursor, statement, _parameters, _context, _many):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", observed)
+    try:
+        with Session(engine) as session:
+            member = session.scalar(select(CompanyMembership).where(
+                CompanyMembership.id == fixture.actor,
+            ).options(joinedload(CompanyMembership.user)))
+            assert member is not None and member.is_active and member.user.is_active
+            assert member.user.full_name
+            assert columns <= set(inspect(member.user).dict)
+            assert "sessions_valid_after" in inspect(member.user).unloaded
+            assert "sessions_valid_after" not in inspect(member.user).dict
+            with pytest.raises(InvalidRequestError, match="sessions_valid_after.*raiseload"):
+                _ = member.user.sessions_valid_after
+            assert not any("users_1.sessions_valid_after" in sql for sql in statements)
+    finally:
+        event.remove(engine, "before_cursor_execute", observed)
+    assert "sessions_valid_after" not in {
+        column["name"] for column in inspect(engine).get_columns("users")
+    }
+
+
+def test_historical_identity_scope_leaves_other_engine_and_post_context_cutoff_real(pg_engine):
+    with historical_database(pg_engine, "20261010_0002") as (engine, cfg):
+        users = Table("users", MetaData(), autoload_with=engine, resolve_fks=False)
+        assert "sessions_valid_after" not in users.c
+        user_id, cutoff = str(uuid4()), datetime.now(UTC)
+        with engine.begin() as connection:
+            connection.execute(users.insert().values(
+                id=user_id, email=f"{user_id}@historical.example", full_name="Historical User",
+                password_hash=hash_password("HistoricalContractPass123!"),
+                is_active=True, created_at=cutoff,
+            ))
+        unrelated = create_engine(engine.url)
+        try:
+            assert not inspect(User).attrs.sessions_valid_after.deferred
+            with _historical_identity_columns(engine):
+                with Session(engine) as session:
+                    user = session.get(User, user_id)
+                    assert user is not None and user.is_active
+                    with pytest.raises(
+                        InvalidRequestError, match="sessions_valid_after.*raiseload",
+                    ):
+                        _ = user.sessions_valid_after
+                # A different Engine must still issue its normal modern query,
+                # not inherit the historical loader or a fabricated null cutoff.
+                with Session(unrelated) as session:
+                    with pytest.raises(ProgrammingError) as missing:
+                        session.get(User, user_id)
+                    assert missing.value.orig.sqlstate == "42703"
+                    assert "sessions_valid_after" in str(missing.value.orig)
+                command.upgrade(cfg, "head")
+                assert "sessions_valid_after" in {
+                    column["name"] for column in inspect(engine).get_columns("users")
+                }
+                with unrelated.begin() as connection:
+                    connection.execute(User.__table__.update().where(User.id == user_id).values(
+                        sessions_valid_after=cutoff,
+                    ))
+                with Session(unrelated) as session:
+                    user = session.get(User, user_id)
+                    assert user.sessions_valid_after == cutoff
+                    assert "sessions_valid_after" not in inspect(user).unloaded
+            # Listener removal restores normal loads on the original Engine too.
+            with Session(engine) as session:
+                user = session.get(User, user_id)
+                assert user.sessions_valid_after == cutoff
+                assert "sessions_valid_after" not in inspect(user).unloaded
+            assert not inspect(User).attrs.sessions_valid_after.deferred
+        finally:
+            unrelated.dispose()
 
 
 def _snapshot(engine, fixture):
@@ -168,7 +330,7 @@ def _assert_legacy_overlap(
         with ThreadPoolExecutor(max_workers=1) as pool:
             old = pool.submit(legacy.run_document_processing_job, fixture.job)
             try:
-                assert entered.wait(10)
+                _wait_for_legacy_boundary(entered, old)
                 start = monotonic()
                 command.upgrade(database.cfg, "20261010_0003")
                 assert monotonic() - start < 10

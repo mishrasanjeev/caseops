@@ -2,7 +2,9 @@ import hmac
 from datetime import datetime
 from functools import lru_cache
 from typing import Literal
+from unicodedata import category
 
+from email_validator import EmailNotValidError, validate_email
 from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -20,6 +22,7 @@ LOCAL_ENVS = {"local", "dev", "test", "ci", "e2e"}
 # prefer the helper `is_non_local_env(env)` below.
 NON_LOCAL_ENVS = {"staging", "production", "prod", "cloud", "gke"}
 LOCAL_POSTGRES_DATABASE_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:5432/caseops"
+ACTIVITY_REPORT_RECIPIENT_MAX_LENGTH = 1024
 
 
 def is_non_local_env(env_value: str | None) -> bool:
@@ -27,6 +30,29 @@ def is_non_local_env(env_value: str | None) -> bool:
     including unknown names — is treated as non-local so security
     guards (auth secret, strict CORS, docs gating) apply."""
     return (env_value or "").strip().lower() not in LOCAL_ENVS
+
+
+def parse_activity_report_recipients(value: str) -> tuple[str, ...]:
+    message = "Invalid activity report recipients."
+    if not isinstance(value, str) or len(value) > ACTIVITY_REPORT_RECIPIENT_MAX_LENGTH:
+        raise ValueError(message)
+    if any(category(char).startswith(("C", "Zl", "Zp")) or char in "<>" for char in value):
+        raise ValueError(message)
+    recipients: dict[str, str] = {}
+    for part in value.split(";"):
+        address = part.strip()
+        if not address:
+            raise ValueError(message)
+        try:
+            normalized = validate_email(
+                address, check_deliverability=False, allow_display_name=False,
+            ).normalized
+        except EmailNotValidError:
+            raise ValueError(message) from None
+        recipients.setdefault(normalized.casefold(), normalized)
+        if len(recipients) > 4:
+            raise ValueError(message)
+    return tuple(recipients.values())
 
 
 class Settings(BaseSettings):
@@ -220,7 +246,10 @@ class Settings(BaseSettings):
         default="sendgrid",
         pattern="^(sendgrid)$",
     )
-    activity_report_recipient_email: str = Field(default="mishra.sanjeev@gmail.com")
+    # Keep the legacy environment key and single-address default.
+    activity_report_recipient_email: str = Field(
+        default="mishra.sanjeev@gmail.com", max_length=ACTIVITY_REPORT_RECIPIENT_MAX_LENGTH,
+    )
     activity_report_enabled: bool = Field(default=True)
     # Public key that SendGrid signs event webhooks with. When set,
     # the webhook endpoint refuses to process events whose signature
@@ -531,6 +560,11 @@ class Settings(BaseSettings):
         if self.api_docs_enabled is not None:
             return bool(self.api_docs_enabled)
         return not is_non_local_env(self.env)
+
+    @field_validator("activity_report_recipient_email")
+    @classmethod
+    def _validate_activity_report_recipients(cls, value: str) -> str:
+        return ";".join(parse_activity_report_recipients(value))
 
     @field_validator(
         "document_worker_admission_protocol_version",

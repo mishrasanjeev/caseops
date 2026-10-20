@@ -27,8 +27,9 @@ const root = process.cwd();
 const requestedMode = process.env.RETENTION_CASE;
 const forwardSlashes = requestedMode.startsWith('forward-slash-');
 const mode = forwardSlashes ? requestedMode.slice('forward-slash-'.length) : requestedMode;
-const output = path.join(root, mode === 'custom-output' ? 'custom-results/deep' :
-  mode === 'ancestor-reparse' ? 'linked-parent/results' : 'test-results');
+const output = mode === 'custom-output' ? path.join(root, 'custom-results/deep') :
+  mode === 'ancestor-reparse' ? path.join(root, 'linked-parent/results') :
+  args.includes('--output') ? args[args.indexOf('--output') + 1] : path.join(root, 'test-results');
 if (mode === 'ancestor-reparse') {
   const target = path.join(root, 'parent-target');
   if (!fs.existsSync(target)) {
@@ -78,7 +79,6 @@ const receipt = {version: 1, test_id: 'offline-' + invocation, project,
 fs.writeFileSync(path.join(unit, 'selection-process.json'), JSON.stringify(receipt));
 fs.writeFileSync(path.join(unit, 'drive-process.json'), JSON.stringify(receipt));
 const names = [
-  'test_actual_entrypoint_starts_and_resolves_authenticated_fixture_routes',
   'test_fixture_inventory_is_bounded',
   'test_install_rejects_non_e2e_and_cloud_before_touching_application',
   'test_provider_cannot_authorize_exchange_or_browse_google',
@@ -86,8 +86,8 @@ const names = [
   'test_provider_enforces_the_captured_version_size_and_deadline',
   'test_provider_returns_exact_registered_bytes_only',
 ];
-fs.writeFileSync(path.join(unit, 'drive-seven-units.txt'),
-  names.map(name => name + ' ... ok').join('\n') + '\nRan 7 tests\nOK\n');
+fs.writeFileSync(path.join(unit, 'drive-six-units.txt'),
+  names.map(name => name + ' ... ok').join('\n') + '\nRan 6 tests\nOK\n');
 // Bytes are a known one-pixel PNG, not a browser execution claim.
 fs.writeFileSync(path.join(unit, 'screenshot.png'), Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
@@ -95,7 +95,7 @@ fs.writeFileSync(path.join(unit, 'screenshot.png'), Buffer.from(
 fs.writeFileSync(path.join(unit, '.control.json'),
   JSON.stringify({status: 'rejected', sha256: null}));
 fs.writeFileSync(path.join(unit, 'empty.txt'), '');
-const originals = ['selection-process.json', 'drive-process.json', 'drive-seven-units.txt',
+const originals = ['selection-process.json', 'drive-process.json', 'drive-six-units.txt',
   'screenshot.png', '.control.json', 'empty.txt'];
 const attachments = originals.map((name, index) => {
   const saved = path.join(unit, 'attachments', name);
@@ -125,8 +125,9 @@ if (mode === 'multiple-output') {
   fs.mkdirSync(second);
   const secondFile = path.join(second, 'secondary.json');
   fs.writeFileSync(secondFile, JSON.stringify({status: 'offline-secondary'}));
-  report.suites[0].specs[0].tests.push({id: 'secondary-' + invocation, projectName: 'secondary',
-    results: [{status: 'passed', attachments: [{name: 'secondary', path: secondFile}]}]});
+  report.suites[0].specs.push({title: 'secondary', tests: [{id: 'secondary-' + invocation,
+    projectName: 'secondary',
+    results: [{status: 'passed', attachments: [{name: 'secondary', path: secondFile}]}]}]});
   report.stats.expected = 2;
 }
 fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE,
@@ -135,6 +136,46 @@ fs.writeFileSync(process.env.PLAYWRIGHT_JUNIT_OUTPUT_FILE,
   '<testsuites><testsuite>' + (mode === 'empty' ? '' : '<testcase name="offline receipt"/>') +
   (mode === 'multiple-output' ? '<testcase name="secondary"/>' : '') +
   '</testsuite></testsuites>');
+const reporterPath = args.find(arg => arg.startsWith('--reporter=')).slice('--reporter='.length)
+  .split(',').find(file => file.endsWith('prod_playwright_reporter.cjs'));
+if (reporterPath !== path.join(root, 'scripts/prod_playwright_reporter.cjs')) {
+  throw new Error('Foreign reporter');
+}
+const Reporter = require(reporterPath);
+const reporter = new Reporter();
+config.workers = 1;
+for (const p of config.projects) Object.assign(p, {retries: 0, repeatEach: 1, timeout: 1000});
+const cases = [];
+for (const suite of report.suites) for (const spec of suite.specs) {
+  Object.assign(spec, {file: suite.file, line: 1, column: 1});
+  for (const test of spec.tests) {
+    spec.id = test.id;
+    Object.assign(test, {expectedStatus: 'passed',
+      status: mode === 'failed' ? 'unexpected' : 'expected'});
+    for (const run of test.results) Object.assign(run, {retry: 0, workerIndex: 0, parallelIndex: 0,
+      startTime: new Date('2026-10-20T00:00:00Z'), duration: 1, annotations: [], errors: []});
+    const results = [];
+    const testcase = {id: test.id, title: spec.title, expectedStatus: test.expectedStatus,
+      annotations: [], tags: [], retries: 0, repeatEachIndex: 0, timeout: 1000, results,
+      parent: {project: () => config.projects.find(p => p.name === test.projectName)},
+      location: {file: path.join(config.rootDir, spec.file), line: 1, column: 1},
+      titlePath: () => ['', test.projectName, spec.file, spec.title],
+      outcome: () => results.length ? test.status : 'skipped',
+      ok: () => test.status !== 'unexpected'};
+    cases.push({testcase, runs: test.results});
+  }
+}
+reporter.onBegin(config, {allTests: () => cases.map(c => c.testcase)});
+for (const {testcase, runs} of cases) for (const run of runs) {
+  testcase.results.push(run);
+  reporter.onTestEnd(testcase, run);
+}
+reporter.onEnd({status: mode === 'failed' ? 'failed' : 'passed',
+  startTime: new Date(), duration: 1});
+// The original JSON reporter still owns all raw path attachments.
+if (mode !== 'malformed-json') {
+  fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE, JSON.stringify(report));
+}
 process.exit(mode === 'failed' ? 7 : 0);
 """
 
@@ -179,6 +220,12 @@ $env:PLAYWRIGHT_JSON_OUTPUT_FILE = 'caller-json'
 $env:PLAYWRIGHT_JUNIT_OUTPUT_FILE = 'caller-xml'
 $env:PLAYWRIGHT_JSON_OUTPUT_DIR = 'caller-dir'
 $env:PLAYWRIGHT_JSON_OUTPUT_NAME = 'caller-name'
+$NativeEnvironment = @('CASEOPS_EXPECTED_RELEASE_SHA', 'CASEOPS_PW_EVIDENCE_PHASE',
+  'CASEOPS_PW_EVIDENCE_INVOCATION', 'CASEOPS_PW_EVIDENCE_JSON_FILE',
+  'CASEOPS_PW_EVIDENCE_JUNIT_FILE')
+foreach ($Name in $NativeEnvironment) {
+    [Environment]::SetEnvironmentVariable($Name, 'caller-' + $Name, 'Process')
+}
 $CopyCount = 0
 if ($Case -in @('copy-error', 'corrupt-copy', 'changed-source', 'changed-inventory')) {
     function Copy-Item {
@@ -223,7 +270,10 @@ finally {
         restored = ($env:PLAYWRIGHT_JSON_OUTPUT_FILE -eq 'caller-json' -and
           $env:PLAYWRIGHT_JUNIT_OUTPUT_FILE -eq 'caller-xml' -and
           $env:PLAYWRIGHT_JSON_OUTPUT_DIR -eq 'caller-dir' -and
-          $env:PLAYWRIGHT_JSON_OUTPUT_NAME -eq 'caller-name')
+          $env:PLAYWRIGHT_JSON_OUTPUT_NAME -eq 'caller-name' -and
+          @($NativeEnvironment | Where-Object {
+            [Environment]::GetEnvironmentVariable($_, 'Process') -cne ('caller-' + $_)
+          }).Count -eq 0)
     } | ConvertTo-Json -Depth 12 |
         Set-Content -LiteralPath (Join-Path $Root 'harness-result.json') -Encoding UTF8
 }
@@ -245,6 +295,10 @@ def _read(path: Path):
     return json.loads(_long(path).read_text(encoding="utf-8-sig"))
 
 
+def _read_progress(path: Path):
+    return [json.loads(line) for line in _long(path).read_text(encoding="utf-8").splitlines()]
+
+
 def _run(tmp_path: Path, shell: str, case: str):
     executable = shutil.which(shell)
     node = shutil.which("node")
@@ -253,6 +307,15 @@ def _run(tmp_path: Path, shell: str, case: str):
     candidate.mkdir()
     (tmp_path / "evidence").mkdir()
     (candidate / "tests/e2e").mkdir(parents=True)
+    (candidate / "scripts").mkdir()
+    shutil.copyfile(
+        REPO / "scripts/prod_playwright_reporter.cjs",
+        candidate / "scripts/prod_playwright_reporter.cjs",
+    )
+    (candidate / "tests/e2e/fixture.spec.ts").write_text("// offline source identity\n")
+    unrelated = candidate / "test-results/prod-native-evidence/unrelated/private.txt"
+    unrelated.parent.mkdir(parents=True)
+    unrelated.write_text("must not archive another invocation\n")
     (candidate / "playwright.docker.config.ts").write_text("// offline fixture\n")
     (candidate / "fake-python").write_bytes(b"")
     (candidate / "offline-cli.cjs").write_text(FAKE_CLI, encoding="utf-8")
@@ -314,7 +377,20 @@ def test_serial_invocations_retain_complete_bound_artifacts(
         assert manifest["event"] == "artifacts_retained"
         assert manifest["release_sha"] == completion["release_sha"]
         assert Path(manifest["json"]) == Path(completion["json"])
-        assert len(manifest["files"]) == 12
+        assert len(manifest["files"]) == 15
+        native_files = [
+            f for f in manifest["files"] if "/prod-native-evidence/" in f["relative_path"]
+        ]
+        assert len(native_files) == 3
+        assert {Path(f["original_path"]).parent.name for f in native_files} == {
+            completion_path.name.removesuffix(".completion.json")
+        }
+        packets = _read_progress(Path(completion["progress"]))
+        assert [p["event"] for p in packets] == [
+            "invocation_started", "collection", "test_end", "session_finished"
+        ]
+        assert packets[0]["invocation"] == completion_path.name.removesuffix(".completion.json")
+        assert packets[0]["release_sha"] == completion["release_sha"]
         assert len(manifest["attachments"]) == 6
         payload = _long(manifest_path.parent)
         actual = {
@@ -343,14 +419,14 @@ def test_serial_invocations_retain_complete_bound_artifacts(
             assert attachment["test_id"] == test["id"]
             assert attachment["project_name"] == test["projectName"]
             assert _hash(payload / attachment["retained_path"]) == attachment["sha256"]
-        seven = next(
+        six = next(
             f
             for f in manifest["files"]
-            if f["relative_path"].endswith("/drive-seven-units.txt")
+            if f["relative_path"].endswith("/drive-six-units.txt")
             and "/attachments/" not in f["relative_path"]
         )
-        transcript = (payload / seven["retained_path"]).read_text()
-        assert transcript.count(" ... ok\n") == 7 and transcript.endswith("Ran 7 tests\nOK\n")
+        transcript = (payload / six["retained_path"]).read_text()
+        assert transcript.count(" ... ok\n") == 6 and transcript.endswith("Ran 6 tests\nOK\n")
         assert any(
             (payload / directory).name == "empty-directory" and (payload / directory).is_dir()
             for directory in manifest["directories"]
@@ -422,7 +498,7 @@ def test_unsuccessful_execution_is_retained_without_false_success(
     assert len((tmp_path / "candidate/invocations.jsonl").read_text().splitlines()) == 1
     manifests = list(evidence.glob("*.artifacts/manifest.json"))
     assert len(manifests) == 1
-    assert len(_read(manifests[0])["files"]) == 12
+    assert len(_read(manifests[0])["files"]) == 15
     completions = list(evidence.glob("*.completion.json"))
     if case == "failed":
         assert len(completions) == 1 and _read(completions[0])["exit_code"] == 7
@@ -445,7 +521,7 @@ def test_selected_projects_retain_nondefault_and_multiple_outputs(
         completion = _read(path)
         manifest_path = Path(completion["artifacts_manifest"])
         manifest = _read(manifest_path)
-        expected_files = 13 if case == "multiple-output" else 12
+        expected_files = 16 if case == "multiple-output" else 15
         assert len(manifest["files"]) == expected_files
         assert completion["tests"] == (2 if case == "multiple-output" else 1)
         assert len(manifest["attachments"]) == (7 if case == "multiple-output" else 6)
@@ -454,7 +530,8 @@ def test_selected_projects_retain_nondefault_and_multiple_outputs(
             assert _hash(manifest_path.parent / file["retained_path"]) == file["sha256"]
         roots = {file["relative_path"].split("/")[0] for file in manifest["files"]}
         assert roots == (
-            {"test-results", "second-results"} if case == "multiple-output" else {"custom-results"}
+            {"test-results", "second-results"}
+            if case == "multiple-output" else {"custom-results", "test-results"}
         )
 
 
@@ -492,4 +569,4 @@ def test_existing_launcher_contract_still_passes_without_guard_edits(
     (tmp_path / "stdout.bin").write_bytes(process.stdout)
     (tmp_path / "stderr.bin").write_bytes(process.stderr)
     assert process.returncode == 0, (process.stdout, process.stderr)
-    assert b"repository-root guard: 42 regression cases passed" in process.stdout
+    assert b"repository-root guard: 54 regression cases passed" in process.stdout

@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import JSZip from "jszip";
 
 import { expect, test } from "./support/prod-diagnostic-test";
@@ -46,8 +46,10 @@ async function nativeDateWorkbook(page: Page, mark: string): Promise<Buffer> {
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
 type ImportRow = {
+  id: string;
   created_docket_id: string | null; commit_status: string; commit_error_code: string | null;
   normalized: Record<string, unknown>; reconciliation_decision: string | null;
+  errors: Array<{ field: string; code: string }>;
 };
 type ImportResult = {
   job: { id: string; status: string; total_rows: number; committed_rows: number; failed_rows: number;
@@ -268,6 +270,130 @@ for (const width of [1280, 393]) {
   test(`source-tolerant portfolio import, duplicate skip and renewal alert at ${width}px`, async ({ page, request, baseURL }) => {
     test.setTimeout(660_000);
     const { web, api, local, run, headers, release, actor, timezone } = await preparePortfolio(page, request, baseURL, width);
+    // BUG-008: real validation boundaries, never a rewrite of a client upload.
+    async function sourcePreview(filename: string, content: Buffer) {
+      await page.goto(`${web.origin}/app/ip/portfolio/imports`);
+      await page.getByLabel("CSV or XLSX file").setInputFiles({ name: filename, mimeType: "text/csv", buffer: content });
+      const uploaded = page.waitForResponse(response => new URL(response.url()).pathname === "/api/ip/imports/upload"
+        && response.request().method() === "POST");
+      await page.getByRole("button", { name: "Validate file", exact: true }).click();
+      const response = await uploaded;
+      expect(response.status(), await response.text()).toBe(201);
+      expect(response.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+      return await response.json() as ImportResult;
+    }
+    const invalidContext = await sourcePreview(`ip13-invalid-context-${run}.csv`, csv([
+      ["Trademark", "Jurisdiction", "Office"], [`Synthetic invalid context ${run}`, "I", "P"],
+    ]));
+    expect(invalidContext.job.valid_rows).toBe(0);
+    expect(invalidContext.rows[0].errors).toEqual([
+      { field: "jurisdiction", code: "invalid_length" }, { field: "office", code: "invalid_length" },
+    ]);
+    await expect(page.getByRole("group", { name: "Blocking issues for row 1", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Commit to portfolio", exact: true })).toBeDisabled();
+    if (local) {
+      // Change only this newly bootstrapped loopback tenant, never production configuration.
+      const current = await request.get(`${api.origin}/api/ip/workspace/configuration`, { headers });
+      expect(current.status()).toBe(200);
+      const configuration = (await current.json()).configuration;
+      const configPayload = {
+        enabled_asset_types: ["trademark"], timezone: "Asia/Kolkata", holiday_calendar_key: "ip13-synthetic-calendar",
+        working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] }, document_taxonomy_version: "ip-taxonomy-2026.1",
+        event_catalog_version: "ip-events-v1", deadline_rule_versions: { IN: "2026.1" }, notification_channels: ["in_app"],
+        critical_event_policy: { escalation_after_minutes: 30 }, escalation_owner_membership_id: actor.membership.id,
+        provider_keys: [], provider_terms_version: null, accept_provider_terms: false,
+      };
+      const ambiguous = await request.put(`${api.origin}/api/ip/workspace/configuration`, { headers, data: {
+        ...configPayload, expected_version: configuration.version, jurisdictions: ["IN", "US"], offices: ["IP India", "USPTO"],
+      } });
+      expect(ambiguous.status(), await ambiguous.text()).toBe(200);
+      const originalFields = { Trademark: `Synthetic saved recovery ${run}`, "Trademark Image": "synthetic-image-reference" };
+      const filename = `ip13-context-recovery-${run}.csv`;
+      const blocked = await sourcePreview(filename, csv([Object.keys(originalFields), Object.values(originalFields)]));
+      expect(blocked.job.valid_rows).toBe(0);
+      expect(blocked.rows[0].errors).toEqual([
+        { field: "jurisdiction", code: "workspace_context_required" }, { field: "office", code: "workspace_context_required" },
+      ]);
+      const recoveryRegion = page.getByRole("region", { name: "Workspace context recovery", exact: true });
+      await expect(recoveryRegion).toBeVisible();
+      await expect(page.getByRole("group", { name: "Non-blocking notes for row 1", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Commit to portfolio", exact: true })).toBeDisabled();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+      await recoveryRegion.scrollIntoViewIfNeeded();
+      const workspaceCta = recoveryRegion.getByRole("link", { name: "IP workspace", exact: true });
+      const refreshControl = page.getByRole("button", { name: "Refresh preview", exact: true });
+      await expect(workspaceCta).toHaveAttribute("href", "/app/ip");
+      for (const control of [workspaceCta, refreshControl]) {
+        await control.scrollIntoViewIfNeeded();
+        const initialBounds = await control.boundingBox();
+        await control.evaluate(element => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
+        await test.info().attach(`ip-import-context-scroll-${width}px-${await control.innerText()}`, { contentType: "application/json",
+          body: Buffer.from(JSON.stringify({ initialBounds, centeredBounds: await control.boundingBox(), viewport: page.viewportSize() })) });
+        await expect(control).toBeEnabled();
+        await expect(control).toBeInViewport({ ratio: 1 });
+      }
+      await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+      await recoveryRegion.scrollIntoViewIfNeeded();
+      const viewport = page.viewportSize()!;
+      const regionBounds = await recoveryRegion.boundingBox();
+      const refreshBeforeFraming = await refreshControl.boundingBox();
+      if (!regionBounds || !refreshBeforeFraming) throw new Error("Recovery region and refresh control must be measurable.");
+      const unionTop = Math.min(regionBounds.y, refreshBeforeFraming.y);
+      const unionBottom = Math.max(regionBounds.y + regionBounds.height, refreshBeforeFraming.y + refreshBeforeFraming.height);
+      expect(unionBottom - unionTop).toBeLessThanOrEqual(viewport.height);
+      await page.evaluate(offset => window.scrollBy({ top: offset, behavior: "instant" }), (unionTop + unionBottom - viewport.height) / 2);
+      await expect(recoveryRegion).toBeInViewport({ ratio: 1 });
+      const mainBounds = await page.locator("#main").boundingBox();
+      expect(mainBounds).not.toBeNull();
+      if (!mainBounds) throw new Error("The available main content area must be measurable.");
+      const available = { left: Math.max(0, mainBounds.x), right: Math.min(viewport.width, mainBounds.x + mainBounds.width),
+        top: 0, bottom: viewport.height };
+      async function usableBounds(control: Locator) {
+        await expect(control).toBeInViewport({ ratio: 1 });
+        const bounds = await control.boundingBox();
+        expect(bounds).not.toBeNull();
+        if (!bounds) throw new Error("Recovery controls must have visible bounds.");
+        expect(bounds.width).toBeGreaterThan(0);
+        expect(bounds.height).toBeGreaterThan(0);
+        expect(bounds.x).toBeGreaterThanOrEqual(available.left);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(available.right);
+        expect(bounds.y).toBeGreaterThanOrEqual(available.top);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(available.bottom);
+        return bounds;
+      }
+      const workspaceBounds = await usableBounds(workspaceCta);
+      const refreshBounds = await usableBounds(refreshControl);
+      expect(workspaceBounds.x + workspaceBounds.width <= refreshBounds.x
+        || refreshBounds.x + refreshBounds.width <= workspaceBounds.x
+        || workspaceBounds.y + workspaceBounds.height <= refreshBounds.y
+        || refreshBounds.y + refreshBounds.height <= workspaceBounds.y).toBe(true);
+      await test.info().attach(`ip-import-context-geometry-${width}px`, { contentType: "application/json",
+        body: Buffer.from(JSON.stringify({ viewport, available, workspaceBounds, refreshBounds, overlap: false })) });
+      await test.info().attach(`ip-import-context-recovery-region-${width}px`, { body: await recoveryRegion.screenshot(), contentType: "image/png" });
+      await test.info().attach(`ip-import-context-blocked-${width}px`, { body: await page.screenshot(), contentType: "image/png" });
+      const fixed = await request.put(`${api.origin}/api/ip/workspace/configuration`, { headers, data: {
+        ...configPayload, expected_version: (await ambiguous.json()).configuration.version, jurisdictions: ["IN"], offices: ["IP India"],
+      } });
+      expect(fixed.status(), await fixed.text()).toBe(200);
+      const enabled = await request.post(`${api.origin}/api/ip/workspace/enable`, { headers,
+        data: { expected_config_version: (await fixed.json()).configuration.version, enabled_automations: [] } });
+      expect(enabled.status(), await enabled.text()).toBe(200);
+      await page.reload();
+      await page.getByRole("button", { name: new RegExp(filename.replace(".csv", "\\.csv")) }).click();
+      const revalidated = page.waitForResponse(response => new URL(response.url()).pathname === `/api/ip/imports/${blocked.job.id}/revalidate`);
+      await page.getByRole("button", { name: "Refresh preview", exact: true }).click();
+      const refreshedResponse = await revalidated;
+      expect(refreshedResponse.status(), await refreshedResponse.text()).toBe(200);
+      const refreshed = await refreshedResponse.json() as ImportResult;
+      expect(refreshed.job.source_sha256).toBe(blocked.job.source_sha256);
+      expect(refreshed.rows[0].normalized._source_values).toEqual(originalFields);
+      expect(refreshed.rows[0].errors).toEqual([]);
+      expect(refreshed.rows[0].normalized.jurisdiction).toBe("IN");
+      expect(refreshed.rows[0].normalized.office).toBe("IP India");
+      await expect(page.getByRole("region", { name: "Workspace context recovery", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Commit to portfolio", exact: true })).toBeEnabled();
+    }
     // Actual Excel datetime cells, independently pinned to this synthetic fixture.
     const nativeName = `ip13-native-${run}.xlsx`;
     const nativeMark = `Synthetic native Excel date ${run}`;
@@ -436,7 +562,15 @@ for (const width of [1280, 393]) {
     }
     await expect(page.getByText("Extra column: Unmapped (unmapped)", { exact: true })).toBeVisible();
     await expect(page.getByRole("row").filter({ has: page.getByText(`${number}-C`, { exact: true }) })
-      .getByText("application_date: invalid optional date", { exact: true })).toBeVisible();
+      .getByText("Application date: Source date not recognized; it is not imported.", { exact: true })).toBeVisible();
+    const firstSourceRow = page.getByRole("row").filter({ has: page.getByRole("cell", { name: "1", exact: true }) });
+    await firstSourceRow.getByRole("group", { name: "Non-blocking notes for row 1", exact: true }).scrollIntoViewIfNeeded();
+    await expect(firstSourceRow.getByText("Specification: Not supplied; new imported records remain drafts.", { exact: true })).toBeVisible();
+    await expect(firstSourceRow.getByText("Image reference: Source text retained; no image downloaded or attached.", { exact: true })).toBeVisible();
+    await expect(firstSourceRow.getByRole("group", { name: "Blocking issues for row 1", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("group", { name: "Blocking issues for row 5", exact: true })
+      .getByText("Row: Blank source row; excluded from import.", { exact: true })).toBeVisible();
+    if (local) await test.info().attach(`ip-import-notes-${width}px`, { body: await page.screenshot(), contentType: "image/png" });
     const rawSource = page.getByRole("region", { name: `Review ip13-${run}.csv`, exact: true })
       .getByRole("row").filter({ has: page.getByRole("cell", { name: "1", exact: true }) }).locator("details");
     await rawSource.getByText("Source values", { exact: true }).click();
@@ -475,12 +609,22 @@ for (const width of [1280, 393]) {
     const persisted = await request.get(`${api.origin}/api/ip/imports/${preview.job.id}`, { headers });
     expect(persisted.status()).toBe(200);
     expect((await persisted.json()).rows).toEqual(saved.rows);
-    for (const row of saved.rows.filter(row => row.created_docket_id)) {
+    const createdSourceRows = saved.rows.filter(row => row.created_docket_id);
+    expect(createdSourceRows).toHaveLength(3);
+    const retainedFields = (docket: Record<string, unknown>) => ({
+      id: docket.id, status: docket.status, is_active: docket.is_active, lifecycle_version: docket.lifecycle_version,
+      current_version: docket.current_version, current_particulars: docket.current_particulars,
+    });
+    const retainedDockets = new Map<string, ReturnType<typeof retainedFields>>();
+    for (const row of createdSourceRows) {
       const record = await request.get(`${api.origin}/api/ip/dockets/${row.created_docket_id}`, { headers });
       expect(record.status()).toBe(200);
       const docket = await record.json();
+      expect(docket.id).toBe(row.created_docket_id);
       expect(docket.status).toBe("draft");
       expect(docket.current_particulars.readiness_status).toBe("incomplete");
+      expect(docket.current_particulars.representation_json.portfolio_import.source_row_id).toBe(row.id);
+      retainedDockets.set(row.created_docket_id!, retainedFields(docket));
       expect(recordText(docket)).not.toContain("private import remark");
       if (row.normalized.application_number === `${number}-C`) {
         expect(docket.current_particulars.parties_json).toEqual([]);
@@ -491,6 +635,45 @@ for (const width of [1280, 393]) {
         expect(docket.current_particulars.representation_json.portfolio_import.renewal_due_date).toBe(due);
       }
     }
+    const beforeRepeat = await request.get(`${api.origin}/api/ip/portfolio`, { headers, params: { query: number } });
+    expect(beforeRepeat.status()).toBe(200);
+    const beforeRepeatIds = (await beforeRepeat.json()).rows.map((row: { docket_id: string }) => row.docket_id).sort();
+    expect(beforeRepeatIds).toEqual([saved.rows[0].created_docket_id]);
+    const repeated = await sourcePreview(`ip13-repeat-${run}.csv`, content);
+    expect(repeated.job.valid_rows).toBe(4);
+    expect(repeated.job.invalid_rows).toBe(1);
+    const duplicateCommitted = page.waitForResponse(response => new URL(response.url()).pathname === `/api/ip/imports/${repeated.job.id}/commit`
+      && response.request().method() === "POST");
+    await page.getByRole("button", { name: "Commit to portfolio", exact: true }).click();
+    const duplicateCommit = await duplicateCommitted;
+    expect(duplicateCommit.status(), await duplicateCommit.text()).toBe(200);
+    expect(duplicateCommit.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+    const duplicateSaved = await duplicateCommit.json() as ImportResult;
+    expect(duplicateSaved.job.committed_rows).toBe(0);
+    expect(duplicateSaved.job.failed_rows).toBe(0);
+    expect(duplicateSaved.rows.every(row => row.commit_status === "skipped" && row.created_docket_id === null)).toBe(true);
+    expect(duplicateSaved.rows.slice(0, 4).map(row => row.commit_error_code)).toEqual(Array(4).fill("duplicate_skipped"));
+    await expect(page.getByRole("region", { name: `Review ip13-repeat-${run}.csv`, exact: true })
+      .getByText(/0 created; 0 linked; 5 skipped \(4 duplicates\); .*0 failed\./)).toBeVisible();
+    await page.reload();
+    await page.getByRole("button", { name: new RegExp(`ip13-repeat-${run}\\.csv`) }).click();
+    await expect(page.getByRole("region", { name: `Review ip13-repeat-${run}.csv`, exact: true })
+      .getByText(/0 created; 0 linked; 5 skipped \(4 duplicates\); .*0 failed\./)).toBeVisible();
+    const afterRepeat = await request.get(`${api.origin}/api/ip/portfolio`, { headers, params: { query: number } });
+    expect(afterRepeat.status()).toBe(200);
+    expect((await afterRepeat.json()).rows.map((row: { docket_id: string }) => row.docket_id).sort())
+      .toEqual([saved.rows[0].created_docket_id]);
+    for (const row of createdSourceRows) {
+      const response = await request.get(`${api.origin}/api/ip/dockets/${row.created_docket_id}`, { headers });
+      expect(response.status(), await response.text()).toBe(200);
+      const retainedDocket = await response.json();
+      expect(retainedFields(retainedDocket)).toEqual(retainedDockets.get(row.created_docket_id!));
+      expect(retainedDocket.status).toBe("draft");
+      expect(retainedDocket.current_particulars.representation_json.portfolio_import.source_row_id).toBe(row.id);
+    }
+    const sourceAfterRepeat = await request.get(`${api.origin}/api/ip/imports/${preview.job.id}`, { headers });
+    expect(sourceAfterRepeat.status()).toBe(200);
+    expect((await sourceAfterRepeat.json()).rows).toEqual(saved.rows);
     await page.goto(`${web.origin}/app/ip/portfolio`);
     await page.getByPlaceholder("Mark, application number, opposition number").fill(mark);
     await page.getByRole("button", { name: "Search portfolio", exact: true }).click();
@@ -748,7 +931,7 @@ for (const width of [1280, 393]) {
         page.getByRole("button", { name: "Commit to portfolio", exact: true }).click(),
       ]);
       await expect(page.getByRole("region", { name: `Review ${filename}`, exact: true })
-        .getByText(/101 created; 0 linked; 0 skipped \(0 duplicates\); 101 with warnings; 0 failed\./)).toBeVisible();
+        .getByText(/101 created; 0 linked; 0 skipped \(0 duplicates\); 101 with notes; 0 failed\./)).toBeVisible();
       expect(transportFailures).toEqual([]);
       expect(results.map(result => result.status)).toEqual([202, 200]);
       expect(results.map(result => result.body.job.committed_rows)).toEqual([100, 101]);
@@ -770,7 +953,7 @@ for (const width of [1280, 393]) {
       await page.reload();
       await page.getByRole("button", { name: new RegExp(filename.replace(".csv", "\\.csv")) }).click();
       await expect(page.getByRole("region", { name: `Review ${filename}`, exact: true })
-        .getByText(/101 created; 0 linked; 0 skipped \(0 duplicates\); 101 with warnings; 0 failed\./)).toBeVisible();
+        .getByText(/101 created; 0 linked; 0 skipped \(0 duplicates\); 101 with notes; 0 failed\./)).toBeVisible();
       const retained = await request.get(`${api.origin}/api/ip/imports/${preview.job.id}`, { headers });
       expect(retained.status()).toBe(200);
       expect((await retained.json()).rows).toEqual(saved.rows);

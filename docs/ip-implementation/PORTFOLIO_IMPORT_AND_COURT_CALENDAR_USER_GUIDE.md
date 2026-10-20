@@ -40,14 +40,15 @@ acceptance until the saved docket opens and the dated browser journey passes.
    limit by repeating large cells. Use the active XLSX sheet.
 3. Select **Validate file**. This stages a preview; it does not create dockets.
 4. Open **Source column mapping** and review source values, normalized fields,
-   warnings and skipped rows. Recognized aliases are not mapped by position.
+   **Blocking issues**, **Non-blocking notes** and skipped rows. Recognized
+   aliases are not mapped by position. Notes do not make an eligible row invalid.
 5. Leave safe duplicates set to **Skip**. Distinct application numbers with
    the same mark are separate records. An explicit existing-record link does
    not overwrite that record's particulars.
 6. Select **Commit to portfolio**. The server rechecks the source, current
    tenant, identities and write authority. The saved commit key makes a replay
    idempotent; it is not a reason to automatically retry a failed mutation.
-7. Read the created, linked, skipped, duplicate, warning and failed counts.
+7. Read the created, linked, skipped, duplicate, notes and failed counts.
    Import history retains the actual result after reload. Open the saved
    docket from Portfolio to inspect it.
 
@@ -65,6 +66,24 @@ identity is needed to create a useful record. Missing legal facts stay empty;
 incomplete applications remain drafts, not filing-ready registrations. Where
 jurisdiction/office are absent, only an unambiguous configured workspace value
 can supply context. Otherwise the row reports missing workspace context.
+
+For a saved preview with missing context, supply the correct jurisdiction/office
+in a corrected source file or ask the workspace administrator to review the
+IP workspace configuration. Only a single configured value per missing field
+is derived; explicit source values are not overwritten. Do not collapse a
+legitimate multi-jurisdiction or multi-office configuration to admit a file;
+provide the correct context for each source row instead. After a legitimate
+configuration correction, reopen the saved import and select **Refresh preview**
+without uploading it again. Review the refreshed rows and duplicate decisions.
+The server revalidates original source fields and rotates the preview token.
+An expired preview still cannot be committed until refreshed. Missing
+specification keeps new imported records in draft; linking or skipping does not
+change an existing record's lifecycle. An image reference remains source text,
+not fetched or attached image evidence. A duplicate-only commit can correctly
+create zero records; valid rows and created records are different counts.
+
+October19 recovery wording has scoped source verification only; this guide does
+not certify its deployment. See `docs/bugfix-ip-import-recovery-2026-10-19.md`.
 
 ## Supported Source Columns
 

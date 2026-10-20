@@ -3,22 +3,26 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from hashlib import sha256
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import event, func, insert, select, text
+from sqlalchemy import event, func, insert, literal, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import visitors
 
 from caseops_api.db.models import (
     Client,
     Company,
+    CompanyMembership,
+    EthicalWall,
     IpAsset,
     IpDocketRecord,
     IpSpecialistRecord,
     IpSpecialistVersion,
     MatterAccessGrant,
+    MembershipRole,
     Team,
     TeamMembership,
 )
@@ -27,6 +31,7 @@ from caseops_api.schemas.ip_specialist import SpecialistCorrection, SpecialistFa
 from caseops_api.services.idempotency import canonical_json_sha256
 from caseops_api.services.ip_lifecycle import transition_ip_docket_lifecycle
 from caseops_api.services.ip_specialist import correct_record, create_record, list_records
+from caseops_api.services.record_access_policy import visible_ip_dockets_filter
 from tests import test_ip_specialist as journeys
 from tests.test_postgres_validation import (
     _ensure_migrations,  # noqa: F401
@@ -346,8 +351,9 @@ def _explain_specialist_clause(request, session, clauses, statements, *, label):
     return _retain_specialist_plan(request, plan, label=label)
 
 
+@pytest.mark.parametrize("visibility_order", ["balanced", "hidden_next_page"])
 def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
-    pg_engine, registered_intake, request
+    pg_engine, registered_intake, request, visibility_order
 ):
     company, actor, record = _seed(pg_engine)
     with Session(pg_engine) as session:
@@ -361,6 +367,8 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
         original_version = session.scalar(
             select(IpSpecialistVersion).where(IpSpecialistVersion.record_id == header.id)
         )
+        record_rank, docket_rank = UUID(header.id).int, UUID(docket.id).int
+        assert record_rank > 10_000 and docket_rank > 10_000
 
         def clone(row, **changes):
             return {
@@ -371,8 +379,14 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
         for batch in range(20):
             dockets, assets, records, versions, grants = [], [], [], [], []
             for offset in range(500):
-                docket_id, asset_id = str(uuid4()), str(uuid4())
-                visible = offset % 2 == 0
+                ordinal = batch * 500 + offset
+                docket_id = str(UUID(int=docket_rank - 10_000 + ordinal))
+                asset_id = str(uuid4())
+                visible = (
+                    ordinal % 2 == 0
+                    if visibility_order == "balanced"
+                    else ordinal < 26 or 79 <= ordinal < 5053
+                )
                 dockets.append(
                     clone(
                         docket,
@@ -383,7 +397,8 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
                 assets.append(
                     clone(asset, id=asset_id, docket_id=docket_id, title=dockets[-1]["title"])
                 )
-                record_id = str(uuid4())
+                # Record and docket rank are independent of random UUID density.
+                record_id = str(UUID(int=record_rank - 10_000 + ordinal))
                 records.append(clone(header, id=record_id, docket_id=docket_id, asset_id=asset_id))
                 facts = {**original_version.facts_json, "title": dockets[-1]["title"]}
                 versions.append(
@@ -404,8 +419,37 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
                 (IpSpecialistVersion, versions),
                 (MatterAccessGrant, grants),
             ):
-                session.execute(insert(model.__table__), rows)
+                if rows:
+                    session.execute(insert(model.__table__), rows)
             session.commit()
+        expected_ids = [str(UUID(int=record_rank - 10_000 + i)) for i in range(10_000)]
+        assert list(session.scalars(
+            select(IpSpecialistRecord.id).where(
+                IpSpecialistRecord.company_id == company,
+                IpSpecialistRecord.domain == "design",
+            ).order_by(IpSpecialistRecord.id)
+        )) == [*expected_ids, header.id]
+        assert session.scalar(select(func.count(MatterAccessGrant.id)).where(
+            MatterAccessGrant.company_id == company,
+            MatterAccessGrant.membership_id == actor,
+            MatterAccessGrant.ip_docket_id.is_not(None),
+            MatterAccessGrant.revoked_at.is_(None),
+        )) == 5001
+        first_ordinals = (
+            list(range(0, 50, 2)) if visibility_order == "balanced" else list(range(25))
+        )
+        next_ordinals = (
+            list(range(50, 100, 2))
+            if visibility_order == "balanced" else [25, *range(79, 103)]
+        )
+        first_expected = [expected_ids[i] for i in first_ordinals]
+        next_expected = [expected_ids[i] for i in next_ordinals]
+        request.node.user_properties.append(("specialist_fixture_order", json.dumps({
+            "layout": visibility_order, "cloned_records": 10_000, "seed_records": 1,
+            "cloned_grants": 5000, "seed_grants": 1,
+            "first_ordinals": first_ordinals, "next_ordinals": next_ordinals,
+            "first_cursor_ordinal": first_ordinals[-1], "next_cursor_ordinal": next_ordinals[-1],
+        })))
         context = _ip_race_context(session, company_id=company, membership_id=actor)
         statements = []
         clauses = []
@@ -429,6 +473,8 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
             request, session, clauses, statements, label="empty:first"
         )
         assert len(page.records) == 25 and page.next_cursor
+        assert [str(row.id) for row in page.records] == first_expected
+        assert str(page.next_cursor) == first_expected[-1]
         assert all(not row.title.startswith("Hidden") for row in page.records)
         assert len(statements) <= 12, statements
         assert not any("ip_specialist_versions" in statement for statement in statements)
@@ -436,6 +482,11 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
         assert row_work <= 2048
         assert docket_nodes and all(node["Actual Loops"] <= 128 for node in docket_nodes)
         assert all("Index" in node["Node Type"] for node in docket_nodes)
+        assert all(
+            "id" in node.get("Index Cond", "") and ">=" in node.get("Index Cond", "")
+            for node in docket_nodes
+        ), docket_nodes
+        assert all(node["Actual Rows"] <= 1 for node in docket_nodes)
         assert all(
             node["Actual Loops"] == 0 for node in nodes if node.get("Relation Name") == "teams"
         )
@@ -500,6 +551,9 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
                 request, session, clauses, statements, label=label
             )
             assert len(following.records) == 25 and following.next_cursor
+            expected = next_expected if cursor else first_expected
+            assert [str(row.id) for row in following.records] == expected
+            assert str(following.next_cursor) == expected[-1]
             assert all(not row.title.startswith("Hidden") for row in following.records)
             assert len(statements) <= 12, statements
             assert not any("ip_specialist_versions" in statement for statement in statements)
@@ -507,6 +561,16 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
             assert work <= 2048
             assert dockets and all(node["Actual Loops"] <= 128 for node in dockets)
             assert all("Index" in node["Node Type"] for node in dockets)
+            assert all(
+                "id" in node.get("Index Cond", "") and ">=" in node.get("Index Cond", "")
+                for node in dockets
+            ), dockets
+            assert all(node["Actual Rows"] <= 1 for node in dockets)
+            assert all(
+                node["Actual Loops"] <= 1
+                for node in following_nodes
+                if node.get("Relation Name") in {"teams", "team_memberships"}
+            )
             if label.startswith("empty"):
                 assert all(
                     node["Actual Loops"] == 0
@@ -517,3 +581,244 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
                 assert first_ids.isdisjoint(row.id for row in following.records)
             else:
                 assert first_ids == {row.id for row in following.records}
+
+
+def _assert_specialist_base_acl_parity(session, context, record_id, *, allowed, closed=False):
+    header = session.get(IpSpecialistRecord, record_id)
+    docket = session.get(IpDocketRecord, header.docket_id)
+    canonical = session.scalar(
+        select(IpDocketRecord.id).where(
+            IpDocketRecord.id == header.docket_id,
+            IpDocketRecord.company_id == context.company.id,
+            visible_ip_dockets_filter(session, context=context),
+        )
+    )
+    assert (canonical is not None) is allowed
+    assert docket.is_active is (not closed)
+    if closed:
+        assert docket.status == "closed"
+    for include_closed in (False, True):
+        page = list_records(
+            session, context=context, domain="design", limit=25,
+            include_closed=include_closed,
+        )
+        expected = [UUID(record_id)] if allowed and (not closed or include_closed) else []
+        assert [row.id for row in page.records] == expected
+        assert page.next_cursor is None
+        if expected:
+            summary = page.records[0]
+            assert (summary.title, summary.lifecycle_status, summary.version) == (
+                docket.title, docket.status, docket.current_version,
+            )
+
+
+@pytest.mark.parametrize(
+    "scenario", ["owner_ungranted", "member_wall", "team_wall", "sole_team_grant", "include_closed"]
+)
+def test_specialist_list_matches_base_acl_after_docket_adaptation(
+    pg_engine, registered_intake, scenario
+):
+    company, actor, record = _seed(pg_engine)
+    with Session(pg_engine) as session:
+        session.get(CompanyMembership, actor).role = MembershipRole.OWNER
+        grant = session.scalars(
+            select(MatterAccessGrant).where(
+                MatterAccessGrant.company_id == company,
+                MatterAccessGrant.ip_docket_id == str(record.docket_id),
+                MatterAccessGrant.membership_id == actor,
+                MatterAccessGrant.revoked_at.is_(None),
+            )
+        ).one()
+        session.commit()
+        context = _ip_race_context(session, company_id=company, membership_id=actor)
+        record_id = str(record.id)
+        _assert_specialist_base_acl_parity(session, context, record_id, allowed=True)
+        if scenario == "owner_ungranted":
+            grant.revoked_at = datetime.now(UTC)
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=False)
+        elif scenario == "sole_team_grant":
+            grant.revoked_at = datetime.now(UTC)
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=False)
+            team = Team(company_id=company, name="Sole alias grant team",
+                        slug=f"sole-alias-grant-{uuid4().hex}", is_active=True)
+            session.add(team)
+            session.flush()
+            association = TeamMembership(team_id=team.id, membership_id=actor)
+            team_grant = MatterAccessGrant(
+                company_id=company, ip_docket_id=str(record.docket_id),
+                team_id=team.id, granted_by_membership_id=actor,
+            )
+            session.add_all([association, team_grant])
+            session.commit()
+            assert session.scalar(select(func.count()).select_from(MatterAccessGrant).where(
+                MatterAccessGrant.company_id == company,
+                MatterAccessGrant.ip_docket_id == str(record.docket_id),
+                MatterAccessGrant.membership_id == actor,
+                MatterAccessGrant.revoked_at.is_(None),
+            )) == 0
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=True)
+            team.is_active = False
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=False)
+            team.is_active = True
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=True)
+            session.delete(association)
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=False)
+            session.add(TeamMembership(team_id=team.id, membership_id=actor))
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=True)
+            team_grant.revoked_at = datetime.now(UTC)
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=False)
+            team_grant.revoked_at = None
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=True)
+            transition_ip_docket_lifecycle(
+                session, context=context, docket_id=str(record.docket_id),
+                payload=IpLifecycleTransitionRequest(
+                    expected_lifecycle_version=record.lifecycle_version,
+                    to_status="closed", effective_at=datetime.now(UTC),
+                    reason="Local sole-team grant closed-read fixture.",
+                    outcome="closed", source="local_fixture",
+                    evidence_ref="fixture:specialist-sole-team-alias",
+                    linked_matter_handling="reviewed",
+                ),
+            )
+            session.commit()
+            _assert_specialist_base_acl_parity(
+                session, context, record_id, allowed=True, closed=True
+            )
+            team_grant.revoked_at = datetime.now(UTC)
+            session.commit()
+            _assert_specialist_base_acl_parity(
+                session, context, record_id, allowed=False, closed=True
+            )
+        elif scenario in {"member_wall", "team_wall"}:
+            wall_subject = {"excluded_membership_id": actor}
+            team = None
+            if scenario == "team_wall":
+                team = Team(company_id=company, name="Alias wall team",
+                            slug=f"alias-wall-{uuid4().hex}", is_active=True)
+                session.add(team)
+                session.flush()
+                session.add(TeamMembership(team_id=team.id, membership_id=actor))
+                wall_subject = {"excluded_team_id": team.id}
+            wall = EthicalWall(
+                company_id=company, ip_docket_id=str(record.docket_id),
+                created_by_membership_id=actor, **wall_subject,
+            )
+            session.add(wall)
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=False)
+            if team is not None:
+                team.is_active = False
+            else:
+                wall.revoked_at = datetime.now(UTC)
+            session.commit()
+            _assert_specialist_base_acl_parity(session, context, record_id, allowed=True)
+        else:
+            transition_ip_docket_lifecycle(
+                session,
+                context=context,
+                docket_id=str(record.docket_id),
+                payload=IpLifecycleTransitionRequest(
+                    expected_lifecycle_version=record.lifecycle_version,
+                    to_status="closed", effective_at=datetime.now(UTC),
+                    reason="Local fixture closure for list and retained ACL parity.",
+                    outcome="closed", source="local_fixture",
+                    evidence_ref="fixture:specialist-list-alias",
+                    linked_matter_handling="reviewed",
+                ),
+            )
+            session.commit()
+            _assert_specialist_base_acl_parity(
+                session, context, record_id, allowed=True, closed=True
+            )
+            grant.revoked_at = datetime.now(UTC)
+            session.commit()
+            _assert_specialist_base_acl_parity(
+                session, context, record_id, allowed=False, closed=True
+            )
+        versions = session.scalar(
+            select(func.count()).select_from(IpSpecialistVersion).where(
+                IpSpecialistVersion.record_id == record_id,
+                IpSpecialistVersion.company_id == company,
+            )
+        )
+        assert versions == 1
+
+
+@pytest.mark.parametrize("neighbor_scope", ["own", "foreign"])
+def test_specialist_list_rejects_a_present_nonmatching_docket_successor(
+    pg_engine, registered_intake, neighbor_scope
+):
+    company, actor, record = _seed(pg_engine)
+    with Session(pg_engine) as session:
+        neighbor_company, neighbor_actor = company, actor
+        if neighbor_scope == "foreign":
+            neighbor_company = _seed_company(session)
+            neighbor_actor = _seed_membership(session, neighbor_company, role="admin")
+        base = uuid4().int & ~((1 << 32) - 1)
+        absent_id, neighbor_id = [str(UUID(int=base + offset)) for offset in (2, 3)]
+        absent = session.get(IpDocketRecord, absent_id)
+        assert absent is None
+        session.add(
+            IpDocketRecord(
+                id=neighbor_id, company_id=neighbor_company,
+                title="Present successor must not supply specialist facts",
+                record_type="design_intake", restricted=True,
+            )
+        )
+        session.flush()
+        session.add(
+            MatterAccessGrant(
+                company_id=neighbor_company, ip_docket_id=neighbor_id,
+                membership_id=neighbor_actor, granted_by_membership_id=neighbor_actor,
+            )
+        )
+        session.commit()
+        successor = session.scalar(
+            select(IpDocketRecord.id).where(IpDocketRecord.id >= absent_id)
+            .order_by(IpDocketRecord.id).limit(1)
+        )
+        assert successor == neighbor_id
+        context = _ip_race_context(session, company_id=company, membership_id=actor)
+        clauses = []
+
+        def capture(_connection, clause, _multiparams, _params, _options):
+            if any(
+                column.get("entity") is IpSpecialistRecord
+                for column in getattr(clause, "column_descriptions", ())
+            ):
+                clauses.append(clause)
+
+        bind = session.get_bind()
+        event.listen(bind, "before_execute", capture)
+        try:
+            admitted = list_records(session, context=context, domain="design", limit=25)
+        finally:
+            event.remove(bind, "before_execute", capture)
+        assert [row.id for row in admitted.records] == [record.id]
+        assert len(clauses) == 1
+        # Probe the actual captured query without corrupting FK-backed fixture rows.
+        replacement = literal(absent_id, type_=IpSpecialistRecord.__table__.c.docket_id.type)
+        replaced = 0
+
+        def replace(node):
+            nonlocal replaced
+            if (
+                getattr(node, "table", None) is IpSpecialistRecord.__table__
+                and getattr(node, "key", None) == "docket_id"
+            ):
+                replaced += 1
+                return replacement
+            return None
+
+        missing_target_clause = visitors.replacement_traverse(clauses[0], {}, replace)
+        assert replaced > 0
+        rejected = session.execute(missing_target_clause).all()
+        assert rejected == []

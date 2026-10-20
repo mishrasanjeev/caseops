@@ -75,12 +75,13 @@ def _token_precedes_membership_cutoff(
     *,
     token_issued_at: float,
 ) -> bool:
-    valid_after = membership.sessions_valid_after
-    if valid_after is None:
-        return False
-    if valid_after.tzinfo is None:
-        valid_after = valid_after.replace(tzinfo=UTC)
-    return token_issued_at < valid_after.timestamp()
+    cutoffs = (membership.sessions_valid_after, membership.user.sessions_valid_after)
+    return any(
+        token_issued_at
+        < (cutoff.replace(tzinfo=UTC) if cutoff.tzinfo is None else cutoff).timestamp()
+        for cutoff in cutoffs
+        if cutoff is not None
+    )
 
 
 def issue_auth_session_under_fence(

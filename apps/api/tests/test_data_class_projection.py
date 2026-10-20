@@ -126,14 +126,19 @@ class TestAdmission:
         )
         assert "IPLF-027A" in excinfo.value.detail["detail"]
 
-    def test_a_non_relational_class_is_refused_before_a_purge_plan_exists(self) -> None:
+    @pytest.mark.parametrize(
+        "data_class_id", ["database-and-object-backups", "operational-activity-report-delivery"]
+    )
+    def test_a_non_relational_class_is_refused_before_a_purge_plan_exists(
+        self, data_class_id: str
+    ) -> None:
         # Control: the separate non-SQL inventory. Merging the two sets would
         # let an object store reach purge_dependency_plan, which can only reason
         # about tables and would return an empty deletion order for it.
-        assert "database-and-object-backups" in compiled.INVENTORIED_NON_SQL_CLASSES
+        assert data_class_id in compiled.INVENTORIED_NON_SQL_CLASSES
 
         with pytest.raises(HTTPException) as excinfo:
-            require_admissible_data_class("database-and-object-backups")
+            require_admissible_data_class(data_class_id)
 
         assert excinfo.value.detail["type"] == "data_class_registered_but_not_reviewed"
 

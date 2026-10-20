@@ -133,6 +133,26 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
 }
 
 
+# PRA-04..08 uses an independent, tenant-less report principal. These exact
+# paths prove credentials/single-use links or call the canonical console
+# context resolver, including CSRF, MFA, live revocation and manager step-up.
+# Tenant role dependencies would authenticate the wrong realm. Runtime denial
+# coverage is in test_platform_console's complete route matrix, supplemented
+# below with matching CSRF but no report-session authority. Never prefix-match.
+CONSOLE_OWN_AUTH_MUTATING_ROUTES = frozenset({
+    ("POST", "/api/platform-console/auth/login"),
+    ("POST", "/api/platform-console/auth/mfa/enroll"),
+    ("POST", "/api/platform-console/auth/mfa/verify"),
+    ("POST", "/api/platform-console/auth/logout"),
+    ("POST", "/api/platform-console/auth/invitations/complete"),
+    ("POST", "/api/platform-console/auth/password-reset/start"),
+    ("POST", "/api/platform-console/auth/invitations/resend"),
+    ("POST", "/api/platform-console/auth/password-reset/complete"),
+    ("POST", "/api/platform-console/admins/invitations"),
+    ("POST", "/api/platform-console/admins/{admin_id}/revoke"),
+})
+
+
 def _is_guarded(route: APIRoute) -> bool:
     """Return whether the dependency chain contains an approved auth boundary."""
     for dep in route.dependant.dependencies:
@@ -170,6 +190,8 @@ def _hashable(value: object) -> bool:
 
 
 def _route_is_public(method: str, path: str) -> bool:
+    if (method, path) in CONSOLE_OWN_AUTH_MUTATING_ROUTES:
+        return True
     if (method, path) in PUBLIC_MUTATING_ROUTES:
         return True
     for ex_method, ex_prefix in PUBLIC_MUTATING_ROUTES:
@@ -205,6 +227,48 @@ def test_every_mutating_api_route_is_role_or_capability_guarded(_app) -> None:
         "PUBLIC_MUTATING_ROUTES with a written justification:\n  - "
         + "\n  - ".join(missing)
     )
+
+
+def test_console_own_auth_inventory_matches_every_current_mutating_route(_app):
+    actual = {
+        (method, route.path)
+        for route in _app.routes
+        if isinstance(route, APIRoute) and route.path.startswith("/api/platform-console/")
+        for method in route.methods & MUTATING_METHODS
+    }
+    assert actual == CONSOLE_OWN_AUTH_MUTATING_ROUTES
+
+
+@pytest.mark.parametrize("method,path", sorted(CONSOLE_OWN_AUTH_MUTATING_ROUTES))
+def test_console_own_auth_admission_never_exempts_siblings_or_other_methods(method, path):
+    assert _route_is_public(method, path)
+    assert not _route_is_public(method, path + "/unreviewed")
+    assert not _route_is_public(method, path + "-unreviewed")
+    assert not _route_is_public("DELETE", path)
+
+
+@pytest.mark.parametrize(
+    "path,payload",
+    [
+        ("/auth/mfa/enroll", {}),
+        ("/auth/mfa/verify", {"code": "123456"}),
+        ("/auth/logout", {}),
+        ("/admins/invitations", {"email": "viewer@console.example", "full_name": "Viewer"}),
+        ("/admins/unknown/revoke", {"reason": "Access ended"}),
+    ],
+)
+def test_console_session_mutations_reject_missing_authority_even_with_csrf(client, path, payload):
+    from caseops_api.core.console_auth import CONSOLE_CSRF_COOKIE, CONSOLE_CSRF_HEADER
+
+    csrf = "isolated-report-console-csrf-proof"
+    client.cookies.set(CONSOLE_CSRF_COOKIE, csrf, path="/")
+    response = client.post(
+        "/api/platform-console" + path,
+        json=payload,
+        headers={CONSOLE_CSRF_HEADER: csrf, "X-CaseOps-Automated-Test": "no-paid-providers"},
+    )
+    assert response.status_code == 401
+    assert response.json()["code"] == "console_session_invalid"
 
 
 # Sanity: the check itself should recognise a guarded dependency.

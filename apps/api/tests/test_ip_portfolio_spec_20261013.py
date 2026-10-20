@@ -30,6 +30,7 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_engine, get_session_factory
 from caseops_api.services import ip_imports, ip_renewals, notification_delivery
 from caseops_api.services.ip_import_files import parse_ip_import_file
+from tests.sql_observation import is_read_only_select
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -783,8 +784,13 @@ def test_preview_duplicate_lookup_is_batched(client):
     statements = []
 
     def observe(conn, cursor, statement, parameters, context, executemany):
-        if statement.lstrip().upper().startswith("SELECT"):
-            statements.append(statement)
+        compiled = getattr(context, "compiled", None)
+        statements.append(
+            {
+                "statement": statement,
+                "read_only_select": is_read_only_select(getattr(compiled, "statement", None)),
+            }
+        )
 
     engine = get_engine()
     event.listen(engine, "before_cursor_execute", observe)
@@ -797,8 +803,12 @@ def test_preview_duplicate_lookup_is_batched(client):
         )
     finally:
         event.remove(engine, "before_cursor_execute", observe)
-    assert sum("FROM ip_identifiers" in sql for sql in statements) == 1
-    assert sum("FROM ip_workspace_configurations" in sql for sql in statements) == 1
+    for table in ("ip_identifiers", "ip_workspace_configurations"):
+        matching = [
+            row for row in statements if f"from {table}" in row["statement"].lower()
+        ]
+        assert len(matching) == 1, statements
+        assert all(row["read_only_select"] for row in matching), statements
 
 
 @pytest.mark.postgres

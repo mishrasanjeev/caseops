@@ -453,7 +453,7 @@ jobs:
 
   e2e:
     name: Playwright app suite
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # The complete inventory is intentionally serial: it includes the dated
     # browser journeys and the 4,496-row statute-source proof. The prior
     # 30-minute ceiling canceled a still-progressing run and misreported the

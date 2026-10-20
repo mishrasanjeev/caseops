@@ -1,5 +1,52 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 20 Delegated Report Acceptance
+
+J14/M14, US-040/042 and FT-060/061 now include PRA-01..08 in
+`docs/platform-report-admin-2026-10-20.md`: all persisted account categories,
+rolling-30-day human engagement, dormant-group presentation, independent
+reports-only admin login/MFA, invitation/reset/revocation and cross-account
+report views. Existing founder/tenant authority is not extended. Complete
+functional/security/migration/PostgreSQL and desktop/mobile browser acceptance
+is required on the final combined candidate and exact deployed main SHA.
+Status is Partially implemented; C17 preparation is not acceptance for this
+new scope, and no production report-admin grant has been made.
+
+## October 20 Operational Report Coverage
+
+J14/M14/US-040/042 operational oversight, not a new reminder module: existing
+activity reporting is extended to four private recipients at 07:30 IST using
+the same scheduler. Legacy configuration, report contents, period calculations
+and sanitized command logs remain covered. The exact sender, validation,
+scheduler and secret-manifest test inventory is mapped in
+`docs/activity-report-0730-2026-10-20.md`. Local proof is not production or
+frozen-C15 acceptance; actual deployed cadence and recipient delivery are open.
+
+## October 19 SQL Oracle Coverage Correction
+
+UJ-30/41, IPLF-090/091 and adjacent IP renewal/portfolio/report/import readers:
+C7 complete CI fails four observation cases, not a newly established product
+or legal-data defect. All16 specialist plans pass, but prefix-based collectors
+miss legitimate WITH reads. C8 shares the exact existing structural AST guard
+and repairs six adjacent test collectors; runtime/API/schema/dependency and
+legal-source contracts are unchanged. Parent-reported29 unit passes are scoped.
+The72-case/six-file PostgreSQL run completed216 passed phases; the separate
+79-case/five-file SQLite run completed237 passed phases, both with zero skips
+or failures and stable source checks. Fresh full release gates remain pending. Neither C7 browser acceptance
+(zero executed) nor deployed C8 acceptance exists at this checkpoint. Preserve
+all failed phases, counters, plans and the owner-deferred cleanup boundary.
+See `docs/bugfix-sql-read-oracles-2026-10-19.md`; earlier results remain history.
+
+## October 19 Specialist Read Recovery
+
+IPLF-090/091 and UJ-30/41 reuse the existing specialist reader/access owner.
+Docker15 fails its actual390055>2048 work bound after1603 passes; no remaining
+local/browser coverage is implied. The ordered one-key barrier preserves all
+current ACL/lifecycle predicates. Complete scoped native25/75 and two compile
+guards pass, four plans1000-1485. Full replacement release/live proof is still
+pending;9cf76f2b is last observed serving. No entitlement, legal-source or Google
+consent gap is closed. See `docs/bugfix-specialist-docket-seek-2026-10-19.md`.
+
 ## October 19 CI Correction
 
 J04/M03 remains source-only/NO-GO. C3ed13138d CI39173686953 failed compiled
@@ -222,6 +269,21 @@ have47 passes. These do not certify the joined release. Fresh final-source
 Docker/CI, canonical merge, guarded execution and exact live browser replay
 remain required. The historical unidentified reopening remains Inconclusive.
 See `docs/runbooks/test-legal-manual-ip-qa-grant.md` for the operator procedure.
+
+## October 19 Import Review Recovery
+
+Canonical IP/IPLF-090/091 remains release-blocked by source-identical CI2109
+and ordered2346-work RED. Candidate statement-local active-team evaluation
+preserves ACL and2048/128 work/probe fences. Four compiler checks passed;
+shared-policy/full release proof is pending. See
+`docs/bugfix-ip-statement-team-plan-2026-10-19.md`.
+
+UJ-02/04/26, J08/M08 and IPLF-030/032/037 retain existing ownership. BUG-008's
+blocking-issue/non-blocking-note UI and saved-preview recovery have focused
+source regressions; original backend incident cause is unconfirmed. Four IP13
+dated identities are extended in place, not counted as deployed acceptance.
+Exact-release production regression remains pending. See
+`docs/bugfix-ip-import-recovery-2026-10-19.md`.
 
 ## October 13 IP And Calendar Scope
 

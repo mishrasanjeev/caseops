@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "130d2fa78f83213417780b75e9eb816999dda20c98147bfeb95a562b5492576c"
-MAP_SCHEMA_FINGERPRINT = "de637a251f88b4ac6c82e6e865224213f53fb14ae81c115cd24095903ab44574"
+MAP_DOCUMENT_FINGERPRINT = "957a16bdc0bf733ea6d5124a06d052a98ad3776d4f0dcafb1864074416d28d49"
+MAP_SCHEMA_FINGERPRINT = "41e0caf4fad57829a96cf6ee3364c1425051454f30a5858a41610f40559adc8a"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "3605dfc0af07a0dc8ee65be3ab4cd5e57c91649d57867cfeef77d92ca142067a"
+ORM_SCHEMA_FINGERPRINT = "c3d9e7fbac8cb873ad5fcff3f2dd0e6813e5cedae084f6ca656ed65dd43f4148"
 
-PROJECTION_ID = "2a9107e26a143025d2bab82a8db30dfa68786a22852ac6be93ecbd697b5802ce"
+PROJECTION_ID = "0abf65db30d94da1a2de9da9af6bf5273a8d328ababd4ec0d635df421160b075"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -316,7 +316,12 @@ INVENTORIED_SQL_TABLES = frozenset(
         "pine_labs_uat_scenario_evidence",
         "platform_admin_audit_events",
         "platform_admin_memberships",
+        "platform_console_deliveries",
+        "platform_console_sessions",
+        "platform_console_tokens",
         "platform_operational_readiness_evidence",
+        "platform_report_admins",
+        "platform_report_audit_events",
         "portal_magic_links",
         "portal_publication_targets",
         "portal_publications",
@@ -398,6 +403,8 @@ INVENTORIED_NON_SQL_CLASSES = frozenset(
         "document-object-prefix-and-version",
         "llm-and-embedding-provider-held-content",
         "matter-attachment-pgvector-index",
+        "operational-activity-report-delivery",
+        "platform-console-account-link-delivery",
         "sql-relational-index-projections",
         "tenant-private-retrieval-candidate-cache",
     }

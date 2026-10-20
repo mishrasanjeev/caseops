@@ -794,6 +794,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    sessions_valid_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -8152,6 +8153,146 @@ class PlatformAdminMembership(Base):
     )
 
     user: Mapped[User] = relationship()
+
+
+class PlatformReportAdmin(Base):
+    __tablename__ = "platform_report_admins"
+    __table_args__ = (
+        Index(
+            "uq_report_admin_one_manager_per_root",
+            "root_platform_admin_id",
+            unique=True,
+            sqlite_where=text("role = 'manager' AND status IN ('pending', 'active')"),
+            postgresql_where=text("role = 'manager' AND status IN ('pending', 'active')"),
+        ),
+        CheckConstraint("role IN ('manager', 'viewer')", name="ck_report_admin_role"),
+        CheckConstraint(
+            "status IN ('pending', 'active', 'revoked')", name="ck_report_admin_status"
+        ),
+        CheckConstraint(
+            "(role = 'manager' AND created_by_report_admin_id IS NULL) OR "
+            "(role = 'viewer' AND created_by_report_admin_id IS NOT NULL)",
+            name="ck_report_admin_provenance",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
+    root_platform_admin_id: Mapped[str] = mapped_column(
+        ForeignKey("platform_admin_memberships.id"), nullable=False, index=True
+    )
+    created_by_report_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_report_admins.id"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    auth_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    initializes_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    encrypted_totp_secret: Mapped[str | None] = mapped_column(Text)
+    mfa_status: Mapped[str] = mapped_column(String(24), nullable=False, default="not_enrolled")
+    last_totp_counter: Mapped[int | None] = mapped_column(BigInteger)
+    recovery_code_hashes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    mfa_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mfa_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    login_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    login_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class PlatformConsoleSession(Base):
+    __tablename__ = "platform_console_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('mfa_enrollment_required', 'mfa_challenge_required', 'authenticated')",
+            name="ck_console_session_purpose",
+        ),
+        Index("ix_console_sessions_admin_expiry", "report_admin_id", "expires_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    report_admin_id: Mapped[str] = mapped_column(
+        ForeignKey("platform_report_admins.id"), nullable=False
+    )
+    secret_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    csrf_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    credential_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    factor_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    auth_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PlatformConsoleToken(Base):
+    __tablename__ = "platform_console_tokens"
+    __table_args__ = (
+        CheckConstraint("purpose IN ('invite', 'password_reset')", name="ck_console_token_purpose"),
+        Index("ix_console_tokens_admin_purpose", "report_admin_id", "purpose"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    report_admin_id: Mapped[str] = mapped_column(
+        ForeignKey("platform_report_admins.id"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    purpose: Mapped[str] = mapped_column(String(24), nullable=False)
+    auth_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    credential_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class PlatformConsoleDelivery(Base):
+    __tablename__ = "platform_console_deliveries"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'failed', 'outcome_unknown')",
+            name="ck_console_delivery_status",
+        ),
+        Index("ix_console_deliveries_status_expiry", "status", "claim_expires_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    token_id: Mapped[str] = mapped_column(
+        ForeignKey("platform_console_tokens.id"), nullable=False, unique=True
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    claim_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    claim_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    provider_message_id: Mapped[str | None] = mapped_column(String(255))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PlatformReportAuditEvent(Base):
+    __tablename__ = "platform_report_audit_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    report_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_report_admins.id"), index=True
+    )
+    actor_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    target_id: Mapped[str | None] = mapped_column(String(120))
+    result: Mapped[str] = mapped_column(String(24), nullable=False, default="success")
+    reason: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 class PlatformAdminAuditEvent(Base):

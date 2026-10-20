@@ -140,6 +140,8 @@ def test_company_disable_and_external_claim_have_native_winner_order(
 ):
     audit = finalizer_audit
     company_locked, provider_entered, provider_release, disabled = (Event() for _ in range(4))
+    waiter_prepared, admit_waiter = Event(), Event()
+    waiter, holder = ("worker", "revocation") if winner == "disable" else ("revocation", "worker")
     calls, worker_session = [], {}
     monkeypatch.setattr(delivery, "get_settings", lambda: SimpleNamespace(
         notification_external_delivery_enabled=True,
@@ -174,6 +176,18 @@ def test_company_disable_and_external_claim_have_native_winner_order(
             company_locked.set()
             assert audit.release.wait(8), "Claim admission boundary was not released"
 
+    def prepare_waiter(connection, _cursor, sql, parameters, _context, _many):
+        if (connection.info.get("finalizer_role") == waiter
+                and "FOR NO KEY UPDATE OF companies" in sql):
+            assert fixture["company_id"] in parameters.values()
+            assert not waiter_prepared.is_set(), "Waiter submitted duplicate Company admission"
+            audit.record("notification_waiter_query_prepared", role=waiter,
+                         pid=audit.pids[waiter], sql=sql, winner=winner, target=target)
+            waiter_prepared.set()
+            # All warm reads, SQL compilation and journal work precede the
+            # observer budget. No recorder work intervenes after admission.
+            assert admit_waiter.wait(8), "Prepared Company admission was not released"
+
     def deliver():
         with audit.session("worker") as session:
             warmed = session.get(Company, fixture["company_id"])
@@ -204,6 +218,7 @@ def test_company_disable_and_external_claim_have_native_winner_order(
             audit.record("company_disable_committed", pid=audit.pids["revocation"])
 
     event.listen(audit.engine, "after_cursor_execute", pause_company)
+    event.listen(audit.engine, "before_cursor_execute", prepare_waiter)
     try:
         with audit.pool() as (pool, futures):
             try:
@@ -212,9 +227,15 @@ def test_company_disable_and_external_claim_have_native_winner_order(
                 assert company_locked.wait(4), "First contender did not own Company admission"
                 second = pool.submit(deliver if winner == "disable" else disable)
                 futures.append(second)
-                waiter, holder = ("worker", "revocation") if winner == "disable" else (
-                    "revocation", "worker",
-                )
+                assert waiter_prepared.wait(4), "Second contender did not prepare Company admission"
+                prepared = audit.snapshot()
+                pending = next(row for row in prepared if row["pid"] == audit.pids[waiter])
+                assert audit.pids[holder] not in pending["blockers"]
+                assert not first.done() and not second.done() and not admit_waiter.is_set()
+                audit.record("notification_waiter_admission_barrier", waiter=waiter, holder=holder,
+                             activity=prepared, winner=winner, target=target,
+                             actual_wait_observed=False)
+                admit_waiter.set()
                 audit.await_blocker(waiter, holder)
                 if winner == "disable":
                     assert not provider_entered.is_set() and not calls
@@ -247,9 +268,11 @@ def test_company_disable_and_external_claim_have_native_winner_order(
                     assert not result.blocked and not result.retry_scheduled
                     assert not result.dead_lettered
             finally:
+                admit_waiter.set()
                 audit.release.set()
                 provider_release.set()
     finally:
+        event.remove(audit.engine, "before_cursor_execute", prepare_waiter)
         event.remove(audit.engine, "after_cursor_execute", pause_company)
     _lock_order(audit, target)
     _read_back(audit, fixture, winner, calls)

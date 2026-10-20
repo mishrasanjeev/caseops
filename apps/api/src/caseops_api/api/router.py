@@ -48,6 +48,7 @@ from caseops_api.api.routes import (
     outside_counsel,
     payments,
     platform_admin,
+    platform_console,
     portal,
     portal_ip,
     private_retrieval,
@@ -75,6 +76,9 @@ def register_api_routes(application: FastAPI) -> None:
     )
     application.include_router(bootstrap.router, prefix="/api/bootstrap", tags=["bootstrap"])
     application.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+    application.include_router(
+        platform_console.router, prefix="/api/platform-console", tags=["platform-console"]
+    )
     application.include_router(billing.router, prefix="/api/billing", tags=["billing"])
     application.include_router(bulk_imports.router, prefix="/api/imports", tags=["bulk-imports"])
     application.include_router(companies.router, prefix="/api/companies", tags=["companies"])

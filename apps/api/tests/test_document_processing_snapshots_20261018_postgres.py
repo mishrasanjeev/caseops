@@ -16,9 +16,6 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import delete, event, func, inspect, select
 from sqlalchemy.orm import Session, defer, raiseload
-from sqlalchemy.sql import visitors
-from sqlalchemy.sql.elements import TextClause
-from sqlalchemy.sql.selectable import TextualSelect
 
 from caseops_api.db.models import (
     CompanyMembership,
@@ -31,6 +28,7 @@ from caseops_api.db.models import (
     utcnow,
 )
 from caseops_api.services import contracts, document_jobs, matters
+from tests.sql_observation import is_read_only_select as _is_read_only_select
 from tests.test_document_worker_claims_20261010_postgres import (
     _activity_source,
     _parsed,
@@ -175,17 +173,6 @@ def _receipt(fixture, source_id, *, queued_at, job_id=None, **overrides):
         "completed_at": queued_at + timedelta(seconds=2),
         "updated_at": queued_at + timedelta(seconds=2),
     } | overrides
-
-
-def _is_read_only_select(statement):
-    return bool(
-        statement is not None
-        and getattr(statement, "is_select", False)
-        and not any(
-            getattr(node, "is_dml", False) or isinstance(node, (TextClause, TextualSelect))
-            for node in visitors.iterate(statement)
-        )
-    )
 
 
 @contextmanager

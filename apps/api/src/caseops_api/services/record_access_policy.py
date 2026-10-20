@@ -311,7 +311,10 @@ def visible_ip_dockets_filter(
             TeamMembership.membership_id == membership_id,
             active_team_id.is_not(None),
         )
-        .subquery()
+        # Both policy branches share this statement-local set. Repeating the
+        # eligibility probe per docket makes sparse continuation pages unstable.
+        .cte()
+        .prefix_with("MATERIALIZED", dialect="postgresql")
     )
     member_wall = _active_ip_subject_match(
         EthicalWall, EthicalWall.excluded_membership_id, membership_id, now

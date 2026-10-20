@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import case, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
@@ -261,9 +261,34 @@ def _active_profile(
     provider: str = "default",
     currency: str = "INR",
     at: datetime | None = None,
+    bounded: bool = False,
 ) -> ProviderCostProfile | None:
     effective_at = at or _now()
     provider_key = (provider or "default").strip().lower()
+    if bounded:
+        return session.scalar(
+            select(ProviderCostProfile)
+            .where(
+                ProviderCostProfile.category == category,
+                ProviderCostProfile.currency == currency,
+                ProviderCostProfile.status == "active",
+                ProviderCostProfile.effective_from <= effective_at,
+                or_(
+                    ProviderCostProfile.effective_until.is_(None),
+                    ProviderCostProfile.effective_until > effective_at,
+                ),
+            )
+            .order_by(
+                case(
+                    (ProviderCostProfile.provider == provider_key, 2),
+                    (ProviderCostProfile.provider == "default", 1),
+                    else_=0,
+                ).desc(),
+                ProviderCostProfile.effective_from.desc(),
+                ProviderCostProfile.id.asc(),
+            )
+            .limit(1)
+        )
     candidates = list(
         session.scalars(
             select(ProviderCostProfile).where(
@@ -423,11 +448,14 @@ def estimate_payment_gateway_cost_minor(
     return round(max(amount_minor, 0) * bps / 10_000) + max(payment_count, 0) * fixed
 
 
-def case_refresh_guardrail_warnings(session: Session) -> list[dict[str, object]]:
+def case_refresh_guardrail_warnings(
+    session: Session, *, bounded: bool = False,
+) -> list[dict[str, object]]:
     row = _active_profile(
         session,
         category=ProviderCostCategory.CASE_REFRESH,
         provider="case_tracking",
+        bounded=bounded,
     )
     if (
         row is None

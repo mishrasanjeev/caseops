@@ -6,12 +6,12 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `130d2fa78f83213417780b75e9eb816999dda20c98147bfeb95a562b5492576c`
-- SQL tables: `339`
-- SQL columns: `5379`
-- ORM indexes: `1778`
-- Alembic/raw index declarations: `1562`
-- Non-SQL data classes: `12`
+- Canonical map SHA-256: `957a16bdc0bf733ea6d5124a06d052a98ad3776d4f0dcafb1864074416d28d49`
+- SQL tables: `344`
+- SQL columns: `5437`
+- ORM indexes: `1787`
+- Alembic/raw index declarations: `1571`
+- Non-SQL data classes: `14`
 
 ## Boundary
 
@@ -297,7 +297,12 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `pine_labs_uat_scenario_evidence` | `billing_provider_evidence` | 16 | `registry_fail_closed` |
 | `platform_admin_audit_events` | `tenant_operational_record` | 12 | `registry_fail_closed` |
 | `platform_admin_memberships` | `platform_operational_reference` | 10 | `registry_fail_closed` |
+| `platform_console_deliveries` | `security_identity_control` | 10 | `registry_fail_closed` |
+| `platform_console_sessions` | `security_identity_control` | 11 | `registry_fail_closed` |
+| `platform_console_tokens` | `security_identity_control` | 10 | `registry_fail_closed` |
 | `platform_operational_readiness_evidence` | `platform_operational_reference` | 14 | `registry_fail_closed` |
+| `platform_report_admins` | `security_identity_control` | 18 | `registry_fail_closed` |
+| `platform_report_audit_events` | `security_identity_control` | 8 | `registry_fail_closed` |
 | `portal_magic_links` | `security_identity_control` | 8 | `registry_fail_closed` |
 | `portal_publication_targets` | `tenant_operational_record` | 9 | `registry_fail_closed` |
 | `portal_publications` | `tenant_operational_record` | 20 | `registry_fail_closed` |
@@ -358,13 +363,14 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `user_mfa_settings` | `security_identity_control` | 12 | `registry_fail_closed` |
 | `user_mfa_step_ups` | `security_identity_control` | 8 | `registry_fail_closed` |
 | `user_notification_preferences` | `tenant_operational_record` | 11 | `registry_fail_closed` |
-| `users` | `platform_operational_reference` | 6 | `registry_fail_closed` |
+| `users` | `platform_operational_reference` | 7 | `registry_fail_closed` |
 | `voyage_usage` | `billing_provider_evidence` | 13 | `registry_fail_closed` |
 
 ## Known non-SQL data classes
 
 | ID | Kind | Disposition handler |
 | --- | --- | --- |
+| `platform-console-account-link-delivery` | `provider_held_object` | `registry_fail_closed` |
 | `document-object-prefix-and-version` | `object_prefix_version` | `registry_fail_closed` |
 | `document-materialization-cache` | `cache` | `registry_fail_closed` |
 | `tenant-private-retrieval-candidate-cache` | `cache` | `registry_fail_closed` |
@@ -376,6 +382,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `audit-export-artifacts` | `export_artifact` | `registry_fail_closed` |
 | `llm-and-embedding-provider-held-content` | `provider_held_object` | `registry_fail_closed` |
 | `connector-and-payment-provider-held-records` | `provider_held_object` | `registry_fail_closed` |
+| `operational-activity-report-delivery` | `provider_held_object` | `registry_fail_closed` |
 | `database-and-object-backups` | `backup` | `registry_fail_closed` |
 
 ## Change control

@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   DRIVE_ISOLATION_UNIT_NAMES, FIXTURE_EVIDENCE_MAX_BYTES,
-  fixtureProcessEvidence, persistFixtureProcessEvidence,
+  fixtureProcessEvidence, persistFixtureProcessEvidence, reviewDriveSupervisor,
 } from "./support/fixture-process";
 import { e2eEnv } from "./support/env";
 import { requireFixtureDatabaseUrl } from "./support/fixture-database";
@@ -122,8 +122,70 @@ function driveUnitTranscript(failed = false): string {
     "RuntimeError: Offline Drive source identity or download bounds changed.",
     "",
   ] : [];
-  return [...units, "", ...failure, "-".repeat(70), "Ran 7 tests in 0.125s", "", failed ? "FAILED (failures=1)" : "OK", ""].join("\n");
+  return [...units, "", ...failure, "-".repeat(70),
+    `Ran ${DRIVE_ISOLATION_UNIT_NAMES.length} tests in 0.125s`, "", failed ? "FAILED (failures=1)" : "OK", ""].join("\n");
 }
+
+function driveSupervisorEvents() {
+  const ids = DRIVE_ISOLATION_UNIT_NAMES.map((name) => `test_drive_import_emulator.DriveImportIsolationTests.${name}`);
+  return [
+    { event: "supervisor_started", pattern: "test_drive_import_emulator.py", deadline_seconds: 50 },
+    { event: "child_started", pid: 17, source_sha256: "a".repeat(64) },
+    { event: "collection", test_ids: ids },
+    ...ids.flatMap((id) => [{ event: "test_started", test_id: id }, { event: "test_finished", test_id: id }]),
+    { event: "unittest_finished", tests_run: ids.length, failures: 0, errors: 0, skipped: 0 },
+    { event: "cleanup_started", pid: 17 }, { event: "cleanup_kill_sent", pid: 17 },
+    { event: "supervisor_finished", exit_code: 0, reason: "child_exited", tree_reaped: true,
+      child_exit_code: 0, duration_seconds: 0.125 },
+  ];
+}
+
+function supervisorOutput(events: Array<object>) {
+  return events.map((event) => "CASEOPS_FIXTURE_EVENT " + JSON.stringify(event)).join("\n") + "\n";
+}
+
+test("Drive supervisor evidence requires the exact completed inventory and owned cleanup", () => {
+  const output = supervisorOutput(driveSupervisorEvents());
+  expect(reviewDriveSupervisor(output)).toEqual({
+    event: "drive_supervision_reviewed", complete: true, stdout_bytes: Buffer.byteLength(output),
+    stdout_sha256: createHash("sha256").update(output).digest("hex"), source_sha256: "a".repeat(64),
+    unit_ids: DRIVE_ISOLATION_UNIT_NAMES.map((name) => `test_drive_import_emulator.DriveImportIsolationTests.${name}`),
+    tree_reaped: true,
+  });
+});
+
+test("Drive supervisor evidence cannot turn missing, failed or orphaned execution into success", () => {
+  const original = driveSupervisorEvents();
+  const last = original.at(-1)!;
+  for (const events of [
+    original.slice(0, -1), original.filter((event) => event.event !== "collection"),
+    [...original.slice(0, -1), { ...last, tree_reaped: false }],
+    [...original.slice(0, -1), { ...last, exit_code: 124, reason: "deadline_exceeded" }],
+    [...original.slice(0, -1), { ...last, duration_seconds: 57 }],
+    [...original, last], [...original.slice(0, 3), ...original.slice(5)],
+    original.map((event) => event.event === "unittest_finished" ? { ...event, skipped: 1 } : event),
+    original.map((event) => event.event === "test_finished" ? { ...event, test_id: "unreviewed" } : event),
+    original.map((event) => event.event === "cleanup_started" ? { ...event, pid: 18 } : event),
+    original.map((event) => event.event === "cleanup_kill_sent" ? { ...event, pid: 18 } : event),
+    original.map((event) => event.event === "cleanup_started" ? { event: event.event } : event),
+    original.map((event) => event.event === "cleanup_kill_sent" ? { event: event.event } : event),
+  ]) {
+    expect(reviewDriveSupervisor(supervisorOutput(events))).toMatchObject({
+      complete: false, source_sha256: null, unit_ids: [], tree_reaped: null,
+    });
+  }
+});
+
+test("Drive supervisor evidence rejects unbounded or unrecognized output and retains no private field", () => {
+  for (const output of ["", "not an event", "CASEOPS_FIXTURE_EVENT []", "CASEOPS_FIXTURE_EVENT {",
+    "x".repeat(FIXTURE_EVIDENCE_MAX_BYTES + 1)]) {
+    expect(() => reviewDriveSupervisor(output)).toThrow();
+  }
+  const events = driveSupervisorEvents().map((event) => ({ ...event, password: "must-not-be-retained" }));
+  expect(JSON.stringify(reviewDriveSupervisor(supervisorOutput(events)))).not.toContain("must-not-be-retained");
+  expect(() => reviewDriveSupervisor('CASEOPS_FIXTURE_EVENT {"password":"must-not-be-retained",'))
+    .toThrow(/^Invalid Drive supervisor JSON\.$/);
+});
 
 test("persisted fixture receipts retain selected metadata without private output", async ({}, testInfo) => {
   const privateValue = "never-retain-fixture-output";
@@ -187,7 +249,7 @@ test("persisted fixture receipts reject existing destinations without overwrite"
   expect(await readFile(first.receiptPath, "utf8")).toBe(first.receipt);
 });
 
-test("persisted Drive evidence retains exact seven-unit transcript and binding", async ({}, testInfo) => {
+test("persisted Drive evidence retains the exact reviewed-unit transcript and binding", async ({}, testInfo) => {
   const first = DRIVE_ISOLATION_UNIT_NAMES[0];
   const output = driveUnitTranscript().replace(
     `${first} (test_drive_import_emulator.DriveImportIsolationTests.${first}) ... ok`,
@@ -224,7 +286,7 @@ test("persisted Drive failures retain full reviewed fake-emulator trace", async 
     const receipt = JSON.parse(await readFile(saved.receiptPath, "utf8"));
     expect(receipt.exit_code).toBe(1);
     expect(receipt.transcript.state).toBe("failed");
-    expect(receipt.transcript.units).toHaveLength(7);
+    expect(receipt.transcript.units).toHaveLength(DRIVE_ISOLATION_UNIT_NAMES.length);
     expect(receipt.transcript.units[0].status).toBe("FAIL");
     expect(await readFile(saved.transcriptPath!, "utf8")).toBe(output);
     expect(output).toContain("Traceback (most recent call last):");
@@ -241,18 +303,23 @@ test("persisted Drive overflow fails admission without truncated success", async
   expect(receipt.transcript).toMatchObject({ state: "rejected", reason: "byte_limit", file: null,
     bytes: Buffer.byteLength(output), sha256: null });
   expect((await readdir(testInfo.outputDir)).filter((file) => file.startsWith("drive-emulator-isolation-"))).toEqual([]);
-  const missing = DRIVE_ISOLATION_UNIT_NAMES[6];
+  const missing = DRIVE_ISOLATION_UNIT_NAMES.at(-1)!;
   const partial = driveUnitTranscript().replace(
     `${missing} (test_drive_import_emulator.DriveImportIsolationTests.${missing}) ... ok\n`, "",
   );
   const before = testInfo.attachments.length;
   await expect(persistFixtureProcessEvidence(testInfo, "drive-isolation-process", processFixture("", partial), new Date().toISOString(), 125, partial))
-    .rejects.toThrow(/lacks complete seven-unit outcomes.*incomplete/);
+    .rejects.toThrow(/lacks complete reviewed-unit outcomes.*incomplete/);
   const retained = testInfo.attachments.slice(before).find((item) => item.name === "drive-isolation-process");
   const partialReceipt = JSON.parse(await readFile(retained!.path!, "utf8"));
   expect(partialReceipt.transcript.state).toBe("incomplete");
-  expect(partialReceipt.transcript.units).toHaveLength(6);
+  expect(partialReceipt.transcript.units).toHaveLength(DRIVE_ISOLATION_UNIT_NAMES.length - 1);
   expect(await readFile(testInfo.outputPath(partialReceipt.transcript.file), "utf8")).toBe(partial);
+  const staleCount = driveUnitTranscript().replace(
+    `Ran ${DRIVE_ISOLATION_UNIT_NAMES.length} tests`, `Ran ${DRIVE_ISOLATION_UNIT_NAMES.length + 1} tests`,
+  );
+  await expect(persistFixtureProcessEvidence(testInfo, "drive-isolation-process", processFixture("", staleCount),
+    new Date().toISOString(), 125, staleCount)).rejects.toThrow(/lacks complete reviewed-unit outcomes.*incomplete/);
 });
 
 test("persisted Drive evidence rejects credential-bearing text before writing streams", async ({}, testInfo) => {

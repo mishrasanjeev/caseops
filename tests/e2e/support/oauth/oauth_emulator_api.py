@@ -27,8 +27,10 @@ from caseops_api.services.calendar_sync import (  # noqa: E402
     MicrosoftGraphOutlookProvider,
 )
 from drive_import_emulator import install_drive_import_emulator  # noqa: E402
+from platform_console_emulator import install_platform_console_emulator  # noqa: E402
 
 install_drive_import_emulator(app)
+install_platform_console_emulator(app)
 
 emulator = CalendarOAuthEmulator()
 transport_origin = emulator.start()

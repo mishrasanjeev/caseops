@@ -35,6 +35,10 @@ from caseops_api.services.document_jobs import (
     _process_ip_document_version_job,
     _process_matter_attachment_job,
 )
+from tests.test_document_execution_protocol_20261010_postgres import (
+    _historical_identity_columns,
+    _wait_for_legacy_boundary,
+)
 from tests.test_postgres_validation import _seed_company, _seed_matter, _seed_membership
 
 pytestmark = pytest.mark.postgres
@@ -195,10 +199,10 @@ def test_first_release_requires_legacy_quiescence_before_recovery(
             # Install only the additive policy before the old snapshot exists.
             # This branch proves that successful DDL alone is not a writer fence.
             command.upgrade(cfg, "20261010_0002")
-        with ThreadPoolExecutor(max_workers=1) as pool:
+        with _historical_identity_columns(engine), ThreadPoolExecutor(max_workers=1) as pool:
             old = pool.submit(old_run, old_id)
             try:
-                assert old_entered.wait(10)
+                _wait_for_legacy_boundary(old_entered, old, timeout=10)
                 if quiesce_before_claim:
                     # CONCURRENTLY still waits for an old reader's snapshot.
                     # Keep the real migration lock budget and its partial DDL.

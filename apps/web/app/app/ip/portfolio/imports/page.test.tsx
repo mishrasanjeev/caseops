@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 import type { IpImportPreview } from "@/lib/api/endpoints";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -105,6 +106,7 @@ function preview(overrides: Record<string, unknown> = {}): IpImportPreview {
 
 describe("IpPortfolioImportsPage", () => {
   beforeEach(() => {
+    vi.mocked(toast.success).mockClear();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
     historyMock.mockReset();
@@ -144,7 +146,7 @@ describe("IpPortfolioImportsPage", () => {
       previewToken: "preview-token-1",
       idempotencyKey: expect.any(String),
     })));
-    expect(await screen.findByText("1 created; 0 linked; 0 skipped (0 duplicates); 0 with warnings; 0 failed.")).toBeInTheDocument();
+    expect(await screen.findByText("1 created; 0 linked; 0 skipped (0 duplicates); 0 with notes; 0 failed.")).toBeInTheDocument();
   });
 
   it("requires an explicit accessible-docket decision and uses the rotated token", async () => {
@@ -169,6 +171,7 @@ describe("IpPortfolioImportsPage", () => {
     await user.upload(screen.getByLabelText("CSV or XLSX file"), file);
     await user.click(screen.getByRole("button", { name: "Validate file" }));
     expect(await screen.findByText("Eligible rows will be committed; duplicate and unusable rows will be skipped.")).toBeInTheDocument();
+    expect(toast.success).toHaveBeenCalledWith("1 valid source rows; 0 blocked rows. Duplicates and blocked rows are skipped by default.");
     expect(screen.getByRole("button", { name: "Commit to portfolio" })).toBeEnabled();
 
     await user.click(screen.getByLabelText("Decision for row 1"));
@@ -246,6 +249,109 @@ describe("IpPortfolioImportsPage", () => {
     await user.click(screen.getByRole("button", { name: "Validate file" }));
     await screen.findByRole("heading", { name: "Review trademarks.csv" });
     expect(screen.getByRole("button", { name: "Commit to portfolio" })).toBeDisabled();
+  });
+
+  it("separates draft and image notes from blocking issues without disabling eligible rows", async () => {
+    const source = preview();
+    source.rows[0].normalized._warnings = [
+      { field: "specification", code: "source_incomplete_draft" },
+      { field: "image_reference", code: "source_reference_only" },
+      { field: "jurisdiction", code: "configured_workspace_context" },
+    ];
+    source.rows[0].normalized.jurisdiction = "IN";
+    uploadMock.mockResolvedValue(source);
+    render(withClient(<IpPortfolioImportsPage />));
+    const user = userEvent.setup();
+    await user.upload(screen.getByLabelText("CSV or XLSX file"), new File(["Trademark\nSynthetic"], "source.csv"));
+    await user.click(screen.getByRole("button", { name: "Validate file" }));
+    const notes = await screen.findByRole("group", { name: "Non-blocking notes for row 1" });
+    expect(within(notes).getByText("Specification: Not supplied; new imported records remain drafts.")).toBeVisible();
+    expect(within(notes).getByText("Image reference: Source text retained; no image downloaded or attached.")).toBeVisible();
+    expect(within(notes).getByText("Jurisdiction: Using workspace context (IN).")).toBeVisible();
+    expect(screen.queryByRole("group", { name: "Blocking issues for row 1" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Commit to portfolio" })).toBeEnabled();
+    expect(screen.queryByText(/source incomplete draft|source reference only/)).not.toBeInTheDocument();
+  });
+
+  it.each(["skip", "link_existing"] as const)("scopes retained %s notes to source data, not the existing record lifecycle", async (decision) => {
+    const retained = preview();
+    retained.job.status = "committed";
+    retained.rows[0].reconciliation_decision = decision;
+    retained.rows[0].reconciled_target_docket_id = decision === "link_existing" ? "existing-active" : null;
+    retained.rows[0].duplicate_candidates = [{ docket_id: "existing-active", title: "Existing active mark", match_reasons: ["exact_application_number"] }];
+    retained.rows[0].commit_status = decision === "skip" ? "skipped" : "committed";
+    retained.rows[0].commit_error_code = decision === "skip" ? "duplicate_skipped" : null;
+    retained.rows[0].normalized._warnings = [
+      { field: "specification", code: "source_incomplete_draft" },
+      { field: "application_date", code: "invalid_optional_date" },
+    ];
+    historyMock.mockResolvedValue({ jobs: [retained.job] });
+    getImportMock.mockResolvedValue(retained);
+    render(withClient(<IpPortfolioImportsPage />));
+    await userEvent.click(await screen.findByRole("button", { name: /trademarks.csv/i }));
+    const notes = await screen.findByRole("group", { name: "Non-blocking notes for row 1" });
+    expect(within(notes).getByText("Specification: Not supplied; new imported records remain drafts.")).toBeVisible();
+    expect(within(notes).getByText("Application date: Source date not recognized; it is not imported.")).toBeVisible();
+    expect(screen.queryByText(/the record remains a draft|no date will be saved/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Commit to portfolio" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh preview" })).not.toBeInTheDocument();
+    expect(commitMock).not.toHaveBeenCalled();
+    expect(fetchDocketMock).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("refreshes a nonexpired context-blocked history preview with admin=%s", async (admin) => {
+    useCapabilityMock.mockImplementation((capability: string) => capability !== "ip:taxonomy_admin" || admin);
+    const blocked = preview();
+    blocked.job.valid_rows = 0;
+    blocked.job.invalid_rows = 1;
+    blocked.rows[0].validation_status = "invalid";
+    blocked.rows[0].errors = [
+      { field: "jurisdiction", code: "workspace_context_required" },
+      { field: "office", code: "workspace_context_required" },
+    ];
+    blocked.rows[0].normalized._warnings = [{ field: "specification", code: "source_incomplete_draft" }];
+    const refreshed = preview();
+    refreshed.job.version = 2;
+    refreshed.job.preview_token = "refreshed-context-token";
+    historyMock.mockResolvedValue({ jobs: [blocked.job] });
+    getImportMock.mockResolvedValue(blocked);
+    revalidateMock.mockResolvedValue(refreshed);
+    commitMock.mockResolvedValue({ ...refreshed, job: { ...refreshed.job, status: "committed" } });
+    render(withClient(<IpPortfolioImportsPage />));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /trademarks.csv/i }));
+    const issues = await screen.findByRole("group", { name: "Blocking issues for row 1" });
+    expect(within(issues).getByText("Jurisdiction: Missing from source and no single workspace value was available.")).toBeVisible();
+    expect(screen.getByRole("group", { name: "Non-blocking notes for row 1" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Commit to portfolio" })).toBeDisabled();
+    expect(screen.getByText("Workspace context needs review")).toBeVisible();
+    if (admin) expect(screen.getByRole("link", { name: "IP workspace" })).toHaveAttribute("href", "/app/ip");
+    else expect(screen.getByText(/Ask a workspace administrator/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Refresh preview" }));
+    await waitFor(() => expect(revalidateMock).toHaveBeenCalledWith("import-1", expect.anything()));
+    await waitFor(() => expect(screen.queryByText("Workspace context needs review")).not.toBeInTheDocument());
+    expect(uploadMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Commit to portfolio" }));
+    await waitFor(() => expect(commitMock).toHaveBeenCalledWith(expect.objectContaining({ previewToken: "refreshed-context-token" })));
+    expect(screen.queryByRole("button", { name: "Refresh preview" })).not.toBeInTheDocument();
+  });
+
+  it("retains unknown blocking codes and cannot refresh or commit without write access", async () => {
+    useCapabilityMock.mockImplementation((capability: string) => capability === "ip:read");
+    const blocked = preview();
+    blocked.rows[0].errors = [{ field: "class_number", code: "out_of_range" }];
+    blocked.rows[0].validation_status = "invalid";
+    blocked.job.valid_rows = 0;
+    blocked.job.invalid_rows = 1;
+    historyMock.mockResolvedValue({ jobs: [blocked.job] });
+    getImportMock.mockResolvedValue(blocked);
+    render(withClient(<IpPortfolioImportsPage />));
+    await userEvent.click(await screen.findByRole("button", { name: /trademarks.csv/i }));
+    const issues = await screen.findByRole("group", { name: "Blocking issues for row 1" });
+    expect(within(issues).getByText("Class: out of range")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Refresh preview" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Commit to portfolio" })).toBeDisabled();
+    expect(revalidateMock).not.toHaveBeenCalled();
   });
 
   it("revalidates an expired history preview and fails closed without read access", async () => {

@@ -6,7 +6,6 @@ import type { TestInfo } from "@playwright/test";
 
 export const FIXTURE_EVIDENCE_MAX_BYTES = 64 * 1024;
 export const DRIVE_ISOLATION_UNIT_NAMES = [
-  "test_actual_entrypoint_starts_and_resolves_authenticated_fixture_routes",
   "test_fixture_inventory_is_bounded",
   "test_install_rejects_non_e2e_and_cloud_before_touching_application",
   "test_provider_cannot_authorize_exchange_or_browse_google",
@@ -17,6 +16,56 @@ export const DRIVE_ISOLATION_UNIT_NAMES = [
 
 type EvidenceTestInfo = Pick<TestInfo, "testId" | "project" | "outputPath" | "attach">;
 type ProcessEvidenceName = "selection-fixture-process" | "drive-isolation-process";
+
+export function reviewDriveSupervisor(output: string) {
+  if (Buffer.byteLength(output) > FIXTURE_EVIDENCE_MAX_BYTES) {
+    throw new Error("Drive supervisor output exceeds its evidence bound.");
+  }
+  const events = output.trim().split(/\r?\n/).map((line) => {
+    if (!line.startsWith("CASEOPS_FIXTURE_EVENT ")) throw new Error("Unrecognized Drive supervisor output.");
+    let event: unknown;
+    try { event = JSON.parse(line.slice("CASEOPS_FIXTURE_EVENT ".length)); }
+    catch { throw new Error("Invalid Drive supervisor JSON."); }
+    if (!event || typeof event !== "object" || Array.isArray(event)) throw new Error("Invalid Drive supervisor event.");
+    return event as Record<string, unknown>;
+  });
+  const names = events.map((event) => event.event);
+  const expected = DRIVE_ISOLATION_UNIT_NAMES.map((name) => `test_drive_import_emulator.DriveImportIsolationTests.${name}`);
+  const starts = events.filter((event) => event.event === "test_started").map((event) => event.test_id);
+  const ends = events.filter((event) => event.event === "test_finished").map((event) => event.test_id);
+  const one = (name: string) => {
+    const selected = events.filter((event) => event.event === name);
+    return selected.length === 1 ? selected[0] : undefined;
+  };
+  const first = one("supervisor_started");
+  const child = one("child_started");
+  const collection = one("collection");
+  const result = one("unittest_finished");
+  const cleanup = one("cleanup_started");
+  const killed = one("cleanup_kill_sent");
+  const last = one("supervisor_finished");
+  const same = (value: unknown, wanted: unknown) => JSON.stringify(value) === JSON.stringify(wanted);
+  const sequence = ["supervisor_started", "child_started", "collection",
+    ...expected.flatMap(() => ["test_started", "test_finished"]),
+    "unittest_finished", "cleanup_started", "cleanup_kill_sent", "supervisor_finished"];
+  const complete = same(names, sequence)
+    && first?.pattern === "test_drive_import_emulator.py" && first.deadline_seconds === 50
+    && Number.isSafeInteger(child?.pid) && Number(child?.pid) > 0
+    && cleanup?.pid === child?.pid && killed?.pid === child?.pid
+    && typeof child?.source_sha256 === "string" && /^[0-9a-f]{64}$/.test(child.source_sha256)
+    && same(collection?.test_ids, expected) && same(starts, expected) && same(ends, expected)
+    && result?.tests_run === expected.length && result.failures === 0 && result.errors === 0 && result.skipped === 0
+    && last?.exit_code === 0 && last.reason === "child_exited" && last.tree_reaped === true
+    && last.child_exit_code === 0 && typeof last.duration_seconds === "number"
+    && Number.isFinite(last.duration_seconds) && last.duration_seconds >= 0 && last.duration_seconds <= 56;
+  // Retain only reviewed fields, never arbitrary process output or exception text.
+  return {
+    event: "drive_supervision_reviewed", complete, stdout_bytes: Buffer.byteLength(output),
+    stdout_sha256: createHash("sha256").update(output).digest("hex"),
+    source_sha256: complete ? child!.source_sha256 : null,
+    unit_ids: complete ? expected : [], tree_reaped: complete ? true : null,
+  };
+}
 
 function driveTranscriptReview(output: string) {
   const bytes = Buffer.byteLength(output);
@@ -54,7 +103,9 @@ function driveTranscriptReview(output: string) {
     || new Set(units.map((unit) => unit.name)).size !== units.length) {
     return { state: "rejected", reason: "unreviewed_unit_inventory", units };
   }
-  const complete = units.length === 7 && /^Ran 7 tests in [0-9]+(?:\.[0-9]+)?s$/m.test(lines);
+  const count = DRIVE_ISOLATION_UNIT_NAMES.length;
+  const complete = units.length === count
+    && new RegExp(`^Ran ${count} tests in [0-9]+(?:\\.[0-9]+)?s$`, "m").test(lines);
   if (complete && units.every((unit) => unit.status === "ok") && /\nOK\s*$/.test(lines)) {
     return { state: "passed", reason: null, units };
   }
@@ -127,7 +178,7 @@ export async function persistFixtureProcessEvidence(
     await writeFile(transcriptPath, driveTranscript!, { encoding: "utf8", flag: "wx", mode: 0o600 });
     await testInfo.attach("drive-emulator-isolation", { path: transcriptPath, contentType: "text/plain" });
     if (!error && result.status === 0 && review.state !== "passed") {
-      throw new Error("Drive fixture transcript lacks complete seven-unit outcomes; acceptance incomplete.");
+      throw new Error("Drive fixture transcript lacks complete reviewed-unit outcomes; acceptance incomplete.");
     }
   }
   return { receipt, receiptPath, transcriptPath };

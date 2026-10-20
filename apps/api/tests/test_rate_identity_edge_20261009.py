@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import secrets
 import time
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import func, select
@@ -204,12 +205,38 @@ def test_duplicate_claims_rejected(edge_key, name):
         ("GET", "/api/health/rate-identity", 0, b"a=1"),
     ],
 )
-def test_signature_is_short_lived_and_target_bound(edge_key, method, path, delta, query):
+def test_signature_is_short_lived_and_target_bound(
+    edge_key, signed_clock, method, path, delta, query,
+):
     from caseops_api.core.rate_identity import InvalidRateIdentity, resolve_rate_identity
 
-    headers = forward_headers(edge_key, timestamp=int(time.time()) + delta)
+    headers = forward_headers(edge_key, timestamp=signed_clock + delta)
     with pytest.raises(InvalidRateIdentity):
         resolve_rate_identity(fake_request(headers, method, path, query))
+
+
+@pytest.fixture
+def signed_clock(monkeypatch):
+    from caseops_api.core import rate_identity
+
+    now = 1_792_000_000
+    monkeypatch.setattr(rate_identity, "time", SimpleNamespace(time=lambda: now))
+    return now
+
+
+@pytest.mark.parametrize(
+    "delta,accepted", [(-31, False), (-30, True), (0, True), (5, True), (6, False)],
+)
+def test_signature_exact_clock_boundaries(edge_key, signed_clock, delta, accepted):
+    from caseops_api.core.rate_identity import InvalidRateIdentity, resolve_rate_identity
+
+    request = fake_request(forward_headers(edge_key, timestamp=signed_clock + delta))
+    if accepted:
+        identity = resolve_rate_identity(request)
+        assert identity.provenance == "web-forward" and identity.client_ip == "2001:db8::1"
+    else:
+        with pytest.raises(InvalidRateIdentity):
+            resolve_rate_identity(request)
 
 
 @pytest.mark.parametrize(

@@ -33,6 +33,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from caseops_api.core.console_auth import CONSOLE_CSRF_COOKIE, CONSOLE_CSRF_HEADER
 from caseops_api.core.cookies import (
     CSRF_COOKIE,
     CSRF_HEADER,
@@ -49,6 +50,11 @@ _PROTECTED_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # server-to-server webhooks (signed by their own provider secret).
 # Match by exact path, by prefix, or by suffix.
 _EXEMPT_PATHS = frozenset({
+    "/api/platform-console/auth/login",
+    "/api/platform-console/auth/invitations/complete",
+    "/api/platform-console/auth/invitations/resend",
+    "/api/platform-console/auth/password-reset/start",
+    "/api/platform-console/auth/password-reset/complete",
     "/api/auth/login",
     "/api/auth/refresh",
     "/api/auth/account-setup/complete",
@@ -106,6 +112,12 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         if _path_is_exempt(request.url.path):
             return await call_next(request)
+        if request.url.path.startswith("/api/platform-console/"):
+            return await self._check_pair(
+                request, call_next,
+                cookie_name=CONSOLE_CSRF_COOKIE,
+                header_name=CONSOLE_CSRF_HEADER,
+            )
         # Bearer-auth callers (SDKs, automation) carry their own
         # secret; CSRF does not apply to them.
         auth_header = request.headers.get("authorization", "")

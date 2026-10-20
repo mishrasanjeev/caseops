@@ -1,5 +1,317 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 20 Historical Worker Gate
+
+Replacement local selections have completed without failures/skips: 330 cases
+across five backend modules, 43 additional historical/migration/helper cases,
+324 cases across the four CI-contract modules, and fresh whole-web coverage
+of 1,740 cases in all 238 files. These inventories overlap and are not summed
+as unique coverage. Historical reads retain real absent columns and reject
+unexpected access; the report client shares the full-body deadline without
+tenant refresh. Source pins and owned cleanup held. The release verdict stays
+NO-GO pending fresh full committed CI/Docker and exact-production proof; see
+the current evidence pointers in `docs/platform-report-admin-2026-10-20.md`.
+
+**Inconclusive / release NO-GO.** C19 `d8ba7fb0` required CI exposes older-schema
+fixtures loading the new User session-revocation column before the historical
+worker boundary. A diagnostic replay retains the actual UndefinedColumn
+exception; increasing a timeout would conceal the cause. The replacement
+preserves the physical historical schema and frozen sources, scopes its read
+column compatibility to that isolated engine and rejects unexpected new-field
+access. Whole replacement CI/Docker and exact-serving browser proof remain
+required. See `docs/platform-report-admin-2026-10-20.md`; no earlier failed
+evidence or Ram/IP/Calendar verdict is erased or upgraded.
+
+## October 20 Solo Report And Delegated Console
+
+Local convergence checkpoint: the full dated console journeys passed on
+desktop and Pixel 5 in `platform-pw-local-06` (2/2, no skips/retries). They are
+host-only deterministic acceptance, not Docker or production proof. Retained
+earlier failures led to complete replacement-link, UTC serialization,
+invitation replay, MFA-retry and precise-money regressions. The final focused
+client/session set is 188/188; backend console112 plus native invitation races2
+is 114/114. See the exact scoped evidence and qualifications in
+`docs/platform-report-admin-2026-10-20.md`. Fresh complete release gates and
+production grant/setup remain open; no Ram historical verdict is upgraded.
+
+**Not fixed on production.** The serving report on `9cf76f2b` explicitly restricts
+CompanyType to law_firm and corporate_legal, while segment construction and
+HTML/plain-text totals repeat that restriction. Solo accounts are omitted at
+multiple layers; adding only a selector option would be incomplete. Dormant
+account grouping and delegated report admins are valid enhancements. Parent
+contract PRA-01..08 is recorded before implementation under J14/M14/US-040/042.
+Require complete category and metric parity, rolling-cutoff evidence, profile-
+less owner login audit, protected invitations/reset/MFA/revocation and fresh
+desktop/mobile local-Docker plus exact-production browser proof. Do not close
+these items from source code, email HTTP acceptance or an earlier candidate's
+green checks. No original Ram/IP/Calendar row is upgraded by this extension.
+
+## October 20 Governance Correction Checkpoint
+
+At05:32 UTC C16 `94db8c27` is NO-GO: CI39373277832/job118465761974
+failed the data-governance change gate for the new settings, report sender and
+scheduler changes. No Docker09 run or production release was started. This
+is not a Ruff diagnosis and no sibling outcome is inferred from it.
+
+The local-only correction `a6659663` inventories the actual cross-account
+SendGrid disclosure without inventing retention, residency, tenant ACLs or
+delivery guarantees. Existing classes and disposition admission remain
+unchanged; the new non-SQL inventory remains unreviewed and unadmitted. Existing
+generators updated the map view and compiled metadata projection. All84 tests
+and252 phases across seven complete governance modules passed, including the
+explicit non-admission control. All12 actual committed-HEAD CI governance
+commands plus scheduler validation passed against canonical origin/main. Parent
+reviewed the full six-file diff, source/artifact pins, genuine red failure and
+class-aware exact collection/JUnit identities. These are focused local results,
+not replacement CI/Docker or production acceptance. Upcoming C17 requires all
+fresh gates. Earlier failed, interrupted and unverified evidence is preserved.
+
+## October 20 Combined Candidate Checkpoint
+
+At 05:07 UTC the upcoming C16 combines Ram's retained fixes with the newly
+requested activity-report correction. C15 Docker08 was deliberately stopped
+for this scope change: 3226 intended native cases, group01 404 complete passes,
+group02 218 passing three-phase cases without session completion, 2604 native
+cases unobserved and all621 browser cases unstarted. No failed product phase
+was observed. Parent67262 and observer46137 are reaped; both raw2975-file source
+comparisons, physical archive and exact-project resource closure passed. The
+run is incomplete, never acceptance or carry. C15 whole hosted CI was also
+left unreconciled at its final browser job and is not C16 evidence.
+
+The dashboard correction independently passed105 host tests/315 phases with
+zero skips; parent reconciled exact collection, JUnit and raw phases. The owner
+explicitly authorized removal of only the Gmail global unsubscribe; DELETE204
+and subsequent GET200/empty object were verified at04:47:51 UTC. Other
+suppression lists were untouched. Four-recipient daily configuration, fresh
+combined Docker09, green CI, main merge and exact-release production acceptance
+remain pending. Previously partial or inconclusive legal/Calendar rows are not
+upgraded. Evidence: `outputs/bugs-l-20261019/docker08-c15-reconciliation-01/`
+`final-closure-02/SOURCEHOLD-RELEASE.json` and
+`outputs/bugs-l-20261019/activity-report-0730-implementation-01/FINAL-PROOF.json`.
+
+## October 20 Activity Dashboard Email
+
+**Inconclusive for production delivery.** Parent diagnosis identifies a Gmail
+global unsubscribe on October 18-20, not a failed report-generation job.
+The separate C15-based feature branch implements the requested four-recipient
+07:30 IST configuration with bounded validation, private personalizations and
+zero task retries. Neither a successful job nor the retained `sent` status
+proves inbox delivery. Parent owns the explicitly authorized Gmail-only global
+unsubscribe removal; this branch performs no provider/suppression operation.
+Review local evidence and later targeted Docker/deployed acceptance separately
+from frozen C15 release gates. See `docs/activity-report-0730-2026-10-20.md`.
+
+## October 20 Drive Docker Release Blocker
+
+Later C14 `dd2756f2` remains NO-GO: findings check118440204670 failed on an
+unreachable `InterruptedError` handler beneath `OSError`, plus two CodeQL notes
+for mixed ctypes imports and an unexplained expected empty-child exception.
+Analyzer execution success is not findings closure. Docker08 was not launched.
+Reorder the specific interruption handler, keep one lazy import style and
+explain the no-descendant case without changing cleanup. New explicit exception
+regressions and fresh full gates are required; do not carry C14 acceptance.
+
+**Release NO-GO.** C13 hosted CI/security/CodeQL passed, but full Docker07
+completed3226 native passes and then failed one nested Drive process timeout:
+desktop603P/1F/10 explicit skips, four mobile cases unstarted. Historical timeout
+cause remains unproven; the separate29.621-second cold diagnostic is not a
+replacement gate. Parent99137 exited1/reaped and owned source/resources closed.
+The narrow test-only replacement promotes existing route checks to real HTTP,
+retains six pure security units under owned bounded supervision, and consumes
+the existing native per-case reporter. Application/dependency/provider/security
+budgets are unchanged. Fresh full gates and serving replay remain required.
+See `docs/bugfix-drive-docker-boundary-2026-10-20.md`; do not relabel the failed
+gate or Ram's unknown historical evidence as fixed.
+
+## October 20 Dependency Security Release Blocker
+
+**Implemented and focused-tested in replacement source, not fixed in the
+serving release; full gates remain pending.** C12 `d7aec233` required Security run39298948341/job118218732094
+failed strict pip-audit on locked aiohttp3.14.3. Three distinct upstream
+advisories identify3.14.4 as patched. This is a real dependency finding, not
+an audit outage, severity-policy exception or demonstrated production exploit.
+The direct dependency and Voyage import path both retain the affected package.
+
+The replacement is aiohttp3.14.4 and its required yarl1.25.1 companion, with
+only the aiohttp declared floor raised. All other lock records are unchanged.
+The complete three-module focused run passed69 cases/207 setup/call/teardown
+phases, zero skips/errors, with matching ordered collection and JUnit. It proves
+real native SDK/client compatibility and the genuinely shared Secure-cookie
+cached-path boundary; the same test bytes retain the old-version cookie RED.
+Final-source strict audits covered162 registry-lock packages and138 Windows
+default/dev installed packages, zero findings/skips/missing identities. Final
+proof SHA2563ead6498e6cce6b7012b70ea3a41483fa5723cea81f685b4bd1225fa6e667592.
+This is source-only acceptance, not Linux CI or production acceptance. All
+fresh required CI and canonical Docker07 plus exact-serving replay remain required.
+No dependency exception, legal-source, provider-cost or release fence changes.
+See `docs/bugfix-aiohttp-security-2026-10-20.md`.
+
+C12 canonical Docker06 was operator-superseded after its build and canonical
+native collection, before any test phase. All3226 native identities and618
+browser cases remain incomplete. Canonical cleanup completed and parent91987
+reaped exit1; the missing aggregate journal follows the explicit driver stop,
+not a diagnosed product failure. All2970 raw source hashes matched twice and
+owned resources/readers closed. Sourcehold release seal:
+`362323205a68e7c3ed79cfa67695df39203c7745a6f0553a6882c25c81724dc3`.
+Fresh C12 raw CodeQL0/0/0 and current-ref open0 do not clear Security failure.
+
+## October 19 Browser Runner Compatibility
+
+**Implemented in workflow/test source; release NO-GO pending fresh complete
+gates.** C11 `a5cc8301` CI39285487552 job118189765017 failed Chromium install
+on the observed ubuntu-26.04 image20261012.163.1 with locked Playwright1.60.0.
+Hosted browser execution was zero. Completed sibling metadata is33 successful
+jobs/one known failure/one skip, Security8/8 successful; separate CodeQL native
+SARIF0/0/0 and current-PR open0 do not make the required browser gate pass.
+
+Pin only six browser jobs in CI, production/manual/scheduled verification and
+release verification to ubuntu-24.04. Preserve every other workflow field,
+dependency, budget, install/runtime/no-paid/source fence and scheduled-step
+digest. The guard now discovers all yml/yaml workflows, including shared-step
+consumers; real filesystem controls fail under the old three-file loader.
+Both complete targeted modules passed92 cases/276 phases, zero skips/errors.
+A real Ubuntu24.04.4/Node22.14.0/lockedSDK1.60 Chromium smoke passed with network
+none. It predates only the final test-helper delta; immutable runtime inputs
+are proven equal, not relabelled as final-tree application acceptance.
+
+The optional five-module Windows audit was deliberately narrowed, not passed:
+599 collected,302 passed/one existing skip/one interrupted/295 unexecuted,
+909 phases with no failed phase. Its full prefix remains retained. The complete
+five-file inventory is now601 after the two filesystem controls and remains
+required in fresh full CI. Full replacement canonical acceptance remains mandatory;
+there is no coverage waiver or native carry. Focused receipt SHA256:
+`a2ec9120655b619d1a4fb7bf7385c4bf7063b96ab8d87c2f99294a100fb2e52d`.
+
+C11 Docker05 was separately operator-superseded:404 complete-group cases/1212
+phases plus402 interrupted-group calls/1206 phases without group completion,
+2420 unexecuted identities and all618 browser cases unstarted. No failed native
+phase was observed. Parent60685 reaped naturally after canonical cleanup;
+source/resource/reader closure seal26e82e7e2ce9934d80ce3e5de1a213a7d713399dc6539b3b16565a97649339a5
+resolves the earlier pending-reap note. No production release is claimed.
+
+## October 19 Leftover Verification Imports
+
+**Corrected in test source; release NO-GO pending fresh complete gates.**
+C10 `1610d300` has three exact-current-ref CodeQL alerts587-589 for unused
+`noPaidProviderHeaders` imports after the fixture-header replacement. Actual
+SARIF counts are Python0 / JavaScript-TypeScript3 / Actions0. A successful
+analysis/check or an empty unscoped alert response did not clear those findings.
+The earlier13-file source review missed them; its limited GO cannot override
+the actual detector. No runtime exploit or credential exposure is established.
+
+Remove only those three unused names; retain the used IP-controls import,
+all five scoped transport fixtures and every no-paid marker. The independent
+real TypeScript semantic comparison of C8/C10 covers all13 changed paths and
+finds only those three introduced unused diagnostics. Five existing unrelated
+baseline diagnostics are recorded, not suppressed or silently called clean.
+After the removals,142 units/six modules, both TypeScript checks and13 real
+wire cases passed;618 standard discovery identities remain unchanged.
+
+Docker04 was operator-superseded, not passed:1211 completed-group cases/3633
+phases,135 further passed calls with an interrupted group and no completion,
+1879 unexecuted identities and one partial identity; all618 browser cases were
+unstarted. No failed native test phases were observed. The missing aggregate
+journal followed the explicit driver stop, not a product reproduction.
+Retained final proof SHA256:
+`cff0714c0e308f12c0828285fc37ae326a02e073313303a3cf49f0ce32d3a014`.
+Focused correction receipt SHA256:
+`8f3e81b391be16bddbfbaf17c36e22a99b91ec199a89b60b7980a20c4bf1c2dd`.
+Require fresh exact-source CodeQL clearance and full unchanged canonical05;
+there is no native carry, detector waiver, main merge or production acceptance.
+
+## October 19 Web Builder Closure Correction
+
+**Implemented in build/test source; release NO-GO.** C9 `862b9cee`
+canonical Docker03 failed web TypeScript with TS2307 and its TS7006 cascade:
+the real static unit import's public identity helper was absent from the
+explicit builder/context closure. Native and browser execution were both zero.
+Host typechecks and focused units had not proved the Docker input boundary.
+Preserve the full failed proof; do not transfer C8 native results.
+
+Add only the exact helper to the builder COPY and both root ignore allowlists.
+The existing standard-discovered closure contract retains runner exclusion,
+strict typechecking and narrow direct/transitive inputs. Two complete RED calls
+identify the missing input. Replacement22 cases/66 phases, all142 units across
+the intended six modules, both TypeScript checks and a real fresh web image
+build passed on the captured dirty source. That image used a source fingerprint,
+not an invented release SHA. No application/provider/legal behavior changed.
+
+Focused receipt: `outputs/bugs-l-20261019/web-builder-closure-c10-01/RECONCILED.json`,
+SHA256 `622c55ca80f9ec77e2206a38b269877688c46033de2e138ad044aea17e264ecc`.
+Full canonical replacement, green exact-source CI, main merge, deployment and
+exact-serving acceptance remain required. The abandoned alternate supplied no
+accepted carry results. See the dated transport postmortem below.
+
+## October 19 Public Identity Transport Correction
+
+**Implemented in test source; release NO-GO pending complete replacement
+gates.** C8 hosted CI passed, but local Docker02 completed native3226 cases /
+9678 phases and then failed one IP15 1281px setup public-web identity GET.
+Desktop results were590 passed /1 error /10 skipped;4 mobile cases did not run.
+The application assertions in that failed case were not reached. Preserve the
+failed run; its historical reset cause remains Inconclusive.
+
+Actual wire tests prove that IP15's marker-only spec option replaces the
+config's loopback close policy. Public identity reads now use credential-free
+per-endpoint contexts, the existing origin-scoped headers and fatal exact-SHA
+checks with no redirects or retries. New contexts still share a socket pool.
+All five workspace consumers preserve their resolved baseURL policy; adjacent
+notice/patent readers share the same public helper. No product/API/native,
+legal-source, entitlement, dependency or execution-script contract changed.
+
+Parent's final combined E2E/web typechecks passed. The full six-module unit
+replacement passed142/142, including the unchanged four inventory assertions
+within their existing8-second child bound. Earlier133P/four-unexecuted evidence
+and the isolated ETIMEDOUT remain; the original exception was not retained and
+no cache-cause conclusion is established. Thirteen real wire regressions pass;
+standard collection is618 cases, retaining all original605 identities. These
+are not full application or production acceptance. See
+`docs/bugfix-ip15-public-identity-transport-2026-10-19.md`.
+
+## October 19 SQL Read Oracle Correction
+
+**Partially fixed in test source / release NO-GO.** C7 `d5ecdab2`
+CI39212375169 completed with four failed cases: hydration on SQLite/PostgreSQL,
+missing retained-scale initial SQL and missing dense-history category_counts.
+All16 specialist plans passed; this is a confirmed SQL-observer defect, not an
+established production regression. Actual retained RED proves three typed
+SELECTs, the third starting WITH ... AS MATERIALIZED. C8 changes tests only:
+extract the exact existing AST guard, preserve its alias, reject nested DML/text,
+and repair six adjacent collectors without cap increases. 29 compiler/unit cases,72 focused PostgreSQL cases/216 phases and79
+focused SQLite cases/237 phases passed in separate completed runs. These are
+not full release acceptance; fresh complete gates remain pending. Keep all failed phases
+and operator-superseded C7 Docker evidence. See
+`docs/bugfix-sql-read-oracles-2026-10-19.md`; older entries below are history.
+
+## October 19 BUG-008 Import Review
+
+Release **NO-GO**: later source-identical specialist CI failed2109 >2048;
+valid ordered PostgreSQL RED confirms2346 >2048. Earlier fixture failures
+remain separate, not product reproductions. Candidate canonical active-team
+SQL is shared per statement; full replacement gates remain pending. PR546 is
+draft. See `docs/bugfix-ip-statement-team-plan-2026-10-19.md`.
+
+**Inconclusive pending committed exact-serving production proof.** Candidate
+source implements the bounded review/recovery UX. Mixed historical
+missing-context report and confirmed raw-warning UX. Serving9cf already stages
+135 valid/three blank rows; the retained committed job created zero and skipped
+135 duplicates. Parent desktop/mobile read-only diagnostic confirms raw notes,
+not a backend failure or committed acceptance. Separate notes from issues and
+refresh saved originals; preserve expiry, context, draft and image fences.
+Evidence and adjacent paths: `docs/bugfix-ip-import-recovery-2026-10-19.md`.
+
+## October 19 Specialist Docket Work
+
+**Partially fixed in source / release NO-GO.** Merged401d1615 equals C5, but
+Docker15 failed the10k specialist query work390055>2048. The retained plan shows
+52 tenant-index loops removing7487 rows per loop. The repair seeks one ordered
+PK row before exact-identity/tenant/current policy checks. Complete native25/75
+passes, four plans1000-1485, two compile guards pass; full replacement gates and
+deployed list acceptance remain pending. Preserve the original failure, the
+18P/1F shape baseline and the19P/6F new-test UUID expectation failure separately.
+No production verdict is upgraded from scoped results. See
+`docs/bugfix-specialist-docket-seek-2026-10-19.md`.
+
 ## October 19 CI Correction
 
 C4 `ce938d24` is additionally blocked by CodeQL alert586

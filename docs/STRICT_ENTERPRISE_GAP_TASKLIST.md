@@ -1,5 +1,81 @@
 # Strict Enterprise Gap Tasklist
 
+## October 20 Delegated Report Security Boundary
+
+The local implementation now passes both complete dated desktop/mobile
+journeys (`platform-pw-local-06`, 2/2 without skips/retries), including live
+local realm denials, one-use setup/reset, used-factor rejection and revocation.
+Pending invitation replay preserves its delivery and cannot reactivate a
+revoked grant; two PostgreSQL overlaps prove one admitted send. A real-client
+session regression distinguishes the exact typed MFA factor refusal from
+revoked/expired/unverifiable 401 responses. These are scoped local results,
+not a deployed authority grant or final release certificate. Full current
+CI/coverage, Docker and production acceptance remain required; the initial
+manager must choose their own credential and MFA after the explicit bootstrap.
+
+**Partially implemented / release NO-GO.** The existing founder-only console
+does not implement invited reports-only administrators or independent global
+report login. The owner authorizes `sanjeev@orchestrum.in` as the initial
+manager, not a tenant permission bypass. PRA-01..08 requires separate live
+delegation, token/cookie realm, mandatory MFA, one-use invitation/reset,
+revocation and audit, bounded account/report reads and no paid-provider or
+founder-write capabilities. Preserve existing founder seeding and tenant
+session fences. No production grant, new initial-password email or release
+acceptance has occurred. Map every new security class before CI and retain
+fresh migration, PostgreSQL race, browser and exact-release evidence.
+
+## October 20 Activity Report Governance Admission
+
+**Partially implemented / release NO-GO.** C16 `94db8c27` failed the required
+data-governance change gate: recipient settings, the SendGrid sender and scheduler
+cadence changed without a canonical map update. Docker09 was not launched.
+J14/M14/US-040/042 now records the existing confidential cross-account report,
+operator-only recipient configuration (not tenant ACL/consent), SQL aggregate
+provenance, external SendGrid/mailbox disclosure, private personalizations and
+zero task retries. No retention duration, deletion, residency or inbox-delivery
+guarantee is added. The generated view and metadata regression must agree;
+the exact HEAD-only change CLI requires a fresh post-commit rerun. Focused local
+checks do not replace candidate CI, Docker, deployment or delivery acceptance.
+
+## October 19 SQL Observation Integrity
+
+**Partially implemented / release NO-GO.** C7 complete CI failed four SQL
+observation cases despite all16 specialist plans passing. We missed adjacent
+SELECT-prefix collectors during the CTE change; targeted plan/ACL proof did not
+certify their measurement integrity. C8 is test-only: exact shared AST guard,
+nested DML/TextClause/TextualSelect rejection, retained raw events and unchanged
+or stronger all-statement budgets. Separate completed runs passed29 unit cases,72 PostgreSQL cases/216 phases
+in six files and79 SQLite cases/237 phases in five files. Their inventories and
+source checks agree; operator-superseded C7 Docker remains incomplete.
+The corrected candidate still requires fresh complete release gates. Serving P9cf,
+private Scheduler hold, no QA-grant replay and user-deferred external cleanup
+remain unchanged. See `docs/bugfix-sql-read-oracles-2026-10-19.md`.
+
+## October 19 Import Review Recovery
+
+Canonical IP read-policy work remains release-blocking. Repeated actor-team
+eligibility made continuation acceptance order-sensitive (CI2109, ordered2346,
+cap2048). Candidate anonymous statement-local CTE preserves the existing ACL;
+shared-consumer and exact-serving proof are required before release. See
+`docs/bugfix-ip-statement-team-plan-2026-10-19.md`.
+
+**Inconclusive / candidate implementation pending exact-serving proof.** BUG-008's UI now
+distinguishes non-blocking source notes from errors and exposes existing saved
+preview refresh. No backend context/legal policy or schema changed. Current
+read-only production diagnosis cannot certify mutation/reload/replay; neither
+valid counts nor duplicate skips are created records. Preserve existing C6 gate
+ownership. See `docs/bugfix-ip-import-recovery-2026-10-19.md`.
+
+## October 19 Specialist Read Recovery
+
+**Partially implemented / release NO-GO.** Docker15 exposed390055 units of
+specialist docket work against2048 despite green hosted same-source CI. A
+tenant/status scan repeated52 times. One ordered PK candidate must precede
+exact identity/tenant/current policy checks; a LIMIT alone was insufficient.
+Full scoped25/75 native and two SQL-composition guards pass, unchanged budget,
+four plans1000-1485. Full Docker/CI/main/live/cadence gates remain outstanding.
+See `docs/bugfix-specialist-docket-seek-2026-10-19.md`; no broader readiness claim.
+
 ## October 19 CI Correction
 
 **Partially implemented / NO-GO.** C3ed13138d required CI failed a stale compiled

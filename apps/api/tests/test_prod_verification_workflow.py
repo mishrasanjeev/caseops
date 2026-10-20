@@ -448,7 +448,14 @@ def test_public_claims_attestation_requires_exact_release_nonmutating_browser_ev
     assert "--workers=1 --retries=0 --reporter=list" in selected["run"]
     assert selected["env"]["CASEOPS_WEB_BASE_URL"] == "https://caseops.ai"
     reconcile = steps["Reconcile required native Playwright evidence"]["run"]
-    assert "public-pages) required=(public-pages)" in reconcile
+    public_branch = reconcile.split("public-pages)", 1)[1].split(";;", 1)[0]
+    assert " ".join(public_branch.split()) == (
+        'required=(public-pages) '
+        'if [[ "$PLATFORM_REPORT_READY" == true ]]; then required+=(platform-reports); fi'
+    )
+    assert steps["Reconcile required native Playwright evidence"]["env"][
+        "PLATFORM_REPORT_READY"
+    ] == "${{ steps.platform-report-prerequisites.outputs.ready }}"
     config = (REPO_ROOT / "playwright.public-seo.config.ts").read_text()
     assert "public-content\\.spec\\.ts" in config
     assert "seo_demo_20261009\\.spec\\.ts" in config
@@ -801,3 +808,125 @@ def test_parallel_statute_source_audit_authenticates_once_per_worker() -> None:
     assert "await api?.dispose()" in spec
     assert "await setup.dispose()" in spec
     assert "noPaidProviderHeaders" in spec
+
+
+BROWSER_WORKFLOW_JOBS = {
+    "ci.yml": ("e2e",),
+    "prod-verify.yml": (
+        "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13",
+        "scheduled-statute-verification",
+    ),
+    "release-verify.yml": ("release-playwright",),
+}
+
+
+def _browser_command(command: str, scripts: dict[str, str], seen: tuple[str, ...] = ()) -> bool:
+    import re
+
+    if re.search(
+        r"\bplaywright\s+(?:install(?:-deps)?|test)\b|"
+        r"\b(?:chromium|firefox|webkit)\.launch\s*\(|"
+        r"scripts/(?:run-public-content-e2e\.mjs|run-functional-qa-e2e\.mjs|verify-docker\.ps1)|"
+        r"scripts/prod_playwright_evidence\.py\s+run\b",
+        command,
+    ):
+        return True
+    for name, body in scripts.items():
+        if name not in seen and re.search(
+            r"\b(?:npm\s+run|pnpm(?:\s+run)?)\s+" + re.escape(name) + r"(?=\s|$)",
+            command,
+        ) and _browser_command(body, scripts, (*seen, name)):
+            return True
+    return False
+
+
+def _browser_workflows() -> tuple[dict, dict]:
+    import yaml
+
+    directory = REPO_ROOT / ".github/workflows"
+    workflows = {
+        path.name: yaml.safe_load(path.read_text(encoding="utf-8"))
+        for path in sorted((*directory.glob("*.yml"), *directory.glob("*.yaml")))
+    }
+    scripts = json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))["scripts"]
+    return workflows, scripts
+
+
+def _assert_browser_workflow_runners(workflows: dict, scripts: dict) -> None:
+    expected = {(name, job) for name, jobs in BROWSER_WORKFLOW_JOBS.items() for job in jobs}
+    actual = {
+        (name, job_id): job
+        for name, workflow in workflows.items()
+        for job_id, job in workflow["jobs"].items()
+        if any(_browser_command(step.get("run", ""), scripts) for step in job.get("steps", []))
+    }
+    assert set(actual) == expected, "Complete browser-job inventory changed; review every caller"
+    invalid = [(name, job, value.get("runs-on")) for (name, job), value in actual.items()
+               if value.get("runs-on") != "ubuntu-24.04"]
+    assert not invalid, f"Locked Playwright browser jobs require literal ubuntu-24.04: {invalid}"
+
+
+def test_browser_workflow_jobs_pin_the_locked_playwright_supported_runner() -> None:
+    workflows, scripts = _browser_workflows()
+    _assert_browser_workflow_runners(workflows, scripts)
+
+
+@pytest.mark.parametrize("workflow,job", [
+    (name, job) for name, jobs in BROWSER_WORKFLOW_JOBS.items() for job in jobs
+])
+@pytest.mark.parametrize("runner", ["ubuntu-latest", "ubuntu-26.04", "${{ matrix.os }}"])
+def test_browser_runner_contract_rejects_floating_unsupported_or_dynamic_labels(
+    workflow: str, job: str, runner: str,
+) -> None:
+    workflows, scripts = _browser_workflows()
+    for name, jobs in BROWSER_WORKFLOW_JOBS.items():
+        for job_id in jobs:
+            workflows[name]["jobs"][job_id]["runs-on"] = "ubuntu-24.04"
+    workflows[workflow]["jobs"][job]["runs-on"] = runner
+    with pytest.raises(AssertionError, match="literal ubuntu-24.04"):
+        _assert_browser_workflow_runners(workflows, scripts)
+
+
+@pytest.mark.parametrize("command", [
+    "npx playwright install chromium", "pnpm exec playwright test",
+    "npm run test:e2e:app", "pnpm run test:e2e:public-content",
+    "pwsh -File scripts/verify-docker.ps1",
+])
+def test_browser_runner_inventory_rejects_unreviewed_direct_or_script_callers(command: str) -> None:
+    workflows, scripts = _browser_workflows()
+    workflows["ci.yml"]["jobs"]["unreviewed-browser"] = {
+        "runs-on": "ubuntu-24.04", "steps": [{"run": command}],
+    }
+    with pytest.raises(AssertionError, match="Complete browser-job inventory"):
+        _assert_browser_workflow_runners(workflows, scripts)
+
+
+@pytest.mark.parametrize("job", ["prod-tester-index", "prod-test-legal-write-oct13"])
+def test_browser_runner_inventory_keeps_both_yaml_anchor_consumers(job: str) -> None:
+    workflows, scripts = _browser_workflows()
+    del workflows["prod-verify.yml"]["jobs"][job]
+    with pytest.raises(AssertionError, match="Complete browser-job inventory"):
+        _assert_browser_workflow_runners(workflows, scripts)
+
+
+@pytest.mark.parametrize("suffix", ["yml", "yaml"])
+def test_browser_runner_inventory_discovers_a_new_workflow_file(tmp_path, monkeypatch, suffix):
+    import yaml
+
+    original_root = REPO_ROOT
+    directory = tmp_path / ".github/workflows"
+    directory.mkdir(parents=True)
+    for name in BROWSER_WORKFLOW_JOBS:
+        shutil.copyfile(REPO_ROOT / ".github/workflows" / name, directory / name)
+    shutil.copyfile(REPO_ROOT / "package.json", tmp_path / "package.json")
+    new_name = f"unreviewed-browser.{suffix}"
+    (directory / new_name).write_text(yaml.safe_dump({"jobs": {
+        "browser": {"runs-on": "ubuntu-24.04", "steps": [{"run": "pnpm exec playwright test"}]}
+    }}), encoding="utf-8")
+    with monkeypatch.context() as override:
+        override.setattr(sys.modules[__name__], "REPO_ROOT", tmp_path)
+        workflows, scripts = _browser_workflows()
+        assert new_name in workflows
+        with pytest.raises(AssertionError, match="Complete browser-job inventory"):
+            _assert_browser_workflow_runners(workflows, scripts)
+    assert REPO_ROOT is original_root

@@ -1157,6 +1157,7 @@ def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str)
         "tests/e2e/support/bounded-network-evidence.ts",
         "tests/e2e/support/prod-api-response-evidence.ts",
         "tests/e2e/support/cost-controls.ts",
+        "tests/e2e/support/public-release-identity.ts",
         "tests/e2e/support/ip-import-acknowledgements.ts",
     } <= required
     _assert_web_builder_inputs(
@@ -1239,9 +1240,24 @@ def test_web_fixture_dependency_inventory_follows_transitive_literal_forms(tmp_p
     }
 
 
+def test_public_release_identity_static_import_closure() -> None:
+    unit = _read_repo_text("apps/web/lib/public-release-identity.test.ts")
+    helper = _read_repo_text("tests/e2e/support/public-release-identity.ts")
+    assert (
+        'import { assertPublicReleaseIdentity } from '
+        '"../../../tests/e2e/support/public-release-identity";'
+    ) in unit
+    assert 'from "@playwright/test"' in helper
+    assert 'from "./cost-controls"' in helper
+    assert {
+        "tests/e2e/support/public-release-identity.ts",
+        "tests/e2e/support/cost-controls.ts",
+    } <= _web_external_unit_dependencies(REPO_ROOT)
+
+
 @pytest.mark.parametrize("helper", [
     "bounded-network-evidence.ts", "prod-api-response-evidence.ts", "cost-controls.ts",
-    "ip-import-acknowledgements.ts",
+    "ip-import-acknowledgements.ts", "public-release-identity.ts",
 ])
 def test_web_fixture_closure_rejects_omitted_direct_or_transitive_copy(helper: str) -> None:
     path = f"tests/e2e/support/{helper}"
@@ -1256,7 +1272,7 @@ def test_web_fixture_closure_rejects_omitted_direct_or_transitive_copy(helper: s
 @pytest.mark.parametrize("ignore_path", [".dockerignore", ".gcloudignore"])
 @pytest.mark.parametrize("helper", [
     "bounded-network-evidence.ts", "prod-api-response-evidence.ts", "cost-controls.ts",
-    "ip-import-acknowledgements.ts",
+    "ip-import-acknowledgements.ts", "public-release-identity.ts",
 ])
 def test_web_fixture_closure_rejects_omitted_context_input(ignore_path: str, helper: str) -> None:
     path = f"tests/e2e/support/{helper}"

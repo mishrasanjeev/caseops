@@ -7,7 +7,8 @@ from hmac import compare_digest
 
 from fastapi import HTTPException
 from sqlalchemy import select, true
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
+from sqlalchemy.sql.util import ClauseAdapter
 
 from caseops_api.db.models import (
     Client,
@@ -232,23 +233,53 @@ def list_records(
         raise _error("specialist_list_invalid", "Select a domain and a page size up to 50.", 422)
     docket_conditions = [
         IpDocketRecord.record_type == f"{domain}_intake",
-        IpDocketRecord.restricted,
+        IpDocketRecord.restricted.is_(True),
         ~IpDocketRecord.archived_by_matter_disposal,
         visible_ip_dockets_filter(session, context=context),
     ]
     if not include_closed:
         docket_conditions.extend(
-            (IpDocketRecord.is_active, IpDocketRecord.status.notin_(TERMINAL_IP_DOCKET_STATUSES))
+            (
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.status.notin_(TERMINAL_IP_DOCKET_STATUSES),
+            )
         )
     relationship = (IpDocketRecord.id == IpSpecialistRecord.docket_id) & (
         IpDocketRecord.company_id == IpSpecialistRecord.company_id
     )
     if session.get_bind().dialect.name == "postgresql":
-        # Keep one indexed docket lookup per candidate. A bulk policy join can
-        # materialize thousands of authorized dockets under stale estimates.
+        # Seek one key before policy filters; a tenant/status index can otherwise
+        # scan thousands of dockets per candidate under another valid plan.
+        candidate = (
+            select(
+                IpDocketRecord.id,
+                IpDocketRecord.company_id,
+                IpDocketRecord.record_type,
+                IpDocketRecord.restricted,
+                IpDocketRecord.archived_by_matter_disposal,
+                IpDocketRecord.is_active,
+                IpDocketRecord.title,
+                IpDocketRecord.status,
+                IpDocketRecord.current_version,
+            )
+            .where(IpDocketRecord.id >= IpSpecialistRecord.docket_id)
+            .order_by(IpDocketRecord.id)
+            .correlate(IpSpecialistRecord)
+            .limit(1)
+            .subquery("candidate_docket")
+        )
+        candidate_docket = aliased(IpDocketRecord, candidate)
+        policy = ClauseAdapter(candidate)
         docket = (
-            select(IpDocketRecord.title, IpDocketRecord.status, IpDocketRecord.current_version)
-            .where(relationship, *docket_conditions)
+            select(
+                candidate_docket.title,
+                candidate_docket.status,
+                candidate_docket.current_version,
+            )
+            .where(
+                policy.traverse(relationship),
+                *(policy.traverse(clause) for clause in docket_conditions),
+            )
             .correlate(IpSpecialistRecord)
             .limit(1)
             .lateral("authorized_docket")

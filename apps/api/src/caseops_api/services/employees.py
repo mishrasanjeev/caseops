@@ -3661,6 +3661,7 @@ def _complete_account_token(
     profile = _get_or_create_profile(session, membership=membership)
     now = _utcnow()
     membership.user.password_hash = hash_password(payload.password)
+    membership.user.sessions_valid_after = now
     profile.force_password_change = False
     if purpose == AccountSetupTokenPurpose.ACCOUNT_SETUP:
         profile.setup_completed_at = now
@@ -3736,11 +3737,10 @@ def record_employee_login(
     membership: CompanyMembership,
 ) -> None:
     profile = membership.employee_profile
-    if profile is None:
-        return
     now = _utcnow()
-    profile.last_login_at = now
-    profile.updated_at = now
+    if profile is not None:
+        profile.last_login_at = now
+        profile.updated_at = now
     record_audit(
         session,
         company_id=membership.company_id,
@@ -3783,7 +3783,14 @@ def record_employee_login_async(membership_id: str) -> None:
                 joinedload(CompanyMembership.user),
                 joinedload(CompanyMembership.employee_profile),
             )
-            .where(CompanyMembership.id == membership_id)
+            .join(Company, Company.id == CompanyMembership.company_id)
+            .join(User, User.id == CompanyMembership.user_id)
+            .where(
+                CompanyMembership.id == membership_id,
+                CompanyMembership.is_active.is_(True),
+                Company.is_active.is_(True),
+                User.is_active.is_(True),
+            )
         )
         if membership is not None:
             record_employee_login(session, membership=membership)
