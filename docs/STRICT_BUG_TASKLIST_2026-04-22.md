@@ -1,5 +1,20 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 20 Docker Evidence Ordering
+
+**Inconclusive / release NO-GO at source freeze.** Docker10 on C20 `2948b3a6`
+completed native 3,252/3,252 and desktop raw 608 passed/10 skipped, but exited 1
+at its progress validator; mobile five did not run. The built-in JSON reporter
+regroups tests with different fixture pools, while native collection/final
+output retains declaration order. All 301 second-group unique identities,
+outcomes and complete progress records match; 24 array positions differ.
+The correction must use an exact identity join without weakening duplicate,
+missing, source/config, outcome, native ordered-inventory or journal fences.
+Retain the failed run and require fresh complete acceptance, not a fabricated
+completion receipt. Details and scoped proof pointers are in
+`docs/bugfix-docker-native-progress-order-2026-10-20.md`. This test-harness
+defect neither reopens nor closes any original Ram/IP/Calendar verdict.
+
 ## October 20 Historical Worker Gate
 
 Replacement local selections have completed without failures/skips: 330 cases
