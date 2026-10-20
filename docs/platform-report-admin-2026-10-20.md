@@ -137,6 +137,14 @@ synthetic regression test or proof that its link has been consumed.
 
 ## Release And Evidence
 
+The first committed candidate `b239b123` failed its local post-commit migration
+change gate before publication or Docker09. Its existing guarded downgrade was
+already tested to refuse populated security tables or User revocation cutoffs,
+but its annotation did not use the required `restore-forward` policy marker.
+The replacement records that exact policy without changing downgrade behavior.
+Retain `platform-final-contracts-01` as failed and rerun all 13 contracts on the
+replacement commit; a comment correction is not a reused release certificate.
+
 At the October 20 09:24 UTC checkpoint, `platform-pw-local-06` completed both
 full desktop and Pixel 5 journeys: **2 passed, zero failed/skipped/retried or
 global errors**. The API and freshly built web ran locally with deterministic

@@ -5,8 +5,9 @@ Revises: 20261019_0001
 DATA-GOVERNANCE-MAP: updated
 MIGRATION-LOCK-RISK: acknowledged. New empty tables and a nullable users column;
 the existing migration runner retains its bounded PostgreSQL lock budget.
-MIGRATION-ROLLBACK: destructive for console-only security/audit records. Refuse
-downgrade once those records exist; never erase retained security evidence.
+MIGRATION-ROLLBACK: restore-forward once report security/audit records or User
+session-revocation evidence exist. Downgrade permits only empty feature tables
+and all-null cutoffs, serialized with writers; it never drops existing users.
 """
 
 import sqlalchemy as sa
