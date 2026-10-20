@@ -2,15 +2,20 @@
 
 ## October 20 Current Release Gate
 
-C19 `d8ba7fb0` cannot deploy: required historical-worker tests fail before their
-boundary because a modern User mapping reads a column absent from the old
-schema. Retain its failed evidence and require the corrected historical
-dependency fixture's complete replacement CI/Docker inventories, normal
-protected merge, exact-main deploy and production replay. Keep the session
-revocation control, physical old schema and original concurrency assertions.
-Details and current qualifications are in
-`docs/platform-report-admin-2026-10-20.md`. No production admin grant or new
-four-recipient report delivery is implied by local implementation.
+Source-freeze checkpoint, October 20 14:37 UTC: C20 `2948b3a6` completed CI,
+Security and CodeQL and merged normally through PR547 to `445b359b`, with an
+identical tree. Its Docker10 native scope completed all 3,252 tests and 9,756
+phases. The whole Docker run nevertheless failed: the browser evidence
+validator compared two reporters' differing fixture-pool order by position.
+All 301 second-group identities and outcomes reconcile independently; mobile
+five never started. This is not completed Docker acceptance or deployment.
+
+Correct the narrow report join and its negative controls, preserve native
+collection order and full progress equality, and require complete replacement
+release gates plus exact-serving production replay. See
+`docs/bugfix-docker-native-progress-order-2026-10-20.md`. C19's failures remain
+retained history, not current C20 failures. Manager setup, actual delivery and
+the existing genuine legal/external partials remain separately open.
 
 ## October 20 Report And Admin Extension
 

@@ -9,8 +9,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -354,6 +356,225 @@ def _run(tmp_path: Path, shell: str, case: str):
     return result, tmp_path / "evidence"
 
 
+def _validator_source() -> str:
+    matches = re.findall(
+        r"\$ValidateNative = @'\r?\n([\s\S]*?)\r?\n'@", RUNNER.read_text(encoding="utf-8")
+    )
+    assert len(matches) == 1, "Exercise the launcher's one actual native validator"
+    return matches[0]
+
+
+def _identity_reports(tmp_path: Path, *, reverse_pools: bool = False):
+    root = tmp_path / "candidate"
+    tests = root / "tests/e2e"
+    tests.mkdir(parents=True)
+    (tests / "fixture.spec.ts").write_text("// offline identity fixture\n")
+    config = root / "playwright.docker.config.ts"
+    config.write_text("// offline config\n")
+    directory = root / "test-results/prod-native-evidence/playwright-identity"
+    directory.mkdir(parents=True)
+    specs = []
+    for index in range(6):
+        skipped = index == 2
+        specs.append(
+            {
+                "id": f"stable-case-{index}",
+                "file": "fixture.spec.ts",
+                "line": 10 + index,
+                "column": 3,
+                "tests": [
+                    {
+                        "projectName": "app-chromium",
+                        "expectedStatus": "passed",
+                        "status": "skipped" if skipped else "expected",
+                        "results": [{"status": "skipped" if skipped else "passed", "retry": 0}],
+                    }
+                ],
+            }
+        )
+    native = {
+        "release_sha": "1" * 40,
+        "invocation": "playwright-identity",
+        "phase": "execution",
+        "status": "passed",
+        "config": {
+            "configFile": str(config),
+            "rootDir": str(tests),
+            "projects": [{"name": "app-chromium", "testDir": str(tests)}],
+        },
+        "suites": [{"specs": [spec]} for spec in specs],
+        "stats": {"expected": 5, "unexpected": 0, "skipped": 1, "flaky": 0},
+        "errors": [],
+    }
+    # allTests() retains interleaved entries; JSON groups direct specs and pools.
+    pools = [
+        {"title": "pool-one", "specs": [specs[1], specs[3]]},
+        {"title": "pool-two", "specs": [specs[5]]},
+    ]
+    raw = deepcopy(native)
+    raw["suites"] = [
+        {"specs": deepcopy(specs[::2]), "suites": deepcopy(pools[::-1] if reverse_pools else pools)}
+    ]
+    collection = deepcopy(native["suites"])
+    for suite in collection:
+        suite["specs"][0]["tests"][0]["results"] = []
+    packets = [
+        {
+            "event": "invocation_started",
+            "release_sha": "1" * 40,
+            "invocation": "playwright-identity",
+        },
+        {
+            "event": "collection",
+            "release_sha": "1" * 40,
+            "invocation": "playwright-identity",
+            "suites": collection,
+        },
+        *[{"event": "test_end", "suites": [deepcopy(suite)]} for suite in native["suites"]],
+        {"event": "session_finished", "status": "passed", "test_count": 6},
+    ]
+    return directory, config, native, raw, packets
+
+
+def _run_validator(tmp_path: Path, reports, *, complete_tail: bool = True):
+    directory, config, native, raw, packets = reports
+    (directory / "native-results.json").write_text(json.dumps(native), encoding="utf-8")
+    progress = "\n".join(json.dumps(packet) for packet in packets)
+    (directory / "progress.jsonl").write_text(
+        progress + ("\n" if complete_tail else ""), encoding="utf-8"
+    )
+    raw_path = tmp_path / "raw.json"
+    raw_path.write_text(json.dumps(raw), encoding="utf-8")
+    node = shutil.which("node")
+    assert node, "The canonical validator requires Node"
+    process = subprocess.run(
+        [
+            node,
+            "-e",
+            _validator_source(),
+            str(directory),
+            "1" * 40,
+            "playwright-identity",
+            str(raw_path),
+            str(config),
+        ],
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    (tmp_path / "validator-stdout.bin").write_bytes(process.stdout)
+    (tmp_path / "validator-stderr.bin").write_bytes(process.stderr)
+    assert not list(directory.glob("*.completion.json"))
+    return process
+
+
+@pytest.mark.parametrize("reverse_pools", [False, True])
+def test_native_cross_reporter_accepts_reordered_nested_fixture_pools(
+    tmp_path: Path, reverse_pools: bool
+) -> None:
+    reports = _identity_reports(tmp_path, reverse_pools=reverse_pools)
+    process = _run_validator(tmp_path, reports)
+    assert process.returncode == 0, process.stderr
+    assert process.stdout == b"native-progress-verified"
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "missing-raw",
+        "extra-raw",
+        "duplicate-raw",
+        "identity-id",
+        "identity-file",
+        "identity-line",
+        "identity-column",
+        "identity-project",
+        "expected-status",
+        "case-status",
+        "attempt-status",
+        "retry",
+        "extra-attempt",
+        "missing-attempt",
+        "collection-order",
+        "collection-missing",
+        "collection-duplicate",
+        "progress-case",
+        "progress-duplicate",
+        "progress-missing",
+        "release-sha",
+        "invocation",
+        "config",
+        "session-status",
+        "session-count",
+        "global-errors",
+        "stats",
+        "partial-tail",
+    ],
+)
+def test_native_cross_reporter_rejects_identity_outcome_and_progress_drift(
+    tmp_path: Path, corruption: str
+) -> None:
+    reports = _identity_reports(tmp_path)
+    _directory, _config, native, raw, packets = reports
+    spec = raw["suites"][0]["specs"][0]
+    test = spec["tests"][0]
+    if corruption == "missing-raw":
+        raw["suites"][0]["specs"].pop()
+    elif corruption in {"extra-raw", "duplicate-raw"}:
+        extra = deepcopy(spec)
+        if corruption == "extra-raw":
+            extra["id"] = "unselected-extra-id"
+        raw["suites"][0]["specs"].append(extra)
+    elif corruption.startswith("identity-"):
+        field = corruption.removeprefix("identity-")
+        if field == "project":
+            test["projectName"] = "foreign-project"
+        else:
+            spec[field] = spec[field] + 1 if field in {"line", "column"} else "foreign"
+    elif corruption == "expected-status":
+        test["expectedStatus"] = "failed"
+    elif corruption == "case-status":
+        test["status"] = "unexpected"
+    elif corruption == "attempt-status":
+        test["results"][0]["status"] = "failed"
+    elif corruption == "retry":
+        test["results"][0]["retry"] = 1
+    elif corruption == "extra-attempt":
+        test["results"].append(deepcopy(test["results"][0]))
+    elif corruption == "missing-attempt":
+        test["results"] = []
+    elif corruption == "collection-order":
+        packets[1]["suites"].reverse()
+    elif corruption == "collection-missing":
+        packets[1]["suites"].pop()
+    elif corruption == "collection-duplicate":
+        packets[1]["suites"].append(deepcopy(packets[1]["suites"][0]))
+    elif corruption == "progress-case":
+        packets[2]["suites"][0]["specs"][0]["tests"][0]["results"][0]["retry"] = 1
+    elif corruption == "progress-duplicate":
+        packets.insert(3, deepcopy(packets[2]))
+    elif corruption == "progress-missing":
+        packets.pop(2)
+    elif corruption == "release-sha":
+        packets[0]["release_sha"] = "2" * 40
+    elif corruption == "invocation":
+        packets[0]["invocation"] = "foreign"
+    elif corruption == "config":
+        native["config"]["configFile"] = str(tmp_path / "foreign.config.ts")
+    elif corruption == "session-status":
+        packets[-1]["status"] = "failed"
+    elif corruption == "session-count":
+        packets[-1]["test_count"] = 5
+    elif corruption == "global-errors":
+        packets.insert(-1, {"event": "global_error", "error": {"message": "fixture"}})
+    elif corruption == "stats":
+        raw["stats"]["skipped"] = 0
+    process = _run_validator(tmp_path, reports, complete_tail=corruption != "partial-tail")
+    assert process.returncode != 0
+    assert process.stdout == b""
+    assert b"Native Playwright progress is incomplete or inconsistent." in process.stderr
+
+
 @pytest.mark.parametrize("shell", SHELLS)
 @pytest.mark.parametrize(
     "case",
@@ -387,7 +608,10 @@ def test_serial_invocations_retain_complete_bound_artifacts(
         }
         packets = _read_progress(Path(completion["progress"]))
         assert [p["event"] for p in packets] == [
-            "invocation_started", "collection", "test_end", "session_finished"
+            "invocation_started",
+            "collection",
+            "test_end",
+            "session_finished",
         ]
         assert packets[0]["invocation"] == completion_path.name.removesuffix(".completion.json")
         assert packets[0]["release_sha"] == completion["release_sha"]
@@ -531,7 +755,8 @@ def test_selected_projects_retain_nondefault_and_multiple_outputs(
         roots = {file["relative_path"].split("/")[0] for file in manifest["files"]}
         assert roots == (
             {"test-results", "second-results"}
-            if case == "multiple-output" else {"custom-results", "test-results"}
+            if case == "multiple-output"
+            else {"custom-results", "test-results"}
         )
 
 

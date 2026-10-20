@@ -2988,3 +2988,10 @@ requirements when using the fallback.
   exact own-auth routes with positive denial and non-prefix regressions; do not
   exempt a whole namespace. Static audit-write checks must distinguish actual
   constructor identities and aliases from longer record names and comments.
+- Playwright's built-in JSON reporter can regroup a file's tests by fixture
+  pool while the native reporter preserves declaration order. Join those two
+  final reports by unique stable test identity, not array position, and retain
+  exact file/line/column/project and outcome checks. Native discovery order
+  must still equal native final order, and every full progress record must
+  still match its final case. Regress legitimate permutations alongside missing,
+  extra, duplicate and altered records; never rewrite failed evidence.

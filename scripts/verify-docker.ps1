@@ -662,9 +662,13 @@ if (!inside(native.config.rootDir) || native.config.projects.some(p => !inside(p
     expected.some(row => !native.config.projects.some(p => p.name === row.test.projectName) ||
       !inside(path.resolve(native.config.rootDir, row.file)) ||
       !fs.statSync(path.resolve(native.config.rootDir, row.file)).isFile())) fail();
-if (!equal(expected.map(identity), actual.map(identity))) fail();
-for (let i = 0; i < expected.length; i++) {
-  const a = expected[i].test, b = actual[i].test;
+// Reporters group nested suites and fixture pools in different valid orders.
+const rawById = new Map(actual.map(row => [row.id, row]));
+if (actual.length !== expected.length || rawById.size !== actual.length) fail();
+for (const row of expected) {
+  const rawRow = rawById.get(row.id);
+  if (!rawRow || !equal(identity(row), identity(rawRow))) fail();
+  const a = row.test, b = rawRow.test;
   if (a.expectedStatus !== b.expectedStatus || a.status !== b.status ||
       a.results.length !== 1 || b.results.length !== 1 ||
       a.results[0].status !== b.results[0].status || a.results[0].retry !== 0 || b.results[0].retry !== 0) fail();
