@@ -2,6 +2,11 @@
 
 ## October 21 Renewal Response Coverage
 
+QG-SEC-004 additionally requires reproducible FastEmbed0.8.0 compatibility
+packaging with unchanged upstream runtime/notices, real offline inference,
+Pillow13 image/OCR controls, and complete installed dependency/tool audits.
+Neither the rejected native override nor superseded Docker15 is acceptance.
+
 QG-SEC-004 adds exact-image Node default HTTPS/fetch trust-store controls
 beside the existing Python certifi regression. An added CA file alone must
 not retain the compromised bundled or system anchor. Release proof is pending.

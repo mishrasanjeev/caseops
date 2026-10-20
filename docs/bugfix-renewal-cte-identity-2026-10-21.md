@@ -153,3 +153,66 @@ packages. Full npm audit reports zero findings and the dependency contracts
 pass 252 cases. These are scoped preflight results, not complete replacement
 Docker/hosted/main or production acceptance. Preserve incomplete diagnostic
 launches and require fresh gates on the combined commit.
+
+## Complete Dependency Closure
+
+C24 `4e541acf` failed Security39506605978 on nine Pillow12.3.0 entries,
+first patched in [Pillow13.0.0](https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html).
+Their OSV publication times followed both C23 clean audits; the failure was
+not explained by a Linux/Windows package omission. Docker15 was stopped,
+retained and cleaned before any native acceptance or browser execution.
+Its successful build/startup is not a complete Docker result.
+
+FastEmbed0.8.0 and the current upstream0.9.0 constrain Pillow below13. A native
+uv0.13.4 scoped override can resolve/export/install, but still fails ordinary
+installed-dependency validation. That path was rejected. The CaseOps
+`1caseops1` wheel instead explicitly rebuilds only the reviewed0.8.0 metadata
+for Pillow13, with a distinct build tag, upstream/rebuilt digests and complete
+member provenance. Runtime files and upstream LICENSE/NOTICE are unchanged.
+This is CaseOps compatibility maintenance, not an upstream support claim or a
+change to production Voyage/reranking policy. Keep positive regeneration from
+the exact official input, tamper/refusal controls, actual offline inference,
+image/OCR paths and ordinary installed-set checks in the regression scope.
+
+The installed-image audit also finds vulnerable uv outside `uv.lock`; the
+[maintainer's CA advisory](https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62)
+requires0.13.4. The replacement image pins that version, disables only the
+known G3 Debian anchor and verifies the full before/after root set. Pip
+uses the reviewed OS bundle without its additive legacy vendored CA store;
+certificate and hostname checks remain enabled. The removal also accepts an
+already-secured upstream image. Current offline controls prove150-to149 and
+149-to149; the19-case module passes without skips. A separately hash-verified
+Windows uv0.13.4 cache is required for subsequent local/release operations;
+the existing Winget installation is not overwritten.
+
+The parent also completed all five adjacent deployment/image/rate/license
+modules:352 collected identities,351 passed and one explicit Windows skip
+for POSIX mount execution policy. JUnit and all1,055 incremental phases match
+case-sensitively, with zero failed phases. The first malformed native-argument
+launch remains retained as exit4 with no coverage. These are focused C24
+contract results, not acceptance for the later dependency revision. Require
+fresh complete candidate/main gates and exact-serving production replay.
+
+The final dependency preflight reconciles five complete installed-set OSV
+audits with zero findings or omissions: Windows/OCR147, Linux CI137, Linux
+production139, and two isolated audit-tool environments of28 each. Native
+dependency checks pass. The six complete compatibility modules pass82/82 on
+Linux and81/82 on Windows; the one Windows skip is the older opt-in reranker
+integration, not an image/Pillow failure. Asset-full controls prove unchanged
+2x384 embeddings, both reranking scores and native OCR text/confidence against
+the original Pillow12 baseline. Asset-dependent skips outside asset-full
+verification are not relabelled positive inference. The existing image prewarm
+now executes real two-document reranking; a full precommit API build, offline
+final-image inference and all21 image/TLS/tool contract cases pass. This
+dirty-snapshot preflight is not a released commit or full Docker acceptance.
+
+Technical compliance review remains within the existing managed-SaaS-only
+scope. Pillow's native LICENSE/SBOM materials remain installed; the identified
+families include MIT-CMU, MIT, FTL, BSD/X11, IJG/libpng/libtiff and Zlib terms.
+Debian's system FriBiDi retains its LGPL-2.1+ copyright and complete licence;
+optional GPL libimagequant is disabled. The public FastEmbed rebuild and its
+official test fixture retain Apache LICENSE/NOTICE and mark the modifications.
+No broader licence-policy waiver or customer binary/container redistribution
+approval is implied. Detailed material hashes and review
+`CASEOPS-PILLOW13-FASTEMBED08-COMPLIANCE-20261021-02` are retained with the
+dependency evidence. Fresh candidate/main and production gates remain pending.

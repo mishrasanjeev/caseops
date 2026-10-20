@@ -2,6 +2,12 @@
 
 ## October 21 Post-Commit Renewal Query
 
+C24's required Security39506605978 fails nine Pillow12.3.0 findings; its
+Docker15/CI results remain incomplete and cannot certify a replacement.
+Pillow13, the labelled FastEmbed compatibility rebuild and shipped uv0.13.4
+need complete fresh audits and actual image/inference regressions. No
+workbook item is upgraded from source changes or a resolver-only success.
+
 C23's certifi patch is not whole-image remediation: pinned web Node still
 trusts the affected root on reachable HTTPS paths. Its Docker14 run was
 deliberately stopped with the partial journals retained and all owned

@@ -1,5 +1,14 @@
 # CaseOps agent instructions
 
+- Dependency closure includes installed Linux/Windows inventories and shipped
+  build tools outside the application lock. Recheck fresh advisory data before
+  expensive gates. A compatibility rebuild must pin its official input,
+  preserve runtime code/notices, reproduce deterministically and pass native
+  dependency validation; an override that still fails `uv pip check` is not a
+  healthy environment. Test the actual offline inference and image paths.
+- Distrusting a compromised CA must be idempotent when an upstream image has
+  already removed it. Preserve every other trust anchor and certificate/host
+  verification; reject unknown identities or a still-trusted compromised root.
 - Trust-store remediation must cover each reachable TLS runtime, not only the
   package named by an advisory. Python certifi does not update Node's bundled
   roots. Prove the effective image defaults with HTTPS and fetch controls,

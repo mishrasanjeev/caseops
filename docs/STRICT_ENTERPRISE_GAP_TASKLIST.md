@@ -2,6 +2,13 @@
 
 ## October 21 Cross-Dialect Renewal Responses
 
+C24 is NO-GO after nine Pillow findings. The subsequent installed-set audit
+also identifies vulnerable uv outside the app lock. Require Pillow13, uv0.13.4
+and an auditable FastEmbed metadata-only compatibility rebuild with ordinary
+installed-dependency validation, not an incompatible overridden environment.
+Debian and pip trust selection must exclude G3 while preserving other roots,
+including when an upstream image already excludes it. Full gates are pending.
+
 C23's adjacent audit finds the same compromised root in Node22.14.0's
 bundled and image system stores, with reachable web-to-API HTTPS fetches.
 The Python fix does not remove that trust. Require a reviewed replacement
