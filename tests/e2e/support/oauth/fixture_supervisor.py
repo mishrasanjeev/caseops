@@ -26,7 +26,7 @@ class WindowsJob:
     """Kernel-owned identity: no PID lookup/tree walk and no breakaway permission."""
 
     def __init__(self) -> None:
-        from ctypes import wintypes
+        import ctypes.wintypes as wintypes
 
         class BasicLimits(ctypes.Structure):
             _fields_ = [
@@ -77,7 +77,7 @@ class WindowsJob:
             raise ctypes.WinError(ctypes.get_last_error())
 
     def resume(self, process: subprocess.Popen) -> None:
-        from ctypes import wintypes
+        import ctypes.wintypes as wintypes
 
         class ThreadEntry(ctypes.Structure):
             _fields_ = [
@@ -174,6 +174,7 @@ def cleanup(process: subprocess.Popen, job: WindowsJob | None, grace: float) -> 
                     while os.waitpid(-process.pid, os.WNOHANG)[0]:
                         pass
                 except ChildProcessError:
+                    # No adopted descendant remains in this owned process group.
                     pass
                 try:
                     os.killpg(process.pid, 0)
@@ -258,11 +259,11 @@ def run_fixture(args: argparse.Namespace) -> int:
                 status, reason = 0, "child_exited"
                 break
             time.sleep(0.01)
-    except (OSError, ValueError) as error:
-        emit("supervisor_error", error_type=type(error).__name__)
     except (KeyboardInterrupt, InterruptedError):
         status, reason = 130, "interrupted"
         emit("supervisor_interrupted")
+    except (OSError, ValueError) as error:
+        emit("supervisor_error", error_type=type(error).__name__)
     finally:
         if process is not None:
             remaining = max(0.001, started + args.deadline_seconds - time.monotonic())

@@ -1,5 +1,33 @@
 # Drive Docker Verification Boundary - 2026-10-20
 
+## C14 CodeQL Follow-Up
+
+C14 `dd2756f2a831f5859912066eac5d6ae80f5629a1` was not deployed. CodeQL
+analysis execution succeeded, but findings check118440204670 failed at03:36:12
+UTC on a genuine exception-ordering defect: `InterruptedError` subclasses
+`OSError`, making its later handler unreachable. The focused20-case process
+suite had not tested that derived exception. Additional notes identify mixed
+ctypes import styles and an unexplained expected no-descendant exception.
+
+The narrow correction moves interruption handling before the broad error,
+normalizes the two existing lazy imports, and documents the expected childless
+cleanup case. Cancellation must still run mandatory owned cleanup, and ordinary
+errors must retain their nonzero result. Add explicit old-source RED plus
+replacement exception tests. No budget, scope, provider, runtime app or
+dependency change is permitted. Full Docker08 never started on C14. Its hosted
+suite is failed/incomplete, not cleared by successful sibling jobs. Retain the
+actual detection/handoff timestamps rather than describing them as immediate.
+
+The unchanged new three-case regression reproduces the C14 error: one failure
+and two passes across9 phases, with completed cleanup but exit2 instead of130.
+The correction passes the entire23-case Windows module (69 phases) and the same
+23 cases in network-none Linux. All original20 case ASTs remain unchanged;
+the existing strict CI artifact reader accepts the complete replacement.
+The two complete browser files also pass37/37 again on the final harness in
+`c15-real-http-preflight-01`, with unchanged executed inputs and owned cleanup.
+These are scoped proofs only; fresh hosted CodeQL and the whole release remain
+mandatory. No exception is suppressed or downgraded to clear the failed gate.
+
 ## Scope And Current Verdict
 
 J04/M03/US-007..009/FT-011..015 and the existing release-quality gate are

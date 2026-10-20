@@ -2,6 +2,14 @@
 
 ## October 20 Drive Docker Release Blocker
 
+Later C14 `dd2756f2` remains NO-GO: findings check118440204670 failed on an
+unreachable `InterruptedError` handler beneath `OSError`, plus two CodeQL notes
+for mixed ctypes imports and an unexplained expected empty-child exception.
+Analyzer execution success is not findings closure. Docker08 was not launched.
+Reorder the specific interruption handler, keep one lazy import style and
+explain the no-descendant case without changing cleanup. New explicit exception
+regressions and fresh full gates are required; do not carry C14 acceptance.
+
 **Release NO-GO.** C13 hosted CI/security/CodeQL passed, but full Docker07
 completed3226 native passes and then failed one nested Drive process timeout:
 desktop603P/1F/10 explicit skips, four mobile cases unstarted. Historical timeout

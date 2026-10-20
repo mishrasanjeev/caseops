@@ -2911,3 +2911,7 @@ requirements when using the fallback.
   a green process is not proof that the whole-gate reader accepts that evidence.
   Replay the unchanged reader, preserve every boundary assertion and explicit
   loop-completion counts, and never weaken phase reconciliation to hide drift.
+- Exception handlers must respect the actual class hierarchy. `InterruptedError`
+  is an `OSError`, so catch interruption before the broad transport/start error.
+  Regress both interrupt classes, the ordinary error and mandatory owned cleanup;
+  green process-tree tests do not establish untested cancellation semantics.

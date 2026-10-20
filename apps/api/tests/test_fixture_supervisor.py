@@ -246,6 +246,61 @@ class FixtureSupervisorTests(unittest.TestCase):
         self.assertEqual(rows[-1]["reason"], "start_failed")
         self.assertTrue(rows[-1]["tree_reaped"])
 
+    def check_child_fault(self, error_type, expected_code, expected_event):
+        self.source.write_text(PASSING, encoding="utf-8")
+        output = io.StringIO()
+        real_exited = supervisor.child_exited
+        real_cleanup = supervisor.cleanup
+        real_popen = supervisor.subprocess.Popen
+        injected = False
+
+        def fail_once(process):
+            nonlocal injected
+            if not injected:
+                injected = True
+                raise error_type("offline-private-fault-do-not-log")
+            return real_exited(process)
+
+        with contextlib.redirect_stdout(output), \
+                patch.object(supervisor, "child_exited", side_effect=fail_once), \
+                patch.object(supervisor, "cleanup", wraps=real_cleanup) as cleanup, \
+                patch.object(supervisor.subprocess, "Popen", wraps=real_popen) as launch:
+            code = supervisor.run_fixture(self.arguments(
+                deadline_seconds=8, cleanup_grace_seconds=2,
+            ))
+        # Retain the safe lifecycle events even when a classification assertion fails.
+        print(output.getvalue(), end="")
+        rows = events(output.getvalue())
+        self.assertTrue(injected)
+        self.assertEqual(launch.call_count, 1)
+        self.assertEqual(cleanup.call_count, 1)
+        process = cleanup.call_args.args[0]
+        self.assertIsNotNone(process.returncode)
+        self.assertEqual(rows[-1]["event"], "supervisor_finished")
+        self.assertTrue(rows[-1]["tree_reaped"])
+        self.assertEqual(rows[-1]["child_exit_code"], process.returncode)
+        self.assertNotIn("offline-private-fault", output.getvalue())
+        self.assertEqual(code, expected_code)
+        self.assertEqual(rows[-1]["exit_code"], expected_code)
+        self.assertEqual(
+            rows[-1]["reason"], "interrupted" if expected_code == 130 else "start_failed",
+        )
+        self.assertEqual([row["event"] for row in rows].count(expected_event), 1)
+        self.assertEqual(
+            [row["event"] for row in rows].count(
+                "supervisor_error" if expected_code == 130 else "supervisor_interrupted"
+            ), 0,
+        )
+
+    def test_interrupted_error_returns_130_and_reaps_owned_child(self):
+        self.check_child_fault(InterruptedError, 130, "supervisor_interrupted")
+
+    def test_keyboard_interrupt_returns_130_and_reaps_owned_child(self):
+        self.check_child_fault(KeyboardInterrupt, 130, "supervisor_interrupted")
+
+    def test_os_error_returns_2_and_reaps_owned_child(self):
+        self.check_child_fault(OSError, 2, "supervisor_error")
+
     def test_late_child_exit_cannot_bypass_the_original_deadline(self):
         self.source.write_text(PASSING, encoding="utf-8")
         output = io.StringIO()
