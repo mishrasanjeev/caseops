@@ -216,3 +216,26 @@ No broader licence-policy waiver or customer binary/container redistribution
 approval is implied. Detailed material hashes and review
 `CASEOPS-PILLOW13-FASTEMBED08-COMPLIANCE-20261021-02` are retained with the
 dependency evidence. Fresh candidate/main and production gates remain pending.
+
+## Final Scanner Findings
+
+C25 `f87d19d6` passed seven Security jobs but failed the secret scanner on two
+public wheel-member SHA256 values. They are the exact `token_embeddings.py`
+and `tokenizer.py` digests retained from the official FastEmbed wheel, not
+credentials. Review only their immutable originating commit/path/rule/line
+fingerprints; no path-wide or rule-wide exclusion is authorized. The local
+full-scan attempt stopped with a Windows PermissionError before scanning the
+tree and remains incomplete. Required hosted Linux scanning must still pass.
+
+The separate CodeQL result found a check-then-read race in the Node trust
+guard, despite all three analysis jobs completing successfully. The guard now
+opens once, validates the descriptor and current identity, reads through that
+descriptor and closes it in `finally`. All 14 trust cases pass, including
+replacement and open/stat/read failure controls. Hosted CodeQL resolution is
+still required; a successful analysis job alone cannot close its alert.
+
+C25 CI and Docker16 were deliberately superseded. Docker16 retains two
+completed native cases, no complete native group and 623 unstarted browser
+cases. Its parent and observer were reaped, resources removed and all 3,070
+source files preserved. None of that partial execution supplies acceptance
+for the next candidate or a deployed-fix claim.

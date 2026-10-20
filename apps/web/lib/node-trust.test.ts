@@ -103,6 +103,67 @@ test("generates immutable bundle and permits guarded startup", async () => {
   expect(result.stdout.trim()).toBe("started");
 });
 
+test.each(["valid", "tampered", "read-error", "stat-error", "open-error", "path-replacement"])("bundle descriptor remains bound and closes on %s", async (scenario) => {
+  const dir = path.join(temp, `descriptor-${scenario}`);
+  fs.mkdirSync(dir);
+  fs.copyFileSync(path.join(scripts, "node-trust.cjs"), path.join(dir, "node-trust.cjs"));
+  expect((await child([path.join(dir, "node-trust.cjs"), "--generate"])).code).toBe(0);
+  const bundle = path.join(dir, "ca-bundle.pem");
+  fs.chmodSync(bundle, 0o644);
+  if (scenario === "tampered") fs.appendFileSync(bundle, "\n");
+  if (scenario === "open-error") fs.unlinkSync(bundle);
+  const code = `
+    const fs = require('node:fs');
+    const target = ${JSON.stringify(bundle)};
+    const scenario = ${JSON.stringify(scenario)};
+    const policy = require(${JSON.stringify(path.join(dir, "node-trust.cjs"))});
+    const original = { open: fs.openSync, stat: fs.fstatSync, read: fs.readFileSync, close: fs.closeSync };
+    const events = [];
+    let descriptor;
+    fs.openSync = (name, ...args) => {
+      if (name === target) events.push('open');
+      const value = original.open(name, ...args);
+      if (name === target) descriptor = value;
+      return value;
+    };
+    fs.fstatSync = (value, ...args) => {
+      if (value === descriptor) {
+        events.push('stat');
+        if (scenario === 'stat-error') throw new Error('injected descriptor stat fault');
+      }
+      const result = original.stat(value, ...args);
+      if (value === descriptor && scenario === 'path-replacement') {
+        fs.renameSync(target, target + '.opened');
+        fs.copyFileSync(target + '.opened', target);
+      }
+      return result;
+    };
+    fs.readFileSync = (value, ...args) => {
+      if (value === target) throw new Error('bundle must not be reopened by path');
+      if (value === descriptor) {
+        events.push('read');
+        if (scenario === 'read-error') throw new Error('injected descriptor read fault');
+      }
+      return original.read(value, ...args);
+    };
+    fs.closeSync = (value) => {
+      if (value === descriptor) events.push('close');
+      return original.close(value);
+    };
+    let outcome = 'accepted';
+    try { policy.verifyRuntime(); } catch { outcome = 'rejected'; }
+    console.log(JSON.stringify({ outcome, events }));
+  `;
+  const result = await child(["--use-openssl-ca", "-e", code], {
+    ...cleanEnv(), NODE_OPTIONS: "--use-openssl-ca", SSL_CERT_FILE: bundle, SSL_CERT_DIR: path.join(dir, "empty"),
+  });
+  expect(result.code, result.stderr).toBe(0);
+  const expectedEvents = scenario === "open-error" ? ["open"]
+    : scenario === "stat-error" || scenario === "path-replacement" ? ["open", "stat", "close"]
+      : ["open", "stat", "read", "close"];
+  expect(JSON.parse(result.stdout)).toEqual({ outcome: scenario === "valid" ? "accepted" : "rejected", events: expectedEvents });
+});
+
 test("missing or tampered bundle and nonempty or missing CA directory fail before app", async () => {
   const dir = path.join(temp, "invalid-trust");
   fs.mkdirSync(dir);

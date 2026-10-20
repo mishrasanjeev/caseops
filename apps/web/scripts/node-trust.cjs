@@ -43,10 +43,19 @@ function verifyRuntime() {
       || process.env.SSL_CERT_DIR !== emptyDirectory
       || process.execArgv.some((arg) => arg !== "--use-openssl-ca"
         && /^--(?:no-)?(?:use-(?:bundled|openssl|system)-ca|openssl-(?:config|shared-config))(?:=|$)/.test(arg))) refuse();
-  const bundle = fs.lstatSync(bundlePath);
-  const directory = fs.lstatSync(emptyDirectory);
-  if (!bundle.isFile() || !directory.isDirectory() || fs.readdirSync(emptyDirectory).length
-      || sha256(fs.readFileSync(bundlePath)) !== BUNDLE_SHA256) refuse();
+  const descriptor = fs.openSync(bundlePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    const bundle = fs.fstatSync(descriptor, { bigint: true });
+    const current = fs.lstatSync(bundlePath, { bigint: true });
+    const directory = fs.lstatSync(emptyDirectory);
+    // Windows lstat reports dev=0, unlike fstat; its inode is still comparable.
+    if (!bundle.isFile() || !current.isFile() || bundle.ino !== current.ino
+        || (process.platform !== "win32" && bundle.dev !== current.dev)
+        || !directory.isDirectory() || fs.readdirSync(emptyDirectory).length
+        || sha256(fs.readFileSync(descriptor)) !== BUNDLE_SHA256) refuse();
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 
 module.exports = { createBundle, verifyRuntime };

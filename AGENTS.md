@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Integrity-sensitive runtime files must be checked and read through the same
+  opened descriptor, with closure on every failure. Require both the scanner's
+  analysis job and its separate alert verdict to pass. A secret-scanner finding
+  on a public package digest needs exact origin-span provenance, not a broad
+  path exclusion; an infrastructure failure before scanning remains incomplete.
+
 - Dependency closure includes installed Linux/Windows inventories and shipped
   build tools outside the application lock. Recheck fresh advisory data before
   expensive gates. A compatibility rebuild must pin its official input,
