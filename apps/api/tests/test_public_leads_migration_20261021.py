@@ -1,4 +1,4 @@
-"""Independent fresh upgrades preserve admissions/outbox and physical catalog."""
+"""Independent fresh upgrades and rollback refusal preserve release data."""
 
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -58,7 +58,7 @@ def _catalog(engine):
 
 
 @pytest.mark.parametrize("kind", KINDS)
-def test_historical_visibility_upgrade_replay_and_rollback_preserve_all_records(
+def test_historical_visibility_upgrade_replay_and_rollback_refusal_preserve_all_records(
     kind,
     tmp_path,
     monkeypatch,
@@ -167,12 +167,15 @@ def test_historical_visibility_upgrade_replay_and_rollback_preserve_all_records(
                 assert all(not row.notification.eligible for row in page.items)
                 assert not page.has_more
 
-        command.downgrade(config, PREVIOUS)
+        with pytest.raises(RuntimeError, match="downgrade requires roll-forward or restore"):
+            command.downgrade(config, PREVIOUS)
         schema = sa.inspect(engine)
-        assert _columns(schema) == before_columns
-        assert schema.get_indexes("billing_enrollments") == before_indexes
+        assert _columns(schema) == columns
+        assert schema.get_indexes("billing_enrollments") == indexes
         assert schema.get_foreign_keys("billing_enrollments") == before_foreign_keys
         assert _records(engine) == before_records and _catalog(engine) == before_catalog
+        with engine.connect() as connection:
+            assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == REVISION
         command.upgrade(config, "head")
         assert _records(engine) == before_records and _catalog(engine) == before_catalog
         table = _table(engine)
@@ -188,3 +191,24 @@ def test_historical_visibility_upgrade_replay_and_rollback_preserve_all_records(
                 )
                 == expected
             )
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_empty_enrollment_database_keeps_roll_forward_only_policy(kind, tmp_path, monkeypatch):
+    with fresh_engine(kind, tmp_path) as engine:
+        config = migration_config(engine, monkeypatch)
+        command.upgrade(config, REVISION)
+        columns = _columns(sa.inspect(engine))
+        indexes = sa.inspect(engine).get_indexes("billing_enrollments")
+        assert not _records(engine)
+        with pytest.raises(RuntimeError, match="downgrade requires roll-forward or restore"):
+            command.downgrade(config, PREVIOUS)
+        assert _columns(sa.inspect(engine)) == columns
+        assert sa.inspect(engine).get_indexes("billing_enrollments") == indexes
+        assert not _records(engine)
+        with engine.connect() as connection:
+            assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == REVISION
+        command.upgrade(config, "head")
+        assert _columns(sa.inspect(engine)) == columns
+        assert sa.inspect(engine).get_indexes("billing_enrollments") == indexes
+        assert not _records(engine)

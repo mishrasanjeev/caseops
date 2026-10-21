@@ -21,7 +21,8 @@ Passwords, setup/reset links, MFA and private workspace forms are excluded.
   demo-request status, known admission contracts and the pre-contract server UTC
   demo_requested_at marker, including later converted enquiries. Source names
   alone do not establish public admission. Migration changes classification only,
-  never notification state or eligibility.
+  never notification state or eligibility. Downgrade refuses before any schema
+  or data change; rollback uses roll-forward or a verified pre-release restore.
 - LEAD-02: GET /api/platform-console/leads uses the existing console cookie,
   live grant and completed MFA with manager authority. Tenant Bearer credentials,
   report viewers, anonymous/challenged sessions and stale/revoked grants do not
@@ -122,8 +123,9 @@ is not a retained enquiry or a measured conversion.
 ## Verification Inventory
 
 Required native regression: retained legacy/converted/contract rows versus an
-unrelated commercial enrollment; data-preserving upgrade, replay and downgrade
-on fresh SQLite and PostgreSQL; column/index/foreign-key/catalog health; complete
+  unrelated commercial enrollment; data-preserving upgrade/replay and rollback
+  refusal on fresh SQLite and PostgreSQL, including an empty enrollment table;
+  column/index/foreign-key/catalog health; complete
 signed pagination and bounded SQL; MFA/role/realm/revocation negatives; exact
 reference-only transport payload and no transaction during HTTP; marked requests;
 disabled-to-enabled old-key replay; new eligible admissions across restart;

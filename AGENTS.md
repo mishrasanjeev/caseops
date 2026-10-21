@@ -18,6 +18,10 @@
   scope and reconcile the sidecar's exact changed-path list. Collapsed directory
   entries can hide a page test beside its page; a green local run may otherwise
   cover a test that was never committed. Preserve a refused preflight as incomplete.
+- Run the actual changed-migration preflight against canonical main before a
+  long release gate. A passing inventory or governance-map check is not that
+  preflight. Retained classification is committed data too: rollback refusal
+  must preserve its rows, columns, indexes and revision, with fresh database proof.
 
 - New dependency notices must be reconciled across every exact upload, image,
   retained-source and public-notice inventory before starting long release gates.

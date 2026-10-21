@@ -5,8 +5,8 @@ Revises: 20261020_0001
 DATA-GOVERNANCE-MAP: updated
 MIGRATION-LOCK-RISK: acknowledged; additive classification and index on the
 existing enrollment table under the canonical migration lock/statement budgets.
-MIGRATION-ROLLBACK: classification only; downgrade preserves every enrollment,
-admission/outbox snapshot, notification outcome and commercial/audit record.
+MIGRATION-ROLLBACK: roll-forward or restore only. Downgrade refuses before
+changing classification, indexes, enrollment/outbox or commercial/audit records.
 """
 
 import sqlalchemy as sa
@@ -59,5 +59,7 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_index(INDEX, table_name="billing_enrollments")
-    op.drop_column("billing_enrollments", "is_public_lead")
+    raise RuntimeError(
+        "Public lead classification is retained release data; "
+        "downgrade requires roll-forward or restore."
+    )
