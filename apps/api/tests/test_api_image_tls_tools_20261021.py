@@ -1,5 +1,6 @@
 import ast
 import hashlib
+import re
 import ssl
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,12 +9,19 @@ from unittest.mock import Mock
 import pytest
 
 DOCKERFILE = Path(__file__).resolve().parents[1] / "Dockerfile"
+CA_POLICY = DOCKERFILE.parent / "docker" / "remove_compromised_ca.py"
 DENIED = "86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b"
 
 
+@pytest.mark.parametrize(
+    "dockerfile", [DOCKERFILE, DOCKERFILE.parent.parent / "web" / "Dockerfile"]
+)
+def test_cloud_release_dockerfiles_do_not_require_buildkit_heredocs(dockerfile):
+    assert re.search(r"(?m)^(?:RUN|COPY)\s+.*<<", dockerfile.read_text()) is None
+
+
 def _exercise_policy(tmp_path, before, after, certificate, entry, *, verify=True, hostname=True):
-    source = DOCKERFILE.read_text()
-    policy = source.split("RUN python - <<'CA_POLICY'\n", 1)[1].split("\nCA_POLICY", 1)[0]
+    policy = CA_POLICY.read_text()
     tree = ast.parse(policy)
     tree.body = [node for node in tree.body if not isinstance(node, (ast.Import, ast.ImportFrom))]
     # Bind a synthetic known identity; the separate source contract pins the real G3 hash.
@@ -53,7 +61,7 @@ def _exercise_policy(tmp_path, before, after, certificate, entry, *, verify=True
         ),
         "subprocess": SimpleNamespace(run=update),
     }
-    exec(compile(ast.fix_missing_locations(tree), str(DOCKERFILE), "exec"), namespace)
+    exec(compile(ast.fix_missing_locations(tree), str(CA_POLICY), "exec"), namespace)
     update.assert_called_once_with(["update-ca-certificates", "--fresh"], check=True)
     assert "mozilla/Other.crt\n" in config.read_text()
     assert known_entry not in config.read_text().splitlines(keepends=True)
@@ -117,18 +125,21 @@ def test_api_image_pins_fixed_uv_without_changing_python_base():
 
 def test_api_bootstrap_selects_verified_patched_ca_before_pip():
     source = DOCKERFILE.read_text()
-    policy = source.index("RUN python - <<'CA_POLICY'")
+    copy = source.index(
+        "COPY docker/remove_compromised_ca.py /tmp/caseops-remove-compromised-ca.py"
+    )
+    policy = source.index("RUN python /tmp/caseops-remove-compromised-ca.py")
     pip_ca = source.index("PIP_CERT=/etc/ssl/certs/ca-certificates.crt")
     install = source.index("RUN pip install --no-cache-dir uv==0.13.4")
-    assert policy < pip_ca < install
+    assert copy < policy < pip_ca < install
+    assert "&& rm /tmp/caseops-remove-compromised-ca.py" in source
     assert "PIP_USE_DEPRECATED=legacy-certs" in source
     assert "trusted-host" not in source
     assert "CERT_NONE" not in source
 
 
 def test_actual_ca_policy_checks_exact_root_and_preserves_all_other_roots():
-    source = DOCKERFILE.read_text()
-    policy = source.split("RUN python - <<'CA_POLICY'\n", 1)[1].split("\nCA_POLICY", 1)[0]
+    policy = CA_POLICY.read_text()
     ast.parse(policy)
     assert DENIED in policy
     assert 'entry = "mozilla/emSign_ECC_Root_CA_-_G3.crt"' in policy

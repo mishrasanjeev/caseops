@@ -3042,3 +3042,14 @@ requirements when using the fallback.
   must still equal native final order, and every full progress record must
   still match its final case. Regress legitimate permutations alongside missing,
   extra, duplicate and altered records; never rewrite failed evidence.
+- A Docker Desktop BuildKit build does not prove that Cloud Build's legacy
+  Docker parser accepts the production Dockerfile. Keep production certificate
+  setup in a copied Python build script rather than a BuildKit-only heredoc,
+  verify its inclusion in both upload contexts, and execute the real production
+  builder path before release closure. Preserve the exact certificate-removal
+  policy and TLS verification; never remove a security step to pass a parser.
+- PowerShell regex operations update the automatic case-insensitive `$Matches`
+  variable. Do not name proof arrays or other retained state `$matches` across
+  `-match` or `-notmatch`. Exercise the actual positive admission loop as well
+  as rejection cases; a set of independent predicate tests cannot prove that
+  the operational launcher can admit a valid release.

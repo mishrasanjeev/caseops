@@ -3227,3 +3227,23 @@ had the same unsupported guarantees. Seven expanded source failures are retained
 the complete 25-case replacement passes. Homepage browser acceptance must open
 the drafting tab and safety FAQ, not inspect only default content. Live verdict
 remains Inconclusive; no backend legal-safety predicate is weakened.
+
+## October 21 Production Builder Compatibility
+
+- **Scope:** release packaging for the existing API, IP/Calendar and reports
+  journeys; no new product capability or provider entitlement.
+- **Confirmed defect:** Cloud Build's legacy Docker parser rejects the API's
+  inline Python heredoc (`unknown instruction: IMPORT`, build
+  `0125c489-c3b8-4002-8d59-3e39158d2692`). Docker Desktop BuildKit acceptance
+  did not cover this production parser. R22 stopped before migration/routing.
+- **Correction:** copy and execute the unchanged certificate-removal build
+  script using legacy-compatible instructions. Keep the compromised-root
+  rejection, unrelated-root equality, hostname verification and frozen lock.
+- **Regression:** `test_api_image_tls_tools_20261021.py` covers both production
+  Dockerfiles and the complete certificate policy; `test_deploy_prod_hardening.py`
+  covers inclusion in both API upload contexts. The new parser contract
+  reproduced one API failure and one web pass before correction.
+- **Verdict:** Inconclusive for production until the corrected candidate passes
+  fresh Docker/CI, the real production builder and exact-serving Playwright.
+  Full R22 evidence remains retained, not reassigned to the corrected revision.
+  See `docs/bugfix-renewal-cte-identity-2026-10-21.md` for the failed release.

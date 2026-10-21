@@ -251,3 +251,43 @@ the unchanged two-case deadline inventory. The first incorrect Vitest launcher
 path remains retained as an uncollected setup failure. These focused results
 do not replace fresh full gates; old mixed-revision preparation is not current
 release admission. Isolated frontend snapshots must also carry the new fixture.
+
+## R22 Production Build Rejection
+
+PR549 merged normally as `d2fd4d00378fd01e51a4538b14b111774fc9f6a3`,
+with the exact C27 tree. Fresh main passed 35 CI, 8 Security and 3 CodeQL jobs.
+Local Docker18 completed all 3,255 PostgreSQL cases and 623 browser identities:
+613 passed, 10 explicit capability skips, zero retries/errors. Both desktop/mobile
+PRA-01..08 journeys passed; they do not prove real-owner production MFA.
+
+The first operational launcher failed locally before creating a release
+process because a regex overwrote a `$matches` proof array. A fresh local
+wrapper renames only that array; all 26 positive/negative controls pass, with
+the original failure retained. The canonical deployment script is unchanged.
+
+The actual R22 release stopped in image build, before migration, scheduler
+reconciliation or traffic changes. API Cloud Build
+`0125c489-c3b8-4002-8d59-3e39158d2692` failed at Dockerfile line31:
+`unknown instruction: IMPORT`. The production builder used its legacy parser,
+which interpreted the Python heredoc body as Dockerfile instructions. The web
+build `4e79c945-3607-4220-821d-d4c44fa6e0cc` succeeded but was not routed.
+The deployment parent exited 1 and was reaped. Production remains on 9cf76f2b;
+R22 is not a deployed fix or production acceptance certificate.
+
+The correction copies the unchanged CA-removal Python body into a temporary
+build script and invokes/removes it with legacy-compatible Docker instructions.
+The existing builder, certificate identity checks, unrelated-root equality,
+hostname verification and frozen dependencies remain unchanged. A new
+two-production-Dockerfile heredoc contract reproduced 1 failure/1 pass before
+the correction. Upload-context coverage checks the added build script.
+The corrected runtime-base image builds with `DOCKER_BUILDKIT=0`; an offline,
+read-only container confirms 148 roots, the denied root absent, TLS/hostname
+verification enabled, uv0.13.4 and removal of the temporary script. The moved
+policy's Python AST is identical to R22. Actual gcloud upload inventory includes
+the script while excluding the local environment and `.venv`. The complete
+TLS module plus both new upload checks pass 23 cases/69 phases. The CodeQL
+terminal-raise module passes 12 cases/36 phases after its static red case.
+Fresh corrected-candidate local Docker, hosted gates, canonical merge/release
+and exact-serving browser verification are still required. Open CodeQL NOTE595
+on R22 is not a fixed finding; its explicit terminal-raise correction requires
+fresh analysis before any resolution claim.

@@ -407,7 +407,10 @@ def _detect_mapping_kind(
         if normalized_content_type not in _XLSX_CONTENT_TYPES:
             _raise_bad_request("Unsupported matter import XLSX MIME type.")
         return "xlsx"
-    _raise_bad_request("Unsupported matter import file type. Upload CSV, JSON, or XLSX.")
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Unsupported matter import file type. Upload CSV, JSON, or XLSX.",
+    )
 
 
 def _parse_csv(content: bytes) -> list[ParsedMatterImportRow]:
