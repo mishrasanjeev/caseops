@@ -6,7 +6,7 @@ import { API_BASE_URL, NetworkError } from "@/lib/api/config";
 import { activityReport } from "./activity-schema";
 import {
   consoleAccepted, consoleAdminRecord, consoleAdminsResponse, consoleAuthState, consoleComplete,
-  consoleEnrollmentResponse, consoleInvitationResponse, consoleOverview, consoleReportPage, consoleSignedOut,
+  consoleEnrollmentResponse, consoleInvitationResponse, consoleLeadsResponse, consoleOverview, consoleReportPage, consoleSignedOut,
 } from "./schemas";
 
 const PREFIX = "/api/platform-console";
@@ -118,6 +118,7 @@ export const platformApi = {
     return result;
   },
   admins: (cursor?: string | null, signal?: AbortSignal) => request(`/admins${pageQuery(cursor)}`, consoleAdminsResponse, { signal }),
+  leads: (cursor?: string | null, signal?: AbortSignal) => request(`/leads${pageQuery(cursor)}`, consoleLeadsResponse, { signal }),
   invite: (body: { email: string; full_name: string }) => request("/admins/invitations", consoleInvitationResponse, { body }),
   revoke: (id: string, reason: string) => request(`/admins/${encodeURIComponent(id)}/revoke`, consoleAdminRecord, { body: { reason } }),
   overview: (signal?: AbortSignal) => request("/reports/overview", consoleOverview, { signal }),

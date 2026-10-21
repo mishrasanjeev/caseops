@@ -34,7 +34,9 @@ def test_demo_admin_denial_preserves_lead_and_outbox(
     monkeypatch.setenv("CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL", "founder-guard@example.com")
     monkeypatch.setattr(billing_demo, "_notification_enabled", lambda: False)
     transports = []
-    monkeypatch.setattr(billing_demo, "_send_notification", transports.append)
+    monkeypatch.setattr(
+        billing_demo, "_send_notification", lambda identity, **_: transports.append(identity)
+    )
     get_settings.cache_clear()
     admin_client.headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
     identity = str(uuid4())
@@ -56,6 +58,9 @@ def test_demo_admin_denial_preserves_lead_and_outbox(
     with get_session_factory()() as session:
         row = session.get(BillingEnrollment, identity)
         assert row is not None
+        # Genuine pre-policy/disabled cohort stays negative; do not retrofit it
+        # merely to exercise the independent founder authorization denial.
+        assert row.status_timestamps_json["demo_admission"]["notification_eligible"] is False
         state = dict(row.status_timestamps_json["demo_admission"])
         state.update(notification_status="retry_pending", attempts=1, last_error_code="timeout")
         row.status_timestamps_json = {**row.status_timestamps_json, "demo_admission": state}
@@ -88,14 +93,17 @@ def test_demo_admin_denial_preserves_lead_and_outbox(
         assert retained.contact_email == original_email
         assert retained.status == "demo_requested"
         assert retained.status_timestamps_json == before
-        assert session.scalar(
-            select(PlatformAdminAuditEvent.id).where(
-                PlatformAdminAuditEvent.target_id == identity,
-                PlatformAdminAuditEvent.action.in_(
-                    [
-                        "platform.demo_notification.retry_requested",
-                        "platform.demo_enrollment.deleted",
-                    ]
-                ),
+        assert (
+            session.scalar(
+                select(PlatformAdminAuditEvent.id).where(
+                    PlatformAdminAuditEvent.target_id == identity,
+                    PlatformAdminAuditEvent.action.in_(
+                        [
+                            "platform.demo_notification.retry_requested",
+                            "platform.demo_enrollment.deleted",
+                        ]
+                    ),
+                )
             )
-        ) is None
+            is None
+        )

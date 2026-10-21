@@ -25,7 +25,7 @@ const PATENT_PROD_SPECS = /iplf-(?:079b-domain-availability|080[ab]-patent-(?:fa
 const SAVED_MANIFEST_PROD_SPEC = /iplf-066c-saved-manifest-later-events-2026-09-29\.spec\.ts$/;
 const OCT13_PORTFOLIO_CALENDAR_SPECS = /(?:ram-2026-10-13-(?:hearings|ip-portfolio)|ram-2026-10-15-ip-(?:controls|renewal-tracker)|ram-2026-10-17-ip-(?:tracker|reminders)|ram-2026-10-17-calendar-readiness)\.spec\.ts$/;
 const RETAINED_INDEX_PROD_SPECS = /ram-2026-10-(?:10|12)-prod\.spec\.ts$/;
-const PLATFORM_REPORT_ADMIN_PROD_SPECS = /platform-report-admin-\d{4}-\d{2}-\d{2}\.prod\.spec\.ts$/;
+const PLATFORM_REPORT_ADMIN_PROD_SPECS = /platform-(?:report-admin|leads)-\d{4}-\d{2}-\d{2}\.prod\.spec\.ts$/;
 
 const candidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",

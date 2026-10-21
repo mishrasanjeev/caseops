@@ -7945,6 +7945,11 @@ class BillingProfitRollup(Base):
 
 class BillingEnrollment(Base):
     __tablename__ = "billing_enrollments"
+    __table_args__ = (
+        Index(
+            "ix_billing_enrollments_public_lead_created_id", "is_public_lead", "created_at", "id"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str | None] = mapped_column(
@@ -7959,6 +7964,9 @@ class BillingEnrollment(Base):
     segment: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     selected_plan: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     source: Mapped[str] = mapped_column(String(40), nullable=False, default="pricing_page")
+    is_public_lead: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     status: Mapped[str] = mapped_column(
         String(40), nullable=False, default="lead_created", index=True
     )

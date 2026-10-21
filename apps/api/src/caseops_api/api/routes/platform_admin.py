@@ -62,7 +62,11 @@ from caseops_api.schemas.saas_billing import (
     PlatformReasonRequest,
     PlatformSubscriptionMutation,
 )
-from caseops_api.services.billing_demo import ADMISSION_CONTRACT, deliver_demo_notification
+from caseops_api.services.billing_demo import (
+    ADMISSION_CONTRACT,
+    _notification_eligible,
+    deliver_demo_notification,
+)
 from caseops_api.services.connector_health import list_platform_connector_health
 from caseops_api.services.forum_catalog import (
     ForumCatalogAliasError,
@@ -405,6 +409,8 @@ def retry_enrollment_notification(
     state = dict((row.status_timestamps_json or {}).get("demo_admission", {})) if row else {}
     if not row or not state:
         raise HTTPException(404, "Demo request not found.")
+    if not _notification_eligible(row) or state.get("automated_request"):
+        raise HTTPException(409, "This request is not eligible for notification delivery.")
     if state["notification_status"] not in {"retry_pending", "exhausted"}:
         raise HTTPException(409, "This notification is already sent, queued, or being delivered.")
     state.update(

@@ -24,7 +24,8 @@ describe("seo_demo_20261009 public form", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Request saved.");
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/demo-request");
-    expect(JSON.parse(init.body)).toMatchObject({ source: "homepage", role: "solo_advocate", segment: "solo", privacy_notice_version: "2026-10-09" });
+    expect(JSON.parse(init.body)).toMatchObject({ source: "homepage", role: "solo_advocate", segment: "solo", privacy_notice_version: "2026-10-21" });
+    expect(Object.keys(JSON.parse(init.body)).sort()).toEqual(["company_name", "contact_email", "contact_name", "idempotency_key", "intent", "notes", "privacy_notice_version", "role", "segment", "selected_plan", "source"]);
     expect(init).toMatchObject({ credentials: "omit", referrerPolicy: "no-referrer" });
     expect(screen.getByRole("button", { name: "Request a conversation" })).toBeDisabled();
     expect(document.cookie).toBe("");

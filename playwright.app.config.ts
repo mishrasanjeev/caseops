@@ -39,6 +39,7 @@ export default defineConfig({
     /portal-invite-access\.spec\.ts/,
     /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
     /platform-report-admin-2026-10-21\.prod\.spec\.ts$/,
+    /platform-leads-2026-10-21(?:\.prod)?\.spec\.ts$/,
     /bootstrap-and-upload\.spec\.ts/,
     /m2-polish\.spec\.ts/,
     /intake\.spec\.ts/,
@@ -146,6 +147,7 @@ export default defineConfig({
       testMatch: [
         /mobile-responsive\.spec\.ts/,
         /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
+        /platform-leads-2026-10-21\.spec\.ts$/,
       ],
       use: {
         ...devices["Pixel 5"],

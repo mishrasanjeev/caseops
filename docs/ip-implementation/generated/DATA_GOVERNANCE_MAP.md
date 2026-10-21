@@ -6,12 +6,12 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `957a16bdc0bf733ea6d5124a06d052a98ad3776d4f0dcafb1864074416d28d49`
+- Canonical map SHA-256: `4f5e546935607d11663d29d225a95c0c03652f59becb39474cca95936a0a90a8`
 - SQL tables: `344`
-- SQL columns: `5437`
-- ORM indexes: `1787`
-- Alembic/raw index declarations: `1571`
-- Non-SQL data classes: `14`
+- SQL columns: `5438`
+- ORM indexes: `1788`
+- Alembic/raw index declarations: `1572`
+- Non-SQL data classes: `15`
 
 ## Boundary
 
@@ -61,7 +61,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `billing_coupons` | `billing_provider_evidence` | 18 | `registry_fail_closed` |
 | `billing_credit_ledger` | `billing_provider_evidence` | 14 | `registry_fail_closed` |
 | `billing_credit_notes` | `billing_provider_evidence` | 18 | `registry_fail_closed` |
-| `billing_enrollments` | `billing_provider_evidence` | 19 | `registry_fail_closed` |
+| `billing_enrollments` | `billing_provider_evidence` | 20 | `registry_fail_closed` |
 | `billing_manual_invoices` | `billing_provider_evidence` | 20 | `registry_fail_closed` |
 | `billing_margin_simulations` | `billing_provider_evidence` | 16 | `registry_fail_closed` |
 | `billing_overage_policies` | `billing_provider_evidence` | 12 | `registry_fail_closed` |
@@ -370,6 +370,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 
 | ID | Kind | Disposition handler |
 | --- | --- | --- |
+| `public-enquiry-reference-notification` | `provider_held_object` | `registry_fail_closed` |
 | `platform-console-account-link-delivery` | `provider_held_object` | `registry_fail_closed` |
 | `document-object-prefix-and-version` | `object_prefix_version` | `registry_fail_closed` |
 | `document-materialization-cache` | `cache` | `registry_fail_closed` |

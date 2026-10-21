@@ -232,7 +232,7 @@ class DemoRequest(BaseModel):
     ] = "not_specified"
     intent: Literal["demo", "pilot", "pricing"] = "demo"
     idempotency_key: UUID | None = None
-    privacy_notice_version: Literal["2026-10-09"] | None = None
+    privacy_notice_version: Literal["2026-10-09", "2026-10-21"] | None = None
 
     @model_validator(mode="after")
     def complete_keyed_admission(self) -> DemoRequest:

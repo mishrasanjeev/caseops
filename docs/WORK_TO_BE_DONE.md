@@ -1,5 +1,15 @@
 # CaseOps  - Work To Be Done
 
+## October 21 Public Leads
+
+Partially implemented: reuse durable demo admission/outbox for new-only,
+reference-only owner notification and an MFA-manager /platform/leads directory
+covering retained enquiries with bounded pagination. Prove immutable eligibility,
+legacy/converted migration visibility without historical sends, claim races and
+unknown no-resend, protected read scopes and responsive reload before release.
+No CRM expansion or retention-policy approval. See
+`docs/public-leads-admin-2026-10-21.md`; full release/deployed proof is pending.
+
 ## October 21 Authenticator QR Usability
 
 PRA-09 under J14/M14/US-040/042: add browser-local QR encoding of the existing

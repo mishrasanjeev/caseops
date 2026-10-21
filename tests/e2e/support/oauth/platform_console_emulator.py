@@ -79,7 +79,9 @@ class _CaptureServer(ThreadingHTTPServer):
         return request, address
 
     def process_request(self, request, address):
-        worker = Thread(target=self.process_request_thread, args=(request, address), daemon=False)
+        worker = Thread(
+            target=self.process_request_thread, args=(request, address), daemon=False
+        )
         with self.owner_lock:
             self._reap_handlers()
             self.handlers.add(worker)
@@ -237,9 +239,16 @@ class ConsoleMailCapture:
             def do_POST(self):
                 try:
                     length = int(self.headers.get("Content-Length", "0"))
-                    if self.path != capture.capture_path or not 0 < length <= 16_384:
+                    # Consume the bounded body before refusal: closing a socket
+                    # with unread bytes can erase the 400 response on Windows.
+                    body = self.rfile.read(min(max(length, 0), 16_385))
+                    if (
+                        self.path != capture.capture_path
+                        or not 0 < length <= 16_384
+                        or len(body) != length
+                    ):
                         raise ValueError("Invalid capture request.")
-                    capture.receive(json.loads(self.rfile.read(length)))
+                    capture.receive(json.loads(body))
                     status = 202
                 except (ValueError, OSError):
                     status = 400
@@ -248,6 +257,7 @@ class ConsoleMailCapture:
                 self.send_response(status)
                 self.send_header("Content-Length", "0")
                 self.send_header("Cache-Control", "no-store")
+                self.send_header("Connection", "close")
                 self.end_headers()
 
         self.server = _CaptureServer(("127.0.0.1", 0), Handler)

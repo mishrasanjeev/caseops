@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 21 Public Enquiry Operations
+
+Partially implemented. Existing public form admission is already durable, but
+isolated manager readback and a persistently wired, new-only notification cohort
+need focused and release proof. Preserve historical/unknown attempt states and
+original idempotency snapshots; never drain legacy pending rows or put submitted
+PII into notification mail. Test claim expiry/concurrency with no transaction
+during transport, no-paid persistence, MFA/realm/revocation fences, bounded
+pagination and data-preserving SQLite/PostgreSQL migration health. The90-day
+purge remains disabled and unapproved. See
+`docs/public-leads-admin-2026-10-21.md`. No production readiness claim yet.
+
 ## October 21 Cross-Dialect Renewal Responses
 
 C24 is NO-GO after nine Pillow findings. The subsequent installed-set audit

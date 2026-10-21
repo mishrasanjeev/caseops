@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 21 Public Lead Coverage
+
+J19/M21/US-063, FT-094..096, NFT-023, SEC-031 and J14/M14/US-040/042,
+FT-060/061 map to LEAD-01..05 in `docs/public-leads-admin-2026-10-21.md`.
+Required coverage includes all seven existing form sources, retained/converted
+visibility, manager MFA and realm isolation, signed bounded pagination, immutable
+new-only notification eligibility, marked-request rejection, conditional claim
+finalization, unknown no-resend, reference-only mail and fresh migration/catalog
+health on both dialects. Focused/full/release proof remains pending.
+
 ## October 21 Authenticator QR Coverage
 
 J14/M14/US-040/042, FT-060/061, PRA-09 extends the existing enrollment UI with

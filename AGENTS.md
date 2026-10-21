@@ -1,5 +1,20 @@
 # CaseOps agent instructions
 
+- Public lead visibility is separate from notification eligibility. An owner
+  opting into new-submission alerts must not reactivate historical outbox rows,
+  old idempotency keys or admissions made while the purpose was disabled. Prove
+  that boundary across configuration changes, restarts and retries. A protected
+  lead read never grants tenant membership or founder billing authority; email
+  transport acceptance is not inbox delivery.
+- A request-local no-paid marker suppresses that invocation, not a previously
+  admitted human obligation. A marked idempotent replay must leave the human
+  outbox byte-equivalent and make zero provider calls; a later ordinary drain
+  must still deliver exactly once. Persisted synthetic admissions remain barred
+  from real transport through every background and retry path.
+  Background transport must also prove the original admission request session
+  ended its transaction on replay, not merely that its separate worker session
+  was closed; request-scoped dependency cleanup can occur after background work.
+
 - New dependency notices must be reconciled across every exact upload, image,
   retained-source and public-notice inventory before starting long release gates.
   A base-policy license still needs its bundled attribution; preserve historical

@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, KeyRound, LogOut, ShieldCheck, UsersRound } from "lucide-react";
+import { BarChart3, Inbox, KeyRound, LogOut, ShieldCheck, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -21,6 +21,7 @@ export function PlatformShell({ children }: {
   const pathname = usePathname();
   const links = [
     { href: "/platform/reports", label: "Reports", icon: BarChart3 },
+    ...(canManageAdmins ? [{ href: "/platform/leads", label: "Leads", icon: Inbox }] : []),
     ...(canManageAdmins ? [{ href: "/platform/admins", label: "Administrators", icon: UsersRound }] : []),
     { href: "/platform/security", label: "Security", icon: KeyRound },
   ];

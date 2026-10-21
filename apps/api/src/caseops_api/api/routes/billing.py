@@ -341,6 +341,11 @@ def start_trial(payload: TrialStartRequest, session: DbSession) -> dict[str, obj
 def create_enrollment_demo_request(
     request: Request, payload: DemoRequest, session: DbSession, background_tasks: BackgroundTasks
 ) -> DemoRequestResponse:
-    response = create_demo_request(session, payload)
+    response = create_demo_request(
+        session, payload, automated="x-caseops-automated-test" in request.headers
+    )
+    # Replay reads must also finish before response background transport runs.
+    if session.in_transaction():
+        session.commit()
     background_tasks.add_task(deliver_demo_notification, response.id)
     return response

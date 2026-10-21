@@ -36,8 +36,10 @@ from caseops_api.schemas.platform_console import (
     ConsoleRevokeRequest,
     ConsoleTokenCompleteRequest,
 )
+from caseops_api.schemas.platform_leads import ConsoleLeadsResponse
 from caseops_api.services import platform_console as console
 from caseops_api.services.activity_reports import build_activity_report
+from caseops_api.services.platform_console_leads import leads_page
 from caseops_api.services.platform_console_reports import overview, report_page
 
 
@@ -262,6 +264,19 @@ def activity(request: Request, response: Response, session: DbSession):
     result = build_activity_report(session, include_internal_accounts=True)
     console.audit_report_read(session, context, "activity")
     response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+@router.get("/leads", response_model=ConsoleLeadsResponse)
+def public_leads(
+    request: Request,
+    session: DbSession,
+    cursor: str | None = Query(default=None, max_length=2048),
+    limit: int = Query(default=25, ge=1, le=100),
+):
+    context = _context(request, session, manager=True)
+    result = leads_page(session, cursor=cursor, limit=limit)
+    console.audit_report_read(session, context, "public_leads")
     return result
 
 

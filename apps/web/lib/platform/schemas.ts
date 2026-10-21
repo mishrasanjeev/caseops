@@ -75,3 +75,20 @@ export type ConsoleAuth = z.infer<typeof consoleAuthState>;
 export type ConsoleAdmin = z.infer<typeof consoleAdminRecord>;
 export type ConsoleReport = z.infer<typeof consoleReportPage>;
 export type ConsoleOverview = z.infer<typeof consoleOverview>;
+
+export const consoleLead = z.object({
+  id: z.string().uuid(), submitted_at: z.string().datetime({ offset: true }),
+  contact_name: z.string().nullable(), contact_email: z.string().nullable(),
+  contact_mobile: z.string().nullable(), company_name: z.string().nullable(),
+  segment: z.string(), selected_plan: z.string().nullable(), source: z.string(),
+  role: z.string().nullable(), intent: z.string().nullable(), notes: z.string().nullable(),
+  privacy_notice_version: z.string().nullable(),
+  notification: z.object({
+    status: z.enum(["not_requested", "pending", "sending", "accepted", "retry_pending", "exhausted", "outcome_unknown"]),
+    attempts: z.number().int().nonnegative(), last_error_code: z.string().nullable(),
+    eligible: z.boolean(),
+  }).strict(),
+}).strict();
+export const consoleLeadsResponse = z.object({
+  items: z.array(consoleLead).max(100), next_cursor: z.string().max(2048).nullable(), has_more: z.boolean(),
+}).strict();

@@ -347,6 +347,50 @@ test.describe("Public landing page and user guide", () => {
     await expect(page.getByRole("textbox", { name: "Work email", exact: true })).toBeVisible();
   });
 
+  for (const viewport of VIEWPORTS) {
+    test(`${viewport.name} public request privacy notice qualifies new-only reference mail without mutation`, async ({ page, context, baseURL }) => {
+      if (!baseURL) throw new Error("Privacy contract requires the configured public origin.");
+      const origin = new URL(baseURL).origin;
+      const refused = { mutations: 0, external: 0 };
+      await context.route("**/*", route => {
+        if (!["GET", "HEAD", "OPTIONS"].includes(route.request().method())) {
+          refused.mutations++; return route.abort("blockedbyclient");
+        }
+        if (new URL(route.request().url()).origin !== origin) {
+          refused.external++; return route.abort("blockedbyclient");
+        }
+        return route.continue();
+      });
+      await page.setViewportSize(viewport);
+      const response = await page.goto("/demo/privacy");
+      expect(response?.status()).toBe(200);
+      const main = page.getByRole("main");
+      await expect(main.getByRole("heading", { level: 1, name: "Demo request privacy notice", exact: true })).toBeVisible();
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://caseops.ai/demo/privacy");
+      await expect(main).toContainText("Version 2026-10-21.");
+      await expect(main).toContainText("not tenant workspace records");
+      await expect(main).toContainText("authorized platform managers with multi-factor authentication");
+      await expect(main).toContainText("Do not submit client names, case details, privileged material or confidential documents.");
+      await expect(main).toContainText("We do not collect full URLs, query strings, referrers, tracking cookies, GA4 or other client-side analytics");
+      await expect(main).toContainText("The request is saved before acceptance is shown.");
+      await expect(main).toContainText("Once server-side notification is activated, only new submissions can trigger an email");
+      await expect(main).toContainText("designated CaseOps enquiry recipient through SendGrid");
+      await expect(main).toContainText("request reference and a protected dashboard link, not your submitted details");
+      await expect(main).toContainText("Historical requests are not bulk mailed.");
+      await expect(main).toContainText("Notification failure does not delete your request.");
+      await expect(main).toContainText("uncertain delivery is held for inspection, not automatically resent");
+      await expect(main).toContainText("Provider acceptance does not guarantee inbox delivery.");
+      await expect(main).toContainText("automated deletion is disabled pending policy review");
+      await expect(main).toContainText("Existing enrollment, account, billing and legal records are outside that proposal.");
+      await expect(main.getByRole("link", { name: "Request a conversation", exact: true })).toHaveAttribute("href", "/#cta");
+      await expect(main.getByRole("form")).toHaveCount(0);
+      await expect(page.locator('script[src*="googletagmanager"],script[src*="google-analytics"]')).toHaveCount(0);
+      expect((await context.cookies()).filter(cookie => /^_(ga|gid|gat)/.test(cookie.name))).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+      expect(refused).toEqual({ mutations: 0, external: 0 });
+    });
+  }
+
   for (const path of ["/account/forgot-password", "/portal/sign-in"]) {
     test(`${path} remains noindex without submitting credentials`, async ({ page }) => {
       const response = await page.goto(path);

@@ -165,6 +165,9 @@
     "private_index_projections": "private_retrieval_disposition"
   },
   "column_category_overrides": {
+    "billing_enrollments": {
+      "is_public_lead": "configuration_or_state_metadata"
+    },
     "platform_console_sessions": {
       "csrf_hash": "security_secret_or_credential",
       "credential_hash": "security_secret_or_credential",
@@ -339,7 +342,8 @@
     }
   },
   "table_purpose_overrides": {
-    "platform_report_admins": "Global operational reports-only grants linked to an existing or explicitly invited User, the configured founder provenance and, for viewers, the inviting report manager. Manager/viewer roles, pending/active/revoked status and credential epoch are not tenant membership, client-document access, founder billing authority or impersonation. This security class also owns encrypted realm-specific TOTP enrollment, accepted counter, hashed single-use recovery codes and bounded factor-failure lockout metadata. Passwords remain in the existing User credential class; ordinary tenant login and founder seeding do not create these grants. Named initial provisioning is a separately admitted post-release operational action, never startup seeding. No retention or disposition authority is added.",
+    "billing_enrollments": "Existing commercial enrollments also retain durable public demo/pricing/enquiry admissions: submitted contact name/email/mobile, company, segment, selected plan, role/intent, notes, allowlisted public entry point, notice version and server admission time. The additive is_public_lead classification and created_at/id index expose proven retained enquiries, including converted historical admissions, through bounded signed pages to current MFA-complete isolated platform managers only; viewers and tenant credentials do not gain contact-data access or founder billing mutation authority. Historical classification never edits notification state. Only a fresh server admission under the enabled owner policy captures the new purpose/version/eligibility cohort in the existing demo_admission outbox; replay, migration, later activation and retry cannot upgrade legacy or disabled-period rows. Claims, lease/attempts, no-paid provenance and fixed accepted/failed/unknown outcomes remain content-free lifecycle metadata. Submitted fields stay in SQL and the protected dashboard, not notification mail. The90-day public-demo deletion proposal remains disabled and unapproved; existing commercial/account/notes/audit preservation rules are unchanged.",
+    "platform_report_admins": "Global operational reports grants linked to an existing or explicitly invited User, the configured founder provenance and, for viewers, the inviting report manager. MFA-complete managers additionally read the protected public-enquiry contact projection; report viewers receive no lead PII. Manager/viewer roles, pending/active/revoked status and credential epoch are not tenant membership, client-document access, founder billing authority or impersonation. This security class also owns encrypted realm-specific TOTP enrollment, accepted counter, hashed single-use recovery codes and bounded factor-failure lockout metadata. Passwords remain in the existing User credential class; ordinary tenant login and founder seeding do not create these grants. Named initial provisioning is a separately admitted post-release operational action, never startup seeding. No retention or disposition authority is added.",
     "platform_console_sessions": "Reports-only session admission receipts: hashed random session and CSRF identities, credential/factor fingerprints, grant epoch, challenge/authenticated purpose, issue/expiry and revocation times. The independent audience/issuer and HttpOnly cookie cannot authorize tenant, portal or founder routes. Each request rechecks current grant, root, user and credential validity; MFA is required for cross-account reports. Session expiry limits authentication, not storage retention or deletion. No raw cookie, bearer token, password or MFA secret is stored here.",
     "platform_console_tokens": "Hash-only, expiring, single-use report-console invitation and password-reset receipts bound to current report grant epoch and credential fingerprint. Link consumption, revocation and issue/expiry metadata prevent stale or repeated acceptance. A pending new identity may initialize a password; an invitation to an existing identity must prove its existing credential, not silently overwrite it. Reset changes the authoritative User credential/session fence without granting tenant membership or bypassing report MFA. Link expiry is not a record deletion policy.",
     "platform_console_deliveries": "Durable, bounded pre-transport claims for report-console invitation/reset email. Only token receipt identity, claim digest/expiry, pending/accepted/failed/unknown outcome, sanitized error code and optional provider message identifier are stored. Sender inputs are captured before commit and transport owns no SQL transaction. Expired/uncertain claims are reconciled as unknown, never automatically resent. Provider acceptance is not mailbox delivery, link use or account activation. The raw one-use link is disclosed to SendGrid and the requested mailbox under the separately inventoried provider class, not persisted in this SQL class. No provider/mailbox deletion or approved retention period is added.",
@@ -357,6 +361,34 @@
     "rule": "A changed Alembic migration or registered storage/provider/telemetry boundary must change this map and use the migration marker. A future runtime operation may replace the fail-closed handler only after the required machine policy, dry-run, and exact-release checks pass."
   },
   "non_sql_data_classes": [
+    {
+      "id": "public-enquiry-reference-notification",
+      "kind": "provider_held_object",
+      "purpose": "Owner-requested notification for fresh public demo/pricing/enquiry admissions only. SendGrid and the designated CaseOps enquiry mailbox receive a request UUID, fixed subject and protected /platform/leads link, not the submitted name, contact details, company, notes, passwords, MFA or private case data. All retained proven enquiries remain readable to currently authorized MFA-complete managers regardless of notification eligibility; there is no historical mail backfill.",
+      "legal_policy_basis": "Explicit owner instruction dated2026-10-21 authorizes new-submission enquiry notification to the server-owned recipient. This records that operational instruction, not platform-wide privacy/legal approval, a retention basis, subprocessor approval or consent for unrelated processing.",
+      "sensitivity": "restricted_operational_reference_and_recipient_address",
+      "default_retention": "No approved provider/mailbox retention or automated deletion duration. The90-day public-demo purge proposal remains disabled and unapproved; reference messages are not deleted by an outbox lease or retry deadline.",
+      "tenant_configurable": false,
+      "tenant_retention_bounds": "No tenant override, bulk export or cross-tenant workspace access is introduced.",
+      "disposition": "registry_fail_closed inventories this disclosure only; it does not delete messages, purge leads, invoke provider deletion or alter billing/account/commercial/audit retention.",
+      "hold_behavior": "No legal hold is activated; any separately approved hold must prevent conflicting disposition.",
+      "source_licence_limits": "Only the new server-written eligible admission cohort may enter bounded real transport. Legacy and disabled-period records and old idempotency replays cannot be upgraded. Automated/no-paid admissions cannot reach a real provider; a separately guarded, unshipped local E2E wrapper preserves that marker while capturing reference-only fake delivery on its existing loopback listener, with no cloud identity or SendGrid key. Transport owns no SQL transaction; expired/uncertain attempts are not automatically resent. Provider acceptance is not inbox delivery or a promise of response.",
+      "region_subprocessor": "SendGrid mail/send HTTPS receives the configured sender, designated operational recipient and reference-only message; the recipient mailbox subsequently holds it. Endpoint location is not a residency guarantee, and no new residency or provider-retention guarantee is asserted.",
+      "owner": "Codex",
+      "disposition_handler_id": "registry_fail_closed",
+      "status": "inventory_registered_runtime_policy_unapproved",
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/billing_demo.py",
+        "apps/api/src/caseops_api/services/sendgrid_transport.py",
+        "apps/api/src/caseops_api/services/platform_console_leads.py",
+        "apps/api/alembic/versions/20261021_0001_public_lead_projection.py",
+        "infra/cloudrun/scheduler-inventory.json",
+        "apps/web/app/demo/privacy/page.tsx",
+        "tests/e2e/support/oauth/public_lead_emulator.py",
+        "apps/api/tests/test_public_lead_emulator_20261021.py",
+        "docs/public-leads-admin-2026-10-21.md"
+      ]
+    },
     {
       "legal_policy_basis": "Owner-requested operational report-console invitation/reset workflow dated 2026-10-20; this inventory is not an asserted platform-wide legal basis, approved subprocessor policy, tenant consent or data-disposition activation.",
       "default_retention": "No approved provider/mailbox retention duration. One-use links expire for authentication but mailbox copies and provider records are not deleted by link expiry. Keep existing security receipts under their registered fail-closed SQL owners.",
@@ -3856,7 +3888,7 @@
     {
       "id": "billing_enrollments",
       "table_name": "billing_enrollments",
-      "purpose": "Repository SQL persistence class `billing_enrollments`; its exact column inventory is intentionally versioned below.",
+      "purpose": "Existing commercial enrollments also retain durable public demo/pricing/enquiry admissions: submitted contact name/email/mobile, company, segment, selected plan, role/intent, notes, allowlisted public entry point, notice version and server admission time. The additive is_public_lead classification and created_at/id index expose proven retained enquiries, including converted historical admissions, through bounded signed pages to current MFA-complete isolated platform managers only; viewers and tenant credentials do not gain contact-data access or founder billing mutation authority. Historical classification never edits notification state. Only a fresh server admission under the enabled owner policy captures the new purpose/version/eligibility cohort in the existing demo_admission outbox; replay, migration, later activation and retry cannot upgrade legacy or disabled-period rows. Claims, lease/attempts, no-paid provenance and fixed accepted/failed/unknown outcomes remain content-free lifecycle metadata. Submitted fields stay in SQL and the protected dashboard, not notification mail. The90-day public-demo deletion proposal remains disabled and unapproved; existing commercial/account/notes/audit preservation rules are unchanged.",
       "policy_profile_id": "billing_provider_evidence",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
@@ -3908,6 +3940,11 @@
         "id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "is_public_lead": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "BOOLEAN",
           "nullable": false
         },
         "notes": {
@@ -25411,7 +25448,7 @@
     {
       "id": "platform_report_admins",
       "table_name": "platform_report_admins",
-      "purpose": "Global operational reports-only grants linked to an existing or explicitly invited User, the configured founder provenance and, for viewers, the inviting report manager. Manager/viewer roles, pending/active/revoked status and credential epoch are not tenant membership, client-document access, founder billing authority or impersonation. This security class also owns encrypted realm-specific TOTP enrollment, accepted counter, hashed single-use recovery codes and bounded factor-failure lockout metadata. Passwords remain in the existing User credential class; ordinary tenant login and founder seeding do not create these grants. Named initial provisioning is a separately admitted post-release operational action, never startup seeding. No retention or disposition authority is added.",
+      "purpose": "Global operational reports grants linked to an existing or explicitly invited User, the configured founder provenance and, for viewers, the inviting report manager. MFA-complete managers additionally read the protected public-enquiry contact projection; report viewers receive no lead PII. Manager/viewer roles, pending/active/revoked status and credential epoch are not tenant membership, client-document access, founder billing authority or impersonation. This security class also owns encrypted realm-specific TOTP enrollment, accepted counter, hashed single-use recovery codes and bounded factor-failure lockout metadata. Passwords remain in the existing User credential class; ordinary tenant login and founder seeding do not create these grants. Named initial provisioning is a separately admitted post-release operational action, never startup seeding. No retention or disposition authority is added.",
       "policy_profile_id": "security_identity_control",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
@@ -30990,12 +31027,12 @@
       }
     }
   ],
-  "schema_fingerprint": "41e0caf4fad57829a96cf6ee3364c1425051454f30a5858a41610f40559adc8a",
+  "schema_fingerprint": "c8c81fc499c28dbc1cb4a4980c3318855f51bea3edec119c04a2d7a55fdf50e8",
   "index_inventory": {
-    "orm_index_count": 1787,
-    "orm_index_fingerprint": "104d75f14f54ed97a99cc2d4841bdd8d6ed80e0adc597d9c41514d98bdfc917d",
-    "migration_index_count": 1571,
-    "migration_index_fingerprint": "15b6a420017a9985977ecdccd20dbf9c4f54279c480ba1023ad0a357986cb152",
+    "orm_index_count": 1788,
+    "orm_index_fingerprint": "6b69829619e65e20bd80cb9200dccff589f49479e218681ccdf624b80ce97b7e",
+    "migration_index_count": 1572,
+    "migration_index_fingerprint": "384e9a90a1c6e235265e68853139147d21a796570dae5ffe28be9cbe92ec7277",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

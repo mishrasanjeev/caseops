@@ -12758,6 +12758,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-console/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Leads */
+        get: operations["public_leads_api_platform_console_leads_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform-console/reports/{kind}": {
         parameters: {
             query?: never;
@@ -19859,6 +19876,62 @@ export interface components {
             /** Full Name */
             full_name: string;
         };
+        /** ConsoleLead */
+        ConsoleLead: {
+            /** Company Name */
+            company_name: string | null;
+            /** Contact Email */
+            contact_email: string | null;
+            /** Contact Mobile */
+            contact_mobile: string | null;
+            /** Contact Name */
+            contact_name: string | null;
+            /** Id */
+            id: string;
+            /** Intent */
+            intent: string | null;
+            /** Notes */
+            notes: string | null;
+            notification: components["schemas"]["ConsoleLeadNotification"];
+            /** Privacy Notice Version */
+            privacy_notice_version: string | null;
+            /** Role */
+            role: string | null;
+            /** Segment */
+            segment: string;
+            /** Selected Plan */
+            selected_plan: string | null;
+            /** Source */
+            source: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+        };
+        /** ConsoleLeadNotification */
+        ConsoleLeadNotification: {
+            /** Attempts */
+            attempts: number;
+            /** Eligible */
+            eligible: boolean;
+            /** Last Error Code */
+            last_error_code: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_requested" | "pending" | "sending" | "accepted" | "retry_pending" | "exhausted" | "outcome_unknown";
+        };
+        /** ConsoleLeadsResponse */
+        ConsoleLeadsResponse: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["ConsoleLead"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
         /** ConsoleLoginRequest */
         ConsoleLoginRequest: {
             /**
@@ -21201,7 +21274,7 @@ export interface components {
             /** Notes */
             notes?: string | null;
             /** Privacy Notice Version */
-            privacy_notice_version?: "2026-10-09" | null;
+            privacy_notice_version?: ("2026-10-09" | "2026-10-21") | null;
             /**
              * Role
              * @default not_specified
@@ -74968,6 +75041,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConsoleAuthState"];
+                };
+            };
+        };
+    };
+    public_leads_api_platform_console_leads_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleLeadsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
