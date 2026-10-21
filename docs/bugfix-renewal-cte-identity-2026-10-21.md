@@ -239,3 +239,15 @@ completed native cases, no complete native group and 623 unstarted browser
 cases. Its parent and observer were reaped, resources removed and all 3,070
 source files preserved. None of that partial execution supplies acceptance
 for the next candidate or a deployed-fix claim.
+
+C26 `2210e729` subsequently failed one API call phase: the first-party deadline
+inventory found the native default-client TLS probe embedded in a web unit-test
+string. The aggregate API failure follows that shard failure; it is not a
+second product defect. The correction moves the real probe to a repository
+test fixture with a five-second deadline and explicit loopback-only admission.
+The application deadline guard and runtime/dependency inputs are unchanged.
+All 14 trust cases, 17 adjacent web cases and 23 backend cases pass, including
+the unchanged two-case deadline inventory. The first incorrect Vitest launcher
+path remains retained as an uncollected setup failure. These focused results
+do not replace fresh full gates; old mixed-revision preparation is not current
+release admission. Isolated frontend snapshots must also carry the new fixture.

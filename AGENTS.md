@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Native Node TLS probes belong in repository test fixtures, not inline in
+  first-party web source. Preserve real default-client verification, bounded
+  deadlines and loopback-only admission. Run the unchanged cross-language
+  deadline inventory before expensive release gates, and include the fixture
+  explicitly in any isolated frontend test snapshot.
+
 - Integrity-sensitive runtime files must be checked and read through the same
   opened descriptor, with closure on every failure. Require both the scanner's
   analysis job and its separate alert verdict to pass. A secret-scanner finding

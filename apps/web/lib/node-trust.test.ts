@@ -214,6 +214,13 @@ test("extra or competing trust settings fail before app", async () => {
 });
 
 test("actual fetch and https enforce selected CA and hostname verification offline", async () => {
+  const probe = path.resolve(web, "..", "..", "tests", "fixtures", "node-default-tls-probe.cjs");
+  for (const target of ["https://example.com:443/", "http://127.0.0.1:443/", "https://127.0.0.1/", "https://user@127.0.0.1:443/", "https://127.0.0.1:443/other"]) {
+    const rejected = await child([probe, target]);
+    expect(rejected.code, target).not.toBe(0);
+    expect(rejected.stdout, target).toBe("");
+    expect(rejected.stderr, target).toContain("only an explicit loopback HTTPS origin");
+  }
   const fixture = path.join(temp, "tls");
   fs.mkdirSync(fixture);
   const openssl = process.env.CASEOPS_TEST_OPENSSL ?? (process.platform === "win32" ? "C:/Program Files/Git/usr/bin/openssl.exe" : "openssl");
@@ -236,8 +243,7 @@ test("actual fetch and https enforce selected CA and hostname verification offli
     try {
       const address = server.address();
       assert.ok(address && typeof address !== "string");
-      const code = `const https=require('node:https');const url='https://127.0.0.1:${address.port}/';(async()=>{const out=[];try{const r=await fetch(url);out.push(await r.text());}catch(e){out.push(e.cause?.code);}await new Promise(resolve=>{const r=https.get(url,async s=>{let b='';for await(const x of s)b+=x;out.push(b);resolve();});r.on('error',e=>{out.push(e.code);resolve();});});console.log(JSON.stringify(out));})().catch(()=>process.exit(1));`;
-      const result = await child(["--use-openssl-ca", "-e", code], env);
+      const result = await child(["--use-openssl-ca", probe, `https://127.0.0.1:${address.port}/`], env);
       expect(result.code, result.stderr).toBe(0);
       const expected = name === "trusted" ? "local-only" : name === "untrusted" ? "DEPTH_ZERO_SELF_SIGNED_CERT" : "ERR_TLS_CERT_ALTNAME_INVALID";
       expect(JSON.parse(result.stdout)).toEqual([expected, expected]);
