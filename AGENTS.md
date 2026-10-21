@@ -1,5 +1,16 @@
 # CaseOps agent instructions
 
+- A retained-record read schema must match the nullable storage/API contract,
+  not only mandatory fields in a new-submission form. Prove one incomplete
+  legacy/commercial row cannot hide valid siblings in the same response, show
+  honest missing-value labels, and keep required keys and invalid types strict.
+- Scoped browser fixtures must establish their configured synthetic founder
+  before report fixtures that create a provenance-only root with a random
+  password. Preserve failed setup data, bootstrap the fresh local identity via
+  normal APIs, and never reset a retained root or weaken authentication to make
+  a guessed password work. Keep that operator prerequisite distinct from the
+  canonical complete-suite fixture ordering and production owner acceptance.
+
 - Enabling a release-owned notification purpose changes the initial queued
   state even for a no-paid synthetic admission. Reconcile dated API and visible
   readback assertions with that explicit harness policy; the no-paid marker is

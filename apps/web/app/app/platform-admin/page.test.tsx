@@ -86,6 +86,39 @@ describe("PlatformAdminPage", () => {
     expect(parsed.demo_notification?.notification_status).toBeUndefined();
   });
 
+  it.each(["contact_name", "contact_email"] as const)(
+    "preserves a nullable retained %s without accepting missing or mistyped fields",
+    (field) => {
+      const retained = { ...enrollments.enrollments[0], [field]: null };
+      expect(platformEnrollmentRecord.parse(retained)[field]).toBeNull();
+      expect(() => platformEnrollmentRecord.parse({ ...retained, [field]: 123 })).toThrow();
+      expect(() => platformEnrollmentRecord.parse({ ...retained, [field]: undefined })).toThrow();
+    },
+  );
+
+  it.each([
+    [null, "legacy@example.com"],
+    ["Retained contact", null],
+    [null, null],
+  ])("keeps a public enquiry visible beside retained contact values %s / %s", async (name, email) => {
+    capabilityMock.mockReturnValue(true);
+    const fallback = fetchMock.getMockImplementation()!;
+    const retained = {
+      ...enrollments.enrollments[0], id: "incomplete-commercial-row",
+      company_name: "Retained commercial enrollment", contact_name: name, contact_email: email,
+    };
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes("/api/platform-admin/enrollments")
+        ? jsonResponse({ enrollments: [retained, demoEnrollment] }) : fallback(input, init));
+    renderWithQuery(<PlatformAdminPage />);
+    expect(await screen.findByText(demoEnrollment.contact_email)).toBeVisible();
+    const row = screen.getByText("Retained commercial enrollment").closest("tr")!;
+    expect(within(row).getByText(name ?? "Name not provided", { exact: true })).toBeVisible();
+    expect(within(row).getByText(email ?? "Email not provided", { exact: true })).toBeVisible();
+    expect(screen.queryByText("Unable to load enrollments.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No enrollment activity yet.")).not.toBeInTheDocument();
+  });
+
   it("seo_demo_20261009 renders persisted contact and qualification through the real parser", async () => {
     capabilityMock.mockReturnValue(true);
     const fallback = fetchMock.getMockImplementation()!;

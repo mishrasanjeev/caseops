@@ -89,6 +89,12 @@ def payload(run, index):
 
 def test_seven_marked_admissions_capture_only_references_and_retain_history(local_leads):
     api, capture, run, manager, path, prepared = local_leads
+    with get_session_factory()() as session:
+        commercial = session.get(BillingEnrollment, prepared["excluded_commercial_id"])
+        assert commercial is not None
+        assert commercial.is_public_lead is False
+        assert commercial.contact_name is None
+        assert commercial.contact_email is None
     admitted = []
     for index in range(7):
         data = payload(run, index)

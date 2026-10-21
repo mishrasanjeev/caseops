@@ -1,5 +1,26 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 22 Retained Enrollment Readback
+
+J14/M14/US-040/042 and J19/M21/US-063: a valid commercial enrollment with a
+null contact name makes the founder page reject its entire HTTP200 enrollment
+response, hiding a saved public enquiry. Storage and the actual API also permit
+a null email; the frontend incorrectly required both fields to be strings.
+The newer isolated Leads reader already models nullable contacts. Preserve the
+incomplete commercial fixture instead of fabricating contact data or dropping
+the row. Align only the retained read schema and show explicit missing labels;
+new public submissions still require their validated name and email.
+
+Original full81ec CI:633ended=615P17S1F at the earlier disabled-purpose assertion.
+Complete abeb scoped28replay:27P1F, now at the real founder UI after normal fresh
+bootstrap/login/me200 and successful pending/zero-attempt API readback. The
+snapshot says Unable to load enrollments; later UI/reload/denial steps remain
+unverified. Five new real-parser/component regressions reproduce the contract
+and sibling loss, alongside nine existing passes. Current verdict:Inconclusive,
+candidate correction only; full amended browser/Docker/CI and exact-production
+acceptance remain required. No authentication, source, delivery or no-paid fence
+was relaxed; original failures and the provenance-only root setup failure remain.
+
 ## October 21 Authenticator Setup QR
 
 PRA-09: confirmed missing QR forces a long manual key. The original component

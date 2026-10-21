@@ -182,3 +182,23 @@ no-retrofit behavior remain separate native regressions. No runtime or security
 fence changes resolve this stale assertion. Original failure evidence and the
 deliberately interrupted Docker05 remain retained and incomplete; complete
 amended-file, sibling, Docker, CI and production acceptance are still required.
+
+The subsequent complete28-case scoped replay exposed a separate real founder
+reader defect: its HTTP200 list contains valid retained commercial rows whose
+name or email may be null, but the shared frontend record validator required
+strings and rejected every sibling. The correction preserves these nullable
+fields and renders explicit missing-value labels without relaxing required keys,
+wrong-type rejection, public-submission validation or any access/delivery fence.
+Five real-parser/component regressions reproduce both nullable fields and mixed
+list loss. The unrelated commercial browser fixture deliberately retains both
+null contacts so the real mixed-list response exercises both fields without
+fabricated data; it remains excluded from public Leads and notification work.
+Both real local Leads journeys pass separately. The original founder
+journey must still complete its previously unreachable UI/reload/denial checks.
+
+Scoped local runs also need explicit founder provisioning before report fixtures
+create a provenance-only root. A separate failed setup is retained; its root had
+a random password and no canonical founder company. A clean local replay used
+normal bootstrap/login/authenticated-context APIs, all200, not password reset or
+grant mutation. This operator setup is not production owner acceptance; the owner
+explicitly deferred personal MFA setup. Full release acceptance is still pending.

@@ -4170,8 +4170,8 @@ export const platformOverviewResponse = z.object({
 export const platformEnrollmentRecord = z.object({
   id: z.string(),
   company_id: z.string().nullable(),
-  contact_name: z.string(),
-  contact_email: z.string(),
+  contact_name: z.string().nullable(),
+  contact_email: z.string().nullable(),
   company_name: z.string().nullable(),
   segment: z.string(),
   selected_plan: z.string().nullable(),

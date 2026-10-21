@@ -213,7 +213,8 @@ def install_public_lead_emulator(app, capture):
             ]
             commercial = BillingEnrollment(
                 is_public_lead=False,
-                contact_email=f"commercial-{run_id}@example.com",
+                contact_name=None,
+                contact_email=None,
                 segment="firm",
                 source="demo",
                 notes="Synthetic unrelated commercial enrollment",
