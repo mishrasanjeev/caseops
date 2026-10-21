@@ -27,13 +27,13 @@ describe("third-party license notices", () => {
     expect(sitemap().some((entry) => new URL(entry.url).pathname.startsWith("/third-party-notices"))).toBe(false);
   });
 
-  it("renders one heading, five named components and all six original full notices", () => {
+  it("renders one heading, six named components and all eight original full notices", () => {
     render(<ThirdPartyNoticesPage />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Third-party notices");
     const article = screen.getByRole("article");
-    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(5);
-    expect(article.querySelectorAll("details")).toHaveLength(6);
+    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(6);
+    expect(article.querySelectorAll("details")).toHaveLength(8);
     for (const { component, notice } of allNotices) {
       const section = document.getElementById(component.id)!;
       expect(section).toHaveTextContent(component.packageName);
@@ -68,6 +68,7 @@ describe("third-party license notices", () => {
       ["@fontsource/libre-caslon-text", "5.2.7"],
       ["nodemailer", "10.0.13"],
       ["pako", "1.0.11"],
+      ["qrcode.react", "4.2.0"],
     ]);
     for (const component of notices.components) {
       const installed = JSON.parse(readFileSync(path.join(repoRoot, "node_modules", component.packageName, "package.json"), "utf8"));
@@ -81,9 +82,36 @@ describe("third-party license notices", () => {
     expect(readFileSync(path.join(repoRoot, ".gitattributes"), "utf8")).toContain("apps/web/public/third-party-notices/** -text");
   });
 
+  it("independently pins the bundled QR generator to its retained exact upstream license", () => {
+    const component = notices.components.find(({ packageName }) => packageName === "qrcode.react")!;
+    expect(component.notices).toHaveLength(2);
+    expect(component.notices.find(({ license }) => license === "ISC")).toMatchObject({
+      sourceFile: "LICENSE",
+      sourceUrl: "https://raw.githubusercontent.com/zpao/qrcode.react/v4.2.0/LICENSE",
+      sha256: "908a4454d01d77cd6a0ae1eea0bafaa74a2e3befdbc4b7b714de2499a22351ce",
+    });
+    const notice = component.notices.find(({ license }) => license === "MIT")!;
+    expect(notice).toMatchObject({
+      sourceFile: "src/third-party/qrcodegen/LICENSE",
+      sourceUrl: "https://raw.githubusercontent.com/zpao/qrcode.react/v4.2.0/src/third-party/qrcodegen/LICENSE",
+      retainedSource: "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt",
+      filename: "qrcode.react-4.2.0-Nayuki-MIT-LICENSE.txt",
+      sha256: "ba5a977288ff7463c51ea0cc5bf5a34372707985655c1ccc054f2a0caa3d9bff",
+    });
+    const original = readFileSync(path.join(repoRoot, "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt"));
+    expect(sha256(original)).toBe("ba5a977288ff7463c51ea0cc5bf5a34372707985655c1ccc054f2a0caa3d9bff");
+    expect(notice.text).toBe(original.toString("utf8"));
+    const bundled = readFileSync(path.join(repoRoot, "node_modules/qrcode.react/lib/esm/index.js"), "utf8");
+    expect(bundled).toContain("Copyright (c) Project Nayuki.");
+    expect(bundled).toContain("SPDX-License-Identifier: MIT");
+    expect(readFileSync(path.join(repoRoot, ".gitattributes"), "utf8")).toContain("license-policy/upstream/** -text");
+  });
+
   for (const { component, notice } of allNotices) {
     it(`${component.packageName} ${notice.license} preserves original bytes, authors and full text`, () => {
-      const installed = readFileSync(path.join(repoRoot, "node_modules", component.packageName, notice.sourceFile));
+      const installed = component.packageName === "qrcode.react" && notice.license === "MIT"
+        ? readFileSync(path.join(repoRoot, "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt"))
+        : readFileSync(path.join(repoRoot, "node_modules", component.packageName, notice.sourceFile));
       let original = installed;
       if (notice.license === "Zlib") {
         const start = installed.indexOf(Buffer.from("// (C)"));

@@ -38,6 +38,7 @@ export default defineConfig({
     /oc-portal\.spec\.ts/,
     /portal-invite-access\.spec\.ts/,
     /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
+    /platform-report-admin-2026-10-21\.prod\.spec\.ts$/,
     /bootstrap-and-upload\.spec\.ts/,
     /m2-polish\.spec\.ts/,
     /intake\.spec\.ts/,

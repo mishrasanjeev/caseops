@@ -1,5 +1,13 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 21 Authenticator QR Coverage
+
+J14/M14/US-040/042, FT-060/061, PRA-09 extends the existing enrollment UI with
+a local scannable QR and manual fallback. Required proof: independent pixel
+decode, matching canonical account/issuer/TOTP parameters, actual local MFA
+verification, mobile/desktop layout and exact-serving renderer acceptance.
+New-source build, Docker, CI and guarded deployment remain pending.
+
 ## October 21 Renewal Response Coverage
 
 QG-SEC-004 additionally requires reproducible FastEmbed0.8.0 compatibility

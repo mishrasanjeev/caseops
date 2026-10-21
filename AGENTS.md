@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Authenticator QR acceptance must independently decode rendered pixels, bind
+  the issuer/account/secret/algorithm/digits/period to the real enrollment and
+  complete actual API verification. An image existing in the DOM is not enough.
+  Never use an external QR service or retain live QR/key media. Synthetic
+  production renderer contracts do not certify the owner's private MFA setup.
+
 - Native Node TLS probes belong in repository test fixtures, not inline in
   first-party web source. Preserve real default-client verification, bounded
   deadlines and loopback-only admission. Run the unchanged cross-language

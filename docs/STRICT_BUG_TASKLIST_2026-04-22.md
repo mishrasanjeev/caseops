@@ -1,5 +1,19 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 21 Authenticator Setup QR
+
+PRA-09: confirmed missing QR forces a long manual key. The original component
+reproduction has one missing-image failure and two passing adjacent tests;
+an earlier malformed test-root invocation collected nothing and is not proof.
+Root cause: the UI implemented only the manual fallback, and its test explicitly
+asserted that no image existed. That assertion preserved the missing phone-scan
+journey instead of proving usable enrollment. Replace it with positive decoded
+QR acceptance while retaining QR absence for anonymous/challenge sessions.
+Fix only enrollment presentation: encode the existing canonical URL locally,
+retain the key and preserve MFA. Independent pixel decoding and real local
+enrollment must pass desktop/mobile, followed by complete release gates and
+exact-serving production checks. Current verdict: Inconclusive, not deployed.
+
 ## October 21 Post-Commit Renewal Query
 
 C24's required Security39506605978 fails nine Pillow12.3.0 findings; its

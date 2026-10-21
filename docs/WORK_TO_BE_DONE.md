@@ -1,5 +1,12 @@
 # CaseOps  - Work To Be Done
 
+## October 21 Authenticator QR Usability
+
+PRA-09 under J14/M14/US-040/042: add browser-local QR encoding of the existing
+enrollment URL, preserve manual entry and MFA fences, and independently decode
+the rendered pixels before real local API verification. Candidate and release
+evidence remain pending; see `platform-report-admin-2026-10-20.md`.
+
 ## October 21 Current Release Blocker
 
 C24 Security39506605978 failed nine Pillow12.3.0 vulnerabilities. Docker15

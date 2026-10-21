@@ -2,6 +2,26 @@
 
 Status: Partially implemented. No production certification for this extension.
 
+## October 21 QR Enrollment Addition
+
+PRA-09 extends PRA-04/07 under J14/M14/US-040/042 and FT-060/061. The platform
+Security page must render a scannable QR only after explicit enrollment, using
+the exact canonical `otpauth_url` returned by the existing authenticated API.
+Keep black modules, a white background, four modules of quiet zone, a stable
+responsive square and an accessible image name. Keep the read-only setup key
+as the alternative for users setting up on the same phone. No external image,
+QR service, analytics, new API field, credential persistence or permission
+change is needed. Hide enrollment material outside its limited session and
+remove it after successful verification.
+
+Acceptance independently decodes the rendered QR pixels, checks issuer,
+account, algorithm, period and digits, and verifies a code derived from the
+decoded secret through the actual local API on desktop and mobile. The standard
+Docker and exact-serving production inventories must discover the regression.
+Deterministic production renderer checks are distinct from real-owner MFA
+acceptance; do not enroll, reset or expose the owner's private factor for QA.
+Status: candidate pending fresh build, Docker, CI and guarded release evidence.
+
 ## Historical Compatibility Gate Correction
 
 Candidate `d8ba7fb0` is not release-admitted. Its required CI run

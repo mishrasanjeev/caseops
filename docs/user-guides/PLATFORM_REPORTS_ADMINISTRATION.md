@@ -12,8 +12,12 @@ production acceptance certificate.
    and enter your name. If you already have a CaseOps identity under that exact
    email address, use its current password; accepting an invitation does not
    replace an existing password or create access to a customer workspace.
-3. Complete multi-factor enrollment on the Security page. Add the displayed
-   setup key to your authenticator, then enter its current code.
+3. Complete multi-factor enrollment on the Security page. Select **Set up
+   authenticator**, then scan the displayed QR using your phone's authenticator
+   app. If you are setting up on the same phone or cannot scan, use the
+   **Authenticator setup key** instead: add a time-based account in the app
+   and paste that key. Enter the app's current six-digit code in CaseOps and
+   select **Verify MFA**. The QR and key are private; never send them to support.
 4. Save the recovery codes securely when they are displayed. Do not email them
    to support or put them in a shared workbook. Each recovery code is single-use.
 5. Open [Platform Reports](https://caseops.ai/platform/reports).
