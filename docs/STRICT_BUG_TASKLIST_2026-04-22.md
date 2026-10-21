@@ -1,5 +1,38 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 21 Post-Commit Renewal Query
+
+C24's required Security39506605978 fails nine Pillow12.3.0 findings; its
+Docker15/CI results remain incomplete and cannot certify a replacement.
+Pillow13, the labelled FastEmbed compatibility rebuild and shipped uv0.13.4
+need complete fresh audits and actual image/inference regressions. No
+workbook item is upgraded from source changes or a resolver-only success.
+
+C23's certifi patch is not whole-image remediation: pinned web Node still
+trusts the affected root on reachable HTTPS paths. Its Docker14 run was
+deliberately stopped with the partial journals retained and all owned
+resources cleaned up. A corrected candidate needs fresh complete gates.
+
+Scoped follow-up: C22 `30d9ba70` passes all four original dated IP portfolio
+journeys with a fresh standard-config build, zero skips/retries/errors and
+stable source. The release remains NO-GO: Security39490391664 reports the
+new critical certifi trust-root advisory GHSA-6q48-6c7w-9gw2. Preserve the
+failure, patch the lock and rebuild all release images; do not relabel the
+operator-failed Docker12 or superseded Docker13 as acceptance. See the same
+evidence document below. No original workbook verdict is upgraded.
+
+**Inconclusive / release NO-GO.** R21 main CI39465871860 collected 623 browser
+cases: 605 passed, 17 explicitly skipped and one failed, with no retries. The
+failed 393px imported-portfolio journey received 503 from a renewal correction.
+Local replay proves the correction committed before a tracker SELECT failed
+with SQLite circular CTE references. A five-stage-name diagnostic subsequently
+completed all three corrections with HTTP200, but the complete journey then
+failed on an offsetless notification timestamp across IST midnight. Neither
+diagnostic is a clean full gate or production acceptance. Preserve both failure
+artifacts; fix shared tracker/list/count identities and UTC receipt output,
+without replaying committed writes or weakening the dated assertion. See
+`docs/bugfix-renewal-cte-identity-2026-10-21.md`.
+
 ## October 20 Docker Evidence Ordering
 
 **Inconclusive / release NO-GO at source freeze.** Docker10 on C20 `2948b3a6`

@@ -6,8 +6,19 @@
 # available. Root .dockerignore/.gcloudignore files admit only package metadata
 # and apps/web plus the explicit builder-only unit fixture dependency closure.
 
+# Keep the pinned Node root set except the compromised emSign ECC G3 root.
+# This store also applies to npm/build processes, before any package download.
+FROM node:22.14.0-alpine AS trusted-base
+COPY apps/web/scripts/node-trust.cjs apps/web/scripts/node-trust-start.cjs /opt/caseops/trust/
+RUN node /opt/caseops/trust/node-trust.cjs --generate \
+  && chmod 0444 /opt/caseops/trust/*.cjs \
+  && chmod 0555 /opt/caseops/trust
+ENV NODE_OPTIONS=--use-openssl-ca \
+    SSL_CERT_FILE=/opt/caseops/trust/ca-bundle.pem \
+    SSL_CERT_DIR=/opt/caseops/trust/empty
+
 # ---- deps ---------------------------------------------------------
-FROM node:22.14.0-alpine AS deps
+FROM trusted-base AS deps
 WORKDIR /app
 
 # Installing *all* deps (including dev) is intentional here: tailwind,
@@ -53,7 +64,7 @@ COPY tests/e2e/support/ip-import-acknowledgements.ts /app/tests/e2e/support/ip-i
 RUN npm run build
 
 # ---- runner -------------------------------------------------------
-FROM node:22.14.0-alpine AS runner
+FROM trusted-base AS runner
 WORKDIR /app/apps/web
 
 ENV NODE_ENV=production \
@@ -84,4 +95,4 @@ LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA
 
 USER nextjs
 
-CMD ["sh", "-c", "node /app/node_modules/next/dist/bin/next start -p ${PORT}"]
+CMD ["sh", "-c", "exec node --use-openssl-ca --require /opt/caseops/trust/node-trust-start.cjs /app/node_modules/next/dist/bin/next start -p ${PORT}"]

@@ -154,3 +154,11 @@ c0f9775f437d8deaeabc84eaec928cc1359ebd02:apps/api/tests/test_document_storage_pa
 # checked against the retained redacted SARIF. No path/rule exclusion is added.
 bac08b2262636999a9c5f549add32e2848a8e3cb:apps/web/app/app/ip/page.test.tsx:generic-api-key:1291
 bac08b2262636999a9c5f549add32e2848a8e3cb:tests/e2e/support/ip15-workspace.ts:generic-api-key:141
+
+# 2026-10-21: exact public SHA256 digests of FastEmbed 0.8.0's
+# token_embeddings.py and tokenizer.py wheel members, not authentication tokens.
+# Both match the hash-pinned official wheel and byte-identical rebuilt members.
+# Only these immutable origin spans are reviewed; changed hashes, new origins
+# and other manifest findings remain blocking under the provenance gate.
+f87d19d62468ed6d6add4d289be49d9d357973f0:apps/api/vendor/fastembed-0.8.0-1caseops1.json:generic-api-key:52
+f87d19d62468ed6d6add4d289be49d9d357973f0:apps/api/vendor/fastembed-0.8.0-1caseops1.json:generic-api-key:78

@@ -72,7 +72,8 @@ def test_compliance_context_is_narrow_and_blocks_hidden_material(name):
 
 def test_runner_retains_public_notices_and_nonpublic_operator_materials():
     dockerfile = (ROOT / "apps/web/Dockerfile").read_text()
-    runner = dockerfile.split("FROM node:22.14.0-alpine AS runner", 1)[1]
+    assert "FROM node:22.14.0-alpine AS trusted-base" in dockerfile
+    runner = dockerfile.split("FROM trusted-base AS runner", 1)[1]
     copies = [shlex.split(line) for line in runner.splitlines() if line.startswith("COPY ")]
     public = [tokens for tokens in copies if tokens[-2:] == ["/app/apps/web/public", "./public"]]
     assert len(public) == 1 and "--from=builder" in public[0]

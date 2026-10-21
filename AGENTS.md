@@ -1,5 +1,52 @@
 # CaseOps agent instructions
 
+- Native Node TLS probes belong in repository test fixtures, not inline in
+  first-party web source. Preserve real default-client verification, bounded
+  deadlines and loopback-only admission. Run the unchanged cross-language
+  deadline inventory before expensive release gates, and include the fixture
+  explicitly in any isolated frontend test snapshot.
+
+- Integrity-sensitive runtime files must be checked and read through the same
+  opened descriptor, with closure on every failure. Require both the scanner's
+  analysis job and its separate alert verdict to pass. A secret-scanner finding
+  on a public package digest needs exact origin-span provenance, not a broad
+  path exclusion; an infrastructure failure before scanning remains incomplete.
+
+- Dependency closure includes installed Linux/Windows inventories and shipped
+  build tools outside the application lock. Recheck fresh advisory data before
+  expensive gates. A compatibility rebuild must pin its official input,
+  preserve runtime code/notices, reproduce deterministically and pass native
+  dependency validation; an override that still fails `uv pip check` is not a
+  healthy environment. Test the actual offline inference and image paths.
+- Distrusting a compromised CA must be idempotent when an upstream image has
+  already removed it. Preserve every other trust anchor and certificate/host
+  verification; reject unknown identities or a still-trusted compromised root.
+- Trust-store remediation must cover each reachable TLS runtime, not only the
+  package named by an advisory. Python certifi does not update Node's bundled
+  roots. Prove the effective image defaults with HTTPS and fetch controls,
+  preserve hostname/certificate verification and reject additive CA overrides;
+  `tls.rootCertificates` alone does not describe the selected OpenSSL store.
+- Reuse the actual previously accepted executable/version for release-test
+  hosts, not an advertised minimum version. Native tools can emit successful
+  diagnostics on stderr; preserve the log and check the real exit status,
+  including a nonzero control, rather than treating stderr text as failure.
+- Compare process identity timestamps as exact UTC round-trip strings. A UTC
+  DateTime and a locally parsed `Z` literal can represent the same instant but
+  compare unequal before normalization. Recheck ancestry, command and creation
+  identity before stopping only an owned native child; keep its cleanup parent.
+- Security evidence expires when a new upstream advisory affects the frozen
+  dependency set. Patch the affected lock entry, retain the failed scan and
+  rebuild every shipping image; an earlier green scan is not a waiver.
+- A database error response does not prove a mutation rolled back. Read the
+  persisted version and audit before replaying a save; a post-commit response
+  query can fail independently. Staged portfolio facts need distinct stable CTE
+  identities across warm tracker, list and count compilation. Preserve nested
+  scope, PostgreSQL materialization and every ACL/source predicate; removing an
+  unused response read alone does not fix its shared query.
+- Notification receipts must expose known UTC persistence timestamps with an
+  explicit offset on both SQLite and PostgreSQL. Regress alert-day arithmetic
+  before and after local midnight, including a non-UTC client timezone. Do not
+  relax offset validation or reinterpret date-only legal inputs as UTC instants.
 - Cross-dialect report acceptance must use populated canonical API responses,
   not only empty pages or simplified frontend fixtures. SQLite can return naive
   datetimes from UTC persistence; normalize known UTC fields at the response

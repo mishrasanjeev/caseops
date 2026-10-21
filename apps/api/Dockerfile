@@ -1,6 +1,6 @@
 # CaseOps API container — Python 3.13 + uv + tesseract for OCR.
 # Built for Cloud Run: binds to ${PORT} (default 8000 for local).
-FROM python:3.13-slim
+FROM python:3.13-slim AS runtime-base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -26,9 +26,49 @@ RUN apt-get update \
        ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir uv==0.11.6
+# Remove only the compromised root from Debian's effective default trust store.
+RUN python - <<'CA_POLICY'
+import hashlib
+import ssl
+import subprocess
+from pathlib import Path
+
+denied = "86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b"
+entry = "mozilla/emSign_ECC_Root_CA_-_G3.crt"
+before = {hashlib.sha256(cert).hexdigest() for cert in ssl.create_default_context().get_ca_certs(binary_form=True)}
+certificate = Path("/usr/share/ca-certificates") / entry
+if certificate.exists():
+    pem = certificate.read_text()
+    if hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem)).hexdigest() != denied:
+        raise RuntimeError("Expected Debian CA identity differs.")
+elif denied in before:
+    raise RuntimeError("Expected Debian CA identity differs.")
+config = Path("/etc/ca-certificates.conf")
+lines = config.read_text().splitlines(keepends=True)
+enabled = sum(line.strip() == entry for line in lines)
+if enabled > 1 or (denied in before and enabled != 1):
+    raise RuntimeError("Expected Debian CA configuration differs.")
+if enabled:
+    config.write_text("".join("!" + line if line.strip() == entry else line for line in lines))
+subprocess.run(["update-ca-certificates", "--fresh"], check=True)
+context = ssl.create_default_context()
+after = {hashlib.sha256(cert).hexdigest() for cert in context.get_ca_certs(binary_form=True)}
+if not (after and denied not in after and after == before - {denied}
+        and context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname):
+    raise RuntimeError("Debian CA removal changed unrelated trust or verification.")
+CA_POLICY
+
+# Without legacy-certs pip preloads its independent, still-affected certifi store.
+# Verification stays enabled against this explicitly selected patched OS bundle.
+ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt \
+    PIP_USE_DEPRECATED=legacy-certs
+RUN pip install --no-cache-dir uv==0.13.4
+
+FROM runtime-base AS api
 
 COPY pyproject.toml uv.lock README.md ./
+COPY vendor/fastembed-0.8.0-1caseops1-py3-none-any.whl ./vendor/
+COPY vendor/fastembed-0.8.0-1caseops1.json ./vendor/
 
 # Install the package with the [ocr] extra so rapidocr + pytesseract
 # ship to Cloud Run by default. Without these, the prod image silently
@@ -57,7 +97,7 @@ RUN python -c "from tokenizers import Tokenizer; tokenizer = Tokenizer.from_pret
 # ~130 MB ONNX) at build time so Cloud Run cold starts don't eat a
 # multi-second download on the first reranked query. The model caches
 # under /root/.cache/fastembed and stays in the image layer.
-RUN python -c "from fastembed.rerank.cross_encoder import TextCrossEncoder; TextCrossEncoder(model_name='jinaai/jina-reranker-v1-tiny-en')"
+RUN python -c "import math; from fastembed.rerank.cross_encoder import TextCrossEncoder; encoder = TextCrossEncoder(model_name='jinaai/jina-reranker-v1-tiny-en'); scores = list(encoder.rerank('regular bail triple test', ['A tax assessment determines taxable income.', 'The court grants regular bail after applying the triple test.'])); assert len(scores) == 2 and all(math.isfinite(float(score)) for score in scores) and scores[1] > scores[0]"
 
 # Keep dependency and embedded-model layers independent of application source.
 # The project install creates console entry points used by Cloud Run jobs and

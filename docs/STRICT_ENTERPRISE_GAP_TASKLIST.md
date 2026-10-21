@@ -1,5 +1,36 @@
 # Strict Enterprise Gap Tasklist
 
+## October 21 Cross-Dialect Renewal Responses
+
+C24 is NO-GO after nine Pillow findings. The subsequent installed-set audit
+also identifies vulnerable uv outside the app lock. Require Pillow13, uv0.13.4
+and an auditable FastEmbed metadata-only compatibility rebuild with ordinary
+installed-dependency validation, not an incompatible overridden environment.
+Debian and pip trust selection must exclude G3 while preserving other roots,
+including when an upstream image already excludes it. Full gates are pending.
+
+C23's adjacent audit finds the same compromised root in Node22.14.0's
+bundled and image system stores, with reachable web-to-API HTTPS fetches.
+The Python fix does not remove that trust. Require a reviewed replacement
+default store and actual offline HTTPS/fetch positive/negative checks;
+certificate/hostname verification and the existing audit policy stay enabled.
+
+The complete C22 focused browser replay now passes4/4, but its security scan
+fails newly published critical GHSA-6q48-6c7w-9gw2. Frozen certifi2026.2.25
+must be replaced by patched2026.10.19 and all shipping images rebuilt, with
+fresh audit/full gates. No TLS bypass or audit exclusion is authorized.
+Docker12/13 remain incomplete for the retained operator/supersession reasons.
+
+**Partially implemented / release NO-GO.** R21's main browser failure is not a
+SQLite lock diagnosis: local evidence proves a committed write followed by a
+circular-reference failure in the shared tracker query. Distinct staged CTE
+identities must preserve tenant/ACL/current-source fences and PostgreSQL work
+bounds. The subsequent full-journey failure also requires explicit UTC offsets
+on known persisted notification timestamps, not a timezone-specific browser
+exception. Fresh complete gates and exact-serving replay are still required;
+production remains `9cf76f2b`. Evidence and regression scope are recorded in
+`docs/bugfix-renewal-cte-identity-2026-10-21.md`.
+
 ## October 20 Delegated Report Security Boundary
 
 The local implementation now passes both complete dated desktop/mobile

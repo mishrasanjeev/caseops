@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import hashlib
 import smtplib
+import socket
 import ssl
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
+import certifi
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
 from sqlalchemy import func, select, text
 
 from caseops_api.core.rate_limit import limiter
@@ -39,15 +45,30 @@ def offline_notifications(monkeypatch):
 
 @pytest.mark.parametrize("port", [465, 587])
 def test_seo_demo_20261009_smtp_tls_verifies_peer(monkeypatch, port):
-    contexts, messages = [], []
+    contexts, messages, calls, ca_files = [], [], [], []
+    create_context = ssl.create_default_context
+
+    def checked_context(*args, **kwargs):
+        ca_files.append(kwargs.get("cafile"))
+        return create_context(*args, **kwargs)
+
+    def reject_network(*args, **kwargs):
+        pytest.fail("SMTP unit regression attempted an external connection")
+
+    monkeypatch.setattr(ssl, "create_default_context", checked_context)
+    monkeypatch.setattr(socket, "create_connection", reject_network)
+    monkeypatch.setattr(socket.socket, "connect", reject_network)
     monkeypatch.setenv("CASEOPS_SMTP_USER", "offline@example.com")
     monkeypatch.setenv("CASEOPS_SMTP_PASSWORD", "offline-fake-password")
     monkeypatch.setenv("CASEOPS_SMTP_HOST", "smtp.example.com")
     monkeypatch.setenv("CASEOPS_SMTP_PORT", str(port))
+    monkeypatch.setenv("CASEOPS_DEMO_NOTIFY_TO", "recipient@example.com")
 
     class Transport:
         def __init__(self, host, actual_port, *, timeout, context=None):
             assert host == "smtp.example.com" and actual_port == port and timeout == 8
+            calls.append("connect")
+            assert (context is not None) == (port == 465)
             if context:
                 contexts.append(context)
 
@@ -55,25 +76,56 @@ def test_seo_demo_20261009_smtp_tls_verifies_peer(monkeypatch, port):
             return self
 
         def __exit__(self, *_):
+            calls.append("close")
             return None
 
         def starttls(self, *, context):
+            assert port == 587
+            calls.append("starttls")
             contexts.append(context)
 
         def login(self, user, password):
             assert user == "offline@example.com" and password == "offline-fake-password"
             assert contexts
+            calls.append("login")
 
         def send_message(self, message):
-            messages.append(message.as_string())
+            calls.append("send")
+            messages.append(message)
 
-    monkeypatch.setattr(smtplib, "SMTP_SSL", Transport)
-    monkeypatch.setattr(smtplib, "SMTP", Transport)
-    REAL_SEND_NOTIFICATION(str(uuid4()))
+    monkeypatch.setattr(smtplib, "SMTP_SSL" if port == 465 else "SMTP", Transport)
+    monkeypatch.setattr(smtplib, "SMTP" if port == 465 else "SMTP_SSL", reject_network)
+    identity = str(uuid4())
+    REAL_SEND_NOTIFICATION(identity)
     assert len(contexts) == 1
     assert contexts[0].verify_mode == ssl.CERT_REQUIRED and contexts[0].check_hostname
-    assert "offline-fake-password" not in messages[0]
-    assert "demo@example.com" not in messages[0]
+    expected = {
+        certificate.fingerprint(hashes.SHA256()).hex()
+        for certificate in x509.load_pem_x509_certificates(Path(certifi.where()).read_bytes())
+    }
+    actual = {
+        hashlib.sha256(certificate).hexdigest()
+        for certificate in contexts[0].get_ca_certs(binary_form=True)
+    }
+    compromised = "86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b"
+    assert expected and compromised not in expected
+    assert actual == expected
+    assert compromised not in actual
+    assert ca_files == [certifi.where()]
+    assert calls == (["connect", "login", "send", "close"] if port == 465 else [
+        "connect", "starttls", "login", "send", "close",
+    ])
+    assert len(messages) == 1
+    assert messages[0]["From"] == "offline@example.com"
+    assert messages[0]["To"] == "recipient@example.com"
+    assert messages[0]["Subject"] == "CaseOps demo request saved"
+    assert messages[0]["Message-ID"] == f"<demo-{identity}@caseops.ai>"
+    assert messages[0].get_content() == (
+        f"Enrollment {identity} is saved. Review it in the protected platform-admin workspace: "
+        "https://caseops.ai/app/platform-admin\n"
+    )
+    assert "offline-fake-password" not in messages[0].as_string()
+    assert "demo@example.com" not in messages[0].as_string()
 
 
 def test_seo_demo_20261009_failed_tls_never_sends_credentials(monkeypatch):

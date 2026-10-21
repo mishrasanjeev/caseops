@@ -19,7 +19,7 @@ dependencies = [
   "python-multipart==0.0.31",
   "pdfminer.six==20260107",
   "pypdfium2==5.7.0",
-  "Pillow==12.3.0",
+  "Pillow==13.0.0",
   "openpyxl==3.1.5",
   "google-cloud-storage==3.10.1",
   "aiohttp>=3.14.4",
@@ -107,6 +107,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/caseops_api"]
+
+[tool.uv.sources]
+fastembed = { path = "vendor/fastembed-0.8.0-1caseops1-py3-none-any.whl" }
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

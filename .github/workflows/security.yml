@@ -106,16 +106,19 @@ jobs:
         run: uv sync --frozen --no-install-project
       - name: Install pip-audit
         run: uv tool install pip-audit
-      # PyPA's pip-audit reads pyproject + the resolved venv. We use
-      # the lock-derived venv so the scan matches what gets shipped.
-      # Strict mode fails on any unresolved advisory.
+      # Audit every installed distribution, including the metadata-only local
+      # FastEmbed wheel under its unchanged upstream name/version. Re-resolving
+      # freeze output would substitute PyPI metadata for the installed rebuild.
+      # Dependency validation and strict OSV failures remain release-blocking.
       - name: Run pip-audit
         working-directory: apps/api
         run: |
+          uv pip check
+          site_packages="$(.venv/bin/python -c 'import sysconfig; paths = sysconfig.get_paths(); assert paths["purelib"] == paths["platlib"]; print(paths["purelib"])')"
           uv tool run pip-audit \
             --strict \
             --vulnerability-service osv \
-            --requirement <(uv pip freeze)
+            --path "$site_packages"
 
   gitleaks:
     name: Secret scan (gitleaks)

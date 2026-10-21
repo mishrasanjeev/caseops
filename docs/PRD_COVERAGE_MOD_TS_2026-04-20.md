@@ -1,5 +1,24 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 21 Renewal Response Coverage
+
+QG-SEC-004 additionally requires reproducible FastEmbed0.8.0 compatibility
+packaging with unchanged upstream runtime/notices, real offline inference,
+Pillow13 image/OCR controls, and complete installed dependency/tool audits.
+Neither the rejected native override nor superseded Docker15 is acceptance.
+
+QG-SEC-004 adds exact-image Node default HTTPS/fetch trust-store controls
+beside the existing Python certifi regression. An added CA file alone must
+not retain the compromised bundled or system anchor. Release proof is pending.
+
+UJ-02/04/26 and IPLF-037 require atomic source-date version/audit persistence,
+successful post-commit tracker hydration, current list/count/category parity
+and unambiguous UTC notification receipts on both database dialects. Retain
+the complete desktop/393px dated portfolio journey, including delivery/body
+and reload assertions. R21 main CI39465871860 failed; the current correction
+is not production-certified. See
+`docs/bugfix-renewal-cte-identity-2026-10-21.md`.
+
 ## October 20 Delegated Report Acceptance
 
 J14/M14, US-040/042 and FT-060/061 now include PRA-01..08 in
