@@ -420,7 +420,8 @@ test.describe("Public landing page and user guide", () => {
       await expect(page.locator('meta[name="googlebot"]')).toHaveAttribute("content", "noindex, follow");
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://caseops.ai/third-party-notices");
       await expect(page.locator("article form, article input, article textarea")).toHaveCount(0);
-      await expect(page.locator("article details")).toHaveCount(6);
+      await expect(page.locator("article h2")).toHaveCount(6);
+      await expect(page.locator("article details")).toHaveCount(8);
       for (const component of thirdPartyNotices.components) {
         const section = page.getByRole("region", { name: component.name, exact: true });
         await expect(section).toContainText(component.packageName);
@@ -452,6 +453,17 @@ test.describe("Public landing page and user guide", () => {
           const bytes = await response.body();
           expect(createHash("sha256").update(bytes).digest("hex")).toBe(notice.sha256);
           expect(bytes.toString("utf8")).toBe(notice.text);
+          if (component.packageName === "qrcode.react" && notice.license === "MIT") {
+            expect(notice).toMatchObject({
+              sourceFile: "src/third-party/qrcodegen/LICENSE",
+              sourceUrl: "https://raw.githubusercontent.com/zpao/qrcode.react/v4.2.0/src/third-party/qrcodegen/LICENSE",
+              retainedSource: "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt",
+              sha256: "ba5a977288ff7463c51ea0cc5bf5a34372707985655c1ccc054f2a0caa3d9bff",
+            });
+            expect(createHash("sha256").update(bytes).digest("hex")).toBe("ba5a977288ff7463c51ea0cc5bf5a34372707985655c1ccc054f2a0caa3d9bff");
+            await expect(details.locator("pre")).toContainText("Copyright (c) Project Nayuki.");
+            await expect(details.locator("pre")).toContainText("The above copyright notice and this permission notice shall be included in all");
+          }
           await summary.scrollIntoViewIfNeeded();
           await summary.press("Enter");
           await expect(details).not.toHaveAttribute("open", "");

@@ -3,6 +3,7 @@ import { expect, request, type APIRequestContext, type APIResponse, type Browser
 
 import { localTransportHeaders, noPaidProviderHeaders } from "./cost-controls";
 import { assertPublicReleaseIdentity } from "./public-release-identity";
+import { AUTHENTICATOR_QR_LABEL, renderedTotpSecret } from "./platform-report-qr";
 
 export const CONSOLE = "/api/platform-console";
 export const SESSION_COOKIE = "caseops_console_session";
@@ -315,7 +316,7 @@ export async function completeSetup(page: Page, link: string, password: string, 
   expect((await completing).status()).toBe(expectedStatus);
 }
 
-export async function enrollMfa(page: Page, target: Origins): Promise<string[]> {
+export async function enrollMfa(page: Page, target: Origins, accountEmail: string): Promise<string[]> {
   await expectState(page, target, "mfa_enrollment_required");
   expect((await safeGet(page.request, `${target.api.origin}${CONSOLE}/reports/activity`)).status()).toBe(403);
   const enrolling = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/auth/mfa/enroll`
@@ -329,14 +330,18 @@ export async function enrollMfa(page: Page, target: Origins): Promise<string[]> 
   await expect(setupKey).toBeVisible();
   await expect(setupKey).toHaveAttribute("readonly", "");
   expect(await setupKey.inputValue() === enrollment.secret, "Visible setup key must match the actual enrollment DTO.").toBe(true);
-  expect(new URL(enrollment.otpauth_url).searchParams.get("secret") === enrollment.secret).toBe(true);
+  const decodedSecret = await renderedTotpSecret(page, enrollment, accountEmail);
+  await controlBounds(page.getByRole("img", { name: AUTHENTICATOR_QR_LABEL, exact: true }), page);
+  await noOverflow(page);
   const verifying = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/auth/mfa/verify`
     && response.request().method() === "POST");
-  await page.getByLabel("Six-digit code", { exact: true }).fill(totp(enrollment.secret));
+  await page.getByLabel("Six-digit code", { exact: true }).fill(totp(decodedSecret));
   await controlBounds(page.getByRole("button", { name: "Verify MFA", exact: true }), page);
   await page.getByRole("button", { name: "Verify MFA", exact: true }).click();
   const auth = await json<ConsoleAuth>(await verifying, 200, "Initial MFA verification");
   expect(auth.state).toBe("authenticated");
+  await expect(page.getByRole("img", { name: AUTHENTICATOR_QR_LABEL, exact: true })).toHaveCount(0);
+  await expect(setupKey).toHaveCount(0);
   expect(Boolean(auth.recovery_codes && auth.recovery_codes.length >= 2)).toBe(true);
   const cookie = (await page.context().cookies()).find(row => row.name === SESSION_COOKIE);
   expect(cookie?.httpOnly).toBe(true);

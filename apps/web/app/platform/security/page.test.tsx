@@ -29,7 +29,7 @@ describe("platform security page entry", () => {
     expect(screen.queryByRole("button", { name: "Set up authenticator" })).not.toBeInTheDocument();
     expect(fetcher.mock.calls).toHaveLength(1);
   });
-  it("composes manual enrollment only after an explicit limited-session command", async () => {
+  it("composes QR and manual enrollment only after an explicit limited-session command", async () => {
     enrollment = true;
     render(<PlatformSessionProvider><Page /></PlatformSessionProvider>);
     const button = await screen.findByRole("button", { name: "Set up authenticator" });
@@ -40,7 +40,7 @@ describe("platform security page entry", () => {
     const calls = fetcher.mock.calls.filter(([url]) => String(url).endsWith("/auth/mfa/enroll"));
     expect(calls).toHaveLength(1);
     expect((calls[0][1] as RequestInit).headers).toHaveProperty("X-Console-CSRF-Token", "security-console-proof");
-    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Authenticator setup QR code" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Reset password" })).toHaveAttribute("href", "/platform/reset-password");
   });
 });

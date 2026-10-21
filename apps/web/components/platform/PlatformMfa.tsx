@@ -1,6 +1,7 @@
 "use client";
 
 import { KeyRound, ShieldCheck } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -14,7 +15,10 @@ import { usePlatformSession } from "@/lib/platform/session";
 export function PlatformMfa() {
   const session = usePlatformSession();
   const router = useRouter();
-  const [enrollment, setEnrollment] = useState<Awaited<ReturnType<typeof platformApi.enroll>> | null>(null);
+  const [enrollmentState, setEnrollment] = useState<{
+    expiresAt: string;
+    data: Awaited<ReturnType<typeof platformApi.enroll>>;
+  } | null>(null);
   const [factor, setFactor] = useState<"code" | "recovery">("code");
   const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
@@ -22,10 +26,14 @@ export function PlatformMfa() {
   const [verified, setVerified] = useState(false);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const needsEnrollment = session.auth?.state === "mfa_enrollment_required";
+  const enrollment = needsEnrollment && enrollmentState && enrollmentState.expiresAt === session.auth?.expires_at
+    ? enrollmentState.data : null;
 
   async function enroll() {
-    setPending(true); setError(null);
-    try { setEnrollment(await platformApi.enroll()); } catch (failure) { setError(consoleErrorMessage(failure)); }
+    if (pending || !needsEnrollment || !session.auth) return;
+    const expiresAt = session.auth.expires_at;
+    setPending(true); setError(null); setCode("");
+    try { setEnrollment({ expiresAt, data: await platformApi.enroll() }); } catch (failure) { setError(consoleErrorMessage(failure)); }
     finally { setPending(false); }
   }
   async function verify(event: FormEvent<HTMLFormElement>) {
@@ -52,9 +60,22 @@ export function PlatformMfa() {
     <section className="max-w-xl space-y-5" aria-label="Multi-factor verification">
       <h2 className="text-lg font-bold">{needsEnrollment ? "Set up multi-factor authentication" : "Verify multi-factor authentication"}</h2>
       {needsEnrollment && !enrollment ? <Button onClick={() => void enroll()} disabled={pending}><KeyRound className="h-4 w-4" aria-hidden />Set up authenticator</Button> : null}
-      {enrollment ? <div className="space-y-3">
-        <Label htmlFor="platform-setup-key">Authenticator setup key</Label>
-        <Input id="platform-setup-key" readOnly autoComplete="off" value={enrollment.secret} className="font-mono" />
+      {enrollment ? <div className="grid min-w-0 gap-4 sm:grid-cols-[256px_minmax(0,1fr)]">
+        <QRCodeSVG
+          value={enrollment.otpauth_url}
+          size={256}
+          marginSize={4}
+          level="M"
+          bgColor="#ffffff"
+          fgColor="#000000"
+          role="img"
+          aria-label="Authenticator setup QR code"
+          className="block aspect-square h-auto w-64 max-w-full"
+        />
+        <div className="min-w-0 space-y-3">
+          <Label htmlFor="platform-setup-key">Authenticator setup key</Label>
+          <Input id="platform-setup-key" readOnly autoComplete="off" value={enrollment.secret} className="font-mono" />
+        </div>
       </div> : null}
       {!needsEnrollment || enrollment ? <form onSubmit={verify} className="space-y-4">
         {!needsEnrollment ? <fieldset className="flex flex-wrap gap-2"><legend className="mb-2 text-sm font-medium">Verification method</legend>

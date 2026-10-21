@@ -355,7 +355,7 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
       data: { token: secretToken(initialLink), password, full_name: fixture.manager.full_name },
     })).status()).toBe(401);
     await completeSetup(page, currentLink, password, fixture.manager.full_name);
-    const recovery = await enrollMfa(page, target);
+    const recovery = await enrollMfa(page, target, fixture.manager.email);
     const manager = await expectState(page, target, "authenticated");
     expect(manager.admin?.id).toBe(fixture.manager.id);
     expect(manager.admin?.role).toBe("manager");
@@ -414,7 +414,7 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
     const viewer = await viewerContext.newPage();
     viewer.on("pageerror", () => pageErrors.push("pageerror"));
     await completeSetup(viewer, link, password, "Synthetic report viewer");
-    const viewerRecovery = await enrollMfa(viewer, target);
+    const viewerRecovery = await enrollMfa(viewer, target, email);
     expect((await expectState(viewer, target, "authenticated")).admin?.role).toBe("viewer");
     await viewer.goto(`${target.web.origin}/platform/reports`);
     await expect(viewer.getByRole("heading", { name: "Reports", exact: true })).toBeVisible();
@@ -513,10 +513,10 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
   }
 }
 
-test("PRA-01..08 desktop manager setup MFA reports invite reset and revoke", async ({ page, browser, baseURL }, info) => {
+test("PRA-01..08 desktop manager setup MFA reports invite reset and revoke; PRA-09 decoded QR", async ({ page, browser, baseURL }, info) => {
   await journey(page, browser, baseURL, false, info);
 });
 
-test("[mobile] PRA-01..08 Pixel 5 setup MFA report controls collapse invite reset and revoke", async ({ page, browser, baseURL }, info) => {
+test("[mobile] PRA-01..08 Pixel 5 setup MFA report controls collapse invite reset and revoke; PRA-09 decoded QR", async ({ page, browser, baseURL }, info) => {
   await journey(page, browser, baseURL, true, info);
 });

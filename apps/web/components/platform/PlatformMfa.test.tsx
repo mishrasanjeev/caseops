@@ -17,22 +17,45 @@ describe("platform MFA without tenant authentication", () => {
     vi.clearAllMocks();
     vi.mocked(usePlatformSession).mockReturnValue({ status: "ready", auth: { state: "mfa_enrollment_required", admin: null, expires_at: "2099-01-01T00:00:00Z" }, error: null, accept, refresh: vi.fn(), signOut: vi.fn() });
   });
-  it("enrolls only on command and accepts the canonical manual setup DTO", async () => {
+  it("enrolls only on command and shows a local QR alongside the canonical setup key", async () => {
     vi.mocked(platformApi.enroll).mockResolvedValue({ secret: "TESTONLYSETUPKEY", otpauth_url: "otpauth://totp/CaseOps:fixture?secret=TESTONLYSETUPKEY" });
     vi.mocked(platformApi.verify).mockResolvedValue({ state: "authenticated", admin, expires_at: "2099-01-01T00:00:00Z", recovery_codes: ["TEST-RECOVERY-CODE"] });
     render(<PlatformMfa />);
     expect(platformApi.enroll).not.toHaveBeenCalled();
+    expect(screen.queryByRole("img", { name: "Authenticator setup QR code" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Set up authenticator" }));
     expect(await screen.findByLabelText("Authenticator setup key")).toHaveValue("TESTONLYSETUPKEY");
-    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "Authenticator setup QR code" })).toBeVisible();
     fireEvent.change(screen.getByLabelText("Six-digit code"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: "Verify MFA" }));
     expect(await screen.findByRole("list", { name: "Recovery codes" })).toHaveTextContent("TEST-RECOVERY-CODE");
     expect(platformApi.verify).toHaveBeenCalledExactlyOnceWith({ code: "123456" });
     expect(screen.queryByDisplayValue("TESTONLYSETUPKEY")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Authenticator setup QR code" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue to reports" }));
     expect(screen.queryByText("TEST-RECOVERY-CODE")).not.toBeInTheDocument();
     expect(replace).toHaveBeenCalledExactlyOnceWith("/platform/reports");
+  });
+  it("does not retain visible enrollment material after the limited session changes", async () => {
+    vi.mocked(platformApi.enroll).mockResolvedValue({ secret: "TESTONLYSETUPKEY", otpauth_url: "otpauth://totp/CaseOps:fixture?secret=TESTONLYSETUPKEY" });
+    const view = render(<PlatformMfa />);
+    fireEvent.click(screen.getByRole("button", { name: "Set up authenticator" }));
+    expect(await screen.findByRole("img", { name: "Authenticator setup QR code" })).toBeVisible();
+    vi.mocked(usePlatformSession).mockReturnValue({ status: "ready", auth: { state: "mfa_enrollment_required", admin: null, expires_at: "2099-01-02T00:00:00Z" }, error: null, accept, refresh: vi.fn(), signOut: vi.fn() });
+    view.rerender(<PlatformMfa />);
+    expect(screen.queryByRole("img", { name: "Authenticator setup QR code" })).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("TESTONLYSETUPKEY")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set up authenticator" })).toBeVisible();
+  });
+  it("keeps enrollment failures private and never fabricates a QR", async () => {
+    vi.mocked(platformApi.enroll).mockRejectedValue(new Error("private-enrollment-detail"));
+    render(<PlatformMfa />);
+    fireEvent.click(screen.getByRole("button", { name: "Set up authenticator" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Verification was refused.");
+    expect(screen.queryByRole("img", { name: "Authenticator setup QR code" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Authenticator setup key")).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("private-enrollment-detail");
+    expect(platformApi.enroll).toHaveBeenCalledTimes(1);
   });
   it("uses only the chosen recovery factor and does not enroll a challenge session", async () => {
     vi.mocked(usePlatformSession).mockReturnValue({ status: "ready", auth: { state: "mfa_challenge_required", admin: null, expires_at: "2099-01-01T00:00:00Z" }, error: null, accept, refresh: vi.fn(), signOut: vi.fn() });

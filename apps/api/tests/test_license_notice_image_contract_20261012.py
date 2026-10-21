@@ -12,6 +12,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 REVIEW = "docs/security/js-license-compliance-review-2026-10-12.md"
 REGISTRY = "license-policy/reviewed-packages.json"
+QR_SOURCE = "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt"
+QR_SOURCE_SHA256 = "ba5a977288ff7463c51ea0cc5bf5a34372707985655c1ccc054f2a0caa3d9bff"
 
 
 def test_security_runs_and_retains_the_native_upload_gate():
@@ -108,6 +110,9 @@ def test_shipped_upstream_inventory_equals_hash_bound_review_materials():
         for entry in record["packages"] for material in entry["materials"]
         if material["path"].startswith("license-policy/upstream/")
     }
+    # The new MIT source notice uses the base policy, not a historical exception.
+    assert QR_SOURCE not in expected
+    expected[QR_SOURCE] = QR_SOURCE_SHA256
     actual = set()
     for visited, path in enumerate((ROOT / "license-policy/upstream").rglob("*"), start=1):
         assert visited <= 128
@@ -121,6 +126,25 @@ def test_shipped_upstream_inventory_equals_hash_bound_review_materials():
         assert path.stat().st_size <= 1024 * 1024
         assert hashlib.sha256(path.read_bytes()).hexdigest() == expected[relative]
     assert actual == set(expected)
-    assert len(actual) == 54
+    assert len(actual) == 55
     document_hash = hashlib.sha256((ROOT / REVIEW).read_bytes()).hexdigest()
     assert document_hash == record["review_document"]["sha256"]
+
+
+def test_qr_runtime_and_public_notice_match_retained_source():
+    package = json.loads((ROOT / "apps/web/package.json").read_text())
+    assert package["dependencies"]["qrcode.react"] == "4.2.0"
+    notices = json.loads((ROOT / "apps/web/app/third-party-notices/notices.json").read_text())
+    component = next(item for item in notices["components"] if item["name"] == "qrcode.react")
+    assert component["version"] == "4.2.0"
+    notice = next(item for item in component["notices"] if item["license"] == "MIT")
+    assert notice["retainedSource"] == QR_SOURCE
+    assert notice["sha256"] == QR_SOURCE_SHA256
+    assert notice["sourceUrl"] == (
+        "https://raw.githubusercontent.com/zpao/qrcode.react/v4.2.0/"
+        "src/third-party/qrcodegen/LICENSE"
+    )
+    public = ROOT / "apps/web/public/third-party-notices/qrcode.react-4.2.0-Nayuki-MIT-LICENSE.txt"
+    source = ROOT / QR_SOURCE
+    assert public.read_bytes() == source.read_bytes() == notice["text"].encode("utf-8")
+    assert hashlib.sha256(source.read_bytes()).hexdigest() == QR_SOURCE_SHA256
