@@ -1148,6 +1148,16 @@ def _ignore_matches(ignore_text: str, relative_path: str) -> bool:
     return ignored
 
 
+@pytest.mark.parametrize("ignore_path", ["apps/api/.gcloudignore", "apps/api/.dockerignore"])
+def test_api_certificate_build_policy_is_in_both_upload_contexts(ignore_path: str) -> None:
+    policy = "docker/remove_compromised_ca.py"
+    assert (REPO_ROOT / "apps/api" / policy).is_file()
+    assert not _ignore_matches(_read_repo_text(ignore_path), policy)
+    assert f"COPY {policy} /tmp/caseops-remove-compromised-ca.py" in _read_repo_text(
+        "apps/api/Dockerfile"
+    )
+
+
 @pytest.mark.parametrize("ignore_path", [".gcloudignore", ".dockerignore"])
 def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str) -> None:
     required = _web_external_unit_dependencies(REPO_ROOT)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import inspect
 from typing import NoReturn, get_type_hints
 from unittest.mock import Mock
 
@@ -19,6 +21,21 @@ def test_bad_request_helper_always_raises_http_400() -> None:
 
 def test_bad_request_helper_declares_no_return_path() -> None:
     assert get_type_hints(matter_imports._raise_bad_request)["return"] is NoReturn
+
+
+def test_mapping_kind_has_explicit_terminal_raise_after_format_branches() -> None:
+    function = ast.parse(inspect.getsource(matter_imports._detect_mapping_kind)).body[0]
+    assert isinstance(function, ast.FunctionDef)
+    assert {
+        node.value.value
+        for node in ast.walk(function)
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Constant)
+    } == {"csv", "json", "xlsx"}
+    terminal = function.body[-1]
+    assert isinstance(terminal, ast.Raise)
+    assert isinstance(terminal.exc, ast.Call)
+    assert isinstance(terminal.exc.func, ast.Name)
+    assert terminal.exc.func.id == "HTTPException"
 
 
 @pytest.mark.parametrize(
