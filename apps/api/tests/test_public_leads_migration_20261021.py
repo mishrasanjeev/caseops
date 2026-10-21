@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
+from alembic.script import ScriptDirectory
 from sqlalchemy.orm import Session
 
 from alembic import command
@@ -126,7 +127,7 @@ def test_historical_visibility_upgrade_replay_and_rollback_refusal_preserve_all_
         assert before_catalog[0]
 
         for _ in range(2):
-            command.upgrade(config, "head")
+            command.upgrade(config, REVISION)
             schema = sa.inspect(engine)
             columns = _columns(schema)
             added = next(row for row in columns if row["name"] == "is_public_lead")
@@ -156,9 +157,6 @@ def test_historical_visibility_upgrade_replay_and_rollback_refusal_preserve_all_
                     ).all()
                 )
                 assert actual == expected
-                if kind == "postgres":
-                    health = build_index_health_report(connection)
-                    assert health["status"] == "ok", health
             with Session(engine) as session:
                 page = leads_page(session, cursor=None, limit=100)
                 assert {row.id for row in page.items} == {
@@ -176,7 +174,7 @@ def test_historical_visibility_upgrade_replay_and_rollback_refusal_preserve_all_
         assert _records(engine) == before_records and _catalog(engine) == before_catalog
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == REVISION
-        command.upgrade(config, "head")
+        command.upgrade(config, REVISION)
         assert _records(engine) == before_records and _catalog(engine) == before_catalog
         table = _table(engine)
         with engine.connect() as connection:
@@ -208,7 +206,28 @@ def test_empty_enrollment_database_keeps_roll_forward_only_policy(kind, tmp_path
         assert not _records(engine)
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == REVISION
-        command.upgrade(config, "head")
+        command.upgrade(config, REVISION)
         assert _columns(sa.inspect(engine)) == columns
         assert sa.inspect(engine).get_indexes("billing_enrollments") == indexes
         assert not _records(engine)
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_actual_current_head_has_complete_public_lead_index_health(kind, tmp_path, monkeypatch):
+    with fresh_engine(kind, tmp_path) as engine:
+        config = migration_config(engine, monkeypatch)
+        heads = ScriptDirectory.from_config(config).get_heads()
+        assert len(heads) == 1
+        command.upgrade(config, "head")
+        schema = sa.inspect(engine)
+        assert next(row for row in _columns(schema) if row["name"] == "is_public_lead")[
+            "nullable"
+        ] is False
+        index = next(
+            row for row in schema.get_indexes("billing_enrollments") if row["name"] == INDEX
+        )
+        assert index["column_names"] == ["is_public_lead", "created_at", "id"]
+        with engine.connect() as connection:
+            health = build_index_health_report(connection)
+        assert health["status"] == "ok", health
+        assert health["schema_revisions"] == heads == [health["required_schema_revision"]]

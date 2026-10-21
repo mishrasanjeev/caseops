@@ -10,6 +10,12 @@ new-only notification eligibility, marked-request rejection, conditional claim
 finalization, unknown no-resend, reference-only mail and fresh migration/catalog
 health on both dialects. Focused/full/release proof remains pending.
 
+LEAD-05 additionally requires zero HTTP worker invocation and pending/zero
+attempts/no claim after admission, replay and authorized retry, then explicit
+scheduled-worker delivery. Desktop/mobile browser proof must inspect all seven
+queued admissions before the first drain and exact reference-only captures
+afterward. Do not substitute a renderer mock for real owner/API/mail acceptance.
+
 ## October 21 Authenticator QR Coverage
 
 J14/M14/US-040/042, FT-060/061, PRA-09 extends the existing enrollment UI with

@@ -69,6 +69,22 @@ export async function capturedLeadNotifications(api: APIRequestContext, target: 
   return receipt.items;
 }
 
+export async function queuedLocalLeadNotifications(api: APIRequestContext, target: Origins, fixture: LocalFixture, admittedIds: string[]) {
+  const receipt = await json<{ items: CapturedLeadNotification[]; external_calls: number; outbox: {
+    id: string; status: string; attempts: number; has_claim: boolean; has_lease: boolean; automated_request_preserved: boolean;
+  }[] }>(await safeGet(api, `${fixturePath(target, fixture)}/mail`), 200, "Queued local notification outbox");
+  expect(receipt.external_calls).toBe(0);
+  expect(receipt.items).toEqual([]);
+  expect(receipt.outbox.length).toBeLessThanOrEqual(8);
+  expect(new Set(admittedIds).size).toBe(admittedIds.length);
+  expect(receipt.outbox.map(row => row.id).sort()).toEqual([...admittedIds].sort());
+  for (const row of receipt.outbox) {
+    expect(row).toEqual({ id: row.id, status: "pending", attempts: 0,
+      has_claim: false, has_lease: false, automated_request_preserved: true });
+  }
+  return receipt.outbox;
+}
+
 export async function drainLocalLeadNotifications(api: APIRequestContext, target: Origins, fixture: LocalFixture) {
   const receipt = await json(await safePost(api, `${fixturePath(target, fixture)}/drain`, {
     headers: fixtureCsrf(), data: { web_origin: target.web.origin },

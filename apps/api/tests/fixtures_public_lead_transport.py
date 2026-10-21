@@ -3,15 +3,35 @@
 import json
 import os
 import re
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import UUID, uuid4
 
 import httpx
 from sqlalchemy.engine import make_url
 
-from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
+from caseops_api.core.automated_test_context import (
+    NO_PAID_PROVIDERS_VALUE,
+    paid_providers_blocked_for_request,
+    reset_automated_test_request,
+    set_automated_test_request,
+)
 from caseops_api.core.settings import get_settings
 from caseops_api.services import billing_demo
+
+
+@contextmanager
+def offline_lead_worker_context():
+    token = set_automated_test_request(NO_PAID_PROVIDERS_VALUE)
+    try:
+        yield
+    finally:
+        reset_automated_test_request(token)
+
+
+def drain_offline_lead_notifications(*, limit=25):
+    with offline_lead_worker_context():
+        return billing_demo.drain_demo_notifications(limit=limit)
 
 
 def install_offline_lead_adapter(request, monkeypatch):

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
@@ -65,7 +65,6 @@ from caseops_api.schemas.saas_billing import (
 from caseops_api.services.billing_demo import (
     ADMISSION_CONTRACT,
     _notification_eligible,
-    deliver_demo_notification,
 )
 from caseops_api.services.connector_health import list_platform_connector_health
 from caseops_api.services.forum_catalog import (
@@ -401,7 +400,6 @@ def retry_enrollment_notification(
     payload: PlatformReasonRequest,
     route_context: PlatformBillingManager,
     session: DbSession,
-    background_tasks: BackgroundTasks,
 ) -> dict[str, str]:
     row = session.scalar(
         select(BillingEnrollment).where(BillingEnrollment.id == enrollment_id).with_for_update()
@@ -427,7 +425,6 @@ def retry_enrollment_notification(
         reason=payload.reason,
     )
     session.commit()
-    background_tasks.add_task(deliver_demo_notification, enrollment_id)
     return {"status": "queued"}
 
 

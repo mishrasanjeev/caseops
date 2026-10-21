@@ -16,6 +16,7 @@ import sqlalchemy as sa
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError
@@ -26,6 +27,7 @@ from caseops_api.core.settings import get_settings
 from tests.test_postgres_validation import _seed_company, _seed_matter, _seed_membership
 
 API = Path(__file__).resolve().parents[1]
+HISTORICAL_GUARD_HEAD = "20261010_0004"
 
 
 @dataclass(frozen=True)
@@ -77,6 +79,23 @@ def _config():
     config = Config(str(API / "alembic.ini"))
     config.set_main_option("script_location", str(API / "alembic"))
     return config
+
+
+def _schema_catalog(engine):
+    statements = {
+        "columns": "SELECT table_name, column_name, data_type, is_nullable, column_default "
+        "FROM information_schema.columns WHERE table_schema='public' ORDER BY 1,2",
+        "indexes": "SELECT tablename, indexname, indexdef FROM pg_indexes "
+        "WHERE schemaname='public' ORDER BY 1,2",
+        "constraints": "SELECT c.relname, k.conname, pg_get_constraintdef(k.oid) "
+        "FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid "
+        "WHERE c.relnamespace='public'::regnamespace ORDER BY 1,2",
+        "triggers": "SELECT c.relname, t.tgname, pg_get_triggerdef(t.oid), "
+        "pg_get_functiondef(t.tgfoid) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid "
+        "WHERE c.relnamespace='public'::regnamespace AND NOT t.tgisinternal ORDER BY 1,2",
+    }
+    with engine.connect() as connection:
+        return {name: connection.execute(sa.text(sql)).all() for name, sql in statements.items()}
 
 
 @pytest.fixture
@@ -507,7 +526,8 @@ def test_full_head_refusal_rolls_back_earlier_guard_ddl(independent_database, re
     owner = _owners(engine)
     for queue in QUEUES:
         _insert_receipt(engine, queue, owner)
-    command.upgrade(config, "head")
+    # Rehearse the complete dated guard chain, not unrelated later migrations.
+    command.upgrade(config, HISTORICAL_GUARD_HEAD)
     for queue in QUEUES:
         _insert_receipt(engine, queue, owner, marker=False)
     receipts = [_snapshot(engine, queue) for queue in QUEUES]
@@ -534,6 +554,7 @@ def test_full_head_refusal_rolls_back_earlier_guard_ddl(independent_database, re
     before_columns = columns()
     with engine.connect() as connection:
         head = connection.scalar(sa.text("SELECT version_num FROM alembic_version"))
+        assert head == HISTORICAL_GUARD_HEAD
         catalog = connection.execute(catalog_sql).all()
         assert sum(row.relname == "document_processing_jobs" for row in catalog) == 2
         tail_count = connection.scalar(
@@ -556,7 +577,7 @@ def test_full_head_refusal_rolls_back_earlier_guard_ddl(independent_database, re
     with engine.connect() as connection:
         assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == head
         assert connection.execute(catalog_sql).all() == catalog
-    command.upgrade(config, "head")
+    command.upgrade(config, HISTORICAL_GUARD_HEAD)
     assert [_snapshot(engine, queue) for queue in QUEUES] == receipts
     assert columns() == before_columns
     record_property(
@@ -569,6 +590,38 @@ def test_full_head_refusal_rolls_back_earlier_guard_ddl(independent_database, re
             "populated_queue_and_catalog_retained": True,
         },
     )
+
+
+@pytest.mark.postgres
+def test_actual_current_head_refusal_preserves_full_catalog_and_queue_receipts(
+    independent_database, record_property,
+):
+    engine, config = independent_database, _config()
+    heads = ScriptDirectory.from_config(config).get_heads()
+    assert len(heads) == 1
+    command.upgrade(config, "head")
+    owner = _owners(engine)
+    for queue in QUEUES:
+        for marker in (False, True):
+            _insert_receipt(engine, queue, owner, marker=marker)
+    receipts = [_snapshot(engine, queue) for queue in QUEUES]
+    catalog = _schema_catalog(engine)
+    with pytest.raises(RuntimeError) as refused:
+        command.downgrade(config, "base")
+    trace = refused.value.__traceback__
+    while trace.tb_next is not None:
+        trace = trace.tb_next
+    origin = Path(trace.tb_frame.f_code.co_filename).resolve()
+    assert origin.parent == (API / "alembic/versions").resolve()
+    assert trace.tb_frame.f_code.co_name == "downgrade"
+    assert [_snapshot(engine, queue) for queue in QUEUES] == receipts
+    assert _schema_catalog(engine) == catalog
+    with engine.connect() as connection:
+        assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == heads[0]
+    record_property("current_head_refusal", {
+        "head": heads[0], "migration": origin.name,
+        "catalog_and_receipts_unchanged": True,
+    })
 
 
 @pytest.mark.postgres

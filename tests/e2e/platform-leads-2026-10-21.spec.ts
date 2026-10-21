@@ -5,7 +5,7 @@ import { devices, type Browser, type BrowserContext, type Page, type TestInfo } 
 import { localTransportHeaders } from "./support/cost-controls";
 import { e2eEnv } from "./support/env";
 import { capturedLeadNotifications, cleanupLocalLeads, drainLocalLeadNotifications, freshLocalAdmissionWindow, leadControls, leadDetails,
-  leadRow, prepareLocalLeads, publicLeadForms, type Lead, type LeadPage } from "./support/platform-leads";
+  leadRow, prepareLocalLeads, publicLeadForms, queuedLocalLeadNotifications, type Lead, type LeadPage } from "./support/platform-leads";
 import { CONSOLE, assertRelease, capturedLink, cleanupLocalFixture, completeSetup, contextCsrf, controlBounds,
   enrollMfa, expectState, json, mailLedger, newApi, noOverflow, origins, safeGet, safePost, seedLocalFixture,
   type LocalFixture, type Origins } from "./support/platform-report-admin";
@@ -92,6 +92,7 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
     const seeded = await prepareLocalLeads(api, target, fixture);
     await freshLocalAdmissionWindow(api, target, fixture);
     expect((await safeGet(api, `${target.api.origin}${CONSOLE}/leads`)).status()).toBe(401);
+    await setupManager(page, target, fixture);
     for (const [index, entry] of publicLeadForms.entries()) {
       await test.step(`LEAD-01 real shared admission ${entry.source}`, async () => {
         await page.goto(`${target.web.origin}${entry.path}`);
@@ -137,19 +138,32 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
         await expect(form.getByRole("status")).toContainText(`Request saved. Reference: ${saved.id}.`);
         await expect(form.getByLabel("Work email", { exact: true })).toBeDisabled();
         submitted.push({ id: saved.id, body: originalBody });
-        await expect.poll(async () => (await capturedLeadNotifications(api, target, fixture!)).filter(row => row.lead_id === saved.id).length,
-          { message: "The real saved admission needs one deterministic local notification; no real send is allowed." }).toBe(1);
+        await queuedLocalLeadNotifications(api, target, fixture!, submitted.map(row => row.id));
+        const pendingRows = await json<LeadPage>(await safeGet(page.request, `${target.api.origin}${CONSOLE}/leads`),
+          200, "Manager read of queued public admissions");
+        for (const admission of submitted) {
+          const row = pendingRows.items.find(item => item.id === admission.id);
+          expect(row, "Each saved admission must remain queued until the explicit worker drain.").toBeDefined();
+          expect(row!.notification).toEqual({ status: "pending", attempts: 0, last_error_code: null, eligible: false });
+        }
         await noOverflow(page);
       });
     }
+    const queued = await queuedLocalLeadNotifications(api, target, fixture, submitted.map(row => row.id));
+    await info.attach("real-local-lead-queued-outbox", { contentType: "application/json", body: JSON.stringify({
+      run_id: run, outbox: queued, captured_notifications: 0, scope: "Before explicit loopback worker drain only",
+    }) });
+    await test.step("LEAD-02 explicit local worker drain after all seven queued admissions", async () => {
+      await drainLocalLeadNotifications(api, target, fixture!);
+    });
     const captured = await capturedLeadNotifications(api, target, fixture);
+    expect(captured).toHaveLength(7);
     expect(captured.map(row => row.lead_id).sort()).toEqual(submitted.map(row => row.id).sort());
     await drainLocalLeadNotifications(api, target, fixture);
     expect(await capturedLeadNotifications(api, target, fixture)).toEqual(captured);
     for (const item of captured) for (const record of submitted) for (const key of ["contact_name", "contact_email", "company_name", "notes"]) {
       expect(item.body).not.toContain(String(record.body[key]));
     }
-    await setupManager(page, target, fixture);
     const tenant = await newApi(target);
     const wrongRealm = await newApi(target);
     try {

@@ -2,11 +2,11 @@
 
 ## Scope And Status
 
-Partially implemented. This branch extends the existing durable public demo
-admission, not a new CRM or a repair of missing admission. Local focused proof,
-integration with the certified QR main, complete release gates and exact-serving
-verification remain required. No production lead, provider send, retention
-activation or historical mail replay is authorized by this document.
+Implemented on the candidate branch; release acceptance is pending. This extends
+the existing durable public demo admission, not a new CRM or a repair of missing
+admission. The worker-only correction, complete release gates and exact-serving
+verification remain required. No synthetic production lead, test provider send,
+retention activation or historical mail replay is authorized by this document.
 
 PRD mapping: public admission J19/M21/US-063, FT-094..096, NFT-023 and SEC-031;
 isolated administration J14/M14/US-040/042, FT-060/061. The seven public entry
@@ -48,8 +48,10 @@ Passwords, setup/reset links, MFA and private workspace forms are excluded.
   the new eligible cohort before applying its batch limit. A marked invocation
   targeting a persisted human admission leaves the complete outbox unchanged;
   it cannot claim, recover or suppress that human notification obligation.
-  The HTTP route finishes its admission transaction, including replay reads,
-  before scheduling delivery; dependency teardown is not its transport fence.
+  HTTP admission and founder retries commit their durable pending state but
+  never invoke or schedule the mail worker after the response. The existing
+  scheduled reminder job is the sole delivery owner. Request-based Cloud Run
+  need not allocate CPU after a response; no billing-mode change is required.
   Its reference-only email uses the server-owned designated enquiry recipient
   and a protected /platform/leads link, not submitted contact fields or notes.
   One private SendGrid personalization is used without CC/BCC. The durable claim
@@ -60,6 +62,12 @@ Passwords, setup/reset links, MFA and private workspace forms are excluded.
   expired sending claim becomes outcome_unknown and is never automatically
   resent. A stored sent result is displayed as Provider accepted, not inbox
   delivery. Founder retry refuses historical, automated and unknown work.
+
+The reminder job runs on its existing five-minute cadence. A queued request is
+not a promise of delivery within five minutes: workload, sender readiness and
+bounded refusal backoff can defer an attempt. Saved enquiries remain available
+in Leads independently of mail. The worker, not another browser request, claims
+the pending notification and handles its accepted/refused/unknown result.
 
 The notification DTO preserves status, attempts, an allowlisted error code and
 eligible separately. This makes a retained historical pending or failed attempt
@@ -120,6 +128,21 @@ persona/guide/resource demo page. Password resets, MFA setup, private workspace
 forms and confidential legal data are not marketing leads. An email-link click
 is not a retained enquiry or a measured conversion.
 
+## Submission Flow
+
+```mermaid
+flowchart TD
+    A[Public enquiry form] --> B[Durably saved enquiry]
+    B --> C[MFA-protected Leads view]
+    B --> D{Fresh notification-eligible admission?}
+    D -->|No| E[Retain without a new email obligation]
+    D -->|Yes| F[Pending outbox]
+    F --> G[Scheduled worker]
+    G --> H[Reference-only owner email]
+    H --> C
+    G --> I[Recorded accepted, refused or unknown outcome]
+```
+
 ## Verification Inventory
 
 Required native regression: retained legacy/converted/contract rows versus an
@@ -132,21 +155,15 @@ disabled-to-enabled old-key replay; new eligible admissions across restart;
 claim races, stale finalizers, known rejection, unknown/crash no-resend; and
 governance, scheduler and release contract alignment.
 
-Fermat owns the new notification native module. Ptolemy owns the new Leads
-component and local/production browser specs plus discovery changes. The existing
-SEO demo module's SMTP expectations are rebased onto the current verified HTTP
-transport while preserving its admission, isolation, rate and retention controls.
-The SQLite/pure selection of that module, demo-admin authorization and their
-rate-identity consumer passed82 identities/246 phases with38 PostgreSQL cases
-explicitly deselected, including a selector regression with25 earlier non-public
-cohort rows and the actual request-session replay transport boundary. The
-regenerated runtime governance projection and its complete
-consumer modules passed31 identities/93 phases. The complete local lead/console
-capture modules passed25
-identities/75 phases after retaining the test-mount and Windows unread-body
-refusal failures. These are scoped development results, not complete backend or
-release acceptance. Full affected modules, exact collected IDs and all phases,
-including fresh PostgreSQL migration/claim/authorization proof, remain required.
+The complete five-module historical-migration/index replacement passed149
+identities/447 phases with all seven original failures present and passing.
+That scoped result predates the worker-only correction and is not whole-release
+acceptance. The deterministic HTTP-only-queues regression first failed because
+the HTTP response had already performed transport. Its replacement must prove
+pending/zero attempts/no claim before an explicit worker invocation, including
+idempotent replay and founder retry. Original failed/incomplete runs remain
+retained. Full affected native modules, all phases, fresh PostgreSQL proof and
+complete Docker/browser/CI/deployed acceptance remain required.
 
 Browser proof must submit through the shared public form, reload the protected
 manager view, inspect retained safe details and paginate beyond the old cap at

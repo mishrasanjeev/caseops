@@ -22,6 +22,11 @@
   long release gate. A passing inventory or governance-map check is not that
   preflight. Retained classification is committed data too: rollback refusal
   must preserve its rows, columns, indexes and revision, with fresh database proof.
+- A dated downgrade rehearsal must start at its named historical boundary,
+  not moving head: a newer restore-only guard can prevent the intended older
+  lock, DDL or refusal from running. Keep separate actual-current-head refusal
+  and full index-health proofs. Compare a historical rollback to its complete
+  dated catalog, not newer model indexes; never accept the wrong guard by regex.
 - Positive cross-dialect provider fixtures must retain the no-paid marker and
   explicitly admit an owned offline transport. A callback below a correctly
   closed isolation fence was never exercised; an empty observation cannot prove
@@ -1103,6 +1108,13 @@ spreadsheet skill's formatting, formula, inspection, and visual-verification
 requirements when using the fallback.
 
 ## Permanent regression learnings
+
+- Request-based Cloud Run does not guarantee CPU after the HTTP response.
+  Public enquiry admission and founder retries must only persist the outbox;
+  the scheduled worker owns mail claims and transport. Prove zero HTTP worker
+  invocation, pending/zero-attempt replay and explicit worker delivery. Keep
+  unknown-outcome no-resend and no-paid fences; do not increase billing to
+  compensate for post-response delivery or call a queued response inbox proof.
 
 - An atomic document-worker commit does not make a DTO assembled by separate
   READ COMMITTED statements coherent. Read source processing fields and the

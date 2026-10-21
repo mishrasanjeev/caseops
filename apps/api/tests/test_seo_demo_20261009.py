@@ -7,6 +7,7 @@ import ssl
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import Mock
 from uuid import uuid4
 
 import certifi
@@ -22,7 +23,11 @@ from caseops_api.db.models import BillingAdminNote, BillingEnrollment, PlatformA
 from caseops_api.db.session import get_db_session, get_session_factory
 from caseops_api.schemas.saas_billing import DemoRequest
 from caseops_api.services import billing_demo
-from tests.fixtures_public_lead_transport import install_offline_lead_adapter
+from tests.fixtures_public_lead_transport import (
+    drain_offline_lead_notifications,
+    install_offline_lead_adapter,
+    offline_lead_worker_context,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 URL = "/api/billing/enrollments/demo-request"
@@ -62,11 +67,42 @@ def test_seo_demo_20261009_marked_offline_protocol_keeps_real_delivery_fences(
     response = demo_client.post(URL, json=payload())
     assert response.status_code == 200, response.text
     identity = response.json()["id"]
+    assert_pending_notification(identity)
+    assert offline_adapter["messages"] == []
+    assert drain_offline_lead_notifications() == {"selected": 1}
     state = billing_demo._state(get_row(identity))
     assert state["automated_request"] is True
     assert state["notification_status"] == "sent" and state["attempts"] == 1
     assert len(offline_adapter["messages"]) == 1
     assert offline_adapter["messages"][0]["lead_id"] == identity
+
+
+def test_seo_demo_20261009_http_admission_only_queues_until_worker(
+    demo_client, monkeypatch, offline_adapter
+):
+    monkeypatch.setattr(billing_demo, "_send_notification", REAL_SEND_NOTIFICATION)
+    details = payload()
+    response = demo_client.post(URL, json=details)
+    assert response.status_code == 200, response.text
+    identity = response.json()["id"]
+    before = billing_demo._state(get_row(identity))
+    assert before["notification_status"] == "pending"
+    assert before["attempts"] == 0
+    assert "claim" not in before and "lease_until" not in before
+    assert offline_adapter["messages"] == []
+    replay = demo_client.post(URL, json=details)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["id"] == identity
+    assert billing_demo._state(get_row(identity)) == before
+    assert offline_adapter["messages"] == []
+    assert before["automated_request"] is True
+    assert drain_offline_lead_notifications() == {"selected": 1}
+    delivered = billing_demo._state(get_row(identity))
+    assert delivered["notification_status"] == "sent" and delivered["attempts"] == 1
+    assert "claim" not in delivered and "lease_until" not in delivered
+    assert [message["lead_id"] for message in offline_adapter["messages"]] == [identity]
+    assert drain_offline_lead_notifications() == {"selected": 0}
+    assert billing_demo._state(get_row(identity)) == delivered
 
 
 @pytest.mark.parametrize(
@@ -81,6 +117,9 @@ def test_seo_demo_20261009_offline_protocol_refuses_unadmitted_runtime(
     monkeypatch.setattr(billing_demo, "_send_notification", REAL_SEND_NOTIFICATION)
     response = demo_client.post(URL, json=payload())
     assert response.status_code == 200, response.text
+    assert_pending_notification(response.json()["id"])
+    assert offline_adapter["messages"] == []
+    assert drain_offline_lead_notifications() == {"selected": 1}
     state = billing_demo._state(get_row(response.json()["id"]))
     assert state["automated_request"] is True
     assert state["notification_status"] == "exhausted"
@@ -268,21 +307,58 @@ def test_seo_demo_20261009_existing_scheduler_drains_without_visitor(
 ):
     from caseops_api.scripts import send_hearing_reminders
 
-    monkeypatch.setattr(send_hearing_reminders, "run_reminder_worker", lambda *args, **kwargs: {})
-    monkeypatch.setattr(
-        send_hearing_reminders, "drain_notification_delivery_intents", lambda *args, **kwargs: {}
-    )
+    events, opened = [], []
+    factory = send_hearing_reminders.get_session_factory()
+    purge = send_hearing_reminders.purge_expired_demo_leads
+    drain = send_hearing_reminders.drain_demo_notifications
+
+    def tracked_factory():
+        session = factory()
+        opened.append(session)
+        return session
+
+    def hearing(_session, *, mode, limit):
+        events.append(("hearing", limit))
+        return {}
+
+    def durable(_session, *, limit):
+        events.append(("durable", limit))
+        return {}
+
+    def retention(*, limit):
+        assert opened and all(not session.in_transaction() for session in opened)
+        events.append(("retention", limit))
+        return purge(limit=limit)
+
+    def notifications(*, limit):
+        assert opened and all(not session.in_transaction() for session in opened)
+        events.append(("leads", limit))
+        return drain(limit=limit)
+
+    monkeypatch.setattr(send_hearing_reminders, "get_session_factory", lambda: tracked_factory)
+    monkeypatch.setattr(send_hearing_reminders, "run_reminder_worker", hearing)
+    monkeypatch.setattr(send_hearing_reminders, "drain_notification_delivery_intents", durable)
+    monkeypatch.setattr(send_hearing_reminders, "purge_expired_demo_leads", retention)
+    monkeypatch.setattr(send_hearing_reminders, "drain_demo_notifications", notifications)
     # Fresh admission is eligible, independently of temporary delivery pause.
-    with get_session_factory()() as session:
-        identity = billing_demo.admit_demo(session, DemoRequest(**payload())).id
+    response = demo_client.post(URL, json=payload())
+    assert response.status_code == 200, response.text
+    identity = response.json()["id"]
+    queued = assert_pending_notification(identity)
+    assert offline_notifications == []
     monkeypatch.setattr(billing_demo, "_notification_enabled", lambda: False)
     state = billing_demo._state(get_row(identity))
     future = datetime.fromisoformat(state["next_attempt_at"]) + timedelta(seconds=1)
     monkeypatch.setattr(billing_demo, "_now", lambda: future)
-    assert send_hearing_reminders.run(mode="dry_run") == 0
+    assert send_hearing_reminders.main(["--mode", "dry_run", "--limit", "137"]) == 0
+    assert events == [("hearing", 137)]
+    assert billing_demo._state(get_row(identity)) == queued
     assert offline_notifications == []
+    events.clear()
     monkeypatch.setattr(billing_demo, "_notification_enabled", lambda: True)
-    assert send_hearing_reminders.run(mode="auto") == 0
+    with offline_lead_worker_context():
+        assert send_hearing_reminders.main(["--mode", "auto", "--limit", "137"]) == 0
+    assert events == [("hearing", 137), ("durable", 137), ("retention", 100), ("leads", 100)]
     assert offline_notifications == [identity]
     assert '"selected": 1' in capsys.readouterr().out
 
@@ -305,6 +381,14 @@ def payload(**changes):
 def get_row(identity):
     with get_session_factory()() as session:
         return session.get(BillingEnrollment, identity)
+
+
+def assert_pending_notification(identity):
+    state = billing_demo._state(get_row(identity))
+    assert state["notification_status"] == "pending" and state["attempts"] == 0
+    assert state["automated_request"] is True
+    assert "claim" not in state and "lease_until" not in state
+    return state
 
 
 def test_seo_demo_20261009_drain_excludes_non_public_cohort_before_limit(
@@ -357,6 +441,9 @@ def test_seo_demo_20261009_commit_before_notification_and_ack(demo_client, monke
     response = demo_client.post(URL, json=data)
     assert response.status_code == 200, response.text
     assert response.json() == {"id": data["idempotency_key"], "status": "demo_requested"}
+    assert_pending_notification(response.json()["id"])
+    assert observed == []
+    assert drain_offline_lead_notifications() == {"selected": 1}
     row = get_row(response.json()["id"])
     assert observed == [row.id]
     assert row.company_id is None
@@ -403,12 +490,16 @@ def test_seo_demo_20261009_replay_releases_request_session_before_transport(
     monkeypatch.setattr(billing_demo, "_send_notification", transport)
     response = demo_client.post(URL, json=data.model_dump(mode="json"))
     assert response.status_code == 200, response.text
+    assert_pending_notification(identity)
+    assert observed == [] and completed == [True]
+    assert request_sessions[0].in_transaction() is False
+    assert drain_offline_lead_notifications() == {"selected": 1}
     assert observed == [
         {
             "identity": identity,
             "request_session_count": 1,
             "request_in_transaction": False,
-            "dependency_completed": False,
+            "dependency_completed": True,
         }
     ]
     assert completed == [True]
@@ -432,6 +523,8 @@ def test_seo_demo_20261009_transport_failure_and_timeout_preserve_lead_without_r
     monkeypatch.setattr(billing_demo, "_send_notification", failing)
     response = demo_client.post(URL, json=payload())
     assert response.status_code == 200
+    assert_pending_notification(response.json()["id"])
+    assert drain_offline_lead_notifications() == {"selected": 1}
     row = get_row(response.json()["id"])
     state = row.status_timestamps_json["demo_admission"]
     assert row.status == "demo_requested" and row.contact_email == "demo@example.com"
@@ -459,6 +552,13 @@ def test_seo_demo_20261009_duplicate_same_key_and_conflicting_key(
     first, second = demo_client.post(URL, json=data), demo_client.post(URL, json=data)
     assert first.status_code == second.status_code == 200
     assert first.json() == second.json()
+    assert_pending_notification(data["idempotency_key"])
+    assert offline_notifications == []
+    assert drain_offline_lead_notifications() == {"selected": 1}
+    assert offline_notifications == [data["idempotency_key"]]
+    replay = demo_client.post(URL, json=data)
+    assert replay.status_code == 200 and replay.json() == first.json()
+    assert drain_offline_lead_notifications() == {"selected": 0}
     assert offline_notifications == [data["idempotency_key"]]
     conflict = demo_client.post(URL, json={**data, "role": "partner"})
     assert conflict.status_code == 409
@@ -536,6 +636,8 @@ def test_seo_demo_20261009_admin_readback_retry_delete_are_audited(demo_client, 
 
     monkeypatch.setattr(billing_demo, "_send_notification", failing)
     identity = demo_client.post(URL, json=payload()).json()["id"]
+    assert_pending_notification(identity)
+    assert drain_offline_lead_notifications() == {"selected": 1}
     response = demo_client.get("/api/platform-admin/enrollments", headers=auth_headers(token))
     assert response.status_code == 200, response.text
     row = next(row for row in response.json()["enrollments"] if row["id"] == identity)
@@ -564,14 +666,30 @@ def test_seo_demo_20261009_admin_readback_retry_delete_are_audited(demo_client, 
     monkeypatch.setattr(
         billing_demo, "_send_notification", lambda identity, **_: sent.append(identity)
     )
+    from caseops_api.api.routes import platform_admin
+
+    worker = Mock(wraps=billing_demo.deliver_demo_notification)
+    drain_worker = Mock(wraps=billing_demo.drain_demo_notifications)
+    monkeypatch.setattr(billing_demo, "deliver_demo_notification", worker)
+    monkeypatch.setattr(billing_demo, "drain_demo_notifications", drain_worker)
+    monkeypatch.setattr(platform_admin, "deliver_demo_notification", worker, raising=False)
+    monkeypatch.setattr(platform_admin, "drain_demo_notifications", drain_worker, raising=False)
     retry = demo_client.post(
         f"/api/platform-admin/enrollments/{human}/retry-notification",
         headers=auth_headers(token),
         json={"reason": "Retry local fake transport"},
     )
     assert retry.status_code == 200, retry.text
+    assert retry.json() == {"status": "queued"}
+    worker.assert_not_called()
+    drain_worker.assert_not_called()
+    retry_state = billing_demo._state(get_row(human))
+    assert retry_state["notification_status"] == "pending" and retry_state["attempts"] == 0
+    assert "claim" not in retry_state and "lease_until" not in retry_state
     assert sent == []
     assert billing_demo.drain_demo_notifications() == {"selected": 1}
+    drain_worker.assert_called_once_with()
+    worker.assert_called_once_with(human)
     assert sent == [human]
     deleted = demo_client.request(
         "DELETE",
@@ -681,4 +799,7 @@ def test_seo_demo_20261009_postgres_transport_releases_row_lock(
     monkeypatch.setattr(billing_demo, "_send_notification", transport)
     response = isolated_postgres_client.post(URL, json=payload())
     assert response.status_code == 200
+    assert_pending_notification(response.json()["id"])
+    assert observed == []
+    assert drain_offline_lead_notifications() == {"selected": 1}
     assert observed == [response.json()["id"]]

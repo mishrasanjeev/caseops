@@ -267,10 +267,27 @@ def install_public_lead_emulator(app, capture):
             fixture = capture.runs[run_id].get("leads", {})
             if fixture.get("phase") != "ready":
                 raise HTTPException(409, "Local lead mail is unavailable.")
-            return {
-                "items": [dict(item) for item in fixture["messages"]],
-                "external_calls": capture.external_calls,
-            }
+            messages = [dict(item) for item in fixture["messages"]]
+            external_calls = capture.external_calls
+        with get_session_factory()() as session:
+            rows = session.execute(
+                select(BillingEnrollment.id, BillingEnrollment.status_timestamps_json)
+                .where(BillingEnrollment.contact_email.like(f"lead-%-{run_id}@example.com"))
+                .order_by(BillingEnrollment.id)
+                .limit(8)
+            ).all()
+        outbox = []
+        for identity, timestamps in rows:
+            state = timestamps.get("demo_admission", {})
+            outbox.append({
+                "id": identity,
+                "status": state.get("notification_status"),
+                "attempts": state.get("attempts"),
+                "has_claim": "claim" in state,
+                "has_lease": "lease_until" in state,
+                "automated_request_preserved": state.get("automated_request") is True,
+            })
+        return {"items": messages, "outbox": outbox, "external_calls": external_calls}
 
     @app.post(PREFIX + "/fixtures/{run_id}/leads/drain", include_in_schema=False)
     def drain(run_id: str, payload: Window, request: Request):

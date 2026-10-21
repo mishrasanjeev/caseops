@@ -10,6 +10,13 @@ unknown no-resend, protected read scopes and responsive reload before release.
 No CRM expansion or retention-policy approval. See
 `docs/public-leads-admin-2026-10-21.md`; full release/deployed proof is pending.
 
+The mail boundary must be worker-owned, not an HTTP background task. The first
+HTTP-only-queues regression retained a real offline failure (sent instead of
+pending). Replace that behavior and prove explicit worker delivery across
+admission, replay, founder retry and all seven browser entry points. The149-case
+historical migration/index replacement passed, but predates this mail correction
+and cannot certify it. Keep original failures and source-bound replacement proof.
+
 ## October 21 Authenticator QR Usability
 
 PRA-09 under J14/M14/US-040/042: add browser-local QR encoding of the existing

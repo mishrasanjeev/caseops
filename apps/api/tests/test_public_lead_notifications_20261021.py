@@ -145,6 +145,11 @@ def test_reference_only_mail_uses_real_sendgrid_seam(client, clock, offline_mail
     assert response.status_code == 200
     identity = response.json()["id"]
     assert identity == str(payload.idempotency_key)
+    queued = _state(identity)
+    assert queued["notification_status"] == "pending" and queued["attempts"] == 0
+    assert "claim" not in queued and "lease_until" not in queued
+    assert offline_mail.calls == []
+    assert demo.drain_demo_notifications() == {"selected": 1}
     assert _state(identity)["notification_status"] == "sent"
     assert len(offline_mail.calls) == 1
     wire = offline_mail.calls[0]
@@ -263,11 +268,16 @@ def test_no_paid_http_marker_blocks_new_and_replayed_admission(
     })
     assert response.status_code == 200
     assert offline_mail.calls == []
+    queued = _state(response.json()["id"])
+    assert queued["notification_status"] == "pending" and queued["attempts"] == 0
+    assert "claim" not in queued and "lease_until" not in queued
     if not existing:
         identity = response.json()["id"]
         assert _state(identity)["automated_request"] is True
         demo.drain_demo_notifications()
         assert offline_mail.calls == []
+        assert _state(identity)["notification_status"] == "exhausted"
+        assert _state(identity)["last_error_code"] == "automated_request_blocked"
 
 
 def test_marked_replay_preserves_human_outbox_then_normal_drain_sends_once(

@@ -83,6 +83,7 @@ def test_untrusted_forwarding_headers_cannot_choose_rate_key():
 
 
 def test_demo_rotating_raw_headers_still_rejects_sixth(client, monkeypatch, offline_notifications):
+    client.headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
     monkeypatch.setattr(limiter, "enabled", True)
     limiter.reset()
     try:
@@ -100,6 +101,13 @@ def test_demo_rotating_raw_headers_still_rejects_sixth(client, monkeypatch, offl
         assert statuses == [200] * 5 + [429]
         with get_session_factory()() as session:
             assert session.scalar(select(func.count()).select_from(BillingEnrollment)) == 5
+            for row in session.scalars(select(BillingEnrollment)):
+                state = demo_tests.billing_demo._state(row)
+                assert state["notification_status"] == "pending" and state["attempts"] == 0
+                assert "claim" not in state and "lease_until" not in state
+                assert state["automated_request"] is True
+        assert offline_notifications == []
+        assert demo_tests.drain_offline_lead_notifications() == {"selected": 5}
         assert len(offline_notifications) == 5
     finally:
         limiter.reset()
@@ -312,6 +320,12 @@ def test_attested_demo_callers_have_independent_buckets(
                 demo_tests.billing_demo._state(row)["automated_request"] is True
                 for row in session.scalars(select(BillingEnrollment))
             )
+            for row in session.scalars(select(BillingEnrollment)):
+                state = demo_tests.billing_demo._state(row)
+                assert state["notification_status"] == "pending" and state["attempts"] == 0
+                assert "claim" not in state and "lease_until" not in state
+        assert offline_notifications == []
+        assert demo_tests.drain_offline_lead_notifications() == {"selected": 6}
         assert len(offline_notifications) == 6
     finally:
         limiter.reset()

@@ -12,6 +12,13 @@ pagination and data-preserving SQLite/PostgreSQL migration health. The90-day
 purge remains disabled and unapproved. See
 `docs/public-leads-admin-2026-10-21.md`. No production readiness claim yet.
 
+Mail activation must not depend on post-response CPU. Admission and founder
+retry are queue-only; the existing scheduled reminder job owns the actual
+claim/transport. Retain its unknown-outcome and no-paid fences without a billing
+change. A deterministic RED proved the old HTTP send; the combined worker-only
+replacement and complete gates remain required, separately from the149 passed
+historical migration/index controls.
+
 ## October 21 Cross-Dialect Renewal Responses
 
 C24 is NO-GO after nine Pillow findings. The subsequent installed-set audit
