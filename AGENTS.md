@@ -1,5 +1,10 @@
 # CaseOps agent instructions
 
+- New dependency notices must be reconciled across every exact upload, image,
+  retained-source and public-notice inventory before starting long release gates.
+  A base-policy license still needs its bundled attribution; preserve historical
+  exception registries and pin supplemental source bytes explicitly.
+
 - Authenticator QR acceptance must independently decode rendered pixels, bind
   the issuer/account/secret/algorithm/digits/period to the real enrollment and
   complete actual API verification. An image existing in the DOM is not enough.
