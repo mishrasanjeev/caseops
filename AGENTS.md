@@ -1,5 +1,14 @@
 # CaseOps agent instructions
 
+- Enabling a release-owned notification purpose changes the initial queued
+  state even for a no-paid synthetic admission. Reconcile dated API and visible
+  readback assertions with that explicit harness policy; the no-paid marker is
+  not a disabled-purpose flag. Preserve zero attempts/no transport, reload and
+  role-denial checks, and independently retain disabled-purpose/no-retrofit tests.
+- A browser failure before a later responsive or permission assertion leaves
+  those steps unverified. Correct the original dated journey and replay its
+  complete file plus the new sibling workflow, not just the first assertion.
+
 - Public lead visibility is separate from notification eligibility. An owner
   opting into new-submission alerts must not reactivate historical outbox rows,
   old idempotency keys or admissions made while the purpose was disabled. Prove

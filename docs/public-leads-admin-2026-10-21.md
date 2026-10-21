@@ -170,3 +170,15 @@ manager view, inspect retained safe details and paginate beyond the old cap at
 desktop/mobile widths. Automated/no-paid submissions must never reach real mail
 transport. Production renderer fixtures or readiness reads are not evidence of
 a real owner enquiry or inbox delivery. No synthetic production lead is allowed.
+
+The complete unchanged81ec hosted browser run ended633cases:615passed,
+17explicit skips and one failure in the dated founder-readback journey. That
+test assumed the old disabled-purpose state even though the current release
+harness enables new-only alerts. Its later responsive readback and denial steps
+were not executed. The corrected contract requires pending/zero attempts and
+no error/transport fields, the visible Pending state after reload at both widths,
+and byte-equivalent protected readback after those reads. Disabled-purpose and
+no-retrofit behavior remain separate native regressions. No runtime or security
+fence changes resolve this stale assertion. Original failure evidence and the
+deliberately interrupted Docker05 remain retained and incomplete; complete
+amended-file, sibling, Docker, CI and production acceptance are still required.
