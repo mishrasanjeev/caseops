@@ -20,6 +20,7 @@ from tests.test_rate_limiting import _bootstrap_once
 from tests.test_seo_demo_20261009 import URL, payload
 
 rate_limited_client = rate_tests.rate_limited_client
+offline_adapter = demo_tests.offline_adapter
 offline_notifications = demo_tests.offline_notifications
 
 
@@ -272,6 +273,7 @@ def test_attested_demo_callers_have_independent_buckets(
     request, fixture, mode, monkeypatch, offline_notifications
 ):
     client = request.getfixturevalue(fixture)
+    client.headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
     key = secrets.token_hex(32)
     monkeypatch.setenv("CASEOPS_RATE_IDENTITY_EDGE_SECRET", key)
     monkeypatch.setenv("CASEOPS_RATE_IDENTITY_EDGE_HTTPS", "true")
@@ -306,6 +308,10 @@ def test_attested_demo_callers_have_independent_buckets(
         )
         with get_session_factory()() as session:
             assert session.scalar(select(func.count()).select_from(BillingEnrollment)) == 6
+            assert all(
+                demo_tests.billing_demo._state(row)["automated_request"] is True
+                for row in session.scalars(select(BillingEnrollment))
+            )
         assert len(offline_notifications) == 6
     finally:
         limiter.reset()

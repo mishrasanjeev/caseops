@@ -22,6 +22,7 @@ from caseops_api.db.models import BillingAdminNote, BillingEnrollment, PlatformA
 from caseops_api.db.session import get_db_session, get_session_factory
 from caseops_api.schemas.saas_billing import DemoRequest
 from caseops_api.services import billing_demo
+from tests.fixtures_public_lead_transport import install_offline_lead_adapter
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 URL = "/api/billing/enrollments/demo-request"
@@ -32,11 +33,19 @@ REAL_SEND_NOTIFICATION = billing_demo._send_notification
     params=["client", pytest.param("isolated_postgres_client", marks=pytest.mark.postgres)]
 )
 def demo_client(request):
-    return request.getfixturevalue(request.param)
+    client = request.getfixturevalue(request.param)
+    client.headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
+    return client
+
+
+@pytest.fixture
+def offline_adapter(request, monkeypatch):
+    yield install_offline_lead_adapter(request, monkeypatch)
+    get_settings.cache_clear()
 
 
 @pytest.fixture(autouse=True)
-def offline_notifications(monkeypatch):
+def offline_notifications(monkeypatch, offline_adapter):
     sent = []
     monkeypatch.setattr(billing_demo, "_notification_enabled", lambda: True)
     monkeypatch.setattr(billing_demo, "_retention_enabled", lambda: True)
@@ -44,6 +53,39 @@ def offline_notifications(monkeypatch):
         billing_demo, "_send_notification", lambda identity, **_: sent.append(identity)
     )
     return sent
+
+
+def test_seo_demo_20261009_marked_offline_protocol_keeps_real_delivery_fences(
+    demo_client, monkeypatch, offline_adapter
+):
+    monkeypatch.setattr(billing_demo, "_send_notification", REAL_SEND_NOTIFICATION)
+    response = demo_client.post(URL, json=payload())
+    assert response.status_code == 200, response.text
+    identity = response.json()["id"]
+    state = billing_demo._state(get_row(identity))
+    assert state["automated_request"] is True
+    assert state["notification_status"] == "sent" and state["attempts"] == 1
+    assert len(offline_adapter["messages"]) == 1
+    assert offline_adapter["messages"][0]["lead_id"] == identity
+
+
+@pytest.mark.parametrize(
+    "name,value",
+    [("K_SERVICE", "offline-refusal"), ("CASEOPS_PUBLIC_APP_URL", "https://example.com")],
+)
+def test_seo_demo_20261009_offline_protocol_refuses_unadmitted_runtime(
+    demo_client, monkeypatch, offline_adapter, name, value
+):
+    monkeypatch.setenv(name, value)
+    get_settings.cache_clear()
+    monkeypatch.setattr(billing_demo, "_send_notification", REAL_SEND_NOTIFICATION)
+    response = demo_client.post(URL, json=payload())
+    assert response.status_code == 200, response.text
+    state = billing_demo._state(get_row(response.json()["id"]))
+    assert state["automated_request"] is True
+    assert state["notification_status"] == "exhausted"
+    assert state["last_error_code"] == "test_transport_not_admitted"
+    assert state["attempts"] == 0 and offline_adapter["messages"] == []
 
 
 @pytest.mark.parametrize("accepted_status", [200, 202])
@@ -332,7 +374,8 @@ def test_seo_demo_20261009_replay_releases_request_session_before_transport(
 ):
     data = DemoRequest(**payload())
     with get_session_factory()() as session:
-        identity = billing_demo.admit_demo(session, data).id
+        identity = billing_demo.admit_demo(session, data, automated=True).id
+        assert billing_demo._state(session.get(BillingEnrollment, identity))["automated_request"]
     request_sessions, completed, observed = [], [], []
 
     async def tracked_request_session():
@@ -500,25 +543,45 @@ def test_seo_demo_20261009_admin_readback_retry_delete_are_audited(demo_client, 
     assert row["source"] == "solo_lawyers"
     assert row["demo_notification"]["last_error_code"] == "provider_rate_limited"
     assert "request_sha256" not in response.text and "claim" not in response.text
+    synthetic_state = billing_demo._state(get_row(identity))
+    assert synthetic_state["automated_request"] is True
+    denied = demo_client.post(
+        f"/api/platform-admin/enrollments/{identity}/retry-notification",
+        headers=auth_headers(token),
+        json={"reason": "A marked synthetic admission cannot be manually replayed"},
+    )
+    assert denied.status_code == 409, denied.text
+    assert billing_demo._state(get_row(identity)) == synthetic_state
+
+    # Model a separate human admission through its actual constructor; never
+    # clear the persisted automated marker on the HTTP-created synthetic row.
+    with get_session_factory()() as session:
+        human = billing_demo.admit_demo(session, DemoRequest(**payload())).id
+    assert billing_demo._state(get_row(human))["automated_request"] is False
+    billing_demo.deliver_demo_notification(human)
+    assert billing_demo._state(get_row(human))["last_error_code"] == "provider_rate_limited"
     sent = []
     monkeypatch.setattr(
         billing_demo, "_send_notification", lambda identity, **_: sent.append(identity)
     )
     retry = demo_client.post(
-        f"/api/platform-admin/enrollments/{identity}/retry-notification",
+        f"/api/platform-admin/enrollments/{human}/retry-notification",
         headers=auth_headers(token),
         json={"reason": "Retry local fake transport"},
     )
     assert retry.status_code == 200, retry.text
-    assert sent == [identity]
+    assert sent == []
+    assert billing_demo.drain_demo_notifications() == {"selected": 1}
+    assert sent == [human]
     deleted = demo_client.request(
         "DELETE",
-        f"/api/platform-admin/enrollments/{identity}",
+        f"/api/platform-admin/enrollments/{human}",
         headers=auth_headers(token),
         json={"reason": "Contact requested deletion"},
     )
     assert deleted.status_code == 200, deleted.text
-    assert get_row(identity) is None
+    assert get_row(human) is None
+    assert billing_demo._state(get_row(identity)) == synthetic_state
     with get_session_factory()() as session:
         actions = set(session.scalars(select(PlatformAdminAuditEvent.action)))
         assert {

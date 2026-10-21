@@ -22,6 +22,11 @@
   long release gate. A passing inventory or governance-map check is not that
   preflight. Retained classification is committed data too: rollback refusal
   must preserve its rows, columns, indexes and revision, with fresh database proof.
+- Positive cross-dialect provider fixtures must retain the no-paid marker and
+  explicitly admit an owned offline transport. A callback below a correctly
+  closed isolation fence was never exercised; an empty observation cannot prove
+  a locking defect. Regress real callback entry on both dialects and retain the
+  cloud-runtime, nonlocal-origin and real-transport refusal cases.
 
 - New dependency notices must be reconciled across every exact upload, image,
   retained-source and public-notice inventory before starting long release gates.

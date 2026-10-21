@@ -134,6 +134,7 @@ def install_public_lead_emulator(app, capture):
                     "automated_request_preserved": True,
                 }
             )
+        return None
 
     capture.receive = receive
 
