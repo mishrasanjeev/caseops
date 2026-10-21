@@ -14,6 +14,10 @@
   Background transport must also prove the original admission request session
   ended its transaction on replay, not merely that its separate worker session
   was closed; request-scoped dependency cleanup can occur after background work.
+- Before freezing a candidate, enumerate untracked files in every build/test
+  scope and reconcile the sidecar's exact changed-path list. Collapsed directory
+  entries can hide a page test beside its page; a green local run may otherwise
+  cover a test that was never committed. Preserve a refused preflight as incomplete.
 
 - New dependency notices must be reconciled across every exact upload, image,
   retained-source and public-notice inventory before starting long release gates.
