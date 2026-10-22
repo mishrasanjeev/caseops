@@ -1,6 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
+
+import { ApiError } from "@/lib/api/config";
 
 const {
   bundleMock,
@@ -87,6 +90,23 @@ const draft = {
   created_at: "2026-08-23T09:00:00Z",
   updated_at: "2026-08-23T10:00:00Z",
 };
+
+function renderReviewWorkspace(deepLink: boolean) {
+  const reviewed = { ...draft, status: "in_review" as const };
+  listDraftsMock.mockResolvedValue({ drafts: deepLink ? [] : [reviewed], next_cursor: null });
+  getDraftMock.mockResolvedValue(reviewed);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <IpPleadingWorkspace docketId="docket-1" proceedingId="proceeding-1"
+        initialDraftId={deepLink ? reviewed.id : undefined}
+        canCreate canEdit canGenerate canReview canFinalize />
+    </QueryClientProvider>,
+  );
+  return { queryClient, reviewed };
+}
 
 describe("IpPleadingWorkspace", () => {
   beforeEach(() => {
@@ -275,6 +295,101 @@ describe("IpPleadingWorkspace", () => {
     });
     expect(listDraftsMock).toHaveBeenCalledOnce();
     expect(listTemplatesMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([false, true])("refreshes a rejected stale approval without replay (deep link: %s)", async (deepLink) => {
+    const { queryClient, reviewed } = renderReviewWorkspace(deepLink);
+    await screen.findByText("Current identifiers, sources, citations, exhibits, and placeholders passed.");
+    const approve = screen.getByRole("button", { name: "Approve", exact: true });
+    expect(approve).toBeEnabled();
+    await waitFor(() => expect(listDraftsMock).toHaveBeenCalledOnce());
+    const previousValidation = await validationMock.mock.results[0].value;
+    const latest = { ...reviewed, current_version_id: "version-2", versions: [reviewed.versions[0], {
+      ...reviewed.versions[0], id: "version-2", revision: 2,
+      body: "Synthetic independent-tab edit without an authority.", citations: [], verified_citation_count: 0,
+    }] };
+    let releaseRead!: (value: typeof latest) => void;
+    const recovered = new Promise<typeof latest>((resolve) => { releaseRead = resolve; });
+    if (deepLink) getDraftMock.mockReturnValue(recovered);
+    else listDraftsMock.mockImplementation(() => recovered.then((row) => ({ drafts: [row], next_cursor: null })));
+    validationMock.mockResolvedValue({ ...previousValidation, version_id: "version-2", revision: 2,
+      blocker_count: 1, can_approve: false, can_file: false, findings: [{
+        code: "citation.none_verified", severity: "blocker",
+        message: "At least one current verified authority is required before approval or filing.", references: [],
+      }] });
+    transitionMock.mockRejectedValue(new ApiError(422, "Cannot approve a draft with zero verified citations.",
+      null, "verified_citations_required"));
+    fireEvent.change(screen.getByLabelText("Review notes"), { target: { value: "Retain my review note." } });
+    fireEvent.click(approve);
+
+    await waitFor(() => expect(deepLink ? getDraftMock : listDraftsMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("button", { name: "Request changes", exact: true })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Approve", exact: true }));
+    expect(transitionMock).toHaveBeenCalledOnce();
+    releaseRead(latest);
+    expect(await screen.findByText("Revision 2")).toBeVisible();
+    expect(screen.getByText("0 verified citations")).toBeVisible();
+    await waitFor(() => expect(screen.getByTestId("ip-draft-validation")).toHaveTextContent("1 blockers"));
+    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+    expect(screen.getByLabelText("Pleading body")).toHaveValue(latest.versions[1].body);
+    expect(screen.getByRole("combobox", { name: "Pleading draft", exact: true })).toHaveValue(reviewed.id);
+    expect(screen.getByLabelText("Review notes")).toHaveValue("Retain my review note.");
+    expect(transitionMock).toHaveBeenCalledOnce();
+    expect(transitionMock).toHaveBeenCalledWith(expect.objectContaining({ action: "approve", draftId: reviewed.id }), expect.any(Object));
+    expect(listDraftsMock).toHaveBeenCalledTimes(2);
+    expect(getDraftMock).toHaveBeenCalledTimes(deepLink ? 2 : 0);
+    if (deepLink) {
+      expect(queryClient.getQueryData(["ip", "pleading-drafts", "docket-1", "proceeding-1", "detail", reviewed.id])).toEqual(latest);
+    } else {
+      expect(queryClient.getQueryData(["ip", "pleading-drafts", "docket-1", "proceeding-1"])).toEqual({ drafts: [latest], next_cursor: null });
+    }
+    expect(toast.error).toHaveBeenCalledWith("Cannot approve a draft with zero verified citations.");
+  });
+
+  it.each([false, true])("keeps approval unavailable after a failed recovery read (deep link: %s)", async (deepLink) => {
+    const { reviewed } = renderReviewWorkspace(deepLink);
+    await screen.findByText("Current identifiers, sources, citations, exhibits, and placeholders passed.");
+    await waitFor(() => expect(listDraftsMock).toHaveBeenCalledOnce());
+    const approve = screen.getByRole("button", { name: "Approve", exact: true });
+    expect(approve).toBeEnabled();
+    const readError = new Error("Synthetic recovery read is unavailable.");
+    if (deepLink) getDraftMock.mockRejectedValue(readError);
+    else listDraftsMock.mockRejectedValue(readError);
+    transitionMock.mockRejectedValue(new ApiError(422, "Cannot approve a draft with zero verified citations.",
+      null, "verified_citations_required"));
+    fireEvent.click(approve);
+
+    await screen.findByText(deepLink ? "Could not load the linked pleading draft" : "Could not load pleading drafts");
+    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+    expect(transitionMock).toHaveBeenCalledOnce();
+    if (deepLink) getDraftMock.mockResolvedValue({ ...reviewed, status: "finalized", review_required: false });
+    else listDraftsMock.mockResolvedValue({ drafts: [{ ...reviewed, status: "finalized", review_required: false }], next_cursor: null });
+    fireEvent.click(screen.getByRole("button", { name: "Try again", exact: true }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Approve", exact: true })).not.toBeInTheDocument());
+    expect(transitionMock).toHaveBeenCalledOnce();
+    expect(toast.error).toHaveBeenCalledWith("Cannot approve a draft with zero verified citations.");
+  });
+
+  it.each(["missing", "loading", "error", "mismatched", "blocked"])("requires current successful validation before approval: %s", async (state) => {
+    const { queryClient } = renderReviewWorkspace(false);
+    await screen.findByText("Current identifiers, sources, citations, exhibits, and placeholders passed.");
+    const previousValidation = await validationMock.mock.results[0].value;
+    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeEnabled();
+    if (state === "missing") validationMock.mockResolvedValue(null);
+    else if (state === "loading") validationMock.mockReturnValue(new Promise(() => {}));
+    else if (state === "error") validationMock.mockRejectedValue(new Error("Synthetic validation read failed."));
+    else validationMock.mockResolvedValue({ ...previousValidation,
+      version_id: state === "mismatched" ? "unseen-version" : "version-1",
+      can_approve: state !== "blocked",
+    });
+    const refresh = queryClient.invalidateQueries({ queryKey: ["ip", "pleading-validation"] });
+    if (state === "loading") {
+      await waitFor(() => expect(queryClient.isFetching({ queryKey: ["ip", "pleading-validation"] })).toBe(1));
+    } else await refresh;
+    await waitFor(() => expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Approve", exact: true }));
+    expect(transitionMock).not.toHaveBeenCalled();
   });
 
   it("compares revisions, exports a filing bundle, and records filing", async () => {

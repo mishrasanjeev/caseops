@@ -32,6 +32,13 @@
   Scope the test clock to report decoding, preserve real authentication time,
   and prove before/at/after expiry plus signature, audience and required claims.
   Never extend production TTL or disable verification to repair this fixture.
+  A temporary JWT-module clock patch is process-global, not thread-local:
+  serial report-call evidence does not authorize reuse with concurrent
+  unrelated authentication decoding without separate isolation proof.
+- An IP pleading's approval control needs a successful, idle validation for
+  that exact current version, not merely the absence of a negative response.
+  Loading, missing, failed or mismatched validation and failed recovery reads
+  remain unavailable. Regress both list-backed and deep-linked stale tabs.
 
 - An ORM migration must update both the reviewed data-class map and its
   compiled governance projection before release tests. Render and validate

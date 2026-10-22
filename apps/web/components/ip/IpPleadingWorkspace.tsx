@@ -205,7 +205,10 @@ export function IpPleadingWorkspace({
       setReviewNotes("");
       await refresh();
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not update review state.")),
+    onError: async (error) => {
+      toast.error(apiErrorMessage(error, "Could not update review state."));
+      await refresh();
+    },
   });
   const download = useMutation({
     mutationFn: downloadIpPleadingDraft,
@@ -228,6 +231,10 @@ export function IpPleadingWorkspace({
     onError: (error) => toast.error(apiErrorMessage(error, "Could not record the lifecycle event.")),
   });
   const busy = create.isPending || generate.isPending || save.isPending || transition.isPending || lifecycle.isPending;
+  const selectedFromList = drafts.data?.drafts.some((row) => row.id === selectedId);
+  const selectedReadFailed = selectedFromList ? drafts.isError : requestedDraft.isError;
+  const approvalValidated = !selectedReadFailed && validation.isSuccess && validation.fetchStatus === "idle"
+    && validation.data?.version_id === currentVersion?.id && validation.data?.can_approve === true;
   const sourceRows = currentVersion?.source_manifest ?? [];
   const immutableStatus = selected ? ["finalized", "filed", "served"].includes(selected.status) : false;
   const workspacePending = !selected && (
@@ -249,7 +256,7 @@ export function IpPleadingWorkspace({
 
       {templates.isError ? <QueryErrorState error={templates.error} title="Could not load pleading templates" onRetry={() => templates.refetch()} /> : null}
       {drafts.isError ? <QueryErrorState error={drafts.error} title="Could not load pleading drafts" onRetry={() => drafts.refetch()} /> : null}
-      {requestedDraft.isError && !draftRows.some((row) => row.id === initialDraftId) && drafts.isFetched ? (
+      {requestedDraft.isError && !drafts.data?.drafts.some((row) => row.id === initialDraftId) && drafts.isFetched ? (
         <QueryErrorState error={requestedDraft.error} title="Could not load the linked pleading draft" onRetry={() => requestedDraft.refetch()} />
       ) : null}
       {workspacePending ? (
@@ -354,7 +361,7 @@ export function IpPleadingWorkspace({
               <div className="flex flex-wrap gap-2">
                 {(selected.status === "draft" || selected.status === "changes_requested") ? <Button size="sm" type="button" variant="outline" disabled={!canEdit || busy} onClick={() => transition.mutate({ docketId, proceedingId, draftId: selected.id, action: "submit", notes: reviewNotes })}><Send className="h-4 w-4" /> Submit</Button> : null}
                 {selected.status === "in_review" ? <Button size="sm" type="button" variant="outline" disabled={!canReview || busy} onClick={() => transition.mutate({ docketId, proceedingId, draftId: selected.id, action: "request-changes", notes: reviewNotes })}><RotateCcw className="h-4 w-4" /> Request changes</Button> : null}
-                {selected.status === "in_review" ? <Button size="sm" type="button" disabled={!canReview || currentVersion.verified_citation_count < 1 || validation.data?.can_approve === false || busy} onClick={() => transition.mutate({ docketId, proceedingId, draftId: selected.id, action: "approve", notes: reviewNotes })}><CheckCircle2 className="h-4 w-4" /> Approve</Button> : null}
+                {selected.status === "in_review" ? <Button size="sm" type="button" disabled={!canReview || currentVersion.verified_citation_count < 1 || !approvalValidated || busy} onClick={() => transition.mutate({ docketId, proceedingId, draftId: selected.id, action: "approve", notes: reviewNotes })}><CheckCircle2 className="h-4 w-4" /> Approve</Button> : null}
                 {selected.status === "approved" ? <Button size="sm" type="button" disabled={!canFinalize || busy} onClick={() => transition.mutate({ docketId, proceedingId, draftId: selected.id, action: "finalize", notes: reviewNotes })}><LockKeyhole className="h-4 w-4" /> Finalize</Button> : null}
               </div>
               {["finalized", "filed"].includes(selected.status) ? (

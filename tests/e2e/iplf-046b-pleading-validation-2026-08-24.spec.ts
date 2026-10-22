@@ -3,19 +3,25 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
-import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { localTransportHeaders } from "./support/cost-controls";
+import { requireFixtureDatabaseUrl } from "./support/fixture-database";
+import { assertPublicReleaseIdentity } from "./support/public-release-identity";
 
 const PASSWORD = "PleadingValidation2026!";
 
+test.use({ extraHTTPHeaders: localTransportHeaders(apiBaseUrl) });
+
 function runPython(lines: string[], environment: Record<string, string>): void {
-  const python = process.platform === "win32"
+  const python = process.env.CASEOPS_E2E_PYTHON?.trim() || (process.platform === "win32"
     ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
-    : path.join(repoRoot, "apps", "api", ".venv", "bin", "python");
+    : path.join(repoRoot, "apps", "api", ".venv", "bin", "python"));
   const result = spawnSync(python, ["-c", lines.join("; ")], {
     cwd: repoRoot,
     encoding: "utf8",
+    timeout: 30_000,
     env: {
       ...process.env,
       ...e2eEnv,
@@ -130,10 +136,22 @@ async function clickTransition(page: Page, name: string): Promise<void> {
   expect((await response).status()).toBe(200);
 }
 
-test("IPLF-046B validates, corrects, files, rejects, refiles, and serves", async ({ page }) => {
+test("IPLF-046B validates, corrects, files, rejects, refiles, and serves", async ({ page, baseURL, request: api }) => {
   test.setTimeout(360_000);
   page.setDefaultTimeout(20_000);
-  const api = await request.newContext();
+  if (!baseURL) throw new Error("Use the configured local app or Docker origin.");
+  const web = new URL(baseURL), apiOrigin = new URL(apiBaseUrl);
+  if ([web, apiOrigin].some(url => url.protocol !== "http:" || url.username || url.password
+    || url.search || url.hash || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))) {
+    throw new Error("Synthetic pleading fixtures are strictly loopback-only, never production.");
+  }
+  requireFixtureDatabaseUrl(e2eEnv.CASEOPS_DATABASE_URL,
+    `sqlite+pysqlite:///${path.join(repoRoot, "caseops-e2e.db").replace(/\\/g, "/")}`);
+  const release = () => assertPublicReleaseIdentity([
+    `${apiOrigin.origin}/api/build`, `${web.origin}/api/release-identity`,
+  ], e2eEnv.CASEOPS_RELEASE_SHA);
+  await release();
+  await page.setExtraHTTPHeaders(localTransportHeaders(web.origin));
   const tenant = await bootstrap(api);
   const headers = await enableWorkspace(api, tenant);
   const title = `IPLF 046 MARK ${Date.now()}`;
@@ -228,6 +246,51 @@ test("IPLF-046B validates, corrects, files, rejects, refiles, and serves", async
   await expect(workspace.getByTestId("ip-draft-comparison")).toBeVisible();
 
   await clickTransition(page, "Submit");
+  await expect(workspace.getByRole("button", { name: "Approve", exact: true })).toBeEnabled();
+  await expect(workspace.getByText("Revision 3", { exact: true })).toBeVisible();
+  const draftUrl = `${base}/drafts/${draft.id}`;
+  const zeroBody = "SYNTHETIC-QA independent-tab pleading edit without any authority.";
+  const externalEdit = await api.patch(draftUrl, {
+    headers, data: { body: zeroBody }, maxRetries: 0, maxRedirects: 0,
+  });
+  expect(externalEdit.status()).toBe(200);
+  const external = await externalEdit.json();
+  const zeroVersion = external.versions.find((row: { id: string }) => row.id === external.current_version_id);
+  expect(zeroVersion.revision).toBe(4);
+  expect(zeroVersion.verified_citation_count).toBe(0);
+  const externalSubmit = await api.post(`${draftUrl}/submit`, {
+    headers, data: {}, maxRetries: 0, maxRedirects: 0,
+  });
+  expect(externalSubmit.status()).toBe(200);
+  await expect(workspace.getByText("Revision 3", { exact: true })).toBeVisible();
+  let browserApprovals = 0;
+  page.on("request", pending => {
+    if (pending.method() === "POST" && pending.url() === `${draftUrl}/approve`) browserApprovals++;
+  });
+  const rejection = page.waitForResponse(response => response.url() === `${draftUrl}/approve`
+    && response.request().method() === "POST");
+  await workspace.getByRole("button", { name: "Approve", exact: true }).click();
+  const denied = await rejection;
+  expect(denied.status()).toBe(422);
+  expect(await denied.finished()).toBeNull();
+  expect((await denied.json()).type).toBe("verified_citations_required");
+  await expect(workspace.getByText("Revision 4", { exact: true })).toBeVisible();
+  await expect(body).toHaveValue(zeroBody);
+  await expect(workspace.getByText("0 verified citations", { exact: true })).toBeVisible();
+  await expect(workspace.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+  expect(browserApprovals).toBe(1);
+  const retainedResponse = await api.get(draftUrl, { headers, maxRetries: 0, maxRedirects: 0 });
+  expect(retainedResponse.status()).toBe(200);
+  const retained = await retainedResponse.json();
+  expect(retained.current_version_id).toBe(external.current_version_id);
+  expect(retained.status).toBe("in_review");
+  expect(retained.reviews.some((row: { action: string }) => row.action === "approve")).toBe(false);
+
+  await workspace.getByLabel("Generation focus").fill(title);
+  await workspace.getByRole("button", { name: "Generate revision", exact: true }).click();
+  await expect(workspace.getByText("Revision 5", { exact: true })).toBeVisible();
+  await expect(workspace.getByTestId("ip-draft-validation")).toContainText("0 blockers");
+  await clickTransition(page, "Submit");
   await clickTransition(page, "Approve");
   await clickTransition(page, "Finalize");
   const download = page.waitForEvent("download");
@@ -250,8 +313,9 @@ test("IPLF-046B validates, corrects, files, rejects, refiles, and serves", async
   await clickTransition(page, "Mark served");
   await expect(workspace.getByText("served", { exact: true })).toBeVisible();
   await workspace.getByText("Review and filing history", { exact: true }).click();
-  await expect(workspace.getByText("file on revision 3", { exact: false })).toBeVisible();
-  await expect(workspace.getByText("file on revision 4", { exact: false })).toBeVisible();
+  await expect(workspace.getByText("file on revision 5", { exact: false })).toBeVisible();
+  await expect(workspace.getByText("file on revision 6", { exact: false })).toBeVisible();
+  expect(browserApprovals).toBe(3);
+  await release();
 
-  await api.dispose();
 });

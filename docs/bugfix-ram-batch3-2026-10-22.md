@@ -49,14 +49,32 @@ on its frozen source while the independent batch is implemented.
 
 ## Current Verdict
 
+The adjacent IP pleading workflow had the same rejected-stale-tab recovery gap,
+and its approval control treated missing validation as sufficient. The page now
+awaits list/deep-link refresh after rejection and requires successful, idle,
+positive validation bound to the exact current version. Failed reads remain
+unavailable. Component RED8F/5P became13P; the existing IPLF-046B browser journey
+now binds the actual422, a single rejected approval, refreshed zero-citation
+revision4 and local mock recovery before later filing/serving. It remains one
+desktop-collected journey, not a separate mobile or production acceptance.
+
+The clock correction's complete SQLite module passed58 cases. Its PostgreSQL
+sibling58 plus full client module47 passed105 cases/315phases/0skips with exact
+collection/JUnit joins and stable API source. These are component results, not
+the next candidate's full3376-node PostgreSQL gate. The earlier full Docker01
+was intentionally interrupted as superseded and cannot certify the replacement.
+
 The next hosted e01 run exposed a fixed-fixture/real-JWT clock mismatch in all
 four named-report pagination kinds. Cursor expiry at13:34:56UTC was correctly
 enforced; this is not a reason to extend production TTL or disable verification.
 All four call failures have complete passing setup/teardown envelopes. A local
 four-case RED reproduced them. The test-owned decode clock is now scoped to
 report cursors only, with seven new expiry/signature/audience/required-claim
-cases imported into the PostgreSQL sibling. Actual authentication keeps real
-time. The two CodeQL redundant-json-import notes were removed at source, not
+cases imported into the PostgreSQL sibling. No production authentication clock
+was changed. The selected fixture calls are serial; its temporary JWT-module
+clock patch is process-global and must not be extended to concurrent unrelated
+authentication without separate isolation proof. The two CodeQL
+redundant-json-import notes were removed at source, not
 dismissed. Replacement full CI/Docker admission is still pending.
 
 Adjacent stale-tab approval was separately reproduced after the initial Docker
