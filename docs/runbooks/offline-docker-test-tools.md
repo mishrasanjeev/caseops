@@ -47,7 +47,8 @@ must separately prove its source archive, selected identities and named JUnit.
 The tools image configures them. A partial configuration, missing/non-executable
 file, oversized file or incorrect hash fails before starting the SDK server.
 Without either variable, ordinary connected developer tests retain the SDK's
-existing download/cache behavior. The real workflow must pass with the explicit
+existing download/cache behavior; CI fails before download when explicit
+provisioning is absent. The real workflow must pass with the explicit
 binary inside the network-disabled container before accepting the offline setup.
 
 The tools Dockerfile is test-only. It is not used to build or deploy the API,
@@ -91,6 +92,9 @@ in the complete durable-workflow and shard-planner modules,177 phases, no skips,
 plus12 acquisition unit cases. It used the reviewed archive, locked SDK1.27.2
 and a separate executable outside `/tmp`. This is dependency/component proof,
 not a substitute for new-head hosted CI or whole-release Docker acceptance.
+The follow-up replay with `CI=true`, including three missing-provisioning
+regressions, passed62 collected cases/186phases and the same12 acquisition
+cases, zero skips. Both original reports remain retained separately.
 
 ## Replaying A Retained Browser Stack
 

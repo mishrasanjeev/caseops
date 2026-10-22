@@ -11,6 +11,10 @@ proof is59P/177phases/0skips plus12 acquisition cases. Hosted new-head CI and th
 combined exact-candidate Docker/release gates remain pending; no production GO
 or owner acceptance follows from this component result. See the offline-tools
 runbook for bounds, provenance and replacement instructions.
+Follow-up CI-marker fencing refuses absent explicit provisioning before any
+implicit SDK acquisition; ordinary developer behavior remains unchanged.
+Complete replacement offline proof is62P/186phases/0skips plus12 acquisition
+cases with `CI=true`. Hosted new-head and full release gates remain pending.
 
 ## October 22 Docker Filesystem Admission
 
