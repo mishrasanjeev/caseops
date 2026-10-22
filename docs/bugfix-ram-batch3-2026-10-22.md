@@ -10,6 +10,19 @@ trusted-checkout and Batch3 fixture modules now pass324 cases/972 phases,
 zero skips, with natural completion and324 JUnit cases. Preserve the original
 CI failure and the superseded full Docker03 partial results, not a green claim.
 Fresh committed-candidate Docker, CI and deployed acceptance remain required.
+The adjacent audit also exposed generic native evidence accepting legitimate
+skips for the new mandatory positive roles. Separate exact project/file/title
+contracts now require one actual passed zero-retry attempt in both production
+capture and independent final validation. Full-envelope RED60F/11P becomes
+complete GREEN259P, including71 new cases and33 nested native Node cases.
+The old172-case tester union and other roles' legitimate skips are unchanged.
+Historical provider UAT explicitly selects its legacy QA project rather than
+implicitly inheriting new exact-release projects. Its missing-scope RED is
+retained. Independent real Playwright collection now proves the original172
+and the separate exact three Batch3 cases (five unit assertions); each bounded
+collection keeps the original eight-second limit. The first six-project
+combined collection exceeded that bound; split the actual work rather than
+raising it. Normal web compilation07 passes. Full final-source gates remain.
 The exact prior full frontend run06 passed1874 cases across241 files with
 stable whole inputs; its retained duplicate-title multiplicities are not
 independent source-case IDs. Neither component result is production evidence.
@@ -35,6 +48,28 @@ the summary or repository.
   prefilled contact/address editor and preserve client identity, KYC evidence,
   matter associations, audit and capability/tenant fences. Changing only the
   creation-form promise is not a fix.
+
+## Reopen Analysis And Our Verification Failures
+
+The first local happy path did not cover a positive draft becoming ineligible
+in another tab. The server stayed safe while the browser displayed stale
+approval eligibility. That was insufficient coverage, not a reason to weaken
+the safety rejection. Reproduce rejected mutation, fresh-read recovery and
+subsequent success on both Matter drafting and the adjacent IP pleading path.
+
+We also ran a workflow subset before the complete independent evidence module,
+so an obsolete role inventory was discovered late in hosted CI. Runtime Vitest
+did not catch unsupported component-test locator options that normal web
+TypeScript rejects. These preventable gate-order mistakes caused repeated
+full-run replacements. Complete affected contract modules, actual project
+collection and normal web compilation must precede the long frozen gate.
+
+Finally, receipt presence alone cannot certify a mandatory positive journey.
+Require its exact case and one actual passed attempt, not a skip or expected
+failure, without changing legitimate historical skips. Preserve every failed
+or interrupted run and never promote an older component pass to current
+production acceptance. No persisted automatic Matter reopening is established
+by this report; contact editing must not change lifecycle or verified KYC.
 
 ## Product Mapping
 

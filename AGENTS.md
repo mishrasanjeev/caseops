@@ -3260,3 +3260,8 @@ requirements when using the fallback.
   before freezing a long release candidate. Preserve explicit role ordering,
   native evidence and missing-role rejection; never derive the expected list
   from the same workflow under test or omit a new role to make CI pass.
+- Required positive browser receipts must bind the independently reviewed exact
+  project, file and title plus one actual passed zero-retry attempt. Generic
+  native reconciliation may legitimately accept historical skips; that cannot
+  certify a new mandatory journey. Keep historical caller project scopes
+  explicit and independently collect each new role before release freeze.

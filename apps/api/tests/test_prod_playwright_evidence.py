@@ -177,10 +177,11 @@ def capture(tmp_path, monkeypatch):
     def launch(command, **kwargs):
         state.calls.append((command, kwargs))
         listing = "--list" in command
+        invocation = kwargs["env"]["CASEOPS_PW_EVIDENCE_INVOCATION"]
         doc = copy.deepcopy(state.discovery if listing else state.runtime)
         doc.update(
             release_sha=BASE,
-            invocation="offline",
+            invocation=invocation,
             phase="discovery" if listing else "execution",
             status=doc.get("status", "passed"),
         )
@@ -270,11 +271,11 @@ def capture(tmp_path, monkeypatch):
 
             strip_attempts(collection)
             packets = [
-                {"event": "invocation_started", "release_sha": BASE, "invocation": "offline"},
+                {"event": "invocation_started", "release_sha": BASE, "invocation": invocation},
                 {
                     "event": "collection",
                     "release_sha": BASE,
-                    "invocation": "offline",
+                    "invocation": invocation,
                     "suites": collection,
                 }
             ]
@@ -339,6 +340,182 @@ def test_complete_native_evidence_binds_release_config_and_full_utf8_inventory(c
         "completion.json",
         "exit.json",
     }
+
+
+BATCH3_EXPECTED_CASES = {
+    "batch3-clients-desktop": (
+        "batch3-clients-prod-chromium", "ram-2026-10-22-bugs.spec.ts",
+        "B3-CLIENT-01/02/03 contact edits preserve retained verified KYC and matter links",
+    ),
+    "batch3-clients-mobile": (
+        "batch3-clients-prod-mobile", "ram-2026-10-22-bugs.spec.ts",
+        "[mobile] B3-CLIENT-06 verified-client contact editing persists at 393px",
+    ),
+    "batch3-drafts-readonly": (
+        "batch3-drafts-readonly-prod-chromium", "ram-2026-10-22-drafting.prod.spec.ts",
+        "B3-DRAFT-PROD read-only retained finalized and mutable Appeal controls persist after "
+        "reload",
+    ),
+}
+
+
+def _batch3_capture(state, invocation):
+    project, file, title = BATCH3_EXPECTED_CASES[invocation]
+    config = state.root / "playwright.prod-ram.config.ts"
+    config.write_text("// synthetic offline Batch3 evidence contract\n", encoding="utf-8")
+    (state.root / file).touch()
+    state.args[:2] = [f"--config={config.name}", f"--project={project}"]
+    state.path = state.root / evidence.EVIDENCE / invocation
+    for document in (state.discovery, state.runtime):
+        document["config"]["configFile"] = str(config)
+        document["config"]["projects"][0].update(id=project, name=project)
+        suite = document["suites"][0]
+        suite["title"] = file
+        suite["specs"][0].update(file=file, title=title)
+        suite["specs"][0]["tests"][0].update(projectId=project, projectName=project)
+    state.run = lambda: evidence.run(
+        state.root, invocation, state.args, env=state.env, launch=state.launch,
+    )
+    return state
+
+
+def _damage_batch3_capture(state, damage):
+    if damage in {"skipped", "expected_failure"}:
+        test = state.runtime["suites"][0]["specs"][0]["tests"][0]
+        status = "skipped" if damage == "skipped" else "failed"
+        test.update(expectedStatus=status, status="skipped" if status == "skipped" else "expected")
+        test["results"][0]["status"] = status
+        state.runtime["stats"].update(
+            expected=int(status != "skipped"), skipped=int(status == "skipped"),
+        )
+        return
+    if damage == "wrong_config":
+        state.args[0] = "--config=playwright.offline.config.ts"
+    elif damage == "wrong_project":
+        state.args[1] = "--project=unreviewed-project"
+    elif damage == "parallel_workers":
+        state.args[2] = "--workers=2"
+    elif damage == "missing_retry_flag":
+        state.args.remove("--retries=0")
+    for document in (state.discovery, state.runtime):
+        suite = document["suites"][0]
+        spec = suite["specs"][0]
+        if damage == "missing":
+            document["suites"] = []
+            document["stats"].update(expected=0, skipped=0)
+        elif damage == "duplicate":
+            extra = copy.deepcopy(spec)
+            extra["id"] += "-duplicate"
+            suite["specs"].append(extra)
+            document["stats"]["skipped" if document is state.discovery else "expected"] = 2
+            state.junit_count = 2
+        elif damage == "wrong_project":
+            document["config"]["projects"][0].update(
+                id="unreviewed-project", name="unreviewed-project",
+            )
+            spec["tests"][0].update(
+                projectId="unreviewed-project", projectName="unreviewed-project",
+            )
+        elif damage == "wrong_title":
+            spec["title"] += " substituted"
+        elif damage == "wrong_file":
+            suite["title"] = spec["file"] = "unreviewed.spec.ts"
+            (state.root / spec["file"]).touch(exist_ok=True)
+        elif damage == "substitution":
+            replacement = BATCH3_EXPECTED_CASES[
+                "batch3-clients-desktop" if "DRAFT" in spec["title"] else "batch3-drafts-readonly"
+            ]
+            suite["title"] = spec["file"] = replacement[1]
+            spec["title"] = replacement[2]
+            (state.root / spec["file"]).touch(exist_ok=True)
+        elif damage == "wrong_config":
+            document["config"]["configFile"] = str(state.root / "playwright.offline.config.ts")
+        elif damage == "parallel_workers":
+            document["config"]["workers"] = 2
+
+
+@pytest.mark.parametrize("invocation", BATCH3_EXPECTED_CASES)
+def test_batch3_full_envelope_requires_one_actual_pass_for_each_owned_case(capture, invocation):
+    state = _batch3_capture(capture, invocation)
+    assert state.run() == 0
+    evidence.validate(state.root, [invocation], BASE)
+    completion = json.loads((state.path / "completion.json").read_text())
+    assert completion["completed"] is True and completion["test_count"] == 1
+    assert set(completion["sha256"]) == evidence.REPORT_FILES
+    assert len(state.calls) == 2
+    assert len(list(ET.parse(state.path / "results.xml").iter("testcase"))) == 1
+    assert not list(ET.parse(state.path / "results.xml").iter("skipped"))
+    result = json.loads((state.path / "results.json").read_text())["tests"][0]
+    project, file, title = BATCH3_EXPECTED_CASES[invocation]
+    assert (result["project_name"], result["file"], result["title_path"]) == (
+        project, file, [file, title],
+    )
+    assert result["expected_status"] == "passed" and result["status"] == "expected"
+    assert len(result["results"]) == 1
+    assert result["results"][0]["status"] == "passed" and result["results"][0]["retry"] == 0
+
+
+@pytest.mark.parametrize("invocation", BATCH3_EXPECTED_CASES)
+@pytest.mark.parametrize("damage", [
+    "expected_failure", "skipped", "missing", "duplicate", "wrong_project", "wrong_title",
+    "wrong_file", "substitution", "wrong_config", "parallel_workers", "missing_retry_flag",
+])
+@pytest.mark.parametrize("phase", ["run", "validate"])
+def test_batch3_full_envelope_rejects_nonpositive_or_substituted_evidence(
+    capture, monkeypatch, invocation, damage, phase,
+):
+    state = _batch3_capture(capture, invocation)
+    if damage == "missing":
+        reason = (
+            "empty_or_duplicate_inventory" if phase == "run" else "completion_inventory_mismatch"
+        )
+    elif damage in {"expected_failure", "skipped"}:
+        reason = "mandatory_batch3_case_not_passed"
+    elif damage in {"wrong_project", "wrong_config", "parallel_workers", "missing_retry_flag"}:
+        reason = "batch3_role_binding_mismatch"
+    else:
+        reason = "mandatory_batch3_case_inventory_mismatch"
+    if phase == "run":
+        _damage_batch3_capture(state, damage)
+        assert state.run() == 1
+        assert not (state.path / "completion.json").exists()
+        exit_marker = json.loads((state.path / "exit.json").read_text())
+        assert exit_marker["completed"] is False
+        assert exit_marker["incomplete_reason"] == reason
+        if damage not in {"expected_failure", "skipped"}:
+            assert all("--list" in command for command, _ in state.calls)
+        return
+
+    if damage != "missing":
+        _damage_batch3_capture(state, damage)
+    # Simulate an older producer accepting a malformed but internally consistent
+    # full envelope. Restore the real policy before independent final validation.
+    with monkeypatch.context() as producer:
+        producer.setattr(evidence, "_check_batch3_evidence", lambda *a, **kw: None, raising=False)
+        assert state.run() == 0
+    if damage == "missing":
+        for name in ("discovery.json", "results.json"):
+            document = json.loads((state.path / name).read_text())
+            document["tests"] = []
+            (state.path / name).write_text(json.dumps(document), encoding="utf-8")
+        completion = json.loads((state.path / "completion.json").read_text())
+        completion["test_count"] = 0
+        for name in ("discovery.json", "results.json"):
+            completion["sha256"][name] = evidence._hash(state.path / name)
+        (state.path / "completion.json").write_text(json.dumps(completion), encoding="utf-8")
+    assert (state.path / "completion.json").is_file()
+    with pytest.raises(evidence.EvidenceError, match=f"^{reason}$"):
+        evidence.validate(state.root, [invocation], BASE)
+
+
+@pytest.mark.parametrize("invocation", ["legacy", "batch3-clients-desktop-historical"])
+def test_batch3_policy_preserves_other_roles_legitimate_skipped_envelopes(capture, invocation):
+    _damage_batch3_capture(capture, "skipped")
+    capture.path = capture.root / evidence.EVIDENCE / invocation
+    assert evidence.run(
+        capture.root, invocation, capture.args, env=capture.env, launch=capture.launch,
+    ) == 0
+    evidence.validate(capture.root, [invocation], BASE)
 
 
 @pytest.mark.parametrize(

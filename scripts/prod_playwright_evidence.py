@@ -50,6 +50,22 @@ TESTER_PARTITIONS = {
 TESTER_PARTITION_COUNTS = {
     "tester": 98, "tester-catalog": 18, "tester-index": 6, "test-legal-write-oct13": 50,
 }
+# These mandatory positive journeys are separate from the reviewed tester union.
+BATCH3_MANDATORY_CASES = {
+    "batch3-clients-desktop": (
+        "batch3-clients-prod-chromium", "ram-2026-10-22-bugs.spec.ts",
+        "B3-CLIENT-01/02/03 contact edits preserve retained verified KYC and matter links",
+    ),
+    "batch3-clients-mobile": (
+        "batch3-clients-prod-mobile", "ram-2026-10-22-bugs.spec.ts",
+        "[mobile] B3-CLIENT-06 verified-client contact editing persists at 393px",
+    ),
+    "batch3-drafts-readonly": (
+        "batch3-drafts-readonly-prod-chromium", "ram-2026-10-22-drafting.prod.spec.ts",
+        "B3-DRAFT-PROD read-only retained finalized and mutable Appeal controls persist after "
+        "reload",
+    ),
+}
 TESTER_CATALOG_FILE = "ram-2026-09-05-bugs.spec.ts"
 TESTER_PARTITION_CONTRACT = 1
 TESTER_CANONICAL_FILES = {"canonical-native-discovery.json", "canonical-discovery.json"}
@@ -152,6 +168,44 @@ def _tester_case_identity(row):
         row["id"], _identity(row), tuple(row["tags"]),
         row["retries"], row["repeat_each_index"],
     )
+
+
+def _check_batch3_evidence(binding, document, *, execution=False):
+    expected = BATCH3_MANDATORY_CASES.get(binding["invocation"])
+    if expected is None:
+        return
+    project, file, title = expected
+    if (
+        binding["config"] != "playwright.prod-ram.config.ts"
+        or binding["project"] != project
+        or not {
+            "--config=playwright.prod-ram.config.ts", f"--project={project}",
+            "--workers=1", "--retries=0",
+        }.issubset(binding["arguments"])
+        or type(document["configuration"]["workers"]) is not int
+        or document["configuration"]["workers"] != 1
+    ):
+        raise EvidenceError("batch3_role_binding_mismatch")
+    rows = document["tests"]
+    if len(rows) != 1:
+        raise EvidenceError("mandatory_batch3_case_inventory_mismatch")
+    row = rows[0]
+    if (
+        row["project_id"] != project or row["project_name"] != project
+        or row["file"] != file or row["title_path"] != [file, title]
+        or type(row["retries"]) is not int or row["retries"] != 0
+        or type(row["repeat_each_index"]) is not int or row["repeat_each_index"] != 0
+    ):
+        raise EvidenceError("mandatory_batch3_case_inventory_mismatch")
+    if row["expected_status"] != "passed":
+        raise EvidenceError("mandatory_batch3_case_not_passed")
+    if execution and (
+        row["status"] != "expected" or len(row["results"]) != 1
+        or row["results"][0]["status"] != "passed"
+        or type(row["results"][0]["retry"]) is not int or row["results"][0]["retry"] != 0
+        or document["report_status"] != "passed" or document["global_error_count"] != 0
+    ):
+        raise EvidenceError("mandatory_batch3_case_not_passed")
 
 
 def _json(path: Path):
@@ -731,6 +785,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
             raise EvidenceError("discovery_executed_tests")
         discovery["binding"] = public_binding
         _write(destination / "discovery.json", discovery)
+        _check_batch3_evidence(binding, discovery)
         partition = _tester_partition(binding)
         if partition is not None:
             canonical_invocation = f"{invocation}-canonical"
@@ -798,6 +853,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         result["binding"] = public_binding
         _write(destination / "results.json", result)
         _reconcile(discovery, result)
+        _check_batch3_evidence(binding, result, execution=True)
         if (
             process.returncode < 0
             or result["report_status"] == "interrupted"
@@ -960,6 +1016,8 @@ def validate(root: Path, required, expected: str) -> None:
         ):
             raise EvidenceError("completion_inventory_mismatch")
         _reconcile(discovery, result)
+        _check_batch3_evidence(binding, discovery)
+        _check_batch3_evidence(binding, result, execution=True)
         _junit(directory / "native-results.xml", None, {}, result)
         _junit(directory / "results.xml", None, {}, result)
         _progress(

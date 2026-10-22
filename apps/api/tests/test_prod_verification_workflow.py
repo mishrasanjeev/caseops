@@ -123,6 +123,27 @@ def test_batch3_production_gate_owns_source_credentials_and_all_three_native_rol
     assert "launchOptions" not in mobile
 
 
+def test_historical_provider_uat_explicitly_selects_legacy_qa_project() -> None:
+    import shlex
+
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/release-verify.yml").read_text())
+    step = next(item for item in workflow["jobs"]["release-playwright"]["steps"]
+                if item.get("name") == "Run release-mode Playwright (CASEOPS_RELEASE_MODE=true)")
+    calls = [shlex.split(line.strip()) for line in step["run"].splitlines()
+             if line.strip().startswith("npx playwright test ")]
+    production = [call for call in calls if "--config=playwright.prod-ram.config.ts" in call]
+    assert len(production) == 1
+    assert [arg for arg in production[0] if arg.startswith("--project=")] == [
+        "--project=prod-chromium"
+    ]
+    assert any("--config=playwright.app.config.ts" in call for call in calls)
+    assert step["env"]["CASEOPS_RELEASE_MODE"] == "true"
+    assert "--grep-invert" in production[0]
+    assert "Ram 2026-08-16 PR #237 production-safe UX proof" in production[0]
+
+
 @pytest.mark.parametrize(
     ("name", "target", "old", "replacement"),
     [
