@@ -322,6 +322,40 @@ jobs:
           test -f tests/e2e/ram-2026-10-13-ip-portfolio.spec.ts
           bash "$RUNNER_TEMP/caseops-prod-playwright" test-legal-write-oct13 --config=playwright.prod-ram.config.ts --project=test-legal-write-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-write-oct13
 
+      - name: Run release-owned Batch3 client and retained drafting acceptance
+        if: matrix.suite == 'test-legal-write-oct13'
+        env:
+          CASEOPS_RAM_PROD_SLUG: test-legal
+          CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
+          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+          CASEOPS_RAM_BATCH3_QA_CLIENT_ID: ${{ vars.CASEOPS_RAM_BATCH3_QA_CLIENT_ID }}
+          CASEOPS_RAM_BATCH3_QA_MATTER_ID: ${{ vars.CASEOPS_RAM_BATCH3_QA_MATTER_ID }}
+          CASEOPS_RAM_BATCH3_QA_RETAINED_SHA256: ${{ vars.CASEOPS_RAM_BATCH3_QA_RETAINED_SHA256 }}
+          CASEOPS_RAM_BATCH3_FINALIZED_DRAFT_ID: ${{ vars.CASEOPS_RAM_BATCH3_FINALIZED_DRAFT_ID }}
+          CASEOPS_RAM_BATCH3_FINALIZED_MATTER_ID: ${{ vars.CASEOPS_RAM_BATCH3_FINALIZED_MATTER_ID }}
+          CASEOPS_RAM_BATCH3_MUTABLE_DRAFT_ID: ${{ vars.CASEOPS_RAM_BATCH3_MUTABLE_DRAFT_ID }}
+          CASEOPS_RAM_BATCH3_MUTABLE_MATTER_ID: ${{ vars.CASEOPS_RAM_BATCH3_MUTABLE_MATTER_ID }}
+        run: |
+          set -euo pipefail
+          if [ ! -f tests/e2e/ram-2026-10-22-drafting.prod.spec.ts ]; then
+            if ! git merge-base --is-ancestor HEAD 38b700facbbadc7e730aca09329a436a9008e3ac; then
+              echo "::error::Newer serving release is missing Batch3 acceptance."
+              exit 1
+            fi
+            echo "::notice::Serving source predates Batch3 acceptance; no new-feature certification."
+            exit 0
+          fi
+          test -f tests/e2e/ram-2026-10-22-bugs.spec.ts
+          for key in CASEOPS_RAM_PROD_PASSWORD CASEOPS_RAM_BATCH3_QA_CLIENT_ID CASEOPS_RAM_BATCH3_QA_MATTER_ID CASEOPS_RAM_BATCH3_QA_RETAINED_SHA256 CASEOPS_RAM_BATCH3_FINALIZED_DRAFT_ID CASEOPS_RAM_BATCH3_FINALIZED_MATTER_ID CASEOPS_RAM_BATCH3_MUTABLE_DRAFT_ID CASEOPS_RAM_BATCH3_MUTABLE_MATTER_ID; do
+            if [ -z "${!key}" ]; then printf '::error::Missing Batch3 fixture key: %s\n' "$key"; exit 1; fi
+          done
+          bash "$RUNNER_TEMP/caseops-prod-playwright" batch3-clients-desktop --config=playwright.prod-ram.config.ts --project=batch3-clients-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch3-clients-desktop
+          bash "$RUNNER_TEMP/caseops-prod-playwright" batch3-clients-mobile --config=playwright.prod-ram.config.ts --project=batch3-clients-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch3-clients-mobile
+          bash "$RUNNER_TEMP/caseops-prod-playwright" batch3-drafts-readonly --config=playwright.prod-ram.config.ts --project=batch3-drafts-readonly-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch3-drafts-readonly
+
       - name: Run legacy QA production regressions
         if: matrix.suite == 'legacy'
         env:
@@ -569,6 +603,9 @@ jobs:
               ;;
             *) exit 1 ;;
           esac
+          if [[ "$SUITE" == test-legal-write-oct13 && -f tests/e2e/ram-2026-10-22-drafting.prod.spec.ts ]]; then
+            required+=(batch3-clients-desktop batch3-clients-mobile batch3-drafts-readonly)
+          fi
           python scripts/prod_playwright_evidence.py validate --required "${required[@]}"
 
       - name: Upload native Playwright evidence

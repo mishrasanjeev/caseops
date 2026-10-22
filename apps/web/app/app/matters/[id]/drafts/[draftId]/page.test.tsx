@@ -208,6 +208,7 @@ describe("MatterDraftDetailPage", () => {
     expect(screen.getByRole("link", { name: "Matter context" })).toHaveAttribute(
       "href", "/app/matters/m-1",
     );
+    expect(screen.getByRole("link", { name: "Matter context" })).toHaveClass("min-h-9");
     await userEvent.click(approve);
     expect(approveDraftMock).not.toHaveBeenCalled();
   });

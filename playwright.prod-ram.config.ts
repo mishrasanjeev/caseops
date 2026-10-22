@@ -26,6 +26,8 @@ const SAVED_MANIFEST_PROD_SPEC = /iplf-066c-saved-manifest-later-events-2026-09-
 const OCT13_PORTFOLIO_CALENDAR_SPECS = /(?:ram-2026-10-13-(?:hearings|ip-portfolio)|ram-2026-10-15-ip-(?:controls|renewal-tracker)|ram-2026-10-17-ip-(?:tracker|reminders)|ram-2026-10-17-calendar-readiness)\.spec\.ts$/;
 const RETAINED_INDEX_PROD_SPECS = /ram-2026-10-(?:10|12)-prod\.spec\.ts$/;
 const PLATFORM_REPORT_ADMIN_PROD_SPECS = /platform-(?:report-admin|leads)-\d{4}-\d{2}-\d{2}\.prod\.spec\.ts$/;
+const BATCH3_CLIENT_SPEC = /ram-2026-10-22-bugs\.spec\.ts$/;
+const BATCH3_DRAFT_READONLY_SPEC = /ram-2026-10-22-drafting\.prod\.spec\.ts$/;
 
 const candidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -56,6 +58,8 @@ export default defineConfig({
     SAVED_MANIFEST_PROD_SPEC,
     OCT13_PORTFOLIO_CALENDAR_SPECS,
     PLATFORM_REPORT_ADMIN_PROD_SPECS,
+    BATCH3_CLIENT_SPEC,
+    BATCH3_DRAFT_READONLY_SPEC,
     /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/,
   ],
   timeout: 120_000,
@@ -114,6 +118,55 @@ export default defineConfig({
         launchOptions: browserExecutablePath
           ? { executablePath: browserExecutablePath }
           : undefined,
+      },
+    },
+    {
+      name: "batch3-drafts-readonly-prod-chromium",
+      testMatch: BATCH3_DRAFT_READONLY_SPEC,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "batch3-clients-prod-chromium",
+      testMatch: BATCH3_CLIENT_SPEC,
+      grep: /B3-CLIENT-01\/02\/03 contact edits preserve retained verified KYC and matter links$/,
+      grepInvert: /\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "batch3-clients-prod-mobile",
+      testMatch: BATCH3_CLIENT_SPEC,
+      grep: /\[mobile\] B3-CLIENT-06 verified-client contact editing persists at 393px$/,
+      grepInvert: /\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Pixel 5"],
+        viewport: { width: 393, height: 851 },
+        isMobile: true,
+        hasTouch: true,
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
       },
     },
     {

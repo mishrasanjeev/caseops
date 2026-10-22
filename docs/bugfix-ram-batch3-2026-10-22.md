@@ -55,6 +55,18 @@ including9 new PostgreSQL contact cases and9 SQLite siblings; source was stable,
 with no skipped cases. Evidence is retained in `outputs/bugs-3-20261022` under
 the primary workspace, not committed with confidential runtime artefacts.
 
+Full frontend coverage01 passed1864 cases with unchanged thresholds on the
+pre-browser candidate. Actual Docker preflight01 collected6 but did not execute
+them because its caller had not created the native reporter directory. Preserve
+it as incomplete infrastructure evidence. Replacement preflight02 executed all6:
+2passed (mobile contact persistence and independent permission/tenant/archive
+negatives),4failed. Desktop contact/fault tests incorrectly used the host's
+touchscreen capability to select Playwright tap; select the configured project
+hasTouch instead. Both drafting cases exposed the actual20px Matter-context
+link target; increase its visible target, keep the24px geometry assertion and
+replay the complete six-case inventory. These failures are not green acceptance
+and the earlier frontend proof does not cover the subsequent class change.
+
 Bounded read-only production metadata at API92f162b4 shows the screenshot Matter
 has a differently titled current draft with5 catalogue citations at revision2
 and0 at revision1. Two other retained Appeal Memoranda are accessible, one

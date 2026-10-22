@@ -24,7 +24,7 @@ const contact = (page: Page) => page.getByRole("heading", { name: "Contact", exa
 const contactValue = (page: Page, label: string) => contact(page).getByText(label, { exact: true }).locator("..").locator("dd");
 
 async function activate(page: Page, control: Locator): Promise<void> {
-  if (await page.evaluate(() => navigator.maxTouchPoints > 0)) await control.tap();
+  if (test.info().project.use.hasTouch === true) await control.tap();
   else await control.click();
 }
 

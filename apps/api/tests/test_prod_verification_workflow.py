@@ -82,6 +82,44 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
 
 
 
+def test_batch3_production_gate_owns_source_credentials_and_all_three_native_roles() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
+    name = "Run release-owned Batch3 client and retained drafting acceptance"
+    step = next(item for item in steps if item.get("name") == name)
+    assert step["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
+    assert "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD" in step["env"]["CASEOPS_RAM_PROD_PASSWORD"]
+    assert (
+        "needs.resolve-release.outputs.release_sha" in step["env"]["CASEOPS_EXPECTED_RELEASE_SHA"]
+    )
+    assert "if [ ! -f tests/e2e/ram-2026-10-22-drafting.prod.spec.ts ]" in step["run"]
+    ancestor = "git merge-base --is-ancestor HEAD 38b700facbbadc7e730aca09329a436a9008e3ac"
+    assert ancestor in step["run"]
+    roles = {
+        "batch3-clients-desktop": "batch3-clients-prod-chromium",
+        "batch3-clients-mobile": "batch3-clients-prod-mobile",
+        "batch3-drafts-readonly": "batch3-drafts-readonly-prod-chromium",
+    }
+    for role, project in roles.items():
+        assert f'" {role} --config=playwright.prod-ram.config.ts --project={project}' in step["run"]
+    assert step["run"].count("--workers=1 --retries=0 --reporter=list") == 3
+    reconcile = next(item for item in steps
+                     if item.get("name") == "Reconcile required native Playwright evidence")
+    required = "required+=(batch3-clients-desktop batch3-clients-mobile batch3-drafts-readonly)"
+    assert required in reconcile["run"]
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
+    for project in roles.values():
+        block = config.split(f'name: "{project}"', 1)[1].split("name:", 1)[0]
+        assert "retries: 0" in block and "dependencies: []" in block
+        assert "storageState: { cookies: [], origins: [] }" in block
+        assert 'trace: "off", screenshot: "off", video: "off"' in block
+    tester = config.split('name: "tester-prod-chromium"', 1)[1].split("name:", 1)[0]
+    assert "BATCH3_DRAFT_READONLY_SPEC" not in tester
+
+
 @pytest.mark.parametrize(
     ("name", "target", "old", "replacement"),
     [

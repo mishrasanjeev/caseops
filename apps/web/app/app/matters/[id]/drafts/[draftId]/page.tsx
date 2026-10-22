@@ -589,7 +589,7 @@ function DraftBody({
                 <div className="flex min-w-0 flex-col gap-2">
                   <Link
                     href={`/app/matters/${matterId}`}
-                    className="w-fit text-sm font-medium underline underline-offset-4"
+                    className="inline-flex min-h-9 w-fit items-center text-sm font-medium underline underline-offset-4"
                   >
                     Matter context
                   </Link>
