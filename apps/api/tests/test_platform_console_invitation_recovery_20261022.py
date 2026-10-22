@@ -143,7 +143,7 @@ def test_managed_version_does_not_change_legacy_responses(recovery_console):
     assert set(record) == keys
     legacy = data["client"].get(old.BASE + "/admins").json()
     assert all(set(row) == keys for row in legacy["items"])
-    current = data["client"].get(old.BASE + "/admins/manage")
+    current = data["client"].get("/api/platform-console/admins/manage")
     assert current.status_code == 200
     row = next(r for r in current.json()["items"] if r["id"] == record["id"])
     assert set(row) == keys | {"version", "removed_at", "can_manage"}
@@ -153,6 +153,23 @@ def test_managed_version_does_not_change_legacy_responses(recovery_console):
         json={"reason": "Old client lacks target version"}, headers=old._csrf(data["client"]))
     assert response.status_code == 409 and response.json()["code"] == "console_reload_required"
     assert _version(record["id"]) == row["version"]
+
+
+def test_managed_directory_rejects_anonymous_reads(recovery_console):
+    client = recovery_console["client"]
+    client.cookies.clear()
+    assert client.get("/api/platform-console/admins/manage").status_code == 401
+
+
+def test_managed_directory_rejects_verified_report_viewer(recovery_console):
+    data = recovery_console
+    old._invite(data)
+    client = data["client"]
+    client.cookies.clear()
+    old._accept(client, old._link(data["messages"]))
+    old._enroll(client)
+    assert client.get(old.BASE + "/reports/usage").status_code == 200
+    assert client.get("/api/platform-console/admins/manage").status_code == 403
 
 
 @pytest.mark.parametrize("action", ["remove", "revoke", "invitations/resend"])

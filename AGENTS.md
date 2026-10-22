@@ -3192,3 +3192,8 @@ requirements when using the fallback.
   reports. A JSON reporter may omit a suite-hook error while marking its cases
   pending; those cases remain unverified, not approved skips or passed tests.
   Preserve the incomplete run and require a complete replacement inventory.
+- New API-route acceptance must run the complete route-inventory, OpenAPI and
+  role-guard contracts locally before long Docker acceptance. Use the canonical
+  full path in real HTTP tests so the inventory can discover it; never replace
+  missing coverage with a comment-only anchor or a new route exemption. Prove
+  authorized access and the anonymous and insufficient-role denials separately.

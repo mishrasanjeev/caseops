@@ -79,6 +79,15 @@ flowchart TD
 
 ## Acceptance Inventory
 
+The first combined CI and an unchanged local replay both rejected the new
+management route because its real HTTP tests composed the path from a prefix,
+which the route inventory could not discover. Preserve that failed evidence.
+The replacement uses the canonical path in the existing positive contract and
+adds anonymous and MFA-verified viewer denial tests. The route-inventory,
+OpenAPI, role-guard and recovery modules must complete together before another
+full Docker run. This correction does not weaken the inventory gate or prove
+deployment, owner sign-in or email delivery.
+
 Retain an actual failing regression for pending -> revoke -> same-email invite.
 Prove new and established accounts, reused identity, immutable old audits,
 fresh invitation and obsolete-link rejection, repeated admission/replay,
