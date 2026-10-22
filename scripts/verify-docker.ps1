@@ -90,10 +90,13 @@ def probe(project, release, stage, compose):
         return child.stdout.strip()
     try:
         # This approved API base must already exist. Admission never pulls it.
-        image_info = json.loads(command('image', ['image', 'inspect', '--format',
-            '{"id":{{json .Id}},"volumes":{{json .Config.Volumes}}}', 'python:3.13-slim']))
-        image = image_info['id']
-        if not re.fullmatch(r'sha256:[0-9a-f]{64}', image) or image_info['volumes'] not in (None, {}):
+        images = json.loads(command('image', ['image', 'inspect', 'python:3.13-slim']))
+        if not isinstance(images, list) or len(images) != 1:
+            raise ValueError('invalid_image_identity')
+        image_info = images[0]
+        image = image_info['Id']
+        if (not re.fullmatch(r'sha256:[0-9a-f]{64}', image)
+                or image_info['Config'].get('Volumes') not in (None, {})):
             raise ValueError('invalid_image_identity')
         result['image_id'] = image
         paths, volumes = ['/'], []

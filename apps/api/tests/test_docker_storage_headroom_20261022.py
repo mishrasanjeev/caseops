@@ -45,8 +45,11 @@ class OfflineDocker:
         args = argv[1:]
         output, code = "", 0
         if args[:2] == ["image", "inspect"]:
-            assert args[-1] == "python:3.13-slim"
-            output = json.dumps(dict(id=IMAGE, volumes=None))
+            assert args == ["image", "inspect", "python:3.13-slim"]
+            config = {} if self.mode != "explicit-null-volumes" else {"Volumes": None}
+            if self.mode == "unexpected-image-volumes":
+                config = {"Volumes": {"/unexpected": {}}}
+            output = json.dumps([dict(Id=IMAGE, Config=config)])
             if self.mode == "missing-image":
                 code = 1
         elif args[0] == "ps" and "label=com.docker.compose.service=postgres" in args:
@@ -135,8 +138,9 @@ class OfflineDocker:
 
 
 @pytest.mark.parametrize("stage", ["pre-build", "post-build", "pre-postgres", "pre-browser"])
-def test_exact_threshold_accepts_and_reaps_only_owned_probe(probe_code, stage):
-    fake = OfflineDocker(stage=stage)
+@pytest.mark.parametrize("mode", ["healthy", "explicit-null-volumes"])
+def test_exact_threshold_accepts_and_reaps_only_owned_probe(probe_code, stage, mode):
+    fake = OfflineDocker(stage=stage, mode=mode)
     probe_code["subprocess"] = SimpleNamespace(
         run=fake.run, TimeoutExpired=subprocess.TimeoutExpired
     )
@@ -151,6 +155,7 @@ def test_exact_threshold_accepts_and_reaps_only_owned_probe(probe_code, stage):
     "mode,error,clean",
     [
         ("missing-image", "docker_command_failed", True),
+        ("unexpected-image-volumes", "invalid_image_identity", True),
         ("low-bytes", "insufficient_headroom", True),
         ("low-inodes", "insufficient_headroom", True),
         ("low-pg", "insufficient_headroom", True),

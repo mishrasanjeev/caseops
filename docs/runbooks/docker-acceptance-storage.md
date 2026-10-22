@@ -22,6 +22,11 @@ Compose project/service/container/mount ownership. The only measurement is
 Linux `os.statvfs`; Windows free space and aggregate `docker system df` are not
 capacity evidence.
 
+Image inspection reads Docker's structured JSON, not a Go template requiring
+the optional `Config.Volumes` key. An omitted or null volume declaration is
+valid; a declared unexpected volume still refuses admission. The real isolated
+probe must pass alongside offline controls before retrying a failed admission.
+
 Each `docker-storage-<stage>-<nonce>.json` receipt records exact source release,
 project, image, owned probe, byte/inode facts, bounded native command outcomes
 and cleanup. A host command timeout kills/reaps its own Docker CLI; cleanup
