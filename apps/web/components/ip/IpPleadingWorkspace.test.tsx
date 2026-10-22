@@ -300,7 +300,7 @@ describe("IpPleadingWorkspace", () => {
   it.each([false, true])("refreshes a rejected stale approval without replay (deep link: %s)", async (deepLink) => {
     const { queryClient, reviewed } = renderReviewWorkspace(deepLink);
     await screen.findByText("Current identifiers, sources, citations, exhibits, and placeholders passed.");
-    const approve = screen.getByRole("button", { name: "Approve", exact: true });
+    const approve = screen.getByRole("button", { name: /^Approve$/ });
     expect(approve).toBeEnabled();
     await waitFor(() => expect(listDraftsMock).toHaveBeenCalledOnce());
     const previousValidation = await validationMock.mock.results[0].value;
@@ -323,17 +323,17 @@ describe("IpPleadingWorkspace", () => {
     fireEvent.click(approve);
 
     await waitFor(() => expect(deepLink ? getDraftMock : listDraftsMock).toHaveBeenCalledTimes(2));
-    expect(screen.getByRole("button", { name: "Request changes", exact: true })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Approve", exact: true }));
+    expect(screen.getByRole("button", { name: /^Request changes$/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Approve$/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Approve$/ }));
     expect(transitionMock).toHaveBeenCalledOnce();
     releaseRead(latest);
     expect(await screen.findByText("Revision 2")).toBeVisible();
     expect(screen.getByText("0 verified citations")).toBeVisible();
     await waitFor(() => expect(screen.getByTestId("ip-draft-validation")).toHaveTextContent("1 blockers"));
-    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Approve$/ })).toBeDisabled();
     expect(screen.getByLabelText("Pleading body")).toHaveValue(latest.versions[1].body);
-    expect(screen.getByRole("combobox", { name: "Pleading draft", exact: true })).toHaveValue(reviewed.id);
+    expect(screen.getByRole("combobox", { name: /^Pleading draft$/ })).toHaveValue(reviewed.id);
     expect(screen.getByLabelText("Review notes")).toHaveValue("Retain my review note.");
     expect(transitionMock).toHaveBeenCalledOnce();
     expect(transitionMock).toHaveBeenCalledWith(expect.objectContaining({ action: "approve", draftId: reviewed.id }), expect.any(Object));
@@ -351,7 +351,7 @@ describe("IpPleadingWorkspace", () => {
     const { reviewed } = renderReviewWorkspace(deepLink);
     await screen.findByText("Current identifiers, sources, citations, exhibits, and placeholders passed.");
     await waitFor(() => expect(listDraftsMock).toHaveBeenCalledOnce());
-    const approve = screen.getByRole("button", { name: "Approve", exact: true });
+    const approve = screen.getByRole("button", { name: /^Approve$/ });
     expect(approve).toBeEnabled();
     const readError = new Error("Synthetic recovery read is unavailable.");
     if (deepLink) getDraftMock.mockRejectedValue(readError);
@@ -361,12 +361,12 @@ describe("IpPleadingWorkspace", () => {
     fireEvent.click(approve);
 
     await screen.findByText(deepLink ? "Could not load the linked pleading draft" : "Could not load pleading drafts");
-    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Approve$/ })).toBeDisabled();
     expect(transitionMock).toHaveBeenCalledOnce();
     if (deepLink) getDraftMock.mockResolvedValue({ ...reviewed, status: "finalized", review_required: false });
     else listDraftsMock.mockResolvedValue({ drafts: [{ ...reviewed, status: "finalized", review_required: false }], next_cursor: null });
-    fireEvent.click(screen.getByRole("button", { name: "Try again", exact: true }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Approve", exact: true })).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /^Try again$/ }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^Approve$/ })).not.toBeInTheDocument());
     expect(transitionMock).toHaveBeenCalledOnce();
     expect(toast.error).toHaveBeenCalledWith("Cannot approve a draft with zero verified citations.");
   });
@@ -375,7 +375,7 @@ describe("IpPleadingWorkspace", () => {
     const { queryClient } = renderReviewWorkspace(false);
     await screen.findByText("Current identifiers, sources, citations, exhibits, and placeholders passed.");
     const previousValidation = await validationMock.mock.results[0].value;
-    expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^Approve$/ })).toBeEnabled();
     if (state === "missing") validationMock.mockResolvedValue(null);
     else if (state === "loading") validationMock.mockReturnValue(new Promise(() => {}));
     else if (state === "error") validationMock.mockRejectedValue(new Error("Synthetic validation read failed."));
@@ -387,8 +387,8 @@ describe("IpPleadingWorkspace", () => {
     if (state === "loading") {
       await waitFor(() => expect(queryClient.isFetching({ queryKey: ["ip", "pleading-validation"] })).toBe(1));
     } else await refresh;
-    await waitFor(() => expect(screen.getByRole("button", { name: "Approve", exact: true })).toBeDisabled());
-    fireEvent.click(screen.getByRole("button", { name: "Approve", exact: true }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Approve$/ })).toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: /^Approve$/ }));
     expect(transitionMock).not.toHaveBeenCalled();
   });
 

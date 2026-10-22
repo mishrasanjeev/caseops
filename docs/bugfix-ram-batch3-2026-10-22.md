@@ -49,6 +49,14 @@ on its frozen source while the independent batch is implemented.
 
 ## Current Verdict
 
+Docker02 at9045 stopped during the web build, before native/browser execution:
+13 new component role locators used Playwright's unsupported exact option in
+Testing Library. Vitest accepted it at runtime but the web compiler correctly
+rejected it. Use anchored accessible-name matchers, retain all failed build
+errors, and require the normal web type-check before the replacement Docker
+gate. E2E TypeScript alone did not cover these component test inputs. Concurrent
+coverage05 will be source-unstable after this correction and cannot certify it.
+
 The adjacent IP pleading workflow had the same rejected-stale-tab recovery gap,
 and its approval control treated missing validation as sufficient. The page now
 awaits list/deep-link refresh after rejection and requires successful, idle,

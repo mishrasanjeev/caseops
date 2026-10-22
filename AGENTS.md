@@ -39,6 +39,10 @@
   that exact current version, not merely the absence of a negative response.
   Loading, missing, failed or mismatched validation and failed recovery reads
   remain unavailable. Regress both list-backed and deep-linked stale tabs.
+- Passing Vitest and E2E TypeScript do not type-check component tests. Compile
+  the web project before an expensive full Docker gate. Testing Library role
+  locators do not accept Playwright's exact option; use anchored name matchers
+  without weakening exact control identity.
 
 - An ORM migration must update both the reviewed data-class map and its
   compiled governance projection before release tests. Render and validate
