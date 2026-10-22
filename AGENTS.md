@@ -3205,3 +3205,9 @@ requirements when using the fallback.
   retry an ambiguous command or relax a cooldown to make the browser test pass.
   Scope feedback assertions to the actual main/form/region so framework route
   announcers cannot satisfy or collide with the product's message.
+- A real workflow test must not acquire its server implicitly during execution.
+  Determine the dependency from the collected file inventory, provision the
+  exact official version and archive/executable checksums before pytest, and
+  preserve a verified cache outside fixture storage. Prove cold preparation,
+  corrupt-cache rejection and the actual workflow with networking disabled;
+  a vendor download503 is not an application assertion or permission to skip it.

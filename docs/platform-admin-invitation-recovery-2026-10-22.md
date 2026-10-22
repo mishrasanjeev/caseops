@@ -79,6 +79,14 @@ flowchart TD
 
 ## Acceptance Inventory
 
+At24be, subsequent CI reached the actual notification runtime test but failed
+its implicit external test-server download with503. Security and CodeQL passed;
+that incomplete CI cannot admit a merge. The dependency-only correction pins
+and provisions a real official server before the selected shard. Its complete
+network-disabled Docker component replay passed59 cases/177phases, zero skips,
+plus12 acquisition regressions. This does not complete the combined release's
+new-head whole Docker, hosted CI, exact-serving or owner-positive acceptance.
+
 The first complete combined browser CI retained613 passed,17 explicitly skipped,
 two renderer failures and two real-journey timeouts. Both real Leads journeys
 passed separately. The renderer expected50 rows while the real bounded client

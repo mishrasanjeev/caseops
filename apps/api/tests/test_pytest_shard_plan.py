@@ -98,14 +98,17 @@ def test_write_shard_file_uses_test_root_relative_paths(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("required", [False, True])
+@pytest.mark.parametrize("temporal", [False, True])
 @pytest.mark.parametrize("newline", ["\n", "\r\n"])
 def test_offline_dependency_cli_uses_exact_inventory_without_rg_or_node(
-    tmp_path, required, newline,
+    tmp_path, required, temporal, newline,
 ):
     selected, output = tmp_path / "selected.txt", tmp_path / "github-output.txt"
     names = ["tests/test_ordinary.py"]
     if required:
         names.append("tests/test_prod_playwright_evidence.py")
+    if temporal:
+        names.append("tests/test_durable_workflows.py")
     selected.write_bytes((newline.join(names) + newline).encode())
     output.write_text("retained=true\n", encoding="utf-8")
     result = subprocess.run([sys.executable, str(SCRIPT_PATH), "--selected-files", str(selected),
@@ -113,7 +116,8 @@ def test_offline_dependency_cli_uses_exact_inventory_without_rg_or_node(
         env=dict(os.environ, PATH=""), check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     assert output.read_text(encoding="utf-8") == (
-        f"retained=true\nrequires_playwright={str(required).lower()}\n")
+        f"retained=true\nrequires_playwright={str(required).lower()}\n"
+        f"requires_temporal={str(temporal).lower()}\n")
     assert f"selected files: {len(names)}" in result.stdout
 
 
@@ -147,6 +151,28 @@ def test_ci_installs_offline_playwright_before_the_exact_selected_python_gate():
     assert install["run"] == "npm ci --ignore-scripts --no-audit --no-fund"
     assert (steps.index(selection) < steps.index(setup)
             < steps.index(install) < steps.index(execution))
+
+
+def test_ci_provisions_and_retains_verified_temporal_before_selected_workflow_tests():
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["api-test-shards"]["steps"]
+    restore = next(step for step in steps if step.get("id") == "temporal-cache")
+    prepare = next(step for step in steps if step.get("id") == "temporal-tools")
+    save = next(step for step in steps if step.get("id") == "temporal-cache-save")
+    execution = next(step for step in steps if step.get("id") == "pytest")
+    condition = "steps.shard-files.outputs.requires_temporal == 'true'"
+    assert restore["if"] == prepare["if"] == condition
+    assert save["if"] == condition + " && steps.temporal-cache.outputs.cache-hit != 'true'"
+    assert restore["uses"] == "actions/cache/restore@v4"
+    assert save["uses"] == "actions/cache/save@v4"
+    assert restore["with"] == save["with"]
+    manifest_key = "hashFiles('scripts/test-tools/temporal-test-server-linux-amd64.json')"
+    assert manifest_key in restore["with"]["key"]
+    assert 'python scripts/prepare_temporal_test_server.py' in prepare["run"]
+    assert '--github-env "$GITHUB_ENV"' in prepare["run"]
+    assert prepare["timeout-minutes"] == 5
+    assert (steps.index(restore) < steps.index(prepare)
+            < steps.index(save) < steps.index(execution))
 
 
 @pytest.mark.parametrize("mode", ["missing-output", "missing-inventory", "mixed-mode"])

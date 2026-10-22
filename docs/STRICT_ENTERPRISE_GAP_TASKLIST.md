@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 22 Real Workflow Test Dependency
+
+CI39759376390 / candidate24be failed only the notification runtime workflow's
+implicit default test-server download with503, before its application assertions.
+The candidate correction provisions the official pinned v1.40.0 fixture before
+the exact selected shard, verifies archive/executable integrity on cache hits
+too, and keeps the real workflow and no-paid isolation. Full offline component
+proof is59P/177phases/0skips plus12 acquisition cases. Hosted new-head CI and the
+combined exact-candidate Docker/release gates remain pending; no production GO
+or owner acceptance follows from this component result. See the offline-tools
+runbook for bounds, provenance and replacement instructions.
+
 ## October 22 Docker Filesystem Admission
 
 Confirmed release-infrastructure NO-GO: the Leads081e whole Docker gate passed

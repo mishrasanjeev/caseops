@@ -53,6 +53,45 @@ binary inside the network-disabled container before accepting the offline setup.
 The tools Dockerfile is test-only. It is not used to build or deploy the API,
 web or worker production images.
 
+## Hosted CI Provisioning
+
+October22 CI39759376390 failed the actual notification workflow because the SDK's
+implicit `temporal.download/.../default` acquisition returned503. Its workflow
+assertions had not run. Do not reclassify that as an application failure, skip
+the test, enable external provider traffic or merely hope the next download works.
+
+The CI shard planner now derives `requires_temporal` from its exact selected
+`tests/test_durable_workflows.py` inventory. Before pytest, restore the cache,
+run `scripts/prepare_temporal_test_server.py`, and save the verified fixture.
+The cache key includes the committed manifest hash. The executable lives in
+`$RUNNER_TEMP/caseops-test-tools/temporal`, not pytest's disposable fixture tree.
+Both explicit path/hash variables are exported through the normal GitHub
+environment file; a cache hit must still pass executable/hash verification.
+
+`scripts/test-tools/temporal-test-server-linux-amd64.json` pins the official
+[SDK Java v1.40.0 release](https://github.com/temporalio/sdk-java/releases/tag/v1.40.0)
+Linux amd64 test-server archive (27208794 bytes). Its official asset SHA256 is
+`524465a96274831e004326f6e2f2a5f3ef9aaed72c2069cf16c1d64b8b1ec3ca`;
+the extracted executable SHA256 is
+`19defb9f7318c7cf249518b3642a735efb79876c2b6918afe312336476b796a5`.
+The [Python SDK's existing-path option](https://python.temporal.io/temporalio.testing.WorkflowEnvironment.html)
+uses this real server without another download. These are integrity/repeatability
+pins, not an independent signature attestation. Neither binary is shipped in
+production images and the older offline-tools image's pin remains historical.
+
+Acquisition permits only HTTPS official release hosts, caps time/bytes/attempts,
+verifies the archive before installation, rejects ambiguous/unsafe tar members
+and retains failed attempts. A corrupt cache fails unchanged; no silent network
+replacement. Regression coverage includes exact workflow ordering, cold and warm
+preparation, corruption, bounded503 retries, permanent404, unsafe archives,
+executable architecture/permissions and append-only environment export.
+
+The initial network-disabled local Docker replay passed all59 collected cases
+in the complete durable-workflow and shard-planner modules,177 phases, no skips,
+plus12 acquisition unit cases. It used the reviewed archive, locked SDK1.27.2
+and a separate executable outside `/tmp`. This is dependency/component proof,
+not a substitute for new-head hosted CI or whole-release Docker acceptance.
+
 ## Replaying A Retained Browser Stack
 
 The canonical fresh verifier resets its owned project. A focused or full replay
