@@ -17,8 +17,11 @@ The already-local API base `python:3.13-slim` must be present. The probe never
 pulls an image: it resolves that image to an immutable ID, rejects unexpected
 image volumes, and starts only its uniquely named, owner-labelled container.
 That container has no network, a read-only root, dropped capabilities and no
-new privileges. PostgreSQL volume inheritance is read-only and requires exact
-Compose project/service/container/mount ownership. The only measurement is
+new privileges. Only the named PostgreSQL data volume is mounted read-only,
+after checking both container and volume project/service ownership. Other
+mounts, including the canonical read-only initialization script, are never
+inherited. Duplicate data-path mounts, host binds at that path and foreign
+volume ownership refuse admission. The only measurement is
 Linux `os.statvfs`; Windows free space and aggregate `docker system df` are not
 capacity evidence.
 
@@ -26,6 +29,8 @@ Image inspection reads Docker's structured JSON, not a Go template requiring
 the optional `Config.Volumes` key. An omitted or null volume declaration is
 valid; a declared unexpected volume still refuses admission. The real isolated
 probe must pass alongside offline controls before retrying a failed admission.
+Exercise all four stages against the real canonical PostgreSQL Compose service,
+not only root-filesystem probes or a simplified one-mount fixture.
 
 Each `docker-storage-<stage>-<nonce>.json` receipt records exact source release,
 project, image, owned probe, byte/inode facts, bounded native command outcomes

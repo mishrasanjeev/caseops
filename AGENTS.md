@@ -9,6 +9,10 @@
   aggregate image sizes do not establish headroom. Retain ENOSPC failures as
   incomplete/failed evidence, recover only explicitly owned or reviewed unused
   resources, then run a complete replacement gate without weakening assertions.
+- Capacity-probe fixtures must reflect the canonical Compose mounts, including
+  its read-only PostgreSQL initialization script. Probe only the independently
+  verified owned data volume, never all inherited mounts. Exercise every probe
+  stage on the real isolated Compose service before launching the full gate.
 
 - A browser response waiter observes headers, not necessarily a readable body.
   Before reloading a page with a same-URL API fetch, finish the initial body and

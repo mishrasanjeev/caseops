@@ -108,17 +108,28 @@ def probe(project, release, stage, compose):
                 raise ValueError('invalid_postgres_identity')
             template = '{"id":{{json .Id}},"labels":{{json .Config.Labels}},"mounts":{{json .Mounts}}}'
             owned = json.loads(command('postgres-owner', ['inspect', '--format', template, pg]))
-            labels, mounts = owned['labels'], owned['mounts']
+            labels = owned['labels']
+            mounts = [m for m in owned['mounts'] if m.get('Destination') == '/var/lib/postgresql/data']
             if (owned['id'] != pg or labels.get('com.docker.compose.project') != project
                     or labels.get('com.docker.compose.service') != 'postgres'
                     or len(mounts) != 1 or mounts[0]['Type'] != 'volume'
                     or mounts[0]['Destination'] != '/var/lib/postgresql/data'
-                    or not mounts[0]['Name'].startswith(project + '_')):
+                    or mounts[0]['Name'] != project + '_postgres_data'):
+                raise ValueError('foreign_postgres_mount')
+            volume = mounts[0]['Name']
+            volume_info = json.loads(command('postgres-volume', ['volume', 'inspect', volume]))
+            if (not isinstance(volume_info, list) or len(volume_info) != 1
+                    or volume_info[0]['Name'] != volume
+                    or volume_info[0]['Labels'].get('com.docker.compose.project') != project
+                    or volume_info[0]['Labels'].get('com.docker.compose.volume') != 'postgres_data'):
                 raise ValueError('foreign_postgres_mount')
             result['postgres_container_id'] = pg
             result['postgres_volume'] = mounts[0]['Name']
             paths.append('/var/lib/postgresql/data')
-            volumes = ['--volumes-from=' + pg + ':ro']
+            # Inherit only this verified data volume, never PostgreSQL's other
+            # mounts (the canonical stack also binds a read-only init script).
+            volumes = ['--mount', 'type=volume,source=' + volume
+                       + ',target=/var/lib/postgresql/data,readonly,volume-nocopy']
         script = ('import json,os,sys\nrows=[]\n'
                   'for path in sys.argv[1:]:\n'
                   ' s=os.statvfs(path)\n'

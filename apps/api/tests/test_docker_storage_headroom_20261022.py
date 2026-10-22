@@ -66,6 +66,12 @@ class OfflineDocker:
                     },
                     mounts=[
                         dict(
+                            Type="bind",
+                            Source="C:/canonical/00-extensions.sql",
+                            Destination="/docker-entrypoint-initdb.d/00-extensions.sql",
+                            RW=False,
+                        ),
+                        dict(
                             Type="volume",
                             Name=PROJECT + "_postgres_data",
                             Destination="/var/lib/postgresql/data",
@@ -75,6 +81,22 @@ class OfflineDocker:
             )
             if self.mode == "foreign-pg":
                 output = output.replace(PROJECT, "foreign")
+            if self.mode in ("bound-data-path", "duplicate-data-path"):
+                value = json.loads(output)
+                if self.mode == "bound-data-path":
+                    value["mounts"][1]["Type"] = "bind"
+                else:
+                    value["mounts"].append(dict(value["mounts"][1]))
+                output = json.dumps(value)
+        elif args[:2] == ["volume", "inspect"]:
+            assert args == ["volume", "inspect", PROJECT + "_postgres_data"]
+            labels = {
+                "com.docker.compose.project": PROJECT,
+                "com.docker.compose.volume": "postgres_data",
+            }
+            if self.mode == "foreign-volume":
+                labels["com.docker.compose.project"] = "foreign"
+            output = json.dumps([dict(Name=PROJECT + "_postgres_data", Labels=labels)])
         elif args[0] == "create":
             assert {
                 "--pull=never",
@@ -88,7 +110,12 @@ class OfflineDocker:
             self.name = args[args.index("--name") + 1]
             self.token = args[args.index("--label") + 1].split("=", 1)[1]
             if self.stage in ("pre-postgres", "pre-browser"):
-                assert "--volumes-from=" + PG + ":ro" in args
+                expected_mount = (
+                    "type=volume,source=" + PROJECT
+                    + "_postgres_data,target=/var/lib/postgresql/data,readonly,volume-nocopy"
+                )
+                assert expected_mount in args
+                assert not any("--volumes-from" in value or "type=bind" in value for value in args)
             self.exists = True
             output = CID
         elif args[0] == "start":
@@ -163,6 +190,9 @@ def test_exact_threshold_accepts_and_reaps_only_owned_probe(probe_code, stage, m
         ("malformed", "invalid_probe_result", True),
         ("timeout", "docker_command_timeout", True),
         ("foreign-pg", "foreign_postgres_mount", True),
+        ("foreign-volume", "foreign_postgres_mount", True),
+        ("bound-data-path", "foreign_postgres_mount", True),
+        ("duplicate-data-path", "foreign_postgres_mount", True),
         ("foreign-probe", "probe_cleanup_failed", False),
         ("cleanup-failed", "probe_cleanup_failed", False),
     ],
