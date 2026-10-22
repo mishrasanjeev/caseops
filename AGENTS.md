@@ -3197,3 +3197,9 @@ requirements when using the fallback.
   full path in real HTTP tests so the inventory can discover it; never replace
   missing coverage with a comment-only anchor or a new route exemption. Prove
   authorized access and the anonymous and insufficient-role denials separately.
+- Browser error-response body capture is not the API contract oracle. A
+  header-only client rejection can leave Playwright's response.json waiting
+  after the UI has already handled the status. Prove the exact problem DTO with
+  a separate explicit API known-denial probe, and retain browser status, payload,
+  actionable copy and persisted no-mutation assertions. Never remove a deadline,
+  retry an ambiguous command or relax a cooldown to make the browser test pass.

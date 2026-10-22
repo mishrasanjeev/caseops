@@ -464,13 +464,19 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
     }
     const viewerRow = page.getByRole("row").filter({ has: page.getByText(email, { exact: true }) });
     const resendViewer = viewerRow.getByRole("button", { name: "Resend invitation for Synthetic report viewer", exact: true });
+    const cooldownContract = await safePost(page.request, `${target.api.origin}${CONSOLE}/admins/${invitation.admin.id}/invitations/resend`, {
+      headers: await contextCsrf(page.context()), data: { expected_version: managed!.version }, maxRetries: 0,
+    });
+    expect(await json(cooldownContract, 409, "Fresh invitation cooldown API contract")).toEqual(expect.objectContaining({
+      code: "console_invitation_cooldown", detail: "Wait five minutes before resending this invitation.",
+    }));
     const resendingViewer = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/admins/${invitation.admin.id}/invitations/resend`
       && response.request().method() === "POST");
     await controlBounds(resendViewer, page);
     await resendViewer.click();
-    expect(await json(await resendingViewer, 409, "Fresh invitation cooldown")).toEqual(expect.objectContaining({
-      code: "console_invitation_cooldown", detail: "Wait five minutes before resending this invitation.",
-    }));
+    const browserRejection = await resendingViewer;
+    expect(browserRejection.status()).toBe(409);
+    expect(browserRejection.request().postDataJSON()).toEqual({ expected_version: managed!.version });
     await expect(page.getByRole("alert")).toContainText("wait five minutes");
     expect((await mailLedger(api, target, fixture)).filter(row => row.recipient_email === email).map(row => row.id))
       .toEqual(firstMail.map(row => row.id));

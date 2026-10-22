@@ -82,7 +82,7 @@ async function mockConsole(context: BrowserContext, target: Origins, initial: Co
       if (request.method() === "GET" && state === "authenticated") {
         expect(request.headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
         if (url.pathname === `${CONSOLE}/admins/manage` && role === "manager") {
-          expect(url.searchParams.get("limit")).toBe("50");
+          expect(url.searchParams.get("limit")).toBe("25");
           reads.push("managed");
           await route.fulfill({ status: 200, headers, json: managedDirectory }); return;
         }

@@ -79,6 +79,17 @@ flowchart TD
 
 ## Acceptance Inventory
 
+The first complete combined browser CI retained613 passed,17 explicitly skipped,
+two renderer failures and two real-journey timeouts. Both real Leads journeys
+passed separately. The renderer expected50 rows while the real bounded client
+requests25. Both real journeys stopped reading the fresh resend409 through the
+browser response-body helper, before the local invitation-aging hook executed;
+the UI already displayed the rejection. The candidate correction preserves the
+full problem DTO in an explicit API known-denial probe and separately asserts
+the real browser status, request version, actionable copy and unchanged mail/
+epoch. It does not change production code, security, cooldowns or timeouts.
+Complete fresh browser/Docker/CI and production acceptance remain pending.
+
 The first combined CI and an unchanged local replay both rejected the new
 management route because its real HTTP tests composed the path from a prefix,
 which the route inventory could not discover. Preserve that failed evidence.
