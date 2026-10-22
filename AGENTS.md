@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- A browser response waiter observes headers, not necessarily a readable body.
+  Before reloading a page with a same-URL API fetch, finish the initial body and
+  prove its visible render; bind the reload to a new request and await completion
+  before parsing. Keep body-retrieval failures distinct from malformed JSON and
+  preserve payload, reload and UI assertions. A discarded decoder exception is
+  not evidence that the server returned invalid data.
+
 - Reviewed browser inventories have independent Python and frontend source
   contracts. After adding a journey, reconcile its exact literal identity and
   per-role counts in both languages, not only the runner count. Keep whole

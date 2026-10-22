@@ -12,6 +12,17 @@ overwritten body exception and unreached width proofs remain unverified. Correct
 the canonical fixture acknowledgement and error preservation, retain both failed
 packets, and require complete replacement unit/browser/CI/Docker/deployed gates.
 
+Subsequent complete f83 scoped05 also ended28P1F/29. Its separate receipts prove
+four-note admission/persistence/order and strict cleanup/disposal200, but failure
+at the first1280px reload body decoder prevented responsive acceptance. The
+catch discarded the underlying exception, so malformed server JSON is not
+established. The missing initial-body/render barrier makes a prior-response race
+plausible, not proven. Preserve all payload/UI/geometry assertions while binding
+the new reload request and awaiting response completion; classify body transport
+separately from JSON syntax. CodeQL598 is a distinct test-only unused initial
+cleanupStage assignment, to correct without suppression. No runtime fix or clean
+production claim follows from either failed test-harness run.
+
 J04/M03/US-007..009/FT-011..015: exact f26 CI39696037419 PostgreSQL shard11
 collected204 cases with203 passes and one failed call, all setup/teardown passed.
 test_default_readers_keep_rich_workspace_dto differed only in notes;14 other DTO

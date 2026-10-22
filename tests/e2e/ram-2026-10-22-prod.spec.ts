@@ -1,6 +1,6 @@
 /** J04/M03/US-007..009/FT-011..015: real saved notes, never a mocked workspace. */
 import { randomUUID } from "node:crypto";
-import type { APIResponse } from "@playwright/test";
+import type { APIResponse, Request } from "@playwright/test";
 import type { components } from "../../apps/web/lib/api/openapi-types";
 
 import { expect, request, test } from "./support/prod-diagnostic-test";
@@ -11,6 +11,12 @@ import { assertPublicReleaseIdentity } from "./support/public-release-identity";
 type Note = components["schemas"]["MatterNoteRecord"];
 type Matter = { id: string; matter_code: string; title: string; status: string; updated_at: string };
 type Workspace = { matter: Matter; notes: Note[] };
+type BrowserRead = {
+  stage: "initial" | "reload_1280" | "reload_393";
+  request_observed: boolean; response_received: boolean; request_bound: boolean;
+  status: number | null; content_type: "json" | "other" | "missing" | null;
+  completed: boolean; body_read: boolean; json_valid: boolean;
+};
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders, storageState: { cookies: [], origins: [] },
   trace: "off", screenshot: "off", video: "off", serviceWorkers: "block" });
@@ -41,11 +47,23 @@ async function response(operation: () => Promise<APIResponse>, label: string): P
   catch { throw new Error(`${label} transport failed; no retry; private request details omitted.`); }
 }
 
-async function json(receipt: Pick<APIResponse, "status" | "json">, label: string): Promise<Record<string, unknown>> {
+function unavailableBody(label: string): Error {
+  const error = new Error(`${label} response body is unavailable; private transport details omitted.`);
+  error.name = "ResponseBodyUnavailableError";
+  return error;
+}
+
+async function json(receipt: Pick<APIResponse, "status" | "body">, label: string,
+  checkpoint?: Pick<BrowserRead, "body_read" | "json_valid">): Promise<Record<string, unknown>> {
   expect(receipt.status(), `${label} must succeed without a retry`).toBe(200);
+  let body: Buffer;
+  try { body = await receipt.body(); }
+  catch { throw unavailableBody(label); }
+  if (checkpoint) checkpoint.body_read = true;
   let value: unknown;
-  try { value = await receipt.json(); }
-  catch { throw new Error(`${label} returned invalid JSON; private response omitted.`); }
+  try { value = JSON.parse(body.toString("utf8")); }
+  catch { throw new SyntaxError(`${label} response body contains invalid JSON; private response omitted.`); }
+  if (checkpoint) checkpoint.json_valid = true;
   return record(value, label);
 }
 
@@ -92,7 +110,8 @@ function newestFirst(left: Note, right: Note): number {
 function failureSummary(error: unknown, stage: string) {
   const location = error instanceof Error
     ? /ram-2026-10-22-prod\.spec\.ts:(\d+):(\d+)/.exec(error.stack ?? "") : null;
-  const kind = error instanceof Error && ["Error", "AssertionError", "TimeoutError", "TypeError"].includes(error.name)
+  const kind = error instanceof Error && ["Error", "AssertionError", "TimeoutError", "TypeError", "SyntaxError",
+    "ResponseBodyUnavailableError"].includes(error.name)
     ? error.name : "unknown";
   return { stage, kind, location: location ? { line: Number(location[1]), column: Number(location[2]) } : null,
     private_details_omitted: true };
@@ -136,9 +155,10 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
     1280: { entered: false, reload: false, recent_three: false, geometry: false, persisted_readback: false },
     393: { entered: false, reload: false, recent_three: false, geometry: false, persisted_readback: false },
   };
+  const browserReads: BrowserRead[] = [];
   let bodyFailed = false;
   let bodyFailure: unknown;
-  let cleanupStage = "not_started";
+  let cleanupStage = "release_identity";
   const cleanup = { admitted_identity: false, identity_matches: false, intake_checked: false,
     version_token_checked: false, read_status: null as number | null, disposal_attempted: false,
     disposal_status: null as number | null, disposal_acknowledged: false, client_disposed: false };
@@ -222,16 +242,55 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
     expect((await signed).status(), "Normal browser QA login").toBe(200);
     await page.waitForURL(/\/app(?:[/?]|$)/);
     reached.push("browser_login_verified");
+    const isWorkspaceRequest = (pending: Request) => new URL(pending.url()).origin === api.origin
+      && new URL(pending.url()).pathname === `${path}/workspace` && pending.method() === "GET"
+      && pending.frame() === page.mainFrame();
+    const readBrowserWorkspace = async (pending: Promise<Request>, stage: BrowserRead["stage"], label: string) => {
+      const checkpoint: BrowserRead = { stage, request_observed: false, response_received: false, request_bound: false,
+        status: null, content_type: null, completed: false, body_read: false, json_valid: false };
+      browserReads.push(checkpoint);
+      const observed = await pending;
+      checkpoint.request_observed = true;
+      const receipt = await observed.response();
+      if (!receipt) throw unavailableBody(label);
+      checkpoint.response_received = true;
+      checkpoint.request_bound = receipt.request() === observed;
+      expect(checkpoint.request_bound, "Workspace response belongs to the newly observed request").toBe(true);
+      checkpoint.status = receipt.status();
+      const mediaType = receipt.headers()["content-type"]?.split(";", 1)[0].trim().toLowerCase();
+      checkpoint.content_type = !mediaType ? "missing"
+        : mediaType === "application/json" || mediaType.endsWith("+json") ? "json" : "other";
+      try {
+        const failure = await receipt.finished();
+        if (failure) throw failure;
+      } catch { throw unavailableBody(label); }
+      checkpoint.completed = true;
+      return workspace(await json(receipt, label, checkpoint));
+    };
+    const initialRequest = page.waitForRequest(isWorkspaceRequest);
     await page.goto(`${web.origin}/app/matters/${saved.id}`);
     reached.push("matter_navigation_completed");
+    const initialBrowserRead = await readBrowserWorkspace(initialRequest, "initial", "Initial browser workspace");
+    expect(initialBrowserRead.matter.id === saved.id, "Initial browser workspace retains the admitted Matter").toBe(true);
+    expect(JSON.stringify(initialBrowserRead.notes) === retainedBytes, "Initial browser workspace retains all four complete note records").toBe(true);
+    reached.push("initial_browser_workspace_body_verified");
+    await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+    const initialHeading = page.getByRole("heading", { name: "Recent notes", exact: true });
+    await expect(initialHeading).toBeVisible();
+    const initialCard = initialHeading.locator("..").locator("..");
+    const initialRows = initialCard.getByRole("list").getByRole("listitem");
+    await expect(initialRows).toHaveCount(3);
+    await expect(initialRows.locator("p")).toHaveText(expected.slice(0, 3).map(row => row.body));
+    for (const body of expected.slice(0, 3).map(row => row.body)) await expect(initialCard.getByText(body, { exact: true })).toBeVisible();
+    await expect(initialCard.getByText(expected[3].body, { exact: true })).toHaveCount(0);
+    reached.push("initial_matter_recent_notes_rendered");
     for (const width of [1280, 393] as const) {
       await page.setViewportSize({ width, height: 1000 });
       widthProof[width].entered = true;
       reached.push(`width_${width}_entered`);
-      const loaded = page.waitForResponse(receipt => new URL(receipt.url()).origin === api.origin
-        && new URL(receipt.url()).pathname === `${path}/workspace` && receipt.request().method() === "GET");
+      const loaded = page.waitForRequest(isWorkspaceRequest);
       await page.reload();
-      const browserRead = workspace(await json(await loaded, "Reloaded browser workspace"));
+      const browserRead = await readBrowserWorkspace(loaded, width === 1280 ? "reload_1280" : "reload_393", "Reloaded browser workspace");
       expect(JSON.stringify(browserRead.notes) === retainedBytes, "All four complete persisted note records survive browser reload").toBe(true);
       widthProof[width].reload = true;
       reached.push(`width_${width}_reload_verified`);
@@ -303,7 +362,6 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
   } finally {
     try {
       if (saved) {
-        cleanupStage = "release_identity";
         await release();
         cleanupStage = "fresh_admitted_identity";
         const currentResponse = await response(() => client.get(`${api.origin}/api/matters/${saved!.id}`, options()), "Owned fixture cleanup read");
@@ -336,7 +394,7 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
   const evidenceFailures: unknown[] = [];
   const attachments = [
     { name: "NOTES22-stage-checkpoints", data: { schema_version: 1, body_status: bodyFailed ? "failed" : "passed",
-      reached, last_completed_stage: reached.at(-1) ?? null, widths: widthProof,
+      reached, last_completed_stage: reached.at(-1) ?? null, widths: widthProof, browser_reads: browserReads,
       failure: bodyFailed ? failureSummary(bodyFailure, "body") : null } },
     { name: "NOTES22-cleanup-result", data: { schema_version: 1, status: cleanupFailures.length ? "failed" : saved ? "passed" : "no_admitted_identity",
       ...cleanup, failures: cleanupFailures.map(item => failureSummary(item.error, item.stage)) } },
