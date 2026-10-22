@@ -89,6 +89,11 @@ full problem DTO in an explicit API known-denial probe and separately asserts
 the real browser status, request version, actionable copy and unchanged mail/
 epoch. It does not change production code, security, cooldowns or timeouts.
 Complete fresh browser/Docker/CI and production acceptance remain pending.
+The first corrected component run passed both renderer cases and advanced both
+real journeys beyond the original wait. Their next assertion collided with
+Next.js's separate route-announcer alert. Scope the unchanged actionable-copy
+assertion to main, preserving strict uniqueness within the product work area.
+That two-pass/two-failure run remains retained, not promoted to acceptance.
 
 The first combined CI and an unchanged local replay both rejected the new
 management route because its real HTTP tests composed the path from a prefix,

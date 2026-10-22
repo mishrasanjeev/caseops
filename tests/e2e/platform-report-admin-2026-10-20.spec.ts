@@ -477,7 +477,7 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
     const browserRejection = await resendingViewer;
     expect(browserRejection.status()).toBe(409);
     expect(browserRejection.request().postDataJSON()).toEqual({ expected_version: managed!.version });
-    await expect(page.getByRole("alert")).toContainText("wait five minutes");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("wait five minutes");
     expect((await mailLedger(api, target, fixture)).filter(row => row.recipient_email === email).map(row => row.id))
       .toEqual(firstMail.map(row => row.id));
     expect((await managedAdmin(page, target, invitation.admin.id))!.version).toBe(managed!.version);

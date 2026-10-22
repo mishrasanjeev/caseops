@@ -3203,3 +3203,5 @@ requirements when using the fallback.
   a separate explicit API known-denial probe, and retain browser status, payload,
   actionable copy and persisted no-mutation assertions. Never remove a deadline,
   retry an ambiguous command or relax a cooldown to make the browser test pass.
+  Scope feedback assertions to the actual main/form/region so framework route
+  announcers cannot satisfy or collide with the product's message.
