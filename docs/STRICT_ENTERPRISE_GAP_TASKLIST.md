@@ -1,5 +1,24 @@
 # Strict Enterprise Gap Tasklist
 
+## October 22 Recent-Collection Determinism
+
+Partially implemented / release NO-GO. The complete f26 PostgreSQL failure proves
+equivalent workspace DTOs disagree only in notes. Unordered Matter.notes directly
+feeds the first-three Recent notes surface, so this is a user-visible source
+defect, not an excuse to weaken equality. Require a shared timestamp-descending,
+unique-ID tie-break contract at database and materialized read boundaries, full
+record retention and native/browser reload proof. Audit sister chronological
+collections without imposing note ordering on unrelated business sequences.
+No global chronology or data migration is inferred or authorized by this fix.
+
+The bounded sister audit identifies timestamp-only SQL ordering before existing
+communications/notes/attachment source limits. The final merged timeline already
+sorts by time and ID but cannot recover unstable capped membership. Preserve
+current ascending/descending directions,500-row caps and visibility filters;
+append unique source IDs before limits and prove exact tied-boundary subsets.
+The ordinary matter timeline already has stable composite ordering and remains
+unchanged. This sister risk is source-backed, not another observed hosted failure.
+
 ## October 21 Public Enquiry Operations
 
 Partially implemented. Existing public form admission is already durable, but

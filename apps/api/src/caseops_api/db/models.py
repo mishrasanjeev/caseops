@@ -1629,6 +1629,7 @@ class Matter(Base):
     notes: Mapped[list[MatterNote]] = relationship(
         back_populates="matter",
         cascade="all, delete-orphan",
+        order_by="desc(MatterNote.created_at), desc(MatterNote.id)",
     )
     hearings: Mapped[list[MatterHearing]] = relationship(
         back_populates="matter",

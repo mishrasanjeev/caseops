@@ -48,7 +48,7 @@ TESTER_PARTITIONS = {
 }
 # Reviewed exact inventory; any new or removed case requires an explicit update.
 TESTER_PARTITION_COUNTS = {
-    "tester": 97, "tester-catalog": 18, "tester-index": 6, "test-legal-write-oct13": 50,
+    "tester": 98, "tester-catalog": 18, "tester-index": 6, "test-legal-write-oct13": 50,
 }
 TESTER_CATALOG_FILE = "ram-2026-09-05-bugs.spec.ts"
 TESTER_PARTITION_CONTRACT = 1

@@ -65,6 +65,7 @@ export default defineConfig({
     /ram-2026-10-08-prod\.spec\.ts$/,
     /ram-2026-10-10-prod\.spec\.ts$/,
     /ram-2026-10-12-prod\.spec\.ts$/,
+    /ram-2026-10-22-prod\.spec\.ts$/,
     /ram-2026-10-13-(?:hearings|ip-portfolio)\.spec\.ts$/,
     /ram-\d{4}-\d{2}-\d{2}-ip-(?:controls|renewal-tracker)\.spec\.ts$/,
     /ram-2026-10-17-ip-(?:tracker|reminders)\.spec\.ts$/,

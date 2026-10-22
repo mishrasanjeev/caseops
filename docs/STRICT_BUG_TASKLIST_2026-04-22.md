@@ -1,5 +1,32 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 22 Unordered Recent Matter Notes
+
+J04/M03/US-007..009/FT-011..015: exact f26 CI39696037419 PostgreSQL shard11
+collected204 cases with203 passes and one failed call, all setup/teardown passed.
+test_default_readers_keep_rich_workspace_dto differed only in notes;14 other DTO
+fields agreed. The dependency guard is not a second failing testcase. Source
+inspection confirms an unordered relationship feeding UI Recent notes slice(0,3),
+which can omit the newest record. This predates the nullable-contact correction;
+do not claim that change introduced it. Require a shared created_at DESC,id DESC
+contract, preserved full DTO equality, deterministic ties/materialization tests
+and actual desktop/mobile reload proof. Current verdict:Not fixed until complete
+replacement native/Docker/CI and exact-serving browser acceptance pass.
+
+## October 22 Rolling Public Admission Classification
+
+LEAD-01/J19/M21/US-063: two valid REDs on SQLite and PostgreSQL prove that
+successful old-column inserts after migration leave three public records false
+and hidden, including converted proof. A second head upgrade does not backfill
+them. Raw metadata/outbox bytes, unrelated commercial/malformed-shape exclusions,
+current-protocol explicit false, index health and downgrade refusal hold. Earlier
+extraction/overlay/database-readiness failures are retained as setup failures,
+not reproductions. Correct only the atomic insertion-time compatibility boundary;
+never retrofit email eligibility or resurrect later/current-policy exclusions.
+Current verdict:Not fixed until the combined correction and full replacement
+native/browser/Docker/CI/exact-production gates pass. No production incident or
+data repair is inferred from this isolated pre-release reproduction.
+
 ## October 22 Retained Enrollment Readback
 
 J14/M14/US-040/042 and J19/M21/US-063: a valid commercial enrollment with a

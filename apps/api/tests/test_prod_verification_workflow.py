@@ -421,7 +421,7 @@ def test_release_owned_tester_split_contract_cli_fails_closed_before_browser(
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == {
             "tester_partition_contract": 1,
-            "partitions": {"tester": 97, "tester-catalog": 18,
+            "partitions": {"tester": 98, "tester-catalog": 18,
                            "tester-index": 6, "test-legal-write-oct13": 50},
             "catalog_file": "ram-2026-09-05-bugs.spec.ts",
         }

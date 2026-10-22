@@ -1081,7 +1081,7 @@ def test_new_native_capture_cli_parses_invocation_and_original_options(capture, 
 def _tester_canonical_rows():
     rows = []
     partitions = {
-        "tester": {"ordinary-prod.spec.ts": 97},
+        "tester": {"ordinary-prod.spec.ts": 98},
         "tester-catalog": {evidence.TESTER_CATALOG_FILE: 18},
         "tester-index": evidence.INDEX_FILES,
         "test-legal-write-oct13": evidence.OCT13_FILES,
@@ -1104,7 +1104,7 @@ def _tester_canonical_rows():
 
 def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 97, "tester-catalog": 18,
+        "tester": 98, "tester-catalog": 18,
         "tester-index": 6, "test-legal-write-oct13": 50,
     }
     assert evidence.OCT13_FILES == {
@@ -1116,12 +1116,12 @@ def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
         "ram-2026-10-17-ip-reminders.spec.ts": 4,
         "ram-2026-10-17-ip-tracker.spec.ts": 2,
     }
-    assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 171
+    assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 172
 
 
 def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 97, "tester-catalog": 18,
+        "tester": 98, "tester-catalog": 18,
         "tester-index": 6, "test-legal-write-oct13": 50,
     }
     assert evidence.TESTER_PARTITIONS["tester-catalog"] == "tester-prod-chromium"

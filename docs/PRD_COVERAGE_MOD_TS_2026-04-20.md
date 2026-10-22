@@ -1,5 +1,19 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 22 Recent Matter Notes Coverage
+
+J04/M03/US-007..009/FT-011..015: deterministic note read ordering must retain
+the complete DTO and newest-three semantics. Assert distinct server timestamps,
+exact timestamp ties, ID-only tie breaking, reversed materialization, fresh
+PostgreSQL sessions and persisted reload. The dated October22 browser journey
+must run in the standard Docker inventory and the exact-release production
+inventory at desktop and narrow widths. No test-only sort or equality weakening.
+
+Direct communications sister coverage must use fixed reverse-inserted IDs at
+equal timestamps across the500-row source cap and assert the exact admitted
+subset before final merge. Preserve business chronology and tenant/visibility
+exclusions; a final sorted DTO alone cannot prove SQL-limited membership.
+
 ## October 21 Public Lead Coverage
 
 J19/M21/US-063, FT-094..096, NFT-023, SEC-031 and J14/M14/US-040/042,
@@ -15,6 +29,13 @@ attempts/no claim after admission, replay and authorized retry, then explicit
 scheduled-worker delivery. Desktop/mobile browser proof must inspect all seven
 queued admissions before the first drain and exact reference-only captures
 afterward. Do not substitute a renderer mock for real owner/API/mail acceptance.
+
+LEAD-01 rolling-writer regression must preserve an old reflected insert shape
+across actual upgrade, then prove immediate classification/readback on both
+dialects. Include converted contract/timestamp proof, nonpublic source-only and
+malformed-shape negatives, current-protocol false and later revoke controls,
+unchanged metadata/outbox bytes, complete index health and downgrade refusal.
+The original two valid REDs and harness setup failures remain separate evidence.
 
 ## October 21 Authenticator QR Coverage
 

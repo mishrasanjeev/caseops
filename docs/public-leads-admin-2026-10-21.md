@@ -85,6 +85,14 @@ transport and no provider call; they do not prove a real owner's inbox.
 
 ## Privacy And Retention
 
+LEAD-01 release acceptance also requires an atomic insertion-only compatibility
+boundary for old API writers still serving after migration. Their proven public
+admissions, including converted historical proof, must become visible without
+outbox edits or new notification eligibility. Preserve current-purpose explicit
+exclusions and later flag revocations. Valid SQLite and PostgreSQL REDs confirm
+the one-time backfill and its replay do not cover these later successful inserts.
+The combined correction and full replacement gates remain pending.
+
 The October21 public notice describes reference-only SendGrid notification and
 MFA-protected review. The previous notice version remains accepted for existing
 browser compatibility; new forms submit2026-10-21. No submitted PII is copied

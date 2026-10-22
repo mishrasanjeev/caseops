@@ -1,5 +1,14 @@
 # CaseOps  - Work To Be Done
 
+## October 22 Recent Matter Notes
+
+Close the actual CI notes-order defect before this release. Workspace reads must
+be stable and Recent notes must show the newest three; do not replace the whole
+DTO equality assertion with a sorted test projection. Require deterministic
+timestamp/tie and reversed-materialization coverage plus fresh native and
+desktop/mobile deployed reload proof. This current failure predates the enquiry
+and nullable-contact corrections; preserve its original full failure evidence.
+
 ## October 21 Public Leads
 
 Partially implemented: reuse durable demo admission/outbox for new-only,
@@ -16,6 +25,15 @@ pending). Replace that behavior and prove explicit worker delivery across
 admission, replay, founder retry and all seven browser entry points. The149-case
 historical migration/index replacement passed, but predates this mail correction
 and cannot certify it. Keep original failures and source-bound replacement proof.
+
+Close the reproduced rolling-upgrade classification gap before release: old
+writers omit the new flag after backfill, and those successful requests remain
+hidden. Require an atomic insertion-only old-protocol bridge without changing
+outbox state, current-policy exclusions or subsequent revocations. Both dialects
+must prove the complete corrected path, not merely rerun the earlier backfill.
+The founder reader must also accept nullable retained contact fields without
+hiding valid sibling enquiries; its complete28-case local replay now passes,
+but whole Docker/CI and production proof remain pending.
 
 ## October 21 Authenticator QR Usability
 

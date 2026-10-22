@@ -1,5 +1,22 @@
 # CaseOps agent instructions
 
+- A "Recent" collection must have a server-owned chronological order and a
+  unique tie-breaker before a client slices it. Database physical row order is
+  not a contract. Prove distinct timestamps dominate IDs, exact timestamp ties
+  are stable, and opposite already-materialized collection orders serialize to
+  the same complete DTO. Keep whole-response equality and reload assertions;
+  sorting only the test would hide the user-visible newest-record omission.
+  A final merge sort cannot repair arbitrary membership selected by an earlier
+  timestamp-only SQL LIMIT; add the unique tie-breaker before that bound and
+  assert the exact included/excluded identities across the tied boundary.
+
+- A one-time derived-state backfill does not cover old API writers still
+  serving during deployment. Reproduce a successful old-column insert after
+  migration on both dialects and prove immediate visibility, converted-source
+  lineage and unchanged outbox bytes. Compatibility must not promote historical
+  notification eligibility or undo a current-protocol exclusion or later revoke;
+  a broad update trigger that resurrects an explicit false is not a valid fix.
+
 - A retained-record read schema must match the nullable storage/API contract,
   not only mandatory fields in a new-submission form. Prove one incomplete
   legacy/commercial row cannot hide valid siblings in the same response, show

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from functools import wraps
 from hashlib import sha256
 from types import SimpleNamespace
@@ -22,6 +22,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, event, func, inspect, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.pool import NullPool
 
 from caseops_api.core.settings import get_settings
@@ -1240,4 +1241,84 @@ def test_default_readers_keep_rich_workspace_dto(court_audit, monkeypatch):
                 default_equals_explicit_full=True,
             )
         _assert_history_retained(audit, fixture)
+    assert audit.errors == []
+
+
+def test_workspace_notes_have_deterministic_recent_order_after_reload(court_audit, monkeypatch):
+    audit, _observer = court_audit
+    created = datetime(2026, 10, 11, 12, tzinfo=UTC)
+    expected_ids = [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000003",
+        "00000000-0000-0000-0000-000000000002",
+        "ffffffff-ffff-ffff-ffff-fffffffffff5",
+        "ffffffff-ffff-ffff-ffff-fffffffffff4",
+    ]
+    timestamps = [created + timedelta(days=offset) for offset in (3, 2, 2, 1, 0)]
+    with Session(audit.engine) as session:
+        company_id = _seed_company(session)
+        actor_id = _seed_membership(session, company_id, role="admin")
+        matter_id = _seed_matter(session, company_id)
+        for identity, timestamp in reversed(list(zip(expected_ids, timestamps, strict=True))):
+            session.add(MatterNote(
+                id=identity, matter_id=matter_id, author_membership_id=actor_id,
+                body=f"Retained note {identity}", created_at=timestamp,
+            ))
+            session.flush()
+        session.commit()
+
+    note_queries, reloaded_orders, outputs, materialized_orders = [], [], [], []
+
+    def retain_note_query(_connection, _cursor, statement, _parameters, _context, _many):
+        if "from matter_notes" in " ".join(statement.lower().split()):
+            note_queries.append(" ".join(statement.split()))
+
+    original = matters._get_matter_model
+    event.listen(audit.engine, "before_cursor_execute", retain_note_query)
+    try:
+        for _ in range(2):
+            with Session(audit.engine) as session:
+                parent = session.get(Matter, matter_id)
+                reloaded_orders.append([note.id for note in parent.notes])
+        for materialized_order in (expected_ids, list(reversed(expected_ids))):
+            with monkeypatch.context() as patch:
+                def already_materialized(session, _order=materialized_order, **kwargs):
+                    parent = original(session, **kwargs)
+                    notes = {note.id: note for note in parent.notes}
+                    set_committed_value(parent, "notes", [notes[key] for key in _order])
+                    materialized_orders.append([note.id for note in parent.notes])
+                    return parent
+
+                patch.setattr(matters, "_get_matter_model", already_materialized)
+                with audit.session("mutation") as session:
+                    context = _ip_race_context(
+                        session, company_id=company_id, membership_id=actor_id,
+                    )
+                    result = matters.get_matter_workspace(
+                        session, context=context, matter_id=matter_id,
+                    )
+                    outputs.append(result.model_dump(mode="json"))
+                    assert not session.dirty
+    finally:
+        event.remove(audit.engine, "before_cursor_execute", retain_note_query)
+
+    audit.record(
+        "workspace_note_ordering", expected_ids=expected_ids,
+        inserted_ids=list(reversed(expected_ids)), reloaded_orders=reloaded_orders,
+        materialized_orders=materialized_orders, note_queries=note_queries,
+        workspace_dto_hashes=[_digest(output) for output in outputs],
+        serialized_orders=[[row["id"] for row in output["notes"]] for output in outputs],
+    )
+    assert outputs[0] == outputs[1]
+    assert all([row["id"] for row in output["notes"]] == expected_ids for output in outputs)
+    assert [row["id"] for row in outputs[0]["notes"][:3]] == [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000003",
+        "00000000-0000-0000-0000-000000000002",
+    ]
+    assert reloaded_orders == [expected_ids, expected_ids]
+    assert note_queries and all(
+        "ORDER BY matter_notes.created_at DESC, matter_notes.id DESC" in statement
+        for statement in note_queries
+    )
     assert audit.errors == []
