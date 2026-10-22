@@ -1,5 +1,16 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 23 Batch 3 Coverage Checkpoint
+
+Full Docker88 now proves all seven changed B3/IP sister journeys within the
+complete640-case inventory:630passed/10explicit skips,zero retries/errors.
+PostgreSQL3376 and frontend1875 also pass. These supersede component-only
+coverage limits below for that source,not production acceptance. Main366's
+critical Next advisory caused pre-routing cancellation. The patched graph's
+four actual RED-to-GREEN lock checks and local zero-finding audit are components;
+fresh Docker/CI and exact-release live roles remain required. No model call,
+original pictured draft recovery or positive owner-MFA outcome is invented.
+
 ## October 22 Batch 3 Coverage
 
 J07/M06/US-017/018/021/FT-027..030 and J12/M11/US-034/035/037/FT-044..046/049:

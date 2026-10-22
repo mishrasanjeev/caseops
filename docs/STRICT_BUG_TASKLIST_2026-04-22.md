@@ -1,5 +1,23 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 23 Batch 3 Security Replacement
+
+PR554 merged as366686f6 with the identical Docker-accepted88 tree. Full local
+acceptance completed3376 PostgreSQL passes/10128 phases and640 browser cases:
+630passed/10explicit skips,zero retries/errors; all seven changed journeys pass.
+Fresh main Security39841340297 then found critical Next advisories published
+to the advisory database during the long gates. Stop the release before routing:
+both Cloud Builds are cancelled, parent reaped, API/web remain92f162b4. This
+supersedes the earlier pending-candidate descriptions, not the production gaps.
+
+Pin reviewed stable Next16.4.2 and matching Vitest/coverage4.1.12. Four lock regressions
+fail on the old graph and pass on the patched graph; strict npm11 audit reports
+zero findings locally. These are component results, not patched Docker/CI or
+production certification. Add the exact-main required-Security release fence,
+then require complete fresh candidate gates and live replay. Both workbook
+issues remain Inconclusive on production. No citation block, KYC identity,
+provider-cost boundary, scanner policy or audit threshold is weakened.
+
 ## October 22 Ram Batch 3
 
 Two populated workbook issues, not an inferred summary total. B3-001 preserves

@@ -3265,3 +3265,9 @@ requirements when using the fallback.
   native reconciliation may legitimately accept historical skips; that cannot
   certify a new mandatory journey. Keep historical caller project scopes
   explicit and independently collect each new role before release freeze.
+- Advisory results are time-dependent even for an unchanged lockfile. An earlier
+  green PR scan cannot authorize routing after current-main Security fails.
+  Recheck the exact canonical revision's required security jobs before cloud
+  work and after builds; pending, missing, skipped or failed jobs remain closed.
+  Preserve cancelled builds and old acceptance, patch the actual dependency and
+  require fresh candidate gates rather than weakening the audit threshold.

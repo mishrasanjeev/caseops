@@ -1,5 +1,65 @@
 # Ram Batch 3: Draft Recovery And Client Editing
 
+## October 23 Security Replacement, Not Deployed
+
+Full canonical local Docker88 completed3376 PostgreSQL passes/10128 phases,
+640 browser cases=630passed/10explicit skips,zero retries/errors; all seven
+changed journeys pass. Complete frontend1875P and hosted candidate CI05 are
+retained. PR554 merged to366686f6 with the identical accepted tree. Main
+Security39841340297 then reported critical Next advisories absent from the
+earlier audit. Parent stopped the exact owned deployment tree and cancelled
+both Cloud Builds before post-build migrations or traffic routing. API/web
+remain92f162b4. Original acceptance and cancelled deployment evidence remain
+separate; neither is patched-source or production certification.
+
+Next16.4.1 is the official minimal patched16.x release for
+GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r and GHSA-673q-mjm6-r5xr.
+The patch itself was publishedOctober14; advisory-database entries were
+publishedOctober22. Existing sharp0.35.5 does not eliminate the need to patch
+the other affected paths. Do not substitute a reachability guess for upgrade.
+Also pin matching Vitest/coverage4.1.12 to remove the prior moderate mocker
+advisories. No new ESLint stack or unrelated React upgrade is introduced.
+The final candidate uses the current stable Next16.4.2,which includes16.4.1
+and the vendor's subsequent compiler fixes; registry metadata and the official
+October15 release agree. Vitest stays on its explicitly maintained V4 channel
+for this security release rather than introducing a separate test-harness major
+migration. The earlier GREEN01/audit01 used Next16.4.1 and are component history;
+the final16.4.2 graph requires its own install,unit,type,build and whole gates.
+
+`apps/web/lib/dependency-security-20261023.test.ts` asserts both workspace
+manifests and every locked Next compiler/runtime and Vitest tool copy. Corrected
+RED02 collected four failures on the old graph; GREEN01 passes all four with
+the new graph. RED01 used the wrong cwd and collected zero, so it is incomplete,
+not a reproduction. npm10's lock-generation Arborist error is retained;
+canonical npm11.6.2 generated the new graph without force/legacy-peer flags.
+Fresh strict lock audit reports zero findings, not whole-product security proof.
+
+Permanent learning: external advisory data can change while an immutable
+candidate is undergoing hours of acceptance. Required current-main Security
+must be checked before cloud work and after builds, not inferred from an old
+PR scan. Add fail-closed exact-source job checks and regress their complete
+existing deploy callers before freezing replacement Docker/CI. Both workbook
+production verdicts stay Inconclusive pending actual live replay.
+
+The complete15-module affected deploy/workflow gate now collects1206 cases:
+1205passed,one POSIX-only mount assertion skipped on Windows,3617 phases,
+exact collection/JUnit/source joins and natural process completion. Ruff and
+Bash syntax pass. The new helper rejects current366's failed Security push
+and old92's newer failed schedule; its historical successful push's actual
+eight-job field validation passes separately,not as current-main admission.
+The initial focused run had two invalid synthetic positive timelines; preserve
+them and the corrected complete replacement rather than weakening timeline
+checks. Final16.4.2 baselineGREEN02,webTSC02,E2ETSC02 and strict audit02 pass.
+These are pre-freeze components. Fresh committed full frontend,Docker,CI and
+exact-serving production verification remain required.
+
+Official release and advisories:
+- https://github.com/vercel/next.js/releases/tag/v16.4.2
+- https://github.com/vercel/next.js/releases/tag/v16.4.1
+- https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw
+- https://github.com/vercel/next.js/security/advisories/GHSA-p3m5-59mp-jv5r
+- https://github.com/vercel/next.js/security/advisories/GHSA-673q-mjm6-r5xr
+
 ## Latest Release Gate Correction
 
 Hosted CI04 at81005522 failed the independent production invocation inventory:
