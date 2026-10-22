@@ -52,6 +52,7 @@ async function journey(page: Page, baseURL: string | undefined, info: TestInfo, 
   const run = randomUUID(), slug = `b3draft-${run}`, email = `${slug}@example.com`, password = `Synthetic!${run}aA9`;
   let http = await request.newContext({ extraHTTPHeaders: localTransportHeaders(api.origin), timeout: 30_000 });
   const generatedBodies: object[] = [];
+  let browserApprovals = 0;
   try {
     const tenant = await json<{ access_token: string; company: { id: string }; membership: { id: string } }>(http,
       `${api.origin}/api/bootstrap/company`, "POST", { company_name: `Synthetic QA drafting ${run}`, company_slug: slug,
@@ -93,6 +94,7 @@ async function journey(page: Page, baseURL: string | undefined, info: TestInfo, 
       if (pending.method() === "POST" && url.pathname === new URL(`${draftUrl}/generate`).pathname) {
         generatedBodies.push(pending.postDataJSON());
       }
+      if (pending.method() === "POST" && url.pathname === new URL(`${draftUrl}/approve`).pathname) browserApprovals++;
       await route.continue();
     });
     await page.goto(`${web.origin}/sign-in`);
@@ -127,24 +129,50 @@ async function journey(page: Page, baseURL: string | undefined, info: TestInfo, 
     await visibleControl(page, "draft-submit");
     await page.getByTestId("draft-submit").click();
     await expect(page.getByTestId("draft-approve")).toBeEnabled();
+    // An independent HTTP writer changes the draft while this tab still displays revision 2.
+    const externallyEdited = await json<Draft>(http, draftUrl, "PATCH", {
+      body: "Synthetic QA independent-tab edit without any authority. Not legal advice.",
+    });
+    expect(externallyEdited.status).toBe("draft");
+    expect(externallyEdited.current_version_id).not.toBe(v2.id);
+    await json(http, `${draftUrl}/submit`, "POST", {});
+    await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 2");
     await visibleControl(page, "draft-approve");
+    expect(browserApprovals).toBe(0);
+    const rejectedApproval = page.waitForResponse(response => response.request().method() === "POST"
+      && response.url() === `${draftUrl}/approve`);
+    await page.getByTestId("draft-approve").click();
+    const rejection = await rejectedApproval;
+    expect(rejection.status()).toBe(422);
+    expect(await rejection.finished()).toBeNull();
+    expect((await rejection.json()).type).toBe("verified_citations_required");
+    expect(browserApprovals).toBe(1);
+    await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 3");
+    await expect(page.getByTestId("draft-approve")).toBeDisabled();
+    await expect(page.getByTestId("draft-citation-status")).toContainText("Revision 3 has no verified citations");
+    expect((await read()).reviews.some(review => review.action === "approve")).toBe(false);
+    await page.getByLabel("Regeneration focus", { exact: true }).fill(focus);
+    await page.getByTestId("draft-generate").click();
+    await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 4");
+    await page.getByTestId("draft-submit").click();
+    await expect(page.getByTestId("draft-approve")).toBeEnabled();
     await page.getByTestId("draft-approve").click();
     await expect(page.getByTestId("draft-finalize")).toBeEnabled();
     const approved = await read();
-    expect(approved.reviews.some(review => review.action === "approve" && review.version_id === v2.id)).toBe(true);
+    expect(approved.reviews.some(review => review.action === "approve" && review.version_id === approved.current_version_id)).toBe(true);
     await visibleControl(page, "draft-edit-toggle");
     await page.getByTestId("draft-edit-toggle").click();
     await page.getByTestId("draft-body-editor").fill("Synthetic QA replacement without any authority. Not legal advice.");
     await visibleControl(page, "draft-save-edit");
     await page.getByTestId("draft-save-edit").click();
-    await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 3");
+    await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 5");
     await page.getByTestId("draft-submit").click();
     await expect(page.getByTestId("draft-approve")).toBeDisabled();
-    await expect(page.getByTestId("draft-citation-status")).toContainText("Revision 3 has no verified citations");
+    await expect(page.getByTestId("draft-citation-status")).toContainText("Revision 5 has no verified citations");
     await json(http, `${draftUrl}/approve`, "POST", {}, 422);
     await page.getByLabel("Regeneration focus", { exact: true }).fill(focus);
     await page.getByTestId("draft-generate").click();
-    await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 4");
+    await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 6");
     await page.getByTestId("draft-submit").click();
     await expect(page.getByTestId("draft-approve")).toBeEnabled();
     await page.getByTestId("draft-approve").click();
@@ -155,7 +183,8 @@ async function journey(page: Page, baseURL: string | undefined, info: TestInfo, 
     const finalized = await read();
     expect(finalized.status).toBe("finalized");
     expect(finalized.review_required).toBe(false);
-    expect(finalized.versions).toHaveLength(4);
+    expect(finalized.versions).toHaveLength(6);
+    expect(browserApprovals).toBe(3);
     expect(finalized.reviews.some(review => review.action === "finalize" && review.version_id === finalized.current_version_id)).toBe(true);
     await json(http, `${draftUrl}/generate`, "POST", { focus_note: focus }, 409);
     expect(await read()).toEqual(finalized);
@@ -166,7 +195,7 @@ async function journey(page: Page, baseURL: string | undefined, info: TestInfo, 
     await page.getByTestId("draft-download-docx").click();
     expect((await download).suggestedFilename()).toMatch(/\.docx$/);
     await page.reload();
-    await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 4");
+    await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 6");
     await expect(page.getByTestId("draft-generate")).toBeDisabled();
     expect(await page.getByTestId("draft-edit-toggle").count()).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);

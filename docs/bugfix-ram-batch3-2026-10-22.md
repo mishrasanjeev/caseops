@@ -49,6 +49,51 @@ on its frozen source while the independent batch is implemented.
 
 ## Current Verdict
 
+Adjacent stale-tab approval was separately reproduced after the initial Docker
+pass: the server correctly rejected a now-zero-citation current revision, but
+the page retained its old positive revision. A new component case failed before
+the correction, then the complete three-page selection passed38 cases. Approval
+failure now awaits a fresh query read, without replaying the mutation. The same
+dated local browser journeys additionally require the actual browser approval
+POST to return422 exactly once, current revision3 to replace stale revision2,
+no approval audit for that rejection, and later review/finalization at revision6.
+Those strengthened browser assertions require a fresh Docker replay; the old
+six-case DAB pass is retained only for its earlier code and four-version scope.
+
+The prior retained candidate is PR554/dabd6704. All6 new local Docker journeys
+passed on fresh exact-SHA API/web images:4client/2draft,4desktop/2real mobile,
+no skips/retries. Native/progress/JSON/JUnit identities reconcile exactly in
+`docker-preflight-03/RECONCILIATION.json`. This is scoped browser acceptance,
+not the full3369-node canonical local PostgreSQL gate or a deployed outcome.
+
+Complete frontend coverage03 passed1864/1864,0pending, unchanged thresholds,
+with all source/configuration readers frozen. Complete workflow/fixture-source
+modules passed97/97. Preserve coverage02's1/1864 failure: it read an intermediate
+root production configuration (117 instead of116 tester cases) excluded by its
+older narrow source guard. The separate Batch3 projects preserve the original
+partitions. Full03 includes root configuration/test inputs in its source guard.
+
+CI554 is currently NO-GO for a separate secret-scan harness cleanup regression:
+53P/1F, scanning not executed. A successful removal acknowledgement did not
+prove the exact owned container was absent. Preserve the original failure and
+require a permanent bounded absence fix, real-client regression and fresh green
+security checks, never a blind rerun or exclusion.
+
+The cleanup correction now verifies actual absence after every removal result
+under one30-second total budget. All40 fake-boundary cases and the two original
+real timeout/interruption cases pass;13 actual owned containers were separately
+confirmed absent. Preserve the complete native Windows module's56P/11SARIF
+permission errors as failed evidence. The replacement Linux Security gate and
+actual nonempty tree/history scans are still required; no full scan is claimed.
+
+The production fixture is a clearly labelled synthetic client/Matter inside
+test-legal, prepared in5 bounded authenticated writes and read back with its
+audit and retained fingerprint. It certifies no real identity, sends no email
+and calls no provider. No GBA or existing client/draft was mutated. Its exact
+IDs/fingerprint are non-secret CI variables. Production UI acceptance still
+requires the admitted serving release; no source-tree or fixture-creation pass
+is a live feature pass.
+
 Component acceptance:37 passed across the three client/draft page modules.
 Complete client native acceptance:47 passed,141 setup/call/teardown phases,
 including9 new PostgreSQL contact cases and9 SQLite siblings; source was stable,

@@ -227,6 +227,29 @@ describe("MatterDraftDetailPage", () => {
     expect(screen.getByTestId("draft-citation-status")).toHaveTextContent("Revision 2");
   });
 
+  it("B3-DRAFT-04: a rejected stale-tab approval reloads the authoritative current revision", async () => {
+    fetchDraftMock.mockResolvedValue({ ...BASE_DRAFT, status: "in_review", review_required: true });
+    useCapabilityMock.mockReturnValue(true);
+    approveDraftMock.mockRejectedValue(Object.assign(new Error("Cannot approve a draft with zero verified citations."), {
+      name: "ApiError", status: 422, detail: "Cannot approve a draft with zero verified citations.",
+      problemType: "verified_citations_required", data: null,
+    }));
+    render(withClient(<DraftDetailPage />));
+    const approve = await screen.findByTestId("draft-approve");
+    expect(approve).toBeEnabled();
+    fetchDraftMock.mockResolvedValue({
+      ...BASE_DRAFT, status: "in_review", review_required: true, current_version_id: "v-2",
+      versions: [BASE_DRAFT.versions[0], { ...BASE_DRAFT.versions[0], id: "v-2", revision: 2,
+        citations: [], verified_citation_count: 0 }],
+    });
+    await userEvent.click(approve);
+    await waitFor(() => expect(screen.getByTestId("draft-current-revision")).toHaveTextContent("Revision 2"));
+    expect(screen.getByTestId("draft-approve")).toBeDisabled();
+    expect(screen.getByTestId("draft-citation-status")).toHaveTextContent("Revision 2 has no verified citations");
+    expect(approveDraftMock).toHaveBeenCalledTimes(1);
+    expect(fetchDraftMock).toHaveBeenCalledTimes(2);
+  });
+
   it("B3-DRAFT-02/03: bounded focus regenerates a new revision before review and approval", async () => {
     let latest = {
       ...BASE_DRAFT, status: "in_review", review_required: true,

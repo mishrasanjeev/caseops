@@ -10,6 +10,23 @@
   A citation catalogue match likewise does not prove legal proposition accuracy;
   keep zero-citation approval fail-closed and distinguish source recovery from
   a guarantee that regeneration will produce a legally valid draft.
+- Frontend tests can execute repository-level Playwright configuration and
+  fixtures. Their source guard must include those actual inputs, not only
+  apps/web. An unchanged narrow fingerprint cannot certify a run that read an
+  intermediate root configuration. Preserve the failure and rerun the complete
+  intended inventory after all input writers close.
+- Desktop touchscreen hardware does not establish a Playwright context's touch
+  mode. Select tap versus click from the configured project's hasTouch setting,
+  and independently prove mobile viewport, isMobile, touch and visible targets.
+  Do not lower target-size assertions when they expose a genuine small link.
+- A rejected stale-tab approval must refresh the authoritative current draft
+  revision without replaying approval. Prove the actual browser POST returns
+  the expected safety rejection, no approval audit is created, and the stale
+  positive revision is replaced by the current blocked revision.
+- A Docker removal acknowledgement is not proof of container absence. Verify
+  the exact invocation-owned name under one bounded cleanup deadline, preserve
+  the original scan failure, and reject transport errors or ambiguous output.
+  A failed harness is neither a detected secret nor a completed secret scan.
 
 - An ORM migration must update both the reviewed data-class map and its
   compiled governance projection before release tests. Render and validate

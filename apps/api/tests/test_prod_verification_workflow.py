@@ -118,6 +118,9 @@ def test_batch3_production_gate_owns_source_credentials_and_all_three_native_rol
         assert 'trace: "off", screenshot: "off", video: "off"' in block
     tester = config.split('name: "tester-prod-chromium"', 1)[1].split("name:", 1)[0]
     assert "BATCH3_DRAFT_READONLY_SPEC" not in tester
+    mobile = config.split('name: "batch3-clients-prod-mobile"', 1)[1].split("name:", 1)[0]
+    assert "hasTouch: true" in mobile and "isMobile: true" in mobile
+    assert "launchOptions" not in mobile
 
 
 @pytest.mark.parametrize(

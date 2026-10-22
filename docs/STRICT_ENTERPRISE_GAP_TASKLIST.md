@@ -2,6 +2,15 @@
 
 ## October 22 Named Workflow Coverage Gap
 
+The actual six new Docker journeys now pass on dabd6704, including current
+revision approval/edit invalidation/finalization and contact preservation.
+Complete frontend coverage03 is1864P with whole-input stability. Keep release
+NO-GO: full exact-candidate canonical Docker and production proof remain open,
+and Security39782850145 failed its real-client cleanup harness case before
+scanning. The scanner/helper correction must prove actual owned-container
+absence rather than trusting a removal command's exit code. Do not classify
+this infrastructure failure as a detected secret or a successful scan.
+
 Partially implemented: the old drafting browser title claimed regeneration,
 approval and finalization but stopped after requesting changes. This was a
 verification gap, not proof those later boundaries worked. Preserve that limit,

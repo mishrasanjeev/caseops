@@ -106,16 +106,18 @@ export default function MatterDraftDetailPage() {
   const approve = useMutation({
     mutationFn: () => approveDraft(matterId, draftId),
     onSuccess: makeSuccess("Draft approved"),
-    onError: (err) => {
+    onError: async (err) => {
       // RFC 7807 `type` lets us render a precise recovery message for
       // the fail-closed approve gate.
       if (isApiErrorShape(err) && err.problemType === "verified_citations_required") {
         toast.error(
           "Approval requires a verified citation in the current revision. Review the matter context and regenerate before submitting the new revision.",
         );
-        return;
+      } else {
+        makeError("Could not approve the draft.")(err);
       }
-      makeError("Could not approve the draft.")(err);
+      // Another reviewer may have replaced the displayed revision.
+      await query.refetch();
     },
   });
   const finalize = useMutation({

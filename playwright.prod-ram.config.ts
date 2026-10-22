@@ -166,7 +166,6 @@ export default defineConfig({
         storageState: { cookies: [], origins: [] },
         extraHTTPHeaders: noPaidProviderHeaders,
         trace: "off", screenshot: "off", video: "off",
-        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
       },
     },
     {
