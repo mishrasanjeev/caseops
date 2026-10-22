@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import uuid
 from pathlib import Path, PurePosixPath
+from time import monotonic, sleep
 
 GITLEAKS_IMAGE = (
     "ghcr.io/gitleaks/gitleaks:v8.24.3@sha256:"
@@ -22,6 +23,8 @@ MAX_FINDINGS = 500
 MAX_BLOB_BYTES = 8 * 1024 * 1024
 MAX_CACHE_BYTES = 64 * 1024 * 1024
 MAX_REPORT_BYTES = 64 * 1024 * 1024
+CLEANUP_TIMEOUT_SECONDS = 30
+CLEANUP_POLL_SECONDS = 0.1
 
 
 class ScanError(RuntimeError):
@@ -402,6 +405,67 @@ def report_findings(report: Path) -> list[dict]:
         raise ScanError("Scanner SARIF is missing or malformed") from exc
 
 
+def _cleanup_owned_container(
+    docker: str, name: str, receipt_path: Path, scan_error_type: str | None
+) -> dict:
+    if not re.fullmatch(r"caseops-secret-[0-9a-f]{32}", name):
+        raise ScanError("Scanner cleanup requires its exact owned container name")
+    receipt = {
+        "container": name,
+        "cleanup_confirmed": False,
+        "remove_exit_code": None,
+        "inspect_attempts": 0,
+        "scan_error_type": scan_error_type,
+    }
+    deadline = monotonic() + CLEANUP_TIMEOUT_SECONDS
+
+    def remaining() -> float:
+        budget = deadline - monotonic()
+        if budget <= 0:
+            raise ScanError("Scanner container cleanup deadline expired")
+        return budget
+
+    try:
+        removed = subprocess.run(
+            [docker, "rm", "--force", name],
+            capture_output=True,
+            timeout=remaining(),
+            check=False,
+        )
+        receipt["remove_exit_code"] = removed.returncode
+        while True:
+            budget = remaining()
+            receipt["inspect_attempts"] += 1
+            inspected = subprocess.run(
+                [docker, "inspect", name],
+                capture_output=True,
+                timeout=budget,
+                check=False,
+            )
+            receipt["inspect_exit_code"] = inspected.returncode
+            remaining()
+            if inspected.returncode:
+                missing = f"no such object: {name}".encode()
+                if (
+                    inspected.returncode != 1
+                    or inspected.stderr.strip().lower()
+                    not in (missing, b"error: " + missing)
+                    or inspected.stdout.strip() not in (b"", b"[]")
+                ):
+                    raise ScanError(
+                        "Scanner container cleanup could not verify absence"
+                    )
+                receipt["cleanup_confirmed"] = True
+                return receipt
+            # Removal acknowledgement can precede daemon-visible absence.
+            sleep(min(CLEANUP_POLL_SECONDS, remaining()))
+    except BaseException as exc:
+        receipt["cleanup_error_type"] = type(exc).__name__
+        raise
+    finally:
+        receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
+
+
 def scan_boundary(
     repo: Path,
     workspace: Path,
@@ -453,41 +517,17 @@ def scan_boundary(
             f"--no-ext-diff --no-textconv {selection}"
         )
     result = None
-    cleanup_status = None
+    scan_error_type = None
     try:
         result = subprocess.run(args, capture_output=True, timeout=timeout, check=False)
+    except BaseException as exc:
+        scan_error_type = type(exc).__name__
+        raise
     finally:
         # A killed Docker client can leave a running scanner. Remove only this
         # invocation's uniquely named container, including on interruption.
-        cleanup = subprocess.run(
-            [docker, "rm", "--force", name],
-            capture_output=True,
-            timeout=30,
-            check=False,
-        )
-        cleanup_status = cleanup.returncode
-        if cleanup_status:
-            # --rm normally removed it already; a failed inspect proves absence.
-            absence = subprocess.run(
-                [docker, "inspect", name],
-                capture_output=True,
-                timeout=30,
-                check=False,
-            )
-            if absence.returncode == 0 or (
-                f"no such object: {name}".encode() not in absence.stderr.lower()
-            ):
-                raise ScanError("Scanner container cleanup did not complete")
-        (output / (kind + "-cleanup.json")).write_text(
-            json.dumps(
-                {
-                    "container": name,
-                    "cleanup_confirmed": True,
-                    "remove_exit_code": cleanup_status,
-                },
-                indent=2,
-            )
-            + "\n"
+        _cleanup_owned_container(
+            docker, name, output / (kind + "-cleanup.json"), scan_error_type
         )
     if result is None:
         raise ScanError("Scanner did not complete")

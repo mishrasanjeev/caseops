@@ -315,6 +315,210 @@ class ReceiptTests(unittest.TestCase):
                 scan.scanner_receipt(output, history=True)
 
 
+class CleanupTests(unittest.TestCase):
+    def setUp(self):
+        self.storage = tempfile.TemporaryDirectory(prefix="caseops-cleanup-test-")
+        self.addCleanup(self.storage.cleanup)
+        self.root = Path(self.storage.name)
+        self.workspace = self.root / "workspace"
+        self.output = self.root / "evidence"
+        self.workspace.mkdir()
+        self.output.mkdir()
+        self.now = 0.0
+        self.calls = []
+        self.visibility = ["absent"]
+        self.remove_elapsed = 0.0
+        self.inspect_elapsed = 0.0
+        self.scan_error = None
+        self.owner = None
+
+    def fake_run(self, args, **kwargs):
+        self.calls.append((list(args), dict(kwargs)))
+        self.assertEqual(args[0], "docker")
+        if args[1] == "run":
+            self.owner = args[args.index("--name") + 1]
+            self.assertRegex(self.owner, r"^caseops-secret-[0-9a-f]{32}$")
+            self.assertEqual(kwargs["timeout"], 1)
+            self.assertEqual(args[args.index("--network") + 1], "none")
+            self.assertEqual(args[args.index("--pull") + 1], "never")
+            if self.scan_error:
+                raise self.scan_error
+            (self.workspace / "tree.sarif").write_text(
+                json.dumps({"version": "2.1.0", "runs": [{"results": []}]})
+            )
+            return subprocess.CompletedProcess(
+                args, 0, b"1 commits scanned.\nscanned ~1 bytes (1 bytes)\n", b""
+            )
+        self.assertEqual(args[-1], self.owner)
+        self.assertGreater(kwargs["timeout"], 0)
+        self.assertLessEqual(kwargs["timeout"], 30 - self.now)
+        if args[1] == "rm":
+            self.assertEqual(args, ["docker", "rm", "--force", self.owner])
+            self.now += self.remove_elapsed
+            return subprocess.CompletedProcess(args, 0, b"", b"")
+        self.assertEqual(args, ["docker", "inspect", self.owner])
+        self.now += self.inspect_elapsed
+        response = (
+            self.visibility.pop(0) if len(self.visibility) > 1 else self.visibility[0]
+        )
+        if isinstance(response, BaseException):
+            raise response
+        if response == "present":
+            return subprocess.CompletedProcess(args, 0, b"[{}]\n", b"")
+        if response == "absent":
+            return subprocess.CompletedProcess(
+                args, 1, b"[]\n", f"Error: No such object: {self.owner}\n".encode()
+            )
+        return subprocess.CompletedProcess(args, *response)
+
+    def boundary(self):
+        def advance(seconds):
+            self.assertGreater(seconds, 0)
+            self.now += seconds
+
+        with (
+            patch.object(scan.subprocess, "run", side_effect=self.fake_run),
+            patch.object(scan, "monotonic", side_effect=lambda: self.now, create=True),
+            patch.object(scan, "sleep", side_effect=advance, create=True),
+        ):
+            return scan.scan_boundary(
+                self.root,
+                self.workspace,
+                self.output,
+                kind="tree",
+                selection="",
+                docker="docker",
+                timeout=1,
+                head="0" * 40,
+            )
+
+    def cleanup(self):
+        return json.loads((self.output / "tree-cleanup.json").read_text())
+
+    def assert_unconfirmed(self):
+        self.assertFalse(self.cleanup()["cleanup_confirmed"])
+        self.assertFalse((self.output / "tree-receipt.json").exists())
+
+    def test_remove_acknowledgement_requires_actual_owned_absence(self):
+        result = self.boundary()
+        inspections = [args for args, _ in self.calls if args[1] == "inspect"]
+        self.assertEqual(inspections, [["docker", "inspect", self.owner]])
+        self.assertTrue(result["cleanup_confirmed"])
+        self.assertEqual(self.cleanup()["inspect_attempts"], 1)
+
+    def test_delayed_removal_visibility_is_verified_before_claim(self):
+        self.visibility = ["present", "present", "absent"]
+        result = self.boundary()
+        self.assertEqual(self.cleanup()["inspect_attempts"], 3)
+        self.assertTrue(result["cleanup_confirmed"])
+        self.assertEqual(sum(args[1] == "rm" for args, _ in self.calls), 1)
+
+    def test_permanently_retained_container_never_gets_cleanup_claim(self):
+        self.visibility = ["present"]
+        self.inspect_elapsed = 15
+        with self.assertRaises(scan.ScanError):
+            self.boundary()
+        self.assert_unconfirmed()
+        self.assertLessEqual(sum(args[1] == "inspect" for args, _ in self.calls), 2)
+
+    def test_inspect_transport_error_is_not_absence(self):
+        self.visibility = [(1, b"", b"Cannot connect to Docker daemon")]
+        with self.assertRaises(scan.ScanError):
+            self.boundary()
+        self.assert_unconfirmed()
+
+    def test_other_container_missing_error_is_not_owned_absence(self):
+        self.visibility = [(1, b"[]", b"Error: No such object: someone-else")]
+        with self.assertRaises(scan.ScanError):
+            self.boundary()
+        self.assert_unconfirmed()
+
+    def test_missing_message_mixed_with_transport_error_is_not_absence(self):
+        original = self.fake_run
+
+        def mixed(args, **kwargs):
+            if args[1] == "inspect":
+                self.visibility = [
+                    (
+                        1,
+                        b"[]",
+                        f"Error: No such object: {self.owner}\nCannot connect to Docker daemon".encode(),
+                    )
+                ]
+            return original(args, **kwargs)
+
+        with patch.object(self, "fake_run", side_effect=mixed):
+            with self.assertRaises(scan.ScanError):
+                self.boundary()
+        self.assert_unconfirmed()
+
+    def test_inspect_timeout_does_not_claim_cleanup(self):
+        self.visibility = [subprocess.TimeoutExpired("docker inspect", 1)]
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.boundary()
+        self.assert_unconfirmed()
+
+    def test_absence_returned_after_cleanup_budget_is_not_claimed(self):
+        self.inspect_elapsed = 31
+        with self.assertRaises(scan.ScanError):
+            self.boundary()
+        self.assert_unconfirmed()
+
+    def test_remove_consuming_budget_does_not_start_inspect(self):
+        self.remove_elapsed = 31
+        with self.assertRaises(scan.ScanError):
+            self.boundary()
+        self.assert_unconfirmed()
+        self.assertEqual(self.cleanup()["inspect_attempts"], 0)
+        self.assertFalse(any(args[1] == "inspect" for args, _ in self.calls))
+
+    def test_missing_error_with_retained_object_output_is_not_absence(self):
+        original = self.fake_run
+
+        def contradictory(args, **kwargs):
+            if args[1] == "inspect":
+                self.visibility = [
+                    (1, b"[{}]", f"Error: No such object: {self.owner}".encode())
+                ]
+            return original(args, **kwargs)
+
+        with patch.object(self, "fake_run", side_effect=contradictory):
+            with self.assertRaises(scan.ScanError):
+                self.boundary()
+        self.assert_unconfirmed()
+
+    def test_each_cleanup_command_uses_only_remaining_budget(self):
+        self.remove_elapsed = 27.5
+        self.visibility = ["present", "absent"]
+        self.boundary()
+        inspections = [
+            kwargs["timeout"] for args, kwargs in self.calls if args[1] == "inspect"
+        ]
+        self.assertEqual(len(inspections), 2)
+        self.assertEqual(inspections[0], 2.5)
+        self.assertLess(inspections[1], inspections[0])
+
+    def test_scan_timeout_is_preserved_after_verified_delayed_cleanup(self):
+        self.scan_error = subprocess.TimeoutExpired("docker run", 1)
+        self.visibility = ["present", "absent"]
+        with self.assertRaises(subprocess.TimeoutExpired) as caught:
+            self.boundary()
+        self.assertIs(caught.exception, self.scan_error)
+        self.assertTrue(self.cleanup()["cleanup_confirmed"])
+        self.assertEqual(self.cleanup()["inspect_attempts"], 2)
+        self.assertEqual(self.cleanup()["scan_error_type"], "TimeoutExpired")
+
+    def test_original_scan_timeout_retained_when_cleanup_cannot_finish(self):
+        self.scan_error = subprocess.TimeoutExpired("docker run", 1)
+        self.visibility = ["present"]
+        self.inspect_elapsed = 15
+        with self.assertRaises(scan.ScanError) as caught:
+            self.boundary()
+        self.assertIs(caught.exception.__context__, self.scan_error)
+        self.assert_unconfirmed()
+        self.assertEqual(self.cleanup()["scan_error_type"], "TimeoutExpired")
+
+
 class FailureTests(GitFixture):
     def setUp(self):
         super().setUp()
@@ -338,6 +542,10 @@ class FailureTests(GitFixture):
             )
             return subprocess.CompletedProcess(
                 args, 0, b"1 commits scanned.\nscanned ~1 bytes (1 bytes)\n", b""
+            )
+        if args[1] == "inspect":
+            return subprocess.CompletedProcess(
+                args, 1, b"[]\n", f"Error: No such object: {args[-1]}\n".encode()
             )
         return subprocess.CompletedProcess(args, 0, b"", b"")
 
