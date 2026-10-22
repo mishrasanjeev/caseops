@@ -17,6 +17,8 @@ from tests.test_platform_console_account_names_20261022 import (
     test_named_unions_keep_profit_types_and_warning_schema_strict,
     test_overview_names_batch_is_bounded_to_50_loss_alerts_not_51st,
     test_repeated_company_id_is_deduplicated_in_name_query,
+    test_report_cursor_clock_keeps_security_checks,
+    test_report_cursor_expiry_uses_the_same_test_clock,
     test_revenue_names_preserve_paid_filter_amounts_and_nullable_utc_dates,
 )
 
@@ -37,6 +39,8 @@ __all__ = [
     "test_named_opt_in_does_not_bypass_unauthenticated_report_boundary",
     "test_overview_names_batch_is_bounded_to_50_loss_alerts_not_51st",
     "test_repeated_company_id_is_deduplicated_in_name_query",
+    "test_report_cursor_clock_keeps_security_checks",
+    "test_report_cursor_expiry_uses_the_same_test_clock",
     "test_revenue_names_preserve_paid_filter_amounts_and_nullable_utc_dates",
 ]
 

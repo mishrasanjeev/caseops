@@ -989,8 +989,6 @@ def _seed_verification_attachment(matter_id: str) -> str:
 def test_matter_client_verification_workflow_links_attachment_and_audits_redacted(
     client: TestClient,
 ) -> None:
-    import json
-
     from sqlalchemy import select
 
     from caseops_api.db.models import AuditEvent
@@ -1068,8 +1066,6 @@ def test_matter_client_verification_workflow_links_attachment_and_audits_redacte
 def test_client_verification_reject_records_reviewer_and_redacts_reason_audit(
     client: TestClient,
 ) -> None:
-    import json
-
     from sqlalchemy import select
 
     from caseops_api.db.models import AuditEvent

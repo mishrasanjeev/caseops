@@ -27,6 +27,11 @@
   the exact invocation-owned name under one bounded cleanup deadline, preserve
   the original scan failure, and reject transport errors or ambiguous output.
   A failed harness is neither a detected secret nor a completed secret scan.
+- A frozen report clock must also govern its signed cursor validation. A fixed
+  issuance time paired with real JWT time eventually expires pagination tests.
+  Scope the test clock to report decoding, preserve real authentication time,
+  and prove before/at/after expiry plus signature, audience and required claims.
+  Never extend production TTL or disable verification to repair this fixture.
 
 - An ORM migration must update both the reviewed data-class map and its
   compiled governance projection before release tests. Render and validate

@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import patch
 
+import jwt
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import event, update
@@ -55,12 +58,65 @@ WARNING = {
 @pytest.fixture(autouse=True)
 def fixed_report_clock(monkeypatch):
     class FixedDateTime(datetime):
+        instant = NOW
+
         @classmethod
         def now(cls, tz=None):
-            return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
+            return cls.instant.astimezone(tz) if tz else cls.instant.replace(tzinfo=None)
+
+    real_decode = jwt.decode
+
+    def decode_report_cursor(*args, **kwargs):
+        # Scope the validation clock to report decoding, never authentication.
+        with patch.object(jwt.api_jwt, "datetime", FixedDateTime):
+            return real_decode(*args, **kwargs)
 
     monkeypatch.setattr(reports, "datetime", FixedDateTime)
+    monkeypatch.setattr(reports, "jwt", SimpleNamespace(
+        encode=jwt.encode, decode=decode_report_cursor,
+    ))
     monkeypatch.setattr(provider_costs, "_now", lambda: NOW)
+    return FixedDateTime
+
+
+@pytest.mark.parametrize("elapsed", [3599, 3600, 3601])
+def test_report_cursor_expiry_uses_the_same_test_clock(client, fixed_report_clock, elapsed):
+    cursor = reports._cursor("usage", ["account-000", "feature"])
+    fixed_report_clock.instant = NOW + timedelta(seconds=elapsed)
+    if elapsed < 3600:
+        assert reports._decode(cursor, "usage", 2) == ["account-000", "feature"]
+    else:
+        with pytest.raises(ProblemHTTPException) as failure:
+            reports._decode(cursor, "usage", 2)
+        assert failure.value.status_code == 400
+        assert failure.value.problem_type == "console_cursor_invalid"
+    assert jwt.api_jwt.datetime is datetime
+
+
+@pytest.mark.parametrize("invalid", ["signature", "audience", "missing-exp", "wrong-key"])
+def test_report_cursor_clock_keeps_security_checks(client, invalid):
+    from caseops_api.core.settings import get_settings
+
+    payload = {"aud": "caseops-console-report-cursor", "kind": "usage",
+               "keys": ["account-000", "feature"], "exp": NOW + timedelta(hours=1)}
+    if invalid == "audience":
+        payload["aud"] = "not-the-report-audience"
+    if invalid == "missing-exp":
+        payload.pop("exp")
+    key = (
+        "different-test-only-signing-key-at-least-32-bytes"
+        if invalid == "wrong-key" else get_settings().auth_secret
+    )
+    cursor = jwt.encode(payload, key, algorithm="HS256")
+    if invalid == "signature":
+        header, body, signature = cursor.split(".")
+        signature = ("A" if signature[0] != "A" else "B") + signature[1:]
+        cursor = ".".join([header, body, signature])
+    with pytest.raises(ProblemHTTPException) as failure:
+        reports._decode(cursor, "usage", 2)
+    assert failure.value.status_code == 400
+    assert failure.value.problem_type == "console_cursor_invalid"
+    assert jwt.api_jwt.datetime is datetime
 
 
 @contextmanager

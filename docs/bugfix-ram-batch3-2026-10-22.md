@@ -49,6 +49,16 @@ on its frozen source while the independent batch is implemented.
 
 ## Current Verdict
 
+The next hosted e01 run exposed a fixed-fixture/real-JWT clock mismatch in all
+four named-report pagination kinds. Cursor expiry at13:34:56UTC was correctly
+enforced; this is not a reason to extend production TTL or disable verification.
+All four call failures have complete passing setup/teardown envelopes. A local
+four-case RED reproduced them. The test-owned decode clock is now scoped to
+report cursors only, with seven new expiry/signature/audience/required-claim
+cases imported into the PostgreSQL sibling. Actual authentication keeps real
+time. The two CodeQL redundant-json-import notes were removed at source, not
+dismissed. Replacement full CI/Docker admission is still pending.
+
 Adjacent stale-tab approval was separately reproduced after the initial Docker
 pass: the server correctly rejected a now-zero-citation current revision, but
 the page retained its old positive revision. A new component case failed before

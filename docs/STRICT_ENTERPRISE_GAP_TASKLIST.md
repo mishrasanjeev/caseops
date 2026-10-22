@@ -2,6 +2,15 @@
 
 ## October 22 Named Workflow Coverage Gap
 
+Fresh e01 CI exposed another test-only clock defect: the names fixture minted
+report cursors at a fixed timestamp, but PyJWT validated against real time.
+All four pagination kinds failed after13:34:56UTC; the earlier native pass ran
+before expiry and does not close this time-dependent gap. The correction scopes
+the same clock to actual report-token validation without changing authentication
+or production TTL/signature/audience/expiry checks. Seven new boundary cases
+run on SQLite and canonical PostgreSQL. Preserve both failed native shard
+envelopes and the local four-case RED; replacement gates remain required.
+
 The actual six new Docker journeys now pass on dabd6704, including current
 revision approval/edit invalidation/finalization and contact preservation.
 Complete frontend coverage03 is1864P with whole-input stability. Keep release
