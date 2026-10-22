@@ -1,5 +1,19 @@
 # Ram Batch 3: Draft Recovery And Client Editing
 
+## Latest Release Gate Correction
+
+Hosted CI04 at81005522 failed the independent production invocation inventory:
+the workflow correctly owned17 roles, but the historical ordered expectation
+still listed14. Add the three Batch3 roles without removing native evidence,
+order or missing-role checks. The complete evidence, verification-workflow,
+trusted-checkout and Batch3 fixture modules now pass324 cases/972 phases,
+zero skips, with natural completion and324 JUnit cases. Preserve the original
+CI failure and the superseded full Docker03 partial results, not a green claim.
+Fresh committed-candidate Docker, CI and deployed acceptance remain required.
+The exact prior full frontend run06 passed1874 cases across241 files with
+stable whole inputs; its retained duplicate-title multiplicities are not
+independent source-case IDs. Neither component result is production evidence.
+
 ## Source And Classification
 
 The supplied `CaseOps_Bugs (3).xlsx` contains two populated issues, Bug Sheet

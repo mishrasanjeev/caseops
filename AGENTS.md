@@ -3255,3 +3255,8 @@ requirements when using the fallback.
   preserve a verified cache outside fixture storage. Prove cold preparation,
   corrupt-cache rejection and the actual workflow with networking disabled;
   a vendor download503 is not an application assertion or permission to skip it.
+- Adding a production browser role changes both its dedicated workflow contract
+  and the independent exact invocation inventory. Run both complete modules
+  before freezing a long release candidate. Preserve explicit role ordering,
+  native evidence and missing-role rejection; never derive the expected list
+  from the same workflow under test or omit a new role to make CI pass.
