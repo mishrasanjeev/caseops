@@ -1,5 +1,15 @@
 # CaseOps agent instructions
 
+- Reviewed browser inventories have independent Python and frontend source
+  contracts. After adding a journey, reconcile its exact literal identity and
+  per-role counts in both languages, not only the runner count. Keep whole
+  inventory equality and run the complete independent source-inventory module.
+- Test cleanup must use the uniquely admitted canonical identity, not an
+  unnormalized request value. Assert the create acknowledgement first, preserve
+  the original body failure separately from cleanup failures, and mark every
+  unreached journey boundary unverified. A failing finally block is not proof
+  that the body passed or that persisted product data was corrupted.
+
 - A "Recent" collection must have a server-owned chronological order and a
   unique tie-breaker before a client slices it. Database physical row order is
   not a contract. Prove distinct timestamps dominate IDs, exact timestamp ties

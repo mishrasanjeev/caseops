@@ -10,7 +10,7 @@ type Case = { id: string; file: string; titles: string[]; project: string; repea
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const projects = {
-  "tester-prod-chromium": 115,
+  "tester-prod-chromium": 116,
   "tester-index-prod-chromium": 6,
   "test-legal-write-prod-chromium": 50,
 };
@@ -79,10 +79,15 @@ describe("reviewed production tester source inventory", () => {
     cases = flatten(native.suites, projectRetries).filter(row => Object.hasOwn(projects, row.project));
   });
 
-  it("collects the independent reviewed115+6+50 exact partition before production", () => {
+  it("collects the independent reviewed116+6+50 exact partition before production", () => {
     expect(counts(cases.map(row => row.project))).toEqual(projects);
-    expect(cases).toHaveLength(171);
+    expect(cases).toHaveLength(172);
     expect(cases.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
+    expect(cases.filter(row => row.file === "ram-2026-10-22-prod.spec.ts")
+      .map(row => ({ project: row.project, title: row.titles.at(-1) }))).toEqual([{
+        project: "tester-prod-chromium",
+        title: "NOTES22 newest three of four saved notes persist after reload at 1280px and 393px",
+      }]);
   });
 
   it("retains exact per-file index and dated inventories", () => {

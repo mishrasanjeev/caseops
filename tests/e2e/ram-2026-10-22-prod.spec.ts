@@ -89,6 +89,15 @@ function newestFirst(left: Note, right: Note): number {
   return a === b ? (left.id < right.id ? 1 : left.id > right.id ? -1 : 0) : a < b ? 1 : -1;
 }
 
+function failureSummary(error: unknown, stage: string) {
+  const location = error instanceof Error
+    ? /ram-2026-10-22-prod\.spec\.ts:(\d+):(\d+)/.exec(error.stack ?? "") : null;
+  const kind = error instanceof Error && ["Error", "AssertionError", "TimeoutError", "TypeError"].includes(error.name)
+    ? error.name : "unknown";
+  return { stage, kind, location: location ? { line: Number(location[1]), column: Number(location[2]) } : null,
+    private_details_omitted: true };
+}
+
 test("NOTES22 newest three of four saved notes persist after reload at 1280px and 393px", async ({ page, baseURL }, info) => {
   if (!baseURL) throw new Error("Use the app, Docker or exact-release production config.");
   expect(info.config.workers, "Matter acceptance mutations require a serial producer").toBe(1);
@@ -118,10 +127,22 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
     extraHTTPHeaders: localTransportHeaders(api.origin) });
   let headers: Record<string, string> = localTransportHeaders(api.origin);
   const options = () => ({ headers, maxRetries: 0, maxRedirects: 0 });
-  let saved: Matter | undefined;
-  const matterCode = `NOTES22-${run}`;
+  let saved: Readonly<Matter> | undefined;
+  const matterCode = `NOTES22-${run}`.toUpperCase();
   const title = `Synthetic recent notes ${run}`;
   const blocked = new Set<string>();
+  const reached: string[] = [];
+  const widthProof = {
+    1280: { entered: false, reload: false, recent_three: false, geometry: false, persisted_readback: false },
+    393: { entered: false, reload: false, recent_three: false, geometry: false, persisted_readback: false },
+  };
+  let bodyFailed = false;
+  let bodyFailure: unknown;
+  let cleanupStage = "not_started";
+  const cleanup = { admitted_identity: false, identity_matches: false, intake_checked: false,
+    version_token_checked: false, read_status: null as number | null, disposal_attempted: false,
+    disposal_status: null as number | null, disposal_acknowledged: false, client_disposed: false };
+  const cleanupFailures: Array<{ stage: string; error: unknown }> = [];
   try {
     await page.setExtraHTTPHeaders(localTransportHeaders(web.origin));
     await page.route("**/*", route => {
@@ -131,12 +152,14 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
       return route.abort("blockedbyclient");
     });
     await release();
+    reached.push("initial_release_verified");
     if (local) {
       await json(await response(() => client.post(`${api.origin}/api/bootstrap/company`, { ...options(), data: {
         company_name: "Isolated recent notes acceptance", company_slug: credentials.company_slug,
         company_type: "law_firm", owner_full_name: "Offline notes owner",
         owner_email: credentials.email, owner_password: credentials.password,
       } }), "Loopback fixture bootstrap"), "Loopback fixture bootstrap");
+      reached.push("loopback_bootstrap_verified");
     }
     const login = await json(await response(() => client.post(`${api.origin}/api/auth/login`, {
       ...options(), data: credentials,
@@ -146,13 +169,25 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
     const me = await json(await response(() => client.get(`${api.origin}/api/auth/me`, options()), "Authenticated QA context"), "Authenticated QA context");
     expect(stringField(record(me.company, "QA company"), "slug") === credentials.company_slug).toBe(true);
     expect(stringField(record(me.user, "QA user"), "email") === credentials.email).toBe(true);
+    reached.push("authenticated_context_verified");
     await release();
-    saved = matter(await json(await response(() => client.post(`${api.origin}/api/matters/`, { ...options(), data: {
+    const acknowledgement = matter(await json(await response(() => client.post(`${api.origin}/api/matters/`, { ...options(), data: {
       matter_code: matterCode, title, status: "intake", practice_area: "Civil", forum_level: "advisory",
       client_name: null, opposing_party: null, description: null,
     } }), "Unique Intake Matter creation"), "Unique Intake Matter creation"));
-    expect(saved.status).toBe("intake");
+    expect(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(acknowledgement.id), "Creation acknowledges a valid server-owned ID").toBe(true);
+    expect(acknowledgement.matter_code === matterCode && acknowledgement.title === title,
+      "Creation acknowledges the exact canonical requested code and title").toBe(true);
+    expect(acknowledgement.status).toBe("intake");
+    saved = Object.freeze({ id: acknowledgement.id, matter_code: acknowledgement.matter_code,
+      title: acknowledgement.title, status: acknowledgement.status, updated_at: acknowledgement.updated_at });
+    cleanup.admitted_identity = true;
     const path = `/api/matters/${saved.id}`;
+    const admittedRead = matter(await json(await response(() => client.get(`${api.origin}${path}`, options()),
+      "Admitted Matter identity read"), "Admitted Matter identity read"));
+    expect(admittedRead.id === saved.id && admittedRead.matter_code === saved.matter_code
+      && admittedRead.title === saved.title, "Persisted acknowledgement retains the original admitted ID code and title").toBe(true);
+    reached.push("matter_acknowledgement_verified");
     const created: Note[] = [];
     for (const index of [1, 2, 3, 4]) {
       const body = `Synthetic NOTES22 note ${index} ${run}`;
@@ -164,6 +199,7 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
       created.push(added);
     }
     expect(new Set(created.map(row => row.id)).size).toBe(4);
+    reached.push("four_note_admissions_verified");
     const expected = [...created].sort(newestFirst);
     const read = async () => workspace(await json(await response(
       () => client.get(`${api.origin}${path}/workspace`, options()), "Persisted notes workspace",
@@ -175,6 +211,7 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
       expect(retained.body === created.find(row => row.id === retained.id)?.body).toBe(true);
     }
     const retainedBytes = JSON.stringify(baseline.notes);
+    reached.push("four_persisted_notes_order_verified");
     await page.goto(`${web.origin}/sign-in`);
     await page.locator("#company-slug").fill(credentials.company_slug);
     await page.locator("#email").fill(credentials.email);
@@ -184,14 +221,20 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
     await page.getByRole("button", { name: /^Sign in$/ }).click();
     expect((await signed).status(), "Normal browser QA login").toBe(200);
     await page.waitForURL(/\/app(?:[/?]|$)/);
+    reached.push("browser_login_verified");
     await page.goto(`${web.origin}/app/matters/${saved.id}`);
-    for (const width of [1280, 393]) {
+    reached.push("matter_navigation_completed");
+    for (const width of [1280, 393] as const) {
       await page.setViewportSize({ width, height: 1000 });
+      widthProof[width].entered = true;
+      reached.push(`width_${width}_entered`);
       const loaded = page.waitForResponse(receipt => new URL(receipt.url()).origin === api.origin
         && new URL(receipt.url()).pathname === `${path}/workspace` && receipt.request().method() === "GET");
       await page.reload();
       const browserRead = workspace(await json(await loaded, "Reloaded browser workspace"));
       expect(JSON.stringify(browserRead.notes) === retainedBytes, "All four complete persisted note records survive browser reload").toBe(true);
+      widthProof[width].reload = true;
+      reached.push(`width_${width}_reload_verified`);
       await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
       const heading = page.getByRole("heading", { name: "Recent notes", exact: true });
       await expect(heading).toBeVisible();
@@ -202,6 +245,8 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
       await expect(rows.locator("p")).toHaveText(expected.slice(0, 3).map(row => row.body));
       for (const body of expected.slice(0, 3).map(row => row.body)) await expect(card.getByText(body, { exact: true })).toBeVisible();
       await expect(card.getByText(expected[3].body, { exact: true })).toHaveCount(0);
+      widthProof[width].recent_three = true;
+      reached.push(`width_${width}_recent_three_verified`);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
         "Recent notes must not widen the document").toBe(true);
       const rowBounds = await rows.evaluateAll(elements => elements.map(element => {
@@ -242,24 +287,68 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
           "Author and timestamp remain readable above the note body").toBe(true);
         expect(geometry.metadata[0].right, "Author and timestamp do not overlap").toBeLessThanOrEqual(geometry.metadata[1].left + 1);
       }
+      widthProof[width].geometry = true;
+      reached.push(`width_${width}_geometry_verified`);
       expect(JSON.stringify((await read()).notes) === retainedBytes, "All four notes remain persisted after responsive readback").toBe(true);
+      widthProof[width].persisted_readback = true;
+      reached.push(`width_${width}_persisted_readback_verified`);
       if (local) await info.attach(`NOTES22-recent-${width}px`, { body: await card.screenshot(), contentType: "image/png" });
     }
     expect(blocked.size, "No external browser requests are allowed").toBe(0);
     await release();
+    reached.push("body_completed");
+  } catch (error) {
+    bodyFailed = true;
+    bodyFailure = error;
   } finally {
     try {
       if (saved) {
+        cleanupStage = "release_identity";
         await release();
-        const current = matter(await json(await response(() => client.get(`${api.origin}/api/matters/${saved!.id}`, options()), "Owned fixture cleanup read"), "Owned fixture cleanup read"));
-        expect(current.matter_code === matterCode && current.title === title, "Cleanup is restricted to this unique QA Matter").toBe(true);
+        cleanupStage = "fresh_admitted_identity";
+        const currentResponse = await response(() => client.get(`${api.origin}/api/matters/${saved!.id}`, options()), "Owned fixture cleanup read");
+        cleanup.read_status = currentResponse.status();
+        const current = matter(await json(currentResponse, "Owned fixture cleanup read"));
+        cleanup.identity_matches = current.id === saved.id && current.matter_code === saved.matter_code && current.title === saved.title;
+        expect(cleanup.identity_matches, "Cleanup requires the original admitted ID code and title").toBe(true);
         expect(current.status).toBe("intake");
-        const disposed = matter(await json(await response(() => client.patch(`${api.origin}/api/matters/${saved!.id}/lifecycle/status`, {
-          ...options(), data: { to_status: "disposed", expected_from_status: current.status,
+        cleanup.intake_checked = true;
+        timestamp(current.updated_at);
+        cleanup.version_token_checked = true;
+        cleanupStage = "single_disposal";
+        cleanup.disposal_attempted = true;
+        const disposalResponse = await response(() => client.patch(`${api.origin}/api/matters/${saved!.id}/lifecycle/status`, {
+          ...options(), data: { to_status: "disposed", expected_from_status: "intake",
             expected_updated_at: current.updated_at, reason: "Complete isolated October 22 notes acceptance fixture" },
-        }), "Owned fixture lifecycle disposal"), "Owned fixture lifecycle disposal"));
+        }), "Owned fixture lifecycle disposal");
+        cleanup.disposal_status = disposalResponse.status();
+        const disposed = matter(await json(disposalResponse, "Owned fixture lifecycle disposal"));
+        expect(disposed.id === saved.id && disposed.matter_code === saved.matter_code && disposed.title === saved.title,
+          "Disposal acknowledges only the original admitted identity").toBe(true);
         expect(disposed.status).toBe("disposed");
+        cleanup.disposal_acknowledged = true;
       }
-    } finally { await client.dispose(); }
+    } catch (error) { cleanupFailures.push({ stage: cleanupStage, error }); }
+    try { await client.dispose(); cleanup.client_disposed = true; }
+    catch (error) { cleanupFailures.push({ stage: "client_disposal", error }); }
   }
+
+  const evidenceFailures: unknown[] = [];
+  const attachments = [
+    { name: "NOTES22-stage-checkpoints", data: { schema_version: 1, body_status: bodyFailed ? "failed" : "passed",
+      reached, last_completed_stage: reached.at(-1) ?? null, widths: widthProof,
+      failure: bodyFailed ? failureSummary(bodyFailure, "body") : null } },
+    { name: "NOTES22-cleanup-result", data: { schema_version: 1, status: cleanupFailures.length ? "failed" : saved ? "passed" : "no_admitted_identity",
+      ...cleanup, failures: cleanupFailures.map(item => failureSummary(item.error, item.stage)) } },
+  ];
+  for (const attachment of attachments) {
+    try { await info.attach(attachment.name, { body: Buffer.from(JSON.stringify(attachment.data)), contentType: "application/json" }); }
+    catch { evidenceFailures.push(new Error("Required bounded notes checkpoint attachment failed; private details omitted.")); }
+  }
+  if (cleanupFailures.length) info.annotations.push({ type: "notes22-cleanup-failure", description: "Cleanup failed; inspect the separate bounded cleanup-result attachment." });
+  if (evidenceFailures.length) info.annotations.push({ type: "notes22-evidence-failure", description: "Required checkpoint evidence could not be retained." });
+  // Rethrow the original body error unchanged; cleanup and evidence failures cannot replace it.
+  if (bodyFailed) throw bodyFailure;
+  if (cleanupFailures.length) throw cleanupFailures[0].error;
+  if (evidenceFailures.length) throw evidenceFailures[0];
 });

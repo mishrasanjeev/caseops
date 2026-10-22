@@ -2,6 +2,16 @@
 
 ## October 22 Unordered Recent Matter Notes
 
+Release-test follow-up: d72's independent web source inventory still expected
+115 tester cases rather than the independently collected116 after NOTES22 was
+added; total171 must become172 without weakening exact membership. Its complete
+web run was1802P1F/1803, not a green gate. The local29-case browser preflight was
+28P1F: server-uppercase Matter code made the new fixture's cleanup ownership
+check reject its lowercase input. Title and four retained notes agree; the
+overwritten body exception and unreached width proofs remain unverified. Correct
+the canonical fixture acknowledgement and error preservation, retain both failed
+packets, and require complete replacement unit/browser/CI/Docker/deployed gates.
+
 J04/M03/US-007..009/FT-011..015: exact f26 CI39696037419 PostgreSQL shard11
 collected204 cases with203 passes and one failed call, all setup/teardown passed.
 test_default_readers_keep_rich_workspace_dto differed only in notes;14 other DTO
