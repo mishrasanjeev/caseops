@@ -3271,3 +3271,9 @@ requirements when using the fallback.
   work and after builds; pending, missing, skipped or failed jobs remain closed.
   Preserve cancelled builds and old acceptance, patch the actual dependency and
   require fresh candidate gates rather than weakening the audit threshold.
+- A successful npm lock rewrite or audit is not a complete dependency graph.
+  Verify native logical, installed and actual pruned musl inventories before
+  long acceptance. Optional WASM packages still own required dependencies and
+  peers; never infer incompatibility from a package name. Retain complete known
+  entries and registry integrity when a resolver drops them, and regress the
+  missing portable Sharp runtime and compiler peer without weakening licenses.

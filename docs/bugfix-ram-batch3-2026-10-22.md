@@ -1,5 +1,31 @@
 # Ram Batch 3: Draft Recovery And Client Editing
 
+## October 23 Portable Dependency Closure Correction
+
+First patched source3a61aeae failed Security39848276097 in two jobs/three steps:
+native workspace inventory and host/musl license inventories. All identify the
+missing required `@img/sharp-wasm32 -> @emnapi/runtime` edge. This is incomplete
+lock data,not an unapproved license. No audit/license policy is loosened. Its
+full frontend08 completed1879P/242files with stable source,not release GO.
+Docker05 had not started; there is no interrupted native replacement to hide.
+
+We accepted npm11's rewrite after inspecting version pins and audit results but
+without executing all platform-closure commands first. That missed its deletion
+of the previously complete portable runtime/peer entries. A clean isolated
+rewrite and an explicit WASM-target rewrite also reproduced the omissions,so
+do not claim that an installed Windows node_modules tree alone caused them.
+The Sharp WASM package declares no CPU/OS exclusion; its required runtime is
+not optional merely because the parent is optional. Inspect actual metadata.
+
+Restore exactly the two unchanged canonical `@emnapi/runtime@1.11.3` and
+`@emnapi/core@1.11.1` records from the last complete main lock; verify both
+registry integrities,MIT labels and dependency metadata. No other lock records
+change in that correction. Native logical npm inventory then exits0. Two new
+actual-lock assertions reproduce2F/4P on3a61's graph before repair. Require
+their GREEN,physical clean install,strict audit,and real logical/host/pruned-musl
+license gates before the next committed full Docker/CI/browser replacement.
+Earlier Security and frontend results stay source-bound historical evidence.
+
 ## October 23 Security Replacement, Not Deployed
 
 Full canonical local Docker88 completed3376 PostgreSQL passes/10128 phases,

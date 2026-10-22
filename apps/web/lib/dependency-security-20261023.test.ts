@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const manifest = JSON.parse(readFileSync(path.join(root, "apps/web/package.json"), "utf8"));
 const lock = JSON.parse(readFileSync(path.join(root, "package-lock.json"), "utf8")) as {
-  packages: Record<string, { version?: string; dependencies?: Record<string, string>; devDependencies?: Record<string, string> }>;
+  packages: Record<string, { version?: string; dependencies?: Record<string, string>; devDependencies?: Record<string, string>; peerDependencies?: Record<string, string> }>;
 };
 
 // Reviewed stable releases fixing the October22 Next and Vitest advisories.
@@ -43,5 +43,21 @@ describe("October23 dependency security baseline", () => {
     expect(entries.length).toBeGreaterThan(3);
     expect(lock.packages["node_modules/@vitest/mocker"].version).toBe(vitestVersion);
     for (const [key, entry] of entries) expect(entry.version, key).toBe(vitestVersion);
+  });
+
+  it("retains the required runtime of the portable Sharp WASM fallback", () => {
+    expect(lock.packages["node_modules/@img/sharp-wasm32"].dependencies?.["@emnapi/runtime"]).toBe("^1.11.3");
+    expect(lock.packages["node_modules/@emnapi/runtime"]).toMatchObject({
+      version: "1.11.3", dependencies: { tslib: "^2.4.0" },
+    });
+    expect(lock.packages["node_modules/tslib"]).toBeDefined();
+  });
+
+  it("retains the compiler WASM runtime's required peer and its dependency", () => {
+    expect(lock.packages["node_modules/@napi-rs/wasm-runtime"].peerDependencies?.["@emnapi/core"]).toBeDefined();
+    expect(lock.packages["node_modules/@emnapi/core"]).toMatchObject({
+      version: "1.11.1", dependencies: { "@emnapi/wasi-threads": "1.2.2", tslib: "^2.4.0" },
+    });
+    expect(lock.packages["node_modules/@emnapi/wasi-threads"].version).toBe("1.2.2");
   });
 });
