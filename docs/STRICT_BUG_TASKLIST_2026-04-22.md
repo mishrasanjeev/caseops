@@ -1,5 +1,22 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 22 Combined Release Gate Corrections
+
+PRA-10..13 and LEAD-01..05 remain release-pending. Leads081e Docker06 failed
+both mobile real journeys on PostgreSQL ENOSPC, with native3276 passing; this
+is not completed browser acceptance or a demonstrated product auth defect.
+Retain all original failures and replay the full combined candidate after
+actual Docker filesystem recovery and new byte/inode admission checks. See
+`runbooks/docker-acceptance-storage.md` for the fail-closed guard contract.
+
+Initial combined-head hosted CI also found the compiled data-class projection
+stale after the ORM addition. Render and validate the canonical projection,
+preserve legal-hold enforcement, and replay the complete affected PostgreSQL
+journey plus all current CI. The CodeQL test mutation is moved outside its
+assertion; the historical scanner finding is reviewed at an exact synthetic
+fixture fingerprint, never a rule-wide/path-wide exclusion. No component fix
+or prior source result establishes current release or owner acceptance.
+
 ## October 22 Revoked Administrator Cannot Be Re-Invited
 
 Adjacent enhancement PRA-13: Usage, Revenue and account-specific Overview

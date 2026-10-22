@@ -186,7 +186,8 @@ def test_legacy_bytes_and_queries_are_unchanged_with_opt_in(client, kind):
             records = payload["margin_alerts" if kind == "overview" else "items"]
             for record in records:
                 if "company_id" in record:
-                    assert record.pop("company_name") == f"Account {int(record['company_id'][-3:])}"
+                    company_name = record.pop("company_name")
+                    assert company_name == f"Account {int(record['company_id'][-3:])}"
         # Exact serialization, including field order, money, dates and pagination.
         assert json.dumps(payload, separators=(",", ":")) == legacy.model_dump_json()
         assert len(default_queries) == (7 if kind == "overview" else 1)

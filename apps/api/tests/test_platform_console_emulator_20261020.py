@@ -423,7 +423,7 @@ def invitation_age_fixture(harness, monkeypatch, tmp_path):
         "CASEOPS_PUBLIC_APP_URL": WEB,
         "CASEOPS_DATABASE_URL": url,
         "CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL": "fixture-founder@example.com",
-        "CASEOPS_AUTH_SECRET": "isolated-invitation-age-secret-at-least-32-bytes",
+        "CASEOPS_AUTH_SECRET": "local-only-" * 4,
     }.items():
         monkeypatch.setenv(key, value)
     get_settings.cache_clear()

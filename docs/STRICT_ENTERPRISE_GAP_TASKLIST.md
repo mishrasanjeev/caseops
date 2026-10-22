@@ -1,5 +1,23 @@
 # Strict Enterprise Gap Tasklist
 
+## October 22 Docker Filesystem Admission
+
+Confirmed release-infrastructure NO-GO: the Leads081e whole Docker gate passed
+its native suite but both real mobile enquiry/admin journeys received503 when
+PostgreSQL could not extend files on Docker's full Linux filesystem. Windows
+host capacity was not the relevant capacity. Preserve that failed evidence;
+neither the product journeys nor an earlier green native run certify release.
+The replacement gate must measure actual bytes and inodes at every expensive
+boundary, record owned network-disabled probe cleanup, and refuse missing or
+insufficient measurements without pruning or weakening any assertion. The
+runbook is `runbooks/docker-acceptance-storage.md`; full replacement acceptance
+remains required after recovery of reviewed unused local build images.
+
+The same schema change also exposed a stale compiled governance projection.
+Regeneration must preserve the reviewed classification and preservation fences,
+with complete PostgreSQL legal-hold replay and new-head CI. Do not treat the
+stale-projection503 as an exception to legal-hold enforcement.
+
 ## October 22 Isolated Administrator Grant Recovery
 
 PRA-13 report-name extension is locally implemented but release-pending: enrich only selected-page IDs

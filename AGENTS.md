@@ -1,5 +1,15 @@
 # CaseOps agent instructions
 
+- An ORM migration must update both the reviewed data-class map and its
+  compiled governance projection before release tests. Render and validate
+  with the canonical generator, then replay the complete affected PostgreSQL
+  journey; a stale-projection denial is not a reason to disable preservation.
+- Docker acceptance must measure the Docker filesystem's available bytes and
+  inodes before builds and database/browser phases. Host-drive free space and
+  aggregate image sizes do not establish headroom. Retain ENOSPC failures as
+  incomplete/failed evidence, recover only explicitly owned or reviewed unused
+  resources, then run a complete replacement gate without weakening assertions.
+
 - A browser response waiter observes headers, not necessarily a readable body.
   Before reloading a page with a same-URL API fetch, finish the initial body and
   prove its visible render; bind the reload to a new request and await completion

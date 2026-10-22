@@ -32,6 +32,12 @@ foreach ($FunctionName in @(
     . ([scriptblock]::Create($Definitions[0].Extent.Text))
 }
 
+# Capacity is independently exercised by docker-storage-headroom-guard.ps1.
+# This offline Playwright guard must never resolve a real Docker transport.
+function Assert-DockerStorageHeadroom([string]$Stage) {
+    if ($Stage -cne "pre-browser") { throw "Unexpected storage boundary." }
+}
+
 function Test-SamePath([string]$Left, [string]$Right) {
     $Comparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
         [StringComparison]::OrdinalIgnoreCase

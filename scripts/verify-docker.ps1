@@ -36,6 +36,173 @@ $ResultsDirectory = [IO.Path]::GetFullPath($ResultsDirectory)
 New-Item -ItemType Directory -Path $ResultsDirectory -Force | Out-Null
 Write-Host "[docker-acceptance] retained reports: $ResultsDirectory"
 
+function Assert-DockerStorageHeadroom {
+    param([Parameter(Mandatory=$true)][ValidateSet("pre-build", "post-build", "pre-postgres", "pre-browser")][string]$Stage)
+
+    # Reserve room for image export plus all native/browser fixtures and WAL.
+    # This floor is not a reservation against concurrent Docker users. Windows
+    # free space and aggregate docker df cannot prove Docker filesystem capacity.
+    $DockerStorageProbe = @'
+import json
+import re
+import subprocess
+import sys
+import uuid
+
+MIN_BYTES, MIN_INODES = 64 * 1024**3, 100000
+OWNER = 'io.caseops.acceptance.storage-probe'
+
+def measurements(value, paths):
+    if (not isinstance(value, dict) or set(value) != {'version', 'filesystems'}
+            or type(value['version']) is not int or value['version'] != 1):
+        raise ValueError('invalid_measurement')
+    rows = value['filesystems']
+    if not isinstance(rows, list) or [r.get('path') for r in rows if isinstance(r, dict)] != paths:
+        raise ValueError('invalid_measurement')
+    for row in rows:
+        if set(row) != {'path', 'available_bytes', 'free_inodes'}:
+            raise ValueError('invalid_measurement')
+        for key in ('available_bytes', 'free_inodes'):
+            if type(row[key]) is not int or not 0 <= row[key] < 2**63:
+                raise ValueError('invalid_measurement')
+    return rows
+
+def probe(project, release, stage, compose):
+    token = uuid.uuid4().hex
+    name = project + '-storage-' + token[:12]
+    result = dict(version=1, project=project, release_sha=release, stage=stage, compose_file=compose,
+                  minimum_bytes=MIN_BYTES, minimum_inodes=MIN_INODES,
+                  container_name=name, owner_token=token, image_id=None,
+                  filesystems=[], commands=[], cleanup_complete=False, status='refused')
+    attempted = False
+    def command(operation, arguments, timeout=10):
+        entry = dict(operation=operation, exit_code=None, timed_out=False)
+        result['commands'].append(entry)
+        try:
+            child = subprocess.run(['docker', *arguments], capture_output=True, text=True,
+                                   timeout=timeout, check=False)
+        except subprocess.TimeoutExpired:
+            entry['timed_out'] = True
+            raise ValueError('docker_command_timeout') from None
+        entry['exit_code'] = child.returncode
+        if child.returncode or len(child.stdout) > 65536:
+            raise ValueError('docker_command_failed')
+        return child.stdout.strip()
+    try:
+        # This approved API base must already exist. Admission never pulls it.
+        image_info = json.loads(command('image', ['image', 'inspect', '--format',
+            '{"id":{{json .Id}},"volumes":{{json .Config.Volumes}}}', 'python:3.13-slim']))
+        image = image_info['id']
+        if not re.fullmatch(r'sha256:[0-9a-f]{64}', image) or image_info['volumes'] not in (None, {}):
+            raise ValueError('invalid_image_identity')
+        result['image_id'] = image
+        paths, volumes = ['/'], []
+        if stage in ('pre-postgres', 'pre-browser'):
+            pg = command('postgres', ['ps', '--no-trunc', '--filter', 'status=running',
+                '--filter', 'label=com.docker.compose.project=' + project,
+                '--filter', 'label=com.docker.compose.service=postgres', '--format', '{{.ID}}'])
+            if not re.fullmatch(r'[0-9a-f]{64}', pg):
+                raise ValueError('invalid_postgres_identity')
+            template = '{"id":{{json .Id}},"labels":{{json .Config.Labels}},"mounts":{{json .Mounts}}}'
+            owned = json.loads(command('postgres-owner', ['inspect', '--format', template, pg]))
+            labels, mounts = owned['labels'], owned['mounts']
+            if (owned['id'] != pg or labels.get('com.docker.compose.project') != project
+                    or labels.get('com.docker.compose.service') != 'postgres'
+                    or len(mounts) != 1 or mounts[0]['Type'] != 'volume'
+                    or mounts[0]['Destination'] != '/var/lib/postgresql/data'
+                    or not mounts[0]['Name'].startswith(project + '_')):
+                raise ValueError('foreign_postgres_mount')
+            result['postgres_container_id'] = pg
+            result['postgres_volume'] = mounts[0]['Name']
+            paths.append('/var/lib/postgresql/data')
+            volumes = ['--volumes-from=' + pg + ':ro']
+        script = ('import json,os,sys\nrows=[]\n'
+                  'for path in sys.argv[1:]:\n'
+                  ' s=os.statvfs(path)\n'
+                  ' rows.append(dict(path=path,available_bytes=s.f_bavail*s.f_frsize,free_inodes=s.f_favail))\n'
+                  'print(json.dumps(dict(version=1,filesystems=rows)))')
+        attempted = True
+        cid = command('create', ['create', '--name', name, '--pull=never', '--network=none',
+                                 '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges',
+                                 '--label', OWNER + '=' + token, *volumes, '--entrypoint=python',
+                                 image, '-I', '-S', '-B', '-c', script, *paths])
+        if not re.fullmatch(r'[0-9a-f]{64}', cid):
+            raise ValueError('invalid_probe_identity')
+        result['container_id'] = cid
+        rows = measurements(json.loads(command('measure', ['start', '--attach', cid], timeout=15)), paths)
+        result['filesystems'] = rows
+        if any(r['available_bytes'] < MIN_BYTES or r['free_inodes'] < MIN_INODES for r in rows):
+            raise ValueError('insufficient_headroom')
+        result['status'] = 'passed'
+    except (ValueError, KeyError, TypeError, AttributeError, OSError) as error:
+        allowed = {'invalid_measurement', 'docker_command_timeout', 'docker_command_failed',
+                   'invalid_image_identity', 'invalid_postgres_identity', 'foreign_postgres_mount',
+                   'invalid_probe_identity', 'insufficient_headroom'}
+        result['error'] = str(error) if str(error) in allowed else 'invalid_probe_result'
+    finally:
+        try:
+            if attempted:
+                args = ['ps', '--all', '--no-trunc', '--filter', 'label=' + OWNER + '=' + token,
+                        '--format', '{{.ID}}']
+                remaining = command('cleanup-inventory', args).splitlines()
+                if len(remaining) > 1:
+                    raise ValueError('ambiguous_owned_probe')
+                for cid in remaining:
+                    if not re.fullmatch(r'[0-9a-f]{64}', cid):
+                        raise ValueError('invalid_owned_probe')
+                    template = '{"name":{{json .Name}},"labels":{{json .Config.Labels}}}'
+                    owned = json.loads(command('cleanup-owner', ['inspect', '--format', template, cid]))
+                    if owned['name'] != '/' + name or owned['labels'].get(OWNER) != token:
+                        raise ValueError('foreign_probe')
+                    command('cleanup-remove', ['rm', '--force', cid])
+                if command('cleanup-confirm', args):
+                    raise ValueError('owned_probe_remains')
+            result['cleanup_complete'] = True
+        except (ValueError, KeyError, TypeError, AttributeError, OSError):
+            result['status'], result['error'] = 'refused', 'probe_cleanup_failed'
+    return result
+
+if __name__ == '__main__':
+    result = probe(*sys.argv[1:])
+    print(json.dumps(result))
+    sys.exit(0 if result['status'] == 'passed' and result['cleanup_complete'] else 1)
+'@
+    # stdin avoids legacy Windows PowerShell re-quoting embedded JSON/Python.
+    $ProbeText = ""
+    $ProbeExit = -1
+    try {
+        $ProbeText = (($DockerStorageProbe | & $ApiPython -I -S -B - $ComposeProject $ReleaseSha $Stage $ComposeFile) | Out-String).Trim()
+        $ProbeExit = $LASTEXITCODE
+    } catch { $ProbeExit = -1 }
+    $Receipt = [ordered]@{ stage = $Stage; release_sha = $ReleaseSha; project = $ComposeProject;
+        native_exit = $ProbeExit; validated = $false; result = $null }
+    try {
+        $Result = $ProbeText | ConvertFrom-Json -ErrorAction Stop
+        $Receipt.result = $Result
+        $ExpectedPaths = if ($Stage -in @("pre-postgres", "pre-browser")) { @("/", "/var/lib/postgresql/data") } else { @("/") }
+        $Valid = $ProbeExit -eq 0 -and ($Result.version -is [int] -or $Result.version -is [long]) -and
+            $Result.version -eq 1 -and $Result.status -ceq "passed" -and
+            $Result.cleanup_complete -is [bool] -and $Result.cleanup_complete -ceq $true -and $Result.project -ceq $ComposeProject -and
+            $Result.release_sha -ceq $ReleaseSha -and $Result.stage -ceq $Stage -and
+            $Result.minimum_bytes -eq 68719476736 -and $Result.minimum_inodes -eq 100000 -and
+            @($Result.filesystems).Count -eq $ExpectedPaths.Count
+        for ($Index = 0; $Index -lt $ExpectedPaths.Count; $Index++) {
+            $Row = @($Result.filesystems)[$Index]
+            $Valid = $Valid -and $Row.path -ceq $ExpectedPaths[$Index] -and
+                ($Row.available_bytes -is [long] -or $Row.available_bytes -is [int]) -and
+                ($Row.free_inodes -is [long] -or $Row.free_inodes -is [int]) -and
+                $Row.available_bytes -ge 68719476736 -and $Row.free_inodes -ge 100000
+        }
+        $Receipt.validated = [bool]$Valid
+    } catch { $Receipt.validated = $false }
+    $ReceiptPath = Join-Path $ResultsDirectory ("docker-storage-$Stage-" + [Guid]::NewGuid().ToString("N") + ".json")
+    $Receipt | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $ReceiptPath -Encoding UTF8
+    if (-not $Receipt.validated) {
+        throw "Docker filesystem headroom admission refused at $Stage; see $ReceiptPath. No automatic pruning or retry is permitted."
+    }
+    Write-Host "[docker-acceptance] Docker filesystem headroom passed at $Stage; retained $ReceiptPath"
+}
+
 function Get-WorkingTreeFingerprint {
     $Entries = @{}
     foreach ($Line in @(& git -C $RepoRoot ls-files --stage)) {
@@ -310,6 +477,8 @@ function Assert-CandidatePlaywrightSuite {
 
 function Invoke-CandidatePlaywright {
     param([string[]]$Arguments = @())
+
+    Assert-DockerStorageHeadroom -Stage "pre-browser"
 
     if (@($Arguments | Where-Object { $_ -match "^--reporter(?:=|$)" }).Count) {
         throw "Docker acceptance owns its structured Playwright reporters."
@@ -945,6 +1114,8 @@ $PinnedNodeVersion = ((Get-Content -LiteralPath (Join-Path $RepoRoot ".nvmrc") -
 & (Join-Path $RepoRoot "tests\docker-acceptance-repo-root-guard.ps1")
 & (Join-Path $RepoRoot "tests\docker-native-postgres-isolation-guard.ps1")
 & (Join-Path $RepoRoot "tests\docker-failure-evidence-guard.ps1")
+& (Join-Path $RepoRoot "tests\docker-storage-headroom-guard.ps1") `
+    -EvidenceDirectory (Join-Path $ResultsDirectory "storage-headroom-guard")
 & (Join-Path $RepoRoot "tests\docker-release-image-identity-guard.ps1") `
     -EvidenceDirectory (Join-Path $ResultsDirectory "image-identity-guard")
 $NodePath = (Get-Command node -ErrorAction Stop).Source
@@ -1044,6 +1215,7 @@ try {
     Assert-CandidateDataClassProjection
     Assert-CandidatePlaywrightSuite -Arguments $PlaywrightArgs
 
+    Assert-DockerStorageHeadroom -Stage "pre-build"
     Write-Host "[docker-acceptance] resetting isolated project $ComposeProject"
     & docker compose --profile acceptance --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
     if ($LASTEXITCODE -ne 0) { throw "Could not reset the isolated Compose project." }
@@ -1072,6 +1244,7 @@ try {
     }
 
     Assert-CandidateSourceUnchanged -Stage "after image build"
+    Assert-DockerStorageHeadroom -Stage "post-build"
     Write-Host "[docker-acceptance] starting migration-first stack"
     & docker compose --project-name $ComposeProject --file $ComposeFile up --detach --wait --wait-timeout 300
     if ($LASTEXITCODE -ne 0) { throw "Docker stack did not become healthy." }
@@ -1186,6 +1359,7 @@ try {
 
     Write-Host "[docker-acceptance] running the complete PostgreSQL + pgvector validation suite"
     Assert-CandidateSourceUnchanged -Stage "before isolated PostgreSQL acceptance"
+    Assert-DockerStorageHeadroom -Stage "pre-postgres"
     Invoke-IsolatedNativePostgresGate -Validation {
         Push-Location $ApiDir
         $PostgresExitCode = 1
@@ -1216,6 +1390,7 @@ try {
         }
     }
     Assert-CandidateSourceUnchanged -Stage "after isolated PostgreSQL acceptance"
+    Assert-DockerStorageHeadroom -Stage "pre-browser"
 
     Write-Host "[docker-acceptance] rechecking schema and index health after rollback rehearsals"
     & docker compose --project-name $ComposeProject --file $ComposeFile exec --no-TTY api caseops-db-index-health
