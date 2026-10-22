@@ -1,5 +1,26 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 22 Administrator Recovery Coverage
+
+PRA-13 adds account names alongside IDs in Usage, Revenue and account-specific
+Overview alerts, preserving named Activity/Profit views and financial evidence.
+Require strict opt-in DTOs/legacy equivalence, one bounded name query, pagination,
+renamed/missing source handling and real visible names after responsive reload.
+
+J14/M14/US-040/042/FT-060/061 adds PRA-10..12: explicit manager resend,
+revoked pending/active grant re-invitation, and directory removal/same-email
+re-admission. Require new/reused User preservation, old token/session rejection,
+MFA and command-authority negatives, PostgreSQL race proof and a complete real
+local browser journey at desktop/mobile widths. Production acceptance must name
+real versus synthetic renderer coverage and must not send automated invite mail.
+Status: Partially implemented. Local code, full frontend1835/1835 with zero
+skips, strict generated contracts and focused backend coverage are present.
+The qualified318-case native selection and stable four-case issuer supplement
+do not replace complete committed Docker or production acceptance. The original
+PG wrapper source guard failed on a separately owned unselected test edit and
+is retained as such. Real browser, current CI/main and combined release remain
+pending; no owner-positive or inbox-delivery acceptance is inferred.
+
 ## October 22 Recent Matter Notes Coverage
 
 J04/M03/US-007..009/FT-011..015: deterministic note read ordering must retain

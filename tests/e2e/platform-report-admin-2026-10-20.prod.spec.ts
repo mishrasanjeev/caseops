@@ -40,7 +40,10 @@ test("PRA production anonymous pages are private/noindex and report APIs reject 
       expect(headers["cache-control"]).toMatch(/no-store/);
       expect(headers["referrer-policy"]).toBe("no-referrer");
     }
-    for (const route of ["/auth/session", "/reports/activity", "/reports/overview", "/reports/usage", "/reports/profit", "/reports/company-profitability", "/reports/revenue", "/admins"]) {
+    for (const route of ["/auth/session", "/reports/activity", "/reports/overview", "/reports/usage", "/reports/profit", "/reports/company-profitability", "/reports/revenue", "/admins", "/admins/manage",
+      "/reports/overview?include_account_names=true", "/reports/usage?include_account_names=true",
+      "/reports/profit?include_account_names=true", "/reports/company-profitability?include_account_names=true",
+      "/reports/revenue?include_account_names=true"]) {
       expect((await safeGet(api, `${target.api.origin}${CONSOLE}${route}`)).status()).toBe(401);
     }
     await page.goto(`${target.web.origin}/platform/sign-in`);

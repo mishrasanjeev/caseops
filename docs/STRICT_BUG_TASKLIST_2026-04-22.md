@@ -1,5 +1,33 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 22 Revoked Administrator Cannot Be Re-Invited
+
+Adjacent enhancement PRA-13: Usage, Revenue and account-specific Overview
+alerts currently expose only account IDs, unlike the already-named Activity
+and Profit views. Add current authoritative names alongside IDs, retaining
+legacy strict wire shapes, values, warning variants and pagination. No
+production or cross-view visible acceptance is claimed yet.
+
+PRA-10..12 / J14/M14: Not fixed. Serving92f162b4 and candidate081e005b
+explicitly reject a revoked report grant with409; the directory lacks Resend
+and Delete controls. The owner clarified that recipients never opened their
+initial links. Do not invent a delivered-link defect from that incident.
+Reproduce pending invite -> revoke -> same-email invite, then prove fresh
+password/MFA admission and rejection of every obsolete token/session. Removal
+must affect report access only, preserve User, tenant memberships and immutable
+audit history, and permit authorized same-email re-admission. Regress active
+and never-accepted accounts, expiry/cooldown, repeated commands, actor revocation,
+cross-issuer/root/role denials and stale concurrent actions on PostgreSQL.
+Original leads release gates remain separate; no new production verdict yet.
+
+Local recovery and named-report code now exists. Complete frontend replacement
+1835/1835 passes without skips; original failures remain retained. The selected
+backend318P/954phases is qualified by one unselected emulator-test hash change,
+not accepted as a clean whole-tree PG gate. Native issuer-boundary4P/12phases
+has stable source and exact collection/JUnit joins. Verdict remains Not fixed
+on production92f until this combined source is merged, deployed and replayed;
+local or synthetic renderer proof must not stand in for real owner acceptance.
+
 ## October 22 Unordered Recent Matter Notes
 
 Release-test follow-up: d72's independent web source inventory still expected

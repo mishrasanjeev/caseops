@@ -285,7 +285,8 @@ def test_invitation_accept_and_revoke_serialize_on_postgres(report_console, monk
                     session, token=manager_token, manager=True, step_up=True
                 )
                 result = console.revoke(
-                    session, context, admin_id=record["id"], reason="Access ended"
+                    session, context, admin_id=record["id"], reason="Access ended",
+                    expected_version=1,
                 )
                 assert result.status == "revoked"
                 return 200, None

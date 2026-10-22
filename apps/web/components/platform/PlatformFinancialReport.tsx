@@ -5,7 +5,7 @@ import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { formatMoneyMinor } from "@/lib/billing-format";
 import { platformApi } from "@/lib/platform/client";
-import type { ConsoleReport } from "@/lib/platform/schemas";
+import type { ConsoleNamedReport } from "@/lib/platform/schemas";
 import { usePlatformLoad } from "@/lib/platform/use-load";
 
 import { PlatformPagination } from "./PlatformPagination";
@@ -13,7 +13,11 @@ import { PlatformPagination } from "./PlatformPagination";
 const date = (value: string) => new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium" }).format(new Date(value));
 const money = (value: number | null) => value === null ? "Not recorded" : formatMoneyMinor(value, "INR", 2);
 
-function ReportRows({ data, kind }: { data: ConsoleReport; kind: string }) {
+function AccountCell({ id, name }: { id: string; name: string | null }) {
+  return <td className="max-w-56 p-3"><div className="break-words font-medium [overflow-wrap:anywhere]">{name?.trim() ? name : "Account name not recorded"}</div><div className="mt-1 break-all text-xs text-[var(--color-mute)]">{id}</div></td>;
+}
+
+function ReportRows({ data, kind }: { data: ConsoleNamedReport; kind: string }) {
   if (!data.items.length) return <p className="py-8 text-sm text-[var(--color-mute)]">No recorded results for this page.</p>;
   return <div className="relative min-w-0 overflow-x-auto" tabIndex={0} aria-label="Scrollable report results" role="region">
     <table className="w-full min-w-[46rem] border-collapse text-left text-sm">
@@ -25,17 +29,17 @@ function ReportRows({ data, kind }: { data: ConsoleReport; kind: string }) {
       </thead>
       <tbody>{data.items.map((row, index) => {
         if ("feature_key" in row) return <tr key={`${row.company_id}:${row.feature_key}:${index}`} className="border-b border-[var(--color-line)] align-top">
-          <td className="max-w-56 break-all p-3">{row.company_id}</td><td className="p-3">{row.feature_key}</td><td className="p-3 tabular-nums">{row.quantity}</td><td className="p-3 tabular-nums">{row.credits}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.estimated_internal_cost_minor, "INR", 2)}</td>
+          <AccountCell id={row.company_id} name={row.company_name} /><td className="p-3">{row.feature_key}</td><td className="p-3 tabular-nums">{row.quantity}</td><td className="p-3 tabular-nums">{row.credits}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.estimated_internal_cost_minor, "INR", 2)}</td>
         </tr>;
         if ("merchant_reference" in row) return <tr key={`${row.company_id}:${row.merchant_reference}:${index}`} className="border-b border-[var(--color-line)] align-top">
-          <td className="max-w-56 break-all p-3">{row.company_id}</td><td className="p-3">{row.paid_at ? date(row.paid_at) : "Not recorded"}</td><td className="max-w-56 break-all p-3">{row.merchant_reference}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.amount_paid_minor, "INR", 2)}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.tax_amount_minor, "INR", 2)}</td>
+          <AccountCell id={row.company_id} name={row.company_name} /><td className="p-3">{row.paid_at ? date(row.paid_at) : "Not recorded"}</td><td className="max-w-56 break-all p-3">{row.merchant_reference}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.amount_paid_minor, "INR", 2)}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.tax_amount_minor, "INR", 2)}</td>
         </tr>;
         if ("rollup_count" in row) return <tr key={row.company_id} className="border-b border-[var(--color-line)] align-top">
-          <td className="max-w-56 break-words p-3">{row.company_name}</td><td className="p-3 tabular-nums">{row.rollup_count}</td><td className="p-3 tabular-nums">{money(row.gross_revenue_minor)}</td><td className="p-3 tabular-nums">{money(row.total_variable_cost_minor)}</td><td className="p-3 tabular-nums">{money(row.gross_profit_minor)}</td><td className="p-3 tabular-nums">{row.gross_margin_bps === null ? "Not recorded" : `${(row.gross_margin_bps / 100).toFixed(1)}%`}</td><td className="p-3">{row.loss_risk === null ? "Not recorded" : row.loss_risk ? "Yes" : "No"}</td>
+          <AccountCell id={row.company_id} name={row.company_name} /><td className="p-3 tabular-nums">{row.rollup_count}</td><td className="p-3 tabular-nums">{money(row.gross_revenue_minor)}</td><td className="p-3 tabular-nums">{money(row.total_variable_cost_minor)}</td><td className="p-3 tabular-nums">{money(row.gross_profit_minor)}</td><td className="p-3 tabular-nums">{row.gross_margin_bps === null ? "Not recorded" : `${(row.gross_margin_bps / 100).toFixed(1)}%`}</td><td className="p-3">{row.loss_risk === null ? "Not recorded" : row.loss_risk ? "Yes" : "No"}</td>
           <td className="min-w-60 p-3"><details><summary className="cursor-pointer font-medium">Cost breakdown</summary><dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2">{Object.entries({ "Recognized revenue": row.recognized_revenue_minor, Tax: row.tax_minor, Discounts: row.discounts_minor, "Provider cost": row.payment_provider_cost_minor, "Gateway cost": row.payment_gateway_cost_minor, "Model cost": row.llm_cost_minor, Embeddings: row.embedding_cost_minor, "Case refresh": row.case_refresh_cost_minor, Documents: row.document_processing_cost_minor, Storage: row.storage_cost_minor, "Manual support": row.manual_support_cost_minor, "Manual research": row.manual_research_cost_minor }).map(([label, value]) => <div className="contents" key={label}><dt>{label}</dt><dd className="tabular-nums">{money(value)}</dd></div>)}</dl></details></td>
         </tr>;
         return <tr key={`${row.company_id}:${row.period_start}:${index}`} className="border-b border-[var(--color-line)] align-top">
-          <td className="max-w-56 break-words p-3">{row.company_name ?? row.company_id}</td><td className="p-3">{date(row.period_start)} - {date(row.period_end)}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.gross_revenue_minor, "INR", 2)}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.total_variable_cost_minor, "INR", 2)}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.gross_profit_minor, "INR", 2)}</td><td className="p-3 tabular-nums">{row.gross_margin_bps === null ? "Not available" : `${(row.gross_margin_bps / 100).toFixed(1)}%`}</td><td className="p-3">{row.status}</td>
+          <AccountCell id={row.company_id} name={row.company_name} /><td className="p-3">{date(row.period_start)} - {date(row.period_end)}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.gross_revenue_minor, "INR", 2)}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.total_variable_cost_minor, "INR", 2)}</td><td className="p-3 tabular-nums">{formatMoneyMinor(row.gross_profit_minor, "INR", 2)}</td><td className="p-3">{row.gross_margin_bps === null ? "Not available" : `${(row.gross_margin_bps / 100).toFixed(1)}%`}</td><td className="p-3">{row.status}</td>
           <td className="min-w-60 p-3"><details><summary className="cursor-pointer font-medium">Cost breakdown</summary><dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2">
             {Object.entries({ "Recognized revenue": row.recognized_revenue_minor, Tax: row.tax_minor, "Tax collected": row.tax_collected_minor, Discounts: row.discounts_minor, "Discount rollup": row.discount_minor, "Provider cost": row.payment_provider_cost_minor, "Gateway cost": row.payment_gateway_cost_minor, "Model cost": row.llm_cost_minor, Embeddings: row.embedding_cost_minor, "Case refresh": row.case_refresh_cost_minor, Documents: row.document_processing_cost_minor, Storage: row.storage_cost_minor, "Manual support": row.manual_support_cost_minor, "Manual research": row.manual_research_cost_minor }).map(([label, value]) => <div className="contents" key={label}><dt>{label}</dt><dd className="tabular-nums">{formatMoneyMinor(value, "INR", 2)}</dd></div>)}
           </dl></details></td>
@@ -48,7 +52,7 @@ function ReportRows({ data, kind }: { data: ConsoleReport; kind: string }) {
 export function PlatformFinancialReport({ kind }: { kind: "usage" | "profit" | "company-profitability" | "revenue" }) {
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const cursor = cursors[cursors.length - 1];
-  const load = useCallback((signal: AbortSignal) => platformApi.report(kind, cursor, signal), [kind, cursor]);
+  const load = useCallback((signal: AbortSignal) => platformApi.namedReport(kind, cursor, signal), [kind, cursor]);
   const result = usePlatformLoad(load);
   return <section className="min-w-0 space-y-4" aria-label={`${kind} report`} aria-busy={result.pending}>
     {result.pending ? <p role="status" className="py-8 text-sm">Loading report...</p> : null}
@@ -60,7 +64,7 @@ export function PlatformFinancialReport({ kind }: { kind: "usage" | "profit" | "
 }
 
 export function PlatformOverview() {
-  const load = useCallback((signal: AbortSignal) => platformApi.overview(signal), []);
+  const load = useCallback((signal: AbortSignal) => platformApi.namedOverview(signal), []);
   const result = usePlatformLoad(load);
   if (result.pending) return <p role="status">Loading overview...</p>;
   if (result.error) return <p role="alert">{result.error}</p>;
@@ -78,6 +82,6 @@ export function PlatformOverview() {
         <p>{alert.message}</p>
         <p>{alert.category} / {alert.provider}: {formatMoneyMinor(alert.unit_amount_minor, "INR", 2)} per unit</p>
       </li>
-      : <li key={`${alert.company_id}:${index}`} className="break-words border-b border-[var(--color-line)] pb-3">{alert.company_id}: {money(alert.gross_profit_minor)}; margin {alert.gross_margin_bps === null ? "not recorded" : `${(alert.gross_margin_bps / 100).toFixed(1)}%`}</li>)}</ul> : null}
+      : <li key={`${alert.company_id}:${index}`} className="break-words border-b border-[var(--color-line)] pb-3"><p className="font-medium [overflow-wrap:anywhere]">{alert.company_name?.trim() ? alert.company_name : "Account name not recorded"}</p><p className="break-all">{alert.company_id}: {money(alert.gross_profit_minor)}; margin {alert.gross_margin_bps === null ? "not recorded" : `${(alert.gross_margin_bps / 100).toFixed(1)}%`}</p></li>)}</ul> : null}
   </div>;
 }

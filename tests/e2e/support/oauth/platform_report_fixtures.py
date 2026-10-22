@@ -6,11 +6,16 @@ import json
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 from calendar_oauth_emulator import loopback_origin, require_test_environment
 
+LONG_FIRM_LABEL = (
+    "Synthetic International Intellectual Property and Litigation Practice "
+    + "SyntheticUnbrokenAccountLabel" * 3
+)
 
 def _fixture_environment(*, run_id: str, web_origin: str, automated_marker: str) -> str:
     require_test_environment()
@@ -48,8 +53,6 @@ def seed_console_fixture(*, run_id: str, web_origin: str, automated_marker: str)
             "PRA deterministic console mail hook is missing; no manager/setup token was created."
         )
 
-    from sqlalchemy import func, select
-
     from caseops_api.core.security import hash_password
     from caseops_api.db.models import (
         AuditActorType,
@@ -66,8 +69,11 @@ def seed_console_fixture(*, run_id: str, web_origin: str, automated_marker: str)
         User,
     )
     from caseops_api.db.session import get_session_factory
-    from caseops_api.services.platform_admin import ensure_configured_platform_super_admin
+    from caseops_api.services.platform_admin import (
+        ensure_configured_platform_super_admin,
+    )
     from caseops_api.services.platform_console import bootstrap_report_manager
+    from sqlalchemy import func, select
 
     manager_email = f"pra-manager-{run_id}@example.com"
     prefix = f"PRA {UUID(run_id).int}"
@@ -75,7 +81,7 @@ def seed_console_fixture(*, run_id: str, web_origin: str, automated_marker: str)
     password = f"PRA-tenant!{secrets.token_urlsafe(24)}aA9"
     owner_email = f"pra-owner-{run_id}@example.com"
     definitions = (
-        ("Firm", "law_firm", "active", now - timedelta(minutes=1)),
+        (LONG_FIRM_LABEL, "law_firm", "active", now - timedelta(minutes=1)),
         ("Solo", "solo", "dormant", now - timedelta(days=31)),
         ("Corporate", "corporate_legal", "unknown", None),
         ("Legacy", "unknown", "unknown", now + timedelta(days=7)),
@@ -180,7 +186,14 @@ def seed_console_fixture(*, run_id: str, web_origin: str, automated_marker: str)
             amount_paid_minor=118_000, tax_amount_minor=18_000, paid_at=paid_at,
             provider_payload_json={"fixture_run": run_id, "provider_call_performed": False},
         )
-        session.add_all([profit, payment])
+        loss = BillingProfitRollup(
+            id=str(UUID(int=UUID(run_id).int % (1 << 64) + 101)),
+            company_id=companies[2].id, period_start=period_start, period_end=period_end,
+            gross_revenue_minor=0, recognized_revenue_minor=0,
+            total_variable_cost_minor=37, gross_profit_minor=-37,
+            gross_margin_bps=None, payment_gateway_cost_minor=37, status="estimated",
+        )
+        session.add_all([profit, payment, loss])
         financial = {
             "profit_id": profit.id, "payment_id": payment.id,
             "company_id": companies[0].id,
@@ -189,11 +202,13 @@ def seed_console_fixture(*, run_id: str, web_origin: str, automated_marker: str)
             "gross_revenue_minor": 120_000, "recognized_revenue_minor": 100_000,
             "total_variable_cost_minor": 25_000, "gross_profit_minor": 75_000,
             "gross_margin_bps": 7_500, "amount_paid_minor": 118_000, "tax_amount_minor": 18_000,
-            "overview": {"rollup_count": rollup_before[0] + 1,
+            "loss": {"company_id": companies[2].id, "company_name": companies[2].name,
+                     "gross_profit_minor": -37},
+            "overview": {"rollup_count": rollup_before[0] + 2,
                          "gross_revenue_minor": rollup_before[1] + 120_000,
                          "recognized_revenue_minor": rollup_before[2] + 100_000,
-                         "total_variable_cost_minor": rollup_before[3] + 25_000,
-                         "gross_profit_minor": rollup_before[4] + 75_000},
+                         "total_variable_cost_minor": rollup_before[3] + 25_037,
+                         "gross_profit_minor": rollup_before[4] + 74_963},
         }
 
         founder = session.scalar(select(User).where(User.email == founder_email))
@@ -258,6 +273,12 @@ def seed_console_fixture(*, run_id: str, web_origin: str, automated_marker: str)
         ).where(BillingProfitRollup.id == financial["profit_id"])).one()
         if tuple(actual_profit[:6]) != (financial["company_id"], 120_000, 100_000, 25_000, 75_000, 7_500):
             raise RuntimeError("PRA persisted positive rollup source mismatch.")
+        actual_loss = session.execute(select(
+            BillingProfitRollup.company_id, BillingProfitRollup.total_variable_cost_minor,
+            BillingProfitRollup.gross_profit_minor,
+        ).where(BillingProfitRollup.id == loss.id)).one()
+        if tuple(actual_loss) != (companies[2].id, 37, -37):
+            raise RuntimeError("PRA persisted account loss source mismatch.")
         actual_payment = session.execute(select(
             BillingPaymentOrder.company_id, BillingPaymentOrder.status,
             BillingPaymentOrder.merchant_reference, BillingPaymentOrder.amount_paid_minor,
@@ -329,14 +350,13 @@ def seed_console_fixture(*, run_id: str, web_origin: str, automated_marker: str)
 
 def cleanup_console_fixture(
     *, run_id: str, web_origin: str, automated_marker: str, manager_id: str | None,
+    viewer_baseline: dict | None = None,
 ) -> dict:
     founder_email = _fixture_environment(
         run_id=run_id, web_origin=web_origin, automated_marker=automated_marker,
     )
     if manager_id is not None and str(UUID(manager_id)) != manager_id:
         raise ValueError("PRA cleanup requires the exact canonical manager UUID.")
-
-    from sqlalchemy import select
 
     from caseops_api.db.models import (
         PlatformAdminMembership,
@@ -349,6 +369,7 @@ def cleanup_console_fixture(
     )
     from caseops_api.db.session import get_session_factory, serialize_sqlite_writer
     from caseops_api.services.platform_console import _root_valid
+    from sqlalchemy import select
 
     manager_email = f"pra-manager-{run_id}@example.com"
     allowed_viewer_emails = {f"viewer-{run_id}@example.com", f"csrf-{run_id}@example.com"}
@@ -408,6 +429,23 @@ def cleanup_console_fixture(
                 or user.id in {root.user_id, manager_user.id}
             ):
                 raise RuntimeError("PRA cleanup viewer ownership fence failed; no write attempted.")
+        if viewer_baseline is not None:
+            viewer = next((row for row in viewers if row.id == viewer_baseline["viewer_id"]), None)
+            if viewer is None or viewer.user_id != viewer_baseline["user_id"]:
+                raise RuntimeError("PRA invitation recovery did not preserve its shared User.")
+            from caseops_api.db.models import CompanyMembership
+
+            memberships = sorted(session.scalars(select(CompanyMembership.id).where(
+                CompanyMembership.user_id == viewer.user_id,
+            )))
+            audits = set(session.scalars(select(PlatformReportAuditEvent.id).where(
+                (PlatformReportAuditEvent.report_admin_id == viewer.id)
+                | (PlatformReportAuditEvent.target_id == viewer.id),
+            )))
+            if memberships != viewer_baseline["membership_ids"] or not set(
+                viewer_baseline["audit_ids"]
+            ).issubset(audits):
+                raise RuntimeError("PRA invitation recovery changed retained tenant/audit identities.")
         admins = [manager, *viewers]
         admin_ids = sorted(admin.id for admin in admins)
         tokens = list(session.scalars(select(PlatformConsoleToken).where(
@@ -469,6 +507,11 @@ def cleanup_console_fixture(
             "cleanup_audit_ids": sorted(added_audits), "root_id": root.id,
             "retained": True, "deletes": 0, "no_provider_calls": True,
         }
+        if viewer_baseline is not None:
+            receipt["invitation_recovery_retention"] = {
+                **viewer_baseline, "user_preserved": True,
+                "tenant_memberships_preserved": True, "prior_audits_preserved": True,
+            }
         session.commit()
         durable_states = session.execute(select(PlatformReportAdmin.id, PlatformReportAdmin.status)
                                          .where(PlatformReportAdmin.id.in_(admin_ids))).all()
@@ -493,3 +536,111 @@ def cleanup_console_fixture(
         receipt["founder_unchanged"] = True
         session.rollback()
         return receipt
+
+
+def age_pending_viewer_invitation(
+    *, run_id: str, web_origin: str, automated_marker: str, manager_id: str,
+    viewer_id: str, manager_session: str, manager_csrf: str,
+) -> dict:
+    """One fixed local-fixture clock operation, never a production clock override."""
+    founder_email = _fixture_environment(
+        run_id=run_id, web_origin=web_origin, automated_marker=automated_marker,
+    )
+    for origin in (web_origin, os.environ["CASEOPS_PUBLIC_APP_URL"]):
+        parsed = urlsplit(origin)
+        if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+            raise ValueError("PRA invitation aging requires exact loopback origins.")
+    if any(str(UUID(value)) != value for value in (manager_id, viewer_id)):
+        raise ValueError("PRA invitation aging requires exact canonical fixture identities.")
+    if not manager_session or not manager_csrf:
+        raise ValueError("PRA invitation aging requires the live manager and CSRF pair.")
+
+    from caseops_api.db.models import (
+        CompanyMembership,
+        PlatformAdminMembership,
+        PlatformConsoleToken,
+        PlatformReportAdmin,
+        PlatformReportAuditEvent,
+        User,
+    )
+    from caseops_api.db.session import get_session_factory
+    from caseops_api.services.platform_console import (
+        _locked_admin,
+        resolve_console_context,
+    )
+    from sqlalchemy import select
+
+    with get_session_factory()() as session:
+        context = resolve_console_context(
+            session, token=manager_session, csrf=manager_csrf, manager=True, step_up=True,
+        )
+        manager, manager_user = context.admin, context.user
+        root_email = session.scalar(select(User.email).join(
+            PlatformAdminMembership, PlatformAdminMembership.user_id == User.id,
+        ).where(PlatformAdminMembership.id == manager.root_platform_admin_id))
+        if (
+            manager.id != manager_id or manager.role != "manager" or manager.status != "active"
+            or manager.created_by_report_admin_id is not None
+            or manager_user.email != f"pra-manager-{run_id}@example.com"
+            or root_email != founder_email or viewer_id == manager_id
+        ):
+            raise ValueError("PRA invitation aging manager/run ownership mismatch.")
+        viewer, user = _locked_admin(session, viewer_id)
+        if (
+            viewer.role != "viewer" or viewer.status != "pending" or viewer.removed_at is not None
+            or viewer.created_by_report_admin_id != manager_id
+            or viewer.root_platform_admin_id != manager.root_platform_admin_id
+            or user.email != f"viewer-{run_id}@example.com" or not user.is_active
+        ):
+            raise ValueError("PRA invitation aging requires its exact pending synthetic viewer.")
+        token = session.scalar(select(PlatformConsoleToken).where(
+            PlatformConsoleToken.report_admin_id == viewer_id,
+            PlatformConsoleToken.purpose == "invite",
+        ).order_by(PlatformConsoleToken.created_at.desc(), PlatformConsoleToken.id.desc())
+          .limit(1).with_for_update())
+        now = datetime.now(UTC)
+        def aware(value):
+            return value.replace(tzinfo=UTC) if value.tzinfo is None else value
+        if (
+            token is None or token.consumed_at is not None or token.revoked_at is not None
+            or aware(token.expires_at) <= now or token.auth_epoch != viewer.auth_epoch
+            or token.credential_hash != sha256(user.password_hash.encode()).hexdigest()
+            or not now - timedelta(minutes=5) < aware(token.created_at) <= now + timedelta(seconds=5)
+        ):
+            raise ValueError("PRA invitation aging requires the fresh current unconsumed link.")
+        before = {column.name: getattr(token, column.name)
+                  for column in PlatformConsoleToken.__table__.columns if column.name != "created_at"}
+        user_before = {column.name: getattr(user, column.name) for column in User.__table__.columns}
+        epoch = viewer.auth_epoch
+        memberships = list(session.scalars(select(CompanyMembership.id).where(
+            CompanyMembership.user_id == user.id,
+        ).order_by(CompanyMembership.id).limit(17)))
+        audits = list(session.scalars(select(PlatformReportAuditEvent.id).where(
+            (PlatformReportAuditEvent.report_admin_id == viewer.id)
+            | (PlatformReportAuditEvent.target_id == viewer.id),
+        ).order_by(PlatformReportAuditEvent.id).limit(65)))
+        if len(memberships) > 16 or len(audits) > 64:
+            raise ValueError("PRA invitation aging exceeds its synthetic fixture inventory.")
+        token.created_at = now - timedelta(minutes=6)
+        token_id, user_id = token.id, user.id
+        session.commit()
+        session.expire_all()
+        persisted = session.get(PlatformConsoleToken, token_id)
+        retained_user = session.get(User, user_id)
+        if (
+            persisted is None or retained_user is None
+            or {name: getattr(persisted, name) for name in before} != before
+            or {name: getattr(retained_user, name) for name in user_before} != user_before
+            or session.scalar(select(PlatformReportAdmin.auth_epoch).where(
+                PlatformReportAdmin.id == viewer_id,
+            )) != epoch
+            or aware(persisted.created_at) != now - timedelta(minutes=6)
+        ):
+            raise RuntimeError("PRA fixed invitation aging changed another persisted fact.")
+        return {
+            "run_id": run_id, "manager_id": manager_id, "viewer_id": viewer_id,
+            "aged_minutes": 6, "only_created_at_changed": True,
+            "expiry_hash_credential_epoch_preserved": True, "no_provider_calls": True,
+            "viewer_baseline": {"viewer_id": viewer_id, "user_id": user_id,
+                                "membership_ids": memberships, "audit_ids": audits},
+        }

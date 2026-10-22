@@ -15,6 +15,12 @@ export const consoleAdminRecord = consoleAdminSelf.extend({
 export const consoleAdminsResponse = z.object({
   items: z.array(consoleAdminRecord).max(100), next_cursor: z.string().max(8192).nullable(),
 }).strict();
+export const consoleManagedAdminRecord = consoleAdminRecord.extend({
+  version: z.number().int().positive(), removed_at: z.string().datetime({ offset: true }).nullable(), can_manage: z.boolean(),
+}).strict();
+export const consoleManagedAdminsResponse = z.object({
+  items: z.array(consoleManagedAdminRecord).max(100), next_cursor: z.string().max(8192).nullable(),
+}).strict();
 export const consoleInvitationResponse = z.object({
   admin: consoleAdminRecord, delivery_status: z.enum(["pending", "accepted", "failed", "outcome_unknown"]),
 }).strict();
@@ -71,10 +77,22 @@ export const consoleOverview = z.object({
   margin_alerts_has_more: z.boolean(),
 }).strict();
 
+export const consoleNamedUsageRecord = consoleUsageRecord.extend({ company_name: consoleProfitRecord.shape.company_name }).strict();
+export const consoleNamedRevenueRecord = consoleRevenueRecord.extend({ company_name: consoleProfitRecord.shape.company_name }).strict();
+export const consoleNamedMarginAlert = consoleMarginAlert.extend({ company_name: consoleProfitRecord.shape.company_name }).strict();
+export const consoleNamedReportPage = consoleReportPage.extend({
+  items: z.array(z.union([consoleNamedUsageRecord, consoleProfitRecord, consoleNamedRevenueRecord, consoleCompanyProfitRecord])).max(100),
+}).strict();
+export const consoleNamedOverview = consoleOverview.extend({
+  margin_alerts: z.array(z.union([consoleNamedMarginAlert, consoleCostGuardrailAlert])).max(100),
+}).strict();
+
 export type ConsoleAuth = z.infer<typeof consoleAuthState>;
 export type ConsoleAdmin = z.infer<typeof consoleAdminRecord>;
+export type ConsoleManagedAdmin = z.infer<typeof consoleManagedAdminRecord>;
 export type ConsoleReport = z.infer<typeof consoleReportPage>;
 export type ConsoleOverview = z.infer<typeof consoleOverview>;
+export type ConsoleNamedReport = z.infer<typeof consoleNamedReportPage>;
 
 export const consoleLead = z.object({
   id: z.string().uuid(), submitted_at: z.string().datetime({ offset: true }),

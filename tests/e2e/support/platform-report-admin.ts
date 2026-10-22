@@ -27,6 +27,7 @@ export type FinancialFixture = {
   merchant_reference: string; gross_revenue_minor: number; recognized_revenue_minor: number;
   total_variable_cost_minor: number; gross_profit_minor: number; gross_margin_bps: number;
   amount_paid_minor: number; tax_amount_minor: number;
+  loss: { company_id: string; company_name: string; gross_profit_minor: number };
   overview: { rollup_count: number; gross_revenue_minor: number; recognized_revenue_minor: number;
     total_variable_cost_minor: number; gross_profit_minor: number };
 };
@@ -58,7 +59,12 @@ export type CleanupReceipt = {
   delivery_ids?: string[]; retained_audit_ids?: string[]; cleanup_audit_ids?: string[];
   retained: true; deletes: 0; no_provider_calls: true;
   persisted_verified?: true; founder_unchanged?: true;
+  invitation_recovery_retention?: { viewer_id: string; user_id: string;
+    membership_ids: string[]; audit_ids: string[]; user_preserved: true;
+    tenant_memberships_preserved: true; prior_audits_preserved: true };
 };
+export type ManagedAdmin = { id: string; email: string; full_name: string; role: string;
+  status: string; version: number; removed_at: string | null; can_manage: boolean };
 
 export function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -157,6 +163,9 @@ export async function seedLocalFixture(api: APIRequestContext, target: Origins, 
   expect(fixture.financial).toEqual(expect.objectContaining({ gross_revenue_minor: 120_000, recognized_revenue_minor: 100_000,
     total_variable_cost_minor: 25_000, gross_profit_minor: 75_000, gross_margin_bps: 7_500,
     amount_paid_minor: 118_000, tax_amount_minor: 18_000, merchant_reference: `PRA-${run}` }));
+  const lossAccount = fixture.accounts.find(row => row.company_type === "corporate_legal")!;
+  expect(fixture.financial.loss).toEqual({ company_id: lossAccount.id, company_name: lossAccount.name,
+    gross_profit_minor: -37 });
   expect(fixture.audit_sources).toHaveLength(4);
   expect(new Set(fixture.audit_sources.map(row => row.id)).size).toBe(4);
   const expectedResults: Record<string, string[]> = { active: ["success"], dormant: ["failed", "success"], unknown: [] };
@@ -225,6 +234,50 @@ export async function capturedLink(api: APIRequestContext, target: Origins, fixt
   const tokens = new URLSearchParams(url.hash.slice(1)).getAll("token");
   expect(tokens.length === 1 && tokens[0].length >= 32).toBe(true);
   return url.href;
+}
+
+export async function managedAdmin(page: Page, target: Origins, id: string): Promise<ManagedAdmin | null> {
+  let cursor: string | null = null;
+  const seen = new Set<string>();
+  for (let index = 0; index < 20; index++) {
+    const query = new URLSearchParams({ limit: "100", ...(cursor ? { cursor } : {}) });
+    const data: { items: ManagedAdmin[]; next_cursor: string | null } = await json(
+      await safeGet(page.request, `${target.api.origin}${CONSOLE}/admins/manage?${query}`), 200, "Managed directory");
+    for (const row of data.items) {
+      expect(seen.has(row.id), "Managed directory must not duplicate an identity.").toBe(false);
+      seen.add(row.id);
+      expect(Number.isInteger(row.version) && row.version > 0).toBe(true);
+      expect(row.removed_at).toBeNull();
+      expect(typeof row.can_manage).toBe("boolean");
+    }
+    const row = data.items.find(item => item.id === id);
+    if (row) return row;
+    cursor = data.next_cursor;
+    if (!cursor) return null;
+  }
+  throw new Error("PRA bounded managed directory did not reach the requested identity or its end.");
+}
+
+export async function ageViewerInvitation(page: Page, target: Origins, fixture: LocalFixture,
+  viewerId: string): Promise<void> {
+  if (!target.local) throw new Error("PRA invitation fixture clock is strictly loopback-only.");
+  const cookies = await page.context().cookies();
+  const session = cookies.find(cookie => cookie.name === SESSION_COOKIE)?.value;
+  const csrf = cookies.find(cookie => cookie.name === CSRF_COOKIE)?.value;
+  if (!session || !csrf) throw new Error("PRA fixture aging requires its real manager console session.");
+  const ordinary = fixtureCsrf();
+  const response = await safePost(page.request,
+    `${target.api.origin}${FIXTURE}/fixtures/${fixture.run_id}/age-viewer-invitation`, {
+      data: { web_origin: target.web.origin, manager_id: fixture.manager.id, viewer_id: viewerId },
+      headers: { ...noPaidProviderHeaders, ...ordinary, [CSRF_HEADER]: csrf,
+        Cookie: `${ordinary.Cookie}; ${SESSION_COOKIE}=${session}; ${CSRF_COOKIE}=${csrf}` }, timeout: 10_000,
+    });
+  const receipt = await json<{ run_id: string; manager_id: string; viewer_id: string;
+    aged_minutes: number; only_created_at_changed: boolean; expiry_hash_credential_epoch_preserved: boolean;
+    no_provider_calls: boolean }>(response, 200, "Fixed pending-invitation age");
+  expect(receipt).toEqual(expect.objectContaining({ run_id: fixture.run_id, manager_id: fixture.manager.id,
+    viewer_id: viewerId, aged_minutes: 6, only_created_at_changed: true,
+    expiry_hash_credential_epoch_preserved: true, no_provider_calls: true }));
 }
 
 export function secretToken(link: string): string {

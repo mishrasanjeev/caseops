@@ -6,9 +6,9 @@ import { expect, test } from "./support/prod-diagnostic-test";
 import { localTransportHeaders, noPaidProviderHeaders } from "./support/cost-controls";
 import { e2eEnv } from "./support/env";
 import {
-  CONSOLE, SESSION_COOKIE, assertRelease, capturedLink, cleanupLocalFixture, completeSetup, contextCsrf,
+  CONSOLE, SESSION_COOKIE, ageViewerInvitation, assertRelease, capturedLink, cleanupLocalFixture, completeSetup, contextCsrf,
   controlBounds, enrollMfa, expectState, json, mailLedger, newApi, noOverflow, origins, passwordControl,
-  safeGet, safePost, secretToken, seedLocalFixture, signInWithRecovery,
+  managedAdmin, safeGet, safePost, secretToken, seedLocalFixture, signInWithRecovery,
   type LocalFixture, type Origins,
 } from "./support/platform-report-admin";
 
@@ -29,7 +29,7 @@ type Activity = {
   }>; periods: Record<string, Record<string, number>> }>;
 };
 type ReportData = { generated_at: string; items?: Array<Record<string, unknown>>; has_more?: boolean } & Record<string, unknown>;
-const money = (minor: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(minor / 100);
+const money = (minor: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(minor / 100);
 const dateOnly = (date: string) => new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium" }).format(new Date(date));
 const timestamp = (date: string) => new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }).format(new Date(date));
 
@@ -51,7 +51,7 @@ async function localScreenshot(page: Page, target: Origins, info: TestInfo, labe
   });
 }
 
-async function positiveFinancial(page: Page, target: Origins, fixture: LocalFixture,
+async function positiveFinancial(page: Page, fixture: LocalFixture,
   endpoint: string, initial: ReportData): Promise<void> {
   const panel = page.getByRole("tabpanel");
   const f = fixture.financial;
@@ -69,6 +69,7 @@ async function positiveFinancial(page: Page, target: Origins, fixture: LocalFixt
     }
     const known = data.items?.filter(identity) ?? [];
     expect(known).toHaveLength(1);
+    expect(known[0]).toEqual(expect.objectContaining({ company_id: f.company_id, company_name: firm.name }));
     const row = endpoint === "usage"
       ? panel.getByRole("row").filter({ has: page.getByText(f.company_id, { exact: true }) })
         .filter({ has: page.getByText(fixture.usage_features[0], { exact: true }) })
@@ -94,7 +95,16 @@ async function positiveFinancial(page: Page, target: Origins, fixture: LocalFixt
       cells = [firm.name, endpoint === "profit" ? `${dateOnly(f.period_start)} - ${dateOnly(f.period_end)}` : "1",
         money(120_000), money(25_000), money(75_000), "75.0%", endpoint === "profit" ? "estimated" : "No"];
     }
-    for (const [index, value] of cells.entries()) await visibleText(row.getByRole("cell").nth(index), value);
+    const account = row.getByRole("cell").first();
+    for (const value of [firm.name, f.company_id]) {
+      const identityText = account.getByText(value, { exact: true });
+      await identityText.scrollIntoViewIfNeeded();
+      await expect(identityText).toBeInViewport({ ratio: 0.95 });
+      await expect(identityText).toHaveText(value);
+    }
+    for (const [index, value] of cells.entries()) {
+      if (index > 0) await visibleText(row.getByRole("cell").nth(index), value);
+    }
     if (["profit", "company-profitability"].includes(endpoint)) {
       const details = row.locator("details");
       await controlBounds(details.locator("summary"), page, 1);
@@ -109,6 +119,15 @@ async function positiveFinancial(page: Page, target: Origins, fixture: LocalFixt
       ["Variable cost", money(f.overview.total_variable_cost_minor)], ["Gross profit", money(f.overview.gross_profit_minor)]]) {
       await visibleText(panel.getByText(label, { exact: true }).locator("..").locator("dd"), value);
     }
+    const alerts = data.margin_alerts as Array<Record<string, unknown>>;
+    expect(alerts.filter(row => row.company_id === f.loss.company_id)).toEqual([
+      expect.objectContaining({ company_id: f.loss.company_id, company_name: f.loss.company_name,
+        gross_profit_minor: -37 }),
+    ]);
+    const lossAlert = panel.getByRole("list", { name: "Margin and cost alerts", exact: true })
+      .getByRole("listitem").filter({ has: page.getByText(f.loss.company_name, { exact: true }) });
+    await visibleText(lossAlert.getByText(f.loss.company_name, { exact: true }), f.loss.company_name);
+    await visibleText(lossAlert.locator("p").nth(1), `${f.loss.company_id}: -\u20b90.37; margin not recorded`);
   }
   expect(Number.isFinite(Date.parse(data.generated_at))).toBe(true);
   await expect(panel.getByText(new RegExp(`^Generated ${dateOnly(data.generated_at).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`))).toBeVisible();
@@ -218,6 +237,7 @@ async function reportAccounts(page: Page, target: Origins, fixture: LocalFixture
     await page.getByRole("tab", { name: tab, exact: true }).click();
     const loadedResponse = await loaded;
     expect(loadedResponse.status()).toBe(200);
+    expect(new URL(loadedResponse.url()).searchParams.get("include_account_names")).toBe("true");
     await expect(page.getByRole("tabpanel")).toBeVisible();
     if (endpoint !== "overview") {
       const data = await loadedResponse.json() as { items: Array<{ company_id: string; feature_key?: string }>; has_more: boolean };
@@ -240,10 +260,11 @@ async function reportAccounts(page: Page, target: Origins, fixture: LocalFixture
         await previous.click();
         const restored = await returning;
         expect(restored.status()).toBe(200);
+        expect(new URL(restored.url()).searchParams.get("include_account_names")).toBe("true");
         expect((await restored.json()).items).toEqual(data.items);
       } else await expect(next).toBeDisabled();
     }
-    await positiveFinancial(page, target, fixture, endpoint, await loadedResponse.json() as ReportData);
+    await positiveFinancial(page, fixture, endpoint, await loadedResponse.json() as ReportData);
     await visibleControls(page);
     const activityReloaded = page.waitForResponse(res => new URL(res.url()).pathname === `${CONSOLE}/reports/activity`
       && res.request().method() === "GET");
@@ -253,7 +274,9 @@ async function reportAccounts(page: Page, target: Origins, fixture: LocalFixture
     const reloaded = page.waitForResponse(res => new URL(res.url()).pathname === `${CONSOLE}/reports/${endpoint}`
       && res.request().method() === "GET");
     await page.getByRole("tab", { name: tab, exact: true }).click();
-    await positiveFinancial(page, target, fixture, endpoint, await json<ReportData>(await reloaded, 200, `${endpoint} reload`));
+    const reloadedResponse = await reloaded;
+    expect(new URL(reloadedResponse.url()).searchParams.get("include_account_names")).toBe("true");
+    await positiveFinancial(page, fixture, endpoint, await json<ReportData>(reloadedResponse, 200, `${endpoint} reload`));
     await localScreenshot(page, target, info, `${endpoint}-positive-reloaded`);
   }
   const firm = fixture.accounts.find(account => account.company_type === "law_firm")!;
@@ -301,6 +324,37 @@ async function realmDenials(page: Page, target: Origins, fixture: LocalFixture):
   } finally { await tenant.dispose(); await wrongRealm.dispose(); }
 }
 
+async function changeViewerAccess(page: Page, target: Origins, email: string, id: string,
+  action: "revoke" | "remove"): Promise<void> {
+  const before = await managedAdmin(page, target, id);
+  expect(before).not.toBeNull();
+  const row = page.getByRole("row").filter({ has: page.getByText(email, { exact: true }) });
+  const button = action === "revoke" ? row.getByRole("button", { name: "Revoke", exact: true })
+    : row.getByRole("button", { name: "Delete report access for Synthetic report viewer", exact: true });
+  await controlBounds(button, page);
+  await button.click();
+  const dialog = page.getByRole("form", {
+    name: action === "revoke" ? "Revoke administrator access" : "Delete administrator access", exact: true,
+  });
+  if (action === "remove") await expect(dialog).toContainText("Tenant accounts and audit history will be retained.");
+  await dialog.getByLabel("Reason", { exact: true }).fill(`Synthetic browser ${action} proof`);
+  const submit = dialog.getByRole("button", { name: action === "revoke" ? "Revoke access" : "Delete report access", exact: true });
+  await controlBounds(submit, page);
+  const changing = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/admins/${id}/${action}`
+    && response.request().method() === "POST");
+  await submit.click();
+  const response = await changing;
+  expect(response.request().postDataJSON()).toEqual({ reason: `Synthetic browser ${action} proof`, expected_version: before!.version });
+  expect((await json<Admin>(response, 200, `Viewer ${action}`)).id).toBe(id);
+  if (action === "revoke") {
+    await expect(row).toContainText("revoked");
+    expect((await managedAdmin(page, target, id))!.version).toBeGreaterThan(before!.version);
+  } else {
+    await expect(row).toHaveCount(0);
+    expect(await managedAdmin(page, target, id)).toBeNull();
+  }
+}
+
 async function journey(page: Page, browser: Browser, baseURL: string | undefined, mobile: boolean, testInfo: TestInfo) {
   test.setTimeout(300_000);
   const target = origins(baseURL, true, e2eEnv.CASEOPS_RELEASE_SHA);
@@ -318,7 +372,11 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
   let primaryFailed = false;
   const pageErrors: string[] = [];
   let forbidden = 0;
+  let clientAccountLookups = 0;
   page.on("pageerror", () => pageErrors.push("pageerror"));
+  page.on("request", call => {
+    if (/^\/api\/(?:companies?|accounts)(?:\/|$)/.test(new URL(call.url()).pathname)) clientAccountLookups++;
+  });
   try {
     await page.context().route("**/*", route => {
       const url = new URL(route.request().url());
@@ -380,7 +438,7 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
     expect(invitation.delivery_status).toBe("accepted");
     await expect(page.getByRole("row").filter({ has: page.getByText(email, { exact: true }) })).toContainText("pending");
     await localScreenshot(page, target, testInfo, "administrator-invited");
-    const link = await capturedLink(api, target, fixture, email, "invite");
+    const originalViewerLink = await capturedLink(api, target, fixture, email, "invite");
     const firstMail = (await mailLedger(api, target, fixture)).filter(row => row.recipient_email === email && row.purpose === "invite");
     const replay = await safePost(page.request, `${target.api.origin}${CONSOLE}/admins/invitations`, {
       headers: await contextCsrf(page.context()), data: { email, full_name: "Synthetic report viewer" }, maxRetries: 0,
@@ -389,6 +447,69 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
     expect(repeated.admin.id).toBe(invitation.admin.id);
     expect((await mailLedger(api, target, fixture)).filter(row => row.recipient_email === email && row.purpose === "invite").map(row => row.id))
       .toEqual(firstMail.map(row => row.id));
+    const managed = await managedAdmin(page, target, invitation.admin.id);
+    expect(managed).toEqual(expect.objectContaining({ id: invitation.admin.id, status: "pending", removed_at: null, can_manage: true }));
+    const managerRow = page.getByRole("row").filter({ has: page.getByText(fixture.manager.email, { exact: true }) });
+    await expect(managerRow.getByRole("button", { name: "Revoke", exact: true })).toBeDisabled();
+    await expect(managerRow.getByRole("button", { name: `Delete report access for ${fixture.manager.full_name}`, exact: true })).toBeDisabled();
+    const managerRecord = (await managedAdmin(page, target, fixture.manager.id))!;
+    expect(managerRecord.can_manage).toBe(false);
+    const managerVersion = managerRecord.version;
+    for (const command of ["revoke", "remove", "invitations/resend"]) {
+      const denied = await safePost(page.request, `${target.api.origin}${CONSOLE}/admins/${fixture.manager.id}/${command}`, {
+        headers: await contextCsrf(page.context()), data: { expected_version: managerVersion,
+          ...(command === "invitations/resend" ? {} : { reason: "Manager authority is not a viewer target" }) },
+      });
+      expect(denied.status()).toBe(409);
+    }
+    const viewerRow = page.getByRole("row").filter({ has: page.getByText(email, { exact: true }) });
+    const resendViewer = viewerRow.getByRole("button", { name: "Resend invitation for Synthetic report viewer", exact: true });
+    const resendingViewer = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/admins/${invitation.admin.id}/invitations/resend`
+      && response.request().method() === "POST");
+    await controlBounds(resendViewer, page);
+    await resendViewer.click();
+    expect(await json(await resendingViewer, 409, "Fresh invitation cooldown")).toEqual(expect.objectContaining({
+      code: "console_invitation_cooldown", detail: "Wait five minutes before resending this invitation.",
+    }));
+    await expect(page.getByRole("alert")).toContainText("wait five minutes");
+    expect((await mailLedger(api, target, fixture)).filter(row => row.recipient_email === email).map(row => row.id))
+      .toEqual(firstMail.map(row => row.id));
+    expect((await managedAdmin(page, target, invitation.admin.id))!.version).toBe(managed!.version);
+    await ageViewerInvitation(page, target, fixture, invitation.admin.id);
+    const resendingAged = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/admins/${invitation.admin.id}/invitations/resend`
+      && response.request().method() === "POST");
+    await resendViewer.click();
+    const resent = await json<{ admin: Admin; delivery_status: string }>(await resendingAged, 200, "Explicit manager resend");
+    expect(resent.admin.id).toBe(invitation.admin.id);
+    expect(resent.delivery_status).toBe("accepted");
+    await expect(page.getByRole("status").filter({ hasText: "Mail provider accepted" })).toBeVisible();
+    const resentViewerLink = await capturedLink(api, target, fixture, email, "invite", firstMail.map(row => row.id));
+    expect(resentViewerLink === originalViewerLink).toBe(false);
+    expect((await safePost(api, `${target.api.origin}${CONSOLE}/auth/invitations/complete`, {
+      data: { token: secretToken(originalViewerLink), password, full_name: "Synthetic report viewer" },
+    })).status()).toBe(401);
+    await expect(resendViewer).toBeEnabled();
+    await changeViewerAccess(page, target, email, invitation.admin.id, "revoke");
+    const beforeReinvite = (await mailLedger(api, target, fixture)).map(row => row.id);
+    const inviteAgain = viewerRow.getByRole("button", { name: "Invite Synthetic report viewer again", exact: true });
+    await controlBounds(inviteAgain, page);
+    await inviteAgain.click();
+    await expect(page.getByLabel("Full name", { exact: true })).toHaveValue("Synthetic report viewer");
+    await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
+    const reinviting = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/admins/invitations`
+      && response.request().method() === "POST");
+    await page.getByRole("button", { name: "Invite viewer", exact: true }).click();
+    const reinvitedResponse = await reinviting;
+    expect(reinvitedResponse.request().postDataJSON()).toEqual({ email, full_name: "Synthetic report viewer", reinvite_revoked: true });
+    const reinvited = await json<{ admin: Admin; delivery_status: string }>(reinvitedResponse, 200, "Never-opened revoked invitation recovery");
+    expect(reinvited.admin.id).toBe(invitation.admin.id);
+    expect(reinvited.delivery_status).toBe("accepted");
+    await expect(viewerRow).toContainText("pending");
+    const link = await capturedLink(api, target, fixture, email, "invite", beforeReinvite);
+    expect(link === originalViewerLink || link === resentViewerLink).toBe(false);
+    expect((await safePost(api, `${target.api.origin}${CONSOLE}/auth/invitations/complete`, {
+      data: { token: secretToken(resentViewerLink), password, full_name: "Synthetic report viewer" },
+    })).status()).toBe(401);
     const adminIds: string[] = [];
     let adminCursor: string | null = null;
     for (let pages = 0; pages < 20; pages++) {
@@ -420,6 +541,14 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
     await expect(viewer.getByRole("heading", { name: "Reports", exact: true })).toBeVisible();
     await expect(viewer.getByRole("link", { name: "Administrators", exact: true })).toHaveCount(0);
     expect((await safeGet(viewer.request, `${target.api.origin}${CONSOLE}/admins`)).status()).toBe(403);
+    expect((await safeGet(viewer.request, `${target.api.origin}${CONSOLE}/admins/manage`)).status()).toBe(403);
+    const activeVersion = (await managedAdmin(page, target, invitation.admin.id))!.version;
+    for (const command of ["revoke", "remove", "invitations/resend"]) {
+      expect((await safePost(viewer.request, `${target.api.origin}${CONSOLE}/admins/${invitation.admin.id}/${command}`, {
+        headers: await contextCsrf(viewerContext), data: { expected_version: activeVersion,
+          ...(command === "invitations/resend" ? {} : { reason: "Viewer cannot administer access" }) },
+      })).status()).toBe(403);
+    }
     await visibleControls(viewer);
 
     const beforeReset = (await mailLedger(api, target, fixture)).map(row => row.id);
@@ -459,7 +588,7 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
     expect(logout.status()).toBe(200);
     await signInWithRecovery(viewer, target, email, newPassword, viewerRecovery.shift()!, consumedCode);
     const unauthorizedRevoke = await safePost(viewer.request, `${target.api.origin}${CONSOLE}/admins/${fixture.manager.id}/revoke`, {
-      headers: await contextCsrf(viewerContext), data: { reason: "Viewer cannot revoke manager" }, maxRetries: 0,
+      headers: await contextCsrf(viewerContext), data: { reason: "Viewer cannot revoke manager", expected_version: managerVersion }, maxRetries: 0,
     });
     expect(unauthorizedRevoke.status()).toBe(403);
     const managerLogout = await safePost(page.request, `${target.api.origin}${CONSOLE}/auth/logout`, {
@@ -468,15 +597,8 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
     expect(managerLogout.status()).toBe(200);
     await signInWithRecovery(page, target, fixture.manager.email, password, recovery.shift()!);
     await page.goto(`${target.web.origin}/platform/admins`);
-    const viewerRow = page.getByRole("row").filter({ has: page.getByText(email, { exact: true }) });
     await expect(viewerRow).toHaveCount(1);
-    await controlBounds(viewerRow.getByRole("button", { name: "Revoke", exact: true }), page);
-    await viewerRow.getByRole("button", { name: "Revoke", exact: true }).click();
-    const dialog = page.getByRole("form", { name: "Revoke administrator access", exact: true });
-    await dialog.getByLabel("Reason", { exact: true }).fill("Synthetic browser revocation proof");
-    await controlBounds(dialog.getByRole("button", { name: "Revoke access", exact: true }), page);
-    await dialog.getByRole("button", { name: "Revoke access", exact: true }).click();
-    await expect(viewerRow).toContainText("revoked");
+    await changeViewerAccess(page, target, email, invitation.admin.id, "revoke");
     expect((await safeGet(viewer.request, `${target.api.origin}${CONSOLE}/auth/session`)).status()).toBe(401);
     expect((await safeGet(viewer.request, `${target.api.origin}${CONSOLE}/reports/activity`)).status()).toBe(401);
     await viewer.reload();
@@ -484,8 +606,45 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
     await page.reload();
     await expect(page.getByRole("row").filter({ has: page.getByText(email, { exact: true }) })).toContainText("revoked");
     await localScreenshot(page, target, testInfo, "administrator-revoked-reloaded");
-    expect((await mailLedger(api, target, fixture)).filter(row => row.recipient_email === email && row.purpose === "invite")).toHaveLength(1);
+    await changeViewerAccess(page, target, email, invitation.admin.id, "remove");
+    await page.reload();
+    await expect(viewerRow).toHaveCount(0);
+    expect(await managedAdmin(page, target, invitation.admin.id)).toBeNull();
+    const legacyAfterRemoval = await json<{ items: Admin[] }>(await safeGet(page.request,
+      `${target.api.origin}${CONSOLE}/admins?limit=100`), 200, "Legacy directory after removal");
+    expect(legacyAfterRemoval.items.some(row => row.id === invitation.admin.id)).toBe(false);
+    const beforeReadmission = (await mailLedger(api, target, fixture)).map(row => row.id);
+    await page.getByLabel("Full name", { exact: true }).fill("Synthetic report viewer");
+    await page.getByLabel("Email", { exact: true }).fill(email);
+    const readmitting = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/admins/invitations`
+      && response.request().method() === "POST");
+    await page.getByRole("button", { name: "Invite viewer", exact: true }).click();
+    const readmitted = await json<{ admin: Admin; delivery_status: string }>(await readmitting, 200, "Manual same-email readmission");
+    expect(readmitted.admin.id).toBe(invitation.admin.id);
+    expect(readmitted.delivery_status).toBe("accepted");
+    await expect(viewerRow).toContainText("pending");
+    const readmissionLink = await capturedLink(api, target, fixture, email, "invite", beforeReadmission);
+    expect((await safeGet(viewer.request, `${target.api.origin}${CONSOLE}/auth/session`)).status()).toBe(401);
+    expect((await safePost(api, `${target.api.origin}${CONSOLE}/auth/invitations/complete`, {
+      data: { token: secretToken(link), password: newPassword, full_name: "Synthetic report viewer" },
+    })).status()).toBe(401);
+    await completeSetup(viewer, readmissionLink, newPassword, "Synthetic report viewer");
+    await expectState(viewer, target, "mfa_challenge_required");
+    await viewer.getByRole("button", { name: "Recovery code", exact: true }).click();
+    await viewer.getByLabel("Recovery code", { exact: true }).fill(viewerRecovery.shift()!);
+    const readmissionMfa = viewer.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/auth/mfa/verify`
+      && response.request().method() === "POST");
+    await viewer.getByRole("button", { name: "Verify MFA", exact: true }).click();
+    expect((await json<{ state: string }>(await readmissionMfa, 200, "Retained viewer MFA")).state).toBe("authenticated");
+    await viewer.getByRole("button", { name: "Continue to reports", exact: true }).click();
+    await expect(viewer.getByRole("heading", { name: "Reports", exact: true })).toBeVisible();
+    await viewer.reload();
+    expect((await safeGet(viewer.request, `${target.api.origin}${CONSOLE}/reports/activity`)).status()).toBe(200);
+    await changeViewerAccess(page, target, email, invitation.admin.id, "revoke");
+    expect((await safeGet(viewer.request, `${target.api.origin}${CONSOLE}/auth/session`)).status()).toBe(401);
+    expect((await mailLedger(api, target, fixture)).filter(row => row.recipient_email === email && row.purpose === "invite")).toHaveLength(4);
     expect(forbidden).toBe(0);
+    expect(clientAccountLookups, "Account labels must come from the primary named report response.").toBe(0);
     expect(pageErrors).toEqual([]);
     await assertRelease(target);
   } catch (error) {
@@ -497,7 +656,11 @@ async function journey(page: Page, browser: Browser, baseURL: string | undefined
       try { await context.close(); } catch { failures.push("owned_browser_context_close_failed"); }
     }
     let cleanup: unknown;
-    try { cleanup = await cleanupLocalFixture(api, target, runId, ownedFixture?.manager.id ?? null); }
+    try {
+      cleanup = await cleanupLocalFixture(api, target, runId, ownedFixture?.manager.id ?? null);
+      if (!primaryFailed) expect(cleanup).toEqual(expect.objectContaining({ invitation_recovery_retention:
+        expect.objectContaining({ user_preserved: true, tenant_memberships_preserved: true, prior_audits_preserved: true }) }));
+    }
     catch {
       failures.push("retained_fixture_cleanup_failed");
       cleanup = { run_id: runId, status: "failed", verified: false, automatic_retry: false };

@@ -1,5 +1,28 @@
 # Strict Enterprise Gap Tasklist
 
+## October 22 Isolated Administrator Grant Recovery
+
+PRA-13 report-name extension is locally implemented but release-pending: enrich only selected-page IDs
+or the bounded Overview alert set with current authoritative Company names.
+Do not copy the complete account directory into a DTO or add browser lookups.
+Keep legacy strict clients working while opting new clients into named rows;
+missing name evidence must remain explicit.
+
+Partially implemented / release NO-GO for PRA-10..12 recovery scope. An explicit report-grant
+revocation is not shared-account deletion and cannot justify deleting a User or
+tenant data to release an email address. Add audited, root/issuer-scoped resend,
+directory removal and fresh re-admission while preserving password/MFA proof,
+obsolete-link/session fences and transport uncertainty. Reproduce and test the
+actual unopened-invitation sequence on both supported databases and at desktop
+and mobile widths. No provider send or real account mutation is acceptance setup.
+
+Current local checkpoint:1835/1835 full frontend, zero skips; nine-module native
+selection318P/954phases with an explicit unselected-test source-drift caveat;
+stable native issuer supplement4P/12phases. The database admits only one active
+root and one pending/active manager per root. Preserve those native constraints,
+not a fictitious concurrent two-manager fixture. Full committed Docker, current
+CI/main and exact-serving combined release remain pending.
+
 ## October 22 Recent-Collection Determinism
 
 Partially implemented / release NO-GO. The complete f26 PostgreSQL failure proves

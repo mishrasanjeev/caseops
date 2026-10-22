@@ -15,7 +15,7 @@ describe("report administrators page authority", () => {
     fetcher = vi.fn(async (url: string) => {
       expect(url).toContain("/api/platform-console/");
       if (url.endsWith("/auth/session")) return new Response(JSON.stringify({ state: "authenticated", admin: { id: "manager", email: record.email, full_name: record.full_name, role }, expires_at: "2099-01-01T00:00:00Z", recovery_codes: null }));
-      if (new URL(url).pathname.endsWith("/admins")) return new Response(JSON.stringify({ items: [record], next_cursor: null }));
+      if (new URL(url).pathname.endsWith("/admins/manage")) return new Response(JSON.stringify({ items: [{ ...record, version: 1, removed_at: null, can_manage: false }], next_cursor: null }));
       if (url.endsWith("/admins/invitations")) return new Response(JSON.stringify({ admin: { ...record, id: "pending", email: "invitee@example.invalid", full_name: "Invitee", role: "viewer", status: "pending" }, delivery_status: "accepted" }));
       throw new Error("Unexpected administrator request");
     });
@@ -37,6 +37,8 @@ describe("report administrators page authority", () => {
     const region = await screen.findByRole("region", { name: "Administrator directory" });
     expect(within(region).getByText(record.email)).toBeVisible();
     expect(within(region).getByRole("button", { name: "Revoke" })).toBeDisabled();
+    expect(within(region).getByRole("button", { name: "Delete report access for Manager" })).toBeDisabled();
+    expect(fetcher.mock.calls.some(([url]) => new URL(String(url)).pathname.endsWith("/admins/manage"))).toBe(true);
   });
   it("posts one explicit viewer invitation with the separate CSRF fence", async () => {
     render(<PlatformSessionProvider><Page /></PlatformSessionProvider>);
@@ -49,6 +51,6 @@ describe("report administrators page authority", () => {
     expect(calls).toHaveLength(1);
     const init = calls[0][1] as RequestInit;
     expect(init.headers).toHaveProperty("X-Console-CSRF-Token", "page-console-proof");
-    expect(JSON.parse(String(init.body))).toEqual({ email: "invitee@example.invalid", full_name: "Invitee" });
+    expect(JSON.parse(String(init.body))).toEqual({ email: "invitee@example.invalid", full_name: "Invitee", reinvite_revoked: true });
   });
 });

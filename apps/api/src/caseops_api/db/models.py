@@ -8197,6 +8197,7 @@ class PlatformReportAdmin(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
     auth_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     initializes_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     encrypted_totp_secret: Mapped[str | None] = mapped_column(Text)
     mfa_status: Mapped[str] = mapped_column(String(24), nullable=False, default="not_enrolled")
     last_totp_counter: Mapped[int | None] = mapped_column(BigInteger)

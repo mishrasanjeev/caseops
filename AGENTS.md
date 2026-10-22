@@ -3158,3 +3158,23 @@ requirements when using the fallback.
   `-match` or `-notmatch`. Exercise the actual positive admission loop as well
   as rejection cases; a set of independent predicate tests cannot prove that
   the operational launcher can admit a valid release.
+- Revoking an isolated report grant is not deletion of the shared account.
+  Recover only through an explicit issuer-authorized fresh invitation, preserve
+  the User, tenant memberships, password and first-password state, and fence
+  obsolete links and sessions with a new grant epoch. Regress the actual
+  never-opened invite -> revoke -> same-email invitation, active and removed
+  grants, protected identities and competing stale commands on PostgreSQL.
+- Existing strict clients can reject additive response fields during a rolling
+  deployment. Keep legacy read shapes byte-identical and introduce command
+  versions, server-owned action eligibility and named report projections through
+  explicit new or opt-in contracts. Resolve report names only for the bounded
+  returned page/alert IDs, preserve financial values and continuation, and prove
+  the actual visible account name plus ID after responsive reload.
+- A changed console client contract must update direct page tests as well as
+  mocked component fixtures. Exercise the real session provider and client at
+  the page boundary, retain protected-role assertions and inspect the complete
+  standard suite. A focused component-only green result does not cover them.
+- Retain verbose native diagnostics alongside machine-readable browser/unit
+  reports. A JSON reporter may omit a suite-hook error while marking its cases
+  pending; those cases remain unverified, not approved skips or passed tests.
+  Preserve the incomplete run and require a complete replacement inventory.

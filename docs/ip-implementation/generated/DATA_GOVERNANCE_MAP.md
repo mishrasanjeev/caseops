@@ -6,9 +6,9 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `d1ac90539dfa4780a2b87a4d9ed8171dd4e5bdbee98cf4477acb8e77dfb5bd62`
+- Canonical map SHA-256: `4b63c0b2e74c331ea344bdc12adf57fd2ad3affbcce367f24371e169765ea2f0`
 - SQL tables: `344`
-- SQL columns: `5438`
+- SQL columns: `5439`
 - ORM indexes: `1788`
 - Alembic/raw index declarations: `1572`
 - Non-SQL data classes: `15`
@@ -301,7 +301,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `platform_console_sessions` | `security_identity_control` | 11 | `registry_fail_closed` |
 | `platform_console_tokens` | `security_identity_control` | 10 | `registry_fail_closed` |
 | `platform_operational_readiness_evidence` | `platform_operational_reference` | 14 | `registry_fail_closed` |
-| `platform_report_admins` | `security_identity_control` | 18 | `registry_fail_closed` |
+| `platform_report_admins` | `security_identity_control` | 19 | `registry_fail_closed` |
 | `platform_report_audit_events` | `security_identity_control` | 8 | `registry_fail_closed` |
 | `portal_magic_links` | `security_identity_control` | 8 | `registry_fail_closed` |
 | `portal_publication_targets` | `tenant_operational_record` | 9 | `registry_fail_closed` |

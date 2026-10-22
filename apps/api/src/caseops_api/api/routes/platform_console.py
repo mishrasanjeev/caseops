@@ -14,7 +14,7 @@ from caseops_api.core.console_auth import (
 )
 from caseops_api.core.problem_details import ProblemHTTPException, problem_json
 from caseops_api.core.rate_limit import limiter, login_rate_limit
-from caseops_api.db.models import PlatformReportAdmin, User
+from caseops_api.db.models import PlatformAdminMembership, PlatformReportAdmin, User
 from caseops_api.schemas.activity_reports import ActivityReportResponse
 from caseops_api.schemas.platform_console import (
     ConsoleAcceptedResponse,
@@ -27,14 +27,21 @@ from caseops_api.schemas.platform_console import (
     ConsoleInviteRequest,
     ConsoleLoginRequest,
     ConsoleLogoutResponse,
+    ConsoleManagedAdminsResponse,
     ConsoleMFAEnrollmentResponse,
     ConsoleMFAVerifyRequest,
     ConsoleOKResponse,
     ConsoleOverviewResponse,
+    ConsoleRemoveRequest,
     ConsoleReportPage,
     ConsoleResetStartRequest,
     ConsoleRevokeRequest,
     ConsoleTokenCompleteRequest,
+    ConsoleVersionRequest,
+)
+from caseops_api.schemas.platform_console_named_reports import (
+    ConsoleNamedOverviewResponse,
+    ConsoleNamedReportPage,
 )
 from caseops_api.schemas.platform_leads import ConsoleLeadsResponse
 from caseops_api.services import platform_console as console
@@ -226,6 +233,7 @@ def admins(
         .join(User, User.id == PlatformReportAdmin.user_id)
         .where(
             PlatformReportAdmin.root_platform_admin_id == context.admin.root_platform_admin_id,
+            PlatformReportAdmin.removed_at.is_(None),
         )
     )
     if cursor:
@@ -239,6 +247,34 @@ def admins(
     return result
 
 
+@router.get("/admins/manage", response_model=ConsoleManagedAdminsResponse)
+def managed_admins(
+    request: Request, session: DbSession,
+    cursor: str | None = Query(default=None, max_length=36),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    context = _context(request, session, manager=True)
+    query = select(PlatformReportAdmin, User).join(
+        User, User.id == PlatformReportAdmin.user_id
+    ).where(
+        PlatformReportAdmin.root_platform_admin_id == context.admin.root_platform_admin_id,
+        PlatformReportAdmin.removed_at.is_(None),
+    )
+    if cursor:
+        query = query.where(PlatformReportAdmin.id > cursor)
+    rows = list(session.execute(query.order_by(PlatformReportAdmin.id).limit(limit + 1)))
+    founder_user_id = session.scalar(select(PlatformAdminMembership.user_id).where(
+        PlatformAdminMembership.id == context.admin.root_platform_admin_id
+    ))
+    items = [console.managed_admin_record(admin, user, context, founder_user_id=founder_user_id)
+             for admin, user in rows[:limit]]
+    result = ConsoleManagedAdminsResponse(
+        items=items, next_cursor=items[-1].id if len(rows) > limit else None
+    )
+    console.audit_report_read(session, context, "admins_manage")
+    return result
+
+
 @router.post("/admins/invitations", response_model=ConsoleInvitationResponse)
 @limiter.limit(login_rate_limit)
 def invite(request: Request, payload: ConsoleInviteRequest, session: DbSession):
@@ -249,13 +285,32 @@ def invite(request: Request, payload: ConsoleInviteRequest, session: DbSession):
         email=str(payload.email),
         full_name=payload.full_name,
         automated=_automated(request),
+        reinvite_revoked=payload.reinvite_revoked,
     )
 
 
 @router.post("/admins/{admin_id}/revoke", response_model=ConsoleAdminRecord)
 def revoke(request: Request, admin_id: str, payload: ConsoleRevokeRequest, session: DbSession):
     context = _context(request, session, manager=True, step_up=True)
-    return console.revoke(session, context, admin_id=admin_id, reason=payload.reason)
+    return console.revoke(session, context, admin_id=admin_id, reason=payload.reason,
+                          expected_version=payload.expected_version)
+
+
+@router.post("/admins/{admin_id}/remove", response_model=ConsoleAdminRecord)
+def remove(request: Request, admin_id: str, payload: ConsoleRemoveRequest, session: DbSession):
+    context = _context(request, session, manager=True, step_up=True)
+    return console.remove(session, context, admin_id=admin_id, reason=payload.reason,
+                          expected_version=payload.expected_version)
+
+
+@router.post("/admins/{admin_id}/invitations/resend", response_model=ConsoleInvitationResponse)
+@limiter.limit(login_rate_limit)
+def resend_admin_invitation(
+    request: Request, admin_id: str, payload: ConsoleVersionRequest, session: DbSession,
+):
+    context = _context(request, session, manager=True, step_up=True)
+    return console.resend_invitation(session, context, admin_id=admin_id,
+        expected_version=payload.expected_version, automated=_automated(request))
 
 
 @router.get("/reports/activity", response_model=ActivityReportResponse)
@@ -280,16 +335,21 @@ def public_leads(
     return result
 
 
-@router.get("/reports/overview", response_model=ConsoleOverviewResponse)
-def overview_report(request: Request, response: Response, session: DbSession):
+@router.get(
+    "/reports/overview", response_model=ConsoleNamedOverviewResponse | ConsoleOverviewResponse
+)
+def overview_report(
+    request: Request, response: Response, session: DbSession,
+    include_account_names: bool = Query(default=False),
+):
     context = _context(request, session)
-    result = overview(session)
+    result = overview(session, include_account_names=include_account_names)
     console.audit_report_read(session, context, "overview")
     response.headers["Cache-Control"] = "no-store"
     return result
 
 
-@router.get("/reports/{kind}", response_model=ConsoleReportPage)
+@router.get("/reports/{kind}", response_model=ConsoleNamedReportPage | ConsoleReportPage)
 def financial_report(
     request: Request,
     response: Response,
@@ -297,11 +357,13 @@ def financial_report(
     session: DbSession,
     cursor: str | None = Query(default=None, max_length=2048),
     limit: int = Query(default=50, ge=1, le=100),
+    include_account_names: bool = Query(default=False),
 ):
     context = _context(request, session)
     if kind not in {"usage", "profit", "company-profitability", "revenue"}:
         console._fail("console_report_not_found", status=404)
-    result = report_page(session, kind=kind, cursor=cursor, limit=limit)
+    result = report_page(session, kind=kind, cursor=cursor, limit=limit,
+                         include_account_names=include_account_names)
     console.audit_report_read(session, context, kind)
     response.headers["Cache-Control"] = "no-store"
     return result

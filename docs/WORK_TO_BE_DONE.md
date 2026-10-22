@@ -1,5 +1,26 @@
 # CaseOps  - Work To Be Done
 
+## October 22 Administrator Re-Invitation
+
+PRA-13 account-name presentation is locally implemented alongside IDs in financial
+report rows and account-specific Overview alerts. Preserve already-named
+Activity/Profit views, bounded pagination and exact financial values; use
+server-owned names with legacy-compatible opt-in read DTOs. Native query bounds
+and actual visible names after desktop/mobile reload remain required.
+
+J14/M14/US-040/042/PRA-10..12 is partially implemented: local manager-directory resend,
+explicit recovery after revoking an unopened invitation, and confirmed removal
+of report access followed by same-email re-admission. Keep shared User/tenant
+data and all audit history unchanged. Require old-link/session rejection,
+manager/root/issuer/CSRF/fresh-MFA fencing, deterministic local mail capture,
+complete regression inventory and exact-serving verification. The user did not
+report an opened-link failure after clarification. See the dated recovery guide;
+leads081e Docker/CI does not certify this new source. Complete frontend1835/1835,
+typed contracts and focused backend/issuer-boundary proof are retained; fresh
+committed Docker browser/full-suite, current CI and combined production release
+remain pending. Keep the PostgreSQL wrapper's unselected-test source drift
+qualification, rather than calling it an unchanged whole-tree gate.
+
 ## October 22 Recent Matter Notes
 
 Close the actual CI notes-order defect before this release. Workspace reads must
