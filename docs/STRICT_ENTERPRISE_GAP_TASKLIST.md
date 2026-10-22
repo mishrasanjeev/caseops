@@ -1,5 +1,130 @@
 # Strict Enterprise Gap Tasklist
 
+## October 22 Named Workflow Coverage Gap
+
+Fresh e01 CI exposed another test-only clock defect: the names fixture minted
+report cursors at a fixed timestamp, but PyJWT validated against real time.
+All four pagination kinds failed after13:34:56UTC; the earlier native pass ran
+before expiry and does not close this time-dependent gap. The correction scopes
+the same clock to actual report-token validation without changing authentication
+or production TTL/signature/audience/expiry checks. Seven new boundary cases
+run on SQLite and canonical PostgreSQL. Preserve both failed native shard
+envelopes and the local four-case RED; replacement gates remain required.
+
+The actual six new Docker journeys now pass on dabd6704, including current
+revision approval/edit invalidation/finalization and contact preservation.
+Complete frontend coverage03 is1864P with whole-input stability. Keep release
+NO-GO: full exact-candidate canonical Docker and production proof remain open,
+and Security39782850145 failed its real-client cleanup harness case before
+scanning. The scanner/helper correction must prove actual owned-container
+absence rather than trusting a removal command's exit code. Do not classify
+this infrastructure failure as a detected secret or a successful scan.
+
+Partially implemented: the old drafting browser title claimed regeneration,
+approval and finalization but stopped after requesting changes. This was a
+verification gap, not proof those later boundaries worked. Preserve that limit,
+correct the title and add an actual dated zero-citation -> recovery -> current
+revision review -> edit invalidation -> re-review -> finalization journey with
+reloads. Independently reconcile the mobile project's allowlist; the generic
+dated-file pattern alone does not select its mobile cases. No legal-safety,
+provider-cost or private-source fence may be weakened to manufacture a pass.
+Batch3 Docker, exact-source CI and deployed browser acceptance remain pending.
+
+## October 22 Real Workflow Test Dependency
+
+CI39759376390 / candidate24be failed only the notification runtime workflow's
+implicit default test-server download with503, before its application assertions.
+The candidate correction provisions the official pinned v1.40.0 fixture before
+the exact selected shard, verifies archive/executable integrity on cache hits
+too, and keeps the real workflow and no-paid isolation. Full offline component
+proof is59P/177phases/0skips plus12 acquisition cases. Hosted new-head CI and the
+combined exact-candidate Docker/release gates remain pending; no production GO
+or owner acceptance follows from this component result. See the offline-tools
+runbook for bounds, provenance and replacement instructions.
+Follow-up CI-marker fencing refuses absent explicit provisioning before any
+implicit SDK acquisition; ordinary developer behavior remains unchanged.
+Complete replacement offline proof is62P/186phases/0skips plus12 acquisition
+cases with `CI=true`. Hosted new-head and full release gates remain pending.
+
+## October 22 Docker Filesystem Admission
+
+Confirmed release-infrastructure NO-GO: the Leads081e whole Docker gate passed
+its native suite but both real mobile enquiry/admin journeys received503 when
+PostgreSQL could not extend files on Docker's full Linux filesystem. Windows
+host capacity was not the relevant capacity. Preserve that failed evidence;
+neither the product journeys nor an earlier green native run certify release.
+The replacement gate must measure actual bytes and inodes at every expensive
+boundary, record owned network-disabled probe cleanup, and refuse missing or
+insufficient measurements without pruning or weakening any assertion. The
+runbook is `runbooks/docker-acceptance-storage.md`; full replacement acceptance
+remains required after recovery of reviewed unused local build images.
+
+The same schema change also exposed a stale compiled governance projection.
+Regeneration must preserve the reviewed classification and preservation fences,
+with complete PostgreSQL legal-hold replay and new-head CI. Do not treat the
+stale-projection503 as an exception to legal-hold enforcement.
+
+## October 22 Isolated Administrator Grant Recovery
+
+PRA-13 report-name extension is locally implemented but release-pending: enrich only selected-page IDs
+or the bounded Overview alert set with current authoritative Company names.
+Do not copy the complete account directory into a DTO or add browser lookups.
+Keep legacy strict clients working while opting new clients into named rows;
+missing name evidence must remain explicit.
+
+Partially implemented / release NO-GO for PRA-10..12 recovery scope. An explicit report-grant
+revocation is not shared-account deletion and cannot justify deleting a User or
+tenant data to release an email address. Add audited, root/issuer-scoped resend,
+directory removal and fresh re-admission while preserving password/MFA proof,
+obsolete-link/session fences and transport uncertainty. Reproduce and test the
+actual unopened-invitation sequence on both supported databases and at desktop
+and mobile widths. No provider send or real account mutation is acceptance setup.
+
+Current local checkpoint:1835/1835 full frontend, zero skips; nine-module native
+selection318P/954phases with an explicit unselected-test source-drift caveat;
+stable native issuer supplement4P/12phases. The database admits only one active
+root and one pending/active manager per root. Preserve those native constraints,
+not a fictitious concurrent two-manager fixture. Full committed Docker, current
+CI/main and exact-serving combined release remain pending.
+
+## October 22 Recent-Collection Determinism
+
+Partially implemented / release NO-GO. The complete f26 PostgreSQL failure proves
+equivalent workspace DTOs disagree only in notes. Unordered Matter.notes directly
+feeds the first-three Recent notes surface, so this is a user-visible source
+defect, not an excuse to weaken equality. Require a shared timestamp-descending,
+unique-ID tie-break contract at database and materialized read boundaries, full
+record retention and native/browser reload proof. Audit sister chronological
+collections without imposing note ordering on unrelated business sequences.
+No global chronology or data migration is inferred or authorized by this fix.
+
+The bounded sister audit identifies timestamp-only SQL ordering before existing
+communications/notes/attachment source limits. The final merged timeline already
+sorts by time and ID but cannot recover unstable capped membership. Preserve
+current ascending/descending directions,500-row caps and visibility filters;
+append unique source IDs before limits and prove exact tied-boundary subsets.
+The ordinary matter timeline already has stable composite ordering and remains
+unchanged. This sister risk is source-backed, not another observed hosted failure.
+
+## October 21 Public Enquiry Operations
+
+Partially implemented. Existing public form admission is already durable, but
+isolated manager readback and a persistently wired, new-only notification cohort
+need focused and release proof. Preserve historical/unknown attempt states and
+original idempotency snapshots; never drain legacy pending rows or put submitted
+PII into notification mail. Test claim expiry/concurrency with no transaction
+during transport, no-paid persistence, MFA/realm/revocation fences, bounded
+pagination and data-preserving SQLite/PostgreSQL migration health. The90-day
+purge remains disabled and unapproved. See
+`docs/public-leads-admin-2026-10-21.md`. No production readiness claim yet.
+
+Mail activation must not depend on post-response CPU. Admission and founder
+retry are queue-only; the existing scheduled reminder job owns the actual
+claim/transport. Retain its unknown-outcome and no-paid fences without a billing
+change. A deterministic RED proved the old HTTP send; the combined worker-only
+replacement and complete gates remain required, separately from the149 passed
+historical migration/index controls.
+
 ## October 21 Cross-Dialect Renewal Responses
 
 C24 is NO-GO after nine Pillow findings. The subsequent installed-set audit

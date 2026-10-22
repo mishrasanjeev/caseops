@@ -15,6 +15,16 @@ const payload = {
 };
 
 describe("seo_demo_20261009 explicit admission allowlists", () => {
+  it.each(["2026-10-09", "2026-10-21"])("retains exact notice %s without promoting it to a notification grant", (privacy_notice_version) => {
+    const admitted = { ...payload, privacy_notice_version };
+    expect(demoAdmissionSchema.parse(admitted)).toEqual(admitted);
+    expect(demoAdmissionSchema.parse(admitted)).not.toHaveProperty("notification_eligible");
+  });
+
+  it.each([undefined, "2026-10-20", "2026-10-22", "approved"])("rejects missing or unreviewed notice %s", (privacy_notice_version) => {
+    expect(demoAdmissionSchema.safeParse({ ...payload, privacy_notice_version }).success).toBe(false);
+  });
+
   it("requires a UUID admission nonce, not an arbitrary credential string", () => {
     expect(demoAdmissionSchema.safeParse(payload).success).toBe(true);
     expect(demoAdmissionSchema.safeParse({ ...payload, idempotency_key: "not-a-uuid" }).success).toBe(false);
@@ -35,7 +45,7 @@ describe("seo_demo_20261009 explicit admission allowlists", () => {
     },
   );
 
-  it.each(["url", "query", "referrer", "utm_json"])("rejects unreviewed attribution field %s", (field) => {
+  it.each(["url", "query", "referrer", "utm_json", "notification_eligible", "notification_policy", "notification_purpose", "automated_request", "created_at"])("rejects unreviewed attribution or server-owned field %s", (field) => {
     expect(demoAdmissionSchema.safeParse({ ...payload, [field]: "private-do-not-retain" }).success).toBe(false);
   });
 });

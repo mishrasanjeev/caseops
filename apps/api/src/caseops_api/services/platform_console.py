@@ -37,6 +37,7 @@ from caseops_api.schemas.platform_console import (
     ConsoleAdminSelf,
     ConsoleAuthState,
     ConsoleInvitationResponse,
+    ConsoleManagedAdminRecord,
     ConsoleMFAEnrollmentResponse,
 )
 from caseops_api.services.platform_admin import _configured_founder_user_id
@@ -90,6 +91,8 @@ def _fail(code: str = "console_session_invalid", *, status: int = 401) -> None:
             "console_mfa_invalid": "The MFA code is invalid or was already used.",
             "console_mfa_locked": "Too many MFA attempts. Try again later.",
             "console_conflict": "This administrator change conflicts with current state.",
+            "console_reload_required": "Reload the administrator directory before changing access.",
+            "console_invitation_cooldown": "Wait five minutes before resending this invitation.",
         }.get(code, "The console session or credential is no longer valid."),
     )
 
@@ -157,7 +160,10 @@ def _locked_admin(session: Session, admin_id: str) -> tuple[PlatformReportAdmin,
         .with_for_update(key_share=True)
         .execution_options(populate_existing=True)
     )
-    if manager is None or manager.role != "manager" or manager.status == "revoked":
+    if (
+        manager is None or manager.role != "manager" or manager.status == "revoked"
+        or manager.removed_at is not None
+    ):
         _fail()
     if not _root_valid(session, manager.root_platform_admin_id):
         _fail()
@@ -182,6 +188,7 @@ def _locked_admin(session: Session, admin_id: str) -> tuple[PlatformReportAdmin,
     if (
         admin is None
         or admin.status == "revoked"
+        or admin.removed_at is not None
         or admin.root_platform_admin_id != manager.root_platform_admin_id
         or (
             admin.id != manager.id
@@ -226,6 +233,71 @@ def admin_record(admin: PlatformReportAdmin, user: User) -> ConsoleAdminRecord:
         status=admin.status,
         created_at=_aware(admin.created_at),
     )
+
+
+def managed_admin_record(
+    admin: PlatformReportAdmin, user: User, context: ConsoleAuthContext, *, founder_user_id: str
+) -> ConsoleManagedAdminRecord:
+    return ConsoleManagedAdminRecord(
+        **admin_record(admin, user).model_dump(), version=admin.auth_epoch,
+        removed_at=_aware(admin.removed_at) if admin.removed_at else None,
+        can_manage=bool(
+            context.admin.role == "manager" and context.admin.status == "active"
+            and context.admin.mfa_status == "enrolled" and context.user.is_active
+            and admin.role == "viewer" and admin.removed_at is None and user.is_active
+            and admin.created_by_report_admin_id == context.admin.id
+            and admin.root_platform_admin_id == context.admin.root_platform_admin_id
+            and admin.user_id not in {context.user.id, founder_user_id}
+        ),
+    )
+
+
+def _owned_viewer(
+    session: Session, context: ConsoleAuthContext, admin_id: str, *, allow_removed: bool = False
+) -> tuple[PlatformReportAdmin, User]:
+    manager, actor = _locked_admin(session, context.admin.id)
+    if manager.role != "manager" or manager.status != "active" or manager.mfa_status != "enrolled":
+        _fail("console_manager_required", status=403)
+    target = session.scalar(
+        select(PlatformReportAdmin).where(PlatformReportAdmin.id == admin_id)
+        .with_for_update(key_share=True).execution_options(populate_existing=True)
+    )
+    founder_id = session.scalar(select(PlatformAdminMembership.user_id).where(
+        PlatformAdminMembership.id == manager.root_platform_admin_id
+    ))
+    if (
+        target is None or target.role != "viewer"
+        or target.created_by_report_admin_id != manager.id
+        or target.root_platform_admin_id != manager.root_platform_admin_id
+        or target.user_id in {actor.id, founder_id}
+        or (target.removed_at is not None and not allow_removed)
+    ):
+        _fail("console_conflict", status=409)
+    user = session.scalar(select(User).where(User.id == target.user_id)
+        .with_for_update(key_share=True).execution_options(populate_existing=True))
+    if user is None or not user.is_active:
+        _fail("console_conflict", status=409)
+    return target, user
+
+
+def _require_version(admin: PlatformReportAdmin, expected_version: int | None) -> None:
+    if expected_version is None:
+        _fail("console_reload_required", status=409)
+    if admin.auth_epoch != expected_version:
+        _fail("console_conflict", status=409)
+
+
+def _invalidate_grant(session: Session, admin: PlatformReportAdmin) -> None:
+    admin.auth_epoch += 1
+    now = _now()
+    session.execute(update(PlatformConsoleToken).where(
+        PlatformConsoleToken.report_admin_id == admin.id,
+        PlatformConsoleToken.revoked_at.is_(None),
+    ).values(revoked_at=now))
+    session.execute(update(PlatformConsoleSession).where(
+        PlatformConsoleSession.report_admin_id == admin.id,
+        PlatformConsoleSession.revoked_at.is_(None),
+    ).values(revoked_at=now))
 
 
 def auth_state(context: ConsoleAuthContext) -> ConsoleAuthState:
@@ -788,11 +860,12 @@ def invite(
     email: str,
     full_name: str,
     automated: bool = False,
+    reinvite_revoked: bool = False,
 ) -> ConsoleInvitationResponse:
     if context.admin.role != "manager":
         _fail("console_manager_required", status=403)
     normalized = email.strip().lower()
-    user = session.scalar(select(User).where(User.email == normalized).with_for_update())
+    user = session.scalar(select(User).where(User.email == normalized))
     new_user = user is None
     if user is None:
         user = User(
@@ -812,30 +885,40 @@ def invite(
         select(PlatformReportAdmin).where(PlatformReportAdmin.user_id == user.id)
     )
     if existing is not None:
-        if (
-            existing.role != "viewer"
-            or existing.status != "pending"
-            or existing.created_by_report_admin_id != context.admin.id
-            or existing.root_platform_admin_id != context.admin.root_platform_admin_id
-        ):
-            _fail("console_conflict", status=409)
-        # Replay observes the durable claim only. Recovery belongs exclusively
-        # to the explicit, cooldown-fenced pending invitation resend endpoint.
-        status = session.scalar(
-            select(PlatformConsoleDelivery.status)
-            .join(PlatformConsoleToken, PlatformConsoleToken.id == PlatformConsoleDelivery.token_id)
-            .where(
-                PlatformConsoleToken.report_admin_id == existing.id,
-                PlatformConsoleToken.purpose == "invite",
-            )
-            .order_by(PlatformConsoleToken.created_at.desc(), PlatformConsoleToken.id.desc())
-            .limit(1)
-        ) or "outcome_unknown"
-        record = admin_record(existing, user)
-        _audit(session, context.admin, "console.invitation_replayed", target_id=existing.id,
-               result=status)
-        session.commit()
-        return ConsoleInvitationResponse(admin=record, delivery_status=status)
+        existing, user = _owned_viewer(session, context, existing.id, allow_removed=True)
+        if existing.status == "revoked" and reinvite_revoked:
+            admin = existing
+            _invalidate_grant(session, admin)
+            admin.status = "pending"
+            admin.removed_at = None
+            _audit(session, context.admin, "console.reinvited", target_id=admin.id)
+        else:
+            if (
+                existing.role != "viewer"
+                or existing.status != "pending"
+                or existing.removed_at is not None
+                or existing.created_by_report_admin_id != context.admin.id
+                or existing.root_platform_admin_id != context.admin.root_platform_admin_id
+            ):
+                _fail("console_conflict", status=409)
+            status = session.scalar(
+                select(PlatformConsoleDelivery.status)
+                .join(
+                    PlatformConsoleToken,
+                    PlatformConsoleToken.id == PlatformConsoleDelivery.token_id,
+                )
+                .where(
+                    PlatformConsoleToken.report_admin_id == existing.id,
+                    PlatformConsoleToken.purpose == "invite",
+                )
+                .order_by(PlatformConsoleToken.created_at.desc(), PlatformConsoleToken.id.desc())
+                .limit(1)
+            ) or "outcome_unknown"
+            record = admin_record(existing, user)
+            _audit(session, context.admin, "console.invitation_replayed", target_id=existing.id,
+                   result=status)
+            session.commit()
+            return ConsoleInvitationResponse(admin=record, delivery_status=status)
     else:
         admin = PlatformReportAdmin(
             user_id=user.id,
@@ -846,7 +929,11 @@ def invite(
             created_by_report_admin_id=context.admin.id,
         )
         session.add(admin)
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        _fail("console_conflict", status=409)
     _, raw, claim, delivery = _new_token(session, admin, user, purpose="invite")
     record = admin_record(admin, user)
     delivery_id, send_email, send_name = delivery.id, user.email, user.full_name
@@ -1103,29 +1190,58 @@ def complete_password_reset(session: Session, *, token: str, password: str) -> N
 
 
 def revoke(
-    session: Session, context: ConsoleAuthContext, *, admin_id: str, reason: str
+    session: Session, context: ConsoleAuthContext, *, admin_id: str, reason: str,
+    expected_version: int | None = None,
 ) -> ConsoleAdminRecord:
-    if context.admin.role != "manager":
-        _fail("console_manager_required", status=403)
-    target = session.scalar(
-        select(PlatformReportAdmin)
-        .where(PlatformReportAdmin.id == admin_id)
-        .with_for_update(key_share=True)
-        .execution_options(populate_existing=True)
-    )
-    if (
-        target is None
-        or target.role != "viewer"
-        or target.created_by_report_admin_id != context.admin.id
-    ):
-        _fail("console_conflict", status=409)
+    target, user = _owned_viewer(session, context, admin_id)
+    _require_version(target, expected_version)
     target.status = "revoked"
-    target.auth_epoch += 1
-    user = session.get(User, target.user_id)
+    _invalidate_grant(session, target)
     record = admin_record(target, user)
     _audit(session, context.admin, "console.revoked", target_id=target.id, reason=reason.strip())
     session.commit()
     return record
+
+
+def remove(
+    session: Session, context: ConsoleAuthContext, *, admin_id: str, reason: str,
+    expected_version: int,
+) -> ConsoleAdminRecord:
+    target, user = _owned_viewer(session, context, admin_id)
+    _require_version(target, expected_version)
+    target.status = "revoked"
+    target.removed_at = _now()
+    _invalidate_grant(session, target)
+    record = admin_record(target, user)
+    _audit(session, context.admin, "console.removed", target_id=target.id, reason=reason.strip())
+    session.commit()
+    return record
+
+
+def resend_invitation(
+    session: Session, context: ConsoleAuthContext, *, admin_id: str, expected_version: int,
+    automated: bool = False,
+) -> ConsoleInvitationResponse:
+    target, user = _owned_viewer(session, context, admin_id)
+    _require_version(target, expected_version)
+    if target.status != "pending":
+        _fail("console_conflict", status=409)
+    recent = session.scalar(select(PlatformConsoleToken.id).where(
+        PlatformConsoleToken.report_admin_id == target.id,
+        PlatformConsoleToken.purpose == "invite",
+        PlatformConsoleToken.created_at > _now() - timedelta(minutes=5),
+    ).limit(1))
+    if recent:
+        _fail("console_invitation_cooldown", status=409)
+    _invalidate_grant(session, target)
+    _, raw, claim, delivery = _new_token(session, target, user, purpose="invite")
+    record = admin_record(target, user)
+    delivery_id, email, name = delivery.id, user.email, user.full_name
+    _audit(session, context.admin, "console.invitation_resent", target_id=target.id)
+    session.commit()
+    status = _send_claim(session, delivery_id=delivery_id, claim=claim, email=email, full_name=name,
+                         raw_token=raw, purpose="invite", automated=automated)
+    return ConsoleInvitationResponse(admin=record, delivery_status=status)
 
 
 def audit_report_read(session: Session, context: ConsoleAuthContext, report: str) -> None:

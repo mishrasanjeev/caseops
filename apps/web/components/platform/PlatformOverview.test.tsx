@@ -13,8 +13,8 @@ const overview = {
   gross_revenue_minor: 10000, recognized_revenue_minor: 10000, total_variable_cost_minor: 13000,
   gross_profit_minor: -3000, gross_margin_bps: -3000,
   margin_alerts: [
-    { company_id: "loss-account", gross_margin_bps: -3000, gross_profit_minor: -3000 },
-    { company_id: "unknown-margin-account", gross_margin_bps: null, gross_profit_minor: 100 },
+    { company_id: "loss-account", company_name: "Loss account", gross_margin_bps: -3000, gross_profit_minor: -3000 },
+    { company_id: "unknown-margin-account", company_name: "Unknown margin account", gross_margin_bps: null, gross_profit_minor: 100 },
     warning,
   ],
   margin_alerts_has_more: true,
@@ -75,6 +75,45 @@ describe("canonical overview wire responses", () => {
     expect(await screen.findByText(message)).toBeVisible();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
+  it.each([
+    { kind: "usage" as const, coverage: "recorded_usage", row: { company_id: "named-account", company_name: "Named legal office", feature_key: "document_read", quantity: 2, credits: 0, estimated_internal_cost_minor: 37 } },
+    { kind: "revenue" as const, coverage: "recorded_payments", row: { company_id: "named-account", company_name: "Named legal office", paid_at: "2026-10-20T00:00:00Z", merchant_reference: "recorded-payment", amount_paid_minor: 123456, tax_amount_minor: 37 } },
+  ])("shows the authoritative account name alongside its retained identifier in $kind", async ({ kind, coverage, row }) => {
+    serve({ items: [row], generated_at: "2026-10-20T10:00:00Z", next_cursor: null, has_more: false, coverage });
+    render(<PlatformFinancialReport kind={kind} />);
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("Named legal office", { exact: true })).toBeVisible();
+    expect(within(table).getByText("named-account", { exact: true })).toBeVisible();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("names account-specific overview alerts without inventing an account for provider warnings", async () => {
+    serve({ ...overview, margin_alerts: [
+      { company_id: "named-account", company_name: "Named legal office", gross_margin_bps: -3000, gross_profit_minor: -3000 },
+      warning,
+    ] });
+    render(<PlatformOverview />);
+    const alerts = await screen.findByRole("list", { name: "Margin and cost alerts" });
+    expect(within(alerts).getByText("Named legal office", { exact: true })).toBeVisible();
+    expect(within(alerts).getByText(/named-account:/)).toBeVisible();
+    expect(within(alerts).getByText("Cost guardrail warning")).toBeVisible();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it.each([null, ""])("shows absent account-name evidence honestly (%s)", async (company_name) => {
+    serve({ items: [{ company_id: "unnamed-account", company_name, feature_key: "document_read", quantity: 2, credits: 0, estimated_internal_cost_minor: 37 }],
+      generated_at: "2026-10-20T10:00:00Z", next_cursor: null, has_more: false, coverage: "recorded_usage" });
+    render(<PlatformFinancialReport kind="usage" />);
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("Account name not recorded", { exact: true })).toBeVisible();
+    expect(within(table).getByText("unnamed-account", { exact: true })).toBeVisible();
+  });
+  it("renders a submitted account label as plain text, not HTML", async () => {
+    const company_name = '<img src="untrusted-account" onerror="alert(1)">';
+    serve({ items: [{ company_id: "text-account", company_name, feature_key: "document_read", quantity: 2, credits: 0, estimated_internal_cost_minor: 37 }],
+      generated_at: "2026-10-20T10:00:00Z", next_cursor: null, has_more: false, coverage: "recorded_usage" });
+    render(<PlatformFinancialReport kind="usage" />);
+    expect(await screen.findByText(company_name, { exact: true })).toBeVisible();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
   it("retains literal paise in overview run rates and recorded totals without changing whole-rupee display", async () => {
     serve({ ...overview, mrr_minor: 123456, total_variable_cost_minor: 37 });
     render(<PlatformOverview />);
@@ -83,8 +122,8 @@ describe("canonical overview wire responses", () => {
     expect(screen.getByText("Configured annual run rate").nextElementSibling).toHaveTextContent(/^\u20b9144$/);
   });
   it.each([
-    { kind: "usage" as const, coverage: "recorded_usage", row: { company_id: "account", feature_key: "document_read", quantity: 2, credits: 0, estimated_internal_cost_minor: 37 } },
-    { kind: "revenue" as const, coverage: "recorded_payments", row: { company_id: "account", paid_at: "2026-10-20T00:00:00Z", merchant_reference: "recorded-payment", amount_paid_minor: 123456, tax_amount_minor: 37 } },
+    { kind: "usage" as const, coverage: "recorded_usage", row: { company_id: "account", company_name: "Recorded account", feature_key: "document_read", quantity: 2, credits: 0, estimated_internal_cost_minor: 37 } },
+    { kind: "revenue" as const, coverage: "recorded_payments", row: { company_id: "account", company_name: "Recorded account", paid_at: "2026-10-20T00:00:00Z", merchant_reference: "recorded-payment", amount_paid_minor: 123456, tax_amount_minor: 37 } },
     { kind: "profit" as const, coverage: "recorded_rollups", row: profit },
     { kind: "company-profitability" as const, coverage: "recorded_rollups", row: companyProfit },
   ])("retains literal minor-unit amounts in the canonical $kind response", async ({ kind, coverage, row }) => {

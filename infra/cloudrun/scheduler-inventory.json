@@ -121,6 +121,8 @@
           "CASEOPS_ENV": "production",
           "CASEOPS_AUTO_MIGRATE": "false",
           "CASEOPS_HEARING_REMINDERS_ENABLED": "true",
+          "CASEOPS_DEMO_NOTIFICATION_ENABLED": "true",
+          "CASEOPS_DEMO_RETENTION_ENABLED": "false",
           "CASEOPS_SENDGRID_SENDER_EMAIL": "hearings@caseops.ai",
           "CASEOPS_SENDGRID_SENDER_NAME": "CaseOps"
         },

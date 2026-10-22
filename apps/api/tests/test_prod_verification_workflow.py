@@ -82,6 +82,68 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
 
 
 
+def test_batch3_production_gate_owns_source_credentials_and_all_three_native_roles() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
+    name = "Run release-owned Batch3 client and retained drafting acceptance"
+    step = next(item for item in steps if item.get("name") == name)
+    assert step["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
+    assert "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD" in step["env"]["CASEOPS_RAM_PROD_PASSWORD"]
+    assert (
+        "needs.resolve-release.outputs.release_sha" in step["env"]["CASEOPS_EXPECTED_RELEASE_SHA"]
+    )
+    assert "if [ ! -f tests/e2e/ram-2026-10-22-drafting.prod.spec.ts ]" in step["run"]
+    ancestor = "git merge-base --is-ancestor HEAD 38b700facbbadc7e730aca09329a436a9008e3ac"
+    assert ancestor in step["run"]
+    roles = {
+        "batch3-clients-desktop": "batch3-clients-prod-chromium",
+        "batch3-clients-mobile": "batch3-clients-prod-mobile",
+        "batch3-drafts-readonly": "batch3-drafts-readonly-prod-chromium",
+    }
+    for role, project in roles.items():
+        assert f'" {role} --config=playwright.prod-ram.config.ts --project={project}' in step["run"]
+    assert step["run"].count("--workers=1 --retries=0 --reporter=list") == 3
+    reconcile = next(item for item in steps
+                     if item.get("name") == "Reconcile required native Playwright evidence")
+    required = "required+=(batch3-clients-desktop batch3-clients-mobile batch3-drafts-readonly)"
+    assert required in reconcile["run"]
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
+    for project in roles.values():
+        block = config.split(f'name: "{project}"', 1)[1].split("name:", 1)[0]
+        assert "retries: 0" in block and "dependencies: []" in block
+        assert "storageState: { cookies: [], origins: [] }" in block
+        assert 'trace: "off", screenshot: "off", video: "off"' in block
+    tester = config.split('name: "tester-prod-chromium"', 1)[1].split("name:", 1)[0]
+    assert "BATCH3_DRAFT_READONLY_SPEC" not in tester
+    mobile = config.split('name: "batch3-clients-prod-mobile"', 1)[1].split("name:", 1)[0]
+    assert "hasTouch: true" in mobile and "isMobile: true" in mobile
+    assert "launchOptions" not in mobile
+
+
+def test_historical_provider_uat_explicitly_selects_legacy_qa_project() -> None:
+    import shlex
+
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/release-verify.yml").read_text())
+    step = next(item for item in workflow["jobs"]["release-playwright"]["steps"]
+                if item.get("name") == "Run release-mode Playwright (CASEOPS_RELEASE_MODE=true)")
+    calls = [shlex.split(line.strip()) for line in step["run"].splitlines()
+             if line.strip().startswith("npx playwright test ")]
+    production = [call for call in calls if "--config=playwright.prod-ram.config.ts" in call]
+    assert len(production) == 1
+    assert [arg for arg in production[0] if arg.startswith("--project=")] == [
+        "--project=prod-chromium"
+    ]
+    assert any("--config=playwright.app.config.ts" in call for call in calls)
+    assert step["env"]["CASEOPS_RELEASE_MODE"] == "true"
+    assert "--grep-invert" in production[0]
+    assert "Ram 2026-08-16 PR #237 production-safe UX proof" in production[0]
+
+
 @pytest.mark.parametrize(
     ("name", "target", "old", "replacement"),
     [
@@ -421,7 +483,7 @@ def test_release_owned_tester_split_contract_cli_fails_closed_before_browser(
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == {
             "tester_partition_contract": 1,
-            "partitions": {"tester": 97, "tester-catalog": 18,
+            "partitions": {"tester": 98, "tester-catalog": 18,
                            "tester-index": 6, "test-legal-write-oct13": 50},
             "catalog_file": "ram-2026-09-05-bugs.spec.ts",
         }

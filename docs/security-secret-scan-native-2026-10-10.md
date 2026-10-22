@@ -1,5 +1,20 @@
 # Nonempty Secret-Scan Gate
 
+## October 22 Invitation Fixture Review
+
+PR553's first secret scan found one new generic-key match in an isolated local
+invitation-age fixture, not a provider or deployed account credential. The
+fixture explicitly selects e2e, an independent SQLite database, loopback-only
+mail capture and no real provider. The immutable a4770e87 origin's exact
+line426 span was verified against native redacted evidence, SHA256
+4382eeddd6ff0a1dc173f26aa0cebd01de6580beac39e976fe1894793f330eea.
+Current source uses a repeated low-entropy local placeholder. Only the exact
+historical commit/path/rule/line fingerprint is reviewed for changed-history
+scanning; modified spans, new origins and real credentials remain blocking.
+No test directory, path-wide or rule-wide exclusion and no alert dismissal.
+The failed initial scan is retained. A complete native replacement scan and
+fresh hosted Security result remain required before release acceptance.
+
 ## Scope and Cause
 
 The actual Security run `38034910148`, job `114163220692`, on merged main

@@ -27,8 +27,8 @@ describe("seo_demo_20261009 request privacy page contract", () => {
   it("limits the notice to public requests and warns against client or privileged data", () => {
     render(<DemoPrivacyPage />);
     expect(screen.getByRole("heading", { level: 1, name: "Demo request privacy notice" })).toBeInTheDocument();
-    expect(screen.getByText(/Version 2026-10-09.*not tenant workspace records/)).toBeInTheDocument();
-    expect(screen.getByText(/authorized platform administrators.*Do not submit client names, case details, privileged material or confidential documents/)).toBeInTheDocument();
+    expect(screen.getByText(/Version 2026-10-21.*not tenant workspace records/)).toBeInTheDocument();
+    expect(screen.getByText(/authorized platform managers with multi-factor authentication.*protected Leads dashboard.*Do not submit client names, case details, privileged material or confidential documents/)).toBeInTheDocument();
   });
 
   it("names minimal first-party attribution and excludes sensitive URLs and tracking", () => {
@@ -38,11 +38,14 @@ describe("seo_demo_20261009 request privacy page contract", () => {
     expect(screen.getByText(/A click is not an accepted lead or proof of organic conversion/)).toBeInTheDocument();
   });
 
-  it("states durable admission without claiming sender approval or successful delivery", () => {
+  it("qualifies new-only reference mail without promising activation or inbox delivery", () => {
     render(<DemoPrivacyPage />);
-    expect(screen.getByText(/saved before acceptance is shown.*Outbound notification is disabled pending sender approval/)).toBeInTheDocument();
-    expect(screen.getByText(/request reference, not your submitted details/)).toBeInTheDocument();
-    expect(screen.getByText(/Notification failure does not delete the request.*delivery may be retried and is not guaranteed/)).toBeInTheDocument();
+    expect(screen.getByText(/saved before acceptance is shown.*Once server-side notification is activated, only new submissions.*designated CaseOps enquiry recipient through SendGrid/)).toBeInTheDocument();
+    expect(screen.getByText(/request reference and a protected dashboard link, not your submitted details/)).toBeInTheDocument();
+    expect(screen.getByText(/Historical requests are not bulk mailed.*Notification failure does not delete your request/)).toBeInTheDocument();
+    expect(screen.getByText(/Known rejected delivery may be retried within a fixed limit; uncertain delivery is held for inspection, not automatically resent/)).toBeInTheDocument();
+    expect(screen.getByText(/Provider acceptance does not guarantee inbox delivery/)).toBeInTheDocument();
+    expect(screen.queryByText(/Outbound notification is disabled pending sender approval/)).not.toBeInTheDocument();
   });
 
   it("keeps the narrow proposed expiry separate from authorized deletion and retained records", () => {

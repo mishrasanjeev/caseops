@@ -1,5 +1,79 @@
 # CaseOps  - Work To Be Done
 
+## October 22 Ram Batch 3
+
+J07/M06 and J12/M11 are partially implemented for the two populated rows in
+`CaseOps_Bugs (3).xlsx`. The client contact API already existed; its missing
+prefilled profile editor is now implemented locally with dirty-only contact
+patches and explicit null clearing. The complete client module passed47 cases,
+including9 new PostgreSQL cases, with stable API source and no skips. Local
+components passed37 cases across the client and draft pages. These are not
+Docker/browser or production acceptance.
+
+Keep approval unavailable for the current zero-citation draft revision, expose
+the existing bounded regeneration focus and Matter context, and verify that
+only a newly reviewed positive current revision can be approved. Catalogue
+matching is not proposition verification. The historical browser test claimed
+more transitions than it executed; its name is corrected and a complete new
+local deterministic journey is required. Standard mobile discovery must select
+the new cases. See `bugfix-ram-batch3-2026-10-22.md`; deployment remains pending.
+
+## October 22 Administrator Re-Invitation
+
+PRA-13 account-name presentation is locally implemented alongside IDs in financial
+report rows and account-specific Overview alerts. Preserve already-named
+Activity/Profit views, bounded pagination and exact financial values; use
+server-owned names with legacy-compatible opt-in read DTOs. Native query bounds
+and actual visible names after desktop/mobile reload remain required.
+
+J14/M14/US-040/042/PRA-10..12 is partially implemented: local manager-directory resend,
+explicit recovery after revoking an unopened invitation, and confirmed removal
+of report access followed by same-email re-admission. Keep shared User/tenant
+data and all audit history unchanged. Require old-link/session rejection,
+manager/root/issuer/CSRF/fresh-MFA fencing, deterministic local mail capture,
+complete regression inventory and exact-serving verification. The user did not
+report an opened-link failure after clarification. See the dated recovery guide;
+leads081e Docker/CI does not certify this new source. Complete frontend1835/1835,
+typed contracts and focused backend/issuer-boundary proof are retained; fresh
+committed Docker browser/full-suite, current CI and combined production release
+remain pending. Keep the PostgreSQL wrapper's unselected-test source drift
+qualification, rather than calling it an unchanged whole-tree gate.
+
+## October 22 Recent Matter Notes
+
+Close the actual CI notes-order defect before this release. Workspace reads must
+be stable and Recent notes must show the newest three; do not replace the whole
+DTO equality assertion with a sorted test projection. Require deterministic
+timestamp/tie and reversed-materialization coverage plus fresh native and
+desktop/mobile deployed reload proof. This current failure predates the enquiry
+and nullable-contact corrections; preserve its original full failure evidence.
+
+## October 21 Public Leads
+
+Partially implemented: reuse durable demo admission/outbox for new-only,
+reference-only owner notification and an MFA-manager /platform/leads directory
+covering retained enquiries with bounded pagination. Prove immutable eligibility,
+legacy/converted migration visibility without historical sends, claim races and
+unknown no-resend, protected read scopes and responsive reload before release.
+No CRM expansion or retention-policy approval. See
+`docs/public-leads-admin-2026-10-21.md`; full release/deployed proof is pending.
+
+The mail boundary must be worker-owned, not an HTTP background task. The first
+HTTP-only-queues regression retained a real offline failure (sent instead of
+pending). Replace that behavior and prove explicit worker delivery across
+admission, replay, founder retry and all seven browser entry points. The149-case
+historical migration/index replacement passed, but predates this mail correction
+and cannot certify it. Keep original failures and source-bound replacement proof.
+
+Close the reproduced rolling-upgrade classification gap before release: old
+writers omit the new flag after backfill, and those successful requests remain
+hidden. Require an atomic insertion-only old-protocol bridge without changing
+outbox state, current-policy exclusions or subsequent revocations. Both dialects
+must prove the complete corrected path, not merely rerun the earlier backfill.
+The founder reader must also accept nullable retained contact fields without
+hiding valid sibling enquiries; its complete28-case local replay now passes,
+but whole Docker/CI and production proof remain pending.
+
 ## October 21 Authenticator QR Usability
 
 PRA-09 under J14/M14/US-040/042: add browser-local QR encoding of the existing

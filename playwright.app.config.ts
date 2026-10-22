@@ -39,6 +39,7 @@ export default defineConfig({
     /portal-invite-access\.spec\.ts/,
     /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
     /platform-report-admin-2026-10-21\.prod\.spec\.ts$/,
+    /platform-leads-2026-10-21(?:\.prod)?\.spec\.ts$/,
     /bootstrap-and-upload\.spec\.ts/,
     /m2-polish\.spec\.ts/,
     /intake\.spec\.ts/,
@@ -55,6 +56,7 @@ export default defineConfig({
     // Dated tester batches must be discovered automatically. Manual entries
     // allowed committed regressions to silently fall out of the normal suite.
     /(?:hari|ram)-\d{4}-\d{2}-\d{2}-bugs\.spec\.ts/,
+    /ram-2026-10-22-drafting\.spec\.ts$/,
     /ram-\d{4}-\d{2}-\d{2}-(?:statutes|hearings)\.spec\.ts$/,
     /case-tracking-summary-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
     /ram-2026-09-07-statute-source-data\.spec\.ts/,
@@ -64,6 +66,7 @@ export default defineConfig({
     /ram-2026-10-08-prod\.spec\.ts$/,
     /ram-2026-10-10-prod\.spec\.ts$/,
     /ram-2026-10-12-prod\.spec\.ts$/,
+    /ram-2026-10-22-prod\.spec\.ts$/,
     /ram-2026-10-13-(?:hearings|ip-portfolio)\.spec\.ts$/,
     /ram-\d{4}-\d{2}-\d{2}-ip-(?:controls|renewal-tracker)\.spec\.ts$/,
     /ram-2026-10-17-ip-(?:tracker|reminders)\.spec\.ts$/,
@@ -145,7 +148,10 @@ export default defineConfig({
       grep: /\[mobile\]/,
       testMatch: [
         /mobile-responsive\.spec\.ts/,
+        /ram-2026-10-22-bugs\.spec\.ts$/,
+        /ram-2026-10-22-drafting\.spec\.ts$/,
         /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
+        /platform-leads-2026-10-21\.spec\.ts$/,
       ],
       use: {
         ...devices["Pixel 5"],

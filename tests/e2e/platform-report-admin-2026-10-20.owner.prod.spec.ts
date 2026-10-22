@@ -3,6 +3,7 @@ import type { APIResponse, BrowserContext } from "@playwright/test";
 
 import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
+import { consoleManagedAdminsResponse, consoleNamedOverview, consoleNamedReportPage } from "../../apps/web/lib/platform/schemas";
 import {
   CONSOLE, SESSION_COOKIE, assertRelease, newApi, noOverflow, productionTarget,
   readOnlyWireGuard, required, safeGet, type ConsoleAuth, type ReadOnlyWireGuard,
@@ -43,7 +44,8 @@ test("PRA owner acceptance: actual tenant session cannot enter the report realm"
   try {
     expect((await safeGet(api, `${target.api.origin}/api/auth/me`, { Authorization: `Bearer ${tenantToken}` })).status(),
       "The supplied tenant credential must first prove valid ordinary-tenant authority.").toBe(200);
-    for (const route of ["/auth/session", "/reports/activity", "/admins"]) {
+    for (const route of ["/auth/session", "/reports/activity", "/admins", "/admins/manage",
+      "/reports/overview?include_account_names=true", "/reports/usage?include_account_names=true"]) {
       expect((await safeGet(api, `${target.api.origin}${CONSOLE}${route}`,
         { Authorization: `Bearer ${tenantToken}` })).status()).toBe(401);
     }
@@ -78,6 +80,17 @@ test("PRA owner acceptance: authorized MFA-complete session reads all six report
   } finally { await alien.dispose(); }
   for (const report of ["activity", "overview", "usage", "profit", "company-profitability", "revenue"]) {
     await readJson<unknown>(await safeGet(page.request, `${target.api.origin}${CONSOLE}/reports/${report}`));
+    if (report !== "activity") {
+      const named = await readJson<unknown>(await safeGet(page.request,
+        `${target.api.origin}${CONSOLE}/reports/${report}?include_account_names=true`));
+      expect((report === "overview" ? consoleNamedOverview : consoleNamedReportPage).safeParse(named).success,
+        "Actual named report must retain its full strict response contract; private values omitted.").toBe(true);
+    }
+  }
+  if (session.admin?.role === "manager") {
+    const directory = await readJson<unknown>(await safeGet(page.request, `${target.api.origin}${CONSOLE}/admins/manage?limit=25`));
+    expect(consoleManagedAdminsResponse.safeParse(directory).success,
+      "Managed directory requires version, removed_at and server-owned can_manage; private values omitted.").toBe(true);
   }
   const activityLoading = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/reports/activity`
     && response.request().method() === "GET");
@@ -90,11 +103,13 @@ test("PRA owner acceptance: authorized MFA-complete session reads all six report
     const loading = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/reports/${endpoint}`
       && response.request().method() === "GET");
     await page.getByRole("tab", { name: tab, exact: true }).click();
-    expect((await loading).status()).toBe(200);
+    const loaded = await loading;
+    expect(loaded.status()).toBe(200);
+    expect(new URL(loaded.url()).searchParams.get("include_account_names")).toBe("true");
     const panel = page.getByRole("tabpanel");
     await expect(panel).toBeVisible();
     await expect(panel.getByRole("alert")).toHaveCount(0);
-    if (endpoint === "overview") await expect(panel.getByText("Monthly recurring revenue", { exact: true })).toBeVisible();
+    if (endpoint === "overview") await expect(panel.getByText("Configured monthly run rate", { exact: true })).toBeVisible();
     else {
       const report = panel.getByRole("region", { name: `${endpoint} report`, exact: true });
       await expect(report).toHaveAttribute("aria-busy", "false");

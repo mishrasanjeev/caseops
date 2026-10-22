@@ -1,5 +1,150 @@
 # CaseOps agent instructions
 
+- A browser test's name is not workflow evidence. A drafting test that stops
+  after requesting changes does not prove regeneration, approval or finalization.
+  Assert every named transition, the exact current revision, retained earlier
+  versions and post-reload state. Reconcile mobile project selection separately.
+- A contact-update API does not make an existing verified client's profile
+  editable. Prove the actual prefilled editor, dirty-only null-clearing payload,
+  persisted reload and unchanged KYC evidence, identity and Matter associations.
+  A citation catalogue match likewise does not prove legal proposition accuracy;
+  keep zero-citation approval fail-closed and distinguish source recovery from
+  a guarantee that regeneration will produce a legally valid draft.
+- Frontend tests can execute repository-level Playwright configuration and
+  fixtures. Their source guard must include those actual inputs, not only
+  apps/web. An unchanged narrow fingerprint cannot certify a run that read an
+  intermediate root configuration. Preserve the failure and rerun the complete
+  intended inventory after all input writers close.
+- Desktop touchscreen hardware does not establish a Playwright context's touch
+  mode. Select tap versus click from the configured project's hasTouch setting,
+  and independently prove mobile viewport, isMobile, touch and visible targets.
+  Do not lower target-size assertions when they expose a genuine small link.
+- A rejected stale-tab approval must refresh the authoritative current draft
+  revision without replaying approval. Prove the actual browser POST returns
+  the expected safety rejection, no approval audit is created, and the stale
+  positive revision is replaced by the current blocked revision.
+- A Docker removal acknowledgement is not proof of container absence. Verify
+  the exact invocation-owned name under one bounded cleanup deadline, preserve
+  the original scan failure, and reject transport errors or ambiguous output.
+  A failed harness is neither a detected secret nor a completed secret scan.
+- A frozen report clock must also govern its signed cursor validation. A fixed
+  issuance time paired with real JWT time eventually expires pagination tests.
+  Scope the test clock to report decoding, preserve real authentication time,
+  and prove before/at/after expiry plus signature, audience and required claims.
+  Never extend production TTL or disable verification to repair this fixture.
+  A temporary JWT-module clock patch is process-global, not thread-local:
+  serial report-call evidence does not authorize reuse with concurrent
+  unrelated authentication decoding without separate isolation proof.
+- An IP pleading's approval control needs a successful, idle validation for
+  that exact current version, not merely the absence of a negative response.
+  Loading, missing, failed or mismatched validation and failed recovery reads
+  remain unavailable. Regress both list-backed and deep-linked stale tabs.
+- Passing Vitest and E2E TypeScript do not type-check component tests. Compile
+  the web project before an expensive full Docker gate. Testing Library role
+  locators do not accept Playwright's exact option; use anchored name matchers
+  without weakening exact control identity.
+
+- An ORM migration must update both the reviewed data-class map and its
+  compiled governance projection before release tests. Render and validate
+  with the canonical generator, then replay the complete affected PostgreSQL
+  journey; a stale-projection denial is not a reason to disable preservation.
+- Docker acceptance must measure the Docker filesystem's available bytes and
+  inodes before builds and database/browser phases. Host-drive free space and
+  aggregate image sizes do not establish headroom. Retain ENOSPC failures as
+  incomplete/failed evidence, recover only explicitly owned or reviewed unused
+  resources, then run a complete replacement gate without weakening assertions.
+- Capacity-probe fixtures must reflect the canonical Compose mounts, including
+  its read-only PostgreSQL initialization script. Probe only the independently
+  verified owned data volume, never all inherited mounts. Exercise every probe
+  stage on the real isolated Compose service before launching the full gate.
+
+- A browser response waiter observes headers, not necessarily a readable body.
+  Before reloading a page with a same-URL API fetch, finish the initial body and
+  prove its visible render; bind the reload to a new request and await completion
+  before parsing. Keep body-retrieval failures distinct from malformed JSON and
+  preserve payload, reload and UI assertions. A discarded decoder exception is
+  not evidence that the server returned invalid data.
+
+- Reviewed browser inventories have independent Python and frontend source
+  contracts. After adding a journey, reconcile its exact literal identity and
+  per-role counts in both languages, not only the runner count. Keep whole
+  inventory equality and run the complete independent source-inventory module.
+- Test cleanup must use the uniquely admitted canonical identity, not an
+  unnormalized request value. Assert the create acknowledgement first, preserve
+  the original body failure separately from cleanup failures, and mark every
+  unreached journey boundary unverified. A failing finally block is not proof
+  that the body passed or that persisted product data was corrupted.
+
+- A "Recent" collection must have a server-owned chronological order and a
+  unique tie-breaker before a client slices it. Database physical row order is
+  not a contract. Prove distinct timestamps dominate IDs, exact timestamp ties
+  are stable, and opposite already-materialized collection orders serialize to
+  the same complete DTO. Keep whole-response equality and reload assertions;
+  sorting only the test would hide the user-visible newest-record omission.
+  A final merge sort cannot repair arbitrary membership selected by an earlier
+  timestamp-only SQL LIMIT; add the unique tie-breaker before that bound and
+  assert the exact included/excluded identities across the tied boundary.
+
+- A one-time derived-state backfill does not cover old API writers still
+  serving during deployment. Reproduce a successful old-column insert after
+  migration on both dialects and prove immediate visibility, converted-source
+  lineage and unchanged outbox bytes. Compatibility must not promote historical
+  notification eligibility or undo a current-protocol exclusion or later revoke;
+  a broad update trigger that resurrects an explicit false is not a valid fix.
+
+- A retained-record read schema must match the nullable storage/API contract,
+  not only mandatory fields in a new-submission form. Prove one incomplete
+  legacy/commercial row cannot hide valid siblings in the same response, show
+  honest missing-value labels, and keep required keys and invalid types strict.
+- Scoped browser fixtures must establish their configured synthetic founder
+  before report fixtures that create a provenance-only root with a random
+  password. Preserve failed setup data, bootstrap the fresh local identity via
+  normal APIs, and never reset a retained root or weaken authentication to make
+  a guessed password work. Keep that operator prerequisite distinct from the
+  canonical complete-suite fixture ordering and production owner acceptance.
+
+- Enabling a release-owned notification purpose changes the initial queued
+  state even for a no-paid synthetic admission. Reconcile dated API and visible
+  readback assertions with that explicit harness policy; the no-paid marker is
+  not a disabled-purpose flag. Preserve zero attempts/no transport, reload and
+  role-denial checks, and independently retain disabled-purpose/no-retrofit tests.
+- A browser failure before a later responsive or permission assertion leaves
+  those steps unverified. Correct the original dated journey and replay its
+  complete file plus the new sibling workflow, not just the first assertion.
+
+- Public lead visibility is separate from notification eligibility. An owner
+  opting into new-submission alerts must not reactivate historical outbox rows,
+  old idempotency keys or admissions made while the purpose was disabled. Prove
+  that boundary across configuration changes, restarts and retries. A protected
+  lead read never grants tenant membership or founder billing authority; email
+  transport acceptance is not inbox delivery.
+- A request-local no-paid marker suppresses that invocation, not a previously
+  admitted human obligation. A marked idempotent replay must leave the human
+  outbox byte-equivalent and make zero provider calls; a later ordinary drain
+  must still deliver exactly once. Persisted synthetic admissions remain barred
+  from real transport through every background and retry path.
+  Background transport must also prove the original admission request session
+  ended its transaction on replay, not merely that its separate worker session
+  was closed; request-scoped dependency cleanup can occur after background work.
+- Before freezing a candidate, enumerate untracked files in every build/test
+  scope and reconcile the sidecar's exact changed-path list. Collapsed directory
+  entries can hide a page test beside its page; a green local run may otherwise
+  cover a test that was never committed. Preserve a refused preflight as incomplete.
+- Run the actual changed-migration preflight against canonical main before a
+  long release gate. A passing inventory or governance-map check is not that
+  preflight. Retained classification is committed data too: rollback refusal
+  must preserve its rows, columns, indexes and revision, with fresh database proof.
+- A dated downgrade rehearsal must start at its named historical boundary,
+  not moving head: a newer restore-only guard can prevent the intended older
+  lock, DDL or refusal from running. Keep separate actual-current-head refusal
+  and full index-health proofs. Compare a historical rollback to its complete
+  dated catalog, not newer model indexes; never accept the wrong guard by regex.
+- Positive cross-dialect provider fixtures must retain the no-paid marker and
+  explicitly admit an owned offline transport. A callback below a correctly
+  closed isolation fence was never exercised; an empty observation cannot prove
+  a locking defect. Regress real callback entry on both dialects and retain the
+  cloud-runtime, nonlocal-origin and real-transport refusal cases.
+
 - New dependency notices must be reconciled across every exact upload, image,
   retained-source and public-notice inventory before starting long release gates.
   A base-policy license still needs its bundled attribution; preserve historical
@@ -1075,6 +1220,13 @@ spreadsheet skill's formatting, formula, inspection, and visual-verification
 requirements when using the fallback.
 
 ## Permanent regression learnings
+
+- Request-based Cloud Run does not guarantee CPU after the HTTP response.
+  Public enquiry admission and founder retries must only persist the outbox;
+  the scheduled worker owns mail claims and transport. Prove zero HTTP worker
+  invocation, pending/zero-attempt replay and explicit worker delivery. Keep
+  unknown-outcome no-resend and no-paid fences; do not increase billing to
+  compensate for post-response delivery or call a queued response inbox proof.
 
 - An atomic document-worker commit does not make a DTO assembled by separate
   READ COMMITTED statements coherent. Read source processing fields and the
@@ -3064,3 +3216,52 @@ requirements when using the fallback.
   `-match` or `-notmatch`. Exercise the actual positive admission loop as well
   as rejection cases; a set of independent predicate tests cannot prove that
   the operational launcher can admit a valid release.
+- Revoking an isolated report grant is not deletion of the shared account.
+  Recover only through an explicit issuer-authorized fresh invitation, preserve
+  the User, tenant memberships, password and first-password state, and fence
+  obsolete links and sessions with a new grant epoch. Regress the actual
+  never-opened invite -> revoke -> same-email invitation, active and removed
+  grants, protected identities and competing stale commands on PostgreSQL.
+- Existing strict clients can reject additive response fields during a rolling
+  deployment. Keep legacy read shapes byte-identical and introduce command
+  versions, server-owned action eligibility and named report projections through
+  explicit new or opt-in contracts. Resolve report names only for the bounded
+  returned page/alert IDs, preserve financial values and continuation, and prove
+  the actual visible account name plus ID after responsive reload.
+- A changed console client contract must update direct page tests as well as
+  mocked component fixtures. Exercise the real session provider and client at
+  the page boundary, retain protected-role assertions and inspect the complete
+  standard suite. A focused component-only green result does not cover them.
+- Retain verbose native diagnostics alongside machine-readable browser/unit
+  reports. A JSON reporter may omit a suite-hook error while marking its cases
+  pending; those cases remain unverified, not approved skips or passed tests.
+  Preserve the incomplete run and require a complete replacement inventory.
+- New API-route acceptance must run the complete route-inventory, OpenAPI and
+  role-guard contracts locally before long Docker acceptance. Use the canonical
+  full path in real HTTP tests so the inventory can discover it; never replace
+  missing coverage with a comment-only anchor or a new route exemption. Prove
+  authorized access and the anonymous and insufficient-role denials separately.
+- Browser error-response body capture is not the API contract oracle. A
+  header-only client rejection can leave Playwright's response.json waiting
+  after the UI has already handled the status. Prove the exact problem DTO with
+  a separate explicit API known-denial probe, and retain browser status, payload,
+  actionable copy and persisted no-mutation assertions. Never remove a deadline,
+  retry an ambiguous command or relax a cooldown to make the browser test pass.
+  Scope feedback assertions to the actual main/form/region so framework route
+  announcers cannot satisfy or collide with the product's message.
+- A real workflow test must not acquire its server implicitly during execution.
+  Determine the dependency from the collected file inventory, provision the
+  exact official version and archive/executable checksums before pytest, and
+  preserve a verified cache outside fixture storage. Prove cold preparation,
+  corrupt-cache rejection and the actual workflow with networking disabled;
+  a vendor download503 is not an application assertion or permission to skip it.
+- Adding a production browser role changes both its dedicated workflow contract
+  and the independent exact invocation inventory. Run both complete modules
+  before freezing a long release candidate. Preserve explicit role ordering,
+  native evidence and missing-role rejection; never derive the expected list
+  from the same workflow under test or omit a new role to make CI pass.
+- Required positive browser receipts must bind the independently reviewed exact
+  project, file and title plus one actual passed zero-retry attempt. Generic
+  native reconciliation may legitimately accept historical skips; that cannot
+  certify a new mandatory journey. Keep historical caller project scopes
+  explicit and independently collect each new role before release freeze.

@@ -3646,7 +3646,14 @@ def get_matter_workspace(
         ),
         time_entries=[_time_entry_record(time_entry) for time_entry in matter.time_entries],
         invoices=[_invoice_record(invoice) for invoice in matter.invoices],
-        notes=[_note_record(note) for note in matter.notes],
+        notes=[
+            _note_record(note)
+            for note in sorted(
+                matter.notes,
+                key=lambda note: (_utc_datetime(note.created_at), note.id),
+                reverse=True,
+            )
+        ],
         hearings=[_hearing_record(hearing) for hearing in matter.hearings],
         activity=[_activity_record(activity) for activity in matter.activity_events],
     )

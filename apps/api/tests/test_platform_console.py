@@ -387,7 +387,8 @@ def test_existing_nonpending_viewer_cannot_be_reinvited(report_console, status):
         data["client"].cookies.set(CONSOLE_CSRF_COOKIE, manager_csrf, path="/")
     else:
         response = data["client"].post(
-            BASE + f"/admins/{record['id']}/revoke", json={"reason": "Access ended"},
+            BASE + f"/admins/{record['id']}/revoke",
+            json={"reason": "Access ended", "expected_version": 1},
             headers=_csrf(data["client"]),
         )
         assert response.status_code == 200
@@ -503,7 +504,7 @@ def test_revoke_invalidates_full_session_and_links(report_console):
     client.cookies.set(CONSOLE_CSRF_COOKIE, manager_csrf, path="/")
     response = client.post(
         BASE + f"/admins/{record['id']}/revoke",
-        json={"reason": "Access ended"},
+        json={"reason": "Access ended", "expected_version": 1},
         headers=_csrf(client),
     )
     assert response.status_code == 200

@@ -52,12 +52,22 @@ class ConsoleResetStartRequest(ConsoleDTO):
 
 class ConsoleInviteRequest(ConsoleDTO):
     email: EmailStr
+    reinvite_revoked: bool = Field(default=False, strict=True)
     full_name: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
     ]
 
 
 class ConsoleRevokeRequest(ConsoleDTO):
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    expected_version: int | None = Field(default=None, ge=1, strict=True)
+
+
+class ConsoleVersionRequest(ConsoleDTO):
+    expected_version: int = Field(ge=1, strict=True)
+
+
+class ConsoleRemoveRequest(ConsoleVersionRequest):
     reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 
 
@@ -93,6 +103,17 @@ class ConsoleAdminRecord(ConsoleAdminSelf):
 
 class ConsoleAdminsResponse(ConsoleDTO):
     items: list[ConsoleAdminRecord]
+    next_cursor: str | None
+
+
+class ConsoleManagedAdminRecord(ConsoleAdminRecord):
+    can_manage: bool
+    version: int
+    removed_at: datetime | None
+
+
+class ConsoleManagedAdminsResponse(ConsoleDTO):
+    items: list[ConsoleManagedAdminRecord]
     next_cursor: str | None
 
 

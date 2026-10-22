@@ -272,8 +272,8 @@ export default function PlatformAdminPage() {
                   return <tr key={row.id} className="border-b border-[var(--color-line-2)] align-top">
                     <td className="py-3 pr-4">{row.company_name ?? row.company_id ?? "-"}</td>
                     <td className="min-w-[14rem] max-w-[20rem] break-words py-3 pr-4">
-                      <div className="font-medium">{row.contact_name}</div>
-                      <div className="text-xs text-[var(--color-mute)]">{row.contact_email}</div>
+                      <div className="font-medium">{row.contact_name ?? "Name not provided"}</div>
+                      <div className="text-xs text-[var(--color-mute)]">{row.contact_email ?? "Email not provided"}</div>
                       {row.contact_mobile ? <div className="mt-1 text-xs">{row.contact_mobile}</div> : null}
                       {row.notes ? <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed">{row.notes}</p> : null}
                     </td>

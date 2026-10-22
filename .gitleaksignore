@@ -162,3 +162,10 @@ bac08b2262636999a9c5f549add32e2848a8e3cb:tests/e2e/support/ip15-workspace.ts:gen
 # and other manifest findings remain blocking under the provenance gate.
 f87d19d62468ed6d6add4d289be49d9d357973f0:apps/api/vendor/fastembed-0.8.0-1caseops1.json:generic-api-key:52
 f87d19d62468ed6d6add4d289be49d9d357973f0:apps/api/vendor/fastembed-0.8.0-1caseops1.json:generic-api-key:78
+
+# 2026-10-22: exact historical deterministic signing placeholder in the
+# isolated invitation-age fixture, not a provider or deployed credential.
+# The immutable one-line span was checked against native redacted evidence;
+# current code uses a repeated low-entropy local-only value. No test-file,
+# path-wide, rule-wide or future-origin exception is introduced.
+a4770e87192a9d872d2af3ed19b1c339846e2589:apps/api/tests/test_platform_console_emulator_20261020.py:generic-api-key:426

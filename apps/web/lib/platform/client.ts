@@ -6,7 +6,8 @@ import { API_BASE_URL, NetworkError } from "@/lib/api/config";
 import { activityReport } from "./activity-schema";
 import {
   consoleAccepted, consoleAdminRecord, consoleAdminsResponse, consoleAuthState, consoleComplete,
-  consoleEnrollmentResponse, consoleInvitationResponse, consoleOverview, consoleReportPage, consoleSignedOut,
+  consoleEnrollmentResponse, consoleInvitationResponse, consoleLeadsResponse, consoleManagedAdminsResponse,
+  consoleNamedOverview, consoleNamedReportPage, consoleOverview, consoleReportPage, consoleSignedOut,
 } from "./schemas";
 
 const PREFIX = "/api/platform-console";
@@ -118,11 +119,17 @@ export const platformApi = {
     return result;
   },
   admins: (cursor?: string | null, signal?: AbortSignal) => request(`/admins${pageQuery(cursor)}`, consoleAdminsResponse, { signal }),
-  invite: (body: { email: string; full_name: string }) => request("/admins/invitations", consoleInvitationResponse, { body }),
-  revoke: (id: string, reason: string) => request(`/admins/${encodeURIComponent(id)}/revoke`, consoleAdminRecord, { body: { reason } }),
+  managedAdmins: (cursor?: string | null, signal?: AbortSignal) => request(`/admins/manage${pageQuery(cursor)}`, consoleManagedAdminsResponse, { signal }),
+  leads: (cursor?: string | null, signal?: AbortSignal) => request(`/leads${pageQuery(cursor)}`, consoleLeadsResponse, { signal }),
+  invite: (body: { email: string; full_name: string; reinvite_revoked?: boolean }) => request("/admins/invitations", consoleInvitationResponse, { body }),
+  resendAdminInvitation: (id: string, expectedVersion: number) => request(`/admins/${encodeURIComponent(id)}/invitations/resend`, consoleInvitationResponse, { body: { expected_version: expectedVersion } }),
+  revoke: (id: string, reason: string, expectedVersion: number) => request(`/admins/${encodeURIComponent(id)}/revoke`, consoleAdminRecord, { body: { reason, expected_version: expectedVersion } }),
+  removeAdmin: (id: string, reason: string, expectedVersion: number) => request(`/admins/${encodeURIComponent(id)}/remove`, consoleAdminRecord, { body: { reason, expected_version: expectedVersion } }),
   overview: (signal?: AbortSignal) => request("/reports/overview", consoleOverview, { signal }),
+  namedOverview: (signal?: AbortSignal) => request("/reports/overview?include_account_names=true", consoleNamedOverview, { signal }),
   activity: (signal?: AbortSignal) => request("/reports/activity", activityReport, { signal }),
   report: (kind: "usage" | "profit" | "company-profitability" | "revenue", cursor?: string | null, signal?: AbortSignal) => request(`/reports/${kind}${pageQuery(cursor)}`, consoleReportPage, { signal }),
+  namedReport: (kind: "usage" | "profit" | "company-profitability" | "revenue", cursor?: string | null, signal?: AbortSignal) => request(`/reports/${kind}${pageQuery(cursor)}&include_account_names=true`, consoleNamedReportPage, { signal }),
 };
 
 export function consoleErrorMessage(error: unknown): string {

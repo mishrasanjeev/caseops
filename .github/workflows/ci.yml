@@ -65,6 +65,9 @@ jobs:
       - name: Validate production scheduler inventory
         run: uv --directory apps/api run python ../../scripts/scheduler_inventory.py validate
 
+      - name: Validate pinned Temporal fixture acquisition without network
+        run: python -m unittest discover -s scripts/tests -p test_prepare_temporal_test_server.py -v
+
       - name: Reproduce every official statute provision from pinned PDF evidence
         run: |
           uv run --no-project --python 3.13 --with pdfplumber==0.11.9 python -m unittest discover -s scripts/tests -p test_statute_bundle_compiler.py -v
@@ -156,6 +159,31 @@ jobs:
       - name: Install offline evidence Playwright dependencies
         if: steps.shard-files.outputs.requires_playwright == 'true'
         run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Restore pinned Temporal test server
+        id: temporal-cache
+        if: steps.shard-files.outputs.requires_temporal == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/caseops-test-tools/temporal
+          key: ${{ runner.os }}-${{ runner.arch }}-temporal-${{ hashFiles('scripts/test-tools/temporal-test-server-linux-amd64.json') }}
+
+      - name: Prepare verified Temporal test server outside fixture storage
+        id: temporal-tools
+        if: steps.shard-files.outputs.requires_temporal == 'true'
+        timeout-minutes: 5
+        run: |
+          python scripts/prepare_temporal_test_server.py \
+            --cache-dir "$RUNNER_TEMP/caseops-test-tools/temporal" \
+            --github-env "$GITHUB_ENV"
+
+      - name: Retain verified Temporal fixture before test execution
+        id: temporal-cache-save
+        if: steps.shard-files.outputs.requires_temporal == 'true' && steps.temporal-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/caseops-test-tools/temporal
+          key: ${{ runner.os }}-${{ runner.arch }}-temporal-${{ hashFiles('scripts/test-tools/temporal-test-server-linux-amd64.json') }}
 
       - name: Pytest with coverage shard (P1-001 per-area gates)
         id: pytest

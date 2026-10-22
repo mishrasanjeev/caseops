@@ -21,6 +21,10 @@ from caseops_api.db.models import (
     Company,
 )
 from caseops_api.schemas.platform_console import ConsoleOverviewResponse, ConsoleReportPage
+from caseops_api.schemas.platform_console_named_reports import (
+    ConsoleNamedOverviewResponse,
+    ConsoleNamedReportPage,
+)
 from caseops_api.services.provider_costs import case_refresh_guardrail_warnings
 from caseops_api.services.saas_billing import (
     ACTIVE_SUBSCRIPTION_STATUSES,
@@ -70,9 +74,20 @@ def _decode(cursor: str | None, kind: str, count: int) -> list[str] | None:
         ) from exc
 
 
+def _account_names(session: Session, company_ids: set[str]) -> dict[str, str]:
+    if not company_ids:
+        return {}
+    return dict(
+        session.execute(
+            select(Company.id, Company.name).where(Company.id.in_(sorted(company_ids)))
+        ).all()
+    )
+
+
 def report_page(
-    session: Session, *, kind: str, cursor: str | None, limit: int
-) -> ConsoleReportPage:
+    session: Session, *, kind: str, cursor: str | None, limit: int,
+    include_account_names: bool = False,
+) -> ConsoleReportPage | ConsoleNamedReportPage:
     if not 1 <= limit <= 100:
         raise ValueError("Report page limit must be between 1 and 100.")
     if kind == "usage":
@@ -203,7 +218,12 @@ def report_page(
         coverage = "recorded_payments"
     else:
         raise ValueError("Unknown report kind.")
-    return ConsoleReportPage(
+    if include_account_names and kind in {"usage", "revenue"}:
+        names = _account_names(session, {item["company_id"] for item in items})
+        for item in items:
+            item["company_name"] = names.get(item["company_id"])
+    page_model = ConsoleNamedReportPage if include_account_names else ConsoleReportPage
+    return page_model(
         items=items,
         generated_at=datetime.now(UTC),
         next_cursor=_cursor(kind, keys) if keys else None,
@@ -212,7 +232,9 @@ def report_page(
     )
 
 
-def overview(session: Session) -> ConsoleOverviewResponse:
+def overview(
+    session: Session, *, include_account_names: bool = False,
+) -> ConsoleOverviewResponse | ConsoleNamedOverviewResponse:
     subscription = BillingSubscription
     active = int(
         session.scalar(
@@ -257,7 +279,18 @@ def overview(session: Session) -> ConsoleOverviewResponse:
             .limit(51)
         )
     )
-    return ConsoleOverviewResponse(
+    margin_alerts = [
+        {"company_id": row[0], "gross_margin_bps": row[1], "gross_profit_minor": row[2]}
+        for row in alerts[:50]
+    ]
+    if include_account_names:
+        names = _account_names(session, {item["company_id"] for item in margin_alerts})
+        for item in margin_alerts:
+            item["company_name"] = names.get(item["company_id"])
+    overview_model = (
+        ConsoleNamedOverviewResponse if include_account_names else ConsoleOverviewResponse
+    )
+    return overview_model(
         generated_at=datetime.now(UTC),
         rollup_count=count,
         mrr_minor=mrr,
@@ -270,10 +303,6 @@ def overview(session: Session) -> ConsoleOverviewResponse:
         total_variable_cost_minor=costs,
         gross_profit_minor=profit,
         gross_margin_bps=round(profit * 10_000 / recognized) if recognized else None,
-        margin_alerts=[
-            {"company_id": row[0], "gross_margin_bps": row[1], "gross_profit_minor": row[2]}
-            for row in alerts[:50]
-        ]
-        + case_refresh_guardrail_warnings(session, bounded=True),
+        margin_alerts=margin_alerts + case_refresh_guardrail_warnings(session, bounded=True),
         margin_alerts_has_more=len(alerts) > 50,
     )

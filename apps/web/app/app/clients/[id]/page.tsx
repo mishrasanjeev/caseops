@@ -15,6 +15,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { ClientContactEditor } from "@/components/clients/ClientContactEditor";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -141,7 +142,7 @@ export default function ClientProfilePage() {
           : "neutral";
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-6 break-words">
       <div>
         <Link
           href="/app/clients"
@@ -151,6 +152,7 @@ export default function ClientProfilePage() {
         </Link>
       </div>
       <PageHeader
+        className="[&>div]:min-w-0"
         eyebrow={c.client_type}
         title={c.name}
         description={
@@ -159,31 +161,34 @@ export default function ClientProfilePage() {
             : "Client profile"
         }
         actions={
-          canArchive ? (
-            c.is_active ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={archiveMutation.isPending}
-                onClick={() => archiveMutation.mutate()}
-                data-testid="client-archive"
-              >
-                <Archive className="h-4 w-4" aria-hidden /> Archive
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={unarchiveMutation.isPending}
-                onClick={() => unarchiveMutation.mutate()}
-                data-testid="client-unarchive"
-              >
-                <ArchiveRestore className="h-4 w-4" aria-hidden /> Restore
-              </Button>
-            )
-          ) : undefined
+          <>
+            <ClientContactEditor key={c.id} client={c} />
+            {canArchive ? (
+              c.is_active ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={archiveMutation.isPending}
+                  onClick={() => archiveMutation.mutate()}
+                  data-testid="client-archive"
+                >
+                  <Archive className="h-4 w-4" aria-hidden /> Archive
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={unarchiveMutation.isPending}
+                  onClick={() => unarchiveMutation.mutate()}
+                  data-testid="client-unarchive"
+                >
+                  <ArchiveRestore className="h-4 w-4" aria-hidden /> Restore
+                </Button>
+              )
+            ) : null}
+          </>
         }
       />
 
@@ -233,7 +238,7 @@ export default function ClientProfilePage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <dl className="grid gap-3 sm:grid-cols-2">
+          <dl className="grid min-w-0 gap-3 [overflow-wrap:anywhere] sm:grid-cols-2">
             <div>
               <dt className="text-xs text-[var(--color-mute)]">Primary contact</dt>
               <dd className="text-sm font-medium text-[var(--color-ink-2)]">

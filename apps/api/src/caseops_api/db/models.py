@@ -1629,6 +1629,7 @@ class Matter(Base):
     notes: Mapped[list[MatterNote]] = relationship(
         back_populates="matter",
         cascade="all, delete-orphan",
+        order_by="desc(MatterNote.created_at), desc(MatterNote.id)",
     )
     hearings: Mapped[list[MatterHearing]] = relationship(
         back_populates="matter",
@@ -7945,6 +7946,11 @@ class BillingProfitRollup(Base):
 
 class BillingEnrollment(Base):
     __tablename__ = "billing_enrollments"
+    __table_args__ = (
+        Index(
+            "ix_billing_enrollments_public_lead_created_id", "is_public_lead", "created_at", "id"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str | None] = mapped_column(
@@ -7959,6 +7965,9 @@ class BillingEnrollment(Base):
     segment: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     selected_plan: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     source: Mapped[str] = mapped_column(String(40), nullable=False, default="pricing_page")
+    is_public_lead: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     status: Mapped[str] = mapped_column(
         String(40), nullable=False, default="lead_created", index=True
     )
@@ -8188,6 +8197,7 @@ class PlatformReportAdmin(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
     auth_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     initializes_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     encrypted_totp_secret: Mapped[str | None] = mapped_column(Text)
     mfa_status: Mapped[str] = mapped_column(String(24), nullable=False, default="not_enrolled")
     last_totp_counter: Mapped[int | None] = mapped_column(BigInteger)

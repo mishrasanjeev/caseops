@@ -31,7 +31,7 @@ export function DemoRequestForm({ source, segment = "solo", intent = "demo", sel
         company_name: data.get("company_name") || null, role: data.get("role"),
         segment: data.get("segment") || segment, selected_plan: chosenSegment === segment ? selectedPlan : null,
         notes: data.get("notes") || null, source, intent,
-        idempotency_key: crypto.randomUUID(), privacy_notice_version: "2026-10-09",
+        idempotency_key: crypto.randomUUID(), privacy_notice_version: "2026-10-21",
       });
       if (!parsed.success) { setError("Review the request fields and try again."); return; }
       snapshot.current = parsed.data;

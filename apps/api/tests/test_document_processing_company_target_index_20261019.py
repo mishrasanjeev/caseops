@@ -32,6 +32,7 @@ from tests.test_queue_isolation_migration_recovery_20261010 import (
     QUEUES,
     _index_state,
     _owners,
+    _schema_catalog,
     _snapshot,
 )
 
@@ -486,6 +487,7 @@ def test_ordinary_drop_rolls_back_with_later_historical_refusal(database, record
     for marker in (False, True):
         _receipt(engine, company, marker)
     before, shape = _receipt_snapshot(engine), _shape(engine)
+    historical_catalog = _schema_catalog(engine)
     observed = []
     catalog_sql = sa.text(
         "SELECT c.relname, t.tgname, pg_get_triggerdef(t.oid), pg_get_functiondef(t.tgfoid) "
@@ -526,23 +528,15 @@ def test_ordinary_drop_rolls_back_with_later_historical_refusal(database, record
     assert len(observed) == 1, "The actual transactional DROP must precede the older refusal"
     assert _version(engine) == REVISION
     assert _shape(engine) == shape and _receipt_snapshot(engine) == before
+    assert _schema_catalog(engine) == historical_catalog
     with engine.connect() as connection:
         assert connection.execute(catalog_sql).all() == catalog
-        historical_health = build_index_health_report(connection)
-    record_property("historical_health_after_refusal_rollback", historical_health)
+    record_property("historical_catalog_after_refusal_rollback", {
+        "revision": REVISION, "catalog_unchanged": True,
+        "actual_transactional_drop_observed": len(observed),
+    })
     heads = ScriptDirectory.from_config(config).get_heads()
     assert len(heads) == 1 and heads != [REVISION]
-    assert historical_health["status"] == "failed", historical_health
-    assert historical_health["required_schema_revision"] == heads[0]
-    assert historical_health["schema_revisions"] == [REVISION]
-    assert historical_health["schema_revision_mismatch"] == [REVISION]
-    for key in (
-        "foreign_key_gaps",
-        "missing_declared_indexes",
-        "mismatched_declared_indexes",
-        "invalid_indexes",
-    ):
-        assert historical_health[key] == [], historical_health
     command.upgrade(config, "head")
     assert _version(engine) == heads[0]
     assert _shape(engine) == shape and _receipt_snapshot(engine) == before

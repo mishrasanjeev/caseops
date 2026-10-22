@@ -121,6 +121,46 @@ describe("independent platform client", () => {
     expect(url.searchParams.get("cursor")).toBe("one&two=three");
     expect(url.searchParams.get("two")).toBeNull();
   });
+  const managed = { ...admin, role: "viewer", status: "pending", created_at: "2026-10-22T00:00:00Z", version: 4, removed_at: null, can_manage: true };
+  it("reads versioned administrator actions from a separate strict management route", async () => {
+    fetcher.mockResolvedValue(response({ items: [managed], next_cursor: null }));
+    expect((await platformApi.managedAdmins("one&two=three")).items).toEqual([managed]);
+    const url = new URL(fetcher.mock.calls[0][0]);
+    expect(url.pathname).toBe("/api/platform-console/admins/manage");
+    expect(url.searchParams.get("cursor")).toBe("one&two=three");
+    expect(url.searchParams.get("two")).toBeNull();
+  });
+  it.each([
+    { ...managed, version: undefined }, { ...managed, version: 0 }, { ...managed, version: "4" },
+    { ...managed, removed_at: undefined }, { ...managed, removed_at: "not-a-timestamp" },
+    { ...managed, can_manage: undefined }, { ...managed, can_manage: "true" },
+    { ...managed, unreviewed_authority: true },
+  ])("refuses an unverified administrator management contract %#", async (record) => {
+    fetcher.mockResolvedValue(response({ items: [record], next_cursor: null }));
+    await expect(platformApi.managedAdmins()).rejects.toMatchObject({ kind: "contract" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("does not silently widen the legacy administrator record contract", async () => {
+    fetcher.mockResolvedValue(response({ items: [managed], next_cursor: null }));
+    await expect(platformApi.admins()).rejects.toMatchObject({ kind: "contract" });
+  });
+  it.each(["resend", "remove", "revoke"] as const)("binds %s to the observed grant version and own CSRF without retry", async (command) => {
+    document.cookie = "caseops_console_csrf=console-proof; Path=/";
+    const legacy = { ...admin, role: "viewer", status: "pending", created_at: "2026-10-22T00:00:00Z" };
+    fetcher.mockResolvedValue(response(command === "resend" ? { admin: legacy, delivery_status: "accepted" } : legacy));
+    if (command === "resend") await platformApi.resendAdminInvitation("viewer+id", 4);
+    else if (command === "remove") await platformApi.removeAdmin("viewer+id", "Explicit report-only removal", 4);
+    else await platformApi.revoke("viewer+id", "Explicit report-only revocation", 4);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const [url, options] = fetcher.mock.calls[0];
+    expect(new URL(url).pathname).toBe(`/api/platform-console/admins/viewer%2Bid/${command === "resend" ? "invitations/resend" : command}`);
+    expect(options).toMatchObject({ method: "POST", credentials: "include", referrerPolicy: "no-referrer" });
+    expect(options.headers).toMatchObject({ "X-Console-CSRF-Token": "console-proof" });
+    expect(options.headers).not.toHaveProperty("Authorization");
+    expect(options.headers).not.toHaveProperty("X-CSRF-Token");
+    expect(JSON.parse(options.body)).toEqual(command === "resend" ? { expected_version: 4 }
+      : { reason: command === "remove" ? "Explicit report-only removal" : "Explicit report-only revocation", expected_version: 4 });
+  });
   const warning = {
     type: "case_refresh_cost_guardrail", severity: "warning", category: "case_refresh", provider: "case_tracking",
     unit_amount_minor: 37, message: "Actual tracked-case refresh cost is INR 0.10 or more. Pause public high-volume fixed-price bundles or require founder quote review.",
@@ -133,6 +173,37 @@ describe("independent platform client", () => {
     margin_alerts: [{ company_id: "company", gross_margin_bps: -3000, gross_profit_minor: -3000 }, warning],
     margin_alerts_has_more: false,
   };
+  it.each([
+    { kind: "usage" as const, coverage: "recorded_usage", row: { company_id: "account", company_name: "Named legal office", feature_key: "document_read", quantity: 2, credits: 0, estimated_internal_cost_minor: 37 } },
+    { kind: "revenue" as const, coverage: "recorded_payments", row: { company_id: "account", company_name: "Named legal office", paid_at: "2026-10-20T00:00:00Z", merchant_reference: "payment", amount_paid_minor: 123456, tax_amount_minor: 37 } },
+  ])("opts into one strict named $kind response without a second account lookup", async ({ kind, coverage, row }) => {
+    fetcher.mockResolvedValue(response({ items: [row], generated_at: "2026-10-22T00:00:00Z", next_cursor: null, has_more: false, coverage }));
+    expect((await platformApi.namedReport(kind, "one&two=three")).items).toEqual([row]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const url = new URL(fetcher.mock.calls[0][0]);
+    expect(url.pathname).toBe(`/api/platform-console/reports/${kind}`);
+    expect(url.searchParams.get("include_account_names")).toBe("true");
+    expect(url.searchParams.get("cursor")).toBe("one&two=three");
+    expect(url.searchParams.get("two")).toBeNull();
+  });
+  it("refuses an unnamed usage row when the named response was requested", async () => {
+    fetcher.mockResolvedValue(response({ items: [{ company_id: "account", feature_key: "document_read", quantity: 2, credits: 0, estimated_internal_cost_minor: 37 }],
+      generated_at: "2026-10-22T00:00:00Z", next_cursor: null, has_more: false, coverage: "recorded_usage" }));
+    await expect(platformApi.namedReport("usage")).rejects.toMatchObject({ kind: "contract" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("accepts explicit absent name evidence without fabricating a label", async () => {
+    const row = { company_id: "account", company_name: null, feature_key: "document_read", quantity: 2, credits: 0, estimated_internal_cost_minor: 37 };
+    fetcher.mockResolvedValue(response({ items: [row], generated_at: "2026-10-22T00:00:00Z", next_cursor: null, has_more: false, coverage: "recorded_usage" }));
+    expect((await platformApi.namedReport("usage")).items).toEqual([row]);
+  });
+  it("opts into named account alerts while retaining the provider warning variant", async () => {
+    const named = { ...overview, margin_alerts: [{ company_id: "account", company_name: "Named legal office", gross_margin_bps: -3000, gross_profit_minor: -3000 }, warning] };
+    fetcher.mockResolvedValue(response(named));
+    expect(await platformApi.namedOverview()).toEqual(named);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(new URL(fetcher.mock.calls[0][0]).searchParams.get("include_account_names")).toBe("true");
+  });
   it("accepts complete margin and cost-warning variants through the actual overview response validator", async () => {
     fetcher.mockResolvedValue(response(overview));
     expect(await platformApi.overview()).toEqual(overview);

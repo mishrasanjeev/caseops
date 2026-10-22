@@ -1,6 +1,11 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { apiBaseUrl } from "./support/env";
-import { noPaidProviderHeaders } from "./support/cost-controls";
+import { localTransportHeaders, noPaidProviderHeaders } from "./support/cost-controls";
+
+test.use({ extraHTTPHeaders: async ({ baseURL }, use) => {
+  if (!baseURL) throw new Error("Public demo contracts require the configured baseURL.");
+  await use(localTransportHeaders(baseURL));
+} });
 
 const entries = [
   ["/#cta", "homepage", "solo"], ["/pricing", "pricing_page", "solo"],
@@ -153,7 +158,7 @@ test.describe("seo_demo_20261009", () => {
       const submitted = page.waitForRequest((request) => request.url().endsWith("/api/demo-request") && request.method() === "POST");
       await form.getByRole("button", { name: "Request a conversation" }).click();
       const payload = (await submitted).postDataJSON();
-      expect(payload).toMatchObject({ source, segment, privacy_notice_version: "2026-10-09", role: "solo_advocate" });
+      expect(payload).toMatchObject({ source, segment, privacy_notice_version: "2026-10-21", role: "solo_advocate" });
       expect(Object.keys(payload).sort()).toEqual(["company_name", "contact_email", "contact_name", "idempotency_key", "intent", "notes", "privacy_notice_version", "role", "segment", "selected_plan", "source"]);
       await expect(form.getByRole("status")).toContainText(`Reference: ${payload.idempotency_key}`);
       await expect(form.getByRole("button", { name: "Request a conversation" })).toBeDisabled();
@@ -229,9 +234,14 @@ test.describe("seo_demo_20261009", () => {
       headers: { ...noPaidProviderHeaders, Authorization: `Bearer ${founderToken}` },
     });
     expect(protectedRead.status()).toBe(200);
-    expect((await protectedRead.json()).enrollments.find((r: { id: string }) => r.id === identity)).toMatchObject({
-      contact_email: email, source: "law_firms", attribution: { role: "partner", intent: "pilot" },
-      demo_notification: { notification_status: "pending", last_error_code: "sender_approval_pending" },
+    const retained = (await protectedRead.json()).enrollments.find((r: { id: string }) => r.id === identity);
+    expect(retained).toMatchObject({
+      contact_email: email, source: "law_firms", attribution: { role: "partner", intent: "pilot", privacy_notice_version: "2026-10-21", attribution_qualified: true },
+    });
+    // The local release harness enables new-only alerts; the marker still bars real transport.
+    expect(retained.demo_notification).toEqual({
+      notification_status: "pending", attempts: 0,
+      next_attempt_at: expect.any(String), expires_at: expect.any(String),
     });
     await page.goto("/sign-in");
     await page.locator("#company-slug").fill(slug);
@@ -251,12 +261,21 @@ test.describe("seo_demo_20261009", () => {
       await row.getByText("Law firms", { exact: true }).scrollIntoViewIfNeeded();
       await expect(row.getByText("Role: Partner", { exact: true })).toBeVisible();
       await expect(row.getByText("Intent: Pilot discussion", { exact: true })).toBeVisible();
-      await row.getByText("Pending sender approval", { exact: true }).scrollIntoViewIfNeeded();
-      await expect(row.getByText("Error code: sender_approval_pending", { exact: true })).toBeVisible();
-      await expect(row.getByText("No delivery confirmed.", { exact: true })).toBeVisible();
+      await row.getByText("Pending", { exact: true }).scrollIntoViewIfNeeded();
+      await expect(row.getByText("Pending", { exact: true })).toBeVisible();
+      await expect(row.getByText("0 attempts", { exact: true })).toBeVisible();
+      await expect(row.getByText("Pending sender approval", { exact: true })).toHaveCount(0);
+      await expect(row.getByText(/^Error code:/)).toHaveCount(0);
+      await expect(row.getByText("Sent (transport accepted)", { exact: true })).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
       await table.screenshot({ path: info.outputPath(`protected-readback-${width}.png`) });
     }
+    const afterReload = await request.get(`${apiBaseUrl}/api/platform-admin/enrollments`, {
+      headers: { ...noPaidProviderHeaders, Authorization: `Bearer ${founderToken}` },
+    });
+    expect(afterReload.status()).toBe(200);
+    expect((await afterReload.json()).enrollments.find((r: { id: string }) => r.id === identity))
+      .toEqual(retained);
     const ordinary = await seoDemoLocalIdentity(request, `seo-readback-${Date.now()}`, `seo-tenant-${Date.now()}@example.com`, "OfflineReadbackTenant20261009!");
     const denied = await request.get(`${apiBaseUrl}/api/platform-admin/enrollments`, {
       headers: { ...noPaidProviderHeaders, Authorization: `Bearer ${ordinary}` },

@@ -12571,6 +12571,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-console/admins/{admin_id}/invitations/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resend Admin Invitation */
+        post: operations["resend_admin_invitation_api_platform_console_admins__admin_id__invitations_resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/admins/{admin_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove */
+        post: operations["remove_api_platform_console_admins__admin_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform-console/admins/{admin_id}/revoke": {
         parameters: {
             query?: never;
@@ -12599,6 +12633,23 @@ export interface paths {
         put?: never;
         /** Invite */
         post: operations["invite_api_platform_console_admins_invitations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/admins/manage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Managed Admins */
+        get: operations["managed_admins_api_platform_console_admins_manage_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -12750,6 +12801,23 @@ export interface paths {
         };
         /** Current Session */
         get: operations["current_session_api_platform_console_auth_session_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-console/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Leads */
+        get: operations["public_leads_api_platform_console_leads_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -19858,6 +19926,67 @@ export interface components {
             email: string;
             /** Full Name */
             full_name: string;
+            /**
+             * Reinvite Revoked
+             * @default false
+             */
+            reinvite_revoked: boolean;
+        };
+        /** ConsoleLead */
+        ConsoleLead: {
+            /** Company Name */
+            company_name: string | null;
+            /** Contact Email */
+            contact_email: string | null;
+            /** Contact Mobile */
+            contact_mobile: string | null;
+            /** Contact Name */
+            contact_name: string | null;
+            /** Id */
+            id: string;
+            /** Intent */
+            intent: string | null;
+            /** Notes */
+            notes: string | null;
+            notification: components["schemas"]["ConsoleLeadNotification"];
+            /** Privacy Notice Version */
+            privacy_notice_version: string | null;
+            /** Role */
+            role: string | null;
+            /** Segment */
+            segment: string;
+            /** Selected Plan */
+            selected_plan: string | null;
+            /** Source */
+            source: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+        };
+        /** ConsoleLeadNotification */
+        ConsoleLeadNotification: {
+            /** Attempts */
+            attempts: number;
+            /** Eligible */
+            eligible: boolean;
+            /** Last Error Code */
+            last_error_code: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_requested" | "pending" | "sending" | "accepted" | "retry_pending" | "exhausted" | "outcome_unknown";
+        };
+        /** ConsoleLeadsResponse */
+        ConsoleLeadsResponse: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["ConsoleLead"][];
+            /** Next Cursor */
+            next_cursor: string | null;
         };
         /** ConsoleLoginRequest */
         ConsoleLoginRequest: {
@@ -19877,6 +20006,43 @@ export interface components {
              * @constant
              */
             status: "signed_out";
+        };
+        /** ConsoleManagedAdminRecord */
+        ConsoleManagedAdminRecord: {
+            /** Can Manage */
+            can_manage: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email: string;
+            /** Full Name */
+            full_name: string;
+            /** Id */
+            id: string;
+            /** Removed At */
+            removed_at: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "manager" | "viewer";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "active" | "revoked";
+            /** Version */
+            version: number;
+        };
+        /** ConsoleManagedAdminsResponse */
+        ConsoleManagedAdminsResponse: {
+            /** Items */
+            items: components["schemas"]["ConsoleManagedAdminRecord"][];
+            /** Next Cursor */
+            next_cursor: string | null;
         };
         /** ConsoleMarginAlert */
         ConsoleMarginAlert: {
@@ -19900,6 +20066,106 @@ export interface components {
             code?: string | null;
             /** Recovery Code */
             recovery_code?: string | null;
+        };
+        /** ConsoleNamedMarginAlert */
+        ConsoleNamedMarginAlert: {
+            /** Company Id */
+            company_id: string;
+            /** Company Name */
+            company_name: string | null;
+            /** Gross Margin Bps */
+            gross_margin_bps: number | null;
+            /** Gross Profit Minor */
+            gross_profit_minor: number;
+        };
+        /** ConsoleNamedOverviewResponse */
+        ConsoleNamedOverviewResponse: {
+            /** Active Subscriptions */
+            active_subscriptions: number;
+            /** Arr Minor */
+            arr_minor: number;
+            /**
+             * Coverage
+             * @default recorded_rollups
+             * @constant
+             */
+            coverage: "recorded_rollups";
+            /** Failed Payments */
+            failed_payments: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Gross Margin Bps */
+            gross_margin_bps: number | null;
+            /** Gross Profit Minor */
+            gross_profit_minor: number | null;
+            /** Gross Revenue Minor */
+            gross_revenue_minor: number | null;
+            /** Margin Alerts */
+            margin_alerts: (components["schemas"]["ConsoleNamedMarginAlert"] | components["schemas"]["ConsoleCostGuardrailAlert"])[];
+            /** Margin Alerts Has More */
+            margin_alerts_has_more: boolean;
+            /** Mrr Minor */
+            mrr_minor: number;
+            /** Recognized Revenue Minor */
+            recognized_revenue_minor: number | null;
+            /** Rollup Count */
+            rollup_count: number;
+            /** Total Variable Cost Minor */
+            total_variable_cost_minor: number | null;
+            /** Trial Count */
+            trial_count: number;
+        };
+        /** ConsoleNamedReportPage */
+        ConsoleNamedReportPage: {
+            /**
+             * Coverage
+             * @enum {string}
+             */
+            coverage: "recorded_usage" | "recorded_rollups" | "recorded_payments";
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: (components["schemas"]["ConsoleNamedUsageRecord"] | components["schemas"]["ConsoleProfitRecord"] | components["schemas"]["ConsoleNamedRevenueRecord"] | components["schemas"]["ConsoleCompanyProfitRecord"])[];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** ConsoleNamedRevenueRecord */
+        ConsoleNamedRevenueRecord: {
+            /** Amount Paid Minor */
+            amount_paid_minor: number;
+            /** Company Id */
+            company_id: string;
+            /** Company Name */
+            company_name: string | null;
+            /** Merchant Reference */
+            merchant_reference: string;
+            /** Paid At */
+            paid_at: string | null;
+            /** Tax Amount Minor */
+            tax_amount_minor: number;
+        };
+        /** ConsoleNamedUsageRecord */
+        ConsoleNamedUsageRecord: {
+            /** Company Id */
+            company_id: string;
+            /** Company Name */
+            company_name: string | null;
+            /** Credits */
+            credits: number;
+            /** Estimated Internal Cost Minor */
+            estimated_internal_cost_minor: number;
+            /** Feature Key */
+            feature_key: string;
+            /** Quantity */
+            quantity: number;
         };
         /** ConsoleOKResponse */
         ConsoleOKResponse: {
@@ -20005,6 +20271,13 @@ export interface components {
             /** Total Variable Cost Minor */
             total_variable_cost_minor: number;
         };
+        /** ConsoleRemoveRequest */
+        ConsoleRemoveRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+        };
         /** ConsoleReportPage */
         ConsoleReportPage: {
             /**
@@ -20047,6 +20320,8 @@ export interface components {
         };
         /** ConsoleRevokeRequest */
         ConsoleRevokeRequest: {
+            /** Expected Version */
+            expected_version?: number | null;
             /** Reason */
             reason: string;
         };
@@ -20069,6 +20344,11 @@ export interface components {
             feature_key: string;
             /** Quantity */
             quantity: number;
+        };
+        /** ConsoleVersionRequest */
+        ConsoleVersionRequest: {
+            /** Expected Version */
+            expected_version: number;
         };
         /** ContractActivityRecord */
         ContractActivityRecord: {
@@ -21201,7 +21481,7 @@ export interface components {
             /** Notes */
             notes?: string | null;
             /** Privacy Notice Version */
-            privacy_notice_version?: "2026-10-09" | null;
+            privacy_notice_version?: ("2026-10-09" | "2026-10-21") | null;
             /**
              * Role
              * @default not_specified
@@ -74633,6 +74913,76 @@ export interface operations {
             };
         };
     };
+    resend_admin_invitation_api_platform_console_admins__admin_id__invitations_resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                admin_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleInvitationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_api_platform_console_admins__admin_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                admin_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleRemoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleAdminRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     revoke_api_platform_console_admins__admin_id__revoke_post: {
         parameters: {
             query?: never;
@@ -74688,6 +75038,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConsoleInvitationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    managed_admins_api_platform_console_admins_manage_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleManagedAdminsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -74972,10 +75354,43 @@ export interface operations {
             };
         };
     };
+    public_leads_api_platform_console_leads_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleLeadsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     financial_report_api_platform_console_reports__kind__get: {
         parameters: {
             query?: {
                 cursor?: string | null;
+                include_account_names?: boolean;
                 limit?: number;
             };
             header?: never;
@@ -74992,7 +75407,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConsoleReportPage"];
+                    "application/json": components["schemas"]["ConsoleNamedReportPage"] | components["schemas"]["ConsoleReportPage"];
                 };
             };
             /** @description Validation Error */
@@ -75028,7 +75443,9 @@ export interface operations {
     };
     overview_report_api_platform_console_reports_overview_get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_account_names?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -75041,7 +75458,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConsoleOverviewResponse"];
+                    "application/json": components["schemas"]["ConsoleNamedOverviewResponse"] | components["schemas"]["ConsoleOverviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

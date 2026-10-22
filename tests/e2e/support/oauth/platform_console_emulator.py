@@ -6,6 +6,7 @@ import json
 import os
 import re
 from atexit import register as register_shutdown
+from hmac import compare_digest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from socket import SHUT_RDWR
 from threading import Event, RLock, Thread
@@ -31,6 +32,13 @@ class Cleanup(BaseModel):
     model_config = ConfigDict(extra="forbid")
     web_origin: str = Field(min_length=1, max_length=255)
     manager_id: str | None = Field(default=None, min_length=36, max_length=36)
+
+
+class AgeInvitation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    web_origin: str = Field(min_length=1, max_length=255)
+    manager_id: str = Field(min_length=36, max_length=36)
+    viewer_id: str = Field(min_length=36, max_length=36)
 
 
 def _origin(value: str) -> str:
@@ -79,7 +87,9 @@ class _CaptureServer(ThreadingHTTPServer):
         return request, address
 
     def process_request(self, request, address):
-        worker = Thread(target=self.process_request_thread, args=(request, address), daemon=False)
+        worker = Thread(
+            target=self.process_request_thread, args=(request, address), daemon=False
+        )
         with self.owner_lock:
             self._reap_handlers()
             self.handlers.add(worker)
@@ -237,9 +247,16 @@ class ConsoleMailCapture:
             def do_POST(self):
                 try:
                     length = int(self.headers.get("Content-Length", "0"))
-                    if self.path != capture.capture_path or not 0 < length <= 16_384:
+                    # Consume the bounded body before refusal: closing a socket
+                    # with unread bytes can erase the 400 response on Windows.
+                    body = self.rfile.read(min(max(length, 0), 16_385))
+                    if (
+                        self.path != capture.capture_path
+                        or not 0 < length <= 16_384
+                        or len(body) != length
+                    ):
                         raise ValueError("Invalid capture request.")
-                    capture.receive(json.loads(self.rfile.read(length)))
+                    capture.receive(json.loads(body))
                     status = 202
                 except (ValueError, OSError):
                     status = 400
@@ -248,6 +265,7 @@ class ConsoleMailCapture:
                 self.send_response(status)
                 self.send_header("Content-Length", "0")
                 self.send_header("Cache-Control", "no-store")
+                self.send_header("Connection", "close")
                 self.end_headers()
 
         self.server = _CaptureServer(("127.0.0.1", 0), Handler)
@@ -278,7 +296,11 @@ class ConsoleMailCapture:
 def install_platform_console_emulator(app) -> ConsoleMailCapture:
     require_test_environment()
     from caseops_api.services import platform_console as console
-    from platform_report_fixtures import cleanup_console_fixture, seed_console_fixture
+    from platform_report_fixtures import (
+        age_pending_viewer_invitation,
+        cleanup_console_fixture,
+        seed_console_fixture,
+    )
 
     capture = ConsoleMailCapture(os.environ["CASEOPS_PUBLIC_APP_URL"])
     previous = os.environ.get("CASEOPS_CONSOLE_TEST_MAIL_URL")
@@ -340,6 +362,44 @@ def install_platform_console_emulator(app) -> ConsoleMailCapture:
         except ValueError as exc:
             raise HTTPException(404, "No admitted local console run.") from exc
 
+    @app.post(PREFIX + "/fixtures/{run_id}/age-viewer-invitation", include_in_schema=False)
+    def age_invitation(run_id: str, payload: AgeInvitation, request: Request):
+        automated = marker(request)
+        # The fixture prefix uses ordinary CSRF middleware. Also require the real
+        # console cookie/header pair; a Bearer shortcut cannot authorize this hook.
+        for cookie, header in (
+            ("caseops_csrf", "X-CSRF-Token"),
+            ("caseops_console_csrf", "X-Console-CSRF-Token"),
+        ):
+            value = request.cookies.get(cookie, "")
+            if not value or not compare_digest(value, request.headers.get(header, "")):
+                raise HTTPException(403, "Local fixture CSRF pair required.")
+        try:
+            _origin(str(request.base_url))
+            with capture.lock:
+                state = capture.admit(run_id, automated)
+                if (
+                    _origin(payload.web_origin) != capture.web_origin
+                    or state["state"] != "ready"
+                    or payload.manager_id != state["manager_id"]
+                    or state.get("invitation_age_attempted")
+                    or not any(row["run_id"] == run_id and row["purpose"] == "invite"
+                               and row["recipient_email"] == f"viewer-{run_id}@example.com"
+                               for row in capture.messages)
+                ):
+                    raise ValueError("Invitation age ownership mismatch.")
+                capture.runs[run_id]["invitation_age_attempted"] = True
+                result = age_pending_viewer_invitation(
+                    run_id=run_id, web_origin=payload.web_origin, automated_marker=automated,
+                    manager_id=payload.manager_id, viewer_id=payload.viewer_id,
+                    manager_session=request.cookies.get("caseops_console_session", ""),
+                    manager_csrf=request.headers["X-Console-CSRF-Token"],
+                )
+                capture.runs[run_id]["viewer_baseline"] = result["viewer_baseline"]
+                return result
+        except ValueError as exc:
+            raise HTTPException(409, "Invalid local invitation age admission.") from exc
+
     @app.post(PREFIX + "/fixtures/{run_id}/cleanup", include_in_schema=False)
     def cleanup(run_id: str, payload: Cleanup, request: Request):
         automated = marker(request)
@@ -366,6 +426,8 @@ def install_platform_console_emulator(app) -> ConsoleMailCapture:
                 web_origin=payload.web_origin,
                 automated_marker=automated,
                 manager_id=payload.manager_id,
+                **({"viewer_baseline": state["viewer_baseline"]}
+                   if state.get("viewer_baseline") is not None else {}),
             )
             with capture.lock:
                 capture.runs[run_id]["state"] = "cleaned"

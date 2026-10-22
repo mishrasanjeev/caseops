@@ -68,6 +68,7 @@ from tests.test_postgres_validation import _ip_race_context
 pytestmark = pytest.mark.postgres
 _TEXT = "The parties shall comply within two weeks from today."
 _DATED_TEXT = "The parties shall comply by 24 October 2026."
+_TAIL_REVISION = "20261010_0004"
 _RETAINED_ANCESTRY = (
     ("20261011_0001", "20261010_0004"),
     ("20261010_0004", "20261010_0003"),
@@ -1095,7 +1096,7 @@ def test_native_worker_attempt_uses_exact_current_row_not_adoption(tail_database
 def test_native_populated_downgrade_preserves_legacy_metadata_and_guard(tail_database, opted_in):
     database = tail_database
     _historical_run(database, metadata_json={"retained": "original"})
-    command.upgrade(database.cfg, "head")
+    command.upgrade(database.cfg, _TAIL_REVISION)
     database.cfg.cmd_opts = SimpleNamespace(
         x=["compliance_tail_fresh_downgrade=true"] if opted_in else []
     )
@@ -1106,13 +1107,13 @@ def test_native_populated_downgrade_preserves_legacy_metadata_and_guard(tail_dat
     with database.engine.connect() as connection:
         assert (
             connection.scalar(text("SELECT version_num FROM alembic_version"))
-            == database.current_head
+            == _TAIL_REVISION
         )
 
 
 def test_native_empty_explicit_downgrade_then_upgrade_restores_fence(tail_database):
     database = tail_database
-    command.upgrade(database.cfg, "head")
+    command.upgrade(database.cfg, _TAIL_REVISION)
     database.cfg.cmd_opts = SimpleNamespace(x=["compliance_tail_fresh_downgrade=true"])
     command.downgrade(database.cfg, "20261010_0003")
     with database.engine.connect() as connection:
@@ -1124,7 +1125,7 @@ def test_native_empty_explicit_downgrade_then_upgrade_restores_fence(tail_databa
                 "AND column_name='persistence_protocol')"
             )
         )
-    command.upgrade(database.cfg, "head")
+    command.upgrade(database.cfg, _TAIL_REVISION)
     with Session(database.engine) as session:
         run = _new_run(database, session)
         session.commit()
@@ -1133,7 +1134,7 @@ def test_native_empty_explicit_downgrade_then_upgrade_restores_fence(tail_databa
 
 def test_native_downgrade_excludes_insert_between_empty_check_and_drop(tail_database):
     database = tail_database
-    command.upgrade(database.cfg, "head")
+    command.upgrade(database.cfg, _TAIL_REVISION)
     database.cfg.cmd_opts = SimpleNamespace(x=["compliance_tail_fresh_downgrade=true"])
     before = _snapshot(database)
     checked, release = Event(), Event()
@@ -1161,7 +1162,7 @@ def test_native_downgrade_excludes_insert_between_empty_check_and_drop(tail_data
     finally:
         release.set()
         event.remove(database.engine.__class__, "after_cursor_execute", pause_after_empty_check)
-    command.upgrade(database.cfg, "head")
+    command.upgrade(database.cfg, _TAIL_REVISION)
     assert _snapshot(database) == before
 
 
@@ -1169,7 +1170,7 @@ def test_native_downgrade_lock_timeout_retains_protocol_and_uncommitted_insert(
     tail_database, monkeypatch
 ):
     database = tail_database
-    command.upgrade(database.cfg, "head")
+    command.upgrade(database.cfg, _TAIL_REVISION)
     database.cfg.cmd_opts = SimpleNamespace(x=["compliance_tail_fresh_downgrade=true"])
     monkeypatch.setenv("CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS", "1000")
     get_settings.cache_clear()
@@ -1184,7 +1185,7 @@ def test_native_downgrade_lock_timeout_retains_protocol_and_uncommitted_insert(
     with database.engine.connect() as connection:
         assert (
             connection.scalar(text("SELECT version_num FROM alembic_version"))
-            == database.current_head
+            == _TAIL_REVISION
         )
     after = _snapshot(database)
     assert len(after["matter_compliance_extraction_runs"]) == 1

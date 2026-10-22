@@ -1,5 +1,129 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 22 Ram Batch 3
+
+Two populated workbook issues, not an inferred summary total. B3-001 preserves
+the correct zero-citation approval block while proving a usable current-version
+recovery path. B3-002 restores actual authorized client contact/address editing
+after KYC without rewriting verification or relationships. The dated batch brief
+owns the full positive/negative/reload/responsive inventory. Both production
+verdicts are Inconclusive pending reproduction and exact-serving Playwright;
+neither the active administrator release nor an old mocked test closes them.
+
+## October 22 Combined Release Gate Corrections
+
+PRA-10..13 and LEAD-01..05 remain release-pending. Leads081e Docker06 failed
+both mobile real journeys on PostgreSQL ENOSPC, with native3276 passing; this
+is not completed browser acceptance or a demonstrated product auth defect.
+Retain all original failures and replay the full combined candidate after
+actual Docker filesystem recovery and new byte/inode admission checks. See
+`runbooks/docker-acceptance-storage.md` for the fail-closed guard contract.
+
+Initial combined-head hosted CI also found the compiled data-class projection
+stale after the ORM addition. Render and validate the canonical projection,
+preserve legal-hold enforcement, and replay the complete affected PostgreSQL
+journey plus all current CI. The CodeQL test mutation is moved outside its
+assertion; the historical scanner finding is reviewed at an exact synthetic
+fixture fingerprint, never a rule-wide/path-wide exclusion. No component fix
+or prior source result establishes current release or owner acceptance.
+
+## October 22 Revoked Administrator Cannot Be Re-Invited
+
+Adjacent enhancement PRA-13: Usage, Revenue and account-specific Overview
+alerts currently expose only account IDs, unlike the already-named Activity
+and Profit views. Add current authoritative names alongside IDs, retaining
+legacy strict wire shapes, values, warning variants and pagination. No
+production or cross-view visible acceptance is claimed yet.
+
+PRA-10..12 / J14/M14: Not fixed. Serving92f162b4 and candidate081e005b
+explicitly reject a revoked report grant with409; the directory lacks Resend
+and Delete controls. The owner clarified that recipients never opened their
+initial links. Do not invent a delivered-link defect from that incident.
+Reproduce pending invite -> revoke -> same-email invite, then prove fresh
+password/MFA admission and rejection of every obsolete token/session. Removal
+must affect report access only, preserve User, tenant memberships and immutable
+audit history, and permit authorized same-email re-admission. Regress active
+and never-accepted accounts, expiry/cooldown, repeated commands, actor revocation,
+cross-issuer/root/role denials and stale concurrent actions on PostgreSQL.
+Original leads release gates remain separate; no new production verdict yet.
+
+Local recovery and named-report code now exists. Complete frontend replacement
+1835/1835 passes without skips; original failures remain retained. The selected
+backend318P/954phases is qualified by one unselected emulator-test hash change,
+not accepted as a clean whole-tree PG gate. Native issuer-boundary4P/12phases
+has stable source and exact collection/JUnit joins. Verdict remains Not fixed
+on production92f until this combined source is merged, deployed and replayed;
+local or synthetic renderer proof must not stand in for real owner acceptance.
+
+## October 22 Unordered Recent Matter Notes
+
+Release-test follow-up: d72's independent web source inventory still expected
+115 tester cases rather than the independently collected116 after NOTES22 was
+added; total171 must become172 without weakening exact membership. Its complete
+web run was1802P1F/1803, not a green gate. The local29-case browser preflight was
+28P1F: server-uppercase Matter code made the new fixture's cleanup ownership
+check reject its lowercase input. Title and four retained notes agree; the
+overwritten body exception and unreached width proofs remain unverified. Correct
+the canonical fixture acknowledgement and error preservation, retain both failed
+packets, and require complete replacement unit/browser/CI/Docker/deployed gates.
+
+Subsequent complete f83 scoped05 also ended28P1F/29. Its separate receipts prove
+four-note admission/persistence/order and strict cleanup/disposal200, but failure
+at the first1280px reload body decoder prevented responsive acceptance. The
+catch discarded the underlying exception, so malformed server JSON is not
+established. The missing initial-body/render barrier makes a prior-response race
+plausible, not proven. Preserve all payload/UI/geometry assertions while binding
+the new reload request and awaiting response completion; classify body transport
+separately from JSON syntax. CodeQL598 is a distinct test-only unused initial
+cleanupStage assignment, to correct without suppression. No runtime fix or clean
+production claim follows from either failed test-harness run.
+
+J04/M03/US-007..009/FT-011..015: exact f26 CI39696037419 PostgreSQL shard11
+collected204 cases with203 passes and one failed call, all setup/teardown passed.
+test_default_readers_keep_rich_workspace_dto differed only in notes;14 other DTO
+fields agreed. The dependency guard is not a second failing testcase. Source
+inspection confirms an unordered relationship feeding UI Recent notes slice(0,3),
+which can omit the newest record. This predates the nullable-contact correction;
+do not claim that change introduced it. Require a shared created_at DESC,id DESC
+contract, preserved full DTO equality, deterministic ties/materialization tests
+and actual desktop/mobile reload proof. Current verdict:Not fixed until complete
+replacement native/Docker/CI and exact-serving browser acceptance pass.
+
+## October 22 Rolling Public Admission Classification
+
+LEAD-01/J19/M21/US-063: two valid REDs on SQLite and PostgreSQL prove that
+successful old-column inserts after migration leave three public records false
+and hidden, including converted proof. A second head upgrade does not backfill
+them. Raw metadata/outbox bytes, unrelated commercial/malformed-shape exclusions,
+current-protocol explicit false, index health and downgrade refusal hold. Earlier
+extraction/overlay/database-readiness failures are retained as setup failures,
+not reproductions. Correct only the atomic insertion-time compatibility boundary;
+never retrofit email eligibility or resurrect later/current-policy exclusions.
+Current verdict:Not fixed until the combined correction and full replacement
+native/browser/Docker/CI/exact-production gates pass. No production incident or
+data repair is inferred from this isolated pre-release reproduction.
+
+## October 22 Retained Enrollment Readback
+
+J14/M14/US-040/042 and J19/M21/US-063: a valid commercial enrollment with a
+null contact name makes the founder page reject its entire HTTP200 enrollment
+response, hiding a saved public enquiry. Storage and the actual API also permit
+a null email; the frontend incorrectly required both fields to be strings.
+The newer isolated Leads reader already models nullable contacts. Preserve the
+incomplete commercial fixture instead of fabricating contact data or dropping
+the row. Align only the retained read schema and show explicit missing labels;
+new public submissions still require their validated name and email.
+
+Original full81ec CI:633ended=615P17S1F at the earlier disabled-purpose assertion.
+Complete abeb scoped28replay:27P1F, now at the real founder UI after normal fresh
+bootstrap/login/me200 and successful pending/zero-attempt API readback. The
+snapshot says Unable to load enrollments; later UI/reload/denial steps remain
+unverified. Five new real-parser/component regressions reproduce the contract
+and sibling loss, alongside nine existing passes. Current verdict:Inconclusive,
+candidate correction only; full amended browser/Docker/CI and exact-production
+acceptance remain required. No authentication, source, delivery or no-paid fence
+was relaxed; original failures and the provenance-only root setup failure remain.
+
 ## October 21 Authenticator Setup QR
 
 PRA-09: confirmed missing QR forces a long manual key. The original component

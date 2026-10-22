@@ -26,14 +26,15 @@ describe("seo_demo_20261009 durable proxy", () => {
     expect(url).toBe("http://api:8000/api/billing/enrollments/demo-request");
     expect(init.headers).toEqual({ "Content-Type": "application/json", "X-CaseOps-Automated-Test": "no-paid-providers" });
   });
-  it("acknowledges only a matching saved enrollment and forwards minimal fields", async () => {
+  it.each(["2026-10-09", "2026-10-21"])("acknowledges a matching saved enrollment under notice %s and forwards minimal fields", async (privacy_notice_version) => {
     fetchMock.mockResolvedValue(Response.json({ id, status: "demo_requested" }));
-    const response = await POST(request());
+    const submitted = { ...payload, privacy_notice_version };
+    const response = await POST(request(submitted));
     expect(response.status).toBe(202);
     expect(await response.json()).toEqual({ accepted: true, id, status: "demo_requested" });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toContain("/api/billing/enrollments/demo-request");
-    expect(JSON.parse(init.body)).toEqual(payload);
+    expect(JSON.parse(init.body)).toEqual(submitted);
     expect(init.headers).toEqual({ "Content-Type": "application/json" });
     expect(init).toMatchObject({ cache: "no-store", credentials: "omit", redirect: "error" });
   });
@@ -60,8 +61,14 @@ describe("seo_demo_20261009 durable proxy", () => {
     ["inherited prototype source", { source: "__proto__" }],
     ["missing idempotency key", { idempotency_key: undefined }],
     ["missing privacy notice", { privacy_notice_version: undefined }],
+    ["unreviewed privacy notice", { privacy_notice_version: "2026-10-22" }],
     ["unreviewed referrer", { referrer: "secret" }],
     ["unreviewed UTM payload", { utm_json: { query: "secret" } }],
+    ["client notification eligibility", { notification_eligible: true }],
+    ["client notification policy", { notification_policy: "owner_public_enquiries_v1" }],
+    ["client notification purpose", { notification_purpose: "public_lead_20261021" }],
+    ["client automated flag", { automated_request: false }],
+    ["client recipient override", { recipient_email: "unreviewed@example.com" }],
   ] as const)("rejects %s before transport", async (_label, change) => {
     expect((await POST(request({ ...payload, ...change }))).status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();

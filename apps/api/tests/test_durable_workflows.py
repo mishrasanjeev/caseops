@@ -66,6 +66,9 @@ def _temporal_test_server_path() -> str | None:
     path = os.environ.get("CASEOPS_TEST_TEMPORAL_SERVER_PATH")
     expected_hash = os.environ.get("CASEOPS_TEST_TEMPORAL_SERVER_SHA256")
     if path is None and expected_hash is None:
+        if any(os.environ.get(name, "").lower() in {"1", "true"}
+               for name in ("CI", "GITHUB_ACTIONS")):
+            raise RuntimeError("CI requires a pre-provisioned verified Temporal test server.")
         return None
     if not path or not expected_hash:
         raise RuntimeError("Configure both the Temporal test-server path and SHA-256.")
@@ -84,7 +87,21 @@ def _temporal_test_server_path() -> str | None:
 def test_temporal_test_server_default_remains_sdk_managed(monkeypatch) -> None:
     monkeypatch.delenv("CASEOPS_TEST_TEMPORAL_SERVER_PATH", raising=False)
     monkeypatch.delenv("CASEOPS_TEST_TEMPORAL_SERVER_SHA256", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     assert _temporal_test_server_path() is None
+
+
+@pytest.mark.parametrize("marker,value", [("CI", "true"), ("CI", "1"),
+                                          ("GITHUB_ACTIONS", "true")])
+def test_temporal_ci_requires_explicit_provisioning(monkeypatch, marker, value) -> None:
+    monkeypatch.delenv("CASEOPS_TEST_TEMPORAL_SERVER_PATH", raising=False)
+    monkeypatch.delenv("CASEOPS_TEST_TEMPORAL_SERVER_SHA256", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setenv(marker, value)
+    with pytest.raises(RuntimeError, match="CI requires a pre-provisioned"):
+        _temporal_test_server_path()
 
 
 @pytest.mark.parametrize("missing", ["PATH", "SHA256"])

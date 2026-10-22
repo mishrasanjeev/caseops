@@ -210,6 +210,11 @@ foreach ($Name in @(
     }
     . ([scriptblock]::Create($Text))
 }
+# Capacity has its own actual-function offline guard. This retained-artifact
+# fixture must not resolve a real Docker executable or launch a probe.
+function Assert-DockerStorageHeadroom([string]$Stage) {
+    if ($Stage -cne 'pre-browser') { throw 'Unexpected storage boundary.' }
+}
 $RepoRoot = Join-Path $Root 'candidate'
 $ResultsDirectory = Join-Path $Root 'evidence'
 $PlaywrightConfig = Join-Path $RepoRoot 'playwright.docker.config.ts'

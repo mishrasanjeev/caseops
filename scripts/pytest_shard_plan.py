@@ -235,9 +235,12 @@ def write_ci_dependency_output(selected_files: Path, github_output: Path) -> boo
     ):
         raise ValueError("The selected pytest inventory must be nonempty, unique and canonical")
     required = "tests/test_prod_playwright_evidence.py" in files
+    temporal = "tests/test_durable_workflows.py" in files
     with github_output.open("a", encoding="utf-8", newline="\n") as output:
         output.write(f"requires_playwright={str(required).lower()}\n")
+        output.write(f"requires_temporal={str(temporal).lower()}\n")
     print(f"Offline Playwright dependencies required: {required}; selected files: {len(files)}")
+    print(f"Pinned Temporal test server required: {temporal}")
     return required
 
 

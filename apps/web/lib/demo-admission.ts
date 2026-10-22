@@ -20,5 +20,5 @@ export const demoAdmissionSchema = z.object({
   selected_plan: z.string().max(80).nullable().optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
   idempotency_key: z.string().uuid(),
-  privacy_notice_version: z.literal("2026-10-09"),
+  privacy_notice_version: z.enum(["2026-10-09", "2026-10-21"]),
 }).strict();

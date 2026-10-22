@@ -120,7 +120,7 @@ def list_matter_communications(
         session.scalars(
             select(Communication)
             .where(Communication.matter_id == matter.id)
-            .order_by(Communication.occurred_at.desc())
+            .order_by(Communication.occurred_at.desc(), Communication.id.desc())
         )
     )
     return CommunicationListResponse(
@@ -327,7 +327,11 @@ def list_matter_communication_timeline(
         session.scalars(
             select(Communication)
             .where(Communication.matter_id == matter.id)
-            .order_by(Communication.occurred_at.asc(), Communication.created_at.asc())
+            .order_by(
+                Communication.occurred_at.asc(),
+                Communication.created_at.asc(),
+                Communication.id.asc(),
+            )
             .limit(_TIMELINE_LIMIT)
         )
     )
@@ -335,7 +339,7 @@ def list_matter_communication_timeline(
         session.scalars(
             select(MatterNote)
             .where(MatterNote.matter_id == matter.id)
-            .order_by(MatterNote.created_at.asc())
+            .order_by(MatterNote.created_at.asc(), MatterNote.id.asc())
             .limit(_TIMELINE_LIMIT)
         )
     )
@@ -343,7 +347,7 @@ def list_matter_communication_timeline(
         session.scalars(
             select(MatterAttachment)
             .where(MatterAttachment.matter_id == matter.id)
-            .order_by(MatterAttachment.created_at.asc())
+            .order_by(MatterAttachment.created_at.asc(), MatterAttachment.id.asc())
             .limit(_TIMELINE_LIMIT)
         )
     )

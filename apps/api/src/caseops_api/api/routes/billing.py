@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
 from caseops_api.api.dependencies import DbSession, get_current_context, require_capability
@@ -24,7 +24,6 @@ from caseops_api.schemas.saas_billing import (
     TrialStartRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.billing_demo import deliver_demo_notification
 from caseops_api.services.identity import register_company_owner
 from caseops_api.services.saas_billing import (
     assert_trial_start_allowed,
@@ -339,8 +338,12 @@ def start_trial(payload: TrialStartRequest, session: DbSession) -> dict[str, obj
 @router.post("/enrollments/demo-request", response_model=DemoRequestResponse)
 @limiter.limit("5/hour")
 def create_enrollment_demo_request(
-    request: Request, payload: DemoRequest, session: DbSession, background_tasks: BackgroundTasks
+    request: Request, payload: DemoRequest, session: DbSession
 ) -> DemoRequestResponse:
-    response = create_demo_request(session, payload)
-    background_tasks.add_task(deliver_demo_notification, response.id)
+    response = create_demo_request(
+        session, payload, automated="x-caseops-automated-test" in request.headers
+    )
+    # The scheduled worker owns transport; HTTP only acknowledges the durable outbox.
+    if session.in_transaction():
+        session.commit()
     return response

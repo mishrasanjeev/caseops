@@ -1,0 +1,7 @@
+{
+  "version": "1.40.0",
+  "url": "https://github.com/temporalio/sdk-java/releases/download/v1.40.0/temporal-test-server_1.40.0_linux_amd64.tar.gz",
+  "archive_sha256": "524465a96274831e004326f6e2f2a5f3ef9aaed72c2069cf16c1d64b8b1ec3ca",
+  "archive_bytes": 27208794,
+  "binary_sha256": "19defb9f7318c7cf249518b3642a735efb79876c2b6918afe312336476b796a5"
+}

@@ -2121,8 +2121,10 @@ def reactivate_subscription(
     return _subscription_record(subscription)
 
 
-def create_demo_request(session: Session, payload: DemoRequest) -> DemoRequestResponse:
-    return admit_demo(session, payload)
+def create_demo_request(
+    session: Session, payload: DemoRequest, *, automated: bool = False
+) -> DemoRequestResponse:
+    return admit_demo(session, payload, automated=automated)
 
 
 def assert_trial_start_allowed(session: Session, payload: TrialStartRequest) -> None:

@@ -10,9 +10,14 @@ type Case = { id: string; file: string; titles: string[]; project: string; repea
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const projects = {
-  "tester-prod-chromium": 115,
+  "tester-prod-chromium": 116,
   "tester-index-prod-chromium": 6,
   "test-legal-write-prod-chromium": 50,
+};
+const batch3Projects = {
+  "batch3-clients-prod-chromium": 1,
+  "batch3-clients-prod-mobile": 1,
+  "batch3-drafts-readonly-prod-chromium": 1,
 };
 const indexFiles = { "ram-2026-10-10-prod.spec.ts": 4, "ram-2026-10-12-prod.spec.ts": 2 };
 const datedFiles = {
@@ -47,42 +52,49 @@ function counts(values: string[]) {
   }, {});
 }
 
+function collectProjects(selectedProjects: Record<string, number>): Case[] {
+  // Collection imports specs but never runs setup, browsers, auth or app code.
+  const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE"]) {
+    if (process.env[key]) env[key] = process.env[key];
+  }
+  Object.assign(env, {
+    CI: "1", PROD_BASE_URL: "https://caseops.ai", PROD_API_BASE_URL: "https://api.caseops.ai",
+    NOTICE_QA_SLUG: "source-inventory-fixture", NOTICE_QA_OWNER_EMAIL: "qa@fixture.invalid",
+    NOTICE_QA_OWNER_PASSWORD: "fixture-only-not-used",
+    CASEOPS_EXPECTED_RELEASE_SHA: "a".repeat(40), CASEOPS_RELEASE_SHA: "a".repeat(40),
+  });
+  const result = spawnSync(process.execPath, [
+    path.join(root, "node_modules/@playwright/test/cli.js"), "test",
+    "--config=playwright.prod-ram.config.ts", "--list", "--reporter=json",
+    ...Object.keys(selectedProjects).map(project => `--project=${project}`),
+  ], { cwd: root, env, encoding: "utf8", timeout: 8_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
+  expect(result.error).toBeUndefined();
+  expect(result.status, result.stderr).toBe(0);
+  const native = JSON.parse(result.stdout) as {
+    errors: unknown[]; suites: NativeSuite[];
+    config: { projects: { id: string; retries: number; repeatEach: number }[] };
+  };
+  expect(native.errors).toEqual([]);
+  expect(native.config.projects.every(project => project.repeatEach === 1)).toBe(true);
+  const projectRetries = Object.fromEntries(native.config.projects.map(project => [project.id, project.retries]));
+  return flatten(native.suites, projectRetries).filter(row => Object.hasOwn(selectedProjects, row.project));
+}
+
 describe("reviewed production tester source inventory", () => {
   let cases: Case[];
 
-  beforeAll(() => {
-    // Collection imports specs but never runs setup, browsers, auth or app code.
-    const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
-    for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE"]) {
-      if (process.env[key]) env[key] = process.env[key];
-    }
-    Object.assign(env, {
-      CI: "1", PROD_BASE_URL: "https://caseops.ai", PROD_API_BASE_URL: "https://api.caseops.ai",
-      NOTICE_QA_SLUG: "source-inventory-fixture", NOTICE_QA_OWNER_EMAIL: "qa@fixture.invalid",
-      NOTICE_QA_OWNER_PASSWORD: "fixture-only-not-used",
-      CASEOPS_EXPECTED_RELEASE_SHA: "a".repeat(40), CASEOPS_RELEASE_SHA: "a".repeat(40),
-    });
-    const result = spawnSync(process.execPath, [
-      path.join(root, "node_modules/@playwright/test/cli.js"), "test",
-      "--config=playwright.prod-ram.config.ts", "--list", "--reporter=json",
-      ...Object.keys(projects).map(project => `--project=${project}`),
-    ], { cwd: root, env, encoding: "utf8", timeout: 8_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
-    expect(result.error).toBeUndefined();
-    expect(result.status, result.stderr).toBe(0);
-    const native = JSON.parse(result.stdout) as {
-      errors: unknown[]; suites: NativeSuite[];
-      config: { projects: { id: string; retries: number; repeatEach: number }[] };
-    };
-    expect(native.errors).toEqual([]);
-    expect(native.config.projects.every(project => project.repeatEach === 1)).toBe(true);
-    const projectRetries = Object.fromEntries(native.config.projects.map(project => [project.id, project.retries]));
-    cases = flatten(native.suites, projectRetries).filter(row => Object.hasOwn(projects, row.project));
-  });
+  beforeAll(() => { cases = collectProjects(projects); });
 
-  it("collects the independent reviewed115+6+50 exact partition before production", () => {
+  it("collects the independent reviewed116+6+50 exact partition before production", () => {
     expect(counts(cases.map(row => row.project))).toEqual(projects);
-    expect(cases).toHaveLength(171);
+    expect(cases).toHaveLength(172);
     expect(cases.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
+    expect(cases.filter(row => row.file === "ram-2026-10-22-prod.spec.ts")
+      .map(row => ({ project: row.project, title: row.titles.at(-1) }))).toEqual([{
+        project: "tester-prod-chromium",
+        title: "NOTES22 newest three of four saved notes persist after reload at 1280px and 393px",
+      }]);
   });
 
   it("retains exact per-file index and dated inventories", () => {
@@ -107,5 +119,28 @@ describe("reviewed production tester source inventory", () => {
       ...widths.map(width => `IP15 BUG-001..007 governed controls and readable forms at ${width}px`),
       ...guards.map(guard => `IP15 geometry guard ${guard}`),
     ].sort());
+  });
+});
+
+describe("separate mandatory Batch3 production source inventory", () => {
+  let cases: Case[];
+
+  // Preserve the original collection budget; do not import the full historical
+  // partition again to collect these three independently admitted projects.
+  beforeAll(() => { cases = collectProjects(batch3Projects); });
+
+  it("collects one exact positive case per role without local-only journeys", () => {
+    expect(counts(cases.map(row => row.project))).toEqual(batch3Projects);
+    expect(cases.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
+    expect(new Set(cases.map(row => row.id)).size).toBe(3);
+    expect(cases.map(row => [row.project, row.file, row.titles.at(-1)]).sort()).toEqual([
+      ["batch3-clients-prod-chromium", "ram-2026-10-22-bugs.spec.ts",
+        "B3-CLIENT-01/02/03 contact edits preserve retained verified KYC and matter links"],
+      ["batch3-clients-prod-mobile", "ram-2026-10-22-bugs.spec.ts",
+        "[mobile] B3-CLIENT-06 verified-client contact editing persists at 393px"],
+      ["batch3-drafts-readonly-prod-chromium", "ram-2026-10-22-drafting.prod.spec.ts",
+        "B3-DRAFT-PROD read-only retained finalized and mutable Appeal controls persist after reload"],
+    ].sort());
+    expect(cases.every(row => !row.titles.some(title => title.includes("[local-only]")))).toBe(true);
   });
 });

@@ -3,6 +3,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
+
+import { ApiError } from "@/lib/api/config";
 
 const {
   approveDraftMock,
@@ -187,6 +190,150 @@ describe("MatterDraftDetailPage", () => {
     ]);
     useCapabilityMock.mockReset();
     useCapabilityMock.mockImplementation((cap: string) => cap === "drafts:edit");
+  });
+
+  it("B3-DRAFT-01: explains the latest zero-citation approval block before a mutation", async () => {
+    fetchDraftMock.mockResolvedValue({
+      ...BASE_DRAFT, status: "in_review", review_required: true,
+      versions: [{ ...BASE_DRAFT.versions[0], citations: [] as string[], verified_citation_count: 0 }],
+    });
+    useCapabilityMock.mockReturnValue(true);
+    render(withClient(<DraftDetailPage />));
+    const approve = await screen.findByTestId("draft-approve");
+    expect(approve).toBeDisabled();
+    expect(approve).toHaveAttribute("aria-describedby", "draft-citation-status");
+    expect(screen.getByTestId("draft-citation-status")).toHaveTextContent(
+      "Revision 1 has no verified citations",
+    );
+    expect(screen.getByRole("link", { name: "Matter context" })).toHaveAttribute(
+      "href", "/app/matters/m-1",
+    );
+    expect(screen.getByRole("link", { name: "Matter context" })).toHaveClass("min-h-9");
+    await userEvent.click(approve);
+    expect(approveDraftMock).not.toHaveBeenCalled();
+  });
+
+  it("B3-DRAFT-04: a verified older revision cannot authorize the current unverified one", async () => {
+    fetchDraftMock.mockResolvedValue({
+      ...BASE_DRAFT, status: "in_review", review_required: true, current_version_id: "v-2",
+      versions: [BASE_DRAFT.versions[0], {
+        ...BASE_DRAFT.versions[0], id: "v-2", revision: 2,
+        citations: [], verified_citation_count: 0,
+      }],
+    });
+    useCapabilityMock.mockReturnValue(true);
+    render(withClient(<DraftDetailPage />));
+    expect(await screen.findByTestId("draft-approve")).toBeDisabled();
+    expect(screen.getByTestId("draft-citation-status")).toHaveTextContent("Revision 2");
+  });
+
+  it("B3-DRAFT-04: a rejected stale-tab approval reloads the authoritative current revision", async () => {
+    fetchDraftMock.mockResolvedValue({ ...BASE_DRAFT, status: "in_review", review_required: true });
+    useCapabilityMock.mockReturnValue(true);
+    approveDraftMock.mockRejectedValue(Object.assign(new Error("Cannot approve a draft with zero verified citations."), {
+      name: "ApiError", status: 422, detail: "Cannot approve a draft with zero verified citations.",
+      problemType: "verified_citations_required", data: null,
+    }));
+    render(withClient(<DraftDetailPage />));
+    const approve = await screen.findByTestId("draft-approve");
+    expect(approve).toBeEnabled();
+    fetchDraftMock.mockResolvedValue({
+      ...BASE_DRAFT, status: "in_review", review_required: true, current_version_id: "v-2",
+      versions: [BASE_DRAFT.versions[0], { ...BASE_DRAFT.versions[0], id: "v-2", revision: 2,
+        citations: [], verified_citation_count: 0 }],
+    });
+    await userEvent.click(approve);
+    await waitFor(() => expect(screen.getByTestId("draft-current-revision")).toHaveTextContent("Revision 2"));
+    expect(screen.getByTestId("draft-approve")).toBeDisabled();
+    expect(screen.getByTestId("draft-citation-status")).toHaveTextContent("Revision 2 has no verified citations");
+    expect(approveDraftMock).toHaveBeenCalledTimes(1);
+    expect(fetchDraftMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("B3-DRAFT-02/03: bounded focus regenerates a new revision before review and approval", async () => {
+    let latest = {
+      ...BASE_DRAFT, status: "in_review", review_required: true,
+      versions: [{ ...BASE_DRAFT.versions[0], citations: [] as string[], verified_citation_count: 0 }],
+    };
+    fetchDraftMock.mockImplementation(async () => latest);
+    generateDraftVersionMock.mockImplementation(async () => {
+      latest = {
+        ...latest, status: "draft", current_version_id: "v-2",
+        versions: [...latest.versions, { ...BASE_DRAFT.versions[0], id: "v-2", revision: 2 }],
+      };
+      return latest;
+    });
+    submitDraftMock.mockImplementation(async () => {
+      latest = { ...latest, status: "in_review" };
+      return latest;
+    });
+    approveDraftMock.mockImplementation(async () => {
+      latest = { ...latest, status: "approved", review_required: false };
+      return latest;
+    });
+    useCapabilityMock.mockReturnValue(true);
+    render(withClient(<DraftDetailPage />));
+    const focus = await screen.findByLabelText("Regeneration focus");
+    expect(focus).toHaveAttribute("maxlength", "4000");
+    await userEvent.type(focus, "  Address the reviewed limitation issue.  ");
+    await userEvent.click(screen.getByTestId("draft-generate"));
+    await waitFor(() => expect(generateDraftVersionMock).toHaveBeenCalledWith({
+      matterId: "m-1", draftId: "d-1", focusNote: "Address the reviewed limitation issue.",
+    }));
+    expect(await screen.findByTestId("draft-submit")).toBeEnabled();
+    expect(screen.getByTestId("draft-current-revision")).toHaveTextContent("Revision 2");
+    await userEvent.click(screen.getByTestId("draft-submit"));
+    expect(await screen.findByTestId("draft-approve")).toBeEnabled();
+    await userEvent.click(screen.getByTestId("draft-approve"));
+    await waitFor(() => expect(approveDraftMock).toHaveBeenCalledWith("m-1", "d-1"));
+    expect(await screen.findByTestId("draft-finalize")).toBeVisible();
+  });
+
+  it.each(["filed", "served"])("B3-DRAFT-05: %s drafts keep regeneration and editing locked", async (status) => {
+    fetchDraftMock.mockResolvedValue({ ...BASE_DRAFT, status });
+    useCapabilityMock.mockReturnValue(true);
+    render(withClient(<DraftDetailPage />));
+    expect(await screen.findByTestId("draft-generate")).toBeDisabled();
+    expect(screen.queryByTestId("draft-edit-toggle")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Regeneration focus")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("draft-approve")).not.toBeInTheDocument();
+  });
+
+  it("B3-DRAFT-05: read-only viewers are not offered reviewer or generator commands", async () => {
+    fetchDraftMock.mockResolvedValue({ ...BASE_DRAFT, status: "in_review" });
+    useCapabilityMock.mockReturnValue(false);
+    render(withClient(<DraftDetailPage />));
+    expect(await screen.findByTestId("draft-generate")).toBeDisabled();
+    expect(screen.queryByTestId("draft-approve")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("draft-request-changes")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Regeneration focus")).not.toBeInTheDocument();
+  });
+
+  it("B3-DRAFT-05: a generation refusal preserves focus and does not retry or approve", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    fetchDraftMock.mockResolvedValue({
+      ...BASE_DRAFT, status: "in_review",
+      versions: [{ ...BASE_DRAFT.versions[0], citations: [], verified_citation_count: 0 }],
+    });
+    generateDraftVersionMock.mockRejectedValue(new ApiError(
+      403, "Automated paid-provider calls are not allowed.", null, "automated_provider_calls_disabled",
+    ));
+    useCapabilityMock.mockReturnValue(true);
+    try {
+      render(withClient(<DraftDetailPage />));
+      const focus = await screen.findByLabelText("Regeneration focus");
+      await userEvent.type(focus, "Reviewed source clarification.");
+      await userEvent.click(screen.getByTestId("draft-generate"));
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+        "Automated paid-provider calls are not allowed.",
+      ));
+      expect(focus).toHaveValue("Reviewed source clarification.");
+      expect(generateDraftVersionMock).toHaveBeenCalledTimes(1);
+      expect(approveDraftMock).not.toHaveBeenCalled();
+      expect(screen.getByTestId("draft-approve")).toBeDisabled();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("BUG-036: edits generated draft text and saves it as a review-required revision", async () => {

@@ -1,0 +1,46 @@
+# Docker acceptance storage admission
+
+`scripts/verify-docker.ps1` requires at least **64 GiB available bytes and
+100,000 available inodes** on the actual Docker-backed filesystem. This is a
+conservative headroom floor for production image export, eight native groups,
+database/WAL growth and the complete browser fixtures, not a measured maximum
+or a reservation against concurrent Docker users.
+
+Admission runs before image build, after build before stack startup, before
+native PostgreSQL, and before each browser invocation. The later probes also
+measure the running acceptance project's own PostgreSQL volume. Insufficient,
+missing, malformed or failed measurements, or incomplete probe cleanup, refuse
+the next stage. Exact threshold values are accepted. There is no environment
+override, pruning, Docker restart, retry or test skip.
+
+The already-local API base `python:3.13-slim` must be present. The probe never
+pulls an image: it resolves that image to an immutable ID, rejects unexpected
+image volumes, and starts only its uniquely named, owner-labelled container.
+That container has no network, a read-only root, dropped capabilities and no
+new privileges. Only the named PostgreSQL data volume is mounted read-only,
+after checking both container and volume project/service ownership. Other
+mounts, including the canonical read-only initialization script, are never
+inherited. Duplicate data-path mounts, host binds at that path and foreign
+volume ownership refuse admission. The only measurement is
+Linux `os.statvfs`; Windows free space and aggregate `docker system df` are not
+capacity evidence.
+
+Image inspection reads Docker's structured JSON, not a Go template requiring
+the optional `Config.Volumes` key. An omitted or null volume declaration is
+valid; a declared unexpected volume still refuses admission. The real isolated
+probe must pass alongside offline controls before retrying a failed admission.
+Exercise all four stages against the real canonical PostgreSQL Compose service,
+not only root-filesystem probes or a simplified one-mount fixture.
+
+Each `docker-storage-<stage>-<nonce>.json` receipt records exact source release,
+project, image, owned probe, byte/inode facts, bounded native command outcomes
+and cleanup. A host command timeout kills/reaps its own Docker CLI; cleanup
+rechecks the unique label and name before removing only that probe container.
+Never interpret a refused admission as a product test result or resume/carry
+an incomplete gate. The operator must resolve capacity separately, preserve
+the failed receipts, and start a fresh canonical gate.
+
+Offline regression coverage is in
+`apps/api/tests/test_docker_storage_headroom_20261022.py` and
+`tests/docker-storage-headroom-guard.ps1`. Fakes are in-process and cannot fall
+through to a real Docker executable on a noexec temporary filesystem.

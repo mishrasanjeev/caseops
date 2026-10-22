@@ -150,6 +150,8 @@ CONSOLE_OWN_AUTH_MUTATING_ROUTES = frozenset({
     ("POST", "/api/platform-console/auth/password-reset/complete"),
     ("POST", "/api/platform-console/admins/invitations"),
     ("POST", "/api/platform-console/admins/{admin_id}/revoke"),
+    ("POST", "/api/platform-console/admins/{admin_id}/remove"),
+    ("POST", "/api/platform-console/admins/{admin_id}/invitations/resend"),
 })
 
 
@@ -255,6 +257,8 @@ def test_console_own_auth_admission_never_exempts_siblings_or_other_methods(meth
         ("/auth/logout", {}),
         ("/admins/invitations", {"email": "viewer@console.example", "full_name": "Viewer"}),
         ("/admins/unknown/revoke", {"reason": "Access ended"}),
+        ("/admins/unknown/remove", {"reason": "Access ended", "expected_version": 1}),
+        ("/admins/unknown/invitations/resend", {"expected_version": 1}),
     ],
 )
 def test_console_session_mutations_reject_missing_authority_even_with_csrf(client, path, payload):

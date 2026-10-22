@@ -10,6 +10,9 @@ Covers:
 """
 from __future__ import annotations
 
+import json
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -161,6 +164,232 @@ def test_client_update_changes_fields(client: TestClient) -> None:
     assert resp.status_code == 200, resp.text
     assert resp.json()["primary_contact_name"] == "Hari Gupta"
     assert resp.json()["kyc_status"] == "requested"
+
+
+@pytest.fixture(params=[
+    "client",
+    pytest.param("isolated_postgres_client", marks=pytest.mark.postgres),
+])
+def contact_client(request: pytest.FixtureRequest) -> TestClient:
+    http = request.getfixturevalue(request.param)
+    http.headers.update({"X-CaseOps-Automated-Test": "no-paid-providers"})
+    return http
+
+
+@pytest.mark.parametrize("editor_role", ["owner", "paralegal"])
+def test_contact_edit_preserves_verified_kyc_identity_audit_and_matter_links(
+    contact_client: TestClient,
+    editor_role: str,
+) -> None:
+    client = contact_client
+    from caseops_api.db.models import (
+        AuditEvent,
+        CompanyMembership,
+        MatterAttachment,
+        MembershipRole,
+    )
+
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    created = _mk_client(
+        client, token, pan="ABCDE1234F", gstin="27ABCDE1234F1Z5",
+        address_line_1="12 Office Road", address_line_2="Fourth floor",
+        state="Karnataka", postal_code="560001", internal_notes="Retained note",
+    )
+    assert created.status_code == 200, created.text
+    cid = created.json()["id"]
+    matter = _mk_matter(client, token, code="CONTACT-KYC")
+    assignment = client.post(
+        f"/api/matters/{matter['id']}/clients", headers=auth_headers(token),
+        json={"client_id": cid, "role": "petitioner", "is_primary": True},
+    )
+    assert assignment.status_code == 200, assignment.text
+    attachment_id = _seed_verification_attachment(matter["id"])
+    submitted = client.patch(
+        f"/api/matters/{matter['id']}/client-verification/{cid}",
+        headers=auth_headers(token),
+        json={"status": "submitted", "documents": [{
+            "name": "Reviewed address proof", "status": "received",
+            "document_type": "address_proof", "attachment_id": attachment_id,
+            "note": "Retained review evidence", "expires_on": "2030-01-01",
+        }]},
+    )
+    assert submitted.status_code == 200, submitted.text
+    verified = client.patch(
+        f"/api/matters/{matter['id']}/client-verification/{cid}",
+        headers=auth_headers(token), json={"status": "verified"},
+    )
+    assert verified.status_code == 200, verified.text
+    if editor_role != "owner":
+        with get_session_factory()() as session:
+            membership = session.get(CompanyMembership, bootstrap["membership"]["id"])
+            assert membership is not None
+            membership.role = MembershipRole(editor_role)
+            session.commit()
+    before_response = client.get(f"/api/clients/{cid}", headers=auth_headers(token))
+    assert before_response.status_code == 200, before_response.text
+    before = before_response.json()
+    assert before["kyc_status"] == "verified"
+    assert before["kyc_verified_at"] and before["kyc_verified_by_membership_id"]
+    assert before["kyc_documents"][0]["attachment_id"] == attachment_id
+    assert before["matters"][0]["matter_id"] == matter["id"]
+
+    audit_query = select(
+        AuditEvent.id, AuditEvent.action, AuditEvent.actor_membership_id,
+        AuditEvent.metadata_json, AuditEvent.created_at,
+    ).where(AuditEvent.target_id == cid).order_by(AuditEvent.id)
+    attachment_query = select(MatterAttachment.__table__).where(
+        MatterAttachment.id == attachment_id,
+    )
+    with get_session_factory()() as session:
+        original_audits = session.execute(audit_query).all()
+        original_attachment = session.execute(attachment_query).one()
+    assert len(original_audits) >= 3
+
+    changes = {
+        "primary_contact_name": "Updated contact",
+        "primary_contact_email": "updated-contact@example.in",
+        "primary_contact_phone": "+91 12345 67890",
+        "address_line_1": "25 New Road", "address_line_2": None,
+        "city": "Pune", "state": "Maharashtra", "postal_code": "411001",
+        "country": "India",
+    }
+    patched = client.patch(
+        f"/api/clients/{cid}", headers=auth_headers(token),
+        json={**changes, "primary_contact_name": "  Updated contact  "},
+    )
+    assert patched.status_code == 200, patched.text
+    profile_response = client.get(f"/api/clients/{cid}", headers=auth_headers(token))
+    assert profile_response.status_code == 200, profile_response.text
+    after = profile_response.json()
+    assert after == before | changes | {"updated_at": after["updated_at"]}
+    listing = client.get("/api/clients/", headers=auth_headers(token))
+    assert listing.status_code == 200, listing.text
+    assert next(row for row in listing.json()["clients"] if row["id"] == cid) == after
+    with get_session_factory()() as session:
+        retained = session.execute(audit_query).all()
+        updated_audits = list(session.scalars(select(AuditEvent).where(
+            AuditEvent.target_id == cid, AuditEvent.action == "client.updated",
+        )))
+        stored_assignment = session.get(MatterClientAssignment, assignment.json()["id"])
+        assert session.execute(attachment_query).one() == original_attachment
+        assert stored_assignment is not None
+        assert stored_assignment.client_id == cid
+        assert stored_assignment.role == "petitioner" and stored_assignment.is_primary
+    original_ids = {event.id for event in original_audits}
+    assert [row for row in retained if row.id in original_ids] == original_audits
+    assert len(retained) == len(original_audits) + 1
+    assert len(updated_audits) == 1
+    assert json.loads(updated_audits[0].metadata_json) == {"fields": sorted(changes)}
+
+
+def test_contact_edit_explicit_null_clears_and_omitted_fields_survive(
+    contact_client: TestClient,
+) -> None:
+    client = contact_client
+    token = str(bootstrap_company(client)["access_token"])
+    values = {
+        "primary_contact_name": "Contact person", "primary_contact_email": "contact@example.in",
+        "primary_contact_phone": "+91 12345 67890", "address_line_1": "12 Office Road",
+        "address_line_2": "Fourth floor", "city": "Mumbai", "state": "Maharashtra",
+        "postal_code": "400001", "country": "India",
+    }
+    created = _mk_client(client, token, **values)
+    assert created.status_code == 200, created.text
+    cid = created.json()["id"]
+    partial = client.patch(
+        f"/api/clients/{cid}", headers=auth_headers(token), json={"city": "Pune"},
+    )
+    assert partial.status_code == 200, partial.text
+    for key, value in values.items():
+        assert partial.json()[key] == ("Pune" if key == "city" else value)
+    clears = dict.fromkeys(values)
+    cleared = client.patch(
+        f"/api/clients/{cid}", headers=auth_headers(token), json=clears,
+    )
+    assert cleared.status_code == 200, cleared.text
+    fetched = client.get(f"/api/clients/{cid}", headers=auth_headers(token))
+    assert fetched.status_code == 200, fetched.text
+    assert all(fetched.json()[key] is None for key in values)
+    assert fetched.json()["name"] == created.json()["name"]
+    assert fetched.json()["is_active"] is True
+
+
+@pytest.mark.parametrize("patch", [
+    {"primary_contact_email": "not-an-email"},
+    {"primary_contact_email": ""},
+    {"primary_contact_phone": "1" * 41},
+    {"postal_code": "1" * 21},
+])
+def test_contact_edit_invalid_input_does_not_write(contact_client: TestClient, patch: dict) -> None:
+    client = contact_client
+    token = str(bootstrap_company(client)["access_token"])
+    created = _mk_client(client, token)
+    assert created.status_code == 200, created.text
+    cid = created.json()["id"]
+    before = client.get(f"/api/clients/{cid}", headers=auth_headers(token))
+    assert before.status_code == 200, before.text
+    rejected = client.patch(f"/api/clients/{cid}", headers=auth_headers(token), json=patch)
+    assert rejected.status_code == 422, rejected.text
+    after = client.get(f"/api/clients/{cid}", headers=auth_headers(token))
+    assert after.status_code == 200, after.text
+    assert after.json() == before.json()
+
+
+def test_contact_edit_current_role_and_tenant_fences(contact_client: TestClient) -> None:
+    client = contact_client
+    from caseops_api.db.models import CompanyMembership, MembershipRole
+
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    created = _mk_client(client, token)
+    assert created.status_code == 200, created.text
+    cid = created.json()["id"]
+    before = client.get(f"/api/clients/{cid}", headers=auth_headers(token))
+    assert before.status_code == 200, before.text
+    with get_session_factory()() as session:
+        membership = session.get(CompanyMembership, bootstrap["membership"]["id"])
+        assert membership is not None
+        membership.role = MembershipRole.VIEWER
+        session.commit()
+    denied = client.patch(
+        f"/api/clients/{cid}", headers=auth_headers(token), json={"city": "Denied city"},
+    )
+    assert denied.status_code == 403, denied.text
+    other_token = _bootstrap_with_role(client, "contact-foreign", "owner")
+    foreign = client.patch(
+        f"/api/clients/{cid}", headers=auth_headers(other_token), json={"city": "Foreign city"},
+    )
+    assert foreign.status_code == 404, foreign.text
+    client.cookies.clear()
+    client.cookies.set("caseops_csrf", "contact-edit-csrf")
+    anonymous = client.patch(
+        f"/api/clients/{cid}", json={"city": "Anonymous city"},
+        headers={"X-CSRF-Token": "contact-edit-csrf"},
+    )
+    assert anonymous.status_code == 401, anonymous.text
+    after = client.get(f"/api/clients/{cid}", headers=auth_headers(token))
+    assert after.status_code == 200, after.text
+    assert after.json() == before.json()
+
+
+def test_contact_edit_does_not_restore_an_archived_client(contact_client: TestClient) -> None:
+    client = contact_client
+    token = str(bootstrap_company(client)["access_token"])
+    created = _mk_client(client, token)
+    assert created.status_code == 200, created.text
+    cid = created.json()["id"]
+    archived = client.delete(f"/api/clients/{cid}", headers=auth_headers(token))
+    assert archived.status_code == 200, archived.text
+    # Retained API semantics allow metadata edits; a contact patch must not restore it.
+    patched = client.patch(
+        f"/api/clients/{cid}", headers=auth_headers(token), json={"city": "Pune"},
+    )
+    assert patched.status_code == 200, patched.text
+    reloaded = client.get(f"/api/clients/{cid}", headers=auth_headers(token))
+    assert reloaded.status_code == 200, reloaded.text
+    assert reloaded.json()["city"] == "Pune"
+    assert reloaded.json()["is_active"] is False
 
 
 def test_client_generic_update_rejects_review_decision_status(
@@ -760,8 +989,6 @@ def _seed_verification_attachment(matter_id: str) -> str:
 def test_matter_client_verification_workflow_links_attachment_and_audits_redacted(
     client: TestClient,
 ) -> None:
-    import json
-
     from sqlalchemy import select
 
     from caseops_api.db.models import AuditEvent
@@ -839,8 +1066,6 @@ def test_matter_client_verification_workflow_links_attachment_and_audits_redacte
 def test_client_verification_reject_records_reviewer_and_redacts_reason_audit(
     client: TestClient,
 ) -> None:
-    import json
-
     from sqlalchemy import select
 
     from caseops_api.db.models import AuditEvent
