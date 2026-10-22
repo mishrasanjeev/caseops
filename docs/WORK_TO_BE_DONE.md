@@ -1,5 +1,23 @@
 # CaseOps  - Work To Be Done
 
+## October 22 Ram Batch 3
+
+J07/M06 and J12/M11 are partially implemented for the two populated rows in
+`CaseOps_Bugs (3).xlsx`. The client contact API already existed; its missing
+prefilled profile editor is now implemented locally with dirty-only contact
+patches and explicit null clearing. The complete client module passed47 cases,
+including9 new PostgreSQL cases, with stable API source and no skips. Local
+components passed37 cases across the client and draft pages. These are not
+Docker/browser or production acceptance.
+
+Keep approval unavailable for the current zero-citation draft revision, expose
+the existing bounded regeneration focus and Matter context, and verify that
+only a newly reviewed positive current revision can be approved. Catalogue
+matching is not proposition verification. The historical browser test claimed
+more transitions than it executed; its name is corrected and a complete new
+local deterministic journey is required. Standard mobile discovery must select
+the new cases. See `bugfix-ram-batch3-2026-10-22.md`; deployment remains pending.
+
 ## October 22 Administrator Re-Invitation
 
 PRA-13 account-name presentation is locally implemented alongside IDs in financial

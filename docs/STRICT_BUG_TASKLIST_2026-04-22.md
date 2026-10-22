@@ -1,5 +1,15 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 22 Ram Batch 3
+
+Two populated workbook issues, not an inferred summary total. B3-001 preserves
+the correct zero-citation approval block while proving a usable current-version
+recovery path. B3-002 restores actual authorized client contact/address editing
+after KYC without rewriting verification or relationships. The dated batch brief
+owns the full positive/negative/reload/responsive inventory. Both production
+verdicts are Inconclusive pending reproduction and exact-serving Playwright;
+neither the active administrator release nor an old mocked test closes them.
+
 ## October 22 Combined Release Gate Corrections
 
 PRA-10..13 and LEAD-01..05 remain release-pending. Leads081e Docker06 failed

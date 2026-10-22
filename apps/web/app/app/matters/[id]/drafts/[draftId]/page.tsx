@@ -88,7 +88,8 @@ export default function MatterDraftDetailPage() {
   };
 
   const generate = useMutation({
-    mutationFn: () => generateDraftVersion({ matterId, draftId }),
+    mutationFn: (focusNote: string | undefined) =>
+      generateDraftVersion({ matterId, draftId, focusNote }),
     onSuccess: makeSuccess("New version drafted"),
     onError: makeError("Could not generate a new version."),
   });
@@ -110,7 +111,7 @@ export default function MatterDraftDetailPage() {
       // the fail-closed approve gate.
       if (isApiErrorShape(err) && err.problemType === "verified_citations_required") {
         toast.error(
-          "Approve blocked — the current version has zero verified citations. Regenerate with grounded authorities first.",
+          "Approval requires a verified citation in the current revision. Review the matter context and regenerate before submitting the new revision.",
         );
         return;
       }
@@ -153,7 +154,7 @@ export default function MatterDraftDetailPage() {
         <DraftBody
           draft={query.data}
           matterId={matterId}
-          onGenerate={() => generate.mutate()}
+          onGenerate={(focusNote) => generate.mutate(focusNote)}
           onSubmit={() => submit.mutate()}
           onRequestChanges={() => requestChanges.mutate()}
           onApprove={() => approve.mutate()}
@@ -162,6 +163,7 @@ export default function MatterDraftDetailPage() {
           generating={generate.isPending}
           savingEdit={saveEdit.isPending}
           transitioning={
+            generate.isPending ||
             submit.isPending ||
             requestChanges.isPending ||
             approve.isPending ||
@@ -249,7 +251,7 @@ function DraftBody({
 }: {
   draft: Draft;
   matterId: string;
-  onGenerate: () => void;
+  onGenerate: (focusNote?: string) => void;
   onSubmit: () => void;
   onRequestChanges: () => void;
   onApprove: () => void;
@@ -263,22 +265,27 @@ function DraftBody({
     (v) => v.id === draft.current_version_id,
   );
   const canEditDraft = useCapability("drafts:edit");
+  const canGenerateDraft = useCapability("drafts:generate");
+  const canReviewDraft = useCapability("drafts:review");
+  const canFinalizeDraft = useCapability("drafts:finalize");
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(currentVersion?.body ?? "");
+  const [focusNote, setFocusNote] = useState("");
   useEffect(() => {
     setEditBody(currentVersion?.body ?? "");
     setEditing(false);
+    setFocusNote("");
   }, [currentVersion?.id, currentVersion?.body]);
 
   const status: DraftStatus = draft.status;
-  const isFinalized = status === "finalized";
-  const canRegenerate = !isFinalized;
-  const canEdit = canEditDraft && !!currentVersion && !isFinalized;
+  const isLocked = status === "finalized" || status === "filed" || status === "served";
+  const canRegenerate = canGenerateDraft && !isLocked;
+  const canEdit = canEditDraft && !!currentVersion && !isLocked;
   const canSubmit =
-    !isFinalized && (status === "draft" || status === "changes_requested");
-  const canRequestChanges = status === "in_review";
-  const canApprove = status === "in_review";
-  const canFinalize = status === "approved";
+    canReviewDraft && (status === "draft" || status === "changes_requested");
+  const canRequestChanges = canReviewDraft && status === "in_review";
+  const canApprove = canReviewDraft && status === "in_review";
+  const canFinalize = canFinalizeDraft && status === "approved";
   const canExport = !!currentVersion;
   const [courtProfileKey, setCourtProfileKey] = useState("");
   const profilesQuery = useQuery({
@@ -294,10 +301,10 @@ function DraftBody({
   const verifiedCount = currentVersion?.verified_citation_count ?? 0;
 
   return (
-    <div className="flex flex-col gap-5">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)]">
+    <div className="flex min-w-0 flex-col gap-5">
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="break-words text-2xl font-semibold text-[var(--color-ink)]">
             {draft.title}
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--color-mute)]">
@@ -317,11 +324,11 @@ function DraftBody({
             ) : null}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
           <Button
             variant="outline"
-            onClick={onGenerate}
-            disabled={!canRegenerate || generating || transitioning}
+            onClick={() => onGenerate(focusNote.trim() || undefined)}
+            disabled={!canRegenerate || generating || transitioning || editing}
             data-testid="draft-generate"
           >
             {generating ? (
@@ -338,7 +345,7 @@ function DraftBody({
           {canSubmit ? (
             <Button
               onClick={onSubmit}
-              disabled={transitioning || !currentVersion}
+              disabled={transitioning || !currentVersion || editing}
               data-testid="draft-submit"
             >
               <Send className="h-4 w-4" aria-hidden /> Submit for review
@@ -348,7 +355,7 @@ function DraftBody({
             <Button
               variant="outline"
               onClick={onRequestChanges}
-              disabled={transitioning}
+              disabled={transitioning || editing}
               data-testid="draft-request-changes"
             >
               <Undo2 className="h-4 w-4" aria-hidden /> Request changes
@@ -357,7 +364,8 @@ function DraftBody({
           {canApprove ? (
             <Button
               onClick={onApprove}
-              disabled={transitioning}
+              disabled={transitioning || !currentVersion || verifiedCount <= 0 || generating || editing}
+              aria-describedby={verifiedCount <= 0 ? "draft-citation-status" : undefined}
               data-testid="draft-approve"
             >
               <CheckCircle2 className="h-4 w-4" aria-hidden /> Approve
@@ -366,7 +374,7 @@ function DraftBody({
           {canFinalize ? (
             <Button
               onClick={onFinalize}
-              disabled={transitioning}
+              disabled={transitioning || editing}
               data-testid="draft-finalize"
             >
               <Lock className="h-4 w-4" aria-hidden /> Finalize
@@ -544,10 +552,20 @@ function DraftBody({
               <CardDescription>
                 {verifiedCount > 0
                   ? `${verifiedCount} verified citation${verifiedCount === 1 ? "" : "s"}.`
-                  : "No verified citations yet — approve will be blocked."}
+                  : "No verified citations in the current revision."}
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex min-w-0 flex-col gap-3">
+              {currentVersion && verifiedCount <= 0 ? (
+                <p
+                  id="draft-citation-status"
+                  role="status"
+                  data-testid="draft-citation-status"
+                  className="text-sm text-[var(--color-ink)]"
+                >
+                  Revision {currentVersion.revision} has no verified citations. Approval is unavailable.
+                </p>
+              ) : null}
               {currentVersion && currentVersion.citations.length > 0 ? (
                 <ul className="flex flex-col gap-1.5 text-sm tabular">
                   {currentVersion.citations.map((c) => (
@@ -561,10 +579,34 @@ function DraftBody({
                 </ul>
               ) : (
                 <p className="text-sm text-[var(--color-mute)]">
-                  The model did not cite any authority this version. Regenerate
-                  after enriching the matter context.
+                  No catalogue-verified authorities are recorded for this revision.
                 </p>
               )}
+              <p className="text-xs text-[var(--color-mute)]">
+                Citation verification confirms catalogue records, not the correctness of legal propositions.
+              </p>
+              {canRegenerate ? (
+                <div className="flex min-w-0 flex-col gap-2">
+                  <Link
+                    href={`/app/matters/${matterId}`}
+                    className="w-fit text-sm font-medium underline underline-offset-4"
+                  >
+                    Matter context
+                  </Link>
+                  <label htmlFor="draft-regeneration-focus" className="text-sm font-medium">
+                    Regeneration focus
+                  </label>
+                  <textarea
+                    id="draft-regeneration-focus"
+                    value={focusNote}
+                    onChange={(event) => setFocusNote(event.target.value)}
+                    maxLength={4000}
+                    disabled={generating || transitioning}
+                    rows={3}
+                    className="w-full min-w-0 resize-y rounded-md border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-ink)]"
+                  />
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 

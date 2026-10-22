@@ -1,5 +1,16 @@
 # CaseOps agent instructions
 
+- A browser test's name is not workflow evidence. A drafting test that stops
+  after requesting changes does not prove regeneration, approval or finalization.
+  Assert every named transition, the exact current revision, retained earlier
+  versions and post-reload state. Reconcile mobile project selection separately.
+- A contact-update API does not make an existing verified client's profile
+  editable. Prove the actual prefilled editor, dirty-only null-clearing payload,
+  persisted reload and unchanged KYC evidence, identity and Matter associations.
+  A citation catalogue match likewise does not prove legal proposition accuracy;
+  keep zero-citation approval fail-closed and distinguish source recovery from
+  a guarantee that regeneration will produce a legally valid draft.
+
 - An ORM migration must update both the reviewed data-class map and its
   compiled governance projection before release tests. Render and validate
   with the canonical generator, then replay the complete affected PostgreSQL

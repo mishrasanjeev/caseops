@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 22 Named Workflow Coverage Gap
+
+Partially implemented: the old drafting browser title claimed regeneration,
+approval and finalization but stopped after requesting changes. This was a
+verification gap, not proof those later boundaries worked. Preserve that limit,
+correct the title and add an actual dated zero-citation -> recovery -> current
+revision review -> edit invalidation -> re-review -> finalization journey with
+reloads. Independently reconcile the mobile project's allowlist; the generic
+dated-file pattern alone does not select its mobile cases. No legal-safety,
+provider-cost or private-source fence may be weakened to manufacture a pass.
+Batch3 Docker, exact-source CI and deployed browser acceptance remain pending.
+
 ## October 22 Real Workflow Test Dependency
 
 CI39759376390 / candidate24be failed only the notification runtime workflow's

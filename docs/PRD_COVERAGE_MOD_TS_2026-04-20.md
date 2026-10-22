@@ -1,5 +1,16 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 22 Batch 3 Coverage
+
+J07/M06/US-017/018/021/FT-027..030 and J12/M11/US-034/035/037/FT-044..046/049:
+B3-DRAFT-01..06 and B3-CLIENT-01..06 cover the current citation approval guard,
+real regeneration/current-version review, locked/unauthorized paths and existing
+verified-client contact editing. Local components37P and the full client native
+module47P (including9 real PostgreSQL cases) are retained; no browser or deployed
+closure follows from them. The old drafting browser title overstated its actual
+request-changes endpoint. Correct the title and prove the additional transitions
+in the new dated local journey, with explicit desktop/mobile discovery.
+
 ## October 22 Administrator Recovery Coverage
 
 PRA-13 adds account names alongside IDs in Usage, Revenue and account-specific
