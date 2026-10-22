@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import sys
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
@@ -22,6 +23,24 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 
 
+def validate_database(value: str) -> None:
+    database = make_url(value)
+    if database.query:
+        raise ValueError("Fixture connection overrides are forbidden")
+    if database.drivername == "sqlite+pysqlite":
+        expected = Path(__file__).resolve().parents[3] / "caseops-e2e.db"
+        if not database.database or Path(database.database).resolve() != expected:
+            raise ValueError("Only this checkout's isolated e2e SQLite file is allowed")
+    elif database.drivername == "postgresql+psycopg":
+        if (database.host not in {"localhost", "127.0.0.1", "::1"}
+                or database.port is None or not 20000 <= database.port <= 49999
+                or database.database != "caseops" or database.username != "caseops"
+                or database.password != "caseops"):
+            raise ValueError("Only the isolated local Docker acceptance database is allowed")
+    else:
+        raise ValueError("Unsupported local fixture database")
+
+
 def main() -> None:
     payload = json.load(sys.stdin)
     if set(payload) != {"web", "api", "company_id", "membership_id", "matter_id", "draft_id", "run"}:
@@ -32,13 +51,9 @@ def main() -> None:
             raise ValueError("Draft fixture accepts loopback HTTP only")
     for name in ("company_id", "membership_id", "matter_id", "draft_id", "run"):
         UUID(payload[name])
-    database = make_url(os.environ["CASEOPS_DATABASE_URL"])
     if os.environ.get("CASEOPS_ENV") != "e2e" or os.environ.get("CASEOPS_LLM_PROVIDER") != "mock":
         raise ValueError("Synthetic drafting requires the isolated e2e mock runtime")
-    if database.get_backend_name() not in {"sqlite", "postgresql"}:
-        raise ValueError("Unsupported local fixture database")
-    if database.get_backend_name() == "postgresql" and database.host not in {"localhost", "127.0.0.1", "::1"}:
-        raise ValueError("Remote PostgreSQL fixture writes are forbidden")
+    validate_database(os.environ["CASEOPS_DATABASE_URL"])
     citation = f"SYNTHETIC-B3-NOT-LEGAL-{payload['run']}"
     with get_session_factory()() as session:
         company = session.get(Company, payload["company_id"])

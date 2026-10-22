@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { expect, request, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
+import { expect, request, test, type APIRequestContext, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { localTransportHeaders } from "./support/cost-controls";
 import { assertPublicReleaseIdentity } from "./support/public-release-identity";
@@ -19,12 +19,16 @@ async function json<T>(api: APIRequestContext, url: string, method = "GET", data
 }
 
 async function visibleControl(page: Page, id: string): Promise<void> {
-  const locator = page.getByTestId(id);
+  await visibleLocator(page, page.getByTestId(id));
+}
+
+async function visibleLocator(page: Page, locator: Locator): Promise<void> {
   await locator.scrollIntoViewIfNeeded();
   await expect(locator).toBeVisible();
   const box = await locator.boundingBox(), viewport = page.viewportSize();
   expect(Boolean(box && viewport && box.width >= 40 && box.height >= 24 && box.x >= 0
-    && box.x + box.width <= viewport.width + 1 && box.y >= 0 && box.y + box.height <= viewport.height + 1), id).toBe(true);
+    && box.x + box.width <= viewport.width + 1 && box.y >= 0 && box.y + box.height <= viewport.height + 1),
+  "The complete control must fit its viewport").toBe(true);
 }
 
 async function journey(page: Page, baseURL: string | undefined, info: TestInfo, mobile: boolean): Promise<void> {
@@ -107,6 +111,8 @@ async function journey(page: Page, baseURL: string | undefined, info: TestInfo, 
     await expect.poll(async () => (await read()).status).toBe("changes_requested");
     const focus = `Review the synthetic QA record only.\n- CITATION: ${seeded.citation}`;
     await expect(page.getByRole("link", { name: "Matter context", exact: true })).toHaveAttribute("href", `/app/matters/${matter.id}`);
+    await visibleLocator(page, page.getByRole("link", { name: "Matter context", exact: true }));
+    await visibleLocator(page, page.getByLabel("Regeneration focus", { exact: true }));
     await page.getByLabel("Regeneration focus", { exact: true }).fill(focus);
     await visibleControl(page, "draft-generate");
     await page.getByTestId("draft-generate").click();
@@ -118,14 +124,18 @@ async function journey(page: Page, baseURL: string | undefined, info: TestInfo, 
     expect(v2.verified_citation_count).toBeGreaterThan(0);
     expect(v2.citations).toContain(seeded.citation);
     expect(second.versions.find(version => version.id === seeded.version_id)).toEqual(initial.versions[0]);
+    await visibleControl(page, "draft-submit");
     await page.getByTestId("draft-submit").click();
     await expect(page.getByTestId("draft-approve")).toBeEnabled();
+    await visibleControl(page, "draft-approve");
     await page.getByTestId("draft-approve").click();
     await expect(page.getByTestId("draft-finalize")).toBeEnabled();
     const approved = await read();
     expect(approved.reviews.some(review => review.action === "approve" && review.version_id === v2.id)).toBe(true);
+    await visibleControl(page, "draft-edit-toggle");
     await page.getByTestId("draft-edit-toggle").click();
     await page.getByTestId("draft-body-editor").fill("Synthetic QA replacement without any authority. Not legal advice.");
+    await visibleControl(page, "draft-save-edit");
     await page.getByTestId("draft-save-edit").click();
     await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 3");
     await page.getByTestId("draft-submit").click();
@@ -138,7 +148,9 @@ async function journey(page: Page, baseURL: string | undefined, info: TestInfo, 
     await page.getByTestId("draft-submit").click();
     await expect(page.getByTestId("draft-approve")).toBeEnabled();
     await page.getByTestId("draft-approve").click();
+    await visibleControl(page, "draft-finalize");
     await page.getByTestId("draft-finalize").click();
+    await expect.poll(async () => (await read()).status).toBe("finalized");
     await expect(page.getByTestId("draft-generate")).toBeDisabled();
     const finalized = await read();
     expect(finalized.status).toBe("finalized");
@@ -148,6 +160,8 @@ async function journey(page: Page, baseURL: string | undefined, info: TestInfo, 
     await json(http, `${draftUrl}/generate`, "POST", { focus_note: focus }, 409);
     expect(await read()).toEqual(finalized);
     await visibleControl(page, "draft-download-docx");
+    await visibleControl(page, "draft-download-pdf");
+    await visibleControl(page, "draft-download-filing-bundle");
     const download = page.waitForEvent("download");
     await page.getByTestId("draft-download-docx").click();
     expect((await download).suggestedFilename()).toMatch(/\.docx$/);
