@@ -1,5 +1,24 @@
 # Strict Enterprise Gap Tasklist
 
+## October 23 Security Freshness At Release Boundaries
+
+NO-GO for production release366686f6. Candidate88's full Docker3376P and
+630P/10browser skips, frontend1875P and earlier hosted CI remain valid historical
+proof, but main Security39841340297 now detects a critical Next dependency.
+The deploy script previously refreshed canonical main without requiring that
+revision's current required security outcomes. Parent stopped only the owned
+build processes and cancelled both Cloud Builds before migrations/routing;
+production remains92f162b4. No physical-instance or all-history scan claim.
+
+Replace the vulnerable graph with stable Next16.4.2 and Vitest/coverage4.1.12 and prove
+their complete runtime/compiler/tool closure, not merely the manifest string.
+Four actual RED assertions become GREEN and local strict audit reports zero
+findings. Required exact-main Security admission must fail closed at pre-cloud
+and post-build boundaries, preserving all existing current-main/QA gates.
+Patch, full affected contracts, fresh canonical Docker/CI, protected merge and
+deployed replay are still required. This gap is not closed by cancelling a
+release or by accepting a prior green scan. See the dated Batch3 task brief.
+
 ## October 22 Named Workflow Coverage Gap
 
 Fresh e01 CI exposed another test-only clock defect: the names fixture minted

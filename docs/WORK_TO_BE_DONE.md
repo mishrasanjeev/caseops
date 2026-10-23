@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 23 Batch 3 Replacement Release
+
+The complete88 Docker gate passed3376 native and630 browser cases,with10
+explicit browser skips; all seven changed journeys passed. PR554/552/553 are
+merged into366686f6 with the identical accepted tree. A fresh main Security
+critical Next advisory stopped deployment before migrations/routing; API/web
+remain92f162b4. Next16.4.2/Vitest4.1.12 pins,four RED-to-GREEN lock checks and
+zero-finding strict local audit are implemented components. Exact-main Security
+admission,fresh full candidate gates and live replay remain required. Both bug
+production verdicts remain Inconclusive. See the dated Batch3 brief for evidence.
+
 ## October 22 Ram Batch 3
 
 J07/M06 and J12/M11 are partially implemented for the two populated rows in

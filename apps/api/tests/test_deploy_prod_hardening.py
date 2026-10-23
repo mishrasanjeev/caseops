@@ -1957,6 +1957,39 @@ def _run_migration_readback(payload: dict[str, object]) -> subprocess.CompletedP
     )
 
 
+def _security_gate_payloads() -> dict:
+    sha = "abcdef1234567890abcdef1234567890abcdef12"
+    names = (
+        "npm audit (high+critical)", "pip-audit (high+critical)",
+        "Secret scan (gitleaks)", "License allow-list",
+        "OpenAPI -> generated client clean diff (QG-API-012, P1-010)",
+        "Cloud Run manifests use secret refs (QG-OPS-006)",
+        "JS workspace production lock policy", "Native Cloud Build web upload context",
+    )
+    run = {
+        "id": 101, "workflow_id": 500, "run_number": 20, "run_attempt": 1,
+        "name": "Security", "path": ".github/workflows/security.yml",
+        "head_sha": sha, "head_branch": "main", "event": "push",
+        "status": "completed", "conclusion": "success",
+        "created_at": "2026-10-01T00:00:00Z", "updated_at": "2026-10-01T00:02:00Z",
+        "repository": {"full_name": "mishrasanjeev/caseops"},
+        "head_repository": {"full_name": "mishrasanjeev/caseops"},
+    }
+    jobs = [{
+        "id": 1000 + index, "run_id": 101, "run_attempt": 1,
+        "workflow_name": "Security", "head_branch": "main", "head_sha": sha,
+        "name": name, "status": "completed", "conclusion": "success",
+        "started_at": "2026-10-01T00:00:00Z", "completed_at": "2026-10-01T00:02:00Z",
+        "steps": [{"name": "Verify", "status": "completed", "conclusion": "success"}],
+    } for index, name in enumerate(names)]
+    return {
+        "workflow": {"id": 500, "name": "Security",
+                     "path": ".github/workflows/security.yml", "state": "active"},
+        "runs": {"total_count": 1, "workflow_runs": [run]},
+        "jobs": {"total_count": len(jobs), "jobs": jobs},
+    }
+
+
 def _run_deploy_with_fakes(
     tmp_path: Path,
     *arguments: str,
@@ -1981,10 +2014,14 @@ def _run_deploy_with_fakes(
     rate_identity_mode: str = "ok",
     document_worker_mode: str = "ok",
     backup_mode: str = "ok",
+    security_mode: str = "ok",
+    security_post_build_mode: str = "ok",
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
     gcloud_log = tmp_path / "gcloud.log"
+    security_payloads = tmp_path / "security-payloads.json"
+    security_payloads.write_text(json.dumps(_security_gate_payloads()), encoding="utf-8")
 
     _write_fake_executable(
         fake_bin / "git",
@@ -2382,6 +2419,44 @@ exit 0
         fake_bin / "python",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "scripts/release_security_gate.py" ]]; then
+  printf '%s\\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+  exec "${FAKE_REAL_PYTHON}" - "$@" <<'PY'
+import copy
+import importlib.util
+import json
+import os
+import sys
+
+args = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("offline_release_security", args[0])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+with open(os.environ["FAKE_SECURITY_PAYLOADS"], encoding="utf-8") as stream:
+    payloads = json.load(stream)
+phase = args[args.index("--phase") + 1]
+key = "FAKE_SECURITY_POST_BUILD_MODE" if phase == "post-build" else "FAKE_SECURITY_MODE"
+mode = os.environ[key]
+if mode == "failure":
+    payloads["runs"]["workflow_runs"][0]["conclusion"] = "failure"
+elif mode == "job-failure":
+    payloads["jobs"]["jobs"][0]["conclusion"] = "failure"
+elif mode == "queued":
+    payloads["runs"]["workflow_runs"][0].update(status="queued", conclusion=None)
+
+def read(endpoint, deadline):
+    if "/attempts/" in endpoint:
+        return copy.deepcopy(payloads["jobs"])
+    if "/runs?" in endpoint:
+        return copy.deepcopy(payloads["runs"])
+    if endpoint.endswith("/actions/workflows/security.yml"):
+        return copy.deepcopy(payloads["workflow"])
+    raise AssertionError("Unexpected offline Security endpoint")
+
+module._gh_json = read
+raise SystemExit(module.main(args[1:]))
+PY
+fi
 if [[ "${1:-}" == "scripts/scheduler_inventory.py" || \
       "${1:-}" == "scripts/reconcile_monitoring_alerts.py" ]]; then
   printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
@@ -2523,6 +2598,9 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_GIT_STATUS": git_status,
             "FAKE_MAIN_DRIFT_AFTER_FETCHES": str(main_drift_after_fetches or 0),
             "FAKE_GH_MODE": gh_mode,
+            "FAKE_SECURITY_PAYLOADS": str(security_payloads),
+            "FAKE_SECURITY_MODE": security_mode,
+            "FAKE_SECURITY_POST_BUILD_MODE": security_post_build_mode,
             "FAKE_GH_ACTIVE_RUNS": active_prod_verify_runs,
             "FAKE_GH_RUNS_CLEARED": _bash_path(tmp_path / "gh-runs-cleared"),
             "FAKE_INDEX_HEALTH_MODE": index_health_mode,
@@ -3642,6 +3720,8 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
     ("case", "mutation_path", "mutation", "reject"),
     [
         ("clean", None, None, False),
+        ("security-helper", "scripts/release_security_gate.py", "modify", True),
+        ("security-policy", ".github/workflows/security.yml", "modify", True),
         ("unrelated-doc", "docs/unrelated-note.md", "modify", False),
         ("registry", "license-policy/reviewed-packages.json", "modify", True),
         ("upstream", "license-policy/upstream/fake-package/LICENSE.txt", "modify", True),
@@ -3696,6 +3776,7 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
     initial_paths = {
         "apps/api/main.py", "apps/web/package.json", "package.json", "package-lock.json",
         ".dockerignore", ".gcloudignore", "docs/unrelated-note.md",
+        "scripts/release_security_gate.py", ".github/workflows/security.yml",
         *(row[1] for row in [
             ("registry", "license-policy/reviewed-packages.json"),
             ("upstream", "license-policy/upstream/fake-package/LICENSE.txt"),
@@ -3754,3 +3835,45 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
         assert result.returncode == 0, result.stdout + result.stderr
         assert "DONE abcdef1" in result.stdout
         assert calls.is_file()
+
+
+@pytest.mark.parametrize("mode", ["failure", "job-failure", "queued"])
+def test_security_failure_stops_before_any_cloud(tmp_path: Path, mode: str) -> None:
+    result = _run_deploy_with_fakes(tmp_path, security_mode=mode)
+    assert result.returncode != 0
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert "release_security_gate.py" in calls
+    assert "document_worker_release.py preflight" not in calls
+    assert "builds submit" not in calls
+    assert "gh run cancel" not in calls
+
+
+@pytest.mark.parametrize("mode", ["failure", "job-failure", "queued"])
+def test_new_security_failure_after_build_stops_mutations(tmp_path: Path, mode: str) -> None:
+    result = _run_deploy_with_fakes(tmp_path, security_post_build_mode=mode)
+    assert result.returncode != 0
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert calls.count("builds submit") == 2
+    assert "--phase post-build" in calls
+    assert "document_worker_release.py prepare" not in calls
+    assert "scheduler_inventory.py quiesce" not in calls
+    assert "pre_migration_backup.py" not in calls
+    assert "gcloud run deploy" not in calls
+    assert "gh workflow run" not in calls
+
+
+def test_exact_main_security_guards_preserve_main_refresh_order(tmp_path: Path) -> None:
+    result = _run_deploy_with_fakes(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert calls.count("scripts/release_security_gate.py") == 2
+    assert calls.index("--phase pre-cloud") < calls.index("document_worker_release.py preflight")
+    assert calls.index("builds submit") < calls.index("--phase post-build")
+    assert calls.index("--phase post-build") < calls.index("document_worker_release.py prepare")
+    source = _read_repo_text("scripts/deploy-prod.sh")
+    assert source.index('assert_current_main "release preflight"') < source.index(
+        '--phase pre-cloud'
+    )
+    assert source.index('assert_current_main "post-build pre-migration gate"') < source.index(
+        '--phase post-build'
+    )

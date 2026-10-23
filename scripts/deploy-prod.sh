@@ -232,7 +232,8 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   .dockerignore .gcloudignore "license-policy" \
   "docs/security/js-license-compliance-review-2026-10-12.md" \
   "scripts/deploy-prod.sh" "scripts/pre_migration_backup.py" "scripts/scheduler_inventory.py" \
-  "scripts/qa_manual_ip_grant_release.py" \
+  "scripts/qa_manual_ip_grant_release.py" "scripts/release_security_gate.py" \
+  ".github/workflows/security.yml" \
   "tests/fixtures/statutes/structured-schedule-api.json" \
   "tests/e2e/support/prod-failure-diagnostics.ts" \
   "tests/e2e/support/bounded-network-evidence.ts" \
@@ -244,6 +245,8 @@ if [[ -n "${DIRTY_BUILD_CONTEXT}" ]]; then
   printf '%s\n' "${DIRTY_BUILD_CONTEXT}"
   exit 1
 fi
+
+python scripts/release_security_gate.py --sha "${HEAD_SHA}" --phase pre-cloud
 
 # A scheduled prod-verify run mutates the shared QA tenants while it exercises
 # the live services. If it survives into a deploy, it can keep running tests
@@ -345,6 +348,7 @@ echo "  api + web images built."
 # Cloud Build is the longest release phase. A newer main commit that landed
 # while images were building must stop before migration or job mutation.
 assert_current_main "post-build pre-migration gate"
+python scripts/release_security_gate.py --sha "${HEAD_SHA}" --phase post-build
 
 # An image repin does not stop executions already using the previous protocol.
 # Keep this paid scheduler paused on failure; never launch a paid release canary.
