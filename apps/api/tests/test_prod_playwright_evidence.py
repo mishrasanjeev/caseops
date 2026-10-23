@@ -1258,7 +1258,7 @@ def test_new_native_capture_cli_parses_invocation_and_original_options(capture, 
 def _tester_canonical_rows():
     rows = []
     partitions = {
-        "tester": {"ordinary-prod.spec.ts": 98},
+        "tester": {"ordinary-prod.spec.ts": 97},
         "tester-catalog": {evidence.TESTER_CATALOG_FILE: 18},
         "tester-index": evidence.INDEX_FILES,
         "test-legal-write-oct13": evidence.OCT13_FILES,
@@ -1271,9 +1271,14 @@ def _tester_canonical_rows():
                 rows.append({
                     "id": f"{native_id}:{project}:0", "native_spec_id": native_id,
                     "file": file, "line": index + 1, "column": 1, "tags": [],
-                    "title_path": [file, f"case {index} with literal::parameter"],
+                    "title_path": [file, (
+                        "NOTES22 newest three of four saved notes persist after reload at 1280px "
+                        "and 393px" if file == "ram-2026-10-22-prod.spec.ts"
+                        else f"case {index} with literal::parameter"
+                    )],
                     "project_id": project, "project_name": project, "retries": 0,
                     "repeat_each_index": 0, "timeout": 120000, "status": "expected",
+                    "expected_status": "passed",
                     "results": [{"status": "passed", "retry": 0}],
                 })
     return rows
@@ -1281,8 +1286,8 @@ def _tester_canonical_rows():
 
 def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 98, "tester-catalog": 18,
-        "tester-index": 6, "test-legal-write-oct13": 50,
+        "tester": 97, "tester-catalog": 18,
+        "tester-index": 6, "test-legal-write-oct13": 51,
     }
     assert evidence.OCT13_FILES == {
         "ram-2026-10-13-hearings.spec.ts": 2,
@@ -1292,16 +1297,101 @@ def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
         "ram-2026-10-17-calendar-readiness.spec.ts": 2,
         "ram-2026-10-17-ip-reminders.spec.ts": 4,
         "ram-2026-10-17-ip-tracker.spec.ts": 2,
+        "ram-2026-10-22-prod.spec.ts": 1,
     }
     assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 172
 
 
 def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 98, "tester-catalog": 18,
-        "tester-index": 6, "test-legal-write-oct13": 50,
+        "tester": 97, "tester-catalog": 18,
+        "tester-index": 6, "test-legal-write-oct13": 51,
     }
     assert evidence.TESTER_PARTITIONS["tester-catalog"] == "tester-prod-chromium"
+
+
+@pytest.mark.parametrize("execution", [False, True])
+@pytest.mark.parametrize("damage", [
+    None, "missing", "duplicate", "wrong_title", "wrong_project", "row_retries",
+    "repeat", "expected_skip", "expected_failure", "wrong_config", "wrong_binding",
+    "parallel_workers", "missing_retry_flag", "boolean_workers",
+])
+def test_notes22_requires_the_exact_positive_case_in_the_authorized_write_role(execution, damage):
+    invocation = "test-legal-write-oct13"
+    project = "test-legal-write-prod-chromium"
+    binding = {
+        "invocation": invocation, "config": "playwright.prod-ram.config.ts", "project": project,
+        "arguments": ["--config=playwright.prod-ram.config.ts", f"--project={project}",
+                      "--workers=1", "--retries=0"],
+    }
+    document = {
+        "configuration": {"workers": 1}, "report_status": "passed", "global_error_count": 0,
+        "tests": copy.deepcopy(evidence._tester_selected_rows(
+            {"tests": _tester_canonical_rows()}, invocation,
+        )),
+    }
+    row = next(item for item in document["tests"] if item["file"] == "ram-2026-10-22-prod.spec.ts")
+    if damage == "missing":
+        document["tests"].remove(row)
+    elif damage == "duplicate":
+        document["tests"].append(copy.deepcopy(row))
+    elif damage == "wrong_title":
+        row["title_path"][-1] += " substituted"
+    elif damage == "wrong_project":
+        row["project_id"] = row["project_name"] = "tester-prod-chromium"
+    elif damage == "row_retries":
+        row["retries"] = 1
+    elif damage == "repeat":
+        row["repeat_each_index"] = 1
+    elif damage in {"expected_skip", "expected_failure"}:
+        row["expected_status"] = "skipped" if damage == "expected_skip" else "failed"
+    elif damage == "wrong_config":
+        binding["config"] = "playwright.offline.config.ts"
+    elif damage == "wrong_binding":
+        binding["project"] = "tester-prod-chromium"
+    elif damage == "parallel_workers":
+        document["configuration"]["workers"] = 2
+    elif damage == "boolean_workers":
+        document["configuration"]["workers"] = True
+    elif damage == "missing_retry_flag":
+        binding["arguments"].remove("--retries=0")
+    if damage:
+        with pytest.raises(evidence.EvidenceError, match="notes22"):
+            evidence._check_notes22_evidence(binding, document, execution=execution)
+    else:
+        evidence._check_notes22_evidence(binding, document, execution=execution)
+
+
+@pytest.mark.parametrize("damage", [
+    "skipped", "failed", "retry", "missing_result", "duplicate_result", "global_error",
+    "interrupted_report",
+])
+def test_notes22_runtime_evidence_cannot_certify_a_skip_or_an_incomplete_attempt(damage):
+    project = "test-legal-write-prod-chromium"
+    binding = {
+        "invocation": "test-legal-write-oct13", "config": "playwright.prod-ram.config.ts",
+        "project": project, "arguments": ["--config=playwright.prod-ram.config.ts",
+                                           f"--project={project}", "--workers=1", "--retries=0"],
+    }
+    row = copy.deepcopy(next(item for item in _tester_canonical_rows()
+                             if item["file"] == "ram-2026-10-22-prod.spec.ts"))
+    document = {"configuration": {"workers": 1}, "tests": [row],
+                "report_status": "passed", "global_error_count": 0}
+    if damage in {"skipped", "failed"}:
+        row["status"] = "skipped" if damage == "skipped" else "unexpected"
+        row["results"][0]["status"] = damage
+    elif damage == "retry":
+        row["results"][0]["retry"] = 1
+    elif damage == "missing_result":
+        row["results"] = []
+    elif damage == "duplicate_result":
+        row["results"].append(copy.deepcopy(row["results"][0]))
+    elif damage == "global_error":
+        document["global_error_count"] = 1
+    else:
+        document["report_status"] = "interrupted"
+    with pytest.raises(evidence.EvidenceError, match="mandatory_notes22_case_not_passed"):
+        evidence._check_notes22_evidence(binding, document, execution=True)
 
 
 def test_tester_partition_selection_preserves_complete_ordered_literal_identities():
@@ -1389,7 +1479,7 @@ def test_oct15_ip_file_cannot_disappear_behind_unchanged_partition_total(file):
     replacement["title_path"][-1] += " substitute"
     rows.append(replacement)
     project = evidence.TESTER_PARTITIONS["test-legal-write-oct13"]
-    assert sum(row["project_name"] == project for row in rows) == 50
+    assert sum(row["project_name"] == project for row in rows) == 51
     with pytest.raises(
         evidence.EvidenceError, match="mandatory_tester_partition_inventory_mismatch"
     ):

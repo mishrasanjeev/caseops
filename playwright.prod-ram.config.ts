@@ -28,6 +28,7 @@ const RETAINED_INDEX_PROD_SPECS = /ram-2026-10-(?:10|12)-prod\.spec\.ts$/;
 const PLATFORM_REPORT_ADMIN_PROD_SPECS = /platform-(?:report-admin|leads)-\d{4}-\d{2}-\d{2}\.prod\.spec\.ts$/;
 const BATCH3_CLIENT_SPEC = /ram-2026-10-22-bugs\.spec\.ts$/;
 const BATCH3_DRAFT_READONLY_SPEC = /ram-2026-10-22-drafting\.prod\.spec\.ts$/;
+const NOTES22_PROD_SPEC = /ram-2026-10-22-prod\.spec\.ts$/;
 
 const candidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -111,7 +112,7 @@ export default defineConfig({
     {
       name: "tester-prod-chromium",
       testMatch: [TESTER_AUTH_PROD_SPECS, SAVED_MANIFEST_PROD_SPEC, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/, /ram-2026-09-21-bugfixes\.spec\.ts$/, /ram-2026-09-24-bugs\.spec\.ts$/, /ram-2026-09-26-bugs\.spec\.ts$/, /ram-2026-10-08-notices\.spec\.ts$/, /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/],
-      testIgnore: RETAINED_INDEX_PROD_SPECS,
+      testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC],
       use: {
         ...devices["Desktop Chrome"],
         storageState: { cookies: [], origins: [] },
@@ -179,7 +180,7 @@ export default defineConfig({
     },
     {
       name: "test-legal-write-prod-chromium",
-      testMatch: OCT13_PORTFOLIO_CALENDAR_SPECS,
+      testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC],
       use: {
         ...devices["Desktop Chrome"],
         storageState: { cookies: [], origins: [] },

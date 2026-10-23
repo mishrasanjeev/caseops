@@ -48,7 +48,7 @@ TESTER_PARTITIONS = {
 }
 # Reviewed exact inventory; any new or removed case requires an explicit update.
 TESTER_PARTITION_COUNTS = {
-    "tester": 98, "tester-catalog": 18, "tester-index": 6, "test-legal-write-oct13": 50,
+    "tester": 97, "tester-catalog": 18, "tester-index": 6, "test-legal-write-oct13": 51,
 }
 # These mandatory positive journeys are separate from the reviewed tester union.
 BATCH3_MANDATORY_CASES = {
@@ -81,6 +81,7 @@ OCT13_FILES = {
     "ram-2026-10-17-calendar-readiness.spec.ts": 2,
     "ram-2026-10-17-ip-reminders.spec.ts": 4,
     "ram-2026-10-17-ip-tracker.spec.ts": 2,
+    "ram-2026-10-22-prod.spec.ts": 1,
 }
 
 
@@ -206,6 +207,41 @@ def _check_batch3_evidence(binding, document, *, execution=False):
         or document["report_status"] != "passed" or document["global_error_count"] != 0
     ):
         raise EvidenceError("mandatory_batch3_case_not_passed")
+
+
+def _check_notes22_evidence(binding, document, *, execution=False):
+    if binding["invocation"] != "test-legal-write-oct13":
+        return
+    project = "test-legal-write-prod-chromium"
+    file = "ram-2026-10-22-prod.spec.ts"
+    title = "NOTES22 newest three of four saved notes persist after reload at 1280px and 393px"
+    if (
+        binding["config"] != "playwright.prod-ram.config.ts"
+        or binding["project"] != project
+        or not {"--config=playwright.prod-ram.config.ts", f"--project={project}",
+                "--workers=1", "--retries=0"}.issubset(binding["arguments"])
+        or type(document["configuration"]["workers"]) is not int
+        or document["configuration"]["workers"] != 1
+    ):
+        raise EvidenceError("notes22_role_binding_mismatch")
+    rows = [row for row in document["tests"] if row["file"] == file]
+    if len(rows) != 1:
+        raise EvidenceError("mandatory_notes22_case_inventory_mismatch")
+    row = rows[0]
+    if (
+        row["project_id"] != project or row["project_name"] != project
+        or row["title_path"] != [file, title]
+        or type(row["retries"]) is not int or row["retries"] != 0
+        or type(row["repeat_each_index"]) is not int or row["repeat_each_index"] != 0
+    ):
+        raise EvidenceError("mandatory_notes22_case_inventory_mismatch")
+    if row["expected_status"] != "passed" or execution and (
+        row["status"] != "expected" or len(row["results"]) != 1
+        or row["results"][0]["status"] != "passed"
+        or type(row["results"][0]["retry"]) is not int or row["results"][0]["retry"] != 0
+        or document["report_status"] != "passed" or document["global_error_count"] != 0
+    ):
+        raise EvidenceError("mandatory_notes22_case_not_passed")
 
 
 def _json(path: Path):
@@ -786,6 +822,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         discovery["binding"] = public_binding
         _write(destination / "discovery.json", discovery)
         _check_batch3_evidence(binding, discovery)
+        _check_notes22_evidence(binding, discovery)
         partition = _tester_partition(binding)
         if partition is not None:
             canonical_invocation = f"{invocation}-canonical"
@@ -854,6 +891,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         _write(destination / "results.json", result)
         _reconcile(discovery, result)
         _check_batch3_evidence(binding, result, execution=True)
+        _check_notes22_evidence(binding, result, execution=True)
         if (
             process.returncode < 0
             or result["report_status"] == "interrupted"
@@ -1018,6 +1056,8 @@ def validate(root: Path, required, expected: str) -> None:
         _reconcile(discovery, result)
         _check_batch3_evidence(binding, discovery)
         _check_batch3_evidence(binding, result, execution=True)
+        _check_notes22_evidence(binding, discovery)
+        _check_notes22_evidence(binding, result, execution=True)
         _junit(directory / "native-results.xml", None, {}, result)
         _junit(directory / "results.xml", None, {}, result)
         _progress(

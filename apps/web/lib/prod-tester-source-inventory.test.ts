@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,9 +11,9 @@ type Case = { id: string; file: string; titles: string[]; project: string; repea
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const projects = {
-  "tester-prod-chromium": 116,
+  "tester-prod-chromium": 115,
   "tester-index-prod-chromium": 6,
-  "test-legal-write-prod-chromium": 50,
+  "test-legal-write-prod-chromium": 51,
 };
 const batch3Projects = {
   "batch3-clients-prod-chromium": 1,
@@ -28,6 +29,7 @@ const datedFiles = {
   "ram-2026-10-17-calendar-readiness.spec.ts": 2,
   "ram-2026-10-17-ip-reminders.spec.ts": 4,
   "ram-2026-10-17-ip-tracker.spec.ts": 2,
+  "ram-2026-10-22-prod.spec.ts": 1,
 };
 
 function flatten(suites: NativeSuite[], projectRetries: Record<string, number>, parents: string[] = []): Case[] {
@@ -86,15 +88,24 @@ describe("reviewed production tester source inventory", () => {
 
   beforeAll(() => { cases = collectProjects(projects); });
 
-  it("collects the independent reviewed116+6+50 exact partition before production", () => {
+  it("collects the independent reviewed115+6+51 exact partition before production", () => {
     expect(counts(cases.map(row => row.project))).toEqual(projects);
     expect(cases).toHaveLength(172);
     expect(cases.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
     expect(cases.filter(row => row.file === "ram-2026-10-22-prod.spec.ts")
       .map(row => ({ project: row.project, title: row.titles.at(-1) }))).toEqual([{
-        project: "tester-prod-chromium",
+        project: "test-legal-write-prod-chromium",
         title: "NOTES22 newest three of four saved notes persist after reload at 1280px and 393px",
       }]);
+  });
+
+  it("routes the Notes mutation to the project matching its unchanged production tenant guard", () => {
+    const notes = cases.filter(row => row.file === "ram-2026-10-22-prod.spec.ts");
+    expect(notes).toHaveLength(1);
+    expect(notes[0].project).toBe("test-legal-write-prod-chromium");
+    const source = readFileSync(path.join(root, "tests/e2e/ram-2026-10-22-prod.spec.ts"), "utf8");
+    expect(source).toContain('if (!local && credentials.company_slug !== "test-legal")');
+    expect(source).toContain('throw new Error("Production notes mutations are test-legal only.")');
   });
 
   it("retains exact per-file index and dated inventories", () => {

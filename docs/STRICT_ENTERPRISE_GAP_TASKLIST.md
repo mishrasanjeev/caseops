@@ -1,5 +1,20 @@
 # Strict Enterprise Gap Tasklist
 
+## October 23 Production Credential-To-Inventory Contract
+
+**Partially implemented; release certification NO-GO.** PR555 is deployed as
+44d3d0be, but exact QA39881030365 exposed Notes22 assigned to generic tester
+credentials instead of its required legal tenant. The guard worked before
+that case's transport. Cancelled remaining roles are incomplete. Correct the
+project assignment without broadening access, preserve the172-case semantic
+union and bind the positive zero-retry Notes receipt to its exact legal role.
+Independent real collection, complete affected contracts, fresh canonical
+Docker and hosted gates plus a new exact-release production run are required;
+old723 component receipts cannot be relabelled as a new candidate's full gate.
+Keep the maintenance resume guard closed until actual successful QA and two
+later clean same-image reports. This is a verification configuration defect,
+not proof that Notes is corrupt or that a disposed Matter reopened.
+
 ## October 23 Security Freshness At Release Boundaries
 
 NO-GO for production release366686f6. Candidate88's full Docker3376P and
