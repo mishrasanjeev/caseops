@@ -93,8 +93,10 @@ def test_notes22_production_case_uses_its_required_tenant_project() -> None:
     source = (REPO_ROOT / "tests/e2e/ram-2026-10-22-prod.spec.ts").read_text()
     assert 'if (!local && credentials.company_slug !== "test-legal")' in source
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
-    step = next(item for item in workflow["jobs"]["prod-playwright-shards"]["steps"]
-                if item.get("name") == "Run release-owned test-legal portfolio and Calendar regressions")
+    step = next(
+        item for item in workflow["jobs"]["prod-playwright-shards"]["steps"]
+        if item.get("name") == "Run release-owned test-legal portfolio and Calendar regressions"
+    )
     assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
     assert step["env"]["CASEOPS_RAM_PROD_EMAIL"] == "ram@testfirm.com"
     assert "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD" in step["env"]["CASEOPS_RAM_PROD_PASSWORD"]
