@@ -26,6 +26,7 @@ docs/security/*
 !tests/e2e/support/cost-controls.ts
 !tests/e2e/support/public-release-identity.ts
 !tests/e2e/support/ip-import-acknowledgements.ts
+!tests/e2e/support/ip-portfolio-export-completion.ts
 
 apps/web/node_modules/
 apps/web/.next/

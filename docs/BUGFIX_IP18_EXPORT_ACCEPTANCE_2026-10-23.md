@@ -55,6 +55,23 @@ Focused component acceptance:40 cases passed across the helper and existing
 failure-diagnostic module. This is not current full frontend, Docker or deployed
 acceptance. Reconcile the complete intended inventory before any closure.
 
+The initial candidate6e9562b6 passed1897 frontend cases, but Docker08 correctly
+failed before native/browser execution: the new root helper was absent from the
+builder COPY/context closure. The two dynamic closure checks reproduced this
+failure. Release contracts04 independently failed377P/1F because the reporter's
+reviewed33-case count had not been advanced for the new34th regression. Neither
+is an application-runtime failure or completed current acceptance. Preserve both
+failures; admit the helper narrowly in builder-only inputs, both allowlists and
+the deploy dirty-context fence. Extend omission/dirty-input/native-upload checks
+and the exact reporter count before complete fresh replacement gates.
+
+The adjacent real-Git probe also reproduced one existing missing dirty-context
+fence for the already copied public-release-identity helper. One selected case
+failed before repair;16 siblings were deselected, not claimed as executed. Add
+that helper to the same pre-cloud guard and replay the complete module, along
+with explicit new-helper omission and native upload-context controls. No broad
+test-directory admission or security threshold change is permitted.
+
 ## Release Gates
 
 Keep production875 healthy but uncertified. Preserve all18 skipped paths as

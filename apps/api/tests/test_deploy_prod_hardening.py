@@ -1169,6 +1169,7 @@ def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str)
         "tests/e2e/support/cost-controls.ts",
         "tests/e2e/support/public-release-identity.ts",
         "tests/e2e/support/ip-import-acknowledgements.ts",
+        "tests/e2e/support/ip-portfolio-export-completion.ts",
     } <= required
     _assert_web_builder_inputs(
         _read_repo_text("apps/web/Dockerfile"), _read_repo_text(ignore_path), required,
@@ -1269,6 +1270,7 @@ def test_public_release_identity_static_import_closure() -> None:
 @pytest.mark.parametrize("helper", [
     "bounded-network-evidence.ts", "prod-api-response-evidence.ts", "cost-controls.ts",
     "ip-import-acknowledgements.ts", "public-release-identity.ts",
+    "ip-portfolio-export-completion.ts",
 ])
 def test_web_fixture_closure_rejects_omitted_direct_or_transitive_copy(helper: str) -> None:
     path = f"tests/e2e/support/{helper}"
@@ -1284,6 +1286,7 @@ def test_web_fixture_closure_rejects_omitted_direct_or_transitive_copy(helper: s
 @pytest.mark.parametrize("helper", [
     "bounded-network-evidence.ts", "prod-api-response-evidence.ts", "cost-controls.ts",
     "ip-import-acknowledgements.ts", "public-release-identity.ts",
+    "ip-portfolio-export-completion.ts",
 ])
 def test_web_fixture_closure_rejects_omitted_context_input(ignore_path: str, helper: str) -> None:
     path = f"tests/e2e/support/{helper}"
@@ -3735,6 +3738,10 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
         ("cost-controls", "tests/e2e/support/cost-controls.ts", "modify", True),
         ("import-acknowledgements", "tests/e2e/support/ip-import-acknowledgements.ts",
          "modify", True),
+        ("portfolio-export-completion", "tests/e2e/support/ip-portfolio-export-completion.ts",
+         "modify", True),
+        ("public-release-identity", "tests/e2e/support/public-release-identity.ts",
+         "modify", True),
         ("new-upstream", "license-policy/upstream/new-package/LICENSE.txt", "new", True),
         ("deleted-review", "docs/security/js-license-compliance-review-2026-10-12.md",
          "delete", True),
@@ -3787,6 +3794,8 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
             ("api", "tests/e2e/support/prod-api-response-evidence.ts"),
             ("cost", "tests/e2e/support/cost-controls.ts"),
             ("import-acknowledgements", "tests/e2e/support/ip-import-acknowledgements.ts"),
+            ("portfolio-export-completion", "tests/e2e/support/ip-portfolio-export-completion.ts"),
+            ("public-release-identity", "tests/e2e/support/public-release-identity.ts"),
         ]),
     }
     for relative in initial_paths:
