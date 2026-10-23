@@ -3277,3 +3277,8 @@ requirements when using the fallback.
   peers; never infer incompatibility from a package name. Retain complete known
   entries and registry integrity when a resolver drops them, and regress the
   missing portable Sharp runtime and compiler peer without weakening licenses.
+- A production browser project's credentials must satisfy every selected
+  journey's tenant guard. Preserve that guard and move a misrouted case to the
+  existing authorized serialized role; reconcile the complete semantic union
+  and independent per-role inventories. Require an actual passed zero-retry
+  receipt for the repaired journey, not a skip or a green collection alone.

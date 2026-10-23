@@ -1,5 +1,27 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 23 Notes Production Role Correction
+
+Production API/web now serve `44d3d0be39b8aac3dbd1294ea3927627ef4eb53d`
+after PR555, with the identical accepted723 tree. This supersedes the earlier
+security-replacement deployment checkpoint below, not its retained failures.
+Exact production verification39881030365 is **NO-GO**: tester completed98 cases
+(84 passed,13 skipped,one failed,zero retries). Notes22 correctly refused the
+generic `caseops-qa` credentials before transport; its mutation guard requires
+`test-legal`. No Notes UI failure was established. Other unfinished roles and
+the three mandatory Batch3 production journeys remain unverified.
+
+Move that single Notes case to the existing serialized legal-write project,
+preserving its hard tenant guard and all172 semantic identities. Independent
+partition counts become97/18/6/51, with exact Notes title/project membership
+and mandatory positive native capture/validation. The unchanged neighboring
+dated families have no additional concrete exclusive-tenant mismatch in the
+bounded source audit. Interrupted component evidence is incomplete, not green.
+Fresh complete candidate gates, protected merge, canonical deployment and
+exact-release Notes execution at1280px/393px with reload/cleanup are required.
+The current release stays deployed but uncertified; private-projection cadence
+remains held until successful QA and the guarded clean-cadence recovery.
+
 ## October 23 Batch 3 Security Replacement
 
 PR554 merged as366686f6 with the identical Docker-accepted88 tree. Full local

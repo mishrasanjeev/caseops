@@ -71,7 +71,7 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
     assert "--project=test-legal-write-prod-chromium --workers=1 --retries=0" in step["run"]
     config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
     project = config.split('name: "test-legal-write-prod-chromium"', 1)[1].split("name:", 1)[0]
-    assert "testMatch: OCT13_PORTFOLIO_CALENDAR_SPECS" in project
+    assert "testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC]" in project
     assert "storageState: { cookies: [], origins: [] }" in project
     evidence_step = [step for step in workflow["jobs"]["prod-playwright-shards"]["steps"]
                      if step.get("name") == "Reconcile required native Playwright evidence"]
@@ -80,6 +80,28 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
         evidence_step[0]["run"]
     )
 
+
+
+def test_notes22_production_case_uses_its_required_tenant_project() -> None:
+    import yaml
+
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
+    tester = config.split('name: "tester-prod-chromium"', 1)[1].split("name:", 1)[0]
+    writer = config.split('name: "test-legal-write-prod-chromium"', 1)[1].split("name:", 1)[0]
+    assert "testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC]" in tester
+    assert "testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC]" in writer
+    source = (REPO_ROOT / "tests/e2e/ram-2026-10-22-prod.spec.ts").read_text()
+    assert 'if (!local && credentials.company_slug !== "test-legal")' in source
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    step = next(
+        item for item in workflow["jobs"]["prod-playwright-shards"]["steps"]
+        if item.get("name") == "Run release-owned test-legal portfolio and Calendar regressions"
+    )
+    assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
+    assert step["env"]["CASEOPS_RAM_PROD_EMAIL"] == "ram@testfirm.com"
+    assert "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD" in step["env"]["CASEOPS_RAM_PROD_PASSWORD"]
+    assert step["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    assert "--project=test-legal-write-prod-chromium --workers=1 --retries=0" in step["run"]
 
 
 def test_batch3_production_gate_owns_source_credentials_and_all_three_native_roles() -> None:
@@ -483,8 +505,8 @@ def test_release_owned_tester_split_contract_cli_fails_closed_before_browser(
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == {
             "tester_partition_contract": 1,
-            "partitions": {"tester": 98, "tester-catalog": 18,
-                           "tester-index": 6, "test-legal-write-oct13": 50},
+            "partitions": {"tester": 97, "tester-catalog": 18,
+                           "tester-index": 6, "test-legal-write-oct13": 51},
             "catalog_file": "ram-2026-09-05-bugs.spec.ts",
         }
     else:
