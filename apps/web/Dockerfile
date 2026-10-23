@@ -60,6 +60,7 @@ COPY tests/e2e/support/prod-api-response-evidence.ts /app/tests/e2e/support/prod
 COPY tests/e2e/support/cost-controls.ts /app/tests/e2e/support/cost-controls.ts
 COPY tests/e2e/support/public-release-identity.ts /app/tests/e2e/support/public-release-identity.ts
 COPY tests/e2e/support/ip-import-acknowledgements.ts /app/tests/e2e/support/ip-import-acknowledgements.ts
+COPY tests/e2e/support/ip-portfolio-export-completion.ts /app/tests/e2e/support/ip-portfolio-export-completion.ts
 
 RUN npm run build
 

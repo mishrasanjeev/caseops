@@ -1,5 +1,22 @@
 # Strict Enterprise Gap Tasklist
 
+## October 23 Async Export Acceptance Drift
+
+Partially implemented under existing IP15-018/IPLF-030/037 and J08/M08 ownership.
+API/web875 is deployed; QA39915271013 is NO-GO395P/18S/1F. The failed desktop
+export actually completed51 rows in10.49seconds, after an inherited10-second
+production assertion but inside the existing15-second local bound. Preserve
+that failed evidence and keep the unrelated interactive10-second budget.
+
+A dedicated finite operation wait and metadata-only export route diagnostics
+are implemented locally. Completion, failure, deadline, identity, readiness and
+transport behavior must remain under regression with one original enqueue and
+byte-exact CSV content. No application runtime, source eligibility or worker
+durability guarantee changes. Notes now has actual production acceptance, but
+the three Batch3 checks remain unverified until a complete replacement release.
+Private cadence stays paused until the successful exact-SHA QA and guarded
+later clean-maintenance resume. No policy, provider-cost or legal-source waiver.
+
 ## October 23 Production Credential-To-Inventory Contract
 
 **Partially implemented; release certification NO-GO.** PR555 is deployed as

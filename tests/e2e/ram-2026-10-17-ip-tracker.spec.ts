@@ -1,10 +1,11 @@
 /** IP15-018: real tenant source-date filters, saved views, continuation and CSV. */
 import { createHash } from "node:crypto";
-import type { APIRequestContext, APIResponse, Locator, Page } from "@playwright/test";
+import type { APIRequestContext, APIResponse, Locator, Page, Request } from "@playwright/test";
 
 import { expect, test } from "./support/prod-diagnostic-test";
 import { localTransportHeaders } from "./support/cost-controls";
 import { prepareIp15Workspace, type Ip15Workspace } from "./support/ip15-workspace";
+import { type PortfolioExportCompletion, waitForPortfolioExport } from "./support/ip-portfolio-export-completion";
 
 test.use({ extraHTTPHeaders: async ({ baseURL }, use) => {
   if (!baseURL) throw new Error("IP15 requires a configured baseURL.");
@@ -168,12 +169,22 @@ for (const width of [1280, 393]) {
       await expect(exportDialog).toContainText("51 accessible records");
       const queued = page.waitForResponse(response => new URL(response.url()).pathname === "/api/ip/portfolio/exports"
         && response.request().method() === "POST");
+      let exportRequests = 0;
+      const countEnqueues = (request: Request) => {
+        const url = new URL(request.url());
+        if (url.origin === workspace.api.origin && url.pathname === "/api/ip/portfolio/exports"
+          && request.method() === "POST") exportRequests++;
+      };
+      page.on("request", countEnqueues);
       await exportDialog.getByRole("button", { name: "Queue export", exact: true }).click();
       const queuedResponse = await queued;
       expect(queuedResponse.status()).toBe(202);
       const exportJob = await queuedResponse.json();
-      await expect.poll(async () => (await json<{ status: string }>(await request.get(
-        `${workspace.api.origin}/api/ip/portfolio/exports/${exportJob.id}`, { headers: workspace.headers }))).status).toBe("completed");
+      const completed = await waitForPortfolioExport(exportJob.id, async timeout => json<PortfolioExportCompletion>(await request.get(
+        `${workspace.api.origin}/api/ip/portfolio/exports/${exportJob.id}`, { headers: workspace.headers, timeout })));
+      expect(completed.row_count).toBe(51);
+      expect(exportRequests).toBe(1);
+      page.off("request", countEnqueues);
       const csv = await request.get(`${workspace.api.origin}/api/ip/portfolio/exports/${exportJob.id}/download`, { headers: workspace.headers });
       expect(csv.status()).toBe(200);
       expect(csv.headers()["cache-control"]).toBe("private, no-store");

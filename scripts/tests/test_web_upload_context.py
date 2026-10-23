@@ -25,6 +25,8 @@ BUILDER_INPUTS = {
     *(f"tests/e2e/support/{name}.ts" for name in (
         "prod-failure-diagnostics", "bounded-network-evidence",
         "prod-api-response-evidence", "cost-controls",
+        "public-release-identity", "ip-import-acknowledgements",
+        "ip-portfolio-export-completion",
     )),
 }
 SAFE_WEB_INPUTS = {"apps/web/app/page.tsx", "apps/web/public/fake-safe.txt"}

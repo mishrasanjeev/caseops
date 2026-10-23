@@ -449,6 +449,19 @@ test("Calendar and tracker read evidence survives reporter sanitization", async 
   assert.equal((await diagnostic(attach(data))).evidence.status, "rejected");
 });
 
+test("portfolio export categories survive sanitization without source identities", async () => {
+  for (const route of ["ip/portfolio-export-preview", "ip/portfolio-export", "ip/portfolio-export-status",
+    "ip/portfolio-export-download", "ip/portfolio-export-retry"]) {
+    const data = snapshot();
+    data.records = [{ ...data.records[0], route }];
+    const { evidence } = await diagnostic(attach(data));
+    assert.equal(evidence.status, "retained");
+    assert.deepEqual(evidence.snapshot, data);
+    data.records[0].route = `${route}/PRIVATE-JOB?token=${sentinel}`;
+    assert.equal((await diagnostic(attach(data))).evidence.status, "rejected");
+  }
+});
+
 test("same-name malicious extra keys or private enum/correlator values rejected before any write", async () => {
   const bad = [];
   const extra = snapshot(); extra.rawBody = sentinel; bad.push(extra);
