@@ -7,6 +7,11 @@ const routes: Array<[RegExp, string]> = [
   [/^\/api\/ip\/patents\/applications$/, "ip/application"],
   [/^\/api\/calendar\/events$/, "calendar/events"],
   [/^\/api\/ip\/portfolio\/renewal-tracker$/, "ip/renewal-tracker"],
+  [/^\/api\/ip\/portfolio\/exports\/preview$/, "ip/portfolio-export-preview"],
+  [/^\/api\/ip\/portfolio\/exports$/, "ip/portfolio-export"],
+  [/^\/api\/ip\/portfolio\/exports\/[^/]+\/retry$/, "ip/portfolio-export-retry"],
+  [/^\/api\/ip\/portfolio\/exports\/[^/]+\/download$/, "ip/portfolio-export-download"],
+  [/^\/api\/ip\/portfolio\/exports\/[^/]+$/, "ip/portfolio-export-status"],
   [/^\/sign-in\/?$/, "web/sign-in"],
   [/^\/app(?:\/|$)/, "web/app-navigation"],
 ];

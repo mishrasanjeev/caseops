@@ -4,6 +4,22 @@ import { diagnosticProblem, diagnosticRequestId, diagnosticRoute, diagnosticTran
 import { createPatentApplicationWithEvidence } from "../../../tests/e2e/support/prod-api-response-evidence";
 
 describe("production failure metadata minimization", () => {
+  it("categorizes export state without retaining job IDs, filters or signed parameters", () => {
+    const origin = "https://api.caseops.ai";
+    for (const [suffix, category] of [
+      ["preview", "preview"], ["PRIVATE-JOB", "status"],
+      ["PRIVATE-JOB/download", "download"], ["PRIVATE-JOB/retry", "retry"],
+    ]) {
+      expect(diagnosticRoute(`${origin}/api/ip/portfolio/exports/${suffix}?query=PRIVATE&token=SECRET`, [origin]))
+        .toBe(`ip/portfolio-export-${category}`);
+    }
+    expect(diagnosticRoute(`${origin}/api/ip/portfolio/exports?query=PRIVATE`, [origin]))
+      .toBe("ip/portfolio-export");
+    expect(diagnosticRoute("https://foreign.invalid/api/ip/portfolio/exports/PRIVATE-JOB?token=SECRET", [origin]))
+      .toBeNull();
+    expect(diagnosticRoute(`${origin}/api/ip/portfolio/exports/PRIVATE-JOB/unknown`, [origin]))
+      .toBeNull();
+  });
   it("categorizes Calendar and tracker reads without leaking their source scope", () => {
     const origins = ["https://api.caseops.ai"];
     expect(diagnosticRoute("https://api.caseops.ai/api/calendar/events?from=2026-10-15&matter=PRIVATE", origins))

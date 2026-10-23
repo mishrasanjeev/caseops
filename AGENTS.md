@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- A dated asynchronous-job check must own its bounded completion contract,
+  not silently inherit a different local or production UI assertion timeout.
+  Correlate the failed attempt with persisted job timestamps before diagnosis.
+  Keep finite serial status reads, per-read deadlines, immediate terminal-failure
+  rejection, exact job identity, single enqueue and byte-exact artifact checks.
+  Do not relax interactive budgets or erase the original failed release evidence.
+
 - A browser test's name is not workflow evidence. A drafting test that stops
   after requesting changes does not prove regeneration, approval or finalization.
   Assert every named transition, the exact current revision, retained earlier

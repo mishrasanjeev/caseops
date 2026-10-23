@@ -1,5 +1,27 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 23 IP18 Export Completion Contract
+
+Serving875 is deployed but production39915271013 is NO-GO:414 actual cases,
+395 passed/18 explicit skips/one failure, zero retries. Writer51 completed50P/1F.
+Notes22 now has its required actual zero-retry pass; the three Batch3 cases were
+not reached after the writer failure and remain unverified.
+
+The sole failure is IP18 desktop at the asynchronous export completion check.
+Nine exact-revision HTTP200 status reads identify jobdc9a59b7 in that test window.
+Its retained job record completed51 rows in10.489420seconds. Mobile completed
+in4.091519seconds. The local assertion default is15seconds; production's is10.
+No failed export, missing rows or worker exception is established by this run.
+
+Give this operation the existing accepted15-second bound independently of the
+unchanged UI defaults, at most16 serial reads and a remaining-time-bounded
+request timeout. Reject failed/unknown/wrong-identity or undownloadable results,
+assert one original enqueue and retain all51 exact CSV record assertions. Add
+deterministic deadline/terminal/transport/privacy coverage. This is a test-contract
+repair, not an export-performance or background-worker durability fix. Fresh
+Docker, CI and exact-main deployed replay remain required; do not rerun the old
+failed release to conceal it. See BUGFIX_IP18_EXPORT_ACCEPTANCE_2026-10-23.md.
+
 ## October 23 Notes Production Role Correction
 
 Production API/web now serve `44d3d0be39b8aac3dbd1294ea3927627ef4eb53d`
