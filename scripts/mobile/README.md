@@ -10,7 +10,8 @@ separately. A browser, Metro export or fake Appium server is never native proof.
 - `tooling.json` pins Appium, drivers and WebdriverIO outside the root lock.
 - Android: JDK compatible with the scaffold's Gradle version, Android SDK,
   matching platform/build tools, emulator image and one explicitly selected
-  booted emulator or dedicated device. No script accepts SDK licenses.
+  booted emulator or dedicated device. Tool preparation does not accept SDK
+  licences; package installation requires separate explicit owner consent.
 - iOS: owner's MacBook, full Xcode, selected developer directory, owner-reviewed
   Xcode terms, simulator runtime and booted simulator. Windows cannot substitute.
 - Real compiled `.apk` or Simulator `.app`, build source snapshot, application
@@ -34,14 +35,55 @@ $env:APPIUM_HOME = "$HOME/.cache/caseops-mobile/appium"
 node "$env:CASEOPS_MOBILE_TOOLING_HOME/node_modules/appium/index.js" driver doctor uiautomator2
 ```
 
-The JDK archive is checksum verified before extraction. SDK packages are not
-downloaded: downloading Android tools is itself subject to Google's terms.
-The owner must review those terms and perform any interactive SDK license step.
-Do not pipe `yes` into `sdkmanager --licenses`. After consent/setup, use
+For this Windows workstation, the owner explicitly authorized the standard free
+SDK licences on October24. The selected SDK packages were installed separately;
+this is not blanket permission for additional Google products or paid services.
+The reusable tool/JDK preparation is:
+
+```powershell
+./scripts/mobile/setup-android.ps1
+. ./scripts/mobile/use-android-env.ps1
+# Optional: persist only this Windows user's tool paths, not machine settings.
+./scripts/mobile/use-android-env.ps1 -Persist
+```
+
+Both publisher-pinned archives are SHA256 verified before extraction. Downloads
+and extraction use separate staging; failed evidence and existing installations
+are preserved. See `docs/mobile/NATIVE_TOOLING_EVIDENCE_2026-10-24.md` for the
+actual workstation receipt, including the selected package versions.
+Do not pipe `yes` into the broad `sdkmanager --licenses`. After consent/setup, use
 `emulator -accel-check`, `emulator -list-avds`, and `adb devices -l`. A Windows
 hypervisor flag alone is not usable acceleration evidence. Do not kill an
 unrelated AVD, ADB server, Docker container or process. Do not change Windows
 features/BIOS or restart the machine without owner coordination.
+
+The native plugins also request the existing pinned JDK17 toolchain, even when
+Gradle itself runs on JDK21. Register both local installations for the build;
+otherwise Gradle may download another JDK. With the test origins/marker below
+set before prebuild and Metro, the Windows build from `apps/mobile/android` is:
+
+```powershell
+$env:GRADLE_USER_HOME = "$HOME/.cache/caseops-mobile/gradle"
+$jdk17 = "$HOME/.cache/caseops-mobile/jdk/jdk-17.0.20.1+1"
+./gradlew.bat :app:assembleDebug "-Dorg.gradle.java.installations.paths=$jdk17,$env:JAVA_HOME" `
+  -Dorg.gradle.java.installations.auto-download=false -PreactNativeArchitectures=x86_64 `
+  -Pandroid.cmakeVersion=3.30.5 -Pexpo.android.cmakeObjectPathMax=250 `
+  --no-daemon --max-workers=4 --console=plain
+```
+
+The actual SDK CMake3.30.5 bundles Ninja1.10.2. On this workstation, long-path
+support is disabled; it was not changed. Worklets has a178-character object
+directory and a36-character maximum object basename:128 is too small to permit
+CMake's hashed path, while1024 retains an unsafe377-character path. The measured
+250 budget produces a248-character maximum across all56 Worklets objects.
+Recalculate for a deeper checkout or changed native inventory; do not just raise
+the limit. The local CaseOps Gradle profile records this budget and both JDKs.
+Shell activation selects that cache without persisting GRADLE_USER_HOME globally.
+
+Run `./scripts/mobile/android-tooling.ps1 -SelfTest` from the repository for the
+complete offline Windows setup inventory. The standard mobile CI selects it on
+both Windows PowerShell5.1 and PowerShell7 and retains their live JSONL journals.
+These tests never install tools, call providers or establish native acceptance.
 
 ## Owner MacBook Preparation (Not Executed Here)
 

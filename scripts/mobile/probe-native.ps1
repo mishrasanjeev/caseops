@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param([string]$OutputPath)
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'android-tooling.ps1')
 function Find-Tool([string]$Name) {
     $tool = Get-Command $Name -ErrorAction SilentlyContinue
     if ($tool) { return $tool.Source }
@@ -27,14 +28,13 @@ $result = [ordered]@{
     nativeProcesses = @(Get-Process -Name emulator,qemu-system-x86_64,adb,java -ErrorAction SilentlyContinue |
         Select-Object Id,ProcessName)
     ios = 'Not run: iOS Simulator and XCUITest require owner MacBook with Xcode'
-    sdkLicenseAction = 'None; owner must review SDK terms interactively'
+    sdkLicenseAction = 'None; licence acceptance is owner-authorized and handled separately'
 }
 foreach ($name in @('node', 'npm', 'java', 'javac', 'adb', 'emulator', 'sdkmanager', 'appium', 'xcodebuild')) {
     $result.tools[$name] = Find-Tool $name
 }
 $json = $result | ConvertTo-Json -Depth 6
 if ($OutputPath) {
-    if (Test-Path -LiteralPath $OutputPath) { throw 'Refusing to overwrite earlier probe evidence' }
-    $json | Set-Content -LiteralPath $OutputPath -Encoding utf8
+    Write-AndroidProbe $OutputPath $json
 }
 $json

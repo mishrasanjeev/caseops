@@ -5,9 +5,11 @@
 J20/M22/US-MOB-01..08: **Partially implemented**. Native source components,
 auth/transport/domain tests and browser handoff tests exist; platform-specific
 Hermes exports passed before final closure. None is native Appium/device proof.
-The six-case per-platform Appium subset does not close MOB-01..40. SDK acceptance,
-owner MacBook execution and all remaining scope/security/release gates are open
-in `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-24.md`. No native or production pass.
+The six-case per-platform Appium subset does not close MOB-01..40. Standard SDK
+consent, tool installation and accelerated Android emulator boot are verified.
+Native app acceptance, owner MacBook execution and scope/security/release gates are open
+in `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-24.md`. Android debug build/install and
+development-launcher startup passed; CaseOps native workflows and production did not.
 
 ## October 23 Android And iOS Coverage Plan
 

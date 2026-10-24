@@ -5,7 +5,98 @@ Owner: native tooling/E2E agent. Shared worktree:
 Scope: J20/M22 P0/P2 tooling; US-MOB-01..04/08. This does not certify the native
 app, all forty MOB groups, a Docker integration, signed beta or production.
 
-## Immediate Feasibility
+## Owner-Authorized Android Setup Continuation
+
+The owner explicitly authorized accepting Google's standard free SDK licences
+on October24. This supersedes the SDK-consent blocker in the historical
+15:23 checkpoint below; it does not authorize paid services or other products.
+
+Actual workstation results:
+
+| Item | Verified result |
+| --- | --- |
+| Command-line tools | 22.0, archive15859902; publisher SHA256 verified |
+| JDK | Temurin21.0.12.1+1; publisher SHA256 verified; java/javac executed |
+| Gradle | 9.4.1; official archive SHA256 `2ab2958f2a1e51120c326cad6f385153bb11ee93b3c216c5fccebfdfbb7ec6cb`; executable verified |
+| SDK | `platforms;android-37.0` revision2, build-tools37.0.0, platform-tools37.0.1 |
+| Native compiler | NDK27.1.12297006, CMake3.30.5 |
+| Emulator | 37.2.12, AOSP x86_64 API37 image revision6, dedicated Pixel9 profile |
+| Acceleration | `emulator -accel-check` exit0: WHPX10.0.26300 installed and usable |
+| Actual boot | `emulator-5580`, `sys.boot_completed=1`, Android17/API37,1080x2424 |
+| Appium doctor | Exit0, zero required fixes; bundletool/ffmpeg/GStreamer remain optional and absent |
+| User environment | JAVA_HOME, ANDROID_HOME, ANDROID_SDK_ROOT, APPIUM_HOME and selected bins persisted to User only |
+| Setup regressions |36/36 complete offline cases passed on each of PowerShell5.1 and7.6.5; no skips |
+| Native evidence harness |21/21 self-tests passed; these are not device workflows |
+| Actual APK | Build06 exited0 in5m3s;365 Gradle tasks,46 executed/319 up-to-date; debug x86_64 APK76,953,040 bytes |
+| Install/start | `adb install` success; package0.1.0/build1, min24/target36, debug signature verified; actual development launcher opened |
+
+SDK package installation exited0 and retained only `android-sdk-license` under
+the SDK licence directory. Broad `sdkmanager --licenses` was not used. Windows
+features, BIOS, machine environment and unrelated Docker services were unchanged.
+Android Studio is not required for this command-line build path and was not
+installed. The AOSP browser has no Custom Tabs service; full browser/PKCE
+acceptance needs a compatible test browser, not an auth bypass.
+
+Source at native build start: `f17f4e1666646c926bfc3aad6e00abc999d4be9b`,
+43 app/root inputs, clean app source, fingerprint
+`91c86933d53c1acacd23663138d5098f3809cfae1566bc37a1085e21155e2a46`.
+Prebuild03 succeeded with the automated marker enabled and local-only API/web
+origins. Prebuild02's Windows directory-lock failure is preserved; the earlier
+Gradle wrapper download was cancelled and the same official distribution was
+independently downloaded and hash checked. Build01's incorrect helper path
+failed before compilation and is retained. Build02 is the corrected native
+debug build, interrupted while resolving dependencies. Build03 exposed an
+unnecessary automatic JDK17 download; build04 registered both existing JDKs and
+disabled auto-download. It then failed in Worklets' C++ build: bundled
+Ninja1.10.2 cannot create the original377-character object path with Windows
+long paths disabled. Build05's128 budget also failed: the178-character object
+directory cannot fit that limit, so CMake did not hash the path.
+
+Build06's measured250 budget generated56 Worklets objects with a248-character
+maximum and completed the actual APK. The CaseOps-only Gradle cache profile
+retains that budget and the two JDK locations; shell activation selects it
+without globally persisting GRADLE_USER_HOME. No registry change was made.
+Both43 source inputs and35 generated Android inputs were unchanged before/after.
+APK embedded `assets/app.config` positively matches the local API/web origins,
+`automatedTest=true` and source SHA above.
+
+Retained APK:
+`C:/Users/mishr/.cache/caseops-mobile/artifacts/caseops-0.1.0-f17f4e16-x86_64-debug.apk`.
+SHA256: `723f220abc405de207f86206dbbb7b6890875fafe3e0ca0b2a7fbf15cdfbf4e4`.
+`apksigner verify` passed with one development v2 signer; this is not store
+signing, beta distribution or a production release.
+
+The actual launch reached the **CaseOps Development Build launcher**, not the
+CaseOps React Native screens. Nearby-device permission was denied. The initial
+blank transition screenshot was retained; settled screenshot02 and UI hierarchy
+positively identify the development launcher. Metro startup was rejected twice
+by execution policy before process creation; no bypass was attempted. Isolated
+auth/backend fixtures and a Custom Tabs-compatible browser are also absent.
+Therefore native core workflow/Appium/MOB-01..40, iOS and release remain **NO-GO**.
+A short-worktree fallback was created but not used: app attachment failed at its
+100-attachment limit. After a guarded HEAD/clean/ignored-file check, only that
+new unused checkout was removed; the original development checkout was retained.
+
+Receipts under `C:/Users/mishr/.cache/caseops-mobile/`:
+
+- `sdk-install-20261024.log`, `android-installation-20261024-01.json` and
+  `android-probe-20261024-02.json`.
+- `emulator-20261024-01.log`, matching `.err.log` and
+  `emulator-boot-20261024.png` (actual launcher, not a CaseOps app screenshot).
+- `android-doctor-20261024-01.log`, prebuild02/03 logs and build01..06 logs.
+- `android-generated-inputs-20261024-01.json`, `android-apk-20261024-01.json`
+  and `caseops-debug-launch-20261024-02.png` (development launcher only).
+
+Final offline journals are retained in Windows Temp:
+`caseops-android-offline-8b5cf93e849d4504bd8f2a4ebc88dc24/results.jsonl`
+(PowerShell7) and
+`caseops-android-offline-281c5a5f300f452db30025af22ac5142/results.jsonl`
+(PowerShell5.1). Each has the complete ordered36-case inventory and completion
+event. Earlier35- and36-case receipts remain historical. The same offline entry
+point is now selected by the Windows job in `mobile-source.yml`; this records
+local proof, not an unexecuted CI pass.
+
+## Historical Immediate Feasibility
 
 Observed at 15:23:59 UTC with `scripts/mobile/probe-native.ps1`:
 

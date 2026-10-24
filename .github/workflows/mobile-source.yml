@@ -16,6 +16,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  android-setup:
+    name: Windows Android setup offline regressions, not device acceptance
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Windows PowerShell 5.1 complete offline inventory
+        shell: powershell
+        run: ./scripts/mobile/android-tooling.ps1 -SelfTest
+      - name: PowerShell 7 complete offline inventory
+        shell: pwsh
+        run: ./scripts/mobile/android-tooling.ps1 -SelfTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-setup-offline-results
+          path: ${{ runner.temp }}/caseops-android-offline-*/results.jsonl
+          if-no-files-found: error
+
   source:
     name: Mobile source, not device acceptance
     runs-on: ubuntu-latest

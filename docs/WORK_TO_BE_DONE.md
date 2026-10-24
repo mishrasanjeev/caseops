@@ -7,7 +7,11 @@ client and native session integration are development code, not certified apps.
 See `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-24.md` for component results and the
 remaining GC/IP/files/push/native-navigation/security gates. Actual Android and
 iOS core E2E, full Docker/shared regression and signed distribution remain open.
-Owner Android SDK terms and separate MacBook/Xcode are prerequisites, not waivers.
+Owner-authorized Android SDK setup and an accelerated emulator boot are now
+verified. Actual app acceptance and separate MacBook/Xcode execution remain
+required; tooling readiness is not a waiver.
+The first Android debug APK also compiled, installed and opened its development
+launcher; CaseOps screens and native core workflows remain unverified.
 No production deployment occurred. October23's Missing status below is historical.
 
 ## October 23 Native App Planning

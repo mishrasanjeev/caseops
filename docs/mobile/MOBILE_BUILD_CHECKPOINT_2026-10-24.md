@@ -11,7 +11,7 @@ precede this work; neither is native-device evidence or participant research.
 Development starts from `e3b20ee648bf0d6bb20546a64b51a6afba5c2423`, with explicit
 uncommitted implementation changes at this checkpoint. That base SHA does not
 identify these new app bytes or claim they are serving production. No production
-deployment, signing, entitlement change or paid-provider call occurred.
+deployment, production signing, entitlement change or paid-provider call occurred.
 
 Development publication branch: `codex/mobile-app-build-20261024`. Its first
 implementation commit is a handoff point, not permission to merge/deploy. Main
@@ -66,18 +66,21 @@ Component observations so far, not full-release certification:
 | Expo compatible pins | `expo install --check`: dependencies up to date |
 | Android Hermes export | Post-writer replacement succeeded,844 modules, about2.1MB, `dist/android-closed`; not an APK |
 | iOS Hermes export | Post-writer replacement succeeded,869 modules, about2.1MB, `dist/ios-closed`; not an Xcode build |
-| Android prebuild | Succeeded with `--no-install`; generated ignored native project, not compiled/installed APK |
+| Android prebuild | Replacement03 succeeded with `--no-install`; earlier directory-lock failure retained. See separate compiled APK proof below |
 | Browser handoff units | Three files,41 passed after correcting a split-text identity assertion; earlier incomplete/root-filter and worker-start failures remain non-passing evidence |
 | Browser full typecheck/build | Initial stale install lacked `qrcode.react`; after root `npm ci`, TypeScript and fresh Next16.4.2 production build passed, including the native handoff route |
 | Local built-browser handoff | Six Playwright cases passed at390px and1280px with deterministic API mocks, zero retries/skips. This is browser layout/consent/recovery proof, not real native authentication. Original six failed test attempts are retained: four ambiguous Next-announcer locators and two assertions that missed the actual correct401 login redirect |
 | Native harness self-tests |21 passed/zero skips; earlier five-failure RED retained by tooling agent |
 | Appium intended inventory | Android6=6; iOS6=6. These are a core subset, not all40 MOB groups |
-| Android native execution | No APK/emulator execution; SDK absent and owner will review/accept terms in Android Studio |
+| Android native execution | Owner-authorized SDK installed; actual build06 succeeded,76,953,040-byte x86_64 debug APK installed and development launcher opened on Android17/API37. No CaseOps JS screen/core-workflow pass: Metro start was policy-rejected; isolated auth fixture and compatible browser are still needed |
 | iOS native execution | Not run; owner will use a separate MacBook. No cloud Mac spend or manufactured simulator evidence |
 
 The source-only CI workflow now runs the isolated app typecheck, complete source
 tests, harness self-tests, both bundle exports and an unwaived high-severity
 audit. It does not pretend an Ubuntu bundle job is Android/iOS device acceptance.
+The Windows job separately discovers all36 offline setup checks on both
+PowerShell5.1 and7; each complete local inventory passed, with live JSONL receipts.
+This is not a claim that the newly added CI job has already executed.
 The known node-forge advisory deliberately remains a failing release gate.
 
 ### Backend And Database Evidence
@@ -136,9 +139,13 @@ device-session UI, true native stack/back, dark theme,200% text/VoiceOver/TalkBa
 tablet/device/permission/kill-restart behavior and signed distribution remain
 open. The software does not pretend an unavailable path is implemented.
 
-Owner actions: accept Android SDK terms in Android Studio; use the separate
-MacBook/Xcode for native iOS build and automation. These actions establish
-prerequisites, never waive the agent's E2E responsibility. See
+Android continuation: the owner authorized the standard SDK licences and the
+agent installed the verified toolchain, configured User-only environment paths
+and booted a WHPX-accelerated API37 AOSP emulator. Appium doctor has zero required
+fixes. This is workstation readiness, not app/workflow acceptance. The corrected
+native build is being reconciled in `NATIVE_TOOLING_EVIDENCE_2026-10-24.md`.
+The separate MacBook/Xcode is still needed for native iOS build and automation.
+These actions never waive the agent's E2E responsibility. See
 `../../scripts/mobile/MACBOOK_RUNBOOK.md` and `NATIVE_TOOLING_EVIDENCE_2026-10-24.md`.
 
 ## Permanent Learning
@@ -147,6 +154,10 @@ prerequisites, never waive the agent's E2E responsibility. See
   inspect the pinned native dependency and actual theme implementation.
 - An Android/iOS Hermes export proves platform module resolution and bundling,
   not native compilation, installation, gestures, secure storage or E2E.
+- Inspect Gradle's requested toolchains and the SDK's actual Ninja executable.
+  A newer JDK/CMake label does not prove local discovery or long-path support;
+  measure the complete object-path budget and retain failed builds. An APK that
+  opens the development launcher is still not a CaseOps screen/workflow pass.
 - A preflight lifecycle read is not mutation concurrency control: carry and
   check its version under the server's authoritative lock, including reopen.
 - Standard browser installs must match the actual lock before certification;

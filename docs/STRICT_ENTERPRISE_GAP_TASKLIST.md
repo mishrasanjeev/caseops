@@ -6,10 +6,14 @@ J20/M22: **Partially implemented; release NO-GO**. Expo58 app, Compose Expressiv
 SwiftUI adapters and separate native device sessions are source components, not
 two-platform acceptance. Native internals include Material3-beta; the Expo CLI
 node-forge advisory has no patched release and is not waived. Web/root lock audit
-findings are separate. Actual APK/Xcode/native E2E, complete core workflows,
+findings are separate. Android debug build/install/launcher are now verified,
+but CaseOps screens, Xcode/native E2E, complete core workflows,
 MFA/session/source/lifecycle proof, registered HTTPS links, full shared Docker
 regression, privacy/signing review and signed beta remain required. Evidence and
 explicit open features: `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-24.md`.
+Owner-authorized Android tool installation and accelerated AOSP emulator boot
+are verified separately in `mobile/NATIVE_TOOLING_EVIDENCE_2026-10-24.md`.
+They do not close APK, native workflow, iOS or release gates.
 
 ## October 23 Native Client Readiness
 
