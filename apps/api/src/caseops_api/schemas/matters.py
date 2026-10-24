@@ -592,6 +592,7 @@ class MatterWorkspaceMembership(BaseModel):
 
 class MatterNoteCreateRequest(BaseModel):
     body: str = Field(min_length=2, max_length=4000)
+    expected_lifecycle_version: int | None = Field(default=None, ge=0, strict=True)
 
 
 class MatterNoteRecord(BaseModel):

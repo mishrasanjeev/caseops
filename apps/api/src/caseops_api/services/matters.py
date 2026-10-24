@@ -3678,6 +3678,17 @@ def create_matter_note(
         lock_for_update=True,
     )
     _assert_matter_not_disposed(matter, operation="add an internal note")
+    expected_version = payload.expected_lifecycle_version
+    if context.native_session_id is not None and expected_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Native note writes require expected_lifecycle_version. Reload the matter.",
+        )
+    if expected_version is not None and expected_version != matter.lifecycle_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The matter lifecycle changed. Reload the matter before adding a note.",
+        )
     note = MatterNote(
         matter_id=matter.id,
         author_membership_id=context.membership.id,

@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `4b63c0b2e74c331ea344bdc12adf57fd2ad3affbcce367f24371e169765ea2f0`
-- SQL tables: `344`
-- SQL columns: `5439`
-- ORM indexes: `1788`
-- Alembic/raw index declarations: `1572`
+- Canonical map SHA-256: `2a1577fd03c5676be6c2567b2054db535e85aaa7752f4697fd7be44a46ebaa71`
+- SQL tables: `347`
+- SQL columns: `5469`
+- ORM indexes: `1793`
+- Alembic/raw index declarations: `1577`
 - Non-SQL data classes: `15`
 
 ## Boundary
@@ -286,6 +286,9 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `mock_hearing_responses` | `tenant_operational_record` | 23 | `registry_fail_closed` |
 | `mock_hearing_sessions` | `tenant_operational_record` | 21 | `registry_fail_closed` |
 | `model_runs` | `tenant_operational_record` | 16 | `registry_fail_closed` |
+| `native_authorization_codes` | `security_identity_control` | 12 | `registry_fail_closed` |
+| `native_device_sessions` | `security_identity_control` | 11 | `registry_fail_closed` |
+| `native_refresh_tokens` | `security_identity_control` | 6 | `registry_fail_closed` |
 | `notification_delivery_events` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `notification_delivery_intents` | `tenant_operational_record` | 46 | `registry_fail_closed` |
 | `notification_rules` | `tenant_operational_record` | 11 | `registry_fail_closed` |
@@ -361,7 +364,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `user_mailbox_connections` | `tenant_operational_record` | 16 | `registry_fail_closed` |
 | `user_mfa_recovery_codes` | `security_identity_control` | 6 | `registry_fail_closed` |
 | `user_mfa_settings` | `security_identity_control` | 12 | `registry_fail_closed` |
-| `user_mfa_step_ups` | `security_identity_control` | 8 | `registry_fail_closed` |
+| `user_mfa_step_ups` | `security_identity_control` | 9 | `registry_fail_closed` |
 | `user_notification_preferences` | `tenant_operational_record` | 11 | `registry_fail_closed` |
 | `users` | `platform_operational_reference` | 7 | `registry_fail_closed` |
 | `voyage_usage` | `billing_provider_evidence` | 13 | `registry_fail_closed` |

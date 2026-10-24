@@ -33,13 +33,20 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from caseops_api.core.console_auth import CONSOLE_CSRF_COOKIE, CONSOLE_CSRF_HEADER
+from caseops_api.core.console_auth import (
+    CONSOLE_CSRF_COOKIE,
+    CONSOLE_CSRF_HEADER,
+    CONSOLE_SESSION_COOKIE,
+)
 from caseops_api.core.cookies import (
     CSRF_COOKIE,
     CSRF_HEADER,
     PORTAL_CSRF_COOKIE,
     PORTAL_CSRF_HEADER,
+    PORTAL_SESSION_COOKIE,
+    SESSION_COOKIE,
 )
+from caseops_api.core.native_auth import NATIVE_ACCESS_PREFIX
 from caseops_api.core.problem_details import problem_json
 
 # State-changing methods. GET / HEAD / OPTIONS / TRACE are exempt by
@@ -57,6 +64,10 @@ _EXEMPT_PATHS = frozenset({
     "/api/platform-console/auth/password-reset/complete",
     "/api/auth/login",
     "/api/auth/refresh",
+    # These routes accept only a code/refresh secret, never cookie authority.
+    "/api/auth/native/token",
+    "/api/auth/native/refresh",
+    "/api/auth/native/logout",
     "/api/auth/account-setup/complete",
     "/api/auth/password-reset/start",
     "/api/auth/password-reset/complete",
@@ -108,6 +119,25 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[override]
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer " + NATIVE_ACCESS_PREFIX) and any(
+            request.cookies.get(name)
+            for name in (SESSION_COOKIE, PORTAL_SESSION_COOKIE, CONSOLE_SESSION_COOKIE)
+        ):
+            response = problem_json(
+                401,
+                detail="Do not mix native credentials and browser sessions.",
+                request=request,
+            )
+        else:
+            response = await self._dispatch(request, call_next)
+        if request.url.path.startswith("/api/auth/native/"):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
+    async def _dispatch(self, request: Request, call_next) -> Response:
         if request.method not in _PROTECTED_METHODS:
             return await call_next(request)
         if _path_is_exempt(request.url.path):

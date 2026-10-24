@@ -1,5 +1,39 @@
 # Strict Enterprise Gap Tasklist
 
+## October 24 Native Development Gate
+
+J20/M22: **Partially implemented; release NO-GO**. Expo58 app, Compose Expressive/
+SwiftUI adapters and separate native device sessions are source components, not
+two-platform acceptance. Native internals include Material3-beta; the Expo CLI
+node-forge advisory has no patched release and is not waived. Web/root lock audit
+findings are separate. Actual APK/Xcode/native E2E, complete core workflows,
+MFA/session/source/lifecycle proof, registered HTTPS links, full shared Docker
+regression, privacy/signing review and signed beta remain required. Evidence and
+explicit open features: `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-24.md`.
+
+## October 23 Native Client Readiness
+
+**Missing; native release readiness NO-GO.** J20/M22 has a five-round planning
+specification, not an app. Browser bearer compatibility does not prove native
+refresh/device revocation or handoff: current refresh expects unexpired access,
+logout clears browser cookies and step-up is user/membership-scoped. Define and
+test the separate native contract without weakening cookie/CSRF or realm fences.
+
+Today scope/GC streams and native viewer integration are **Partially implemented**
+as reusable server primitives, not complete phone surfaces. Global inbox/device
+registration/APNs-FCM transport and persistent private offline policy are
+**Missing** for the proposed client. V1 intentionally excludes persistent private
+offline content and external native sharing; audit viewer temp/cache/download
+headers before release. These are mobile-readiness findings, not an assertion
+that the existing browser release failed or that a Matter automatically reopened.
+
+Require the forty planned native scenario groups, OWASP MASVS-aligned review,
+actual Android and iOS evidence, compatible full local Docker/backend regression,
+green protected-main gates and signed-beta/store review. macOS/Xcode/Apple and
+Play ownership, privacy/retention and approved spend remain explicit dependencies.
+See `mobile/MOBILE_APP_PLAN_2026-10-23.md`; no infrastructure, provider or legal
+data was changed during planning and no native pass is claimed.
+
 ## October 23 Async Export Acceptance Drift
 
 Partially implemented under existing IP15-018/IPLF-030/037 and J08/M08 ownership.

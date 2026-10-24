@@ -29,7 +29,7 @@ export function safePostLoginPath(candidate: string | null | undefined): string 
     }
     if (
       ENCODED_UNSAFE_PATH_CHARACTERS.test(parsed.pathname) ||
-      (parsed.pathname !== "/app" && !parsed.pathname.startsWith("/app/"))
+      (parsed.pathname !== "/native/sign-in" && parsed.pathname !== "/app" && !parsed.pathname.startsWith("/app/"))
     ) {
       return POST_LOGIN_FALLBACK;
     }

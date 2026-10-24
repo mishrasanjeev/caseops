@@ -1,5 +1,13 @@
 # CaseOps agent instructions
 
+- Native acceptance is not a platform-named JavaScript export. Bind the actual
+  APK or Simulator app, source fingerprint, backend revision and complete Appium
+  inventory independently for Android and iOS. A stable wrapper can contain
+  experimental native components; inspect the actual pinned theme/dependencies.
+- Native save preflight does not close a lifecycle race. Carry the observed
+  lifecycle version through the request DTO and check it under the same parent
+  lock as the mutation, including close/reopen between read and submit.
+
 - A dated asynchronous-job check must own its bounded completion contract,
   not silently inherit a different local or production UI assertion timeout.
   Correlate the failed attempt with persisted job timestamps before diagnosis.

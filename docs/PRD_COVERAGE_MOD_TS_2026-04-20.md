@@ -1,5 +1,25 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 24 Native Component Coverage
+
+J20/M22/US-MOB-01..08: **Partially implemented**. Native source components,
+auth/transport/domain tests and browser handoff tests exist; platform-specific
+Hermes exports passed before final closure. None is native Appium/device proof.
+The six-case per-platform Appium subset does not close MOB-01..40. SDK acceptance,
+owner MacBook execution and all remaining scope/security/release gates are open
+in `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-24.md`. No native or production pass.
+
+## October 23 Android And iOS Coverage Plan
+
+J20/M22 is **Missing**, not a shipped responsive-web feature. Namespaced
+US-MOB-01..08 and MOB-01..40 in
+`mobile/MOBILE_ACCEPTANCE_MATRIX_2026-10-23.md` cover native identity, daily work,
+existing source-owned records, capture, review, notifications, accessibility,
+privacy and release. All forty groups are planned/not run; no native test
+identity or pass is invented. The five expert design rounds are planning
+evidence only. Existing J01/J03/J04/J07/J08/J09/J10/J13/J14/J15 and IP ownership
+remain authoritative; do not create parallel phone legal/workflow engines.
+
 ## October 23 Batch 3 Coverage Checkpoint
 
 Full Docker88 now proves all seven changed B3/IP sister journeys within the

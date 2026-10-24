@@ -489,6 +489,7 @@ def verify_mfa_enrollment(
             membership_id=context.membership.id,
             purpose="step_up",
             method="totp",
+            source_token_issued_at=context.token_issued_at,
             completed_at=now,
             expires_at=now + timedelta(minutes=get_settings().mfa_step_up_ttl_minutes),
         )
@@ -564,6 +565,7 @@ def complete_step_up(
             membership_id=context.membership.id,
             purpose=purpose if purpose in STEP_UP_PURPOSES else "step_up",
             method="recovery_code" if used_recovery else "totp",
+            source_token_issued_at=context.token_issued_at,
             completed_at=now,
             expires_at=expires_at,
         )

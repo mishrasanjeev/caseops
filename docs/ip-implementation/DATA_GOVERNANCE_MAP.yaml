@@ -146,6 +146,9 @@
     }
   },
   "table_policy_profile_overrides": {
+    "native_authorization_codes": "security_identity_control",
+    "native_device_sessions": "security_identity_control",
+    "native_refresh_tokens": "security_identity_control",
     "ai_feedback_items": "tenant_operational_record",
     "platform_report_admins": "security_identity_control",
     "platform_console_sessions": "security_identity_control",
@@ -165,6 +168,22 @@
     "private_index_projections": "private_retrieval_disposition"
   },
   "column_category_overrides": {
+    "user_mfa_step_ups": {
+      "source_token_issued_at": "lifecycle_or_audit_evidence"
+    },
+    "native_authorization_codes": {
+      "code_hash": "security_secret_or_credential",
+      "code_challenge": "security_secret_or_credential",
+      "source_issued_at": "lifecycle_or_audit_evidence",
+      "mfa_verified_at": "lifecycle_or_audit_evidence",
+      "mfa_expires_at": "lifecycle_or_audit_evidence"
+    },
+    "native_device_sessions": {
+      "source_issued_at": "lifecycle_or_audit_evidence",
+      "mfa_verified_at": "lifecycle_or_audit_evidence",
+      "mfa_expires_at": "lifecycle_or_audit_evidence",
+      "revocation_reason": "lifecycle_or_audit_evidence"
+    },
     "billing_enrollments": {
       "is_public_lead": "configuration_or_state_metadata"
     },
@@ -342,6 +361,10 @@
     }
   },
   "table_purpose_overrides": {
+    "user_mfa_step_ups": "Existing tenant/member MFA evidence additionally binds newly completed enrollment and step-up proofs to the authenticated source token issuance timestamp for native handoff. Historical proofs remain NULL and cannot satisfy native session-bound admission; there is no fabricated backfill. Browser MFA policy and separate platform factors are unchanged. No raw source token, MFA code or native credential is stored; this is authentication provenance, not new retention or disposition authority.",
+    "native_authorization_codes": "J20/M22 single-use browser-to-native PKCE S256 handoff receipts bound to one existing tenant membership, original browser issuance/cutoff, current MFA proof, client-reported Android/iOS platform and exact allowlisted redirect. Only a SHA-256 authorization-code digest is stored; the verifier and state are never persisted. Sixty-second default authentication expiry is not storage retention or deletion authority. The provisional caseops scheme is local-only; non-local grants require explicit native enablement, independent signing configuration and registered exact HTTPS redirects. No portal/platform grant, device attestation or production readiness is asserted.",
+    "native_device_sessions": "J20/M22 membership-owned native session families retain a random public session identifier, client-reported platform, original browser cutoff timestamp, captured MFA proof, creation/use/absolute expiry and durable revocation metadata. Every native tenant request rechecks this family plus current company, user, membership cutoff and MFA; refresh never slides the thirty-day default family expiry. Session-bound bearer authority is not a hardware-bound key or app/device attestation. Listing/revocation is caller-membership scoped and cannot grant portal/platform authority or mint browser cookies. Authentication expiry does not authorize deletion or approve a retention period.",
+    "native_refresh_tokens": "J20/M22 SHA-256 digests of random rotating refresh secrets, bound to a native session family with creation, absolute expiry and single-use consumption receipts. Atomic identity/family/token locks serialize rotation; replay durably revokes the entire family before denial, including after independent identity disablement. Used digests are retained to detect replay; no raw refresh token or access token is stored. The ledger is capped at ten thousand rows per family, after which reauthentication is required. No automated purge, tenant export, external provider transmission, approved storage-retention duration or production native grant is authorized.",
     "billing_enrollments": "Existing commercial enrollments also retain durable public demo/pricing/enquiry admissions: submitted contact name/email/mobile, company, segment, selected plan, role/intent, notes, allowlisted public entry point, notice version and server admission time. The additive is_public_lead classification and created_at/id index expose proven retained enquiries, including converted historical admissions, through bounded signed pages to current MFA-complete isolated platform managers only; viewers and tenant credentials do not gain contact-data access or founder billing mutation authority. Historical classification never edits notification state. Only a fresh server admission under the enabled owner policy captures the new purpose/version/eligibility cohort in the existing demo_admission outbox; replay, migration, later activation and retry cannot upgrade legacy or disabled-period rows. Claims, lease/attempts, no-paid provenance and fixed accepted/failed/unknown outcomes remain content-free lifecycle metadata. Submitted fields stay in SQL and the protected dashboard, not notification mail. The90-day public-demo deletion proposal remains disabled and unapproved; existing commercial/account/notes/audit preservation rules are unchanged.",
     "platform_report_admins": "Global operational reports grants linked to an existing or explicitly invited User, the configured founder provenance and, for viewers, the inviting report manager. MFA-complete managers additionally read the protected public-enquiry contact projection; report viewers receive no lead PII. Manager/viewer roles, pending/active/revoked status and credential epoch are not tenant membership, client-document access, founder billing authority or impersonation. The nullable removed_at timestamp is an access-lifecycle marker for hiding a revoked grant from the operational directory, not deletion of the User, tenant data or immutable audit history. Explicit same-issuer re-admission reuses that identity, preserves shared credentials and first-password initialization semantics, clears the directory marker and advances the grant epoch; prior links and sessions remain invalid. A separate versioned management read fences stale resend, revoke and remove commands while legacy read DTOs remain unchanged. This security class also owns encrypted realm-specific TOTP enrollment, accepted counter, hashed single-use recovery codes and bounded factor-failure lockout metadata. Passwords remain in the existing User credential class; ordinary tenant login and founder seeding do not create these grants. Named initial provisioning is a separately admitted post-release operational action, never startup seeding. No retention or disposition authority is added.",
     "platform_console_sessions": "Reports-only session admission receipts: hashed random session and CSRF identities, credential/factor fingerprints, grant epoch, challenge/authenticated purpose, issue/expiry and revocation times. The independent audience/issuer and HttpOnly cookie cannot authorize tenant, portal or founder routes. Each request rechecks current grant, root, user and credential validity; MFA is required for cross-account reports. Session expiry limits authentication, not storage retention or deletion. No raw cookie, bearer token, password or MFA secret is stored here.",
@@ -24217,6 +24240,178 @@
       }
     },
     {
+      "id": "native_authorization_codes",
+      "table_name": "native_authorization_codes",
+      "purpose": "J20/M22 single-use browser-to-native PKCE S256 handoff receipts bound to one existing tenant membership, original browser issuance/cutoff, current MFA proof, client-reported Android/iOS platform and exact allowlisted redirect. Only a SHA-256 authorization-code digest is stored; the verifier and state are never persisted. Sixty-second default authentication expiry is not storage retention or deletion authority. The provisional caseops scheme is local-only; non-local grants require explicit native enablement, independent signing configuration and registered exact HTTPS redirects. No portal/platform grant, device attestation or production readiness is asserted.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "code_challenge": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "VARCHAR(43)",
+          "nullable": false
+        },
+        "code_hash": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "consumed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "expires_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "mfa_expires_at": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "mfa_verified_at": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "platform": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(10)",
+          "nullable": false
+        },
+        "redirect_uri": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(512)",
+          "nullable": false
+        },
+        "source_issued_at": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "FLOAT",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "native_device_sessions",
+      "table_name": "native_device_sessions",
+      "purpose": "J20/M22 membership-owned native session families retain a random public session identifier, client-reported platform, original browser cutoff timestamp, captured MFA proof, creation/use/absolute expiry and durable revocation metadata. Every native tenant request rechecks this family plus current company, user, membership cutoff and MFA; refresh never slides the thirty-day default family expiry. Session-bound bearer authority is not a hardware-bound key or app/device attestation. Listing/revocation is caller-membership scoped and cannot grant portal/platform authority or mint browser cookies. Authentication expiry does not authorize deletion or approve a retention period.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "expires_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "last_used_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "mfa_expires_at": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "mfa_verified_at": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "platform": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(10)",
+          "nullable": false
+        },
+        "revocation_reason": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "VARCHAR(30)",
+          "nullable": true
+        },
+        "revoked_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "source_issued_at": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "FLOAT",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "native_refresh_tokens",
+      "table_name": "native_refresh_tokens",
+      "purpose": "J20/M22 SHA-256 digests of random rotating refresh secrets, bound to a native session family with creation, absolute expiry and single-use consumption receipts. Atomic identity/family/token locks serialize rotation; replay durably revokes the entire family before denial, including after independent identity disablement. Used digests are retained to detect replay; no raw refresh token or access token is stored. The ledger is capped at ten thousand rows per family, after which reauthentication is required. No automated purge, tenant export, external provider transmission, approved storage-retention duration or production native grant is authorized.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "consumed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "expires_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "session_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "token_hash": {
+          "category_id": "security_secret_or_credential",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "notification_delivery_events",
       "table_name": "notification_delivery_events",
       "purpose": "Repository SQL persistence class `notification_delivery_events`; its exact column inventory is intentionally versioned below.",
@@ -30804,7 +30999,7 @@
     {
       "id": "user_mfa_step_ups",
       "table_name": "user_mfa_step_ups",
-      "purpose": "Repository SQL persistence class `user_mfa_step_ups`; its exact column inventory is intentionally versioned below.",
+      "purpose": "Existing tenant/member MFA evidence additionally binds newly completed enrollment and step-up proofs to the authenticated source token issuance timestamp for native handoff. Historical proofs remain NULL and cannot satisfy native session-bound admission; there is no fabricated backfill. Browser MFA policy and separate platform factors are unchanged. No raw source token, MFA code or native credential is stored; this is authentication provenance, not new retention or disposition authority.",
       "policy_profile_id": "security_identity_control",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
@@ -30842,6 +31037,11 @@
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(80)",
           "nullable": false
+        },
+        "source_token_issued_at": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "FLOAT",
+          "nullable": true
         },
         "user_id": {
           "category_id": "tenant_or_access_identifier",
@@ -31033,12 +31233,12 @@
       }
     }
   ],
-  "schema_fingerprint": "efc4bc4e38ea3974ebf1ad5e37539710b76e562287cfc73c8b7a96f5791eeff0",
+  "schema_fingerprint": "f36946f658b4f830616eea7d43fec31d5e74e2c98453bd97d46e55c121c0692b",
   "index_inventory": {
-    "orm_index_count": 1788,
-    "orm_index_fingerprint": "6b69829619e65e20bd80cb9200dccff589f49479e218681ccdf624b80ce97b7e",
-    "migration_index_count": 1572,
-    "migration_index_fingerprint": "384e9a90a1c6e235265e68853139147d21a796570dae5ffe28be9cbe92ec7277",
+    "orm_index_count": 1793,
+    "orm_index_fingerprint": "2794641f7b5ea65cde2278a642529e7183555043ac94349679514ca783cf9e65",
+    "migration_index_count": 1577,
+    "migration_index_fingerprint": "34134af787ef24877a9007ba5887735b793d035cd2cec81bffe7a760f0a6a723",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

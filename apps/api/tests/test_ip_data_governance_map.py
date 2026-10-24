@@ -21,6 +21,26 @@ def test_committed_data_governance_map_covers_current_repository_inventory() -> 
     assert ip_data_governance_map.validate(_map()) == []
 
 
+def test_native_auth_credentials_have_restricted_fail_closed_governance() -> None:
+    data = _map()
+    tables = {row["table_name"]: row for row in data["sql_tables"]}
+    for name in ("native_authorization_codes", "native_device_sessions", "native_refresh_tokens"):
+        row = tables[name]
+        assert row["policy_profile_id"] == "security_identity_control"
+        assert row["disposition_handler_id"] == "registry_fail_closed"
+        assert row["purpose"] == data["table_purpose_overrides"][name]
+        assert name not in data["table_disposition_handler_overrides"]
+    for column in ("code_hash", "code_challenge"):
+        assert tables["native_authorization_codes"]["columns"][column]["category_id"] == (
+            "security_secret_or_credential"
+        )
+    assert tables["native_refresh_tokens"]["columns"]["token_hash"]["category_id"] == (
+        "security_secret_or_credential"
+    )
+    assert "not a hardware-bound key" in tables["native_device_sessions"]["purpose"]
+    assert "state" not in tables["native_authorization_codes"]["columns"]
+
+
 def test_manual_ip_qa_receipts_use_existing_owners_without_policy_activation() -> None:
     data = _map()
     rows = {row["table_name"]: row for row in data["sql_tables"]}

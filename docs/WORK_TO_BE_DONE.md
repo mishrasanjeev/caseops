@@ -1,5 +1,31 @@
 # CaseOps  - Work To Be Done
 
+## October 24 Native Build
+
+J20/M22 is **Partially implemented**. The first Expo/Compose-Expressive/SwiftUI
+client and native session integration are development code, not certified apps.
+See `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-24.md` for component results and the
+remaining GC/IP/files/push/native-navigation/security gates. Actual Android and
+iOS core E2E, full Docker/shared regression and signed distribution remain open.
+Owner Android SDK terms and separate MacBook/Xcode are prerequisites, not waivers.
+No production deployment occurred. October23's Missing status below is historical.
+
+## October 23 Native App Planning
+
+J20/M22 native Android/iOS client: **Missing**. Planning is retained in
+`mobile/MOBILE_APP_PLAN_2026-10-23.md`, with five sequential expert UI/UX rounds
+and forty planned acceptance groups. No app build, native test or store release
+is claimed. Current web/API E3B was independently read during planning; old
+dated release checkpoints below are not the current serving identity.
+
+Next: P0 stable two-platform/auth-session feasibility, followed by a design-only
+prototype and scoped implementation. Native rotating refresh/device revocation,
+safe browser handoff, Today ownership/GC read integration, inbox/push and private
+viewer/cache behavior require actual contracts and proof. Preserve existing
+server owners and keep private offline mutation queues, lifecycle commands,
+paid AI generation and formal legal approvals outside v1. iOS needs approved
+macOS/Xcode/signing/device access; workstation Docker is not iOS acceptance.
+
 ## October 23 Batch 3 Replacement Release
 
 The complete88 Docker gate passed3376 native and630 browser cases,with10

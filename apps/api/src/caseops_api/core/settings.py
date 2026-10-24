@@ -116,6 +116,15 @@ class Settings(BaseSettings):
     # It is intentionally separate from browser/app JWT signing material.
     machine_readiness_evidence_secret: str | None = Field(default=None, min_length=32)
     access_token_ttl_minutes: int = Field(default=120)
+    native_auth_enabled: bool = Field(default=False)
+    native_signing_enabled: bool = Field(default=False)
+    # Provision with secrets.token_hex(32) or longer: 64-256 lowercase hex
+    # characters encoding at least 32 random bytes. Never use a static example.
+    native_signing_secret: SecretStr | None = Field(default=None, min_length=64, max_length=256)
+    native_redirect_uris: list[str] = Field(default_factory=list)
+    native_access_ttl_seconds: int = Field(default=300, ge=30, le=600)
+    native_code_ttl_seconds: int = Field(default=60, ge=15, le=120)
+    native_session_ttl_days: int = Field(default=30, ge=1, le=30)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     # EG-002 (2026-04-23): default still True for local/dev so the
     # docker-compose stack and pytest fixtures keep their current

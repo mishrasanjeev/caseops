@@ -8488,6 +8488,7 @@ class UserMFAStepUp(Base):
     )
     purpose: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     method: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_token_issued_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     completed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False, index=True
     )
@@ -22489,6 +22490,11 @@ class AssistantActionPreview(Base):
 
 # PostgreSQL does not create indexes for referencing foreign-key columns. Keep
 # model-created schemas and migration-created schemas on the same coverage contract.
+from caseops_api.db.native_auth_models import (  # noqa: E402, F401
+    NativeAuthorizationCode,
+    NativeDeviceSession,
+    NativeRefreshToken,
+)
 from caseops_api.db.patent_proceeding_models import (  # noqa: E402, F401
     IpPatentProceedingDetail,
     IpPatentProceedingEvent,
