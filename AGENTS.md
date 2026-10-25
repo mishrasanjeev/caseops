@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A dependency override is not a resolved security repair. Reconcile every
+  nested locked and installed identity after targeted regeneration; npm can
+  retain an older transitive copy even after its override changes. Preserve
+  parser-level reproductions and exact-version licence provenance alongside
+  fresh full-source audit, Docker and deployed-workflow evidence.
+
 - A dated asynchronous-job check must own its bounded completion contract,
   not silently inherit a different local or production UI assertion timeout.
   Correlate the failed attempt with persisted job timestamps before diagnosis.
