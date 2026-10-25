@@ -1,159 +1,300 @@
 # Owner MacBook: Standalone iOS Simulator Build And XCUITest
 
-**Status: NOT RUN on macOS/iOS.** These are owner-run instructions, not build,
-Simulator, signing or native interaction evidence. Windows Hermes exports do not
-change that status. No cloud Mac, billing, new account or CI dispatch is needed.
+**macOS/Xcode/iOS: NOT RUN.** This is an owner-run handoff, not native build,
+Simulator, signing or interaction evidence. No services, installs, commits,
+pushes, new worktrees or deployment were performed by this offline component task.
 
-## 1. Use The Exact Shared Candidate
+## 1. Evidence And Publication Gate
 
-Use development branch `codex/mobile-app-build-20261024` once the parent confirms
-its push. A checkout of the old production/base commit alone does not contain
-the app. In a clean dedicated Mac checkout, fetch that branch and select it
-without resetting another user's work. Do not transfer `.env`, tokens, signing
-keys or real customer data. The branch is not a merge/release certification.
+The parent reports Android built and local API/web at
+`60f1deccb4a2ff968ae649a82dfc066782d4a846`. The finite iOS Hermes export passed:
+**900 modules, about 9.6 MB**. This is bundling evidence, NOT CocoaPods, Xcode,
+a Simulator `.app`, SwiftUI behavior or iOS E2E. Retain the parent's original
+receipts; this Windows offline component pass did not repeat those builds.
 
-```sh
+The current dated inventory is **23 cases**, `NATIVE-01` through `NATIVE-23`,
+not the historical six or previous 22. Files is a separate pending supplement,
+not an extra iOS core case. See the
+[owner checklist](../../docs/mobile/IOS_OWNER_CHECKLIST_2026-10-25.md).
+A 23-case core result cannot certify all forty MOB acceptance groups.
+
+Wait until parent confirms that `codex/mobile-app-build-20261024`, including
+all reviewed bootstrap/harness changes, is pushed and supplies its full SHA.
+The final published candidate may be newer than the observed `60f1decc`.
+Use one clean dedicated Mac checkout, not copied Windows native output, volumes,
+CA keys, tokens or customer data. Do not reset another user's checkout.
+
+Open a dedicated **Bash** shell (macOS may default to zsh). Replace the three
+owner-supplied placeholders, then:
+
+```bash
+set -euo pipefail
+umask 077
+export CASEOPS_REPO_URL="OWNER-AUTHORIZED-REPOSITORY-URL"
 export CASEOPS_REPO="/absolute/path/to/CaseOps"
+export CASEOPS_EXPECTED_SHA="PARENT-CONFIRMED-PUBLISHED-40-HEX-SHA"
+git clone --single-branch --branch codex/mobile-app-build-20261024 "$CASEOPS_REPO_URL" "$CASEOPS_REPO"
 cd "$CASEOPS_REPO"
+test "$(git rev-parse HEAD)" = "$CASEOPS_EXPECTED_SHA"
+test -z "$(git status --porcelain --untracked-files=all)"
 git rev-parse HEAD
 git branch --show-current
-git status --short -- apps/mobile scripts/mobile
+git ls-remote --heads origin refs/heads/codex/mobile-app-build-20261024
+mkdir -p "$HOME/.cache/caseops-mobile"
+export CASEOPS_HANDOFF="$HOME/.cache/caseops-mobile/ios-handoff-$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir "$CASEOPS_HANDOFF"
+sw_vers
+uname -m
 node --version
 npm --version
+python3 --version
+ruby --version
+pod --version
+docker version
+docker compose version
 xcodebuild -version
 xcode-select -p
 xcrun simctl list devices available
+node scripts/mobile/source-snapshot.mjs > "$CASEOPS_HANDOFF/source-before.json"
+node scripts/mobile/run-native.mjs ios --collect > "$CASEOPS_HANDOFF/ios-collection.json"
 ```
 
-Required: supported Node >=22.19.0 (tested Windows tooling uses 24.15.0), npm >=10,
-full Xcode, an installed compatible Simulator runtime and a dedicated device
-UDID selected from the actual list. The owner must review any Xcode license or
-runtime prompt. Do not silently run a license-accept command, change the global
-developer directory, shut down all simulators or stop unrelated services.
+Require the remote branch to resolve to the same parent-confirmed SHA. Do not
+pull/change source during a build or native run. Record all tool/OS versions
+and Mac architecture; do not overwrite a prior handoff directory.
 
-## 2. Install The Independent App Package
+Required: supported Node >=22.19.0 (retained Windows version 24.15.0; prefer
+that exact version), npm >=10, host Python >=3.11 (`datetime.UTC`), owner-managed
+Ruby/CocoaPods, full Xcode and a compatible installed Simulator runtime.
+Owner must review Xcode terms, first-launch/components/runtime and Docker
+Desktop terms/availability. Windows consent does not cover these. Do not silently
+accept licenses, change the global developer directory, shut down all devices,
+or stop unrelated services. Full Xcode must be selected, not Command Line Tools
+alone. Do not infer compatibility from RN's minimum: installed Expo/ExpoUI
+podspecs require iOS 16.4; the exact Xcode/runtime/package set still needs Mac
+compilation. Missing prerequisites are blockers, not completed steps.
 
-Parent confirmed Expo SDK58/RN0.88. `apps/mobile` is **not a root npm workspace**.
-Use its own checked-in lock and local CLI, never `npm --workspace`, a global Expo
-or `npx` that can fetch another version. Do not regenerate the lock on macOS.
+## 2. Locked Dependencies And Local Checks
 
-```sh
+`apps/mobile` is **not a root npm workspace**. Use its checked-in package lock
+and local CLI, never a global Expo, fetching `npx`, or dependency repair:
+
+```bash
 cd "$CASEOPS_REPO/apps/mobile"
-npm ci
-npm ls expo react-native expo-dev-client expo-secure-store expo-web-browser
+unset NODE_ENV
+npm ci --include=dev
+npm ls expo react-native react @expo/ui react-native-webview pdfjs-dist
+node "$CASEOPS_REPO/scripts/mobile/prepare-viewer-assets.mjs" --check
 npm run typecheck
 npm test
-```
-
-Any platform-specific install/lock failure is a prerequisite failure. Preserve
-the error and coordinate with parent, rather than silently changing dependencies.
-
-## 3. Prepare An Isolated HTTPS Backend And Marker Gateway
-
-Use the parent's isolated Docker API/PostgreSQL + deterministic providers and
-synthetic QA auth fixture. If using a standalone deterministic server instead,
-label receipts `deterministic-simulator`; do not label them Docker integration.
-Never use production or a billable provider. Do not invent seed identities,
-bootstrap accounts in a shared tenant or inject native tokens to simulate login.
-
-The standalone Release build uses `__DEV__=false`; HTTP is deliberately rejected.
-Use parent-provisioned HTTPS listeners, for example API
-`https://127.0.0.1:8443` and web `https://127.0.0.1:3443`. The API listener must
-forward through the marker-enforcing gateway, not bypass it. Bind host listeners
-to loopback and keep the Docker database/providers isolated. Do not expose a
-fixture to the LAN. Do not copy the Windows Docker volume or private CA key to
-the Mac: provision a separate ephemeral local fixture and CA there.
-
-Generate the internal gateway config from the fixture's real route inventory. It
-contains `upstream` (loopback origin), a free explicit `port`, unique `runId`, and
-reviewed exact `METHOD /api/path` strings. Include actual native-auth endpoints,
-`GET /api/build` and the known Today/Matter/calendar/note reads, but no paid or
-generation routes. See `README.md` for schema and bounds. Start in a terminal:
-
-```sh
 cd "$CASEOPS_REPO"
-node scripts/mobile/no-paid-gateway.mjs /absolute/path/gateway-config.json
+node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs
+git diff --exit-code -- apps/mobile/package.json apps/mobile/package-lock.json
 ```
 
-The HTTP gateway is an internal hop behind the local HTTPS listener, not the
-origin embedded in the standalone app. The proxy rejects any app request missing
-`X-CaseOps-Automated-Test: no-paid-providers`; it does not manufacture a positive
-marker test by merely injecting the header. Use the real native sign-in button,
-system browser and single-use handoff. If browser auth/MFA/PKCE completion is not
-implemented for the isolated fixture, stop: this is an auth prerequisite, not
-permission to inject a token or scrape browser cookies. Existing browser login
-alone is not native session evidence.
+Current pins: Expo 58.0.19, RN 0.88.0, React 19.3.0, `@expo/ui` 58.0.23,
+WebView 14.0.1, and public PDF.js inputs 6.4.299. iOS uses the actual SwiftUI
+adapter, not Android Compose or DOM controls. Verify committed renderer assets
+and notices; a missing closure is a stop, not permission for a CDN, fake PDF
+image or new package. These checks are components, not native execution.
 
-## 4. Establish Simulator-Only TLS Trust
+No committed project Ruby/CocoaPods lock or iOS Podfile.lock was found in this
+handoff source. Owner/parent must select and record the exact Ruby/CocoaPods pair.
+The wrapper uses `pod` on PATH, not `bundle exec pod`. First generated Pods
+resolution remains provisional until the resulting Podfile.lock/native closure
+is reviewed and retained. Do not run unpinned `sudo gem install`, `pod update`,
+`expo install --fix`, a lock rewrite or an unreviewed SwiftPM migration.
+[CocoaPods guidance](https://guides.cocoapods.org/using/getting-started.html)
+describes owner-managed Ruby and version pinning, not proof of this package set.
 
-Parent supplies one public CA certificate in PEM format outside every Git
-checkout, its independently recorded SHA-256 and HTTPS server certificates with
-IP SAN `127.0.0.1` (and DNS SAN `localhost` if used). Never transfer a private
-key, add a production trust exception, disable hostname verification, set
-`NODE_TLS_REJECT_UNAUTHORIZED=0`, use `curl -k`, or add ATS exceptions.
+## 3. Platform-Aware Python Fixture (Mac Not Run)
 
-Select and boot only the dedicated simulator from the actual available list.
-Do not repeat `boot` when it is already booted. The owner must approve the
-simulator-specific CA installation; it is not a host Keychain installation.
+The QA-ID dated gate requires **synthetic docker-integration**, not a fake server.
+Use `local-bootstrap.py`, `compose.mobile-local.yml` and `local-gateway.py`.
+Do not substitute the generic `no-paid-gateway.mjs`: it lacks the dynamic
+current-session DELETE behavior needed by NATIVE-20.
 
-```sh
+The actual commands below are an owner-authorized local provisioning attempt,
+**not a Mac-tested recipe**. `up` refuses an existing cache, builds canonical
+API and marker-enabled derived web images, migrates an independently fresh
+database, seeds synthetic records and creates a new local CA. It requires at
+least 12 GiB measured Docker filesystem build headroom; also inspect Docker
+inodes, host space and pinned image architecture. Only gateway ports publish
+on host loopback. Runtime API/web/PostgreSQL/scanner networking is isolated and
+has no paid-provider keys. Free public build dependencies/images may download.
+
+```bash
+cd "$CASEOPS_REPO"
+export CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE="$HOME/.cache/caseops-mobile/ios-docker-$(date -u +%Y%m%dT%H%M%SZ)"
+python3 scripts/mobile/local-bootstrap.py --help
+python3 scripts/mobile/local-bootstrap.py up --platform ios --cache "$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE" --api-port 8443 --web-port 3443 --mfa
+python3 scripts/mobile/local-bootstrap.py status --platform ios --cache "$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE"
+python3 scripts/mobile/local-bootstrap.py probe --platform ios --cache "$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE"
+python3 scripts/mobile/local-bootstrap.py scanner-probe --platform ios --cache "$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE"
+python3 scripts/mobile/local-bootstrap.py auth-probe --platform ios --cache "$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE"
+```
+
+**Portability implementation (offline component proof, not a Mac pass):**
+
+- `--platform android|ios` is explicit and defaults to Android. New
+  `config.json` stores platform, exact API/web origins and ports. iOS derives
+  `https://127.0.0.1:8443` / `https://127.0.0.1:3443`; Android retains
+  `10.0.2.2`. Web build arguments, receipts and extension inputs consume the
+  same validated config. Foreign/HTTP/path-bearing origins, bad ports and
+  attempts to reinterpret an existing cache's platform fail closed.
+- The iOS helper writes a content-bound JSON Compose override **outside Git**
+  changing only API/migration `CASEOPS_PUBLIC_APP_URL` to the configured iOS
+  web origin. The canonical Compose file, CORS, TLS, networks, provider fences
+  and image definitions are unchanged. Legacy/default Android Compose/build
+  commands stay unchanged. The immutable receipt retains the generated override
+  path/SHA-256 as `platformComposeOverride`, alongside canonical Compose hash.
+- `extend --platform ios --udid <actual-Simulator-UUID>` requires the actual
+  Darwin host and exactly one already-booted, available iOS device. It performs
+  only `xcrun simctl list devices available --json` and
+  `xcrun simctl spawn <UUID> defaults read NSGlobalDomain AppleLocale`, each
+  with a five-second deadline and a 64 KiB accepted-response cap. It does not
+  boot, erase, change language/locale, install or launch an app. A missing,
+  duplicate, non-iOS, unavailable or unbooted target, malformed output or
+  unsupported locale fails without a guessed fallback. Locale underscores are
+  normalized only after validating the actual returned value. Read-only command
+  evidence is hashed and retained; formatted captions remain expectations, not
+  native rendered-label proof.
+- iOS extension auth is server-config-bound `web-context` with
+  `iosConsent: true`; no MFA stage or observed browser success is invented.
+  Android remains `native-firefox` and uses the real host's SDK `adb.exe`
+  on Windows or `adb` on macOS/Linux, never PATH fallback. Existing route
+  metadata/dynamic admission policy and the 64-event history are preserved.
+
+Use `--platform ios` on **every** action against the new iOS cache. Existing
+Android caches are not converted; an omitted/default-Android option against an
+iOS cache is refused before transport. This task has not run Docker, built an
+image, changed a device or reconfigured the frozen 60f API/web/APK.
+
+**Remaining gates, not silently solved by these helper changes:**
+
+- Actual Mac/Apple Silicon image manifests, bind mounts, host CLI/defaults
+  availability, source fingerprints, strict TLS and complete bootstrap have not
+  run here. Preserve setup failures; do not substitute pinned images or enable
+  external provider networking.
+- The helper preserves a gateway route descriptor but does not generate the
+  complete schema-2 dynamic-session policy/status evidence or local run plan
+  required by `local-run.mjs`/`session-admission.mjs`. Parent-owned reviewed
+  preparation remains needed; no shared harness was changed.
+- Raw `extended-seed-*.json` is not the flat DTO consumed by
+  `inspectLocalPlan` (`taskId`, `draftId`, `hearingId`, `calendarDate`,
+  `otherMatterId`). A provenance-bound effective projection must retain the
+  immutable base/extension receipts and name the actual extended member/task,
+  not the base owner's original task. This separate preparation is still open.
+
+Windows unit mocks do not prove a Mac helper works. No DNS/routing workaround,
+ATS weakening, production fixture or billing-enabled provider is allowed.
+
+The Python TLS gateway requires the client's authoritative
+`X-CaseOps-Automated-Test: no-paid-providers` marker and exact method/path.
+It learns one current, unrevoked ID from a successful marked native Bearer
+`GET /api/auth/native/sessions`, records the source request ID and consumes
+that exact DELETE on the first attempt. Never guess a session ID, add wildcard
+routes, pre-revoke it, or reset the ledger during execution.
+
+`auth-probe` exercises real API/MFA/PKCE/token behavior on disposable proof
+records; it does not sign in the device browser or inject native credentials.
+`scanner-probe` proves real configured clean/EICAR behavior, not a native upload
+or post-start scanner-outage boundary. Genuine app sign-in/system browser/MFA
+and one-use callback must still run.
+
+After section 4 has selected and booted the one dedicated Simulator, the
+concrete extension/owner sequence is now:
+
+```bash
+python3 scripts/mobile/local-bootstrap.py extend --platform ios --cache "$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE" --udid "$SIMULATOR_UDID"
+python3 scripts/mobile/local-bootstrap.py bind-owner --platform ios --cache "$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE"
+python3 scripts/mobile/local-bootstrap.py admit-source --platform ios --cache "$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE"
+node scripts/mobile/local-owner-read.mjs
+python3 scripts/mobile/local-bootstrap.py begin-core-ledger --platform ios --cache "$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE" --mfa
+```
+
+These owner-run commands create fresh synthetic member/targets through the
+existing real APIs and preserve prior seed/history. They are **not executed by
+this Windows task**. Keep all ordinary TLS/auth/negative probes before the
+final clean ledger. Only if API/web inputs really change after a freeze, parent
+must explicitly direct `rebuild-api --platform ios --mfa` and/or
+`resume --platform ios --mfa` with that same cache, then rebind and retain new
+immutable receipts. Do not rebuild the currently frozen 60f images as part of
+this implementation, and never reset/restart a ledger during native traffic.
+
+`bind-owner` binds actual running API image/container and extension/Python
+hashes. `local-owner-controls.mjs` supports only `disposeMatter`,
+`readMatterState`, `revokeMatterAccess`, `readNoteState`, using canonical
+services in the owned Docker API with SQL/child deadlines inside the harness's
+10-second limit. `local-owner-read.mjs` is a read-only fresh-baseline check.
+Destructive controls retain exclusive no-replay attempt files. A new full run
+needs fresh disposable targets, never reopened predecessors or an uncertain
+command replay. Device-session revocation remains the actual Account UI action.
+
+## 4. Simulator-Only Strict TLS
+
+Use the **new Mac fixture's** public PEM
+`$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE/tls/ca.crt`, outside Git, and compare its
+SHA-256 to an independently retained local receipt. Never copy the Windows CA
+key or private fixture state. Leaf certificates need IP SAN `127.0.0.1` and
+DNS SAN `localhost` if used; browser/native/host origins must match.
+
+Select one actual dedicated Simulator. Boot only if not already booted. The
+owner explicitly approves importing this one public CA into that Simulator,
+not the host Keychain or a normal device:
+
+```bash
 export SIMULATOR_UDID="ACTUAL-DEDICATED-SIMULATOR-UDID"
-export CASEOPS_LOCAL_PUBLIC_CA="/absolute/outside-git/public-ca.pem"
+export CASEOPS_LOCAL_PUBLIC_CA="$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE/tls/ca.crt"
 shasum -a 256 "$CASEOPS_LOCAL_PUBLIC_CA"
 xcrun simctl boot "$SIMULATOR_UDID"
 xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 xcrun simctl keychain "$SIMULATOR_UDID" add-root-cert "$CASEOPS_LOCAL_PUBLIC_CA"
 ```
 
-Compare the public certificate hash to the parent's independent receipt first.
-If the installed runtime requires manual activation, the owner enables only
-this identified CA under Settings > General > About > Certificate Trust Settings.
-Prove the exact HTTPS web origin in the selected Simulator's system browser
-without a certificate warning. A CA trusted by an app does not automatically
-establish trust in a separate browser. Review Simulator TLS failure as a setup
-failure; never click through a warning for acceptance. Keep this CA/device
-disposable and use the owner's normal device cleanup after evidence collection.
+If the selected runtime needs manual activation, owner enables only this CA
+in Certificate Trust Settings. Prove the exact web origin in the actual system
+browser without a warning, separately from native app trust and process-scoped
+Node `NODE_EXTRA_CA_CERTS`. No `curl -k`, hostname-verification bypass,
+`NODE_TLS_REJECT_UNAUTHORIZED=0`, ATS exception or warning continuation.
+Missing strict TLS is failed setup, not a native product result.
 
-## 5. Build A Bundled Unsigned Release Simulator App
+## 5. Bundled Unsigned Simulator Build
 
-Wait for the parent's exact candidate/scaffold-ready confirmation. Run from a
-clean dedicated Mac checkout with the installed local package. No Metro process
-is needed or started. The wrapper uses the installed Expo prebuild, CocoaPods,
-then `xcodebuild -configuration Release -sdk iphonesimulator` with both code
-signing switches disabled. This is not a physical-device or App Store build.
+After parent-approved source/fixture prerequisites, use the checked-in wrapper.
+No Metro, Expo Go or `run:ios` development-server substitute. It uses local
+Expo prebuild, CocoaPods and Release `xcodebuild -sdk iphonesimulator`, with
+`CODE_SIGNING_ALLOWED=NO` and `CODE_SIGNING_REQUIRED=NO`. It is not a
+physical-device, distribution-signing or App Store build.
 
-```sh
+```bash
 cd "$CASEOPS_REPO"
 export EXPO_PUBLIC_API_ORIGIN="https://127.0.0.1:8443"
 export EXPO_PUBLIC_WEB_ORIGIN="https://127.0.0.1:3443"
+unset CASEOPS_MOBILE_ANDROID_CA_FILE CASEOPS_MOBILE_ANDROID_CA_SHA256
 node --test scripts/mobile/build-config.test.mjs
 bash scripts/mobile/build-ios-simulator-acceptance.sh
 ```
 
-The wrapper sets only its child process profile `ios-simulator-acceptance`,
-marker `1`, and exact HEAD. Both HTTPS origins must be explicit loopback origins
-with unprivileged ports. Android CA variables are forbidden for this profile.
-It does not change the default iOS identifier or add an ATS/CA plugin. Its QA
-bundle ID is `ai.caseops.mobile.dev.simulatoracceptance`. Native auth remains
-disabled in production; only the isolated Docker fixture may enable it.
+Child profile: `ios-simulator-acceptance`, marker `1`, exact HEAD,
+`NODE_ENV=production`, `EXPO_NO_DOTENV=1`. Both origins must be explicit
+HTTPS loopback origins with unprivileged ports. Android CA variables are
+forbidden. QA bundle ID: `ai.caseops.mobile.dev.simulatoracceptance`;
+default development ID is not changed and no ATS/CA plugin is added to iOS.
+Native auth stays disabled in production, enabled only in this isolated fixture.
 
-The first prebuild/Pods may download free open-source build dependencies. Install
-the owner-reviewed CocoaPods prerequisite first. A retained `Podfile.lock` uses
-`pod install --deployment`; a fresh generated project uses `pod install` and
-retains the resulting lock with the build evidence. Stop on new terms, accounts,
-signing or paid-service prompts. Never add `-allowProvisioningUpdates`.
+An existing generated Podfile.lock uses `pod install --deployment`; a fresh
+project uses `pod install` and retains the new lock. Stop on new terms,
+accounts, signing or paid-service prompts. Never use `-allowProvisioningUpdates`.
+Unique `~/.cache/caseops-mobile/ios-build-*` directories retain before/after
+fingerprints, prebuild/Pods/Xcode logs, lock, embedded config and canonical
+bundle-tree hash. Require the actual new `.app`, nonempty `main.jsbundle`,
+matching origin/source/marker and bundle ID. Preserve failures. An unchanged SHA
+does not certify dirty bytes, and a Hermes bundle does not certify Xcode.
 
-Each run has a unique directory under `~/.cache/caseops-mobile/ios-build-*` with
-prebuild/Pods/Xcode logs, before/after source identity, embedded Expo config and
-binary hash. Failures remain there. Require the current `.app`, a nonempty
-`main.jsbundle`, marker `true`, matching origins/source, and the distinct QA
-bundle ID. A Hermes export alone is not an Xcode build. An unchanged SHA alone
-does not identify dirty app bytes; the wrapper also requires equal fingerprints.
+After success use only the reported artifact path, not a stale DerivedData match:
 
-Only after a successful build, use its reported path, never a stale DerivedData
-match. Parent owns installation, simulator launch and native E2E:
-
-```sh
+```bash
 export APP_PATH="/actual/new-run/DerivedData/Build/Products/Release-iphonesimulator/CaseOps.app"
 plutil -extract CFBundleIdentifier raw -o - "$APP_PATH/Info.plist"
 plutil -extract CFBundleShortVersionString raw -o - "$APP_PATH/Info.plist"
@@ -162,17 +303,18 @@ xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
 xcrun simctl launch "$SIMULATOR_UDID" ai.caseops.mobile.dev.simulatoracceptance
 ```
 
-Require a real CaseOps screen, not a development launcher, with no Metro listener.
-The unchanged callback is `caseops://oauth/callback`: a side-by-side old dev app
-may claim it. Parent must prove the callback resolves to the QA app on this
-dedicated simulator rather than editing auth/domain code or pretending a token
-injection proves sign-in.
+Require a genuine CaseOps screen/SwiftUI controls, not a development launcher.
+Prove unchanged `caseops://oauth/callback` resolves to this QA app on the
+dedicated Simulator; a side-by-side dev app may claim it. Do not edit auth or
+inject a token to conceal a callback collision.
 
-## 6. Prepare Appium/XCUITest
+## 6. Owner-Local Appium/XCUITest
 
-Install only into the owner cache, not the repository's root or app lock:
+These are pinned tooling versions, not proof of compatibility on the owner Mac.
+Use outside-repository caches and inspect an existing installation before
+changing it. Owner approves installation; no relaxed Appium security or cloud Mac.
 
-```sh
+```bash
 export CASEOPS_MOBILE_TOOLING_HOME="$HOME/.cache/caseops-mobile/tooling"
 export APPIUM_HOME="$HOME/.cache/caseops-mobile/appium"
 npm install --prefix "$CASEOPS_MOBILE_TOOLING_HOME" --save-exact --no-audit --no-fund appium@3.8.0 webdriverio@10.1.0
@@ -182,54 +324,131 @@ node "$CASEOPS_MOBILE_TOOLING_HOME/node_modules/appium/index.js" driver doctor x
 node "$CASEOPS_MOBILE_TOOLING_HOME/node_modules/appium/index.js" --address 127.0.0.1 --port 4723 --log-level error
 ```
 
-Do not reinstall an already matching driver; review a different existing version
-rather than overwrite it. A doctor failure is a setup failure. Do not enable
-relaxed Appium security, configure distribution signing or dispatch CI here.
+Skip installation when the exact matching package/driver is already installed;
+review a different version rather than overwrite it. Run the server in its own
+owner-controlled terminal. Doctor, WDA/Xcode/runtime or browser-context failure
+is a blocker, not permission to alter the driver/security/signing constraints.
 
-## 7. Collect, Execute And Reconcile
+## 7. Prepare, Run And Reconcile All 23 Cases
 
-Generate the fixture JSON from the isolated seed ledger and actual app/device
-metadata using the current `apps/mobile/e2e/fixture-contract.mjs` and the parent's
-isolated-fixture instructions in `local-README.md`. The current dated inventory
-is `apps/mobile/e2e/core-20261025.json` (22 cases); `inventory.json` retains the
-historical six and must not be relabelled as the expanded core. Inspect the
-source-frozen selectors and owner-control targets, including distinct disposable
-negative targets, before execution. Never invent IDs, expectations or capability
-evidence to satisfy the validator. Set `environment` honestly and retain the
-separate Docker source/image/database receipt. Missing capability is a blocker,
-not an approved skip or a reason to inject a session.
+Stop here until section 3's Mac requirements are resolved. The real existing
+preparation CLI is `run-native.mjs ios --inspect-local /absolute/plan.json`
+then `ios --prepare-local /absolute/plan.json`. There is no
+`prepare-local-run.mjs` or complete Mac plan/policy exporter. A prepared plan
+is not a native pass.
 
-Use the actual bundle ID `ai.caseops.mobile.dev.simulatoracceptance` in the
-fixture. The original harness at `d5a6641e` admitted only `ai.caseops.mobile.dev`.
-Parent must land/review its dedicated QA-ID admission before execution; never
-mislabel this binary to bypass that fence. The harness control-plane gateway
-URL remains host-loopback (not `10.0.2.2`) and must identify the same run. For a
-custom-CA HTTPS control-plane endpoint, use process-scoped `NODE_EXTRA_CA_CERTS`
-with the verified public PEM; do not disable TLS validation. Keep Appium local.
+Parent must supply a secret-free plan generated from this Mac's real evidence,
+not a copied unit/Android fixture. Exact fields are in `local-run.mjs`,
+`fixture-contract.mjs` and `session-admission.mjs`:
 
-```sh
-cd "$CASEOPS_REPO"
-export CASEOPS_MOBILE_FIXTURE="/absolute/path/isolated-ios-fixture.json"
-export CASEOPS_MOBILE_APPIUM_URL="http://127.0.0.1:4723"
-export CASEOPS_MOBILE_REPORT_ROOT="$HOME/.cache/caseops-mobile/evidence"
-node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs
-node scripts/mobile/run-native.mjs ios --collect
-node scripts/mobile/run-native.mjs ios
-node scripts/mobile/reconcile-native.mjs ios /actual/run/events.jsonl
+- `schemaVersion: 1`; absolute/hash-verified `dockerReceipt`, `seed`,
+  `buildReceipt`, `publicCa`, `gatewayRoutes`; outside-Git `outputFixture`.
+  Effective seed must have the real flat plan-consumer shape and fresh extended
+  member/task identities, with immutable base/extension provenance retained;
+  neither the base owner-only seed nor raw nested extension suffices. Resolve
+  `current-receipt.json` to its named immutable receipt and hash that file,
+  not the pointer. Use Mac paths, never copied Windows references.
+- Actual bundle version/build, device/runtime/UDID and QA ID. Native embedded
+  origins and live API/web SHA/revisions agree with the frozen candidate.
+  Retain separate native source fingerprint and harness fingerprint.
+- Canonical `expectations`: five distinct identifiers; Today/Work/current
+  draft/calendar values in the observed Simulator locale; foreign Matter and
+  distinct fresh lifecycle/access targets. No invented IDs/captions/legal data.
+- Hash-bound `ownerControls`, all four operations, actual API image/container,
+  extension/Python/module hashes and fresh read-only baseline. Owners bypass
+  restricted Matter access; use the extension's member.
+- Actual iOS `auth.mode: "web-context"`, explicit observed MFA `mfaStage`
+  (`login` or `consent`), plan-named credential environment variables.
+  `iosConsent: true` is opt-in only for the observed normal Continue prompt.
+  Android Firefox recipes are not Safari/ASWebAuthenticationSession proof.
+  Stop if XCUITest cannot attach to the real system-browser context.
+- A schema-2 `gatewayRoutes` descriptor containing
+  `dynamicAdmissions.nativeCurrentSessionDelete`, exact static route list,
+  `native-current-session-delete-v1` invariants, reviewed Python source/hash,
+  matching run ID, immutable isolation reference and hashed current status.
+  Session-list/request-ID linkage, one live current/unrevoked native ID,
+  cookie exclusion and consume-on-attempt must validate. Static routes alone
+  fail `CURRENT_SESSION_DELETE_ADMISSION_MISSING`. The bootstrap does not
+  currently export this complete descriptor; do not invent a session ID/policy.
+
+Load only the actual extended member values named by the plan from its protected
+local credential file. Do not print the file, put secrets in JSON/CLI/history,
+enable `set -x` or record the terminal. For the current variable names,
+Bash reads existing values without terminal echo:
+
+```bash
+IFS= read -r -s CASEOPS_MOBILE_CORE_EMAIL
+printf '\n'
+IFS= read -r -s CASEOPS_MOBILE_CORE_PASSWORD
+printf '\n'
+IFS= read -r -s CASEOPS_MOBILE_CORE_TOTP_SECRET
+printf '\n'
+export CASEOPS_MOBILE_CORE_EMAIL CASEOPS_MOBILE_CORE_PASSWORD CASEOPS_MOBILE_CORE_TOTP_SECRET
 ```
 
-Require all 22 ordered intended/discovered identities in the dated inventory,
-complete setup/call/teardown results,
-native `NATIVE_APP` context, no retries, exact backend/source/binary identity and
-zero missing-marker/unadmitted-route counters. After a process restart, the note
-must come from the authoritative workspace reread. Keep failures and interrupted
-runs unchanged; missing completion, missing fixture, no binary or incomplete
-handoff is **not** success. Never retry an uncertain note save.
+Environment is process-local, not secret-free storage. Do not dump it; unset it
+after execution. Do not enroll/reset a real user or replace missing credentials.
 
-Return the complete unique run directory, sanitized build/config/doctor results,
-Xcode/OS/device versions and exact candidate inputs to parent. This dated core
-slice does not certify the forty-group matrix, physical iPhone,
-VoiceOver, camera, biometrics, APNs, signed distribution, TestFlight or production.
+```bash
+cd "$CASEOPS_REPO"
+export CASEOPS_MOBILE_RUN_PLAN="/absolute/outside-git/real-ios-plan.json"
+export CASEOPS_MOBILE_APPIUM_URL="http://127.0.0.1:4723"
+export CASEOPS_MOBILE_REPORT_ROOT="$HOME/.cache/caseops-mobile/evidence"
+export NODE_EXTRA_CA_CERTS="$CASEOPS_LOCAL_PUBLIC_CA"
+node scripts/mobile/run-native.mjs ios --inspect-local "$CASEOPS_MOBILE_RUN_PLAN"
+node scripts/mobile/run-native.mjs ios --prepare-local "$CASEOPS_MOBILE_RUN_PLAN"
+export CASEOPS_MOBILE_FIXTURE="/actual/outputFixture/path/reported-by-prepare-local.json"
+node scripts/mobile/local-owner-read.mjs
+node scripts/mobile/run-native.mjs ios --collect > "$CASEOPS_HANDOFF/ios-final-collection.json"
+node scripts/mobile/run-native.mjs ios
+node scripts/mobile/reconcile-native.mjs ios /actual/run/events.jsonl
+unset CASEOPS_MOBILE_CORE_EMAIL CASEOPS_MOBILE_CORE_PASSWORD CASEOPS_MOBILE_CORE_TOTP_SECRET
+node scripts/mobile/source-snapshot.mjs > "$CASEOPS_HANDOFF/source-after.json"
+```
+
+Require zero preparation blockers and all **23 ordered intended/discovered
+identities**, complete setup/call/teardown, genuine `NATIVE_APP` context,
+preflight/postflight and completion, zero retries, exact source/binary/backend/
+web identities and zero missing-marker/unadmitted-route counters. Keep the
+20-minute run bound unchanged. Missing completion, fixture, browser handoff,
+owner capability or binary is incomplete, never success or an approved skip.
+
+NATIVE-20 must link a fresh marked native session-list read to the actual current
+ID and its single acknowledged DELETE, then stay signed out after restart.
+NATIVE-23 follows acknowledged logout in NATIVE-22: perform actual Home
+background and warm resume, restore usable signed-out controls, and prove no
+private UI/auth traffic returns. A cold launch or permanent privacy cover does
+not satisfy it.
+
+Consent-stage MFA requires actual authorize 403 -> one successful step-up ->
+fresh identity -> explicit second Connect -> one authorize 200 -> one token 200,
+with unchanged PKCE/principal/workspace. Login-stage MFA needs its own observed
+challenge. API auth-probe does not prepare the browser or certify these controls.
+
+Return complete unique build/run directories, sanitized versions/doctor/config,
+immutable Docker/seed/extension/scanner/TLS/isolation and dynamic-policy receipts,
+native lock/binary hash, source/harness fingerprints and all failures to parent.
+Never retry an uncertain note, upload, session-delete or owner mutation. Another
+full attempt needs fresh disposable targets, not reopened consumed fixtures.
+
+The pending `files-20261025.mjs` supplement is Android-only, outside the core
+CLI and anchored to an owner's Windows fixture IDs. FILES-01 describes TXT
+source read/return; FILES-02 deliberately blocks without actual picker/upload
+evidence. Do not transplant those IDs into a fresh Mac tenant, call an opened
+picker an upload, claim iOS Files coverage, or silently count it in the 23.
+A separately reviewed iOS source/picker/viewer/upload/cleanup inventory is open.
+The forty-group matrix, physical iPhone, VoiceOver/large text, camera, biometrics,
+push, signing/TestFlight/store and exact-release product gates remain open.
+
+Only after owner-directed shutdown:
+
+```bash
+python3 scripts/mobile/local-bootstrap.py stop --platform ios --cache "$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE"
+```
+
+This validates/stops only the owned Compose project and retains volumes/evidence.
+No `down -v`, global prune, broad Simulator shutdown or trust-store cleanup.
+Any selected-device CA removal/cleanup is a separate explicit owner action.
 
 ## 8. Android Contract And Default-Config Recovery
 
@@ -275,3 +494,24 @@ Reference behavior: [Expo local release variants](https://docs.expo.dev/more/exp
 [Apple Simulator certificate management](https://developer.apple.com/videos/play/wwdc2020/10647/).
 The implementation also checks the installed Expo58/RN0.88 Gradle and Xcode
 scripts; current upstream documentation alone is not exact-version proof.
+
+Current primary references:
+[Expo SDK 58](https://expo.dev/changelog/sdk-58) confirms RN 0.88 and the supported
+default CocoaPods path; [Apple Xcode components](https://developer.apple.com/documentation/xcode/downloading-and-installing-additional-xcode-components)
+and [XCUITest setup](https://appium.github.io/appium-xcuitest-driver/latest/getting-started/)
+guide owner prerequisites. These sources do not certify this application on Mac.
+
+## Portability Component Verification
+
+Verdict: **Partially fixed**. The original iOS web-origin regression failed
+before the change (Android build arguments despite iOS config), then passed.
+The original 19-case Python module and its 64-entry gateway history remain
+required alongside the added offline portability tests. The complete replacement
+module ran **39 tests: 39 passed, no failures/errors/skips**, including all prior
+19 and 20 added regression/portability cases, on Windows with mocked external
+CLIs and isolated loopback gateway test doubles. A first expanded run
+retained an eager home-directory failure (even with an explicit SDK) and a
+test command-slice failure; both were corrected and the full replacement
+inventory is reconciled above. This is not a Mac, Xcode or native acceptance
+receipt. No shared gateway/harness, app/API/web source, checked-in Compose,
+images, services, device state or commit was changed by this bounded task.

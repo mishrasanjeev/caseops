@@ -1,5 +1,34 @@
 # Native App Integration: 25 October 2026
 
+## Later Runtime Findings And Replacement
+
+Source `60f1decc` produced an actual standalone non-debug Android APK and matching
+Docker API/web images. Manual real-browser password/MFA, native Today/Account,
+sign-out and signed-out Home/return were observed. None certified the full core.
+The first 23-case attempt was interrupted after browser failure; two subsequent
+completed reports each retain zero successful calls and 22 blocked downstream
+cases. No note/lifecycle mutation occurred in those blocked attempts.
+
+The test harness now explicitly configures/readbacks exact resource IDs, fills
+MFA before locating its enabled submit, waits for request-backed states without
+pull-to-refresh, records secret-free steps/session IDs and blocks downstream
+setup after initial auth fails. Its dynamic current-session deletion proof is
+hash-bound to real gateway source/status/isolation; the bounded 64-event history
+retains all events and rejects overflow, without a route wildcard or fake ID.
+
+Actual Firefox exploration additionally proved an unreliable asynchronous app
+launch after authorization. The replacement requires an explicit Open CaseOps
+gesture after one acknowledged grant. Server lifetime bounds the memory-only
+callback; response latency, query changes, pagehide, hidden state, expiry and
+double clicks cannot extend/replay it. Four intended web files pass **79 cases**
+with zero failures/skips; strict web TypeScript passes. The earlier three-file
+63-case filter and timer-fixture failure/interruption remain incomplete evidence,
+not replacement passes. Fresh source-frozen API/web/APK and native replay follow.
+
+Mac fixture helpers now select iOS loopback origins and observe the dedicated
+simulator locale without Android tooling. **Actual Mac/Xcode remains NOT RUN**;
+see `scripts/mobile/MACBOOK_RUNBOOK.md` and the dated iOS owner checklist.
+
 J20/M22, US-MOB-01..08; J01/J03/J04/J08/J14 remain the server owners.
 Status: **Partially implemented; native release NO-GO**. This checkpoint freezes
 the integrated source before the real Android run, not an app-completion claim.

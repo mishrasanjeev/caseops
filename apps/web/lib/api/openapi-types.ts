@@ -40539,6 +40539,8 @@ export interface components {
         NativeAuthorizeResponse: {
             /** Code */
             code: string;
+            /** Expires In */
+            expires_in: number;
             /** Redirect Uri */
             redirect_uri: string;
             /** State */

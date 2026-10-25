@@ -19,6 +19,7 @@ class NativeAuthorizeResponse(BaseModel):
     code: str
     state: str
     redirect_uri: str
+    expires_in: int = Field(strict=True, ge=15, le=120)
 
 
 class NativeTokenRequest(BaseModel):

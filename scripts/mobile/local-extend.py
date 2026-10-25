@@ -1,4 +1,4 @@
-"""Additive real-API fixture preparation for the dated 22-case native gate."""
+"""Additive real-API fixture preparation for the dated 23-case native gate."""
 
 from datetime import UTC, datetime
 import hashlib
@@ -11,11 +11,29 @@ import secrets
 import sys
 
 ROOT = Path(os.environ.get("CASEOPS_MOBILE_STATE", "/fixture-state"))
-spec = importlib.util.spec_from_file_location("local_fixture", Path(__file__).with_name("local-fixture.py"))
-fixture = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(fixture)
+fixture = None
 SEARCH_KINDS = ("matter_code", "case_number", "filing_number", "cnr_number", "temporary_e_case_number")
 JOIN = " \u00b7 "
+
+
+def extension_auth(inputs, config):
+    assert isinstance(inputs, dict) and isinstance(config, dict), "Extension input and config objects required"
+    platform = config.get("CASEOPS_MOBILE_PLATFORM", "android")
+    assert platform in ("android", "ios"), "Unsupported fixture platform"
+    assert inputs.get("platform", "android") == platform, "Extension platform mismatch"
+    port = str(config.get("CASEOPS_MOBILE_WEB_PORT", "3443"))
+    assert re.fullmatch(r"[1-9][0-9]{3,4}", port) and 1024 <= int(port) <= 65535, "Explicit unprivileged web port required"
+    host = "127.0.0.1" if platform == "ios" else "10.0.2.2"
+    expected = f"https://{host}:{port}"
+    origin = config.get("CASEOPS_MOBILE_WEB_ORIGIN", expected)
+    assert origin == expected and inputs.get("webOrigin") == origin, "Extension web origin differs from server config"
+    auth = {"webOrigin": origin, "companySlug": "test-legal",
+            "mode": "web-context" if platform == "ios" else "native-firefox",
+            "emailEnv": "CASEOPS_MOBILE_CORE_EMAIL", "passwordEnv": "CASEOPS_MOBILE_CORE_PASSWORD",
+            "mfaRequired": True, "totpSecretEnv": "CASEOPS_MOBILE_CORE_TOTP_SECRET"}
+    if platform == "ios":
+        auth["iosConsent"] = True
+    return auth
 
 
 def sha(path):
@@ -35,11 +53,17 @@ def matter_ref(row, search=None):
 
 
 def main():
+    global fixture
     name = sys.argv[1]
     assert re.fullmatch(r"extend-input-[a-f0-9]{12}\.json", name)
     inputs = json.loads((ROOT / name).read_text(encoding="utf-8"))
+    config = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+    auth = extension_auth(inputs, config)
     nonce = inputs["iteration"]
     assert re.fullmatch(r"[a-f0-9]{12}", nonce)
+    spec = importlib.util.spec_from_file_location("local_fixture", Path(__file__).with_name("local-fixture.py"))
+    fixture = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixture)
     base_path = ROOT / "seed.json"
     base_hash = sha(base_path)
     base = json.loads(base_path.read_text(encoding="utf-8"))
@@ -172,14 +196,13 @@ def main():
         receipt = {
             "environment": "docker-integration", "syntheticDataOnly": True,
             "coreInventory": "native-core-2026-10-25", "iteration": nonce,
+            "platform": config.get("CASEOPS_MOBILE_PLATFORM", "android"),
             "baseSeed": {"file": "seed.json", "sha256": base_hash},
             "servingBuild": fixture.expect(owner.get("/api/build")),
             "principalLabel": credentials["full_name"], "workspaceLabel": identity["company"]["name"],
             "companyId": base["companyId"], "membershipId": user["membership_id"], "userId": user["user_id"],
             "ownerMembershipId": identity["membership"]["id"], "credentialsFile": credentials_name,
-            "auth": {"webOrigin": inputs["webOrigin"], "companySlug": "test-legal", "mode": "native-firefox",
-                     "emailEnv": "CASEOPS_MOBILE_CORE_EMAIL", "passwordEnv": "CASEOPS_MOBILE_CORE_PASSWORD",
-                     "mfaRequired": True, "totpSecretEnv": "CASEOPS_MOBILE_CORE_TOTP_SECRET"},
+            "auth": auth,
             "matter": {**primary_ref, "search": primary["matter_code"], "searches": searches},
             "today": {**task_expectation, "dueOn": today_task["due_on"], "dateLabel": day_label, "status": today_task["status"]},
             "work": {"task": task_expectation, "draft": {

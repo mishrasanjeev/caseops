@@ -1,5 +1,14 @@
 # CaseOps  - Work To Be Done
 
+## October 25 Native Handoff Replay
+
+The standalone Android APK runs without a Metro development server. Actual
+23-case attempts exposed browser-control orchestration defects and an unreliable
+post-consent app launch. Explicit user-gesture launch and bounded server lifetime
+now pass web79; fresh API/web/APK builds and complete native replacement are
+required before closure. Preserve all earlier incomplete/failed evidence. iOS
+fixture portability is implemented but actual Mac/Xcode execution remains open.
+
 ## October 25 Native Integration
 
 J20/M22 is **Partially implemented**, not shipped. Integrated mobile components

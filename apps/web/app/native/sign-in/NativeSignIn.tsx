@@ -3,7 +3,7 @@
 import { ArrowRight, Loader2, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/marketing/Logo";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -12,7 +12,11 @@ import { apiRequest } from "@/lib/api/client";
 import { completeMfaLoginChallenge } from "@/lib/api/auth";
 import { isApiErrorShape } from "@/lib/api/config";
 import type { AuthContext } from "@/lib/api/schema-types";
-import { parseNativeAuthorization } from "@/lib/native-authorization";
+import {
+  openNativeApp,
+  parseNativeAuthorization,
+  prepareNativeHandoff,
+} from "@/lib/native-authorization";
 
 export function NativeSignIn() {
   const params = useSearchParams();
@@ -28,13 +32,57 @@ export function NativeSignIn() {
   const [mfaRequired, setMfaRequired] = useState(false);
   const [mfaCode, setMfaCode] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [handoffReady, setHandoffReady] = useState(false);
+  const [handoffExpired, setHandoffExpired] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const handoff = useRef<{
+    callback: string;
+    query: string;
+    owner: number;
+    deadline: number;
+  } | null>(null);
+  const handoffTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openingRef = useRef(false);
   const submitting = useRef(false);
   const verifying = useRef(false);
   const epoch = useRef(0);
   const consent = contextQuery === query ? context : null;
+  const hasHandoff =
+    handoffReady &&
+    handoff.current?.query === query &&
+    handoff.current.owner === epoch.current;
+  const discardHandoff = useCallback(() => {
+    if (handoffTimer.current !== null) clearTimeout(handoffTimer.current);
+    handoffTimer.current = null;
+    handoff.current = null;
+    openingRef.current = false;
+    setHandoffReady(false);
+    setOpening(false);
+  }, []);
+
+  useEffect(() => {
+    const leave = () => {
+      if (handoff.current) {
+        discardHandoff();
+        setHandoffExpired(true);
+        setNotice(null);
+      }
+    };
+    const visibility = () => {
+      if (document.visibilityState === "hidden") leave();
+    };
+    window.addEventListener("pagehide", leave);
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      window.removeEventListener("pagehide", leave);
+      document.removeEventListener("visibilitychange", visibility);
+    };
+  }, [discardHandoff]);
 
   useEffect(() => {
     const owner = ++epoch.current;
+    discardHandoff();
+    setHandoffExpired(false);
     submitting.current = false;
     verifying.current = false;
     setContext(null);
@@ -73,45 +121,51 @@ export function NativeSignIn() {
         });
     return () => {
       controller.abort();
+      discardHandoff();
       if (owner === epoch.current) ++epoch.current;
     };
-  }, [query]);
+  }, [query, discardHandoff]);
 
   async function connect() {
     if (
       !parsed ||
       !consent ||
       mfaRequired ||
+      handoff.current ||
+      handoffExpired ||
       submitting.current ||
       verifying.current
     )
       return;
     const owner = epoch.current;
+    const startedAt = performance.now();
     submitting.current = true;
     setPending(true);
     setError(null);
     setNotice(null);
     try {
-      const response = await apiRequest<{
-        code: string;
-        state: string;
-        redirect_uri: string;
-      }>("/api/auth/native/authorize", {
+      const response = await apiRequest<unknown>("/api/auth/native/authorize", {
         method: "POST",
         body: parsed,
       });
       if (owner !== epoch.current) return;
-      if (
-        response.state !== parsed.state ||
-        response.redirect_uri !== parsed.redirect_uri ||
-        !/^[A-Za-z0-9_-]{32,256}$/.test(response.code)
-      ) {
-        throw new Error("Invalid native handoff response.");
+      const prepared = prepareNativeHandoff(parsed, response);
+      // Charge response latency to the server's lifetime, never extend a grant.
+      const deadline = startedAt + prepared.expiresIn * 1000;
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) {
+        setHandoffExpired(true);
+        return;
       }
-      const callback = new URL(response.redirect_uri);
-      callback.searchParams.set("code", response.code);
-      callback.searchParams.set("state", response.state);
-      window.location.assign(callback.href);
+      handoff.current = { callback: prepared.callback, query, owner, deadline };
+      setHandoffReady(true);
+      setNotice("Sign-in is ready. Open CaseOps to finish.");
+      handoffTimer.current = setTimeout(() => {
+        if (owner !== epoch.current) return;
+        discardHandoff();
+        setHandoffExpired(true);
+        setNotice(null);
+      }, remaining);
     } catch (cause) {
       if (owner !== epoch.current) return;
       if (isApiErrorShape(cause) && cause.status === 401) {
@@ -138,6 +192,36 @@ export function NativeSignIn() {
         submitting.current = false;
         setPending(false);
       }
+    }
+  }
+
+  function openApp() {
+    const current = handoff.current;
+    if (
+      !current ||
+      current.owner !== epoch.current ||
+      current.query !== query ||
+      openingRef.current
+    )
+      return;
+    if (performance.now() >= current.deadline) {
+      discardHandoff();
+      setHandoffExpired(true);
+      setNotice(null);
+      return;
+    }
+    openingRef.current = true;
+    setOpening(true);
+    try {
+      // Synchronous user gesture: no awaited network operation before app launch.
+      openNativeApp(current.callback);
+    } catch {
+      discardHandoff();
+      setHandoffExpired(true);
+      setNotice(null);
+      setError(
+        "The app could not be opened. Return to CaseOps and start sign-in again.",
+      );
     }
   }
 
@@ -227,6 +311,12 @@ export function NativeSignIn() {
               </p>
             )}
             {notice && <p role="status">{notice}</p>}
+            {handoffExpired && !error && (
+              <p role="alert">
+                This app handoff is no longer available. Return to CaseOps and
+                start sign-in again.
+              </p>
+            )}
             {consent && (
               <>
                 <dl className="space-y-3 border-y border-[var(--color-line)] py-5">
@@ -253,7 +343,25 @@ export function NativeSignIn() {
                   {parsed.platform === "ios" ? "iPhone" : "Android"} app. The
                   app uses your current workspace permissions.
                 </p>
-                {mfaRequired ? (
+                {hasHandoff ? (
+                  <div className="space-y-3">
+                    <Button
+                      id="native-app-open"
+                      className="min-h-12 w-full"
+                      disabled={opening}
+                      onClick={openApp}
+                    >
+                      <ArrowRight aria-hidden className="mr-2 h-4 w-4" />
+                      Open CaseOps
+                    </Button>
+                    {opening && (
+                      <p role="status">
+                        Choose Open in your browser if prompted. If CaseOps does
+                        not open, return to the app and start sign-in again.
+                      </p>
+                    )}
+                  </div>
+                ) : mfaRequired ? (
                   <form
                     className="space-y-3"
                     onSubmit={(event) => {
@@ -296,7 +404,7 @@ export function NativeSignIn() {
                       Verify code
                     </Button>
                   </form>
-                ) : (
+                ) : !handoffExpired ? (
                   <Button
                     className="min-h-12 w-full"
                     disabled={pending}
@@ -312,7 +420,7 @@ export function NativeSignIn() {
                     )}
                     Connect app
                   </Button>
-                )}
+                ) : null}
               </>
             )}
             {(signedOut || error || consent) && (

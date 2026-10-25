@@ -1,5 +1,14 @@
 # Strict Enterprise Gap Tasklist
 
+## October 25 Native Runtime Replacement
+
+Release remains **NO-GO**. Standalone Android startup and manual native/browser
+sign-in were observed, but the full inventory found an unreliable asynchronous
+browser-to-app launch. Explicit launch, one-use grant expiry and private callback
+cleanup have web79 component evidence; fresh exact-source API/web/APK and native
+replay remain required. No native, signing, iOS, advisory or full-matrix gate is
+waived by the portable Mac fixture preparation or Windows Hermes export.
+
 ## October 25 Native Gate
 
 J20/M22 remains **Partially implemented; release NO-GO**. Integrated file/session/

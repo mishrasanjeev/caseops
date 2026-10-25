@@ -88,6 +88,90 @@ def _assert_no_native_issuance():
             assert session.scalar(select(func.count()).select_from(model)) == 0
 
 
+def test_native_authorize_response_expiry_schema_bounds():
+    from pydantic import ValidationError
+
+    from caseops_api.schemas.native_auth import NativeAuthorizeResponse
+
+    base = {"code": "c" * 43, "state": STATE, "redirect_uri": LOCAL_REDIRECT}
+    for ttl in (15, 60, 120):
+        assert NativeAuthorizeResponse(**base, expires_in=ttl).model_dump() == {
+            **base, "expires_in": ttl,
+        }
+    for ttl in (14, 121, None, 15.5, "15", 15.0, True, False):
+        with pytest.raises(ValidationError):
+            NativeAuthorizeResponse(**base, expires_in=ttl)
+    with pytest.raises(ValidationError):
+        NativeAuthorizeResponse(**base)
+    schema = NativeAuthorizeResponse.model_json_schema()
+    assert "expires_in" in schema["required"]
+    assert schema["properties"]["expires_in"] == {
+        "type": "integer", "title": "Expires In", "minimum": 15, "maximum": 120,
+    }
+
+
+@pytest.mark.parametrize("ttl", [15, 60, 120])
+def test_native_authorize_expiry_matches_configured_deadline_and_retains_pkce(
+    client, monkeypatch, ttl,
+):
+    auth, browser = _browser(client)
+    monkeypatch.setenv("CASEOPS_NATIVE_CODE_TTL_SECONDS", str(ttl))
+    get_settings.cache_clear()
+    assert get_settings().native_code_ttl_seconds == ttl
+    clock = [datetime.now(UTC)]
+    monkeypatch.setattr(native_auth, "_now", lambda: clock[0])
+    captured_at = clock[0]
+    reads = []
+
+    def settings_snapshot():
+        reads.append(True)
+        return get_settings()
+
+    with monkeypatch.context() as capture:
+        capture.setattr(native_auth, "get_settings", settings_snapshot)
+        grant = _authorize(client, browser)
+    assert grant.status_code == 200, grant.text
+    assert reads == [True]
+    payload = grant.json()
+    assert set(payload) == {"code", "state", "redirect_uri", "expires_in"}
+    assert payload["expires_in"] == ttl
+    assert payload["state"] == STATE
+    assert payload["redirect_uri"] == LOCAL_REDIRECT
+    deadline = captured_at + timedelta(seconds=payload["expires_in"])
+    with get_session_factory()() as session:
+        stored = session.scalar(select(NativeAuthorizationCode))
+        assert native_auth._aware(stored.expires_at) == deadline
+        assert stored.consumed_at is None
+        assert stored.code_hash == native_auth._hash(payload["code"])
+        assert session.scalar(select(func.count()).select_from(NativeDeviceSession)) == 0
+    clock[0] = deadline - timedelta(microseconds=1)
+    wrong = _exchange(client, payload["code"], code_verifier="x" * 64)
+    assert wrong.status_code == 401, wrong.text
+    with get_session_factory()() as session:
+        assert session.scalar(select(NativeAuthorizationCode)).consumed_at is None
+    exchanged = _exchange(client, payload["code"])
+    assert exchanged.status_code == 200, exchanged.text
+    assert exchanged.json()["membership"]["id"] == auth["membership"]["id"]
+    assert _exchange(client, payload["code"]).status_code == 401
+    # A separate, never-consumed code expires at the exact advertised boundary.
+    clock[0] = captured_at
+    second = _authorize(client, browser)
+    assert second.status_code == 200, second.text
+    assert second.json()["expires_in"] == ttl
+    for now in (deadline, deadline + timedelta(microseconds=1)):
+        clock[0] = now
+        assert _exchange(client, second.json()["code"]).status_code == 401
+        assert _exchange(client, payload["code"]).status_code == 401
+    with get_session_factory()() as session:
+        expired = session.scalar(select(NativeAuthorizationCode).where(
+            NativeAuthorizationCode.code_hash == native_auth._hash(second.json()["code"]),
+        ))
+        assert native_auth._aware(expired.expires_at) == deadline
+        assert expired.consumed_at is None
+        assert session.scalar(select(func.count()).select_from(NativeDeviceSession)) == 1
+        assert session.scalar(select(func.count()).select_from(NativeRefreshToken)) == 1
+
+
 def test_optional_policy_native_mfa_requires_same_browser_proof_and_explicit_recovery(client):
     import time
 

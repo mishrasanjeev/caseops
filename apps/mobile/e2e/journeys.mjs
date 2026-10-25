@@ -5,6 +5,7 @@ import { absent, backgroundAndResume, click, expectText, find, findQuery, home, 
 import { localJson } from './support.mjs';
 import { validateTraffic } from './traffic.mjs';
 import { validateAuthorizationTraffic } from './mfa.mjs';
+import { configuredSessionDeleteAdmission, proveCurrentSessionDeletion } from './session-admission.mjs';
 
 export { authenticate };
 export async function traffic(context) {
@@ -325,9 +326,11 @@ export const scenarios = [
     successfulRead(delta(before, await traffic(context)), '/api/matters/');
   } },
   { id: 'NATIVE-20', run: async (context) => {
+    if (!context.fixture.nativeSessionDeleteAdmission) throw new FixtureUnavailable('NATIVE_SESSION_DELETE_ADMISSION_REQUIRED');
+    const admission = configuredSessionDeleteAdmission(context.fixture);
+    const before = await traffic(context);
     await click(context, 'id', 'account-open');
     await find(context, 'id', 'account-session-current', { scroll: true });
-    const before = await traffic(context);
     await click(context, 'text', 'Revoke this session', { scroll: true });
     await find(context, 'id', 'account-session-confirmation');
     await click(context, 'id', 'account-session-cancel');
@@ -345,7 +348,8 @@ export const scenarios = [
     const revocations = requests.filter((request) => request.method === 'DELETE');
     assert.equal(revocations.length, 1, 'DEVICE_REVOCATION_NOT_EXACTLY_ONCE');
     assert.match(revocations[0].route, /^\/api\/auth\/native\/sessions\/[a-zA-Z0-9_-]{1,100}$/, 'EXACT_NATIVE_DEVICE_REVOCATION_REQUIRED');
-    assert.ok([200, 204].includes(revocations[0].status), 'DEVICE_REVOCATION_NOT_ACKNOWLEDGED');
+    const proof = proveCurrentSessionDeletion(before, await traffic(context), admission);
+    context.record?.({ type: 'assertion', boundary: 'current-native-session-delete-admission', ...proof });
     assert.equal(requestCount(requests, 'POST', '/api/auth/native/refresh'), 0, 'REVOKED_DEVICE_REFRESH_RESTORED');
   } },
   { id: 'NATIVE-21', run: async (context) => {

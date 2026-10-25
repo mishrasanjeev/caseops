@@ -1,5 +1,14 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 25 Handoff Runtime Findings
+
+US-MOB-01/02 and NATIVE-01 now require explicit Open CaseOps after the one
+acknowledged grant; no automatic navigation/regrant counts as that gesture.
+Web79 spans all four intended files, including expiry, response latency,
+query/pagehide/visibility cleanup and duplicate-click rejection. Earlier native
+runs remain incomplete/failed; no full 23-case or MOB-01..40 pass is claimed.
+The checkpoint and MacBook runbook distinguish source/component and device proof.
+
 ## October 25 Native Coverage
 
 J20/M22/US-MOB-01..08 remains **Partially implemented**. All 20 selected mobile

@@ -6,6 +6,7 @@ import { verifiedFile } from './evidence.mjs';
 import { admitApplication, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture } from './fixture-contract.mjs';
 import { binaryHash, safeFailure } from './support.mjs';
 import { collect } from './suite.mjs';
+import { validateSessionDeletePolicy } from './session-admission.mjs';
 
 const allCases = collect('android').intended.map((id) => id.split(':')[1]);
 function noEmbeddedSecrets(value) {
@@ -95,12 +96,12 @@ export function inspectLocalPlan(plan, platform, environment = process.env) {
     } catch (error) { block(safeFailure(error, 'OWNER_CONTROL_EVIDENCE_INVALID'), ['ownerControls'], ['NATIVE-17', 'NATIVE-18']); }
   }
   if (plan.gatewayRoutes) {
-    const routes = readReference(plan.gatewayRoutes).routes;
+    const descriptor = readReference(plan.gatewayRoutes), routes = descriptor.routes;
     assert.ok(Array.isArray(routes), 'GATEWAY_ROUTE_INVENTORY_REQUIRED');
     if (!routes.includes('GET /api/auth/native/sessions')) block('DEVICE_SESSION_LIST_ROUTE_MISSING', ['gatewayRoutes'], ['NATIVE-20']);
-    if (!routes.some((route) => /^DELETE \/api\/auth\/native\/sessions\/[a-zA-Z0-9_-]{1,100}$/.test(route))) {
-      block('CURRENT_SESSION_DELETE_ADMISSION_MISSING', ['gatewayRoutes'], ['NATIVE-20']);
-    }
+    try {
+      fixture.nativeSessionDeleteAdmission = validateSessionDeletePolicy(descriptor, plan.gatewayRoutes, plan.dockerReceipt, receipt);
+    } catch (error) { block(safeFailure(error, 'CURRENT_SESSION_DELETE_POLICY_INVALID'), ['gatewayRoutes'], ['NATIVE-20']); }
   } else block('PINNED_GATEWAY_ROUTE_INVENTORY_MISSING', ['gatewayRoutes'], ['NATIVE-20', 'NATIVE-21']);
   for (const key of ['emailEnv', 'passwordEnv', ...(fixture.auth.mfaRequired ? ['totpSecretEnv'] : [])]) {
     const name = fixture.auth[key];

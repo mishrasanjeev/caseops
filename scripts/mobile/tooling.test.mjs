@@ -20,6 +20,9 @@ import { backgroundAndResume, find, selector, visible } from '../../apps/mobile/
 import { collect, harnessFingerprint, inventory as datedInventory, receiptInventory } from '../../apps/mobile/e2e/suite.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { inspectLocalPlan, prepareLocalPlan } from '../../apps/mobile/e2e/local-run.mjs';
+import { configuredSessionDeleteAdmission, MAX_SESSION_ADMISSION_EVENTS, proveCurrentSessionDeletion } from '../../apps/mobile/e2e/session-admission.mjs';
+import { browserStep } from '../../apps/mobile/e2e/browser-progress.mjs';
+import { appiumSessionEvent, authenticationGate, configureNativeDriver } from '../../apps/mobile/e2e/run-state.mjs';
 
 const inventory = JSON.parse(readFileSync(new URL('../../apps/mobile/e2e/inventory.json', import.meta.url), 'utf8'));
 test('core discovered inventory exactly matches canonical identities on both platforms', () => {
@@ -461,7 +464,7 @@ test('browser credentials come only from bounded named environment values, never
 
 function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, externalOrigin = false, duplicatePassword = false,
   mfa = false, consent = false, platform = 'android', wrongAfterMfa = false, changedAfterMfa = false, autoConnect = false,
-  noConsentChallenge = false, verifyRefused = false } = {}) {
+  noConsentChallenge = false, verifyRefused = false, appOpenMissing = false, appOpenDisabled = false, wrongAppOpenLabel = false } = {}) {
   let stage = 'app', native = true, verified = false;
   const writes = [], clicks = [], records = [];
   const url = () => {
@@ -472,11 +475,12 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
     return ['login', 'mfa'].includes(stage) ? `${value.origin}/sign-in?${new URLSearchParams({ next: value.pathname + value.search })}` : value.href;
   };
   const element = (key, text = '') => ({
-    isDisplayed: async () => true, isEnabled: async () => true, getText: async () => text,
+    isDisplayed: async () => true, isEnabled: async () => key !== 'app-open' || !appOpenDisabled, getText: async () => text,
     setValue: async (value) => { writes.push([key, value]); },
     click: async () => { clicks.push(key); if (key === 'sign-in') stage = 'landing'; if (key === 'link') stage = 'login';
       if (key === 'submit') stage = mfa ? 'mfa' : 'connect'; if (key === 'mfa-submit') stage = 'connect';
-      if (key === 'connect') stage = consent && !verified ? noConsentChallenge ? 'connect' : 'consent-mfa' : 'complete';
+      if (key === 'connect') stage = consent && !verified ? noConsentChallenge ? 'connect' : 'consent-mfa' : 'grant';
+      if (key === 'app-open') stage = 'complete';
       if (key === 'consent-verify' && !verifyRefused) { verified = true; stage = autoConnect ? 'complete' : 'connect'; } },
   });
   const driver = {
@@ -500,6 +504,7 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
       if (query === 'main [role="status"]' && verified && stage === 'connect') return [element('consent-notice', CONSENT_MFA_VERIFIED)];
       if (query === 'main dl dd' && stage === 'connect') return [element('principal', `${wrongPrincipal || verified && wrongAfterMfa ? 'Wrong' : 'Unit Person'} unit@example.invalid`), element('workspace', 'Unit Workspace / unit')];
       if (query === 'main button' && stage === 'connect') return [element('connect', 'Connect app')];
+      if (query === '#native-app-open' && stage === 'grant' && !appOpenMissing) return [element('app-open', wrongAppOpenLabel ? 'Wrong button' : 'Open CaseOps')];
       return [];
     },
   };
@@ -635,16 +640,17 @@ test('an uncertain owner command poisons the shared adapter and cannot be replay
   assert.equal(calls, 1);
 });
 
-function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [] } = {}) {
+function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], afterConnect = [] } = {}) {
   const locators = Object.fromEntries(['urlOpen', 'urlValue', 'urlClose', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace', 'connect', 'signInLink']
     .map((key) => [key, { kind: 'id', value: `unit-${key}` }]));
+  locators.appOpen = { kind: 'id', value: 'native-app-open' };
   if (consent) Object.assign(locators, { mfaCode: { kind: 'id', value: 'native-mfa-code' }, mfaSubmit: { kind: 'buttonText', value: 'Verify code' },
     mfaVerified: { kind: 'text', value: CONSENT_MFA_VERIFIED } });
   const urlCloseMode = androidBack ? 'android-back' : 'locator';
-  const evidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: 'org.mozilla.firefox', version: '158.0.2', locators, urlCloseMode, prepare });
+  const evidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: 'org.mozilla.firefox', version: '158.0.2', locators, urlCloseMode, prepare, afterConnect });
   return { ...(consent ? { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' } : {}),
     firefoxUi: { status: 'complete', packageName: 'org.mozilla.firefox', version: '158.0.2', signerSha256: 'A78B62A5165B4494B2FEAD9E76A280D22D937FEE6251AECE599446B2EA319B04',
-    caTrustedThroughSettings: true, locatorEvidencePath: evidence.path, locatorEvidenceSha256: evidence.sha256, locators, urlCloseMode, prepare } };
+    caTrustedThroughSettings: true, locatorEvidencePath: evidence.path, locatorEvidenceSha256: evidence.sha256, locators, urlCloseMode, prepare, afterConnect } };
 }
 test('Firefox native automation requires observed exact locators, trusted CA and reviewed package signer', (t) => {
   const auth = firefoxRecipe(t);
@@ -656,6 +662,24 @@ test('Firefox native automation requires observed exact locators, trusted CA and
     (copy) => { copy.firefoxUi.locatorEvidenceSha256 = '0'.repeat(64); },
     (copy) => { copy.firefoxUi.packageName = 'foreign.browser'; },
   ]) { const copy = structuredClone(auth); mutate(copy); assert.throws(() => validateFirefoxRecipe(copy)); }
+});
+
+test('Firefox app-open admission requires the exact new locator in both the recipe and hashed observed evidence', (t) => {
+  const old = firefoxRecipe(t);
+  delete old.firefoxUi.locators.appOpen;
+  const oldEvidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: old.firefoxUi.packageName,
+    version: old.firefoxUi.version, locators: old.firefoxUi.locators, urlCloseMode: old.firefoxUi.urlCloseMode });
+  Object.assign(old.firefoxUi, { locatorEvidencePath: oldEvidence.path, locatorEvidenceSha256: oldEvidence.sha256 });
+  assert.throws(() => validateFirefoxRecipe(old), /OBSERVED_LOCATORS_REQUIRED/);
+  const substituted = firefoxRecipe(t);
+  substituted.firefoxUi.locators.appOpen = { kind: 'text', value: 'Open CaseOps' };
+  assert.throws(() => validateFirefoxRecipe(substituted), /LOCATOR_IDENTITY_MISMATCH/);
+  const wrong = firefoxRecipe(t);
+  wrong.firefoxUi.locators.appOpen = { kind: 'id', value: 'invented-open-control' };
+  const evidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: wrong.firefoxUi.packageName,
+    version: wrong.firefoxUi.version, locators: wrong.firefoxUi.locators, urlCloseMode: wrong.firefoxUi.urlCloseMode });
+  Object.assign(wrong.firefoxUi, { locatorEvidencePath: evidence.path, locatorEvidenceSha256: evidence.sha256 });
+  assert.throws(() => validateFirefoxRecipe(wrong), /EXACT_NATIVE_APP_OPEN_CONTROL_REQUIRED/);
 });
 
 test('Firefox consent recipes require hash-bound exact challenge, Verify code and verified notice locators', (t) => {
@@ -776,7 +800,7 @@ test('consent MFA browser orchestration has two explicit Connect clicks around o
     const fake = domBrowserDouble({ consent: true, platform });
     Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
     await browserLogin(fake.context);
-    assert.deepEqual(fake.clicks, ['sign-in', 'link', 'submit', 'connect', 'consent-verify', 'connect']);
+    assert.deepEqual(fake.clicks, ['sign-in', 'link', 'submit', 'connect', 'consent-verify', 'connect', 'app-open']);
     assert.deepEqual(fake.writes.map(([key]) => key), ['#company-slug', '#email', '#password', 'native-mfa-code']);
     assert.match(fake.writes.at(-1)[1], /^\d{6}$/);
     assert.equal(JSON.stringify(fake.records).includes(process.env.CASEOPS_MOBILE_UNIT_TOTP), false);
@@ -835,8 +859,9 @@ test('authorization receipts distinguish the consent 403 attempt from the sole s
 // Their recipe is deliberately synthetic and is never a native observation.
 function firefoxDouble(t, foreign = false, options = {}) {
   const auth = firefoxRecipe(t, options);
-  let stage = 'app', editing = false, verified = false, backCount = 0;
-  const writes = [], clicks = [], records = [];
+  let stage = 'app', editing = false, verified = false, backCount = 0, consentCodeEntered = false;
+  let clock = 0, verifiedAt = 0, grantAt = 0, noticeCleared = false, lastLookup, promptIndex = 0;
+  const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [];
   const values = auth.firefoxUi.locators;
   const fixture = { appId: 'ai.caseops.mobile.dev.localacceptance', principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace',
     auth: { ...auth, mode: 'native-firefox', webOrigin: 'https://10.0.2.2:3443', companySlug: 'unit', emailEnv: 'CASEOPS_MOBILE_UNIT_EMAIL', passwordEnv: 'CASEOPS_MOBILE_UNIT_PASSWORD' } };
@@ -847,12 +872,35 @@ function firefoxDouble(t, foreign = false, options = {}) {
       assert.equal(code, 4); assert.equal(editing, true, 'BACK_MUST_NOT_NAVIGATE_WHEN_EDITOR_CLOSED');
       clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) editing = false;
     },
-    waitUntil: async (callback) => assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED'),
+    waitUntil: async (callback, settings = {}) => {
+      if (options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined) return assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED');
+      const start = clock, timeout = settings.timeout ?? 10000, interval = settings.interval ?? 150;
+      const wait = { key: undefined, timeout, start };
+      waits.push(wait);
+      for (;;) {
+        const satisfied = await callback();
+        wait.key ??= lastLookup;
+        if (satisfied) return;
+        if (clock - start >= timeout) throw new Error(settings.timeoutMsg || 'UNIT_WAIT_UNSATISFIED');
+        clock += Math.min(interval, timeout - (clock - start));
+      }
+    },
+    getWindowRect: async () => ({ width: 400, height: 800 }),
+    performActions: async () => {
+      swipes.push('scroll');
+      if (options.verifiedNoticeDelayMs !== undefined && verified) {
+        noticeCleared = true;
+        refreshes.push('GET /api/auth/me');
+      }
+    },
+    releaseActions: async () => {},
     $$: async (query) => {
       const preparationIndex = auth.firefoxUi.prepare.findIndex((locator) => query === selector('android', locator.kind, locator.value));
+      const afterConnectIndex = auth.firefoxUi.afterConnect.findIndex((locator) => query === selector('android', locator.kind, locator.value));
       const key = query === 'id=sign-in' ? 'sign-in' : query === 'id=account-open' ? 'account-open'
         : Object.keys(values).find((name) => query === selector('android', values[name].kind, values[name].value))
-          || (preparationIndex >= 0 ? `prepare-${preparationIndex}` : undefined);
+          || (preparationIndex >= 0 ? `prepare-${preparationIndex}` : afterConnectIndex >= 0 ? `prompt-${afterConnectIndex}` : undefined);
+      lastLookup = key;
       const shown = key === 'sign-in' ? stage === 'app' : key === 'account-open' ? stage === 'complete'
         : key === 'urlOpen' ? stage !== 'app' && stage !== 'complete' && !editing
         : ['urlValue', 'urlClose'].includes(key) ? editing
@@ -860,11 +908,15 @@ function firefoxDouble(t, foreign = false, options = {}) {
         : ['companySlug', 'email', 'password', 'submit'].includes(key) ? stage === 'login' && !editing
         : ['principal', 'emailFact', 'workspace', 'connect'].includes(key) ? stage === 'connect' && !editing
         : ['mfaCode', 'mfaSubmit'].includes(key) ? stage === 'consent-mfa' && !editing
-        : key === 'mfaVerified' ? verified && stage === 'connect' && !editing
+          && (key !== 'mfaSubmit' || !options.submitHiddenUntilCode || consentCodeEntered)
+        : key === 'mfaVerified' ? verified && stage === 'connect' && !editing && !noticeCleared
+          && clock - verifiedAt >= (options.verifiedNoticeDelayMs ?? 0)
+        : key === 'appOpen' ? stage === 'grant' && !editing && !options.appOpenMissing && clock - grantAt >= (options.appOpenDelayMs ?? 0)
+        : key && key.startsWith('prompt-') ? stage === 'prompt' && key === `prompt-${promptIndex}`
         : key && key.startsWith('prepare-') ? stage === 'landing' : false;
       if (!shown) return [];
-      return [{ isDisplayed: async () => true,
-        setValue: async (value) => { writes.push([key, value]); },
+      return [{ isDisplayed: async () => true, isEnabled: async () => key !== 'appOpen' || !options.appOpenDisabled,
+        setValue: async (value) => { writes.push([key, value]); if (key === 'mfaCode') consentCodeEntered = /^\d{6}$/.test(value); },
         getText: async () => {
           if (key === 'urlValue') {
             const target = new URL(authUrl(foreign ? 'https://example.com' : fixture.auth.webOrigin));
@@ -872,7 +924,8 @@ function firefoxDouble(t, foreign = false, options = {}) {
             return stage === 'login' ? `${target.origin}/sign-in?${new URLSearchParams({ next: target.pathname + target.search })}` : target.href;
           }
           return { principal: verified && options.wrongAfterMfa ? 'Wrong' : fixture.principalLabel, emailFact: 'unit@example.invalid',
-            workspace: 'Unit Workspace / unit', connect: 'Connect app', mfaSubmit: 'Verify code', mfaVerified: CONSENT_MFA_VERIFIED }[key] || '';
+            workspace: 'Unit Workspace / unit', connect: 'Connect app', mfaSubmit: 'Verify code', mfaVerified: CONSENT_MFA_VERIFIED,
+            appOpen: options.wrongAppOpenLabel ? 'Wrong button' : 'Open CaseOps' }[key] || '';
         },
         click: async () => {
           clicks.push(key);
@@ -881,12 +934,18 @@ function firefoxDouble(t, foreign = false, options = {}) {
           if (key === 'urlClose') editing = false;
           if (key === 'signInLink') stage = 'login';
           if (key === 'submit') stage = 'connect';
-          if (key === 'connect') stage = options.consent && !verified ? options.noConsentChallenge ? 'connect' : 'consent-mfa' : 'complete';
-          if (key === 'mfaSubmit' && !options.verifyRefused) { verified = true; stage = options.autoConnect ? 'complete' : 'connect'; }
+          if (key === 'connect') {
+            stage = options.consent && !verified ? options.noConsentChallenge ? 'connect' : 'consent-mfa' : 'grant';
+            if (stage === 'grant') grantAt = clock;
+          }
+          if (key === 'appOpen') stage = auth.firefoxUi.afterConnect.length ? 'prompt' : 'complete';
+          if (key?.startsWith('prompt-') && ++promptIndex === auth.firefoxUi.afterConnect.length) stage = 'complete';
+          if (key === 'mfaSubmit' && !options.verifyRefused) { verified = true; verifiedAt = clock; stage = options.autoConnect ? 'complete' : 'connect'; }
         } }];
     },
   };
-  return { context: { driver, fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records };
+  return { context: { driver, fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes,
+    elapsed: () => clock };
 }
 test('Firefox native UI orchestration inspects location, fills labelled controls and connects exactly once', async (t) => {
   browserEnvironment(t);
@@ -913,6 +972,255 @@ test('Firefox consent MFA submits one code between exactly two explicit Connect 
   assert.deepEqual(fake.writes.map(([key]) => key), ['companySlug', 'email', 'password', 'mfaCode']);
   assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit'].includes(key)), ['connect', 'mfaSubmit', 'connect']);
   assert.equal(JSON.stringify(fake.records).includes(process.env.CASEOPS_MOBILE_UNIT_TOTP), false);
+});
+
+test('Firefox explicitly opens the granted app callback once before its observed normal browser prompt', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, afterConnect: [{ kind: 'label', value: 'Open in App' }] });
+  await browserLogin(fake.context);
+  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit', 'appOpen', 'prompt-0'].includes(key)),
+    ['connect', 'mfaSubmit', 'connect', 'appOpen', 'prompt-0']);
+  assert.equal(fake.records.filter(({ type, key, action }) => type === 'browser_step' && key === 'appOpen' && action === 'click').length, 1);
+});
+
+test('Firefox waits for a delayed grant-backed Open CaseOps button without refreshing or reauthorizing', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, appOpenDelayMs: 4011 });
+  await browserLogin(fake.context);
+  assert.ok(fake.waits.some(({ key, timeout }) => key === 'appOpen' && timeout === 10000));
+  assert.deepEqual(fake.swipes, []);
+  assert.deepEqual(fake.refreshes, []);
+  assert.equal(fake.clicks.filter((key) => key === 'connect').length, 2);
+  assert.equal(fake.clicks.filter((key) => key === 'appOpen').length, 1);
+});
+
+test('Firefox missing, disabled/expired or wrongly labelled app-open control cannot retry Connect or fabricate a native return', async (t) => {
+  browserEnvironment(t);
+  for (const options of [{ appOpenMissing: true }, { appOpenDisabled: true }, { wrongAppOpenLabel: true }]) {
+    const fake = firefoxDouble(t, false, { consent: true, ...options });
+    await assert.rejects(() => browserLogin(fake.context));
+    assert.equal(fake.clicks.filter((key) => key === 'connect').length, 2);
+    assert.equal(fake.clicks.filter((key) => key === 'mfaSubmit').length, 1);
+    assert.equal(fake.clicks.filter((key) => key === 'appOpen').length, 0);
+    assert.deepEqual(fake.swipes, []);
+  }
+});
+
+test('Android/iOS web-context flow clicks fixed app-open control once after the final explicit Connect', async (t) => {
+  browserEnvironment(t);
+  for (const platform of ['android', 'ios']) {
+    const fake = domBrowserDouble({ consent: true, platform });
+    Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
+    await browserLogin(fake.context);
+    assert.deepEqual(fake.clicks.filter((key) => ['connect', 'consent-verify', 'app-open'].includes(key)),
+      ['connect', 'consent-verify', 'connect', 'app-open']);
+    assert.equal(fake.records.filter(({ type, key, action }) => type === 'browser_step' && key === 'appOpen' && action === 'click').length, 1);
+  }
+});
+
+test('web-context missing or disabled app-open button fails without renewing a grant or clicking the expired callback', async (t) => {
+  browserEnvironment(t);
+  for (const options of [{ appOpenMissing: true }, { appOpenDisabled: true }, { wrongAppOpenLabel: true }]) {
+    const fake = domBrowserDouble({ consent: true, ...options });
+    Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
+    await assert.rejects(() => browserLogin(fake.context));
+    assert.equal(fake.clicks.filter((key) => key === 'connect').length, 2);
+    assert.equal(fake.clicks.filter((key) => key === 'app-open').length, 0);
+    assert.equal(fake.isNative(), true);
+  }
+});
+
+test('Firefox consent fills six digits before looking up Verify code hidden from Gecko accessibility while disabled', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, submitHiddenUntilCode: true });
+  await browserLogin(fake.context);
+  assert.match(fake.writes.find(([key]) => key === 'mfaCode')[1], /^\d{6}$/);
+  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit'].includes(key)), ['connect', 'mfaSubmit', 'connect']);
+  assert.deepEqual(fake.swipes, []);
+});
+
+test('Firefox waits without scrolling for the exact MFA verified notice arriving after 4011ms, retaining explicit second Connect', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, submitHiddenUntilCode: true, verifiedNoticeDelayMs: 4011 });
+  await browserLogin(fake.context);
+  assert.ok(fake.elapsed() >= 4011 && fake.elapsed() <= 10000);
+  assert.ok(fake.waits.some(({ key, timeout }) => key === 'mfaVerified' && timeout === 10000));
+  assert.deepEqual(fake.swipes, []);
+  assert.deepEqual(fake.refreshes, []);
+  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit'].includes(key)), ['connect', 'mfaSubmit', 'connect']);
+  assert.equal(fake.records.filter(({ type, key, action }) => type === 'browser_step' && key === 'mfaVerified' && action === 'find').length, 1);
+});
+
+test('Firefox missing MFA verified notice fails at the bounded 10s wait without refresh, replay or second Connect', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, submitHiddenUntilCode: true, verifiedNoticeDelayMs: 10001 });
+  await assert.rejects(() => browserLogin(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.equal(fake.elapsed(), 10000);
+  assert.deepEqual(fake.swipes, []);
+  assert.deepEqual(fake.refreshes, []);
+  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit'].includes(key)), ['connect', 'mfaSubmit']);
+  assert.equal(fake.records.filter(({ type }) => type === 'browser_step').at(-1).key, 'mfaVerified');
+});
+
+test('runner configures and verifies real UiAutomator2 ID settings before UI commands, not an ignored capability', () => {
+  const source = readFileSync(new URL('./run-native.mjs', import.meta.url), 'utf8');
+  assert.equal(/appium:disableIdLocatorAutocompletion/.test(source), false, 'UNRECOGNIZED_ID_CAPABILITY_MUST_BE_ABSENT');
+  const configure = source.indexOf('await configureNativeDriver(');
+  assert.ok(configure > source.indexOf('appiumSessionEvent(driver.sessionId'));
+  assert.ok(configure < source.indexOf('const contexts = await driver.getContexts()'));
+  assert.equal(/allowInvisibleElements|mapTestTagToResourceId/.test(source), false);
+  assert.ok(source.indexOf('authGate.assertSetup()') < source.indexOf('driver = await remote('));
+  assert.ok(source.includes("authGate.failInitial(scenario, 'call')"));
+});
+
+test('browser-step journals accept only fixed action/key names and never arbitrary URL, selector or credential values', () => {
+  const records = [], context = { record: (event) => records.push(event) };
+  browserStep(context, 'password', 'fill');
+  assert.deepEqual(records, [{ type: 'browser_step', key: 'password', action: 'fill' }]);
+  for (const [key, action] of [['https://unit.invalid/?code=unit-secret', 'read'], ['unit@example.invalid', 'fill'],
+    ['unit-only-password', 'fill'], ['mfaCode', '123456'], ['mfaCode', { value: 'unit-secret' }]]) {
+    assert.throws(() => browserStep(context, key, action), /SAFE_BROWSER_STEP_NAME_REQUIRED/);
+  }
+  assert.equal(records.length, 1);
+});
+
+test('Firefox journals each recipe action before execution and fills MFA before any submit lookup without secret values', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, submitHiddenUntilCode: true, androidBack: true,
+    prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] });
+  await browserLogin(fake.context);
+  const steps = fake.records.filter(({ type }) => type === 'browser_step');
+  const fill = steps.findIndex(({ key, action }) => key === 'mfaCode' && action === 'fill');
+  const submit = steps.findIndex(({ key, action }) => key === 'mfaSubmit' && action === 'find');
+  assert.ok(fill >= 0 && submit > fill);
+  for (const key of ['prepare-0', 'prepare-1', 'urlOpen', 'urlValue', 'urlEditor', 'companySlug', 'email', 'password', 'submit',
+    'principal', 'emailFact', 'workspace', 'connect', 'mfaCode', 'mfaSubmit', 'mfaVerified', 'appOpen', 'native-return']) {
+    assert.ok(steps.some((step) => step.key === key), key);
+  }
+  assert.equal(steps.filter(({ key, action }) => key === 'connect' && action === 'click').length, 2);
+  for (const step of steps) assert.deepEqual(Object.keys(step), ['type', 'key', 'action']);
+  const serialized = JSON.stringify(steps);
+  for (const value of [fake.context.fixture.auth.webOrigin, 'unit@example.invalid', 'unit-only-password',
+    process.env.CASEOPS_MOBILE_UNIT_TOTP, fake.writes.find(([key]) => key === 'mfaCode')[1], 'More options', 'native-mfa-code']) {
+    assert.equal(serialized.includes(value), false);
+  }
+});
+
+test('a Firefox locator failure retains the exact last nonsecret recipe stage rather than a generic final-only error', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, noConsentChallenge: true });
+  await assert.rejects(() => browserLogin(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.deepEqual(fake.records.filter(({ type }) => type === 'browser_step').at(-1), { type: 'browser_step', key: 'mfaCode', action: 'find' });
+  assert.equal(fake.writes.some(([key]) => key === 'mfaCode'), false);
+  assert.equal(fake.clicks.filter((key) => key === 'connect').length, 1);
+});
+
+test('web-context consent journals fill-before-submit and two explicit Connect actions without browser contents', async (t) => {
+  browserEnvironment(t);
+  const fake = domBrowserDouble({ consent: true });
+  Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
+  await browserLogin(fake.context);
+  const steps = fake.records.filter(({ type }) => type === 'browser_step');
+  assert.ok(steps.findIndex(({ key, action }) => key === 'mfaCode' && action === 'fill')
+    < steps.findIndex(({ key, action }) => key === 'mfaSubmit' && action === 'find'));
+  assert.equal(steps.filter(({ key, action }) => key === 'connect' && action === 'click').length, 2);
+  assert.equal(JSON.stringify(steps).includes('unit-only-password'), false);
+  assert.equal(JSON.stringify(steps).includes('code_challenge'), false);
+});
+
+test('owned Appium UUID creation and cleanup states can be flushed before completion without auth data', (t) => {
+  const marker = ownedFile(t, 'unit parent marker');
+  const file = path.join(path.dirname(marker.path), 'owned-session.jsonl'), journal = new Journal(file);
+  const sessionId = '11111111-2222-3333-4444-555555555555';
+  journal.write(appiumSessionEvent(sessionId, 'created'));
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).sessionId, sessionId);
+  journal.write(appiumSessionEvent(sessionId, 'cleanup-failed'));
+  journal.close();
+  assert.deepEqual(readFileSync(file, 'utf8').trim().split('\n').map((line) => JSON.parse(line).state), ['created', 'cleanup-failed']);
+  assert.deepEqual(appiumSessionEvent(sessionId, 'deleted'), { type: 'appium_session', sessionId, state: 'deleted' });
+  for (const value of ['cnat_unit_secret', 'Bearer unit-only', 'https://unit.invalid/callback?code=unit', undefined]) {
+    assert.throws(() => appiumSessionEvent(value, 'created'), /APPIUM_SESSION_UUID_REQUIRED/);
+  }
+});
+
+test('Android explicitly updates then reads ID-autocompletion setting and exposes exact unprefixed IDs deterministically', async () => {
+  const calls = [], records = [];
+  let enabled = false;
+  const control = { isDisplayed: async () => true };
+  const driver = {
+    updateSettings: async (settings) => { calls.push('update'); assert.deepEqual(settings, { disableIdLocatorAutocompletion: true }); enabled = true; },
+    getSettings: async () => { calls.push('read'); return { disableIdLocatorAutocompletion: enabled, privateUnrelatedSetting: 'unit-secret' }; },
+    $$: async (query) => { calls.push('lookup'); assert.equal(query, 'id=native-mfa-code'); return enabled ? [control] : []; },
+  };
+  await configureNativeDriver(driver, 'android', (event) => records.push(event));
+  assert.equal(await visible(driver, selector('android', 'id', 'native-mfa-code')), control);
+  assert.deepEqual(calls, ['update', 'read', 'lookup']);
+  assert.deepEqual(records, [{ type: 'native_driver_settings', disableIdLocatorAutocompletion: true }]);
+});
+
+test('false, missing or nonboolean ID-setting readback fails closed before UI and journals only the bounded boolean', async () => {
+  for (const value of [false, undefined, 'true', 'unit-secret']) {
+    const calls = [], records = [];
+    const driver = {
+      updateSettings: async () => calls.push('update'),
+      getSettings: async () => { calls.push('read'); return { disableIdLocatorAutocompletion: value }; },
+      getContexts: async () => { throw new Error('UI_MUST_NOT_BE_REACHED'); },
+    };
+    await assert.rejects(async () => { await configureNativeDriver(driver, 'android', (event) => records.push(event)); await driver.getContexts(); },
+      /EXACT_ANDROID_RESOURCE_ID_SETTING_REQUIRED/);
+    assert.deepEqual(calls, ['update', 'read']);
+    assert.deepEqual(records, [{ type: 'native_driver_settings', disableIdLocatorAutocompletion: value === false ? false : null }]);
+  }
+  const noAndroidCalls = new Proxy({}, { get: () => { throw new Error('NO_ANDROID_SETTINGS_ON_IOS'); } });
+  await configureNativeDriver(noAndroidCalls, 'ios', () => { throw new Error('NO_FAKE_IOS_SETTINGS_PROOF'); });
+});
+
+test('initial auth failure blocks all remaining 22 setups before another session while preserving exact failed/not-run evidence', () => {
+  for (const platform of ['android', 'ios']) for (const failurePhase of ['setup', 'call']) {
+    const collection = collect(platform), rows = [{ type: 'run_started', ...collection, harnessFingerprint: 'a'.repeat(64) },
+      { type: 'preflight_result', status: 'passed' }];
+    const gate = authenticationGate((event) => rows.push(event));
+    let sessions = 0;
+    for (const scenario of datedScenarios) {
+      const id = `${platform}:${scenario.id}`;
+      let setupPassed = false;
+      rows.push({ type: 'phase_started', id, phase: 'setup' });
+      try {
+        gate.assertSetup(); sessions++;
+        if (scenario.id === 'NATIVE-01' && failurePhase === 'setup') throw new Error('NATIVE_CONTROL_NOT_VISIBLE');
+        setupPassed = true;
+        rows.push({ type: 'phase_result', id, phase: 'setup', status: 'passed' });
+      } catch (error) {
+        gate.failInitial(scenario, 'setup');
+        rows.push({ type: 'phase_result', id, phase: 'setup', status: error instanceof FixtureUnavailable ? 'blocked' : 'failed',
+          reason: safeFailure(error, 'UNIT_FAILURE') });
+      }
+      rows.push({ type: 'phase_started', id, phase: 'call' });
+      if (!setupPassed) rows.push({ type: 'phase_result', id, phase: 'call', status: 'not-run', reason: 'SETUP_FAILED' });
+      else {
+        assert.equal(scenario.id, 'NATIVE-01'); gate.failInitial(scenario, 'call');
+        rows.push({ type: 'phase_result', id, phase: 'call', status: 'failed', reason: 'NATIVE_CONTROL_NOT_VISIBLE' });
+      }
+      rows.push({ type: 'phase_started', id, phase: 'teardown' }, { type: 'phase_result', id, phase: 'teardown', status: 'passed' });
+    }
+    rows.push({ type: 'postflight_result', status: 'passed' }, { type: 'run_completed', platform, intendedCount: 23 });
+    const result = reconcileResults(rows, collection.intended);
+    assert.equal(sessions, 1);
+    assert.equal(result.nativeCallsPassed, 0);
+    assert.equal(result.failedPhases, 1);
+    assert.equal(result.blockedScenarios, 22);
+    assert.equal(result.unexecutedCalls, failurePhase === 'setup' ? 23 : 22);
+    assert.equal(result.status, 'incomplete-or-failed');
+    assert.equal(rows.filter(({ type }) => type === 'auth_prerequisite_failed').length, 1);
+    assert.ok(rows.some(({ status, reason }) => status === 'failed' && reason === 'NATIVE_CONTROL_NOT_VISIBLE'));
+  }
+});
+
+test('a noninitial journey assertion failure does not silently poison the initial-auth prerequisite', () => {
+  const records = [], gate = authenticationGate((event) => records.push(event));
+  gate.failInitial({ id: 'NATIVE-09' }, 'call');
+  gate.assertSetup();
+  assert.deepEqual(records, []);
 });
 
 test('Firefox consent MFA refuses missing challenge, failed verification and changed identity/PKCE without reconnecting', async (t) => {
@@ -1011,6 +1319,157 @@ function localPlan(t) {
     ownerControls: { modulePath: module.path, sha256: module.sha256, capabilities: ['disposeMatter', 'readMatterState', 'revokeMatterAccess', 'readNoteState'] },
     outputFixture: path.join(path.dirname(output.path), 'native-fixture.json') };
 }
+
+function dynamicSessionPlan(t) {
+  const plan = localPlan(t), receipt = JSON.parse(readFileSync(plan.dockerReceipt.path, 'utf8'));
+  const source = fileURLToPath(new URL('./local-gateway.py', import.meta.url));
+  const implementationSha256 = createHash('sha256').update(readFileSync(source)).digest('hex');
+  receipt.gatewayImplementationSha256 = implementationSha256;
+  plan.dockerReceipt = ownedFile(t, receipt);
+  const status = { runId: receipt.gatewayRunId, implementationSha256, accepted: 0, markerRejected: 0,
+    routeRejected: 0, lastSequence: 0, overflow: false, requests: [], sessionDeleteAdmissions: [] };
+  const policy = { kind: 'native-current-session-delete-v1', sourceRoute: 'GET /api/auth/native/sessions', sourceListLimit: 50,
+    maxLiveIds: 1, maxAdmissionEvents: 64, nativeBearerOnly: true, cookiesAllowed: false, currentOnly: true, unrevokedOnly: true, consumeOnAttempt: true,
+    gatewayRunId: receipt.gatewayRunId, implementationSha256, implementationEvidence: { path: source, sha256: implementationSha256 },
+    statusEvidence: ownedFile(t, status), isolationEvidence: plan.dockerReceipt,
+    requestEvidenceLink: 'sessionDeleteAdmissions[].sourceRequestId -> requests[].requestId', liveExecutionProofRequiredAt: 'NATIVE-20' };
+  const descriptor = { schemaVersion: 2, routes: ['GET /api/auth/native/sessions'],
+    dynamicAdmissions: { nativeCurrentSessionDelete: policy } };
+  plan.gatewayRoutes = ownedFile(t, descriptor);
+  return { plan, descriptor, policy, status };
+}
+
+test('dynamic session admission policy replaces an unknowable future static ID only with pinned source/status/isolation proof', (t) => {
+  const { plan, policy } = dynamicSessionPlan(t);
+  const result = inspectLocalPlan(plan, 'android', unitCredentials);
+  assert.equal(result.readiness.status, 'ready-for-native-preflight', JSON.stringify(result.readiness.blockers));
+  assert.deepEqual(result.fixture.nativeSessionDeleteAdmission, { mode: 'dynamic', routeEvidence: plan.gatewayRoutes, policy });
+  assert.deepEqual(configuredSessionDeleteAdmission(result.fixture), result.fixture.nativeSessionDeleteAdmission);
+});
+
+test('missing dynamic proof or static wildcard still blocks preparation without fabricating a session ID', (t) => {
+  for (const dynamic of [false, true]) for (const route of [undefined, 'DELETE /api/auth/native/sessions/*', 'DELETE /api/auth/native/sessions/']) {
+    const { plan, descriptor } = dynamicSessionPlan(t);
+    if (!dynamic) delete descriptor.dynamicAdmissions;
+    if (route) descriptor.routes.push(route);
+    plan.gatewayRoutes = ownedFile(t, descriptor);
+    const result = prepareLocalPlan(plan, 'android', unitCredentials);
+    assert.equal(result.readiness.status, dynamic && !route ? 'ready-for-native-preflight' : 'incomplete');
+    if (result.readiness.status === 'incomplete') assert.throws(() => readFileSync(plan.outputFixture), /ENOENT/);
+  }
+});
+
+test('dynamic policy rejects weakened invariants, changed reference hashes and wrong source/run identities', (t) => {
+  for (const [key, value] of Object.entries({ kind: 'invented', sourceRoute: 'GET /api/auth/me', sourceListLimit: 500,
+    maxLiveIds: 2, maxAdmissionEvents: 24, nativeBearerOnly: false, cookiesAllowed: true, currentOnly: false, unrevokedOnly: false,
+    consumeOnAttempt: false, gatewayRunId: 'other-run', implementationSha256: '0'.repeat(64),
+    requestEvidenceLink: 'unlinked', liveExecutionProofRequiredAt: 'never',
+    implementationEvidence: { path: 'wrong.py', sha256: '0'.repeat(64) },
+    isolationEvidence: { path: 'wrong.json', sha256: '0'.repeat(64) },
+    statusEvidence: { path: 'wrong.json', sha256: '0'.repeat(64) } })) {
+    const { plan, descriptor, policy } = dynamicSessionPlan(t);
+    policy[key] = value; plan.gatewayRoutes = ownedFile(t, descriptor);
+    const result = inspectLocalPlan(plan, 'android', unitCredentials);
+    assert.equal(result.readiness.status, 'incomplete', key);
+    assert.ok(result.readiness.blockers.some(({ fields }) => fields.includes('gatewayRoutes')), key);
+  }
+  const { plan, descriptor } = dynamicSessionPlan(t);
+  descriptor.schemaVersion = 1; plan.gatewayRoutes = ownedFile(t, descriptor);
+  assert.equal(inspectLocalPlan(plan, 'android', unitCredentials).readiness.status, 'incomplete');
+});
+
+test('dynamic policy rejects stale, overflowed, unsettled, unlinked or rejected runtime status evidence', (t) => {
+  for (const patch of [{ runId: 'other' }, { implementationSha256: '0'.repeat(64) }, { markerRejected: 1 }, { routeRejected: 1 },
+    { overflow: true }, { sessionDeleteAdmissions: undefined },
+    { sessionDeleteAdmissions: [{ type: 'session-delete-admitted', route: 'DELETE /api/auth/native/sessions/unit', sourceRequestId: 'a'.repeat(16) }] },
+    { lastSequence: 1, requests: [{ sequence: 1, requestId: 'a'.repeat(16), method: 'GET', route: '/api/build', status: null }] }]) {
+    const { plan, descriptor, policy, status } = dynamicSessionPlan(t);
+    policy.statusEvidence = ownedFile(t, { ...status, ...patch }); plan.gatewayRoutes = ownedFile(t, descriptor);
+    assert.equal(inspectLocalPlan(plan, 'android', unitCredentials).readiness.status, 'incomplete');
+  }
+});
+
+function sessionDeletionLedger(policy, count = 1) {
+  const request = (sequence, method, route, status) => ({ sequence, requestId: sequence.toString(16).padStart(16, '0'), method, route, status,
+    nativeMarker: true, browserHandoff: false });
+  const before = { runId: policy.gatewayRunId, implementationSha256: policy.implementationSha256, accepted: 1,
+    markerRejected: 0, routeRejected: 0, lastSequence: 1, overflow: false,
+    requests: [request(1, 'GET', '/api/build', 200)], sessionDeleteAdmissions: [] };
+  const after = structuredClone(before);
+  for (let index = 0; index < count; index++) {
+    const source = request(index + 2, 'GET', '/api/auth/native/sessions', 200);
+    after.requests.push(source);
+    after.sessionDeleteAdmissions.push({ type: 'session-delete-admitted', route: `DELETE /api/auth/native/sessions/current-${index}`,
+      sourceRequestId: source.requestId });
+  }
+  after.requests.push(request(count + 2, 'DELETE', `/api/auth/native/sessions/current-${count - 1}`, 204));
+  after.lastSequence = after.accepted = after.requests.length;
+  return { before, after };
+}
+
+test('NATIVE-20 proves the latest real current-session admission and records only safe request/session IDs', (t) => {
+  const { plan, policy } = dynamicSessionPlan(t);
+  const { fixture } = inspectLocalPlan(plan, 'android', unitCredentials);
+  const admission = configuredSessionDeleteAdmission(fixture);
+  const { before, after } = sessionDeletionLedger(policy, 2);
+  const proof = proveCurrentSessionDeletion(before, after, admission);
+  assert.equal(proof.sourceRequestId, after.requests[2].requestId);
+  assert.equal(proof.deleteRequestId, after.requests[3].requestId);
+  assert.equal(proof.currentSessionId, 'current-1');
+  assert.equal(proof.sourceSequence, 3);
+  assert.equal(proof.deleteSequence, 4);
+  assert.equal(JSON.stringify(proof).includes('Bearer'), false);
+});
+
+test('NATIVE-20 rejects wrong targets, stale sources, cookie/browser reads, unmarked/failed reads, duplicate deletes and altered history', (t) => {
+  const { plan, policy } = dynamicSessionPlan(t);
+  const admission = inspectLocalPlan(plan, 'android', unitCredentials).fixture.nativeSessionDeleteAdmission;
+  for (const mutate of [
+    ({ after }) => { after.sessionDeleteAdmissions = []; },
+    ({ after }) => { after.requests.at(-1).route = '/api/auth/native/sessions/not-current'; },
+    ({ after }) => { after.requests[1].status = 403; },
+    ({ after }) => { after.requests[1].nativeMarker = false; },
+    ({ after }) => { after.requests[1].browserHandoff = true; },
+    ({ after }) => { after.requests[1].route = '/api/auth/me'; },
+    ({ after }) => { after.sessionDeleteAdmissions[0].sourceRequestId = 'a'.repeat(16); },
+    ({ after }) => { after.requests.at(-1).status = 200; },
+    ({ after }) => { after.requests.at(-1).nativeMarker = false; },
+    ({ after }) => { after.requests.at(-1).browserHandoff = true; },
+    ({ after }) => { after.implementationSha256 = '0'.repeat(64); },
+    ({ after }) => { after.runId = 'other'; },
+    ({ after }) => { after.requests[0].requestId = 'f'.repeat(16); },
+    ({ after }) => { after.requests[1].requestId = after.requests[0].requestId; },
+    ({ after }) => { after.requests.push({ ...after.requests.at(-1), sequence: 4, requestId: 'f'.repeat(16) }); after.lastSequence = 4; },
+    ({ before, after }) => { before.requests.push(structuredClone(after.requests[1])); before.lastSequence = 2;
+      before.sessionDeleteAdmissions = structuredClone(after.sessionDeleteAdmissions); },
+  ]) {
+    const state = sessionDeletionLedger(policy); mutate(state);
+    assert.throws(() => proveCurrentSessionDeletion(state.before, state.after, admission));
+  }
+  const newer = sessionDeletionLedger(policy, 2);
+  newer.after.requests.at(-1).route = '/api/auth/native/sessions/current-0';
+  assert.throws(() => proveCurrentSessionDeletion(newer.before, newer.after, admission), /DELETE_TARGET_NOT_LATEST_CURRENT_SESSION/);
+});
+
+test('64 complete admission events are retained; event 65 and request 501 reject without dropping history', (t) => {
+  assert.equal(MAX_SESSION_ADMISSION_EVENTS, 64);
+  const { plan, policy } = dynamicSessionPlan(t);
+  const admission = inspectLocalPlan(plan, 'android', unitCredentials).fixture.nativeSessionDeleteAdmission;
+  const complete = sessionDeletionLedger(policy, 64);
+  assert.equal(proveCurrentSessionDeletion(complete.before, complete.after, admission).currentSessionId, 'current-63');
+  assert.equal(complete.after.sessionDeleteAdmissions.length, 64);
+  const overflow = sessionDeletionLedger(policy, 65);
+  assert.throws(() => proveCurrentSessionDeletion(overflow.before, overflow.after, admission), /BOUNDED_SESSION_ADMISSION_LEDGER_REQUIRED/);
+  assert.equal(overflow.after.sessionDeleteAdmissions.length, 65);
+  const requests = sessionDeletionLedger(policy, 1);
+  while (requests.after.requests.length < 501) {
+    const sequence = requests.after.requests.length + 1;
+    requests.after.requests.push({ sequence, requestId: sequence.toString(16).padStart(16, '0'), method: 'GET', route: '/api/build', status: 200 });
+  }
+  requests.after.lastSequence = 501;
+  assert.throws(() => proveCurrentSessionDeletion(requests.before, requests.after, admission), /BOUNDED_REQUEST_LEDGER_REQUIRED/);
+  assert.equal(requests.after.requests.length, 501);
+});
 test('offline local preparation maps exact Docker and seed metadata without loading a device or credential file', (t) => {
   const plan = localPlan(t);
   const result = inspectLocalPlan(plan, 'android', unitCredentials);

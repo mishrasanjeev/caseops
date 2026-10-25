@@ -3328,3 +3328,18 @@ requirements when using the fallback.
   existing authorized serialized role; reconcile the complete semantic union
   and independent per-role inventories. Require an actual passed zero-retry
   receipt for the repaired journey, not a skip or a green collection alone.
+- A native acceptance gateway cannot predeclare a future current-session ID.
+  Bind a reviewed dynamic-admission policy to the actual gateway implementation,
+  isolation receipt and runtime ledger; prove the fresh marked session-list
+  request, exact current-ID admission and one acknowledged DELETE through the
+  real UI. No wildcard, invented ID or token injection may replace that proof.
+  Size bounded evidence history for the complete intended journeys including
+  process-restore/account checks, and fail closed on overflow without discarding
+  earlier events. Test both the repeated-read budget and its overflow boundary.
+- Native browser acceptance must use the driver's documented exact-resource-ID
+  setting and assert its readback; an ignored capability is not configuration.
+  A disabled browser submit may be absent from the accessibility tree until its
+  required input is filled. Wait for request-backed MFA states without gestures
+  that can trigger pull-to-refresh and erase the very state being asserted.
+  Keep fixed-name, secret-free step evidence and mark downstream journeys
+  blocked after initial authentication fails instead of repeatedly probing them.

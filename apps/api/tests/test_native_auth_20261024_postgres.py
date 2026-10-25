@@ -24,6 +24,18 @@ pytestmark = pytest.mark.postgres
 VERIFIER = "v" * 64
 
 
+@pytest.mark.parametrize("ttl", [15, 60, 120])
+def test_native_grant_expiry_contract_on_postgres(isolated_postgres_client, monkeypatch, ttl):
+    from tests.test_native_auth_20261024 import (
+        test_native_authorize_expiry_matches_configured_deadline_and_retains_pkce,
+    )
+
+    assert isolated_postgres_client.headers["X-CaseOps-Automated-Test"] == "no-paid-providers"
+    test_native_authorize_expiry_matches_configured_deadline_and_retains_pkce(
+        isolated_postgres_client, monkeypatch, ttl,
+    )
+
+
 def _grant(engine):
     with Session(engine) as session:
         company_id = _seed_company(session)

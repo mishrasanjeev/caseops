@@ -1,5 +1,15 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 25 Native Browser Launch
+
+Actual full-inventory attempts reached successful MFA and authorization but did
+not reliably open the app. The fix requires a fresh Open CaseOps gesture after
+the grant, with server-owned lifetime, no regrant, duplicate-launch fencing and
+query/visibility/pagehide cleanup. Web79 passes; actual replacement native
+acceptance is pending. Separate harness defects (ignored resource-ID capability,
+disabled button lookup, pull-to-refresh while waiting, unknowable static session
+ID and undersized evidence history) have retained diagnoses and regressions.
+
 ## October 25 Native Race And Identity Components
 
 Actual device exploration additionally reproduced a signed-out privacy-cover

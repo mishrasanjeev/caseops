@@ -201,6 +201,7 @@ def authorize(
         context,
         source_issued_at=context.token_issued_at,
     )
+    code_ttl_seconds = get_settings().native_code_ttl_seconds
     now = _now()
     pending = session.scalar(
         select(func.count())
@@ -224,7 +225,7 @@ def authorize(
             source_issued_at=context.token_issued_at,
             mfa_verified_at=verified_at,
             mfa_expires_at=mfa_expires_at,
-            expires_at=now + timedelta(seconds=get_settings().native_code_ttl_seconds),
+            expires_at=now + timedelta(seconds=code_ttl_seconds),
         )
     )
     record_from_context(
@@ -237,7 +238,8 @@ def authorize(
     )
     session.commit()
     return NativeAuthorizeResponse(
-        code=code, state=payload.state, redirect_uri=payload.redirect_uri
+        code=code, state=payload.state, redirect_uri=payload.redirect_uri,
+        expires_in=code_ttl_seconds,
     )
 
 

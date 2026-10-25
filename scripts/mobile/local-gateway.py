@@ -16,6 +16,8 @@ from urllib.parse import urlsplit
 ROOT = Path(os.environ.get("CASEOPS_MOBILE_STATE", "/fixture-state"))
 MARKER_HEADER = "X-CaseOps-Automated-Test"
 MARKER = "no-paid-providers"
+# Covers 23 core journeys plus their account/restore checks without dropping evidence.
+MAX_SESSION_ADMISSION_EVENTS = 64
 BROWSER_ROUTES = {
     "GET /api/auth/me", "POST /api/auth/login", "POST /api/auth/logout", "POST /api/auth/refresh",
     "GET /api/auth/security", "POST /api/auth/mfa/step-up",
@@ -53,7 +55,7 @@ class Gateway:
                 self.session_delete_route = None
             return
         with self.lock:
-            if len(self.state["sessionDeleteAdmissions"]) >= 24:
+            if len(self.state["sessionDeleteAdmissions"]) >= MAX_SESSION_ADMISSION_EVENTS:
                 self.session_delete_route = None
                 self.state["overflow"] = True
                 return

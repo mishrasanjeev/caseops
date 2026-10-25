@@ -4,7 +4,7 @@
   "scope": "J20/M22 dated concrete native core; partial MOB-01..40, not full-v1 acceptance",
   "platforms": ["android", "ios"],
   "cases": [
-    {"id":"NATIVE-01","groups":["MOB-01","MOB-02"],"title":"Real browser login, explicit login/consent MFA stage, unchanged PKCE/principal/workspace and exactly one successful grant/token exchange"},
+    {"id":"NATIVE-01","groups":["MOB-01","MOB-02"],"title":"Real browser login, explicit MFA/Connect/app-open actions, unchanged PKCE/principal/workspace and exactly one successful grant/token exchange"},
     {"id":"NATIVE-02","groups":["MOB-07","MOB-15","MOB-19"],"title":"Four actual native destinations"},
     {"id":"NATIVE-03","groups":["MOB-07"],"title":"Seeded Today task identity/date/status opens exact source Matter"},
     {"id":"NATIVE-04","groups":["MOB-08"],"title":"Matter code search, exact detail and authoritative reload"},

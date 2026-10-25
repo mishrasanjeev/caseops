@@ -13,6 +13,7 @@ import { sourceSnapshot } from './source-snapshot.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
 import { inspectLocalPlan, prepareLocalPlan } from '../../apps/mobile/e2e/local-run.mjs';
+import { appiumSessionEvent, authenticationGate, configureNativeDriver } from '../../apps/mobile/e2e/run-state.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const platform = process.argv[2];
@@ -111,7 +112,7 @@ if (mode === '--collect') {
       'appium:noReset': true,
       'appium:enforceAppInstall': true,
       'appium:newCommandTimeout': 60,
-      ...(platform === 'android' ? { 'appium:appPackage': fixture.appId, 'appium:disableIdLocatorAutocompletion': true,
+      ...(platform === 'android' ? { 'appium:appPackage': fixture.appId,
         'appium:dontStopAppOnReset': true, 'appium:ensureWebviewsHavePages': true,
         'appium:enableWebviewDetailsCollection': true } : { 'appium:bundleId': fixture.appId,
         'appium:includeSafariInWebviews': true, 'appium:webviewConnectTimeout': 20000 }),
@@ -130,12 +131,14 @@ if (mode === '--collect') {
     journal.write({ type: 'preflight_result', status: 'failed', reason: safeFailure(error, 'NATIVE_PREREQUISITE_MISSING_OR_MISMATCHED') });
   }
   const completedCases = new Set();
+  const authGate = authenticationGate((event) => journal.write(event));
   for (const scenario of scenarios) {
     const id = `${platform}:${scenario.id}`;
-    let driver, context, setupPassed = false, callPassed = false;
+    let driver, context, ownedSessionId, setupPassed = false, callPassed = false;
     journal.write({ type: 'phase_started', id, phase: 'setup' });
     try {
       assert.equal(preflightFailed, false, 'PREFLIGHT_FAILED');
+      authGate.assertSetup();
       assert.notEqual(owner?.poisoned, true, 'OWNER_CONTROL_PREVIOUSLY_UNCERTAIN');
       for (const capability of inventory.cases.find((item) => item.id === scenario.id).ownerCapabilities || []) {
         if (!owner?.capabilities.includes(capability)) throw new FixtureUnavailable('FIXTURE_OWNER_CAPABILITY_UNAVAILABLE');
@@ -144,6 +147,10 @@ if (mode === '--collect') {
         protocol: appiumUrl.protocol.slice(0, -1), path: appiumUrl.pathname, capabilities,
         logLevel: 'silent', connectionRetryCount: 0, connectionRetryTimeout: 60000 });
       assert.ok(driver.sessionId, 'NATIVE_SESSION_MISSING');
+      const sessionCreated = appiumSessionEvent(driver.sessionId, 'created');
+      ownedSessionId = sessionCreated.sessionId;
+      journal.write({ ...sessionCreated, id });
+      await configureNativeDriver(driver, platform, (event) => journal.write({ ...event, id }));
       const contexts = await driver.getContexts();
       assert.ok(contexts.includes('NATIVE_APP'), 'NATIVE_CONTEXT_REQUIRED');
       await driver.switchContext('NATIVE_APP');
@@ -153,6 +160,7 @@ if (mode === '--collect') {
       setupPassed = true;
       journal.write({ type: 'phase_result', id, phase: 'setup', status: 'passed' });
     } catch (error) {
+      if (!preflightFailed) authGate.failInitial(scenario, 'setup');
       journal.write({ type: 'phase_result', id, phase: 'setup', status: error instanceof FixtureUnavailable ? 'blocked' : 'failed',
         reason: safeFailure(error, 'NATIVE_SESSION_OR_AUTH_FAILED') });
     }
@@ -164,6 +172,7 @@ if (mode === '--collect') {
         callPassed = true;
         journal.write({ type: 'phase_result', id, phase: 'call', status: 'passed' });
       } catch (error) {
+        authGate.failInitial(scenario, 'call');
         journal.write({ type: 'phase_result', id, phase: 'call', status: error instanceof FixtureUnavailable ? 'blocked' : 'failed',
           reason: safeFailure(error, 'NATIVE_ASSERTION_FAILED') });
       }
@@ -171,9 +180,11 @@ if (mode === '--collect') {
     journal.write({ type: 'phase_started', id, phase: 'teardown' });
     try {
       if (driver) await driver.deleteSession();
+      if (ownedSessionId) journal.write({ ...appiumSessionEvent(ownedSessionId, 'deleted'), id });
       journal.write({ type: 'phase_result', id, phase: 'teardown', status: 'passed' });
       if (setupPassed && callPassed) completedCases.add(scenario.id);
     } catch {
+      if (ownedSessionId) journal.write({ ...appiumSessionEvent(ownedSessionId, 'cleanup-failed'), id });
       journal.write({ type: 'phase_result', id, phase: 'teardown', status: 'failed', reason: 'NATIVE_SESSION_CLEANUP_FAILED' });
     }
   }

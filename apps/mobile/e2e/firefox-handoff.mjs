@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { find, read, selector, visible } from './native-ui.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage } from './mfa.mjs';
 import { verifiedFile } from './evidence.mjs';
+import { browserStep } from './browser-progress.mjs';
 
-const REQUIRED = ['urlOpen', 'urlValue', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace', 'connect'];
+const REQUIRED = ['urlOpen', 'urlValue', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace', 'connect', 'appOpen'];
 export function validateFirefoxRecipe(auth) {
   const stage = mfaStage(auth);
   const recipe = auth.firefoxUi;
@@ -22,6 +23,7 @@ export function validateFirefoxRecipe(auth) {
   assert.deepEqual(evidence.afterConnect || [], recipe.afterConnect || [], 'FIREFOX_APP_PROMPT_NOT_OBSERVED');
   assert.equal(evidence.urlCloseMode || 'locator', recipe.urlCloseMode || 'locator', 'FIREFOX_URL_DISMISSAL_NOT_OBSERVED');
   for (const key of REQUIRED) assert.ok(recipe.locators?.[key], 'FIREFOX_OBSERVED_LOCATORS_REQUIRED');
+  assert.deepEqual(recipe.locators.appOpen, { kind: 'id', value: 'native-app-open' }, 'EXACT_NATIVE_APP_OPEN_CONTROL_REQUIRED');
   if (recipe.urlCloseMode === 'android-back') assert.equal(recipe.packageName, 'org.mozilla.firefox', 'DEDICATED_FIREFOX_REQUIRED');
   else { assert.ok(!recipe.urlCloseMode || recipe.urlCloseMode === 'locator', 'FIREFOX_URL_DISMISSAL_UNSUPPORTED'); assert.ok(recipe.locators.urlClose, 'FIREFOX_OBSERVED_LOCATORS_REQUIRED'); }
   if (auth.mfaRequired) for (const key of ['mfaCode', 'mfaSubmit']) assert.ok(recipe.locators[key], 'FIREFOX_MFA_LOCATORS_REQUIRED');
@@ -40,19 +42,46 @@ export function validateFirefoxRecipe(auth) {
   return recipe;
 }
 
-async function locate(context, locator) { return find(context, locator.kind, locator.value, { scroll: true }); }
-async function press(context, locator) { await (await locate(context, locator)).click(); }
+async function locate(context, key, locator = context.fixture.auth.firefoxUi.locators[key]) {
+  browserStep(context, key, 'find');
+  // These request-backed states must settle before any gesture can refresh the page.
+  return find(context, locator.kind, locator.value, { scroll: !['mfaCode', 'mfaVerified', 'appOpen'].includes(key) });
+}
+async function press(context, key, locator) {
+  const control = await locate(context, key, locator);
+  browserStep(context, key, 'click');
+  await control.click();
+}
+async function fill(context, key, value) {
+  const control = await locate(context, key);
+  browserStep(context, key, 'fill');
+  await control.setValue(typeof value === 'function' ? value() : value);
+}
+async function text(context, key) {
+  const control = await locate(context, key);
+  browserStep(context, key, 'read');
+  return control.getText();
+}
 async function location(context, recipe) {
+  browserStep(context, 'firefox-context', 'check');
   assert.equal(await context.driver.getCurrentPackage(), recipe.packageName, 'WRONG_SYSTEM_BROWSER_PACKAGE');
-  await press(context, recipe.locators.urlOpen);
-  try { return await read(context, recipe.locators.urlValue.kind, recipe.locators.urlValue.value); }
+  await press(context, 'urlOpen');
+  try {
+    browserStep(context, 'urlValue', 'read');
+    return await read(context, recipe.locators.urlValue.kind, recipe.locators.urlValue.value);
+  }
   finally {
     if (recipe.urlCloseMode === 'android-back') {
       const query = selector(context.platform, recipe.locators.urlValue.kind, recipe.locators.urlValue.value);
-      for (let count = 0; count < 2 && await visible(context.driver, query); count++) await context.driver.pressKeyCode(4);
+      const editorVisible = async () => { browserStep(context, 'urlEditor', 'check'); return visible(context.driver, query); };
+      for (let count = 0; count < 2 && await editorVisible(); count++) {
+        browserStep(context, 'urlEditor', 'dismiss');
+        await context.driver.pressKeyCode(4);
+      }
+      browserStep(context, 'urlEditor', 'check');
       assert.equal(await visible(context.driver, query), undefined, 'FIREFOX_URL_EDITOR_NOT_DISMISSED');
-      await locate(context, recipe.locators.urlOpen);
-    } else await press(context, recipe.locators.urlClose);
+      await locate(context, 'urlOpen');
+    } else await press(context, 'urlClose');
   }
 }
 
@@ -63,47 +92,62 @@ export async function firefoxLogin(context, credentials, authorizationIdentity) 
   const recipe = validateFirefoxRecipe(context.fixture.auth);
   const { driver, fixture, platform } = context;
   const stage = mfaStage(fixture.auth);
+  browserStep(context, 'firefox-context', 'switch-context');
   await driver.switchContext('NATIVE_APP');
+  browserStep(context, 'firefox-context', 'wait');
   await driver.waitUntil(async () => await driver.getCurrentPackage() === recipe.packageName,
     { timeout: 15000, interval: 250, timeoutMsg: 'FIREFOX_CUSTOM_TAB_NOT_OPENED' });
-  for (const locator of recipe.prepare || []) await press(context, locator);
+  for (const [index, locator] of (recipe.prepare || []).entries()) await press(context, `prepare-${index}`, locator);
+  browserStep(context, 'handoff', 'check');
   const handoff = authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform);
   for (const key of ['useAnotherAccount', 'signInLink']) {
     const locator = recipe.locators[key];
-    if (locator && await visible(driver, selector(platform, locator.kind, locator.value))) await press(context, locator);
+    if (locator) {
+      browserStep(context, key, 'check');
+      if (await visible(driver, selector(platform, locator.kind, locator.value))) await press(context, key);
+    }
   }
   assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
   for (const [key, value] of Object.entries({ companySlug: credentials.companySlug, email: credentials.email, password: credentials.password })) {
-    await (await locate(context, recipe.locators[key])).setValue(value);
+    await fill(context, key, value);
   }
-  await press(context, recipe.locators.submit);
+  await press(context, 'submit');
   if (stage === 'login') {
-    await (await locate(context, recipe.locators.mfaCode)).setValue(fixtureMfaCode(fixture.auth));
-    await press(context, recipe.locators.mfaSubmit);
+    await fill(context, 'mfaCode', () => fixtureMfaCode(fixture.auth));
+    await press(context, 'mfaSubmit');
   }
   const verifyIdentity = async () => {
-    await locate(context, recipe.locators.connect);
+    browserStep(context, 'identity', 'check');
+    await locate(context, 'connect');
     assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
     for (const [key, expected] of Object.entries({ principal: fixture.principalLabel, emailFact: credentials.email,
       workspace: `${fixture.workspaceLabel} / ${credentials.companySlug}` })) {
-      assert.equal((await (await locate(context, recipe.locators[key])).getText()).replace(/\s+/g, ' ').trim(), expected, 'WRONG_BROWSER_PRINCIPAL_OR_WORKSPACE');
+      assert.equal((await text(context, key)).replace(/\s+/g, ' ').trim(), expected, 'WRONG_BROWSER_PRINCIPAL_OR_WORKSPACE');
     }
-    assert.equal((await (await locate(context, recipe.locators.connect)).getText()).trim(), 'Connect app', 'REAL_CONNECT_CONTROL_REQUIRED');
+    assert.equal((await text(context, 'connect')).trim(), 'Connect app', 'REAL_CONNECT_CONTROL_REQUIRED');
   };
   await verifyIdentity();
-  await press(context, recipe.locators.connect);
+  await press(context, 'connect');
   if (stage === 'consent') {
-    await locate(context, recipe.locators.mfaCode);
+    await locate(context, 'mfaCode');
     assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
-    assert.equal((await (await locate(context, recipe.locators.mfaSubmit)).getText()).trim(), 'Verify code', 'REAL_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
-    await (await locate(context, recipe.locators.mfaCode)).setValue(fixtureMfaCode(fixture.auth));
-    await press(context, recipe.locators.mfaSubmit);
-    await locate(context, recipe.locators.mfaVerified);
+    await fill(context, 'mfaCode', () => fixtureMfaCode(fixture.auth));
+    assert.equal((await text(context, 'mfaSubmit')).trim(), 'Verify code', 'REAL_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
+    await press(context, 'mfaSubmit');
+    await locate(context, 'mfaVerified');
     await verifyIdentity();
     assert.equal(await visible(driver, selector(platform, recipe.locators.mfaCode.kind, recipe.locators.mfaCode.value)), undefined,
       'NATIVE_CONSENT_MFA_NOT_COMPLETED');
-    await press(context, recipe.locators.connect);
+    await press(context, 'connect');
   }
-  for (const locator of recipe.afterConnect || []) await press(context, locator);
+  const appOpen = await locate(context, 'appOpen');
+  browserStep(context, 'appOpen', 'read');
+  assert.equal((await appOpen.getText()).trim(), 'Open CaseOps', 'REAL_NATIVE_APP_OPEN_CONTROL_REQUIRED');
+  browserStep(context, 'appOpen', 'check');
+  assert.equal(await appOpen.isEnabled(), true, 'NATIVE_APP_OPEN_CONTROL_DISABLED');
+  browserStep(context, 'appOpen', 'click');
+  await appOpen.click();
+  for (const [index, locator] of (recipe.afterConnect || []).entries()) await press(context, `afterConnect-${index}`, locator);
+  browserStep(context, 'native-return', 'wait');
   await find(context, 'id', 'account-open');
 }
