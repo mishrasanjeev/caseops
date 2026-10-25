@@ -4,7 +4,8 @@ export function selector(platform, kind, value) {
   assert.ok(['android', 'ios'].includes(platform), 'NATIVE_PLATFORM_REQUIRED');
   assert.ok(typeof value === 'string' && value.length > 0 && value.length <= 4000, 'NATIVE_LOCATOR_VALUE_REQUIRED');
   if (kind === 'id') {
-    assert.match(value, /^[a-zA-Z0-9_.:-]{1,160}$/, 'INVALID_TEST_ID');
+    assert.ok(/^[a-zA-Z0-9_.:-]{1,160}$/.test(value)
+      || platform === 'android' && value.length <= 160 && /^[a-zA-Z][a-zA-Z0-9_.]*:id\/[a-zA-Z0-9_]+$/.test(value), 'INVALID_TEST_ID');
     return platform === 'android' ? `id=${value}` : `~${value}`;
   }
   if (kind === 'label') return `~${value}`;
@@ -18,6 +19,16 @@ export function selector(platform, kind, value) {
     : `-ios predicate string:label == ${JSON.stringify(value)} OR value == ${JSON.stringify(value)}`;
 }
 
+export function nativeAction(context, action, kind, value) {
+  assert.ok(['find', 'click', 'read', 'input', 'absent', 'swipe', 'restart'].includes(action), 'SAFE_NATIVE_ACTION_REQUIRED');
+  const event = { type: 'native_ui_action', action };
+  if (kind === 'id') {
+    selector(context.platform, kind, value);
+    event.controlId = value;
+  }
+  context.record?.(event);
+}
+
 export async function visible(driver, query) {
   const matches = [];
   for (const element of await driver.$$(query)) if (await element.isDisplayed()) matches.push(element);
@@ -26,6 +37,7 @@ export async function visible(driver, query) {
 }
 
 export async function swipe(context, direction = 'down') {
+  nativeAction(context, 'swipe');
   const { width, height } = await context.driver.getWindowRect();
   const x = Math.round(width * 0.5);
   const top = Math.round(height * 0.28), bottom = Math.round(height * 0.72);
@@ -40,10 +52,11 @@ export async function swipe(context, direction = 'down') {
 
 export async function find(context, kind, value, { scroll = false } = {}) {
   const query = selector(context.platform, kind, value);
-  return findQuery(context, query, { scroll });
+  return findQuery(context, query, { scroll, controlId: kind === 'id' ? value : undefined });
 }
 
-export async function findQuery(context, query, { scroll = false } = {}) {
+export async function findQuery(context, query, { scroll = false, controlId } = {}) {
+  nativeAction(context, 'find', controlId ? 'id' : undefined, controlId);
   let element;
   for (let attempt = 0; attempt <= (scroll ? 9 : 0); attempt++) {
     try {
@@ -59,11 +72,24 @@ export async function findQuery(context, query, { scroll = false } = {}) {
   }
 }
 
-export async function click(context, kind, value, options) { await (await find(context, kind, value, options)).click(); }
-export async function read(context, kind, value, options) { return (await find(context, kind, value, options)).getText(); }
-export async function input(context, kind, value, text) { await (await find(context, kind, value)).setValue(text); }
+export async function click(context, kind, value, options) {
+  const element = await find(context, kind, value, options);
+  nativeAction(context, 'click', kind, value);
+  await element.click();
+}
+export async function read(context, kind, value, options) {
+  const element = await find(context, kind, value, options);
+  nativeAction(context, 'read', kind, value);
+  return element.getText();
+}
+export async function input(context, kind, value, text) {
+  const element = await find(context, kind, value);
+  nativeAction(context, 'input', kind, value);
+  await element.setValue(text);
+}
 export async function expectText(context, text, options = { scroll: true }) { await find(context, 'text', text, options); }
 export async function absent(context, kind, value) {
+  nativeAction(context, 'absent', kind, value);
   assert.equal(await visible(context.driver, selector(context.platform, kind, value)), undefined, 'PRIVATE_OR_FORBIDDEN_SURFACE_VISIBLE');
 }
 export async function home(context, tab) {
@@ -75,6 +101,7 @@ export async function home(context, tab) {
   }
 }
 export async function restart(context) {
+  nativeAction(context, 'restart');
   await context.driver.terminateApp(context.fixture.appId);
   await context.driver.activateApp(context.fixture.appId);
   await context.driver.switchContext('NATIVE_APP');

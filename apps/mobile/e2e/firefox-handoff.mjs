@@ -44,8 +44,8 @@ export function validateFirefoxRecipe(auth) {
 
 async function locate(context, key, locator = context.fixture.auth.firefoxUi.locators[key]) {
   browserStep(context, key, 'find');
-  // These request-backed states must settle before any gesture can refresh the page.
-  return find(context, locator.kind, locator.value, { scroll: !['mfaCode', 'mfaVerified', 'appOpen'].includes(key) });
+  // These asynchronous states must settle before any gesture can refresh the page.
+  return find(context, locator.kind, locator.value, { scroll: !['mfaCode', 'mfaVerified', 'appOpen', 'afterConnect-0', 'afterConnect-1'].includes(key) });
 }
 async function press(context, key, locator) {
   const control = await locate(context, key, locator);

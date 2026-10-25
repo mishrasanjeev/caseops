@@ -119,18 +119,14 @@ export function MatterScreen({
                   Notes
                 </Text>
                 {workspace.notes.length ? (
-                  workspace.notes.slice(0, limit).map((note, index) => (
+                  workspace.notes.slice(0, limit).map((note) => (
                     <View
                       key={note.id}
                       testID={`note-${note.id}`}
                       style={[styles.divider, { paddingVertical: 16, gap: 8 }]}
                     >
                       <Text
-                        testID={
-                          index === 0
-                            ? "note-latest-body"
-                            : `note-body-${note.id}`
-                        }
+                        testID={`note-body-${note.id}`}
                         selectable
                         style={styles.body}
                       >

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { FixtureUnavailable } from './fixture-contract.mjs';
+import { restart } from './native-ui.mjs';
 
 export function authenticationGate(record) {
   let failed = false;
@@ -30,4 +31,15 @@ export async function configureNativeDriver(driver, platform, record) {
   const value = settings?.disableIdLocatorAutocompletion;
   record({ type: 'native_driver_settings', disableIdLocatorAutocompletion: typeof value === 'boolean' ? value : null });
   assert.equal(value, true, 'EXACT_ANDROID_RESOURCE_ID_SETTING_REQUIRED');
+}
+
+export function needsFailedCallRecovery(scenario, previous) {
+  return previous?.failedCall === true && !scenario.signedOutAfter;
+}
+
+export async function recoverFailedCall(context, scenario, previous) {
+  if (!needsFailedCallRecovery(scenario, previous)) return;
+  assert.match(previous.id || '', /^NATIVE-\d{2}$/, 'PREVIOUS_NATIVE_CASE_ID_REQUIRED');
+  context.record?.({ type: 'native_case_recovery', previousCase: previous.id, action: 'restart-bound-app', mutationReplay: false });
+  await restart(context);
 }

@@ -2,6 +2,26 @@
 
 ## Later Runtime Findings And Replacement
 
+The source80b full run reached all 23 setup/call/teardown identities and passed
+postflight, but is **not acceptance**: 10 calls passed, three direct call failures
+and subsequent modal-blocked setup left 10 calls unexecuted. Authentication,
+tabs/Today, all five identifier/reload/restart journeys, invalid-date rejection
+and saved draft/version reads passed. The note POST was acknowledged once;
+manual same-actor read proved its exact saved body and ID remained present.
+Android flattened its row identity marker away from the body in the accessibility
+tree. Every body now has its own stable note-body ID. Mobile298 in all 21 intended
+files and strict TypeScript pass; rebuilt device replay remains required.
+
+Calendar reload succeeded through the actual enabled button ID. Android's native
+unsaved-note dialog exposed STAY / LEAVE EDITOR with canonical button IDs, not the
+source labels' title case. The harness now uses those observed controls, records
+ID-only native steps, recovers failed local UI without a note replay and declares
+real browser reauthentication before its second group. The 15-minute MFA policy,
+existing note and untouched lifecycle/access negative targets remain unchanged.
+Native127 tooling tests pass. The current-session revoke control also has a
+server-current-flag-owned stable ID. Historical six-case receipts/mappings stay unchanged;
+their positional latest-body selector does not certify the current dated core.
+
 Source `60f1decc` produced an actual standalone non-debug Android APK and matching
 Docker API/web images. Manual real-browser password/MFA, native Today/Account,
 sign-out and signed-out Home/return were observed. None certified the full core.

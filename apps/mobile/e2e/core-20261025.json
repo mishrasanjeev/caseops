@@ -16,7 +16,7 @@
     {"id":"NATIVE-10","groups":["MOB-14","MOB-15"],"title":"Recorded agenda date/value, reload and exact source navigation"},
     {"id":"NATIVE-11","groups":["MOB-14"],"title":"Invalid agenda date does not fetch or replace current date"},
     {"id":"NATIVE-12","groups":["MOB-19","MOB-20"],"title":"Work task and exact read-only current draft revision/body/citations after reload"},
-    {"id":"NATIVE-13","groups":["MOB-11"],"title":"Short note disables save; corrected input enables it without POST"},
+    {"id":"NATIVE-13","groups":["MOB-11"],"title":"Explicit phase-two fresh browser authentication, short note disables save and corrected input enables without POST","freshAuthenticationInSetup":true},
     {"id":"NATIVE-14","groups":["MOB-36"],"title":"Unsaved navigation Stay preserves text; Leave discards without POST"},
     {"id":"NATIVE-15","groups":["MOB-04"],"title":"Process restart rotates refresh once without browser token exchange"},
     {"id":"NATIVE-16","groups":["MOB-36"],"title":"Process kill does not restore or save memory-only note"},
@@ -24,7 +24,7 @@
     {"id":"NATIVE-18","groups":["MOB-09"],"title":"Held dedicated Matter loses access; reload hides labels and bytes","ownerCapabilities":["revokeMatterAccess","readNoteState"]},
     {"id":"NATIVE-19","groups":["MOB-05","MOB-09"],"title":"Seeded other-tenant identifier search returns no foreign label or row"},
     {"id":"NATIVE-20","groups":["MOB-04"],"title":"Current native device-session revocation: cancel, confirm once and stay signed out on restart"},
-    {"id":"NATIVE-21","groups":["MOB-30"],"title":"Whole-run native/browser ledger has exact staged-MFA attempt/grant/token sequences and zero missing markers or unadmitted routes"},
+    {"id":"NATIVE-21","groups":["MOB-30"],"title":"Whole-run native/browser ledger has three exact staged-MFA attempt/grant/token cycles and zero missing markers or unadmitted routes","expectedAuthenticationCycles":3},
     {"id":"NATIVE-22","groups":["MOB-05"],"title":"Acknowledged logout hides private content and stays signed out after restart"},
     {"id":"NATIVE-23","groups":["MOB-05","MOB-35","MOB-36"],"title":"After acknowledged logout, actual Home background and warm resume restore usable signed-out controls without private UI or authentication","signedOutAfter":"NATIVE-22"}
   ]

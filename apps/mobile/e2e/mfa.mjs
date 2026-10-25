@@ -13,7 +13,7 @@ export function mfaStage(auth) {
   return 'none';
 }
 
-export function validateAuthorizationTraffic(requests, auth, { single = false } = {}) {
+export function validateAuthorizationTraffic(requests, auth, { single = false, cycles } = {}) {
   const stage = mfaStage(auth);
   const attempts = requests.filter(({ method, route }) => method === 'POST'
     && ['/api/auth/native/authorize', '/api/auth/native/token'].includes(route));
@@ -24,6 +24,10 @@ export function validateAuthorizationTraffic(requests, auth, { single = false } 
   ];
   assert.ok(attempts.length > 0 && attempts.length % expected.length === 0, 'EXACT_BROWSER_AUTHORIZATION_SEQUENCE_REQUIRED');
   if (single) assert.equal(attempts.length, expected.length, 'REAL_BROWSER_AUTHORIZATION_NOT_ONCE');
+  if (cycles !== undefined) {
+    assert.ok(Number.isSafeInteger(cycles) && cycles > 0, 'EXACT_AUTHENTICATION_CYCLE_COUNT_REQUIRED');
+    assert.equal(attempts.length, expected.length * cycles, 'WHOLE_RUN_AUTHENTICATION_CYCLE_COUNT_MISMATCH');
+  }
   for (let index = 0; index < attempts.length; index++) {
     assert.deepEqual({ route: attempts[index].route, status: attempts[index].status }, expected[index % expected.length],
       'BROWSER_MFA_ATTEMPT_GRANT_OR_TOKEN_SEQUENCE_MISMATCH');

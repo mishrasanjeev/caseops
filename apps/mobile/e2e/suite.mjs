@@ -15,6 +15,10 @@ export function collect(platform) {
   for (let index = 0; index < scenarios.length; index++) {
     const dependency = scenarios[index].signedOutAfter;
     assert.equal(dependency, inventory.cases[index].signedOutAfter, 'SCENARIO_AUTH_STATE_CONTRACT_MISMATCH');
+    for (const key of ['freshAuthenticationInSetup', 'expectedAuthenticationCycles']) {
+      assert.equal(scenarios[index][key], inventory.cases[index][key], 'SCENARIO_AUTH_BOUNDARY_CONTRACT_MISMATCH');
+    }
+    assert.ok(!dependency || !scenarios[index].freshAuthenticationInSetup, 'SIGNED_OUT_CASE_MUST_NOT_AUTHENTICATE');
     if (dependency) assert.ok(scenarios.slice(0, index).some(({ id }) => id === dependency), 'SCENARIO_DEPENDENCY_MUST_PRECEDE_CASE');
   }
   return { platform, inventoryId: inventory.inventoryId, scope: inventory.scope, intended, discovered };

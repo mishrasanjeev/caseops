@@ -15,14 +15,14 @@ import { authorizationIdentity, browserLogin, browserOrigin, loginCredentials } 
 import { validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { admitApplication, FixtureUnavailable, ownerControl, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
-import { delta, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, signedOutResumeTraffic } from '../../apps/mobile/e2e/journeys.mjs';
-import { backgroundAndResume, find, selector, visible } from '../../apps/mobile/e2e/native-ui.mjs';
+import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
+import { backgroundAndResume, click, find, input, nativeAction, read, selector, visible } from '../../apps/mobile/e2e/native-ui.mjs';
 import { collect, harnessFingerprint, inventory as datedInventory, receiptInventory } from '../../apps/mobile/e2e/suite.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { inspectLocalPlan, prepareLocalPlan } from '../../apps/mobile/e2e/local-run.mjs';
 import { configuredSessionDeleteAdmission, MAX_SESSION_ADMISSION_EVENTS, proveCurrentSessionDeletion } from '../../apps/mobile/e2e/session-admission.mjs';
 import { browserStep } from '../../apps/mobile/e2e/browser-progress.mjs';
-import { appiumSessionEvent, authenticationGate, configureNativeDriver } from '../../apps/mobile/e2e/run-state.mjs';
+import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
 
 const inventory = JSON.parse(readFileSync(new URL('../../apps/mobile/e2e/inventory.json', import.meta.url), 'utf8'));
 test('core discovered inventory exactly matches canonical identities on both platforms', () => {
@@ -464,9 +464,11 @@ test('browser credentials come only from bounded named environment values, never
 
 function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, externalOrigin = false, duplicatePassword = false,
   mfa = false, consent = false, platform = 'android', wrongAfterMfa = false, changedAfterMfa = false, autoConnect = false,
-  noConsentChallenge = false, verifyRefused = false, appOpenMissing = false, appOpenDisabled = false, wrongAppOpenLabel = false } = {}) {
-  let stage = 'app', native = true, verified = false;
-  const writes = [], clicks = [], records = [];
+  noConsentChallenge = false, verifyRefused = false, appOpenMissing = false, appOpenDisabled = false, wrongAppOpenLabel = false,
+  initiallyAuthenticated = false } = {}) {
+  let stage = initiallyAuthenticated ? 'complete' : 'app', native = true, verified = false;
+  const writes = [], clicks = [], records = [], requests = [];
+  const request = (method, route, status) => requests.push({ sequence: requests.length + 1, method, route, status, nativeMarker: true });
   const url = () => {
     if (externalOrigin) return authUrl('https://example.com');
     const value = new URL(authUrl('https://127.0.0.1:3443'));
@@ -478,10 +480,18 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
     isDisplayed: async () => true, isEnabled: async () => key !== 'app-open' || !appOpenDisabled, getText: async () => text,
     setValue: async (value) => { writes.push([key, value]); },
     click: async () => { clicks.push(key); if (key === 'sign-in') stage = 'landing'; if (key === 'link') stage = 'login';
+      if (key === 'account') stage = 'account'; if (key === 'back') stage = 'complete';
+      if (key === 'sign-out') { request('POST', '/api/auth/native/logout', 204); stage = 'app'; }
       if (key === 'submit') stage = mfa ? 'mfa' : 'connect'; if (key === 'mfa-submit') stage = 'connect';
-      if (key === 'connect') stage = consent && !verified ? noConsentChallenge ? 'connect' : 'consent-mfa' : 'grant';
-      if (key === 'app-open') stage = 'complete';
-      if (key === 'consent-verify' && !verifyRefused) { verified = true; stage = autoConnect ? 'complete' : 'connect'; } },
+      if (key === 'connect') {
+        request('POST', '/api/auth/native/authorize', consent && !verified ? 403 : 200);
+        stage = consent && !verified ? noConsentChallenge ? 'connect' : 'consent-mfa' : 'grant';
+      }
+      if (key === 'app-open') { request('POST', '/api/auth/native/token', 200); stage = 'complete'; }
+      if (key === 'consent-verify' && !verifyRefused) {
+        request('POST', '/api/auth/mfa/step-up', 200); request('GET', '/api/auth/me', 200);
+        verified = true; stage = autoConnect ? 'complete' : 'connect';
+      } },
   });
   const driver = {
     switchContext: async (name) => { native = name === 'NATIVE_APP'; },
@@ -492,6 +502,13 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
       if (native) {
         if (query === selector(platform, 'id', 'sign-in') && stage === 'app') return [element('sign-in')];
         if (query === selector(platform, 'id', 'account-open') && stage === 'complete') return [element('account')];
+        if (query === selector(platform, 'id', 'signed-out') && stage === 'app') return [element('signed-out')];
+        if (stage === 'account') {
+          if (query === selector(platform, 'id', 'sign-out')) return [element('sign-out')];
+          if (query === selector(platform, 'id', 'account-principal')) return [element('principal', 'Unit Person')];
+          if (query === selector(platform, 'id', 'account-workspace')) return [element('workspace', 'Unit Workspace')];
+          if (query === selector(platform, 'id', 'back')) return [element('back')];
+        }
         return [];
       }
       if (query === 'a[href^="/sign-in?next="]' && stage === 'landing') return [element('link')];
@@ -510,7 +527,7 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
   };
   return { context: { driver, platform, fixture: { principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace',
     auth: { mode: 'web-context', webOrigin: 'https://127.0.0.1:3443', companySlug: 'unit', emailEnv: 'CASEOPS_MOBILE_UNIT_EMAIL', passwordEnv: 'CASEOPS_MOBILE_UNIT_PASSWORD' } }, record: (row) => records.push(row) },
-  writes, clicks, records, isNative: () => native };
+  writes, clicks, records, requests, isNative: () => native };
 }
 function browserEnvironment(t) {
   for (const [key, value] of Object.entries({ CASEOPS_MOBILE_UNIT_EMAIL: 'unit@example.invalid', CASEOPS_MOBILE_UNIT_PASSWORD: 'unit-only-password', CASEOPS_MOBILE_UNIT_TOTP: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' })) {
@@ -568,6 +585,300 @@ test('read-only Work rejects generation, approval and other mutations while allo
   for (const route of ['/api/drafts/generate', '/api/drafts/approve', '/api/matters/unit/notes']) {
     assert.throws(() => readOnlyTraffic([{ method: 'GET' }, { method: 'POST', route }]), /MUTATION/);
   }
+});
+
+function discardDriver(platform, captions = {}) {
+  const appId = 'ai.caseops.mobile.dev.localacceptance', clicks = [], records = [];
+  let open = false;
+  const controls = platform === 'android'
+    ? [[`${appId}:id/alert_title`, captions.title ?? 'Discard unsaved note?'], ['android:id/button2', captions.stay ?? 'STAY'],
+      ['android:id/button1', captions.leave ?? 'LEAVE EDITOR']]
+    : [['Discard unsaved note?', 'Discard unsaved note?'], ['Stay', 'Stay'], ['Leave editor', 'Leave editor']];
+  const driver = {
+    waitUntil: async (predicate) => assert.ok(await predicate(), 'UNIT_CONTROL_NOT_VISIBLE'),
+    $$: async (query) => {
+      const back = query === selector(platform, 'id', 'back');
+      const entry = open && controls.find(([id]) => selector(platform, platform === 'android' ? 'id' : 'text', id) === query);
+      if (!back && !entry) return [];
+      return [{ isDisplayed: async () => true, getText: async () => entry[1], click: async () => {
+        clicks.push(back ? 'back' : entry[0]); open = back;
+      } }];
+    },
+  };
+  return { context: { driver, platform, fixture: { appId }, record: (event) => records.push(event) }, clicks, records };
+}
+
+test('Android discard validates observed title and exact uppercase canonical button IDs for Stay and Leave', async () => {
+  for (const [action, expected] of [['stay', 'android:id/button2'], ['leave', 'android:id/button1']]) {
+    const fake = discardDriver('android');
+    await discard(fake.context, action);
+    assert.deepEqual(fake.clicks, ['back', expected]);
+    assert.ok(fake.records.some(({ action, controlId }) => action === 'read' && controlId.endsWith(':id/alert_title')));
+  }
+  for (const captions of [{ title: 'Save outcome unknown' }, { stay: 'Stay' }, { leave: 'Leave editor' }]) {
+    const fake = discardDriver('android', captions);
+    await assert.rejects(() => discard(fake.context), /WRONG_NOTE_DISCARD/);
+    assert.deepEqual(fake.clicks, ['back']);
+  }
+});
+
+test('iOS discard orchestration retains exact source TitleCase labels without claiming an observed Mac run', async () => {
+  for (const [action, expected] of [['stay', 'Stay'], ['leave', 'Leave editor']]) {
+    const fake = discardDriver('ios');
+    await discard(fake.context, action);
+    assert.deepEqual(fake.clicks, ['back', expected]);
+  }
+});
+
+test('native ID locator admits exact qualified Android resource IDs but no guessed paths or iOS resource prefixes', () => {
+  assert.equal(selector('android', 'id', 'android:id/button2'), 'id=android:id/button2');
+  for (const id of ['some/path', 'android:id/button2/child', '/android:id/button2', 'android:id/button 2']) {
+    assert.throws(() => selector('android', 'id', id), /INVALID_TEST_ID/);
+  }
+  assert.throws(() => selector('ios', 'id', 'android:id/button2'), /INVALID_TEST_ID/);
+});
+
+test('native UI action stages retain IDs only, never text selectors, read bodies or input values', async () => {
+  const records = [], secret = 'unit-private-note-content';
+  const context = { platform: 'android', record: (event) => records.push(event), driver: {
+    waitUntil: async (predicate) => assert.ok(await predicate()),
+    $$: async () => [{ isDisplayed: async () => true, setValue: async () => {}, getText: async () => secret, click: async () => {} }],
+  } };
+  await input(context, 'id', 'note-input', secret);
+  assert.equal(await read(context, 'id', 'note-body-unit'), secret);
+  await click(context, 'id', 'android:id/button1');
+  await find(context, 'text', secret);
+  assert.equal(JSON.stringify(records).includes(secret), false);
+  assert.ok(records.some(({ action, controlId }) => action === 'input' && controlId === 'note-input'));
+  for (const event of records) assert.ok(Object.keys(event).every((key) => ['type', 'action', 'controlId'].includes(key)));
+  assert.throws(() => nativeAction(context, 'unit-secret-action'), /SAFE_NATIVE_ACTION_REQUIRED/);
+});
+
+test('phase-two fresh auth and whole-run three-cycle expectation match independent intended metadata', () => {
+  assert.deepEqual(datedInventory.cases.filter(({ freshAuthenticationInSetup }) => freshAuthenticationInSetup).map(({ id }) => id), ['NATIVE-13']);
+  assert.deepEqual(datedScenarios.filter(({ freshAuthenticationInSetup }) => freshAuthenticationInSetup).map(({ id }) => id), ['NATIVE-13']);
+  assert.equal(datedInventory.cases.find(({ id }) => id === 'NATIVE-21').expectedAuthenticationCycles, 3);
+  assert.equal(datedScenarios.find(({ id }) => id === 'NATIVE-21').expectedAuthenticationCycles, 3);
+  const cycle = [{ method: 'POST', route: '/api/auth/native/authorize', status: 403 },
+    { method: 'POST', route: '/api/auth/mfa/step-up', status: 200 }, { method: 'GET', route: '/api/auth/me', status: 200 },
+    { method: 'POST', route: '/api/auth/native/authorize', status: 200 }, { method: 'POST', route: '/api/auth/native/token', status: 200 }];
+  const auth = { mfaRequired: true, mfaStage: 'consent' };
+  validateAuthorizationTraffic(Array.from({ length: 3 }, () => structuredClone(cycle)).flat(), auth, { cycles: 3 });
+  for (const count of [1, 2, 4]) assert.throws(() => validateAuthorizationTraffic(
+    Array.from({ length: count }, () => structuredClone(cycle)).flat(), auth, { cycles: 3 }), /CYCLE_COUNT_MISMATCH/);
+});
+
+test('NATIVE-13 setup runs actual auth orchestration fresh with logout, password, MFA, consent and app-open (unit double only)', async (t) => {
+  browserEnvironment(t);
+  const fake = domBrowserDouble({ consent: true, initiallyAuthenticated: true });
+  Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
+  const server = http.createServer((request, response) => {
+    assert.equal(request.url, '/__caseops_e2e/status');
+    response.setHeader('content-type', 'application/json');
+    response.end(JSON.stringify({ runId: 'unit-phase-two', lastSequence: fake.requests.length, overflow: false, markerRejected: 0,
+      routeRejected: 0, requests: fake.requests }));
+  });
+  t.after(() => server.close());
+  Object.assign(fake.context.fixture, { gatewayUrl: await listen(server), gatewayRunId: 'unit-phase-two' });
+  await prepareScenario(fake.context, datedScenarios.find(({ id }) => id === 'NATIVE-13'), new Set());
+  assert.deepEqual(fake.clicks, ['account', 'sign-out', 'sign-in', 'link', 'submit', 'connect', 'consent-verify', 'connect', 'app-open', 'account', 'back']);
+  assert.deepEqual(fake.records.filter(({ type }) => type === 'native_authentication_boundary').map(({ state }) => state), ['started', 'passed']);
+  assert.equal(fake.requests.filter(({ method, route }) => method === 'POST' && route === '/api/auth/native/logout').length, 1);
+  assert.equal(fake.requests.filter(({ method, route }) => method === 'POST' && route === '/api/auth/native/token').length, 1);
+});
+
+test('failed-call recovery restarts only the bound app and never retries an operation or alters NATIVE-23 Home semantics', async () => {
+  const calls = [], records = [], appId = 'ai.caseops.mobile.dev.localacceptance';
+  const context = { platform: 'android', fixture: { appId }, record: (event) => records.push(event), driver: {
+    terminateApp: async (id) => calls.push(['terminate', id]), activateApp: async (id) => calls.push(['activate', id]),
+    switchContext: async (name) => calls.push(['context', name]),
+  } };
+  const previous = { id: 'NATIVE-13', failedCall: true };
+  await recoverFailedCall(context, { id: 'NATIVE-14' }, previous);
+  assert.deepEqual(calls, [['terminate', appId], ['activate', appId], ['context', 'NATIVE_APP']]);
+  assert.ok(records.some(({ type, mutationReplay }) => type === 'native_case_recovery' && mutationReplay === false));
+  calls.length = 0;
+  assert.equal(needsFailedCallRecovery({ id: 'NATIVE-14' }, { id: 'NATIVE-13', failedCall: false }), false);
+  await recoverFailedCall(context, { id: 'NATIVE-14' }, { id: 'NATIVE-13', failedCall: false });
+  await recoverFailedCall(context, signedOutResume, { id: 'NATIVE-22', failedCall: true });
+  assert.deepEqual(calls, []);
+});
+
+test('recovery rejects note POST activity including unknown outcomes without deleting or replaying retained notes', () => {
+  noNotePostRetried([{ method: 'GET', route: '/api/matters/unit/notes' }, { method: 'POST', route: '/api/auth/native/refresh' }]);
+  for (const id of ['primary', 'lifecycle', 'access']) for (const status of [null, 200, 201, 500]) {
+    assert.throws(() => noNotePostRetried([{ method: 'POST', route: `/api/matters/${id}/notes`, status }]), /NOTE_POST_DURING_CASE_RECOVERY/);
+  }
+});
+
+function savedNoteDriver(platform, options = {}) {
+  const savedId = 'unit-acknowledged-id', body = 'Unit exact note body with release-scoped run identity', queries = [];
+  const texts = { 'matter-code': options.wrongMatter ? 'OTHER-MATTER' : 'UNIT-MATTER',
+    [`note-body-${savedId}`]: options.wrongBody ? 'Another saved body' : body };
+  const driver = {
+    waitUntil: async (predicate) => assert.ok(await predicate(), 'UNIT_NOTE_CONTROL_MISSING'),
+    getWindowRect: async () => ({ width: 400, height: 800 }), performActions: async () => {}, releaseActions: async () => {},
+    $$: async (query) => {
+      queries.push(query);
+      const id = query.replace(platform === 'android' ? /^id=/ : /^~/, '');
+      const exists = id === 'matter-code' || id === `note-${savedId}` && !options.markerMissing
+        || id === `note-body-${savedId}` && !options.bodyMissing || id === 'note-input' && options.editorVisible;
+      if (!exists) return [];
+      const element = { isDisplayed: async () => true, getText: async () => texts[id] ?? '',
+        $$: async () => { throw new Error('FLATTENED_MARKER_HAS_NO_BODY_CHILDREN'); } };
+      return id === `note-body-${savedId}` && options.duplicateBodyId ? [element, element] : [element];
+    },
+  };
+  return { context: { driver, platform, fixture: { matter: { identityLabel: 'UNIT-MATTER' } }, noteText: body }, savedId, queries };
+}
+
+test('N9 exact acknowledged body ID proves ack/restart persistence despite a flattened leaf row marker (unit double)', async () => {
+  for (const platform of ['android', 'ios']) for (const phase of ['ack', 'restart']) {
+    const fake = savedNoteDriver(platform);
+    await verifySavedNote(fake.context, fake.savedId, phase);
+    assert.ok(fake.queries.includes(selector(platform, 'id', `note-${fake.savedId}`)));
+    assert.ok(fake.queries.includes(selector(platform, 'id', `note-body-${fake.savedId}`)));
+    assert.equal(fake.queries.some((query) => query.includes(fake.context.noteText)), false);
+    assert.equal(fake.queries.some((query) => query.includes('note-latest-body')), false);
+  }
+});
+
+test('N9 exact note binding rejects wrong body/Matter, editor text, missing marker/body and duplicate IDs without global fallback', async () => {
+  for (const options of [{ wrongBody: true }, { wrongMatter: true }, { editorVisible: true },
+    { markerMissing: true }, { bodyMissing: true }, { duplicateBodyId: true }]) {
+    const fake = savedNoteDriver('android', options);
+    await assert.rejects(() => verifySavedNote(fake.context, fake.savedId, 'restart'));
+    assert.equal(fake.queries.some((query) => query.includes(fake.context.noteText)), false);
+  }
+});
+
+test('canonical N9 uses the acknowledged ID at both checkpoints and retains one-POST/read evidence; six-case mapping stays historical', () => {
+  const source = readFileSync(new URL('../../apps/mobile/e2e/journeys.mjs', import.meta.url), 'utf8');
+  assert.ok(source.includes("await verifySavedNote(context, savedId, 'ack')"));
+  assert.ok(source.includes("await verifySavedNote(context, savedId, 'restart')"));
+  assert.equal(source.includes('note-latest-body'), false);
+  assert.ok(source.includes("'NOTE_NOT_SUBMITTED_EXACTLY_ONCE'"));
+  assert.ok(source.includes('successfulRead(requests, context.fixture.matterReloadRoute)'));
+  const historical = JSON.parse(readFileSync(new URL('../../apps/mobile/e2e/testids.json', import.meta.url), 'utf8'));
+  assert.equal(historical.ids?.savedNote ?? historical.savedNote, 'note-latest-body');
+});
+
+async function calendarDriver(t, { omitReloadRead = false, wrongEventId = false } = {}) {
+  const requests = [], clicks = [], waits = [];
+  const event = { hearingId: 'unit-hearing', day: '2026-10-25', dayLabel: '25 Oct 2026', title: 'Unit recorded hearing', metaLabel: 'Unit hearing value',
+    matter: { id: 'unit-matter', identityLabel: 'UNIT-MATTER', title: 'Unit source matter' }, nextHearingLabel: '25 Oct 2026 next hearing' };
+  let page = 'calendar', draftDay = '', invalid = false;
+  const appendRead = () => requests.push({ sequence: requests.length + 1, method: 'GET', route: '/api/calendar/events', status: 200, nativeMarker: true });
+  const server = http.createServer((request, response) => {
+    assert.equal(request.url, '/__caseops_e2e/status');
+    response.setHeader('content-type', 'application/json');
+    response.end(JSON.stringify({ runId: 'unit-calendar', lastSequence: requests.length, overflow: false,
+      markerRejected: 0, routeRejected: 0, requests }));
+  });
+  t.after(() => server.close());
+  const driver = {
+    waitUntil: async (predicate, options) => { waits.push(options); if (!await predicate()) throw new Error(options.timeoutMsg); },
+    getWindowRect: async () => ({ width: 400, height: 800 }), performActions: async () => {}, releaseActions: async () => {},
+    $$: async (query) => {
+      const ids = ['tab-calendar', ...(page === 'calendar' ? ['screen-calendar', 'calendar-go-date', 'reload',
+        `event-${wrongEventId ? 'another-hearing' : event.hearingId}`] : ['matter-code'])];
+      const id = ids.find((id) => query === selector('android', 'id', id));
+      const dateInput = page === 'calendar' && query === selector('android', 'label', 'Agenda date, YYYY-MM-DD');
+      const texts = page === 'calendar' ? [event.dayLabel, event.title, event.metaLabel,
+        ...(invalid ? ['Enter a valid date as YYYY-MM-DD.'] : [])] : [event.matter.title, event.nextHearingLabel];
+      const text = texts.find((text) => query === selector('android', 'text', text));
+      if (!id && !dateInput && !text) return [];
+      return [{ isDisplayed: async () => true, getText: async () => id === 'matter-code' ? event.matter.identityLabel : text ?? '',
+        setValue: async (value) => { assert.ok(dateInput); draftDay = value; }, click: async () => {
+          clicks.push(id ?? 'text-leaf');
+          if (id === 'tab-calendar') page = 'calendar';
+          if (id === 'calendar-go-date') { invalid = draftDay !== event.day; if (!invalid) appendRead(); }
+          if (id === 'reload' && !omitReloadRead) appendRead();
+          if (id === `event-${event.hearingId}`) page = 'matter';
+          if (text) throw new Error('CALENDAR_TEXT_LEAF_IS_NOT_AN_ACTION_CONTROL');
+        } }];
+    },
+  };
+  return { context: { driver, platform: 'android', fixture: { calendar: event, gatewayRunId: 'unit-calendar', gatewayUrl: await listen(server) } },
+    requests, clicks, waits };
+}
+
+test('N10/N11 use actual date/reload IDs and retain exact event/source values plus invalid-date zero-read boundary (unit double)', async (t) => {
+  const positive = await calendarDriver(t);
+  await datedScenarios.find(({ id }) => id === 'NATIVE-10').run(positive.context);
+  assert.deepEqual(positive.clicks, ['tab-calendar', 'calendar-go-date', 'reload', 'event-unit-hearing']);
+  assert.equal(positive.requests.length, 2);
+  assert.ok(positive.waits.some(({ timeout, interval, timeoutMsg }) => timeout === 10000 && interval === 200 && timeoutMsg === 'AGENDA_REREAD_MISSING'));
+  const invalid = await calendarDriver(t);
+  await datedScenarios.find(({ id }) => id === 'NATIVE-11').run(invalid.context);
+  assert.deepEqual(invalid.clicks, ['tab-calendar', 'calendar-go-date', 'calendar-go-date']);
+  assert.equal(invalid.requests.length, 1);
+});
+
+test('N10 missing authoritative reload GET still fails without clicking twice or extending the read deadline', async (t) => {
+  const fake = await calendarDriver(t, { omitReloadRead: true });
+  await assert.rejects(() => datedScenarios.find(({ id }) => id === 'NATIVE-10').run(fake.context), /AGENDA_REREAD_MISSING/);
+  assert.equal(fake.clicks.filter((id) => id === 'reload').length, 1);
+  assert.equal(fake.requests.length, 1);
+  assert.equal(fake.waits.filter(({ timeoutMsg }) => timeoutMsg === 'AGENDA_REREAD_MISSING').length, 1);
+});
+
+test('N10 rejects a different event ID even if its visible title/date/meta values match, without a title-click fallback', async (t) => {
+  const fake = await calendarDriver(t, { wrongEventId: true });
+  await assert.rejects(() => datedScenarios.find(({ id }) => id === 'NATIVE-10').run(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.deepEqual(fake.clicks, ['tab-calendar', 'calendar-go-date', 'reload']);
+});
+
+test('N20 clicks only the fixed server-current revoke ID while retaining cancel, confirmation, exact DELETE204 and admission proof (unit double)', async (t) => {
+  const { plan, policy } = dynamicSessionPlan(t);
+  const fixture = inspectLocalPlan(plan, 'android', unitCredentials).fixture;
+  const state = sessionDeletionLedger(policy).before, clicks = [], records = [];
+  let page = 'home';
+  const append = (method, route, status) => {
+    const sequence = ++state.lastSequence;
+    const request = { sequence, requestId: sequence.toString(16).padStart(16, '0'), method, route, status, nativeMarker: true, browserHandoff: false };
+    state.requests.push(request); state.accepted++;
+    return request;
+  };
+  const server = http.createServer((request, response) => {
+    assert.equal(request.url, '/__caseops_e2e/status');
+    response.setHeader('content-type', 'application/json'); response.end(JSON.stringify(state));
+  });
+  t.after(() => server.close());
+  fixture.gatewayUrl = await listen(server);
+  const driver = {
+    waitUntil: async (predicate) => assert.ok(await predicate()),
+    getWindowRect: async () => ({ width: 400, height: 800 }), performActions: async () => {}, releaseActions: async () => {},
+    terminateApp: async (id) => assert.equal(id, fixture.appId), activateApp: async (id) => assert.equal(id, fixture.appId),
+    switchContext: async (name) => assert.equal(name, 'NATIVE_APP'),
+    $$: async (query) => {
+      const ids = page === 'home' ? ['account-open'] : page === 'account' ? ['account-session-current', 'account-session-current-revoke']
+        : page === 'confirmation' ? ['account-session-confirmation', 'account-session-cancel', 'account-session-confirm'] : ['signed-out'];
+      const id = ids.find((id) => query === selector('android', 'id', id));
+      if (!id) return [];
+      return [{ isDisplayed: async () => true, click: async () => {
+        clicks.push(id);
+        if (id === 'account-open') {
+          page = 'account';
+          const source = append('GET', '/api/auth/native/sessions', 200);
+          state.sessionDeleteAdmissions.push({ type: 'session-delete-admitted', route: 'DELETE /api/auth/native/sessions/unit-current', sourceRequestId: source.requestId });
+        }
+        if (id === 'account-session-current-revoke') page = 'confirmation';
+        if (id === 'account-session-cancel') page = 'account';
+        if (id === 'account-session-confirm') {
+          append('DELETE', '/api/auth/native/sessions/unit-current', 204);
+          append('POST', '/api/auth/native/logout', 204);
+          page = 'signed-out';
+        }
+      } }];
+    },
+  };
+  await datedScenarios.find(({ id }) => id === 'NATIVE-20').run({ driver, fixture, platform: 'android', record: (event) => records.push(event) });
+  assert.deepEqual(clicks, ['account-open', 'account-session-current-revoke', 'account-session-cancel',
+    'account-session-current-revoke', 'account-session-confirm']);
+  assert.equal(state.requests.filter(({ method }) => method === 'DELETE').length, 1);
+  assert.ok(records.some(({ boundary, sourceRequestId, currentSessionId }) => boundary === 'current-native-session-delete-admission'
+    && sourceRequestId === state.sessionDeleteAdmissions[0].sourceRequestId && currentSessionId === 'unit-current'));
 });
 test('request deltas reject changed run, truncation and same-sized history substitution', () => {
   const before = { runId: 'unit', lastSequence: 1, requests: [{ sequence: 1, method: 'GET', route: '/api/read', status: null }] };
@@ -765,7 +1076,7 @@ test('dated documentation retains all forty acceptance groups and all 23 executa
   const doc = readFileSync(new URL('../../docs/mobile/ANDROID_CORE_INVENTORY_2026-10-25.md', import.meta.url), 'utf8');
   assert.deepEqual([...doc.matchAll(/^\| (MOB-\d{2}) \|/gm)].map((match) => match[1]), Array.from({ length: 40 }, (_, index) => `MOB-${String(index + 1).padStart(2, '0')}`));
   assert.deepEqual([...doc.matchAll(/^\| (NATIVE-\d{2}) \|/gm)].map((match) => match[1]), EXPECTED_DATED);
-  assert.ok(doc.includes('Native acceptance: **Not run**.'));
+  assert.ok(doc.includes('Native acceptance: **Incomplete**.'));
 });
 
 test('actual MFA-form orchestration submits one entered code and never logs its seed', async (t) => {
@@ -860,7 +1171,7 @@ test('authorization receipts distinguish the consent 403 attempt from the sole s
 function firefoxDouble(t, foreign = false, options = {}) {
   const auth = firefoxRecipe(t, options);
   let stage = 'app', editing = false, verified = false, backCount = 0, consentCodeEntered = false;
-  let clock = 0, verifiedAt = 0, grantAt = 0, noticeCleared = false, lastLookup, promptIndex = 0;
+  let clock = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0;
   const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [];
   const values = auth.firefoxUi.locators;
   const fixture = { appId: 'ai.caseops.mobile.dev.localacceptance', principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace',
@@ -873,7 +1184,9 @@ function firefoxDouble(t, foreign = false, options = {}) {
       clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) editing = false;
     },
     waitUntil: async (callback, settings = {}) => {
-      if (options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined) return assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED');
+      if (options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined) {
+        return assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED');
+      }
       const start = clock, timeout = settings.timeout ?? 10000, interval = settings.interval ?? 150;
       const wait = { key: undefined, timeout, start };
       waits.push(wait);
@@ -890,6 +1203,10 @@ function firefoxDouble(t, foreign = false, options = {}) {
       swipes.push('scroll');
       if (options.verifiedNoticeDelayMs !== undefined && verified) {
         noticeCleared = true;
+        refreshes.push('GET /api/auth/me');
+      }
+      if (options.promptDelaysMs && stage === 'prompt') {
+        promptCleared = true;
         refreshes.push('GET /api/auth/me');
       }
     },
@@ -912,7 +1229,8 @@ function firefoxDouble(t, foreign = false, options = {}) {
         : key === 'mfaVerified' ? verified && stage === 'connect' && !editing && !noticeCleared
           && clock - verifiedAt >= (options.verifiedNoticeDelayMs ?? 0)
         : key === 'appOpen' ? stage === 'grant' && !editing && !options.appOpenMissing && clock - grantAt >= (options.appOpenDelayMs ?? 0)
-        : key && key.startsWith('prompt-') ? stage === 'prompt' && key === `prompt-${promptIndex}`
+        : key && key.startsWith('prompt-') ? stage === 'prompt' && key === `prompt-${promptIndex}` && !promptCleared
+          && clock - promptAt >= (options.promptDelaysMs?.[promptIndex] ?? 0)
         : key && key.startsWith('prepare-') ? stage === 'landing' : false;
       if (!shown) return [];
       return [{ isDisplayed: async () => true, isEnabled: async () => key !== 'appOpen' || !options.appOpenDisabled,
@@ -938,8 +1256,11 @@ function firefoxDouble(t, foreign = false, options = {}) {
             stage = options.consent && !verified ? options.noConsentChallenge ? 'connect' : 'consent-mfa' : 'grant';
             if (stage === 'grant') grantAt = clock;
           }
-          if (key === 'appOpen') stage = auth.firefoxUi.afterConnect.length ? 'prompt' : 'complete';
-          if (key?.startsWith('prompt-') && ++promptIndex === auth.firefoxUi.afterConnect.length) stage = 'complete';
+          if (key === 'appOpen') { stage = auth.firefoxUi.afterConnect.length ? 'prompt' : 'complete'; promptAt = clock; }
+          if (key?.startsWith('prompt-')) {
+            promptAt = clock;
+            if (++promptIndex === auth.firefoxUi.afterConnect.length) stage = 'complete';
+          }
           if (key === 'mfaSubmit' && !options.verifyRefused) { verified = true; verifiedAt = clock; stage = options.autoConnect ? 'complete' : 'connect'; }
         } }];
     },
@@ -981,6 +1302,36 @@ test('Firefox explicitly opens the granted app callback once before its observed
   assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit', 'appOpen', 'prompt-0'].includes(key)),
     ['connect', 'mfaSubmit', 'connect', 'appOpen', 'prompt-0']);
   assert.equal(fake.records.filter(({ type, key, action }) => type === 'browser_step' && key === 'appOpen' && action === 'click').length, 1);
+});
+
+test('both bounded afterConnect prompt keys wait 10s without gestures when their observed controls arrive asynchronously', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, promptDelaysMs: [4011, 2300],
+    afterConnect: [{ kind: 'label', value: 'Unit prompt one' }, { kind: 'label', value: 'Unit prompt two' }] });
+  await browserLogin(fake.context);
+  for (const key of ['prompt-0', 'prompt-1']) assert.ok(fake.waits.some((wait) => wait.key === key && wait.timeout === 10000));
+  assert.deepEqual(fake.swipes, []);
+  assert.deepEqual(fake.refreshes, []);
+  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit', 'appOpen', 'prompt-0', 'prompt-1'].includes(key)),
+    ['connect', 'mfaSubmit', 'connect', 'appOpen', 'prompt-0', 'prompt-1']);
+  assert.ok(fake.elapsed() >= 6311 && fake.elapsed() < 20000);
+});
+
+test('either missing afterConnect prompt fails at its one 10s bound without scrolling, callback replay or another grant', async (t) => {
+  browserEnvironment(t);
+  for (const missing of [0, 1]) {
+    const delays = [0, 0]; delays[missing] = 10001;
+    const fake = firefoxDouble(t, false, { consent: true, promptDelaysMs: delays,
+      afterConnect: [{ kind: 'label', value: 'Unit prompt one' }, { kind: 'label', value: 'Unit prompt two' }] });
+    await assert.rejects(() => browserLogin(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+    assert.equal(fake.elapsed(), 10000);
+    assert.deepEqual(fake.swipes, []);
+    assert.deepEqual(fake.refreshes, []);
+    assert.equal(fake.clicks.filter((key) => key === 'appOpen').length, 1);
+    assert.equal(fake.clicks.filter((key) => key === 'connect').length, 2);
+    assert.equal(fake.clicks.filter((key) => key.startsWith('prompt-')).length, missing);
+    assert.equal(fake.records.filter(({ type }) => type === 'browser_step').at(-1).key, `afterConnect-${missing}`);
+  }
 });
 
 test('Firefox waits for a delayed grant-backed Open CaseOps button without refreshing or reauthorizing', async (t) => {

@@ -3343,3 +3343,10 @@ requirements when using the fallback.
   that can trigger pull-to-refresh and erase the very state being asserted.
   Keep fixed-name, secret-free step evidence and mark downstream journeys
   blocked after initial authentication fails instead of repeatedly probing them.
+- Native accessibility may flatten a rendered record container into an empty
+  identity marker and sibling content. Put the immutable record identity on the
+  actual body Text, assert that exact ID and value after reload, and inspect the
+  real hierarchy before diagnosing lost data. Use source-owned button IDs and
+  observed platform dialog captions. Long native acceptance must renew MFA
+  through the real browser at declared phase boundaries, never extend its policy
+  lifetime or replay an uncertain mutation to keep a suite running.

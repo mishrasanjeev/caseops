@@ -65,10 +65,21 @@ async function editor(context, matter = context.fixture.matter) {
   await click(context, 'id', 'note-add', { scroll: true });
   await find(context, 'id', 'note-input');
 }
-async function discard(context, action = 'Leave editor') {
+export async function discard(context, action = 'leave') {
+  assert.ok(['stay', 'leave'].includes(action), 'EXACT_NOTE_DISCARD_ACTION_REQUIRED');
   await click(context, 'id', 'back');
-  await expectText(context, 'Discard unsaved note?', { scroll: false });
-  await click(context, 'text', action);
+  if (context.platform === 'android') {
+    assert.equal(await read(context, 'id', `${context.fixture.appId}:id/alert_title`), 'Discard unsaved note?', 'WRONG_NOTE_DISCARD_DIALOG');
+    assert.equal(await read(context, 'id', 'android:id/button2'), 'STAY', 'WRONG_NOTE_DISCARD_STAY_BUTTON');
+    assert.equal(await read(context, 'id', 'android:id/button1'), 'LEAVE EDITOR', 'WRONG_NOTE_DISCARD_LEAVE_BUTTON');
+    await click(context, 'id', action === 'stay' ? 'android:id/button2' : 'android:id/button1');
+  } else {
+    assert.equal(context.platform, 'ios', 'NATIVE_PLATFORM_REQUIRED');
+    await expectText(context, 'Discard unsaved note?', { scroll: false });
+    await find(context, 'text', 'Stay');
+    await find(context, 'text', 'Leave editor');
+    await click(context, 'text', action === 'stay' ? 'Stay' : 'Leave editor');
+  }
 }
 async function row(context, item) {
   const element = await find(context, 'id', `today-item-${item.kind}-${item.id}`, { scroll: true });
@@ -85,6 +96,16 @@ function seeded(context, key) {
   return context.fixture[key];
 }
 
+export async function verifySavedNote(context, savedId, phase) {
+  assert.match(savedId || '', /^[a-zA-Z0-9_-]{1,100}$/, 'ACKNOWLEDGED_NOTE_ID_REQUIRED');
+  assert.ok(['ack', 'restart'].includes(phase), 'SAVED_NOTE_VERIFICATION_PHASE_REQUIRED');
+  await absent(context, 'id', 'note-input');
+  assert.equal(await read(context, 'id', 'matter-code'), context.fixture.matter.identityLabel, 'WRONG_MATTER');
+  await find(context, 'id', `note-${savedId}`, { scroll: true });
+  assert.equal(await read(context, 'id', `note-body-${savedId}`, { scroll: true }), context.noteText,
+    phase === 'ack' ? 'NOTE_ACK_BODY_MISMATCH' : 'NOTE_RESTART_ID_OR_BODY_MISMATCH');
+}
+
 async function signedOutSurface(context) {
   await find(context, 'id', 'signed-out');
   assert.equal(await (await find(context, 'id', 'sign-in')).isEnabled(), true, 'SIGNED_OUT_SIGN_IN_NOT_USABLE');
@@ -99,7 +120,22 @@ export async function prepareScenario(context, scenario, completedCases) {
   if (scenario.signedOutAfter) {
     if (!completedCases.has(scenario.signedOutAfter)) throw new FixtureUnavailable('PREREQUISITE_SCENARIO_NOT_PASSED');
     await signedOutSurface(context);
-  } else if (!scenario.authenticateInCall) await authenticate(context);
+  } else if (!scenario.authenticateInCall) {
+    if (scenario.freshAuthenticationInSetup) {
+      context.record?.({ type: 'native_authentication_boundary', scenario: scenario.id, state: 'started' });
+      const before = await traffic(context);
+      await authenticate(context, { fresh: true });
+      const requests = delta(before, await traffic(context));
+      validateAuthorizationTraffic(requests, context.fixture.auth, { single: true });
+      noNotePostRetried(requests);
+      context.record?.({ type: 'native_authentication_boundary', scenario: scenario.id, state: 'passed' });
+    } else await authenticate(context);
+  }
+}
+
+export function noNotePostRetried(requests) {
+  assert.equal(requests.filter(({ method, route }) => method === 'POST' && /^\/api\/matters\/[^/]+\/notes$/.test(route)).length,
+    0, 'NOTE_POST_DURING_CASE_RECOVERY');
 }
 
 export function signedOutResumeTraffic(requests) {
@@ -143,13 +179,12 @@ export const scenarios = [
     const savedId = /^Saved note ID: ([a-zA-Z0-9_-]{1,100})$/.exec(await saved.getText())?.[1];
     assert.ok(savedId, 'ACKNOWLEDGED_NOTE_ID_REQUIRED');
     await click(context, 'id', 'note-return', { scroll: true });
-    assert.equal(await read(context, 'id', 'note-latest-body', { scroll: true }), context.noteText, 'NOTE_ACK_BODY_MISMATCH');
+    await verifySavedNote(context, savedId, 'ack');
     await restart(context);
     await authenticate(context);
     await openMatter(context);
     await click(context, 'id', 'matter-activity');
-    const retained = await find(context, 'id', `note-${savedId}`, { scroll: true });
-    assert.ok(await visible(retained, selector(context.platform, 'text', context.noteText)), 'NOTE_RESTART_ID_OR_BODY_MISMATCH');
+    await verifySavedNote(context, savedId, 'restart');
     const requests = delta(before, await traffic(context));
     assert.equal(requestCount(requests, 'POST', context.fixture.noteRoute), 1, 'NOTE_NOT_SUBMITTED_EXACTLY_ONCE');
     assert.ok(requests.some((request) => request.method === 'POST' && request.route === context.fixture.noteRoute && [200, 201].includes(request.status)), 'NOTE_POST_NOT_ACKNOWLEDGED');
@@ -159,17 +194,18 @@ export const scenarios = [
     const event = context.fixture.calendar;
     await home(context, 'calendar');
     await input(context, 'label', 'Agenda date, YYYY-MM-DD', event.day);
-    await click(context, 'text', 'Go to date');
+    await click(context, 'id', 'calendar-go-date');
     await expectText(context, event.dayLabel);
     await expectText(context, event.title);
     await expectText(context, event.metaLabel);
     const before = await traffic(context);
-    await click(context, 'text', 'Reload agenda', { scroll: true });
-    await context.driver.waitUntil(async () => delta(before, await traffic(context)).some((item) => item.route === '/api/calendar/events' && item.status === 200),
+    await click(context, 'id', 'reload', { scroll: true });
+    await context.driver.waitUntil(async () => delta(before, await traffic(context)).some((item) => item.method === 'GET' && item.route === '/api/calendar/events' && item.status === 200),
       { timeout: 10000, interval: 200, timeoutMsg: 'AGENDA_REREAD_MISSING' });
     await expectText(context, event.title);
     await expectText(context, event.metaLabel);
-    await click(context, 'text', event.title, { scroll: true });
+    assert.match(event.hearingId || '', /^[a-zA-Z0-9_-]{1,100}$/, 'SEEDED_CALENDAR_EVENT_ID_REQUIRED');
+    await click(context, 'id', `event-${event.hearingId}`, { scroll: true });
     assert.equal(await read(context, 'id', 'matter-code'), event.matter.identityLabel, 'AGENDA_WRONG_SOURCE');
     await expectText(context, event.matter.title);
     await expectText(context, event.nextHearingLabel);
@@ -178,12 +214,12 @@ export const scenarios = [
     await home(context, 'calendar');
     const event = context.fixture.calendar;
     await input(context, 'label', 'Agenda date, YYYY-MM-DD', event.day);
-    await click(context, 'text', 'Go to date');
+    await click(context, 'id', 'calendar-go-date');
     await expectText(context, event.dayLabel);
     await expectText(context, event.title);
     const before = await traffic(context);
     await input(context, 'label', 'Agenda date, YYYY-MM-DD', '2026-02-30');
-    await click(context, 'text', 'Go to date');
+    await click(context, 'id', 'calendar-go-date');
     await expectText(context, 'Enter a valid date as YYYY-MM-DD.');
     await expectText(context, event.dayLabel);
     assert.equal(requestCount(delta(before, await traffic(context)), 'GET', '/api/calendar/events'), 0, 'INVALID_DATE_FETCHED');
@@ -214,7 +250,7 @@ export const scenarios = [
     for (const text of ['Approve', 'Finalize', 'Request changes', 'Generate']) await absent(context, 'text', text);
     readOnlyTraffic(delta(before, await traffic(context)));
   } },
-  { id: 'NATIVE-13', run: async (context) => {
+  { id: 'NATIVE-13', freshAuthenticationInSetup: true, run: async (context) => {
     await editor(context);
     const before = await traffic(context);
     await input(context, 'id', 'note-input', 'x');
@@ -228,7 +264,7 @@ export const scenarios = [
     await editor(context);
     const before = await traffic(context);
     await input(context, 'id', 'note-input', context.noteText);
-    await discard(context, 'Stay');
+    await discard(context, 'stay');
     assert.equal(await read(context, 'id', 'note-input'), context.noteText, 'STAY_LOST_UNSAVED_NOTE');
     await discard(context);
     await find(context, 'id', 'matter-code');
@@ -331,12 +367,12 @@ export const scenarios = [
     const before = await traffic(context);
     await click(context, 'id', 'account-open');
     await find(context, 'id', 'account-session-current', { scroll: true });
-    await click(context, 'text', 'Revoke this session', { scroll: true });
+    await click(context, 'id', 'account-session-current-revoke', { scroll: true });
     await find(context, 'id', 'account-session-confirmation');
     await click(context, 'id', 'account-session-cancel');
     await absent(context, 'id', 'account-session-confirmation');
     assert.equal(delta(before, await traffic(context)).filter((request) => request.method === 'DELETE').length, 0, 'CANCEL_REVOKED_DEVICE_SESSION');
-    await click(context, 'text', 'Revoke this session', { scroll: true });
+    await click(context, 'id', 'account-session-current-revoke', { scroll: true });
     await find(context, 'id', 'account-session-confirmation');
     await click(context, 'id', 'account-session-confirm');
     await find(context, 'id', 'signed-out');
@@ -352,12 +388,12 @@ export const scenarios = [
     context.record?.({ type: 'assertion', boundary: 'current-native-session-delete-admission', ...proof });
     assert.equal(requestCount(requests, 'POST', '/api/auth/native/refresh'), 0, 'REVOKED_DEVICE_REFRESH_RESTORED');
   } },
-  { id: 'NATIVE-21', run: async (context) => {
+  { id: 'NATIVE-21', expectedAuthenticationCycles: 3, run: async (context) => {
     const state = await traffic(context);
     const requests = state.requests.filter((row) => row.sequence > (context.gatewayBaseline?.lastSequence || 0));
     assert.ok(requests.some((row) => row.route === '/api/me/today' && row.status === 200), 'MEANINGFUL_NATIVE_TRAFFIC_MISSING');
     assert.ok(requests.some((row) => row.route === '/api/auth/native/authorize' && row.status === 200), 'SYSTEM_BROWSER_TRAFFIC_NOT_IN_LEDGER');
-    validateAuthorizationTraffic(requests, context.fixture.auth);
+    validateAuthorizationTraffic(requests, context.fixture.auth, { cycles: 3 });
   } },
   { id: 'NATIVE-22', run: async (context) => {
     await openMatter(context);

@@ -190,7 +190,11 @@ export function AccountDeviceSessions({
                   <Text style={styles.status}>Revoked</Text>
                 ) : (
                   <NativeButton
-                    testID={`account-session-${index}-revoke`}
+                    testID={
+                      session.current
+                        ? "account-session-current-revoke"
+                        : `account-session-${index}-revoke`
+                    }
                     label={
                       session.current
                         ? "Revoke this session"

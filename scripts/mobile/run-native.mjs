@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { prepareScenario, scenarios } from '../../apps/mobile/e2e/journeys.mjs';
+import { delta, noNotePostRetried, prepareScenario, scenarios, traffic } from '../../apps/mobile/e2e/journeys.mjs';
 import { admitApplication, FixtureUnavailable, loadOwnerControls, validateBuildReceipt, validateCoreFixture } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { collect, harnessFingerprint, inventory } from '../../apps/mobile/e2e/suite.mjs';
 import { binaryHash, Journal, localJson, localUrl, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
@@ -13,7 +13,7 @@ import { sourceSnapshot } from './source-snapshot.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
 import { inspectLocalPlan, prepareLocalPlan } from '../../apps/mobile/e2e/local-run.mjs';
-import { appiumSessionEvent, authenticationGate, configureNativeDriver } from '../../apps/mobile/e2e/run-state.mjs';
+import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const platform = process.argv[2];
@@ -132,13 +132,15 @@ if (mode === '--collect') {
   }
   const completedCases = new Set();
   const authGate = authenticationGate((event) => journal.write(event));
+  let previousCase;
   for (const scenario of scenarios) {
     const id = `${platform}:${scenario.id}`;
-    let driver, context, ownedSessionId, setupPassed = false, callPassed = false;
+    let driver, context, ownedSessionId, setupPassed = false, callPassed = false, callFailed = false, teardownPassed = false;
     journal.write({ type: 'phase_started', id, phase: 'setup' });
     try {
       assert.equal(preflightFailed, false, 'PREFLIGHT_FAILED');
       authGate.assertSetup();
+      if (previousCase?.cleanupUncertain) throw new FixtureUnavailable('PREVIOUS_NATIVE_SESSION_CLEANUP_UNCERTAIN');
       assert.notEqual(owner?.poisoned, true, 'OWNER_CONTROL_PREVIOUSLY_UNCERTAIN');
       for (const capability of inventory.cases.find((item) => item.id === scenario.id).ownerCapabilities || []) {
         if (!owner?.capabilities.includes(capability)) throw new FixtureUnavailable('FIXTURE_OWNER_CAPABILITY_UNAVAILABLE');
@@ -156,7 +158,10 @@ if (mode === '--collect') {
       await driver.switchContext('NATIVE_APP');
       context = { driver, fixture, platform, owner, runId, gatewayBaseline: runGatewayBaseline,
         record: (event) => journal.write({ ...event, id }), noteText: `CaseOps native QA ${runId} ${scenario.id}` };
+      const recoveryBaseline = needsFailedCallRecovery(scenario, previousCase) ? await traffic(context) : undefined;
+      await recoverFailedCall(context, scenario, previousCase);
       await prepareScenario(context, scenario, completedCases);
+      if (recoveryBaseline) noNotePostRetried(delta(recoveryBaseline, await traffic(context)));
       setupPassed = true;
       journal.write({ type: 'phase_result', id, phase: 'setup', status: 'passed' });
     } catch (error) {
@@ -172,6 +177,7 @@ if (mode === '--collect') {
         callPassed = true;
         journal.write({ type: 'phase_result', id, phase: 'call', status: 'passed' });
       } catch (error) {
+        callFailed = !(error instanceof FixtureUnavailable);
         authGate.failInitial(scenario, 'call');
         journal.write({ type: 'phase_result', id, phase: 'call', status: error instanceof FixtureUnavailable ? 'blocked' : 'failed',
           reason: safeFailure(error, 'NATIVE_ASSERTION_FAILED') });
@@ -181,12 +187,15 @@ if (mode === '--collect') {
     try {
       if (driver) await driver.deleteSession();
       if (ownedSessionId) journal.write({ ...appiumSessionEvent(ownedSessionId, 'deleted'), id });
+      teardownPassed = true;
       journal.write({ type: 'phase_result', id, phase: 'teardown', status: 'passed' });
       if (setupPassed && callPassed) completedCases.add(scenario.id);
     } catch {
       if (ownedSessionId) journal.write({ ...appiumSessionEvent(ownedSessionId, 'cleanup-failed'), id });
       journal.write({ type: 'phase_result', id, phase: 'teardown', status: 'failed', reason: 'NATIVE_SESSION_CLEANUP_FAILED' });
     }
+    previousCase = { id: scenario.id, failedCall: callFailed,
+      cleanupUncertain: previousCase?.cleanupUncertain || !!driver && !teardownPassed };
   }
   if (!preflightFailed) {
     try {
