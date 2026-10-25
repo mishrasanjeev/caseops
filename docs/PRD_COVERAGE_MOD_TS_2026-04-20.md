@@ -1,5 +1,14 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 25 Native Coverage
+
+J20/M22/US-MOB-01..08 remains **Partially implemented**. All 20 selected mobile
+files ran 295 passing cases; 38 web-handoff checks and the upload owner's real
+PostgreSQL races are component evidence. Native acceptance expands to 22 named
+cases per platform; it is not a full MOB-01..40 pass. Exact candidate Docker/APK
+and actual Android execution follow. MacBook iOS and release gates stay open in
+`mobile/MOBILE_BUILD_CHECKPOINT_2026-10-25.md`.
+
 ## October 24 Native Component Coverage
 
 J20/M22/US-MOB-01..08: **Partially implemented**. Native source components,

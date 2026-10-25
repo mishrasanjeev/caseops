@@ -1241,6 +1241,22 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- A native system picker can background and unmount private screens. Preserve
+  only opaque tenant/user/membership/login/parent identity and the originally
+  observed lifecycle version at the root; revalidate on return, require an
+  explicit upload, and reject that original version under the server lock both
+  before and after I/O. Never retain a hidden Matter DTO or adopt a reopened
+  parent's new version to make an old selection succeed.
+- A private native reader needs a genuinely streaming, bounded transport, not
+  an unbounded global fetch followed by a size check. Bind exact download paths,
+  source hashes, no-store, deadline/abort and login generation; purge visible
+  content before renewing access. Unit/desktop rendering is not native cache,
+  capture or revocation proof.
+- Test screenshots and raw reports must remain outside the app's build input
+  inventory. A passing renderer test that writes into its own source directory
+  can dirty or change a frozen candidate; retain unique external evidence and
+  compare the actual input fingerprint before and after the native build.
+
 - Request-based Cloud Run does not guarantee CPU after the HTTP response.
   Public enquiry admission and founder retries must only persist the outbox;
   the scheduled worker owns mail claims and transport. Prove zero HTTP worker

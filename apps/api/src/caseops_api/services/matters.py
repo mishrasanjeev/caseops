@@ -5530,6 +5530,7 @@ def create_matter_attachment(
     filename: str,
     content_type: str | None,
     stream: BinaryIO,
+    expected_lifecycle_version: int | None = None,
     document_type: str | None = None,
     lifecycle_stage: str | None = None,
     document_date: date | None = None,
@@ -5570,10 +5571,24 @@ def create_matter_attachment(
     require_read_only_upload_session(
         session, detail="Matter upload requires a read-only session before its I/O boundary.",
     )
+    if expected_lifecycle_version is not None and (
+        type(expected_lifecycle_version) is not int or expected_lifecycle_version < 0
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="expected_lifecycle_version must be a nonnegative integer.",
+        )
+    # Refreshing the actor below returns a context without its native credential identity.
+    if context.native_session_id is not None and expected_lifecycle_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Native uploads require expected_lifecycle_version. Reload the matter.",
+        )
     lock_compliance_participants(
         session, company_id=context.company.id, matter_id=matter_id,
         actor_membership_id=context.membership.id, context=context,
         required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_attachment"],
+        expected_lifecycle_version=expected_lifecycle_version,
         include_order_notifications=linked_court_order_id is not None,
     )
     _lock_matter_mutation_actor(
@@ -5596,7 +5611,11 @@ def create_matter_attachment(
     audit_matter_id = matter.id
     upload_company_id = context.company.id
     upload_actor_id = context.membership.id
-    upload_lifecycle_version = matter.lifecycle_version
+    upload_lifecycle_version = (
+        matter.lifecycle_version
+        if expected_lifecycle_version is None
+        else expected_lifecycle_version
+    )
     linked_court_order_id = _validated_attachment_court_order_id(
         session,
         matter_id=matter.id,

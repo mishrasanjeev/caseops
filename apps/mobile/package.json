@@ -8,7 +8,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-transform-types --test src/network/*.test.ts src/auth/*.test.ts src/domain/*.test.ts",
+    "test": "node --experimental-transform-types --test src/network/*.test.ts src/auth/*.test.ts src/domain/*.test.ts src/files/*.test.ts src/viewer/*.test.ts",
     "export:android": "expo export --platform android --output-dir dist/android",
     "export:ios": "expo export --platform ios --output-dir dist/ios"
   },
@@ -28,14 +28,18 @@
     "react": "19.3.0",
     "react-native": "0.88.0",
     "react-native-safe-area-context": "5.10.1",
+    "react-native-webview": "14.0.1",
     "react-native-worklets": "0.13.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@types/react": "19.3.0",
     "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "pdfjs-dist": "6.4.299",
     "prettier": "3.6.2",
     "typescript": "6.0.3"
   },
-  "overrides": { "zod": "$zod" }
+  "overrides": {
+    "zod": "$zod"
+  }
 }

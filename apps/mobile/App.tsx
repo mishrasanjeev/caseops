@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform, StyleSheet, Text, View } from "react-native";
 import Constants from "expo-constants";
 import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
+import { fetch as expoFetch } from "expo/fetch";
 import { usePreventScreenCapture } from "expo-screen-capture";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -19,7 +20,18 @@ import {
   initializeDeviceStore,
 } from "./src/auth/secure-store";
 import type { SessionIdentity } from "./src/auth/types";
-import { checkedOrigin, JsonTransport } from "./src/network/http";
+import type { PurgeReason } from "./src/viewer/contracts";
+import {
+  checkedOrigin,
+  createExpoFetchAdapter,
+  JsonTransport,
+} from "./src/network/http";
+import { createFilePickerCoordinator } from "./src/domain/file-picker";
+import {
+  cleanupPickedFile,
+  pickFile,
+  purgeMatterFileTemps,
+} from "./src/files/native";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -31,6 +43,37 @@ export default function App() {
   const foreground = useRef(AppState.currentState === "active");
   const loginInFlight = useRef(false);
   const alive = useRef(true);
+  const viewerEvents = useMemo(() => {
+    const listeners = new Set<(reason: PurgeReason) => void>();
+    return {
+      subscribe: (listener: (reason: PurgeReason) => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      notify: (reason: PurgeReason) => {
+        for (const listener of listeners) listener(reason);
+      },
+    };
+  }, []);
+  const [, setPickerRevision] = useState(0);
+  const picker = useMemo(
+    () =>
+      createFilePickerCoordinator(pickFile, cleanupPickedFile, () => {
+        if (alive.current) setPickerRevision((value) => value + 1);
+      }),
+    [],
+  );
+  const clearSelection = useCallback(() => {
+    try {
+      picker.clear();
+    } catch {
+      setError(
+        "Private temporary-file cleanup could not be confirmed. Close the app and try again.",
+      );
+    }
+  }, [picker]);
   const runtime = useMemo(() => {
     const extra = Constants.expoConfig?.extra;
     const origin = checkedOrigin(
@@ -45,6 +88,7 @@ export default function App() {
       origin,
       __DEV__,
       extra?.automatedTest === true,
+      createExpoFetchAdapter(expoFetch),
     );
     const session = new NativeSession(
       transport,
@@ -52,16 +96,47 @@ export default function App() {
       Date.now,
       () => {
         if (alive.current) setIdentity(null);
+        viewerEvents.notify("logout");
+        try {
+          picker.clear();
+          purgeMatterFileTemps();
+        } catch {
+          if (alive.current)
+            setError(
+              "Private temporary-file cleanup could not be confirmed. Restart before signing in.",
+            );
+        }
       },
     );
-    return { session, webOrigin };
-  }, []);
+    return {
+      session,
+      webOrigin,
+      request: session.request.bind(session),
+      viewer: {
+        requestBytes: session.requestBytes.bind(session),
+        subscribeInvalidation: viewerEvents.subscribe,
+        sha256: async (bytes: Uint8Array) => {
+          const digest = await Crypto.digest(
+            Crypto.CryptoDigestAlgorithm.SHA256,
+            bytes.slice().buffer,
+          );
+          return Array.from(new Uint8Array(digest), (byte) =>
+            byte.toString(16).padStart(2, "0"),
+          ).join("");
+        },
+      },
+    };
+  }, [picker, viewerEvents]);
+  const fileState = identity
+    ? picker.snapshot(identity, runtime.session.sessionKey)
+    : null;
 
   useEffect(() => {
     alive.current = true;
     void (async () => {
       try {
         await initializeDeviceStore();
+        purgeMatterFileTemps();
         const restored = await runtime.session.restore();
         if (restored) {
           const current = await runtime.session.revalidate();
@@ -83,6 +158,8 @@ export default function App() {
       if (state !== "active") {
         // Unmount private screens and discard their memory-only records/drafts.
         setIdentity(null);
+        viewerEvents.notify("background");
+        if (!picker.picking) clearSelection();
       } else if (!loginInFlight.current && runtime.session.identity) {
         setBusy(true);
         void runtime.session
@@ -106,8 +183,9 @@ export default function App() {
     return () => {
       alive.current = false;
       listener.remove();
+      picker.clear();
     };
-  }, [runtime]);
+  }, [runtime, picker, clearSelection, viewerEvents]);
 
   async function signIn() {
     if (loginInFlight.current || !["android", "ios"].includes(Platform.OS))
@@ -116,6 +194,8 @@ export default function App() {
     setBusy(true);
     setError(null);
     try {
+      picker.clear();
+      purgeMatterFileTemps();
       const bytes = await Crypto.getRandomBytesAsync(32);
       const verifier = Array.from(bytes, (byte) =>
         byte.toString(16).padStart(2, "0"),
@@ -173,23 +253,57 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="dark" />
       {identity && foreground.current ? (
-        <MobileApplication
-          key={`${identity.company.id}:${identity.user.id}:${identity.membership.id}`}
-          identity={identity}
-          request={runtime.session.request.bind(runtime.session)}
-          onSignOut={async () => {
-            setError(null);
-            try {
-              await runtime.session.signOut();
-            } catch (cause) {
-              setError(
-                cause instanceof Error
-                  ? cause.message
-                  : "Server revocation could not be confirmed.",
-              );
-            }
-          }}
-        />
+        <View style={{ flex: 1 }}>
+          {error ? (
+            <Text
+              testID="app-operation-error"
+              accessibilityRole="alert"
+              style={{ padding: 16, color: "#a02030" }}
+            >
+              {error}
+            </Text>
+          ) : null}
+          <MobileApplication
+            key={`${identity.company.id}:${identity.user.id}:${identity.membership.id}`}
+            identity={identity}
+            request={runtime.request}
+            viewer={runtime.viewer}
+            sessionKey={runtime.session.sessionKey}
+            initialFilesMatterId={fileState?.intent.matterId}
+            selectedFile={fileState?.selection ?? null}
+            onClearSelectedFile={clearSelection}
+            onChooseFile={(matterId, expectedLifecycleVersion) => {
+              setError(null);
+              void picker
+                .choose({
+                  companyId: identity.company.id,
+                  userId: identity.user.id,
+                  membershipId: identity.membership.id,
+                  sessionKey: runtime.session.sessionKey,
+                  matterId,
+                  expectedLifecycleVersion,
+                })
+                .catch(() => {
+                  if (alive.current)
+                    setError(
+                      "The file could not be selected. Please choose it again.",
+                    );
+                });
+            }}
+            onSignOut={async () => {
+              setError(null);
+              try {
+                await runtime.session.signOut();
+              } catch (cause) {
+                setError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "Server revocation could not be confirmed.",
+                );
+              }
+            }}
+          />
+        </View>
       ) : foreground.current ? (
         <SignInPanel
           busy={busy}

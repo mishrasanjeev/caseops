@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 25 Native Race And Identity Components
+
+Malformed native identity and mutable identity snapshots reproduced in unit
+tests before correction. Picker-origin login/lifecycle identity must survive the
+OS round trip unchanged; native upload now checks that version under the real
+server lock before and after I/O, including close/explicit-reopen races. Private
+original downloads now emit no-store including one-byte range responses.
+Component and PostgreSQL coverage passed; actual candidate Android journeys are
+still pending, not fixed/deployed closure. No Matter-reopening or production
+claim follows. See `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-25.md`.
+
 ## October 23 IP18 Export Completion Contract
 
 Serving875 is deployed but production39915271013 is NO-GO:414 actual cases,

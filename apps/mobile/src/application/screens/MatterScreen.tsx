@@ -9,6 +9,8 @@ import type { Repository } from "../../domain/repository";
 import { useResource } from "../useResource";
 
 import type { MatterSection } from "../types";
+import { FilesScreen } from "./FilesScreen";
+import type { FilesScreenProps } from "./FilesScreen";
 
 export function MatterScreen({
   repository,
@@ -17,6 +19,8 @@ export function MatterScreen({
   canWrite,
   addNote,
   openDraft,
+  files,
+  onSectionChange,
 }: {
   repository: Repository;
   matterId: string;
@@ -24,6 +28,8 @@ export function MatterScreen({
   canWrite: boolean;
   addNote: (matter: Matter) => void;
   openDraft: (id: string) => void;
+  files: FilesScreenProps;
+  onSectionChange: (section: MatterSection) => void;
 }) {
   const [section, setSection] = useState<string>(initialSection),
     [limit, setLimit] = useState(50);
@@ -57,8 +63,15 @@ export function MatterScreen({
                 }),
               )}
               onChange={(value) => {
-                setSection(value);
-                setLimit(50);
+                const change = () => {
+                  setSection(value);
+                  setLimit(50);
+                  onSectionChange(value as MatterSection);
+                  if (value !== "Files") files.onClearSelectedFile();
+                };
+                if (section === "Files" && files.guard.current)
+                  files.guard.current(change);
+                else change();
               }}
             />
             {section === "Summary" ? (
@@ -168,35 +181,7 @@ export function MatterScreen({
                 ) : null}
               </>
             ) : section === "Files" ? (
-              <>
-                <Text style={styles.muted}>
-                  Private native viewing, camera capture and upload are not
-                  available in this build. Use the secure web workspace.
-                </Text>
-                {workspace.attachments.length ? (
-                  workspace.attachments
-                    .slice(0, limit)
-                    .map((file) => (
-                      <RecordRow
-                        key={file.id}
-                        title={file.filename || "Filename not supplied"}
-                        meta={`${file.processing_status || "Processing state unknown"} · ${file.created_at}`}
-                      />
-                    ))
-                ) : (
-                  <Empty
-                    title="No files returned"
-                    message="No attachments were returned for this matter."
-                  />
-                )}
-                {workspace.attachments.length > limit ? (
-                  <NativeButton
-                    label="Show more files"
-                    onPress={() => setLimit((value) => value + 50)}
-                    secondary
-                  />
-                ) : null}
-              </>
+              <FilesScreen {...files} />
             ) : (
               <>
                 <Text accessibilityRole="header" style={styles.heading}>

@@ -1,5 +1,8 @@
 import type { ExpoConfig } from "expo/config";
 
+const { acceptanceSettings } = require("./plugins/with-local-acceptance.cjs");
+const acceptance = acceptanceSettings(process.env);
+
 const config: ExpoConfig = {
   name: "CaseOps",
   slug: "caseops-mobile",
@@ -9,7 +12,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: "light",
   ios: {
     supportsTablet: true,
-    bundleIdentifier: "ai.caseops.mobile.dev",
+    bundleIdentifier: acceptance?.iosBundleIdentifier || "ai.caseops.mobile.dev",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSCameraUsageDescription: "Attach a photograph to the matter you select.",
@@ -20,7 +23,11 @@ const config: ExpoConfig = {
     allowBackup: false,
     permissions: [],
   },
-  plugins: ["expo-secure-store", "expo-web-browser"],
+  plugins: [
+    "expo-secure-store",
+    "expo-web-browser",
+    "./plugins/with-local-acceptance.cjs",
+  ],
   updates: { enabled: false },
   extra: {
     apiOrigin: process.env.EXPO_PUBLIC_API_ORIGIN || "https://caseops.ai",
@@ -28,7 +35,9 @@ const config: ExpoConfig = {
       process.env.EXPO_PUBLIC_WEB_ORIGIN ||
       process.env.EXPO_PUBLIC_API_ORIGIN ||
       "https://caseops.ai",
-    automatedTest: process.env.CASEOPS_MOBILE_AUTOMATED_TEST === "1",
+    automatedTest: acceptance
+      ? true
+      : process.env.CASEOPS_MOBILE_AUTOMATED_TEST === "1",
     releaseSha:
       process.env.CASEOPS_MOBILE_RELEASE_SHA || "unreleased-development",
   },

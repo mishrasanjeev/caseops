@@ -18,6 +18,12 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { colors, styles, target } from "../components/theme";
 import type { Matter, MatterRef, WorkItem } from "../domain/contracts";
 import { createRepository } from "../domain/repository";
+import { createSourceRecordsRepository } from "../domain/source-records";
+import type { SourceLocator, SourceRef } from "../domain/source-records";
+import { createMatterFilesApi } from "../files/api";
+import { attachmentViewerSource } from "../viewer/contracts";
+import type { ViewerSource, ViewerPorts } from "../viewer/contracts";
+import { PrivateDocumentViewer } from "../viewer/PrivateDocumentViewer";
 import { useResource } from "./useResource";
 
 import type {
@@ -41,6 +47,10 @@ import { NoteEditor } from "./screens/NoteEditor";
 import { DraftScreen } from "./screens/DraftScreen";
 
 import { AccountScreen } from "./screens/AccountScreen";
+import {
+  SourceRecordsScreen,
+  SourceRecordDetailScreen,
+} from "./screens/SourceRecordsScreen";
 
 export type { MobileApplicationProps } from "./types";
 
@@ -51,6 +61,9 @@ type Route =
   | { type: "matter"; matterId: string; section: MatterSection }
   | { type: "note"; matter: Matter }
   | { type: "draft"; matterId: string; draftId: string }
+  | { type: "source-list" }
+  | { type: "viewer"; source: ViewerSource }
+  | { type: "source"; source: SourceRef; locator?: SourceLocator }
   | { type: "account" };
 
 const tabs: {
@@ -78,18 +91,74 @@ export default MobileApplication;
 function ApplicationContent({
   request,
   identity,
+  sessionKey,
+  initialFilesMatterId,
+  selectedFile,
+  onChooseFile,
+  onClearSelectedFile,
+  viewer,
   onSignOut,
 }: MobileApplicationProps) {
   const repository = useMemo(() => createRepository(request), [request]);
+  const sources = useMemo(
+    () =>
+      createSourceRecordsRepository(
+        request,
+        identity.company.id,
+        identity.capabilities,
+      ),
+    [request, identity.company.id, identity.capabilities],
+  );
+  const viewerPorts = useMemo<ViewerPorts>(
+    () => ({
+      ...viewer,
+      revalidate: async (source, { signal }) => {
+        if (
+          source.companyId !== identity.company.id ||
+          source.userId !== identity.user.id ||
+          source.sessionKey !== sessionKey
+        )
+          throw new Error("The private session changed.");
+        const scope = {
+          companyId: identity.company.id,
+          userId: identity.user.id,
+          sessionKey,
+          matterId: source.matterId,
+        };
+        const workspace = await createMatterFilesApi(request, scope).workspace(
+          signal,
+        );
+        const file = workspace.attachments.find(
+          (item) => item.id === source.attachmentId,
+        );
+        if (!file)
+          throw new Error("The private source is no longer available.");
+        return attachmentViewerSource(scope, file);
+      },
+    }),
+    [viewer, request, identity.company.id, identity.user.id, sessionKey],
+  );
   const [tab, setTab] = useState<Tab>("today");
   const [stacks, setStacks] = useState<Record<Tab, Route[]>>({
-    today: [{ type: "home" }],
+    today: initialFilesMatterId
+      ? [
+          { type: "home" },
+          { type: "matter", matterId: initialFilesMatterId, section: "Files" },
+        ]
+      : [{ type: "home" }],
     matters: [{ type: "home" }],
     calendar: [{ type: "home" }],
     work: [{ type: "home" }],
   });
   const stack = stacks[tab],
     route = stack[stack.length - 1];
+  useEffect(() => {
+    if (
+      selectedFile &&
+      !(route.type === "matter" && route.matterId === selectedFile.matterId)
+    )
+      onClearSelectedFile();
+  }, [route, selectedFile, onClearSelectedFile]);
   const leaveGuard = useRef<LeaveGuard | null>(null);
   const guarded = (action: () => void) =>
     leaveGuard.current ? leaveGuard.current(action) : action();
@@ -170,63 +239,67 @@ function ApplicationContent({
       edges={["top", "left", "right", "bottom"]}
     >
       <View style={styles.fill} {...swipe.panHandlers}>
-        <View
-          style={[
-            styles.divider,
-            {
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-            },
-          ]}
-        >
-          {stack.length > 1 ? (
-            <Pressable
-              onPress={pop}
-              accessibilityRole="button"
-              accessibilityLabel="Back"
-              testID="back"
-              style={{
-                minWidth: target,
-                minHeight: target,
-                justifyContent: "center",
+        {route.type !== "viewer" ? (
+          <View
+            style={[
+              styles.divider,
+              {
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                flexDirection: "row",
                 alignItems: "center",
-              }}
-            >
-              <Ionicons name="chevron-back" size={26} color={colors.brand} />
-            </Pressable>
-          ) : null}
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.heading, { fontWeight: "600" }]}>CaseOps</Text>
-            <Text style={styles.label}>{identity.company.name}</Text>
-          </View>
-          {route.type !== "account" ? (
-            <Pressable
-              testID="account-open"
-              onPress={() => push({ type: "account" })}
-              accessibilityRole="button"
-              accessibilityLabel="Account"
-              style={{
-                minWidth: target,
-                minHeight: target,
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 2,
-              }}
-            >
-              <Ionicons
-                name="person-circle-outline"
-                size={24}
-                color={colors.brand}
-              />
-              <Text style={[styles.label, { color: colors.brand }]}>
-                Account
+                gap: 8,
+              },
+            ]}
+          >
+            {stack.length > 1 ? (
+              <Pressable
+                onPress={pop}
+                accessibilityRole="button"
+                accessibilityLabel="Back"
+                testID="back"
+                style={{
+                  minWidth: target,
+                  minHeight: target,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <Ionicons name="chevron-back" size={26} color={colors.brand} />
+              </Pressable>
+            ) : null}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.heading, { fontWeight: "600" }]}>
+                CaseOps
               </Text>
-            </Pressable>
-          ) : null}
-        </View>
+              <Text style={styles.label}>{identity.company.name}</Text>
+            </View>
+            {route.type !== "account" ? (
+              <Pressable
+                testID="account-open"
+                onPress={() => push({ type: "account" })}
+                accessibilityRole="button"
+                accessibilityLabel="Account"
+                style={{
+                  minWidth: target,
+                  minHeight: target,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 2,
+                }}
+              >
+                <Ionicons
+                  name="person-circle-outline"
+                  size={24}
+                  color={colors.brand}
+                />
+                <Text style={[styles.label, { color: colors.brand }]}>
+                  Account
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
         <View style={styles.fill}>
           <View
             style={[
@@ -296,6 +369,30 @@ function ApplicationContent({
               matterId={route.matterId}
               initialSection={route.section}
               canWrite={identity.capabilities.includes("matters:write")}
+              onSectionChange={(section) =>
+                setStacks((previous) => ({
+                  ...previous,
+                  [tab]: previous[tab].map((item, index) =>
+                    index === previous[tab].length - 1 && item.type === "matter"
+                      ? { ...item, section }
+                      : item,
+                  ),
+                }))
+              }
+              files={{
+                request,
+                companyId: identity.company.id,
+                userId: identity.user.id,
+                sessionKey,
+                matterId: route.matterId,
+                capabilities: identity.capabilities,
+                selectedFile,
+                onChooseFile: (version) =>
+                  onChooseFile(route.matterId, version),
+                onClearSelectedFile,
+                onOpenFile: (source) => push({ type: "viewer", source }),
+                guard: leaveGuard,
+              }}
               addNote={(matter) => push({ type: "note", matter })}
               openDraft={(draftId) =>
                 push({ type: "draft", matterId: route.matterId, draftId })
@@ -308,10 +405,40 @@ function ApplicationContent({
               draftId={route.draftId}
             />
           ) : route.type === "account" ? (
-            <AccountScreen identity={identity} onSignOut={onSignOut} />
+            <View style={styles.fill}>
+              <NativeSourcesButton
+                onPress={() => push({ type: "source-list" })}
+              />
+              <AccountScreen
+                identity={identity}
+                request={request}
+                onSignOut={onSignOut}
+              />
+            </View>
+          ) : route.type === "source-list" ? (
+            <SourceRecordsScreen
+              repository={sources}
+              kind="ip_docket"
+              active
+              openSource={(source, locator) =>
+                push({ type: "source", source, locator })
+              }
+            />
+          ) : route.type === "source" ? (
+            <SourceRecordDetailScreen
+              repository={sources}
+              source={route.source}
+              locator={route.locator}
+            />
+          ) : route.type === "viewer" ? (
+            <PrivateDocumentViewer
+              source={route.source}
+              ports={viewerPorts}
+              onClose={pop}
+            />
           ) : null}
         </View>
-        {route.type !== "note" ? (
+        {route.type !== "note" && route.type !== "viewer" ? (
           <View
             style={{
               flexDirection: "row",
@@ -374,5 +501,31 @@ function ApplicationContent({
         ) : null}
       </View>
     </SafeAreaView>
+  );
+}
+
+function NativeSourcesButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      testID="account-ip-records"
+      accessibilityRole="button"
+      accessibilityLabel="Trademark portfolio"
+      onPress={onPress}
+      style={{
+        minHeight: target,
+        padding: 16,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      <Ionicons
+        name="shield-checkmark-outline"
+        color={colors.brand}
+        size={22}
+      />
+      <Text style={styles.body}>Trademark portfolio</Text>
+      <Ionicons name="chevron-forward" color={colors.brand} size={18} />
+    </Pressable>
   );
 }

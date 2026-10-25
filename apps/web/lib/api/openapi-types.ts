@@ -17038,6 +17038,8 @@ export interface components {
             document_date?: string | null;
             /** Document Type */
             document_type?: ("complaint_petition" | "notice" | "vakalatnama" | "pleading_reply" | "affidavit" | "chief_affidavit" | "counter_affidavit" | "evidence" | "written_submission" | "interim_application" | "order_judgment" | "correspondence" | "research" | "billing" | "other") | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version?: number | null;
             /** File */
             file: string;
             /** Hearing Id */

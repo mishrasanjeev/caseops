@@ -96,6 +96,14 @@ export function reconcileResults(events, intended) {
   const completion = events.filter((event) => event.type === 'run_completed');
   assert.equal(completion.length, 1, 'MISSING_OR_DUPLICATE_COMPLETION');
   assert.equal(events.at(-1), completion[0], 'COMPLETION_MUST_BE_LAST');
+  const strict = starts[0].inventoryId !== undefined;
+  assert.equal(events.some((event) => event.type === 'run_interrupted'), false, 'INTERRUPTED_RUN_CANNOT_COMPLETE');
+  if (strict) {
+    assert.equal(completion[0].platform, starts[0].platform, 'COMPLETION_PLATFORM_MISMATCH');
+    assert.equal(completion[0].intendedCount, intended.length, 'COMPLETION_COUNT_MISMATCH');
+    assert.match(starts[0].harnessFingerprint || '', /^[a-f0-9]{64}$/, 'HARNESS_IDENTITY_REQUIRED');
+    assert.equal(events[0], starts[0], 'START_MUST_BE_FIRST');
+  }
   const preflights = events.filter((event) => event.type === 'preflight_result');
   assert.equal(preflights.length, 1, 'MISSING_OR_DUPLICATE_PREFLIGHT');
   assert.ok(['passed', 'failed'].includes(preflights[0].status), 'INVALID_PREFLIGHT');
@@ -108,15 +116,34 @@ export function reconcileResults(events, intended) {
       const rows = events.filter((event) => event.type === 'phase_result' && event.id === id && event.phase === phase);
       assert.equal(rows.length, 1, 'MISSING_OR_DUPLICATE_PHASE');
       assert.ok(events.indexOf(began[0]) < events.indexOf(rows[0]), 'PHASE_RESULT_BEFORE_START');
-      assert.ok(['passed', 'failed', 'not-run'].includes(rows[0].status), 'UNKNOWN_PHASE_STATUS');
+      assert.ok(['passed', 'failed', 'not-run', ...(strict ? ['blocked'] : [])].includes(rows[0].status), 'UNKNOWN_PHASE_STATUS');
     }
   }
   const phases = events.filter((event) => event.type === 'phase_result');
   assert.equal(phases.length, intended.length * 3, 'UNEXPECTED_PHASE_ID');
+  if (strict) {
+    assert.equal(events.filter((event) => event.type === 'phase_started').length, intended.length * 3, 'UNEXPECTED_PHASE_START');
+    const phaseEvents = events.filter((event) => ['phase_started', 'phase_result'].includes(event.type));
+    const expected = intended.flatMap((id) => ['setup', 'call', 'teardown'].flatMap((phase) =>
+      ['phase_started', 'phase_result'].map((type) => ({ id, phase, type }))));
+    assert.deepEqual(phaseEvents.map(({ id, phase, type }) => ({ id, phase, type })), expected, 'PHASE_EXECUTION_ORDER_MISMATCH');
+    assert.ok(events.indexOf(preflights[0]) < events.indexOf(phaseEvents[0]), 'PREFLIGHT_MUST_PRECEDE_CASES');
+    for (const id of intended) {
+      const rows = phases.filter((row) => row.id === id);
+      assert.ok(['passed', 'failed', 'blocked'].includes(rows[0].status), 'INVALID_SETUP_OUTCOME');
+      assert.ok(['passed', 'failed'].includes(rows[2].status), 'INVALID_TEARDOWN_OUTCOME');
+      if (preflights[0].status !== 'passed') assert.notEqual(rows[0].status, 'passed', 'SETUP_PASSED_AFTER_FAILED_PREFLIGHT');
+      if (rows[0].status !== 'passed') assert.equal(rows[1].status, 'not-run', 'CALL_EXECUTED_AFTER_FAILED_SETUP');
+      else assert.notEqual(rows[1].status, 'not-run', 'CALL_UNEXECUTED_AFTER_PASSED_SETUP');
+    }
+    if (postflights.length) assert.ok(events.indexOf(postflights[0]) > events.indexOf(phaseEvents.at(-1)), 'POSTFLIGHT_MUST_FOLLOW_CASES');
+  }
   return {
     nativeCallsPassed: phases.filter((row) => row.phase === 'call' && row.status === 'passed').length,
     failedPhases: phases.filter((row) => row.status === 'failed').length,
     unexecutedCalls: phases.filter((row) => row.phase === 'call' && row.status === 'not-run').length,
+    blockedCalls: phases.filter((row) => row.phase === 'call' && row.status === 'blocked').length,
+    blockedScenarios: new Set(phases.filter((row) => row.status === 'blocked').map((row) => row.id)).size,
     status: phases.every((row) => row.status === 'passed') && preflights[0].status === 'passed'
       && postflights[0]?.status === 'passed' ? 'passed' : 'incomplete-or-failed',
   };
