@@ -3,7 +3,7 @@
   "scope": "managed-saas-only",
   "review_document": {
     "path": "docs/security/js-license-compliance-review-2026-10-12.md",
-    "sha256": "2deb68133004633285a54a14dc5ac62a967e96aea870620b0a6c9da0c6e7d97b"
+    "sha256": "564bf5e1e216c3bcd6f22cd876689e05c2e4c7362c716cad11ae083a25d1562c"
   },
   "packages": [
     {

@@ -56,7 +56,8 @@ installed package metadata and original LICENSE were reviewed afresh. The
 MIT-0 expression and complete copyright/license bytes are unchanged; the
 exact-version registry and visible/downloadable notice now identify10.2.1.
 No global allowlist, SaaS-only scope or redistribution condition was relaxed.
-Retained10.0.13 upstream material remains historical, not current admission.
+Retained10.0.13 metadata is archived under `license-policy/history`, outside
+the current Cloud Build/Docker upload inventory, not admitted as current code.
 The real parser regression uses only example-domain strings and sends no mail.
 
 Undici7.30.1 is the patched supported major for the Node22.14 compatibility

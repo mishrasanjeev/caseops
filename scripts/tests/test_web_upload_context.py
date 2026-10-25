@@ -116,6 +116,7 @@ class NativeUploadTests(unittest.TestCase):
         forbidden = {
             "license-policy/.env", "license-policy/unreviewed.txt",
             "license-policy/unreviewed/secret.txt", "license-policy/upstream/fake/.env",
+            "license-policy/history/nodemailer_10.0.13/package.json",
             "license-policy/upstream/fake/.git/config", "apps/web/.env.local",
             "apps/web/.env.production", "apps/web/.env.test", "apps/web/.env.staging",
             "apps/web/node_modules/fake/package.json", "apps/web/.next/server.js",

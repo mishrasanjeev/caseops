@@ -27,6 +27,13 @@ the immutable FastEmbed wheel and all unrelated dependency versions remain.
 Nodemailer keeps original MIT-0 bytes; refresh exact metadata/SRI/public notice
 and the reviewed-material registry rather than broadening the license allowlist.
 
+The first hosted replacement Security40187192426 passed both dependency audits,
+but its native upload gate correctly rejected the obsolete10.0.13 metadata
+still in the current upstream subtree. Archive those original bytes under
+`license-policy/history` and regress their exclusion; do not weaken exact upload
+inventory equality. Initial Docker-full01 refused default Node24 before any
+build; replay with the actual Node22.14 binary required by `.nvmrc`.
+
 ## Regression And Acceptance
 
 - `apps/web/lib/dependency-security-20261025.test.ts`: three graph/installed
