@@ -5,7 +5,11 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.meta.url))) {
-  const paths = ['apps/mobile', 'package.json', 'package-lock.json'];
+  const paths = ['apps/mobile', 'package.json', 'package-lock.json',
+    'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/build-android-local-acceptance.ps1',
+    'scripts/mobile/build-ios-simulator-acceptance.sh', 'scripts/mobile/source-snapshot.mjs',
+    'scripts/mobile/windows-native-paths.gradle', 'scripts/mobile/use-android-env.ps1',
+    'scripts/mobile/android-tooling.ps1', 'scripts/mobile/prepare-viewer-assets.mjs'];
   const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...paths], {
     cwd: root, encoding: 'utf8', timeout: 5000, maxBuffer: 1048576,
   }).split('\0').filter((file) => file && !/\/(e2e|node_modules|\.expo|dist|build)\//.test(file)

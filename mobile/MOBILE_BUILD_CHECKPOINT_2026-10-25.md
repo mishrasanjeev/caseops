@@ -73,3 +73,17 @@ iOS remains ready for the owner's MacBook workflow, **not tested on Windows**.
 Use `scripts/mobile/MACBOOK_RUNBOOK.md` and its actual simulator build/test script.
 Latest native outcomes belong in a fresh dated sidecar; never rewrite a failed
 run or mutate the build's source while acceptance is in progress.
+
+## Retained Android Build Failures
+
+The first local profile failed in Gradle configuration: the legacy `react`
+property shadowed the typed ReactExtension. Its explicit typed extension lookup
+now passes a retained red-to-green profile test. The replacement reached native
+compilation, then Windows Ninja rejected a prefab path longer than 260 characters.
+Object-name hashing does not shorten prefab configuration paths. The build wrapper
+now uses AGP's supported `buildStagingDirectory` in a bounded, per-project/module
+user cache through a Windows-only init script. No source alias, worktree, machine
+long-path setting or security policy is changed. The complete build-tool input
+closure is now included in the fingerprint. Component checks pass; the next
+actual build is still required. Original build logs remain under the two unique
+`$HOME/.cache/caseops-mobile/builds/android-*` directories.

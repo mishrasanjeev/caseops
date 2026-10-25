@@ -22,6 +22,20 @@ const certificate = `${rootCertificates.find((pem) => {
 }).trim()}\n`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 
+test('Windows native staging is short, outside sources, module-isolated and part of build evidence', () => {
+  const init = readFileSync(path.join(repo,'scripts/mobile/windows-native-paths.gradle'),'utf8');
+  assert.match(init, /gradle\.beforeProject/);
+  assert.match(init, /components\.finalizeDsl/);
+  assert.match(init, /dsl\.externalNativeBuild\.cmake\.buildStagingDirectory = staging\.resolve\(module\)/);
+  assert.match(init, /!staging\.startsWith\(owned\)/);
+  assert.match(init, /substring\(0, 12\)/);
+  assert.doesNotMatch(init, /delete\(|deleteDir|exec\(|debuggable|cleartext|LongPathsEnabled/);
+  const wrapper=readFileSync(path.join(repo,'scripts/mobile/build-android-local-acceptance.ps1'),'utf8');
+  assert.match(wrapper, /'--init-script', \(Join-Path \$PSScriptRoot 'windows-native-paths\.gradle'\)/);
+  const snapshot=readFileSync(path.join(repo,'scripts/mobile/source-snapshot.mjs'),'utf8');
+  for (const file of ['windows-native-paths.gradle','build-android-local-acceptance.ps1','build-ios-simulator-acceptance.sh']) assert.ok(snapshot.includes(file));
+});
+
 function fixture(t) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'caseops-build-config-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));

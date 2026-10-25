@@ -30,7 +30,7 @@ function Invoke-BuildCommand {
 $names = @('JAVA_HOME', 'ANDROID_HOME', 'ANDROID_SDK_ROOT', 'APPIUM_HOME', 'GRADLE_USER_HOME', 'PATH',
     'CASEOPS_MOBILE_BUILD_PROFILE', 'CASEOPS_MOBILE_AUTOMATED_TEST', 'CASEOPS_MOBILE_RELEASE_SHA',
     'CASEOPS_MOBILE_ANDROID_CA_FILE', 'CASEOPS_MOBILE_ANDROID_CA_SHA256',
-    'EXPO_PUBLIC_API_ORIGIN', 'EXPO_PUBLIC_WEB_ORIGIN', 'NODE_ENV', 'EXPO_NO_DOTENV')
+    'EXPO_PUBLIC_API_ORIGIN', 'EXPO_PUBLIC_WEB_ORIGIN', 'NODE_ENV', 'EXPO_NO_DOTENV', 'CASEOPS_MOBILE_NATIVE_STAGING')
 $prior = @{}
 foreach ($name in $names) { $prior[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 Push-Location $app
@@ -47,12 +47,16 @@ try {
     $env:EXPO_PUBLIC_WEB_ORIGIN = $WebOrigin
     $env:NODE_ENV = 'production'
     $env:EXPO_NO_DOTENV = '1'
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $repoKey = [BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($repo.ToLowerInvariant()))).Replace('-', '').Substring(0, 12).ToLowerInvariant() }
+    finally { $sha.Dispose() }
+    $env:CASEOPS_MOBILE_NATIVE_STAGING = Join-Path $HOME ('.cache/caseops-mobile/cxx/' + $repoKey)
     Invoke-BuildCommand 'node' @($proof, 'check', 'android', (Join-Path $run 'before.json')) 'before.log'
     Invoke-BuildCommand 'node' @('./node_modules/expo/bin/cli', 'prebuild', '--platform', 'android', '--no-install') 'prebuild.log'
     Push-Location (Join-Path $app 'android')
     try {
         # This invokes export:embed as a finite build task, never a Metro development server.
-        $gradleArgs = @(':app:assembleLocalAcceptance', "-PreactNativeArchitectures=$Architecture", '--console=plain', '--no-daemon')
+        $gradleArgs = @(':app:assembleLocalAcceptance', "-PreactNativeArchitectures=$Architecture", '--console=plain', '--no-daemon', '--init-script', (Join-Path $PSScriptRoot 'windows-native-paths.gradle'))
         Invoke-BuildCommand './gradlew.bat' $gradleArgs 'gradle.log'
     } finally { Pop-Location }
     $apk = Join-Path $app 'android/app/build/outputs/apk/localAcceptance/app-localAcceptance.apk'
