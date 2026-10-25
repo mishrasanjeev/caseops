@@ -1,26 +1,44 @@
 # Owner MacBook: Standalone iOS Simulator Build And XCUITest
 
-**macOS/Xcode/iOS: NOT RUN.** This is an owner-run handoff, not native build,
-Simulator, signing or interaction evidence. No services, installs, commits,
-pushes, new worktrees or deployment were performed by this offline component task.
+**macOS/Xcode/iOS: NOT RUN.** This is an owner-run local-development handoff,
+not native iOS build, Simulator, signing, distribution or interaction evidence.
+No production change or signing is authorized by this guide.
 
 ## 1. Evidence And Publication Gate
 
-The parent reports Android built and local API/web at
-`60f1deccb4a2ff968ae649a82dfc066782d4a846`. The finite iOS Hermes export passed:
-**900 modules, about 9.6 MB**. This is bundling evidence, NOT CocoaPods, Xcode,
-a Simulator `.app`, SwiftUI behavior or iOS E2E. Retain the parent's original
-receipts; this Windows offline component pass did not repeat those builds.
+Current observed Android app/API/web source is
+`4959129a0108bd332c4eacc86a3e0ec18f05711c`. The actual Android16/API36 dated
+core completed23/23 with passed postflight; that is not an iOS or full-v1 pass.
+Older60f1decc references are historical snapshots.
+
+The finite Windows iOS receipt is
+`ios-hermes-4959129a-20261025-e3162c/receipt.json`: **900 modules, 9,210,328 bytes**,
+Hermes SHA-256 `297d811f317bac13d669b8565ba495ebc8979230f98b7d230de5d2dc763146ed`,
+app fingerprint `be52fcdc07d205e7d5b2c3ca80fef382957e90f74224b06b13d94ca57fb5c000`.
+Its origins are `https://localhost:8443` and `https://localhost:3443`.
+This proves bundling only, NOT a Simulator binary, Mac127.0.0.1 origin
+acceptance, CocoaPods, Xcode, SwiftUI behavior or iOS E2E. Build the exact final
+published candidate afresh using the Mac-local fixture origins and public CA.
+
+The October25 dependency audit fails on unpatched high advisory
+[GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv) in
+node-forge1.4.0 through Expo58's CLI. Public release/signing stays NO-GO.
+No forced older Expo downgrade, audit exclusion or unreviewed crypto fork is
+part of this handoff. Isolated development checks do not waive that gate.
 
 The current dated inventory is **23 cases**, `NATIVE-01` through `NATIVE-23`,
 not the historical six or previous 22. Files is a separate pending supplement,
 not an extra iOS core case. See the
 [owner checklist](../../docs/mobile/IOS_OWNER_CHECKLIST_2026-10-25.md).
 A 23-case core result cannot certify all forty MOB acceptance groups.
+Android Files remains separately unverified despite two confirmed native uploads;
+do not describe its latest0/2 replacement as green. The complete Windows tooling
+gate passes263 cases across all four selected files; two PowerShell-specific
+cases are explicitly platform-skipped on macOS, whose actual results remain open.
 
 Wait until parent confirms that `codex/mobile-app-build-20261024`, including
 all reviewed bootstrap/harness changes, is pushed and supplies its full SHA.
-The final published candidate may be newer than the observed `60f1decc`.
+The final published candidate may be newer than the observed `4959129a`.
 Use one clean dedicated Mac checkout, not copied Windows native output, volumes,
 CA keys, tokens or customer data. Do not reset another user's checkout.
 
@@ -88,7 +106,7 @@ node "$CASEOPS_REPO/scripts/mobile/prepare-viewer-assets.mjs" --check
 npm run typecheck
 npm test
 cd "$CASEOPS_REPO"
-node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs
+node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs
 git diff --exit-code -- apps/mobile/package.json apps/mobile/package-lock.json
 ```
 
@@ -182,7 +200,9 @@ image, changed a device or reconfigured the frozen 60f API/web/APK.
   preparation remains needed; no shared harness was changed.
 - Raw `extended-seed-*.json` is not the flat DTO consumed by
   `inspectLocalPlan` (`taskId`, `draftId`, `hearingId`, `calendarDate`,
-  `otherMatterId`). A provenance-bound effective projection must retain the
+  `otherMatterId`) plus nested `calendar.eventId`. Preserve the exact opaque
+  event ID returned by Calendar; never reconstruct it from `hearingId`.
+  A provenance-bound effective projection must retain the
   immutable base/extension receipts and name the actual extended member/task,
   not the base owner's original task. This separate preparation is still open.
 
@@ -410,7 +430,8 @@ Require zero preparation blockers and all **23 ordered intended/discovered
 identities**, complete setup/call/teardown, genuine `NATIVE_APP` context,
 preflight/postflight and completion, zero retries, exact source/binary/backend/
 web identities and zero missing-marker/unadmitted-route counters. Keep the
-20-minute run bound unchanged. Missing completion, fixture, browser handoff,
+30-minute whole-run bound unchanged, alongside each original individual
+deadline. Missing completion, fixture, browser handoff,
 owner capability or binary is incomplete, never success or an approved skip.
 
 NATIVE-20 must link a fresh marked native session-list read to the actual current

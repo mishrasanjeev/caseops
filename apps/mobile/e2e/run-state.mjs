@@ -26,11 +26,17 @@ export function appiumSessionEvent(sessionId, state) {
 export async function configureNativeDriver(driver, platform, record) {
   assert.ok(['android', 'ios'].includes(platform), 'NATIVE_PLATFORM_REQUIRED');
   if (platform === 'ios') return;
-  await driver.updateSettings({ disableIdLocatorAutocompletion: true });
+  // The harness owns explicit visible-state deadlines; nested 10s selector waits
+  // otherwise multiply each poll, especially on Gecko's active event stream.
+  await driver.updateSettings({ disableIdLocatorAutocompletion: true, waitForIdleTimeout: 500, waitForSelectorTimeout: 0 });
   const settings = await driver.getSettings();
   const value = settings?.disableIdLocatorAutocompletion;
-  record({ type: 'native_driver_settings', disableIdLocatorAutocompletion: typeof value === 'boolean' ? value : null });
+  record({ type: 'native_driver_settings', disableIdLocatorAutocompletion: typeof value === 'boolean' ? value : null,
+    waitForIdleTimeout: Number.isInteger(settings?.waitForIdleTimeout) ? settings.waitForIdleTimeout : null,
+    waitForSelectorTimeout: Number.isInteger(settings?.waitForSelectorTimeout) ? settings.waitForSelectorTimeout : null });
   assert.equal(value, true, 'EXACT_ANDROID_RESOURCE_ID_SETTING_REQUIRED');
+  assert.equal(settings.waitForIdleTimeout, 500, 'EXACT_ANDROID_IDLE_WAIT_SETTING_REQUIRED');
+  assert.equal(settings.waitForSelectorTimeout, 0, 'EXACT_ANDROID_SELECTOR_WAIT_SETTING_REQUIRED');
 }
 
 export function needsFailedCallRecovery(scenario, previous) {

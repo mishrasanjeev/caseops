@@ -13,7 +13,7 @@ const results = [];
 const owner = createOwnerControls();
 let readiness;
 try {
-  readiness = await owner.prepare({ fixture: { ...fixture, backendSha: binding.backendSha }, signal: AbortSignal.timeout(30000) });
+  readiness = await owner.prepare({ fixture: { ...fixture, backendSha: binding.backendSha }, signal: AbortSignal.timeout(60000) });
   for (const [operation, key] of [['readMatterState', 'lifecycleMatter'], ['readNoteState', 'accessMatter']]) {
   const receipt = await owner.control({ operation, targetId: fixture[key].id, runId: `readonly-preflight-${Date.now()}`,
     backendSha: binding.backendSha, marker: 'no-paid-providers', signal: AbortSignal.timeout(10000) });

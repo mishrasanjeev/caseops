@@ -3369,3 +3369,27 @@ requirements when using the fallback.
   deadlines, current tenant/ACL/lifecycle checks, single-inflight command limits,
   durable no-replay claims and cleanup unchanged; do not retain a DB transaction
   while the worker waits. Classify a fixture deadline separately from app bugs.
+- A visible native sign-in button can be disabled while secure-store restoration
+  is still loading. Require non-loading state and enabled authoritative account
+  or signed-out controls, including after logout; preserve the existing deadline.
+  Browser authentication must not race a session that is already being restored.
+- A browser Custom Tab and full Firefox can expose the same URL-box resource ID.
+  Observe a distinct full-browser marker and never use scroll gestures to wait
+  for asynchronous consent/MFA states. Accept terms only with owner authority;
+  install a public fixture CA through normal isolated-device settings, not a TLS
+  warning bypass, credential injection or host-wide trust change.
+- A native upload test must derive its exact acknowledgement status and fields
+  from the canonical route/OpenAPI contract. HTTP200 is the existing Matter
+  attachment contract, not201. Prove the complete positive picker/save/reload/open
+  path as well as rejection; retain a mismatched test verdict and reconcile an
+  already-saved attachment read-only instead of uploading it again.
+- Dependency audits must run before expensive platform exports, not first after
+  native acceptance. An unpatched transitive advisory remains a release blocker;
+  do not force an incompatible SDK downgrade, disguise a fork's version or waive
+  the audit to claim green CI. Keep the complete independent tooling inventory
+  selected by the standard CI command, including its positive native-path doubles.
+- Appending a file row can move an upload acknowledgement below the native
+  viewport. First establish the one exact canonical transport acknowledgement,
+  then scroll within the existing bound and assert the reachable confirmation
+  plus persisted source identity and bytes. A server200 alone cannot certify
+  UI completion, and an offscreen message never authorizes another upload.

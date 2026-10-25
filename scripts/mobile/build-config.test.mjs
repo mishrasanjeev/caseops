@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, X509Certificate } from 'node:crypto';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,6 +21,26 @@ const certificate = `${rootCertificates.find((pem) => {
     && Date.parse(cert.validFrom) < Date.now() && Date.now() < Date.parse(cert.validTo);
 }).trim()}\n`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
+
+test('mobile CI selects every tooling module and audits before either platform export', () => {
+  const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
+  const steps = workflow.jobs.source.steps;
+  const expected = ['scripts/mobile/build-config.test.mjs', 'scripts/mobile/tooling.test.mjs',
+    'scripts/mobile/local-owner-controls.test.mjs', 'apps/mobile/e2e/files-20261025.test.mjs'];
+  const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
+    .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
+  assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
+  const harness = steps.find(step => step.name === 'Verify the native evidence harness');
+  assert.equal(harness.run, `node --test ${expected.join(' ')}`);
+  const audit = steps.findIndex(step => step.name === 'Enforce the unwaived high-severity dependency gate');
+  assert.ok(audit >= 0);
+  assert.equal(steps[audit].run, 'npm audit --audit-level=high');
+  assert.notEqual(steps[audit]['continue-on-error'], true);
+  for (const command of ['npm run export:android', 'npm run export:ios']) {
+    const exporting = steps.findIndex(step => step.run === command);
+    assert.ok(exporting > audit, 'DEPENDENCY_AUDIT_MUST_PRECEDE_PLATFORM_EXPORT');
+  }
+});
 
 const resourceDump = `Package name=ai.caseops.mobile.dev.localacceptance id=7f
   type raw id=10 entryCount=1

@@ -1,5 +1,23 @@
 # CaseOps  - Work To Be Done
 
+## October 25 Android Core Result
+
+J20/M22: **23/23 dated Android core cases pass** on the real Android16/API36
+emulator and local Docker, exact app/API/web4959129a. All phases, byte-attested
+binary boundaries and postflight completed; prior failures stay retained.
+Two native picker uploads are read-confirmed indexed with exact204-byte hashes;
+no upload replayed. Files end-to-end certification is still open: latest059d496c
+has0/2 passed calls, source-hash visibility after reload and browser-menu setup
+failure. Reproduce those precise boundaries and complete the entire replacement,
+preserving data and earlier1/2/MFA-expiry/offscreen-confirmation evidence.
+Tooling263/4 files passes; that is not a native Files pass.
+Mobile304 component tests/22 files and Windows iOS Hermes export
+are not full native release acceptance. The new upstream node-forge high
+advisory leaves the unwaived dependency gate blocked. Mac native, GC/IP breadth,
+inbox/push, physical privacy/accessibility/performance, signing/store, full
+canonical Docker/CI/main and production gates remain open. No production change.
+Current evidence: `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-25.md`.
+
 ## October 25 Native Runtime Follow-Up
 
 J20/M22 remains release NO-GO. The source-bound ee8dde90 Android run has 14

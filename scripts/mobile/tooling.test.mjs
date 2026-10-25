@@ -11,7 +11,7 @@ import test from 'node:test';
 import { binaryHash, byTestId, Journal, localJson, localUrl, MARKER, MARKER_HEADER, reconcileInventory, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
 import { scenarios } from '../../apps/mobile/e2e/core.mjs';
 import { createGateway } from './no-paid-gateway.mjs';
-import { authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
+import { authenticate, authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { admitApplication, FixtureUnavailable, ownerControl, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
@@ -28,35 +28,71 @@ import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs
 const installedHash = 'a'.repeat(64);
 const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
 const installedFixture = { appId: 'ai.caseops.mobile.dev', udid: 'emulator-5580', appPath: path.resolve('acceptance.apk') };
-function androidCommandDouble({ install = 'Performing Streamed Install\nSuccess', paths = `package:${installedPath}`, digest = `${installedHash}  ${installedPath}` } = {}) {
+function androidCommandDouble({ install = 'Performing Streamed Install\nSuccess', paths = `package:${installedPath}`,
+  digest = `${installedHash}  ${installedPath}`, initialDigest = digest, initialPaths = paths } = {}) {
   const calls = [];
+  let replaced = false;
   return { calls, command: (binary, args, options) => {
     assert.equal(binary, 'adb'); assert.deepEqual(args.slice(0, 2), ['-s', 'emulator-5580']);
     assert.equal(options.shell, false); assert.equal(options.windowsHide, true); assert.ok(options.timeout <= 120000);
     calls.push(args.slice(2));
-    if (args[2] === 'install') return install;
-    return args[3] === 'pm' ? paths : digest;
+    if (args[2] === 'install') { replaced = true; return install; }
+    if (args[3] === 'pm' && args[4] === 'list') return (replaced ? paths : initialPaths) ? `package:${installedFixture.appId}` : '';
+    return args[3] === 'pm' ? replaced ? paths : initialPaths : replaced ? digest : initialDigest;
   } };
 }
 test('Android preflight explicitly replaces the APK without clearing data and attests installed bytes', () => {
-  const stub = androidCommandDouble();
+  const stub = androidCommandDouble({ initialDigest: `${'b'.repeat(64)}  ${installedPath}` });
   const proof = attestAndroidBinary(installedFixture, installedHash, { ...stub, install: true });
   assert.equal(proof.explicitReplaceInstall, true); assert.equal(proof.appDataCleared, false);
-  assert.deepEqual(stub.calls, [['install', '-r', installedFixture.appPath], ['shell', 'pm', 'path', installedFixture.appId], ['shell', 'sha256sum', installedPath]]);
+  assert.deepEqual(stub.calls, [['shell', 'pm', 'list', 'packages', installedFixture.appId], ['shell', 'pm', 'path', installedFixture.appId], ['shell', 'sha256sum', installedPath],
+    ['install', '-r', installedFixture.appPath], ['shell', 'pm', 'list', 'packages', installedFixture.appId], ['shell', 'pm', 'path', installedFixture.appId], ['shell', 'sha256sum', installedPath]]);
 });
 test('Android per-case and final attestations never reinstall or clear session data', () => {
   const stub = androidCommandDouble();
   assert.equal(attestAndroidBinary(installedFixture, installedHash, stub).explicitReplaceInstall, false);
-  assert.equal(stub.calls.length, 2); assert.ok(stub.calls.every(args => args[0] === 'shell'));
+  assert.equal(stub.calls.length, 3); assert.ok(stub.calls.every(args => args[0] === 'shell'));
 });
 test('Android stale same-version installed APK cannot pass a source-bound run', () => {
   const stub = androidCommandDouble({ digest: `${'b'.repeat(64)}  ${installedPath}` });
   assert.throws(() => attestAndroidBinary(installedFixture, installedHash, stub), /INSTALLED_ANDROID_APK_HASH_MISMATCH/);
 });
 test('Android failed install cannot fall through to an older installed APK', () => {
-  const stub = androidCommandDouble({ install: 'Failure [INSTALL_FAILED]' });
+  const stub = androidCommandDouble({ install: 'Failure [INSTALL_FAILED]', initialDigest: `${'b'.repeat(64)}  ${installedPath}` });
   assert.throws(() => attestAndroidBinary(installedFixture, installedHash, { ...stub, install: true }), /EXACT_ANDROID_APK_INSTALL_FAILED/);
-  assert.equal(stub.calls.length, 1);
+  assert.equal(stub.calls.length, 4);
+});
+
+test('Android preflight reuses only byte-identical installed APKs without a redundant replacement', () => {
+  const stub = androidCommandDouble();
+  const proof = attestAndroidBinary(installedFixture, installedHash, { ...stub, install: true });
+  assert.equal(proof.installedApkSha256, installedHash);
+  assert.equal(proof.explicitReplaceInstall, false);
+  assert.deepEqual(stub.calls, [['shell', 'pm', 'list', 'packages', installedFixture.appId], ['shell', 'pm', 'path', installedFixture.appId], ['shell', 'sha256sum', installedPath]]);
+});
+
+test('Android missing owned APK installs once and verifies the actual resulting bytes', () => {
+  const stub = androidCommandDouble({ initialPaths: '' });
+  assert.equal(attestAndroidBinary(installedFixture, installedHash, { ...stub, install: true }).explicitReplaceInstall, true);
+  assert.equal(stub.calls.filter(args => args[0] === 'install').length, 1);
+  assert.equal(stub.calls.length, 5);
+});
+
+test('Android package-manager errors are not reinterpreted as an absent package or authorized install', () => {
+  const calls = [];
+  const error = Object.assign(new Error('UNIT_PACKAGE_MANAGER_FAILURE'), { status: 1, stdout: '', stderr: '' });
+  assert.throws(() => attestAndroidBinary(installedFixture, installedHash, { install: true,
+    command: (_binary, args) => { calls.push(args); throw error; } }), /UNIT_PACKAGE_MANAGER_FAILURE/);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].slice(2), ['shell', 'pm', 'list', 'packages', installedFixture.appId]);
+});
+
+test('Android malformed digest output cannot authorize either reuse or an install', () => {
+  for (const digest of [installedHash, `${installedHash}  /another/base.apk`, `invalid  ${installedPath}`]) {
+    const stub = androidCommandDouble({ digest });
+    assert.throws(() => attestAndroidBinary(installedFixture, installedHash, { ...stub, install: true }), /EXACT_INSTALLED_APK_DIGEST_REQUIRED/);
+    assert.equal(stub.calls.some(args => args[0] === 'install'), false);
+  }
 });
 test('Android split APK and unsafe package paths fail closed', () => {
   for (const paths of [`package:${installedPath}\npackage:/data/app/split.apk`, 'package:/data/app/../base.apk', 'package:/sdcard/base.apk'])
@@ -1018,6 +1054,7 @@ function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], 
   const locators = Object.fromEntries(['urlOpen', 'urlValue', 'urlClose', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace', 'connect', 'signInLink']
     .map((key) => [key, { kind: 'id', value: `unit-${key}` }]));
   locators.appOpen = { kind: 'id', value: 'native-app-open' };
+  locators.fullBrowser = { kind: 'id', value: 'ADDRESSBAR_TABS_COUNTER' };
   if (consent) Object.assign(locators, { mfaCode: { kind: 'id', value: 'native-mfa-code' }, mfaSubmit: { kind: 'buttonText', value: 'Verify code' },
     mfaVerified: { kind: 'text', value: CONSENT_MFA_VERIFIED } });
   const urlCloseMode = androidBack ? 'android-back' : 'locator';
@@ -1135,11 +1172,14 @@ test('standalone receipt field substitution never authorizes another build or a 
     assert.throws(() => validateBuildReceipt(copy, 'android', hash));
   }
 });
-test('dated documentation retains all forty acceptance groups and all 23 executable cases without a passed claim', () => {
+test('dated documentation separates the passed Android core from incomplete full mobile and iOS acceptance', () => {
   const doc = readFileSync(new URL('../../docs/mobile/ANDROID_CORE_INVENTORY_2026-10-25.md', import.meta.url), 'utf8');
   assert.deepEqual([...doc.matchAll(/^\| (MOB-\d{2}) \|/gm)].map((match) => match[1]), Array.from({ length: 40 }, (_, index) => `MOB-${String(index + 1).padStart(2, '0')}`));
   assert.deepEqual([...doc.matchAll(/^\| (NATIVE-\d{2}) \|/gm)].map((match) => match[1]), EXPECTED_DATED);
-  assert.ok(doc.includes('Native acceptance: **Incomplete**.'));
+  assert.ok(doc.includes('Android dated core: **23/23 passed**'));
+  assert.ok(doc.includes('full mobile release remains **NO-GO**, not complete MOB-01..40 acceptance.'));
+  assert.ok(doc.includes('iOS23 remain NOT RUN'));
+  assert.ok(doc.includes('Historical attempts retained:'));
 });
 
 test('actual MFA-form orchestration submits one entered code and never logs its seed', async (t) => {
@@ -1235,7 +1275,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
   const auth = firefoxRecipe(t, options);
   let stage = 'app', editing = false, verified = false, backCount = 0, consentCodeEntered = false;
   let fullBrowser = !options.prepare?.length || options.fullBrowserInitially === true;
-  let clock = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0;
+  let clock = 0, connectedAt = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0;
   const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [];
   const values = auth.firefoxUi.locators;
   const fixture = { appId: 'ai.caseops.mobile.dev.localacceptance', principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace',
@@ -1248,7 +1288,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
       clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) editing = false;
     },
     waitUntil: async (callback, settings = {}) => {
-      if (options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined) {
+      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined) {
         return assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED');
       }
       const start = clock, timeout = settings.timeout ?? 10000, interval = settings.interval ?? 150;
@@ -1265,6 +1305,10 @@ function firefoxDouble(t, foreign = false, options = {}) {
     getWindowRect: async () => ({ width: 400, height: 800 }),
     performActions: async () => {
       swipes.push('scroll');
+      if (options.connectDelayMs !== undefined && stage === 'connect' && clock - connectedAt < options.connectDelayMs) {
+        stage = 'login';
+        refreshes.push('GET /sign-in');
+      }
       if (options.verifiedNoticeDelayMs !== undefined && verified) {
         noticeCleared = true;
         refreshes.push('GET /api/auth/me');
@@ -1283,11 +1327,13 @@ function firefoxDouble(t, foreign = false, options = {}) {
           || (preparationIndex >= 0 ? `prepare-${preparationIndex}` : afterConnectIndex >= 0 ? `prompt-${afterConnectIndex}` : undefined);
       lastLookup = key;
       const shown = key === 'sign-in' ? stage === 'app' : key === 'account-open' ? stage === 'complete'
-        : key === 'urlOpen' ? fullBrowser && stage !== 'app' && stage !== 'complete' && !editing
+        : key === 'fullBrowser' ? fullBrowser && stage !== 'app' && stage !== 'complete' && !editing && clock >= (options.chromeDelayMs ?? 0)
+        : key === 'urlOpen' ? (fullBrowser || options.customTabUrlShared) && stage !== 'app' && stage !== 'complete' && !editing && clock >= (options.chromeDelayMs ?? 0)
         : ['urlValue', 'urlClose'].includes(key) ? editing
         : key === 'signInLink' ? stage === 'landing' && !editing
         : ['companySlug', 'email', 'password', 'submit'].includes(key) ? stage === 'login' && !editing
         : ['principal', 'emailFact', 'workspace', 'connect'].includes(key) ? stage === 'connect' && !editing
+          && clock - connectedAt >= (options.connectDelayMs ?? 0)
         : ['mfaCode', 'mfaSubmit'].includes(key) ? stage === 'consent-mfa' && !editing
           && (key !== 'mfaSubmit' || !options.submitHiddenUntilCode || consentCodeEntered)
         : key === 'mfaVerified' ? verified && stage === 'connect' && !editing && !noticeCleared
@@ -1295,7 +1341,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
         : key === 'appOpen' ? stage === 'grant' && !editing && !options.appOpenMissing && clock - grantAt >= (options.appOpenDelayMs ?? 0)
         : key && key.startsWith('prompt-') ? stage === 'prompt' && key === `prompt-${promptIndex}` && !promptCleared
           && clock - promptAt >= (options.promptDelaysMs?.[promptIndex] ?? 0)
-        : key && key.startsWith('prepare-') ? stage === 'landing' : false;
+        : key && key.startsWith('prepare-') ? stage === 'landing' && clock >= (options.chromeDelayMs ?? 0) : false;
       if (!shown) return [];
       return [{ isDisplayed: async () => true, isEnabled: async () => key !== 'appOpen' || !options.appOpenDisabled,
         setValue: async (value) => { writes.push([key, value]); if (key === 'mfaCode') consentCodeEntered = /^\d{6}$/.test(value); },
@@ -1312,11 +1358,11 @@ function firefoxDouble(t, foreign = false, options = {}) {
         click: async () => {
           clicks.push(key);
           if (key === 'sign-in') stage = 'landing';
-          if (key === `prepare-${auth.firefoxUi.prepare.length - 1}`) fullBrowser = true;
+          if (key === `prepare-${auth.firefoxUi.prepare.length - 1}` && !options.neverFullBrowser) fullBrowser = true;
           if (key === 'urlOpen') { editing = true; backCount = 0; }
           if (key === 'urlClose') editing = false;
           if (key === 'signInLink') stage = 'login';
-          if (key === 'submit') stage = 'connect';
+          if (key === 'submit') { stage = 'connect'; connectedAt = clock; }
           if (key === 'connect') {
             stage = options.consent && !verified ? options.noConsentChallenge ? 'connect' : 'consent-mfa' : 'grant';
             if (stage === 'grant') grantAt = clock;
@@ -1344,6 +1390,26 @@ test('Firefox already-full browser skips Custom Tab menu conversion but retains 
   assert.equal(fake.clicks.filter(key => key === 'appOpen').length, 1);
 });
 
+test('Firefox Custom Tab sharing the URL box still requires observed full-browser conversion', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, customTabUrlShared: true,
+    prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] });
+  await browserLogin(fake.context);
+  assert.deepEqual(fake.clicks.filter(key => key.startsWith('prepare-')), ['prepare-0', 'prepare-1']);
+  assert.ok(fake.records.some(({ key, action }) => key === 'fullBrowser' && action === 'find'));
+  assert.deepEqual(fake.swipes, []);
+});
+
+test('Firefox conversion without the full-browser marker fails before entering credentials', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, customTabUrlShared: true, neverFullBrowser: true,
+    prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] });
+  await assert.rejects(() => browserLogin(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.deepEqual(fake.writes, []);
+  assert.deepEqual(fake.clicks.filter(key => ['submit', 'connect', 'mfaSubmit', 'appOpen'].includes(key)), []);
+  assert.deepEqual(fake.swipes, []);
+});
+
 test('Firefox already-full browser still rejects an external origin before entering credentials', async (t) => {
   browserEnvironment(t);
   const fake = firefoxDouble(t, true, { androidBack: true, fullBrowserInitially: true,
@@ -1351,6 +1417,27 @@ test('Firefox already-full browser still rejects an external origin before enter
   await assert.rejects(browserLogin(fake.context), /UNSAFE_BROWSER_ORIGIN/);
   assert.deepEqual(fake.writes, []);
   assert.deepEqual(fake.clicks.filter(key => key.startsWith('prepare-')), []);
+});
+
+test('Firefox cold chrome settles without scrolling before the observed Custom Tab menu actions', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, chromeDelayMs: 4011,
+    prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] });
+  await browserLogin(fake.context);
+  assert.ok(fake.elapsed() >= 4011 && fake.elapsed() <= 10000);
+  assert.deepEqual(fake.clicks.filter(key => key.startsWith('prepare-')), ['prepare-0', 'prepare-1']);
+  assert.deepEqual(fake.swipes, []);
+});
+
+test('Firefox unavailable chrome fails before credentials, scrolling or menu actions at its 10s bound', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, chromeDelayMs: 10001,
+    prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] });
+  await assert.rejects(() => browserLogin(fake.context), /FIREFOX_BROWSER_CHROME_NOT_READY/);
+  assert.equal(fake.elapsed(), 10000);
+  assert.deepEqual(fake.writes, []);
+  assert.deepEqual(fake.clicks, ['sign-in']);
+  assert.deepEqual(fake.swipes, []);
 });
 
 test('Firefox native UI orchestration inspects location, fills labelled controls and connects exactly once', async (t) => {
@@ -1475,6 +1562,28 @@ test('Firefox consent fills six digits before looking up Verify code hidden from
   assert.deepEqual(fake.swipes, []);
 });
 
+test('Firefox waits for post-login consent without a pull-to-refresh that cancels navigation', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, connectDelayMs: 4011 });
+  await browserLogin(fake.context);
+  assert.ok(fake.elapsed() >= 4011 && fake.elapsed() <= 10000);
+  assert.ok(fake.waits.some(({ key, timeout }) => key === 'connect' && timeout === 10000));
+  assert.deepEqual(fake.swipes, []);
+  assert.deepEqual(fake.refreshes, []);
+  assert.deepEqual(fake.clicks.filter(key => ['submit', 'connect', 'mfaSubmit', 'appOpen'].includes(key)),
+    ['submit', 'connect', 'mfaSubmit', 'connect', 'appOpen']);
+});
+
+test('Firefox absent post-login consent fails at 10s without scrolling, another login or authorization', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, connectDelayMs: 10001 });
+  await assert.rejects(() => browserLogin(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.equal(fake.elapsed(), 10000);
+  assert.deepEqual(fake.swipes, []);
+  assert.deepEqual(fake.refreshes, []);
+  assert.deepEqual(fake.clicks.filter(key => ['submit', 'connect', 'mfaSubmit', 'appOpen'].includes(key)), ['submit']);
+});
+
 test('Firefox waits without scrolling for the exact MFA verified notice arriving after 4011ms, retaining explicit second Connect', async (t) => {
   browserEnvironment(t);
   const fake = firefoxDouble(t, false, { consent: true, submitHiddenUntilCode: true, verifiedNoticeDelayMs: 4011 });
@@ -1584,14 +1693,17 @@ test('Android explicitly updates then reads ID-autocompletion setting and expose
   let enabled = false;
   const control = { isDisplayed: async () => true };
   const driver = {
-    updateSettings: async (settings) => { calls.push('update'); assert.deepEqual(settings, { disableIdLocatorAutocompletion: true }); enabled = true; },
-    getSettings: async () => { calls.push('read'); return { disableIdLocatorAutocompletion: enabled, privateUnrelatedSetting: 'unit-secret' }; },
+    updateSettings: async (settings) => { calls.push('update'); assert.deepEqual(settings,
+      { disableIdLocatorAutocompletion: true, waitForIdleTimeout: 500, waitForSelectorTimeout: 0 }); enabled = true; },
+    getSettings: async () => { calls.push('read'); return { disableIdLocatorAutocompletion: enabled,
+      waitForIdleTimeout: 500, waitForSelectorTimeout: 0, privateUnrelatedSetting: 'unit-secret' }; },
     $$: async (query) => { calls.push('lookup'); assert.equal(query, 'id=native-mfa-code'); return enabled ? [control] : []; },
   };
   await configureNativeDriver(driver, 'android', (event) => records.push(event));
   assert.equal(await visible(driver, selector('android', 'id', 'native-mfa-code')), control);
   assert.deepEqual(calls, ['update', 'read', 'lookup']);
-  assert.deepEqual(records, [{ type: 'native_driver_settings', disableIdLocatorAutocompletion: true }]);
+  assert.deepEqual(records, [{ type: 'native_driver_settings', disableIdLocatorAutocompletion: true,
+    waitForIdleTimeout: 500, waitForSelectorTimeout: 0 }]);
 });
 
 test('false, missing or nonboolean ID-setting readback fails closed before UI and journals only the bounded boolean', async () => {
@@ -1605,10 +1717,23 @@ test('false, missing or nonboolean ID-setting readback fails closed before UI an
     await assert.rejects(async () => { await configureNativeDriver(driver, 'android', (event) => records.push(event)); await driver.getContexts(); },
       /EXACT_ANDROID_RESOURCE_ID_SETTING_REQUIRED/);
     assert.deepEqual(calls, ['update', 'read']);
-    assert.deepEqual(records, [{ type: 'native_driver_settings', disableIdLocatorAutocompletion: value === false ? false : null }]);
+    assert.deepEqual(records, [{ type: 'native_driver_settings', disableIdLocatorAutocompletion: value === false ? false : null,
+      waitForIdleTimeout: null, waitForSelectorTimeout: null }]);
   }
   const noAndroidCalls = new Proxy({}, { get: () => { throw new Error('NO_ANDROID_SETTINGS_ON_IOS'); } });
   await configureNativeDriver(noAndroidCalls, 'ios', () => { throw new Error('NO_FAKE_IOS_SETTINGS_PROOF'); });
+});
+
+test('Android refuses missing or silently ignored nested-wait settings before any UI work', async () => {
+  for (const settings of [{}, { waitForIdleTimeout: 10000, waitForSelectorTimeout: 0 },
+    { waitForIdleTimeout: 500, waitForSelectorTimeout: 10000 },
+    { waitForIdleTimeout: '500', waitForSelectorTimeout: 0 }]) {
+    let ui = false;
+    const driver = { updateSettings: async () => {}, getSettings: async () => ({ disableIdLocatorAutocompletion: true, ...settings }) };
+    await assert.rejects(async () => { await configureNativeDriver(driver, 'android', () => {}); ui = true; },
+      /EXACT_ANDROID_(IDLE|SELECTOR)_WAIT_SETTING_REQUIRED/);
+    assert.equal(ui, false);
+  }
 });
 
 test('initial auth failure blocks all remaining 22 setups before another session while preserving exact failed/not-run evidence', () => {
@@ -1961,4 +2086,147 @@ test('local run plans reject embedded credential values and conflicting seed ide
   assert.throws(() => inspectLocalPlan({ ...plan, password: 'UNIT_VALUE_MUST_NOT_APPEAR' }, 'android', unitCredentials), /SECRET_VALUE/);
   plan.expectations.matter.searches[0].value = 'wrong';
   assert.throws(() => inspectLocalPlan(plan, 'android', unitCredentials), /PRIMARY_SEARCH/);
+});
+
+// Offline driver/clock regression only; the existing browser doubles own the full PKCE/MFA journey.
+const browserBoundary = 'OFFLINE_BROWSER_ADMISSION_BOUNDARY';
+
+function readinessDouble({ initial = 'restoring', restoreAt = Infinity, logoutReadyAfter = 0 } = {}) {
+  let time = 0, screen = initial, logoutAt;
+  const clicks = [], reads = [], waits = [], records = [], browserAdmissions = [], gestures = [];
+  const phase = () => {
+    if (screen === 'restoring' && time >= restoreAt) screen = 'home';
+    return screen;
+  };
+  const signInEnabled = () => phase() === 'signed-out' && time >= logoutAt + logoutReadyAfter;
+  const element = (id, text = '') => ({
+    isDisplayed: async () => true,
+    isEnabled: async () => id !== 'sign-in' || signInEnabled(),
+    getText: async () => { reads.push({ id, time }); return text; },
+    click: async () => {
+      clicks.push({ id, time });
+      if (id === 'sign-in') {
+        if (!signInEnabled()) throw new Error('OFFLINE_DISABLED_SIGNIN_CLICK');
+        throw new Error(browserBoundary);
+      }
+      if (id === 'account-open') { assert.equal(phase(), 'home'); screen = 'account'; }
+      else if (id === 'sign-out') { assert.equal(phase(), 'account'); screen = 'signed-out'; logoutAt = time; }
+      else if (id === 'back') { assert.equal(phase(), 'account'); screen = 'home'; }
+      else assert.fail(`UNEXPECTED_OFFLINE_CLICK:${id}`);
+    },
+  });
+  if (initial === 'signed-out') logoutAt = 0;
+  const driver = {
+    switchContext: async name => assert.equal(name, 'NATIVE_APP', 'NO_REAL_BROWSER_CONTEXT_ALLOWED'),
+    waitUntil: async (callback, options) => {
+      const startedAt = time, deadline = time + options.timeout;
+      const row = { startedAt, timeout: options.timeout, interval: options.interval, timeoutMsg: options.timeoutMsg };
+      waits.push(row);
+      while (true) {
+        if (await callback()) { row.endedAt = time; row.result = 'ready'; return; }
+        if (time >= deadline) { row.endedAt = time; row.result = 'timeout'; throw new Error(options.timeoutMsg); }
+        time = Math.min(deadline, time + options.interval);
+      }
+    },
+    $$: async query => {
+      assert.ok(query.startsWith('id='), 'ONLY_OFFLINE_NATIVE_IDS_ALLOWED');
+      const id = query.slice(3), current = phase();
+      if (id === 'account-open' && current === 'home') return [element(id)];
+      if (id === 'session-loading' && (current === 'restoring' || current === 'signed-out' && !signInEnabled())) return [element(id)];
+      if (id === 'sign-in' && ['restoring', 'signed-out'].includes(current)) return [element(id)];
+      // This deliberately keeps the logout acknowledgement visible before its button is usable.
+      if (id === 'signed-out' && current === 'signed-out') return [element(id)];
+      if (current === 'account') {
+        if (id === 'account-principal') return [element(id, 'Synthetic Restart Principal')];
+        if (id === 'account-workspace') return [element(id, 'Synthetic Restart Workspace')];
+        if (['sign-out', 'back'].includes(id)) return [element(id)];
+      }
+      return [];
+    },
+    performActions: async () => { gestures.push(time); assert.fail('NO_GESTURE_DURING_OFFLINE_READINESS'); },
+  };
+  const context = { driver, platform: 'android', fixture: {
+    principalLabel: 'Synthetic Restart Principal', workspaceLabel: 'Synthetic Restart Workspace',
+    auth: { mode: 'web-context', webOrigin: 'https://127.0.0.1:3443', companySlug: 'synthetic-restart',
+      mfaRequired: true, mfaStage: 'consent', emailEnv: 'CASEOPS_MOBILE_UNIT_EMAIL', passwordEnv: 'CASEOPS_MOBILE_UNIT_PASSWORD' },
+  }, record: row => {
+    records.push(row);
+    if (row.type === 'browser_step' && row.key === 'sign-in' && row.action === 'click') browserAdmissions.push(time);
+  } };
+  return { context, clicks, reads, waits, records, browserAdmissions, gestures, now: () => time };
+}
+
+async function observeReadiness(fake, options) {
+  let error;
+  try { await authenticate(fake.context, options); } catch (cause) { error = cause.message; }
+  return { error: error ?? null, elapsedVirtualMs: fake.now(), clicks: fake.clicks, reads: fake.reads,
+    waits: fake.waits, browserAdmissions: fake.browserAdmissions, gestures: fake.gestures, records: fake.records };
+}
+
+test('restart waits past disabled visible sign-in for restored account identity without browser auth', async t => {
+  browserEnvironment(t);
+  const fake = readinessDouble({ restoreAt: 4011 });
+  const actual = await observeReadiness(fake);
+  assert.equal(actual.error, null);
+  assert.ok(actual.elapsedVirtualMs >= 4011 && actual.elapsedVirtualMs <= 20000);
+  assert.deepEqual(actual.clicks.map(row => row.id), ['account-open', 'back']);
+  assert.deepEqual(actual.reads.map(row => row.id), ['account-principal', 'account-workspace']);
+  assert.deepEqual(actual.browserAdmissions, []);
+  assert.deepEqual(actual.gestures, []);
+});
+
+test('permanently disabled visible sign-in times out at 20s without clicks or browser auth', async t => {
+  browserEnvironment(t);
+  const fake = readinessDouble();
+  const actual = await observeReadiness(fake);
+  assert.equal(actual.error, 'NATIVE_SESSION_NOT_READY');
+  assert.equal(actual.elapsedVirtualMs, 20000);
+  assert.deepEqual(actual.clicks, []);
+  assert.deepEqual(actual.reads, []);
+  assert.deepEqual(actual.browserAdmissions, []);
+  assert.deepEqual(actual.gestures, []);
+});
+
+test('fresh logout waits for enabled sign-in after signed-out acknowledgement before browser auth', async t => {
+  browserEnvironment(t);
+  const fake = readinessDouble({ initial: 'home', logoutReadyAfter: 4011 });
+  const actual = await observeReadiness(fake, { fresh: true });
+  assert.equal(actual.error, browserBoundary);
+  assert.ok(actual.elapsedVirtualMs >= 4011 && actual.elapsedVirtualMs <= 20000);
+  assert.deepEqual(actual.clicks.map(row => row.id), ['account-open', 'sign-out', 'sign-in']);
+  assert.equal(actual.browserAdmissions.length, 1);
+  assert.ok(actual.browserAdmissions[0] >= 4011);
+  assert.deepEqual(actual.gestures, []);
+});
+
+test('fresh logout with permanently disabled sign-in times out at 20s without browser auth', async t => {
+  browserEnvironment(t);
+  const fake = readinessDouble({ initial: 'home', logoutReadyAfter: Infinity });
+  const actual = await observeReadiness(fake, { fresh: true });
+  assert.equal(actual.error, 'NATIVE_SESSION_NOT_READY');
+  assert.equal(actual.elapsedVirtualMs, 20000);
+  assert.deepEqual(actual.clicks.map(row => row.id), ['account-open', 'sign-out']);
+  assert.deepEqual(actual.browserAdmissions, []);
+  assert.deepEqual(actual.gestures, []);
+});
+
+test('already restored account control still reads both exact identities and returns without browser auth', async t => {
+  browserEnvironment(t);
+  const fake = readinessDouble({ initial: 'home' });
+  const actual = await observeReadiness(fake);
+  assert.equal(actual.error, null);
+  assert.equal(actual.elapsedVirtualMs, 0);
+  assert.deepEqual(actual.clicks.map(row => row.id), ['account-open', 'back']);
+  assert.deepEqual(actual.reads.map(row => row.id), ['account-principal', 'account-workspace']);
+  assert.deepEqual(actual.browserAdmissions, []);
+});
+
+test('already enabled signed-out control admits browser auth exactly once without extra wait', async t => {
+  browserEnvironment(t);
+  const fake = readinessDouble({ initial: 'signed-out' });
+  const actual = await observeReadiness(fake);
+  assert.equal(actual.error, browserBoundary);
+  assert.equal(actual.elapsedVirtualMs, 0);
+  assert.deepEqual(actual.clicks.map(row => row.id), ['sign-in']);
+  assert.deepEqual(actual.browserAdmissions, [0]);
 });

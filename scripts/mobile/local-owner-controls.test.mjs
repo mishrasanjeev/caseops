@@ -86,7 +86,7 @@ function workerFixture(t, options = {}) {
           const proof = { kind: 'docker-owner-worker-ready', workerId: request.workerId, requestId: request.requestId,
             readyId: 'e'.repeat(24), bindingFile: pointer.file, bindingSha256: pointer.sha256,
             ...Object.fromEntries(['backendSha', 'backendRevision', 'apiContainerId', 'apiImage', 'project', 'pythonSha256', 'moduleSha256', 'extensionSha256'].map((key) => [key, binding[key]])),
-            maxCommands: 16, maxRequestBytes: 4096, maxResponseBytes: 65536, operationDeadlineMs: 8000,
+            maxCommands: 16, maxRequestBytes: 4096, maxResponseBytes: 65536, preparationTimeoutMs: 60000, operationDeadlineMs: 8000,
             idleSeconds: 1200, lifetimeSeconds: 1200, canonicalMutationImportsPreloaded: true, databaseSessionRetained: false };
           const readyFile = `owner-ready-${request.workerId}.json`;
           readyHash = save(readyFile, proof);
@@ -129,25 +129,26 @@ test('cold control refuses execution until explicit preparation without launchin
 });
 
 test('preparation inspects immutable container identity and verifies a separate durable ready hash', async (t) => {
-  const unit = workerFixture(t), ready = await unit.prepare();
+  const unit = workerFixture(t, { now: () => 1000 }), ready = await unit.prepare();
   assert.equal(ready.kind, 'docker-owner-worker-ready');
   assert.equal(ready.maxCommands, 16);
   assert.match(ready.evidenceSha256, /^[a-f0-9]{64}$/);
   assert.equal(unit.processes.length, 2);
   assert.deepEqual(unit.processes[0].args, ['inspect', 'a'.repeat(64)]);
-  assert.ok(unit.requests[0].deadlineMs - Date.now() <= 30000);
-  assert.ok(unit.requests[0].deadlineMs - Date.now() >= 29000);
+  assert.equal(unit.requests[0].deadlineMs, 61000);
   assert.equal(unit.requests.filter(({ type }) => type === 'control').length, 0);
 });
 
 test('warm control re-inspects and stays inside the unchanged eight-second deadline', async (t) => {
-  const unit = workerFixture(t);
+  let clock = 1700000000000;
+  const unit = workerFixture(t, { now: () => clock });
   await unit.prepare();
-  const started = Date.now(), result = await unit.read();
+  clock += 500;
+  const started = clock, result = await unit.read();
   assert.equal(result.result.lifecycleVersion, 0);
   assert.equal(unit.processes.filter(({ args }) => args[0] === 'exec').length, 1);
   assert.equal(unit.processes.filter(({ args }) => args[0] === 'inspect').length, 2);
-  assert.ok(unit.requests[1].deadlineMs - started <= 8000);
+  assert.equal(unit.requests[1].deadlineMs, started + 8000);
 });
 
 test('startup timeout kills only its owned exec child and never runs or retries a control', async (t) => {
@@ -285,14 +286,27 @@ test('stderr overflow also fails closed without retaining an unbounded transcrip
   assert.equal(unit.worker.killed, 1);
 });
 
-test('readiness proof validation cannot extend the thirty-second preparation budget', async (t) => {
+test('readiness proof validation cannot extend the separate sixty-second preparation budget', async (t) => {
   let clock = 0;
   const unit = workerFixture(t, { now: () => clock, reply: (request, response) => {
-    if (request.type === 'prepare') clock = 30001;
+    if (request.type === 'prepare') clock = 60001;
     return response;
   } });
   await assert.rejects(unit.prepare(), /READINESS_DEADLINE/);
   assert.equal(unit.worker.killed, 1);
+});
+
+test('cold fixture preparation never extends the subsequent eight-second command budget', async (t) => {
+  let clock = 0;
+  const unit = workerFixture(t, { now: () => clock, reply: (request, response) => {
+    if (request.type === 'prepare') clock = 45000;
+    return response;
+  } });
+  await unit.prepare();
+  assert.equal(unit.requests[0].deadlineMs, 60000);
+  assert.equal(unit.requests.filter(({ type }) => type === 'control').length, 0);
+  await unit.read();
+  assert.equal(unit.requests[1].deadlineMs, 53000);
 });
 
 test('result evidence validation cannot extend the eight-second operation budget', async (t) => {

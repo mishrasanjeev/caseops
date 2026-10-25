@@ -126,10 +126,11 @@ export function createOwnerControls({ spawnProcess = spawn, cacheRoot, now = Dat
       }
     } catch (error) { fail(error); }
   }
-  async function prepare({ fixture, signal = AbortSignal.timeout(30000) } = {}) {
+  async function prepare({ fixture, signal = AbortSignal.timeout(60000) } = {}) {
     assert.equal(phase, 'new', 'OWNER_PREPARATION_ALREADY_STARTED');
     phase = 'preparing';
-    const deadline = now() + 30000;
+    // Cold canonical imports/mappers are fixture startup, never an operation.
+    const started = now(), deadline = started + 60000;
     try {
       assert.match(fixture?.backendSha || '', /^[a-f0-9]{40}$/, 'EXACT_OWNER_BACKEND_REQUIRED');
       assert.ok(signal instanceof AbortSignal && !signal.aborted, 'OWNER_ABORT_SIGNAL_REQUIRED');
@@ -164,14 +165,14 @@ export function createOwnerControls({ spawnProcess = spawn, cacheRoot, now = Dat
       for (const [key, value] of Object.entries({ kind: 'docker-owner-worker-ready', workerId, requestId,
         bindingFile: context.pointer.file, bindingSha256: context.pointer.sha256,
         ...Object.fromEntries(['backendSha', 'backendRevision', 'apiContainerId', 'apiImage', 'project', 'pythonSha256', 'moduleSha256', 'extensionSha256'].map((key) => [key, context.binding[key]])),
-        maxCommands: 16, maxRequestBytes: 4096, maxResponseBytes: 65536, operationDeadlineMs: 8000,
+        maxCommands: 16, maxRequestBytes: 4096, maxResponseBytes: 65536, preparationTimeoutMs: 60000, operationDeadlineMs: 8000,
         idleSeconds: 1200, lifetimeSeconds: 1200, canonicalMutationImportsPreloaded: true, databaseSessionRetained: false })) assert.equal(proof[key], value, 'OWNER_READINESS_PROOF_MISMATCH');
       assert.match(proof.readyId || '', /^[a-f0-9]{24}$/);
       assert.equal(phase, 'preparing', 'OWNER_WORKER_DISCONNECTED');
       assert.ok(now() <= deadline && !signal.aborted, 'OWNER_READINESS_DEADLINE');
       ready = { file: response.readyFile, sha256: response.readySha256 };
       phase = 'ready';
-      lifetime = setTimeout(() => fail(new Error('OWNER_WORKER_LIFETIME_EXPIRED')), Math.max(1, deadline - 30000 + 1200000 - now()));
+      lifetime = setTimeout(() => fail(new Error('OWNER_WORKER_LIFETIME_EXPIRED')), Math.max(1, started + 1200000 - now()));
       lifetime.unref?.();
       return { kind: proof.kind, workerId, evidencePath, evidenceSha256: ready.sha256, maxCommands: 16 };
     } catch (error) { fail(error); throw error; }

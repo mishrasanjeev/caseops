@@ -4,6 +4,125 @@ J20/M22; US-MOB-01..08. **Partially implemented. Public release: NO-GO.**
 This checkpoint separates component tests from native and production acceptance.
 No production deployment or paid-provider call is part of this native task.
 
+## Superseding Android 16 Acceptance
+
+Actual source/API/web: `4959129a0108bd332c4eacc86a3e0ec18f05711c`.
+App-input fingerprint: `be52fcdc07d205e7d5b2c3ca80fef382957e90f74224b06b13d94ca57fb5c000`.
+The non-debug standalone APK SHA-256 is
+`1e5b075e1b0de2fee170f081cb2fb0053f83194e21c3951e2362f0418577ca29`.
+It starts without a Metro development server; the separate workstation restriction
+was not changed or bypassed. This is a local-emulator artifact, not a phone/store
+or production build.
+
+On the fresh, isolated `CaseOps_API_36_AOSP` / Android 16 / API36 device,
+`native-core-20261025-eb7d9106-eeff-407f-a3f6-37ac618779fb` completed at
+09:38:31 UTC: **23 intended/discovered/executed/passed, zero failed phases,
+blocked or unexecuted cases**, with successful preflight/postflight and exit0.
+Report: `reports/2026-10-25T09-19-38-852Z-android-ae0d1bc1`.
+The installed APK was independently hashed at every session boundary; no app
+data was cleared or identical package unnecessarily reinstalled.
+
+The run includes all five identifier searches/restarts, exact acknowledged note
+persistence, Calendar date/source navigation, current read-only draft, unsaved
+navigation/process kill, real owner disposal and access revocation, foreign
+tenant exclusion, current-device revocation, three real browser/MFA cycles,
+logout and warm signed-out resume. Old disposed/revoked targets stayed terminal;
+two fresh negative targets were provisioned without changing the positive Matter.
+
+Core harness fingerprint:
+`cda340ee4bdc087ba75066304ace42ec21e528ba3aba01e5e1a8e8ccf064ef0b`.
+The app-input scope was unchanged, but harness inputs were dirty and separately
+hash-bound; this is not a clean whole-release/canonical-main certification.
+The earlier Android16 `306c6949-*` attempt remains **21/23**, not rewritten:
+NATIVE-04/05 acted on disabled sign-in during secure-store restoration. The
+replacement waits for non-loading, enabled, authoritative account/signed-out
+controls within the original 20-second deadline. Six focused regressions cover it.
+
+The older API37 AVD's retained OS/SystemUI/Quickstep ANRs are not a passing
+Android17 result. No automatic system-dialog dismissal was added to acceptance.
+
+## Current Files Supplement
+
+`native-files-20261025-aaee0c34-3027-4f38-943f-a3d509896cbc` completed **1/2**:
+FILES-01 passed the rebuilt APK's source/hash/reload/private-TXT/range/full-read
+journey. FILES-02 selected the real file and uploaded exactly once, then the
+harness incorrectly required HTTP201 rather than this canonical route's HTTP200.
+The application displayed its persisted acknowledgement; gateway request
+`5490b9c5ec61fdac` records the marked upload response200.
+
+Read-only reconciliation found one indexed attachment
+`e8b4ed37-cfad-4fc0-a037-f098b2212ba5`, original filename
+`CaseOps-native-clean-30b6adb2005d.txt`, 204 bytes, SHA-256
+`aa0d4c440338cdd58f92ed613d0861ba994f51a60f90e2144e4a990f10df8a42`.
+An ordinary authorized download matched those exact bytes. No upload was replayed,
+and this API readback does not relabel the failed native case as passed.
+The second saved native upload is `a2b02b63-985f-41cf-bf6d-8f846c7cb9e4`,
+filename `CaseOps-native-clean-bcad78b96042.txt`, also indexed with the same
+204-byte synthetic fixture hash. No business write was repeated. The next
+prepared file `CaseOps-native-clean-6fed43e2568e.txt` was never uploaded.
+
+The full Files supplement remains **UNVERIFIED**, not green:
+
+| Retained actual run | Calls | Specific outcome |
+| --- | --- | --- |
+| aaee0c34-* | 1/2 passed | Canonical200 incorrectly required201; first upload persisted |
+| c5695663-* | 1/2 passed | Native MFA expired at09:54:47; refresh rejected one second later, app signed out; no upload attempted |
+| 51687734-* | 1/2 passed | Fresh browser/MFA setup passed; second upload persisted, but confirmation moved below viewport |
+| 059d496c-* | 0/2 passed | FILES-01 could not observe original source hash after reload; FILES-02 browser-menu setup failed, call not run |
+
+The second acknowledgement was observed after one ordinary downward swipe,
+without submitting again. Harness coverage now requires canonical200, a reachable
+visible confirmation after the bounded scroll, the persisted UUID/name/hash,
+exact range/full bytes and no replay. A missing confirmation still fails.
+Those unit fixes do not certify the final failed native replacement. Source-detail
+reload and Firefox menu orchestration need reproduction and a complete two-case
+replacement; do not delete the retained files, reopen negative Matters, weaken
+MFA or reset the data merely to make it pass.
+
+Current complete tooling gate: **263/263**, four intended/selected modules
+(55 build-config,155 tooling,29 owner-controls,24 Files), zero failures/errors/
+skips. XML: `mobile-tooling-complete-20261025-1011.xml`. The earlier261-case
+failure on an obsolete docs assertion and its passing replacement are retained.
+Mobile source304/22 files and strict TypeScript are reused at unchanged app
+inputs from4959129a, not described as new executions.
+
+Final reconciled sidecar: `LOCAL-MOBILE-ACCEPTANCE-20261025-final.json`, SHA-256
+`0d40bf4ca1a395890dbcb9d75fbe461aaa777891ee17ab5d4e74bd21463db2d0`.
+It asserts23 core passes, the actual failed latest Files phases, two independently
+read-confirmed uploads,263 tooling passes and publicReleaseReady=false. Core and
+the independent Files supplement retain different harness fingerprints; no single
+clean combined-release certification is claimed. Only the local APK/API/web
+runtime stayed identical.
+
+## Current iOS And Security Boundary
+
+The actual finite Windows iOS export is
+`ios-hermes-4959129a-20261025-e3162c/receipt.json`: 900 logged modules,
+9,210,328-byte Hermes bundle, SHA-256
+`297d811f317bac13d669b8565ba495ebc8979230f98b7d230de5d2dc763146ed`.
+Its embedded origins are `https://localhost:8443` / `https://localhost:3443`.
+It is bundling evidence only, not a runnable Simulator binary or proof for the
+Mac fixture's `127.0.0.1` origins. CocoaPods/Xcode/Simulator/iPhone remain NOT RUN.
+
+Fresh `npm audit --audit-level=high` failed: four affected package entries trace
+to one reviewed high-severity advisory in `node-forge@1.4.0`, through
+Expo58.0.19 / CLI58.1.15 / code-signing-certificates0.0.7.
+[GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv)
+lists no patched release; upstream PR1152 is still unmerged as checked today.
+The raw audit is `mobile-dependency-audit-20261025-0928.json` in the cache.
+No exploitability exemption, crypto substitution, forced SDK44 downgrade,
+audit waiver or public release was introduced. The audit now precedes exports
+in CI; its complete four-file tooling selection is guarded by regression.
+
+These are component/native-core results, not all forty MOB groups. Full GC/IP
+breadth, inbox/push, physical privacy/memory/accessibility/performance, native
+iOS, security, signing/store and protected canonical release gates stay open.
+
+## Historical Evidence Below
+
+The following earlier checkpoints are retained as failures and partial results;
+their pending-build statements do not supersede the actual acceptance above.
+
 ## Exact Android Evidence
 
 The standalone local-acceptance APK was built from

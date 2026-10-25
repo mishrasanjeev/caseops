@@ -19,6 +19,8 @@ export function validateFirefoxRecipe(auth) {
   assert.equal(evidence.packageName, recipe.packageName, 'FIREFOX_LOCATOR_IDENTITY_MISMATCH');
   assert.equal(evidence.version, recipe.version, 'FIREFOX_LOCATOR_IDENTITY_MISMATCH');
   assert.deepEqual(evidence.locators, recipe.locators, 'FIREFOX_LOCATOR_IDENTITY_MISMATCH');
+  if (recipe.locators.fullBrowser) assert.deepEqual(recipe.locators.fullBrowser,
+    { kind: 'id', value: 'ADDRESSBAR_TABS_COUNTER' }, 'EXACT_FIREFOX_FULL_BROWSER_MARKER_REQUIRED');
   assert.deepEqual(evidence.prepare || [], recipe.prepare || [], 'FIREFOX_PREPARATION_NOT_OBSERVED');
   assert.deepEqual(evidence.afterConnect || [], recipe.afterConnect || [], 'FIREFOX_APP_PROMPT_NOT_OBSERVED');
   assert.equal(evidence.urlCloseMode || 'locator', recipe.urlCloseMode || 'locator', 'FIREFOX_URL_DISMISSAL_NOT_OBSERVED');
@@ -45,7 +47,8 @@ export function validateFirefoxRecipe(auth) {
 async function locate(context, key, locator = context.fixture.auth.firefoxUi.locators[key]) {
   browserStep(context, key, 'find');
   // These asynchronous states must settle before any gesture can refresh the page.
-  return find(context, locator.kind, locator.value, { scroll: !['mfaCode', 'mfaVerified', 'appOpen', 'afterConnect-0', 'afterConnect-1'].includes(key) });
+  return find(context, locator.kind, locator.value, { scroll: !key.startsWith('prepare-')
+    && !['fullBrowser', 'connect', 'mfaCode', 'mfaVerified', 'appOpen', 'afterConnect-0', 'afterConnect-1'].includes(key) });
 }
 async function press(context, key, locator) {
   const control = await locate(context, key, locator);
@@ -87,9 +90,17 @@ async function location(context, recipe) {
 
 export async function prepareFirefox(context, recipe) {
   browserStep(context, 'prepare-ready', 'check');
-  const locator = recipe.locators.urlOpen;
-  if (await visible(context.driver, selector(context.platform, locator.kind, locator.value))) return;
+  const locator = recipe.locators.fullBrowser;
+  let fullBrowser = false;
+  await context.driver.waitUntil(async () => {
+    fullBrowser = !!locator && !!await visible(context.driver, selector(context.platform, locator.kind, locator.value));
+    if (fullBrowser) return true;
+    const first = recipe.prepare?.[0];
+    return !!first && !!await visible(context.driver, selector(context.platform, first.kind, first.value));
+  }, { timeout: 10000, interval: 150, timeoutMsg: 'FIREFOX_BROWSER_CHROME_NOT_READY' });
+  if (fullBrowser) return;
   for (const [index, action] of (recipe.prepare || []).entries()) await press(context, `prepare-${index}`, action);
+  if (locator) await locate(context, 'fullBrowser');
   await locate(context, 'urlOpen');
 }
 

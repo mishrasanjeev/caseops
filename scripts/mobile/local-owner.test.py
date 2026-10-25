@@ -251,7 +251,7 @@ class OwnerImportTests(unittest.TestCase):
     def startup(self):
         return {"type": "prepare", "workerId": "a" * 24, "requestId": "b" * 24,
             "bindingFile": "unit-binding.json", "bindingSha256": "unit-binding-hash", "backendSha": "d" * 40,
-            "marker": "no-paid-providers", "deadlineMs": 130000,
+            "marker": "no-paid-providers", "deadlineMs": 160000,
             **{key: self.binding[key] for key in ("apiContainerId", "apiImage", "project")}}
 
     def protocol_worker(self):
@@ -283,6 +283,7 @@ class OwnerImportTests(unittest.TestCase):
             "SET LOCAL lock_timeout = '800ms'", "SELECT 1"])
         self.assertEqual(worker["maxCommands"], 16)
         self.assertEqual(worker["operationDeadlineMs"], 8000)
+        self.assertEqual(worker["preparationTimeoutMs"], 60000)
         self.assertEqual(worker["lifetimeSeconds"], 1200)
         proof = json.loads((self.root / worker["readyFile"]).read_text())
         self.assertFalse(proof["databaseSessionRetained"])

@@ -215,16 +215,27 @@ export async function browserLogin(context) {
   context.record?.({ type: 'assertion', boundary: 'system-browser-ui-pkce-completed', platform });
 }
 
+async function waitForSessionReady(context, { signedOutOnly = false } = {}) {
+  const { driver, platform } = context;
+  await driver.waitUntil(async () => {
+    if (await visible(driver, selector(platform, 'id', 'session-loading'))) return false;
+    const account = await visible(driver, selector(platform, 'id', 'account-open'));
+    if (account) return !signedOutOnly && await account.isEnabled();
+    const signIn = await visible(driver, selector(platform, 'id', 'sign-in'));
+    return !!signIn && await signIn.isEnabled()
+      && !!await visible(driver, selector(platform, 'id', 'signed-out'));
+  }, { timeout: 20000, interval: 200, timeoutMsg: 'NATIVE_SESSION_NOT_READY' });
+}
+
 export async function authenticate(context, { fresh = false } = {}) {
   const { driver, fixture, platform } = context;
   await driver.switchContext('NATIVE_APP');
-  await driver.waitUntil(async () => !!(await visible(driver, selector(platform, 'id', 'account-open')))
-    || !!(await visible(driver, selector(platform, 'id', 'sign-in'))),
-  { timeout: 20000, interval: 200, timeoutMsg: 'NATIVE_SESSION_NOT_READY' });
+  await waitForSessionReady(context);
   if (fresh && await visible(driver, selector(platform, 'id', 'account-open'))) {
     await click(context, 'id', 'account-open');
     await click(context, 'id', 'sign-out', { scroll: true });
     await find(context, 'id', 'signed-out');
+    await waitForSessionReady(context, { signedOutOnly: true });
   }
   if (!await visible(driver, selector(platform, 'id', 'account-open'))) await browserLogin(context);
   await click(context, 'id', 'account-open');

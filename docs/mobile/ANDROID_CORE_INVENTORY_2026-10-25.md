@@ -2,7 +2,18 @@
 
 J20/M22; US-MOB-01..06/08; underlying J01/J03/J04/J08/J14,
 M01/M02/M03/M08/M13/M14 and FT-002/003/006/007/008/011..015/042/061.
-Implementation status: Partially implemented. Native acceptance: **Incomplete**.
+Implementation status: Partially implemented. Android dated core: **23/23 passed**;
+full mobile release remains **NO-GO**, not complete MOB-01..40 acceptance.
+The replacement Android16/API36 report
+`native-core-20261025-eb7d9106-eeff-407f-a3f6-37ac618779fb/reports/2026-10-25T09-19-38-852Z-android-ae0d1bc1`
+completed all setup/call/teardown and preflight/postflight with exit0 at
+09:38:31 UTC, source/API/web4959129a and installed APK SHA
+`1e5b075e1b0de2fee170f081cb2fb0053f83194e21c3951e2362f0418577ca29`.
+There were no blocked/unexecuted cases or failed phases. The exact dirty harness
+is separately hash-bound in the report. iOS23 remain NOT RUN; Files is a distinct
+supplement, not part of this 23. The new dependency audit still blocks release.
+
+**Historical attempts retained:**
 The exact installed ee8dde90 APK completed a 23-case attempt: NATIVE-01..09 and
 NATIVE-11..15 passed (14 calls); NATIVE-10/16/17 failed, and NATIVE-18..23 did not
 execute after the owner-helper deadline. Postflight remained fail-closed.

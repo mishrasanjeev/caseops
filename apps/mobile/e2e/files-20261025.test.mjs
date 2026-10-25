@@ -184,11 +184,15 @@ test('offline upload requires explicit acknowledged-source read admission before
   await assert.rejects(uploadFilesSource(context), /EXACT_ACKNOWLEDGED_UPLOAD_READ_ADMISSION_REQUIRED/);
 });
 
-function offlineFailedUpload(t, outcome) {
+function offlineUpload(t, outcome, { status = 200, acknowledgement = 'visible' } = {}) {
   const value = offlineUploadFixture(t);
   const { context, upload, ledger } = value;
-  const clicks = [], queries = [], records = [];
+  const clicks = [], queries = [], records = [], reads = [], admissions = [], swipes = [];
+  const uploadedId = '11111111-2222-4333-8444-555555555555';
+  const downloadRoute = `/api/matters/${source.matterId}/attachments/${uploadedId}/download`;
   let selected = false, submitted = false, pickerOpen = false, downloadsOpen = false, expanded = false;
+  let reloaded = false, admitted = false, viewerOpen = false;
+  let acknowledgementVisible = acknowledgement === 'visible';
   const append = (method, route, status) => ledger.requests.push({ sequence: ++ledger.lastSequence,
     method, route, status, nativeMarker: true, requestId: `offline-${ledger.lastSequence}` });
   t.mock.method(globalThis, 'fetch', async (url, options) => {
@@ -199,7 +203,9 @@ function offlineFailedUpload(t, outcome) {
     return new Response(JSON.stringify(ledger));
   });
   const element = (id, text = '') => ({
-    async isDisplayed() { return true; }, async isEnabled() { return true; }, async getText() { return text; },
+    async isDisplayed() { return true; }, async isEnabled() { return true; },
+    async getText() { reads.push({ id, text }); return text; },
+    async getAttribute(name) { assert.equal(name, 'resource-id'); return id; },
     async setValue(value) { assert.equal(id, 'matter-search'); assert.equal(value, context.fixture.matter.search); },
     async click() {
       clicks.push(id);
@@ -211,8 +217,21 @@ function offlineFailedUpload(t, outcome) {
         assert.equal(selected, true);
         assert.equal(submitted, false, 'OFFLINE_DOUBLE_DETECTED_UPLOAD_REPLAY');
         submitted = true;
-        append('POST', `/api/matters/${source.matterId}/attachments`, outcome === 'rejected' ? 422 : outcome === 'no-ack' ? 200 : 0);
+        append('POST', `/api/matters/${source.matterId}/attachments`, outcome === 'rejected' ? 422 : outcome === 'persisted' ? status : 0);
       }
+      if (id === 'files-reload') {
+        assert.equal(submitted, true);
+        assert.equal(reloaded, false);
+        reloaded = true;
+        append('GET', `/api/matters/${source.matterId}/workspace`, 200);
+      }
+      if (id === `files-open-${uploadedId}`) {
+        assert.equal(reloaded, true, 'OPEN_MUST_FOLLOW_PERSISTED_RELOAD');
+        assert.equal(admitted, true, 'OPEN_MUST_FOLLOW_EXACT_READ_ADMISSION');
+        viewerOpen = true;
+        for (const code of [206, 200, 206]) append('GET', downloadRoute, code);
+      }
+      if (id === 'viewer-close') { assert.equal(viewerOpen, true); viewerOpen = false; }
     },
   });
   const controls = new Map(['account-open', 'back', 'tab-matters', 'screen-matters', 'matter-search', 'matter-search-submit',
@@ -230,20 +249,66 @@ function offlineFailedUpload(t, outcome) {
         ? [element(expanded ? 'Hide source details' : 'Source details')] : [];
     },
   });
+  const uploadedControls = new Map([
+    [`files-row-${uploadedId}`, ''], [`files-name-${uploadedId}`, upload.filename],
+    [`files-hash-${uploadedId}`, upload.sha256], [`files-open-${uploadedId}`, 'Open'], ['files-reload', 'Reload'],
+  ].map(([id, text]) => [selector('android', 'id', id), element(id, text)]));
+  uploadedControls.set(selector('android', 'id', `files-source-${uploadedId}`), {
+    async isDisplayed() { return true; },
+    async $$(query) {
+      return query === selector('android', 'text', expanded ? 'Hide source details' : 'Source details')
+        ? [element(expanded ? 'Hide source details' : 'Source details')] : [];
+    },
+  });
+  if (outcome === 'persisted') context.admitUploadedFileRead = async anchor => {
+    assert.equal(reloaded, true, 'ADMISSION_MUST_FOLLOW_PERSISTED_RELOAD');
+    assert.equal(admissions.length, 0, 'READ_ADMISSION_MUST_NOT_REPLAY');
+    assert.equal(anchor.matterId, source.matterId);
+    assert.equal(anchor.attachmentId, uploadedId);
+    assert.equal(anchor.filename, upload.filename);
+    assert.equal(anchor.sha256, upload.sha256);
+    assert.equal(anchor.sizeBytes, upload.sizeBytes);
+    assert.equal(anchor.text, upload.text);
+    assert.deepEqual(anchor.acknowledgement, ledger.requests[0]);
+    assert.equal(anchor.acknowledgement.status, 200);
+    admissions.push(anchor);
+    admitted = true;
+    return { route: `GET ${downloadRoute}` };
+  };
   context.driver = {
     $() { assert.fail('UNEXPECTED_SINGLE_ELEMENT_LOOKUP'); },
     async switchContext(name) { assert.equal(name, 'NATIVE_APP'); },
     async getCurrentPackage() { return pickerOpen ? 'com.android.documentsui' : context.fixture.appId; },
     async waitUntil(predicate, options) { if (!await predicate()) throw new Error(options.timeoutMsg); },
+    async getWindowRect() { return { width: 1080, height: 2424 }; },
+    async performActions(actions) {
+      assert.equal(submitted, true, 'OUTCOME_SCROLL_REQUIRES_PRIOR_EXPLICIT_UPLOAD');
+      const moves = actions[0].actions.filter(action => action.type === 'pointerMove');
+      const direction = moves[1].y < moves[0].y ? 'down' : 'up';
+      swipes.push(direction);
+      if (acknowledgement === 'after-scroll' && direction === 'down') acknowledgementVisible = true;
+    },
+    async releaseActions() {},
     async $$(query) {
       queries.push(query);
+      if (query === selector('android', 'id', 'session-loading')) return [];
       if (controls.has(query)) return [controls.get(query)];
+      if (submitted && outcome === 'persisted') {
+        if (uploadedControls.has(query)) return [uploadedControls.get(query)];
+        if (query === `android=new UiSelector().resourceIdMatches("files-name-.*").text(${JSON.stringify(upload.filename)})`)
+          return [element(`files-name-${uploadedId}`, upload.filename)];
+      }
+      if (viewerOpen && query === 'id=viewer-filename') return [element('viewer-filename', upload.filename)];
+      if (viewerOpen && query === 'id=viewer-text') return [element('viewer-text', upload.text)];
+      if (viewerOpen && query === 'id=viewer-close') return [element('viewer-close')];
+      if (!viewerOpen && query === 'id=viewer-text') return [];
       if (query === '~Show roots' && pickerOpen) return [element('Show roots')];
       if (query === 'id=com.android.documentsui:id/roots_list' && pickerOpen) return [{ async isDisplayed() { return true; },
         async $$(child) { assert.equal(child, selector('android', 'text', 'Downloads')); return [element('Downloads')]; } }];
       if (query === `android=new UiSelector().resourceId("android:id/title").text(${JSON.stringify(upload.filename)})` && downloadsOpen)
         return [element('picked-file', upload.filename)];
       if (selected && ['id=files-selection', 'id=files-upload'].includes(query)) return [element(query.slice(3))];
+      if (query === 'id=files-upload-persisted' && outcome === 'persisted' && !acknowledgementVisible) return [];
       if (submitted && query === `id=files-upload-${outcome === 'no-ack' ? 'persisted' : outcome}` && outcome !== 'missing-persistence')
         return [element('outcome')];
       if ([`android=new UiSelector().resourceIdMatches("files-name-.*").text(${JSON.stringify(upload.filename)})`,
@@ -252,13 +317,13 @@ function offlineFailedUpload(t, outcome) {
     },
   };
   context.record = event => records.push(event);
-  return { context, ledger, clicks, queries, records };
+  return { context, ledger, clicks, queries, records, reads, admissions, swipes, uploadedId, downloadRoute, upload };
 }
 
 for (const [outcome, expected] of [['unknown', /UPLOAD_OUTCOME_UNKNOWN_NO_REPLAY/], ['rejected', /NATIVE_UPLOAD_REJECTED/],
   ['no-ack', /NATIVE_UPLOAD_NOT_ACKNOWLEDGED/], ['missing-persistence', /NATIVE_UPLOAD_PERSISTENCE_NOT_ACKNOWLEDGED/]]) {
   test(`offline ${outcome} upload response is never retried or admitted for source opening`, async t => {
-    const { context, ledger, clicks, queries, records } = offlineFailedUpload(t, outcome);
+    const { context, ledger, clicks, queries, records } = offlineUpload(t, outcome);
     await assert.rejects(uploadFilesSource(context), expected);
     assert.equal(clicks.filter(id => id === 'files-upload').length, 1);
     assert.deepEqual(ledger.requests.map(({ method, route }) => ({ method, route })),
@@ -268,3 +333,63 @@ for (const [outcome, expected] of [['unknown', /UPLOAD_OUTCOME_UNKNOWN_NO_REPLAY
     assert.equal(clicks.includes('files-reload'), false);
   });
 }
+
+test('offline canonical 200 upload completes once through persisted UUID/hash/name reload and exact source opening', async t => {
+  const { context, ledger, clicks, queries, records, reads, admissions, uploadedId, downloadRoute, upload } = offlineUpload(t, 'persisted');
+  await uploadFilesSource(context);
+  assert.deepEqual(ledger.requests.map(({ method, route, status }) => ({ method, route, status })), [
+    { method: 'POST', route: `/api/matters/${source.matterId}/attachments`, status: 200 },
+    { method: 'GET', route: `/api/matters/${source.matterId}/workspace`, status: 200 },
+    ...[206, 200, 206].map(status => ({ method: 'GET', route: downloadRoute, status })),
+  ]);
+  for (const id of ['files-upload', 'files-reload', `files-open-${uploadedId}`, 'viewer-close'])
+    assert.equal(clicks.filter(value => value === id).length, 1);
+  for (const [id, text] of [[`files-name-${uploadedId}`, upload.filename], [`files-hash-${uploadedId}`, upload.sha256]])
+    assert.deepEqual(reads.filter(row => row.id === id), [{ id, text }, { id, text }]);
+  assert.deepEqual(reads.filter(row => row.id === 'viewer-text'), [{ id: 'viewer-text', text: upload.text }]);
+  assert.equal(createHash('sha256').update(upload.text).digest('hex'), upload.sha256);
+  assert.equal(Buffer.byteLength(upload.text), upload.sizeBytes);
+  assert.equal(admissions.length, 1);
+  assert.equal(admissions[0].attachmentId, uploadedId);
+  assert.equal(admissions[0].acknowledgement.status, 200);
+  assert.ok(queries.includes(`id=files-name-${uploadedId}`));
+  assert.deepEqual(records.filter(event => event.boundary === 'native-picker-upload-reload-open'), [{
+    type: 'assertion', boundary: 'native-picker-upload-reload-open', attachmentId: uploadedId,
+    sha256: upload.sha256, sizeBytes: upload.sizeBytes, acknowledgementRequestId: ledger.requests[0].requestId,
+    admission: { route: `GET ${downloadRoute}` },
+  }]);
+  assert.equal(ledger.requests.filter(row => row.method === 'POST').length, 1);
+});
+
+test('offline persisted upload rejects 201 and other noncanonical success statuses without retry or read admission', async t => {
+  for (const status of [201, 202, 204]) {
+    const { context, ledger, clicks, queries, records, admissions } = offlineUpload(t, 'persisted', { status });
+    await assert.rejects(uploadFilesSource(context), /NATIVE_UPLOAD_NOT_ACKNOWLEDGED/);
+    assert.equal(clicks.filter(id => id === 'files-upload').length, 1);
+    assert.deepEqual(ledger.requests.map(({ method, route, status }) => ({ method, route, status })),
+      [{ method: 'POST', route: `/api/matters/${source.matterId}/attachments`, status }]);
+    assert.deepEqual(admissions, []);
+    assert.equal(queries.some(query => query.startsWith('id=files-open-')), false);
+    assert.equal(clicks.includes('files-reload'), false);
+    assert.equal(records.some(event => event.boundary === 'native-picker-upload-reload-open'), false);
+  }
+});
+
+test('acknowledged upload below a growing file list is scrolled into view before exact source opening', async t => {
+  const { context, ledger, clicks, admissions, swipes } = offlineUpload(t, 'persisted', { acknowledgement: 'after-scroll' });
+  await uploadFilesSource(context);
+  assert.equal(clicks.filter(id => id === 'files-upload').length, 1);
+  assert.equal(ledger.requests.filter(row => row.method === 'POST').length, 1);
+  assert.ok(swipes.includes('down'));
+  assert.equal(admissions.length, 1);
+});
+
+test('server acknowledgement without reachable UI confirmation stays failed and never reuploads or opens', async t => {
+  const { context, ledger, clicks, admissions, swipes } = offlineUpload(t, 'persisted', { acknowledgement: 'never' });
+  await assert.rejects(uploadFilesSource(context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.equal(clicks.filter(id => id === 'files-upload').length, 1);
+  assert.equal(ledger.requests.filter(row => row.method === 'POST').length, 1);
+  assert.equal(swipes.length, 9);
+  assert.deepEqual(admissions, []);
+  assert.equal(clicks.includes('files-reload'), false);
+});

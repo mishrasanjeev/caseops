@@ -10,17 +10,27 @@ do not execute its gated steps before their blockers are resolved.
 
 | Item                                | Evidence and limit                                                                                                |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Parent's local app/API/web baseline | `60f1deccb4a2ff968ae649a82dfc066782d4a846`; Android build reported by parent, not rebuilt by this task            |
-| Finite iOS Hermes export            | Reported passed: 900 modules, about 9.6 MB; NOT Pods, Xcode, an installed `.app`, SwiftUI behavior or an iOS test |
+| Local app/API/web baseline | `4959129a0108bd332c4eacc86a3e0ec18f05711c`; Android16/API36 dated core23/23 passed, not iOS/full-v1 |
+| Finite iOS Hermes export | Actual Windows export:900 modules,9,210,328 bytes; NOT Pods, Xcode, an installed `.app`, SwiftUI behavior or an iOS test |
 | Mac host, CocoaPods and Simulator   | Not run; Windows cannot certify these                                                                             |
 | Dated core                          | 23 intended/executable IDs, NATIVE-01..NATIVE-23, `native-core-2026-10-25`; offline collection only               |
 | iOS core results                    | All 23 NOT RUN; require actual source/binary/backend-bound phases and completion                                  |
-| Files supplement                    | Separate pending Android-only source module; no iOS inventory/execution or native picker/upload receipt           |
+| Files supplement | Separate Android supplement still unverified; two actual native uploads persist, latest0/2; no iOS Files inventory/execution |
 
 The final pushed candidate may be newer than this baseline. Parent must supply
 its full SHA after publishing all reviewed app/API/web/bootstrap/harness inputs.
-Do not build an older branch tip and execute newer tests against it. This task
-does not push, freeze source or independently reverify the reported builds.
+Do not build an older branch tip and execute newer tests against it.
+
+The iOS receipt `ios-hermes-4959129a-20261025-e3162c/receipt.json` binds app
+fingerprint `be52fcdc07d205e7d5b2c3ca80fef382957e90f74224b06b13d94ca57fb5c000`
+and Hermes SHA `297d811f317bac13d669b8565ba495ebc8979230f98b7d230de5d2dc763146ed`.
+Its `localhost` API/web origins are not the Mac fixture's `127.0.0.1` origins.
+Rebuild on Mac; do not reinterpret this Windows export as an installed binary.
+The fresh high-severity node-forge advisory through Expo's CLI is unpatched;
+the unchanged security gate blocks public release/signing, not just a checklist
+label. No audit waiver, crypto fork or forced older SDK downgrade was applied.
+The complete Windows four-file tooling run is263/263, not a Mac execution.
+Preserve Mac's actual inventory and its two explicit Windows-only skips.
 
 ## Owner Prerequisites
 
@@ -90,7 +100,9 @@ performed; external commands in portability tests are mocks.
       descriptor or session ID. No shared harness change is authorized here.
 - [ ] Effective seed projection matches `inspectLocalPlan`'s actual flat
       `taskId`, `draftId`, `hearingId`, `calendarDate`, `otherMatterId`
-      fields and extended member/task identities. Raw extension JSON is nested;
+      fields, nested `calendar.eventId` and extended member/task identities.
+      Keep the exact opaque event ID from Calendar; never derive it from the
+      hearing UUID. Raw extension JSON is nested;
       the base owner seed names the wrong actor/task for access proof. Retain both
       immutable receipts/hashes. The reviewed projection remains parent-owned.
 - [ ] Dynamic current-session admission is bound to the reviewed
@@ -178,7 +190,7 @@ entire mapped MOB groups. Blocked/skipped/unstarted/interrupted is not passed.
 - [ ] Load protected synthetic member/TOTP values only into plan-named process
       variables. No secrets in plans/logs/screenshots. Browser performs its actual
       login/consent MFA, not API auth-probe's session. Unset values after the run.
-- [ ] `node scripts/mobile/run-native.mjs ios` completes its finite 20-minute,
+- [ ] `node scripts/mobile/run-native.mjs ios` completes its finite 30-minute,
       zero-retry run in genuine `NATIVE_APP`; retain every setup/call/teardown phase,
       preflight/postflight/completion and source/binary/device/backend/web/harness
       identities. Do not prune cases or raise deadlines to force a pass.

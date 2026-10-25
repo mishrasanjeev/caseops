@@ -211,13 +211,18 @@ export async function uploadFilesSource(context) {
   await context.driver.waitUntil(async () => {
     if (await visible(context.driver, 'id=files-upload-unknown')) throw new FixtureUnavailable('UPLOAD_OUTCOME_UNKNOWN_NO_REPLAY');
     assert.equal(await visible(context.driver, 'id=files-upload-rejected'), undefined, 'NATIVE_UPLOAD_REJECTED');
-    return !!(await visible(context.driver, 'id=files-upload-persisted'));
+    if (await visible(context.driver, 'id=files-upload-persisted')) return true;
+    // A new row can move confirmation below the viewport. Wait for the exact
+    // transport acknowledgement before scrolling; never submit the file again.
+    return delta(before, await traffic(context)).some(row => row.method === 'POST'
+      && row.route === `/api/matters/${source.matterId}/attachments` && row.status === 200);
   }, { timeout: 30000, interval: 200, timeoutMsg: 'NATIVE_UPLOAD_PERSISTENCE_NOT_ACKNOWLEDGED' });
   const changes = delta(before, await traffic(context));
   const posts = changes.filter(row => row.method === 'POST');
   assert.equal(posts.length, 1, 'NATIVE_UPLOAD_NOT_EXACTLY_ONCE');
   assert.equal(posts[0].route, `/api/matters/${source.matterId}/attachments`);
-  assert.equal(posts[0].status, 201, 'NATIVE_UPLOAD_NOT_ACKNOWLEDGED');
+  assert.equal(posts[0].status, 200, 'NATIVE_UPLOAD_NOT_ACKNOWLEDGED');
+  await find(context, 'id', 'files-upload-persisted', { scroll: true });
   const name = await findQuery(context, expectedNameQuery, { scroll: true });
   const match = /^files-name-([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/.exec(await name.getAttribute('resource-id'));
   assert.ok(match, 'ACTUAL_UPLOADED_ATTACHMENT_ID_REQUIRED');

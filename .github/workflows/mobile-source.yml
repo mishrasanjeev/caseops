@@ -61,16 +61,16 @@ jobs:
         working-directory: apps/mobile
         run: npm test
       - name: Verify the native evidence harness
-        run: node --test scripts/mobile/tooling.test.mjs
+        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs
+      - name: Enforce the unwaived high-severity dependency gate
+        working-directory: apps/mobile
+        run: npm audit --audit-level=high
       - name: Export Android JavaScript, not an APK
         working-directory: apps/mobile
         run: npm run export:android
       - name: Export iOS JavaScript, not an Xcode build
         working-directory: apps/mobile
         run: npm run export:ios
-      - name: Enforce the unwaived high-severity dependency gate
-        working-directory: apps/mobile
-        run: npm audit --audit-level=high
 
   browser-handoff:
     name: Local built-browser handoff, not native E2E

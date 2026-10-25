@@ -156,7 +156,7 @@ export async function loadOwnerControls(fixture) {
   assert.equal(typeof instance.control, 'function', 'REAL_FIXTURE_CONTROL_REQUIRED');
   try {
     const readiness = typeof instance.prepare === 'function'
-      ? await instance.prepare({ fixture, signal: AbortSignal.timeout(30000) }) : undefined;
+      ? await instance.prepare({ fixture, signal: AbortSignal.timeout(60000) }) : undefined;
     return { control: instance.control, close: instance.close, readiness, capabilities };
   } catch (error) {
     if (typeof instance.close === 'function') await instance.close().catch(() => {});

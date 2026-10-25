@@ -187,7 +187,7 @@ def prepare_worker(request):
     for key in ("workerId", "requestId"):
         assert re.fullmatch(r"[a-f0-9]{24}", request[key]), "Invalid worker identity"
     remaining = (request["deadlineMs"] - time.time() * 1000) / 1000
-    assert 0 < remaining <= 30, "Expired owner readiness"
+    assert 0 < remaining <= 60, "Expired owner readiness"
     signal.signal(signal.SIGALRM, expired)
     signal.setitimer(signal.ITIMER_REAL, remaining)
     binding = load_hashed(request["bindingFile"], request["bindingSha256"])
@@ -214,12 +214,19 @@ def prepare_worker(request):
         from sqlalchemy import select, text
         from sqlalchemy.engine import make_url
         from sqlalchemy.orm import configure_mappers
+        checkpoint("sqlalchemy-imports-ready")
         from caseops_api.db.models import Company, CompanyMembership, Matter, MatterNote, MembershipRole
+        checkpoint("models-imports-ready")
         from caseops_api.db.session import get_session_factory
+        checkpoint("session-imports-ready")
         from caseops_api.schemas.matters import MatterLifecycleStatusRequest
+        checkpoint("schemas-imports-ready")
         from caseops_api.services.identity import get_session_context
+        checkpoint("identity-imports-ready")
         from caseops_api.services.matter_access import can_access, remove_access_grant
+        checkpoint("access-imports-ready")
         from caseops_api.services.matters import transition_matter_lifecycle_status
+        checkpoint("lifecycle-imports-ready")
 
         # Resolve every command dependency before readiness, without retaining a DB session.
         assert all(callable(value) for value in (get_session_factory, MatterLifecycleStatusRequest,
@@ -227,6 +234,7 @@ def prepare_worker(request):
         url = make_url(os.environ["CASEOPS_DATABASE_URL"])
         assert url.host == "postgres" and url.database == "caseops_mobile", "Non-fixture database refused"
         configure_mappers()
+        checkpoint("mappers-ready")
         with get_session_factory()() as session:
             session.execute(text("SET TRANSACTION READ ONLY"))
             session.execute(text("SET LOCAL statement_timeout = '1200ms'"))
@@ -246,7 +254,7 @@ def prepare_worker(request):
                                                  "project", "pythonSha256", "moduleSha256", "extensionSha256")},
                  "maxCommands": MAX_COMMANDS, "maxRequestBytes": MAX_REQUEST_BYTES,
                  "maxResponseBytes": MAX_RESPONSE_BYTES, "idleSeconds": WORKER_LIFETIME_SECONDS,
-                 "lifetimeSeconds": WORKER_LIFETIME_SECONDS, "operationDeadlineMs": 8000,
+                 "lifetimeSeconds": WORKER_LIFETIME_SECONDS, "preparationTimeoutMs": 60000, "operationDeadlineMs": 8000,
                  "canonicalMutationImportsPreloaded": True, "databaseSessionRetained": False}
         ready_file = f"owner-ready-{request['workerId']}.json"
         with (ROOT / ready_file).open("xb") as ready:
@@ -262,7 +270,7 @@ def worker_main(stream=None, output=None):
     output = output or sys.stdout
     started = time.monotonic()
     signal.signal(signal.SIGALRM, expired)
-    signal.setitimer(signal.ITIMER_REAL, 30)
+    signal.setitimer(signal.ITIMER_REAL, 60)
     startup = bounded_line(stream)
     assert startup is not None, "Owner worker disconnected before readiness"
     worker = prepare_worker(startup)
