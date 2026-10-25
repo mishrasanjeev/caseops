@@ -4,7 +4,7 @@
 
 J20/M22 is **Partially implemented**, not shipped. Integrated mobile components
 pass 295 tests across all 20 intended files plus strict TypeScript; web handoff
-passes 38 checks. Native 22-case inventory, candidate Docker/APK identity and
+passes 44 checks. Native 23-case inventory, candidate Docker/APK identity and
 actual Android execution remain pending at source freeze. Private reader/cache,
 GC/IP scope, inbox/push, iOS MacBook and release gates are not waived.
 See `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-25.md`; no production change occurred.

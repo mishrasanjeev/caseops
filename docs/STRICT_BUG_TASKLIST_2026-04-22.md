@@ -2,6 +2,13 @@
 
 ## October 25 Native Race And Identity Components
 
+Actual device exploration additionally reproduced a signed-out privacy-cover
+return defect and an unusable optional-policy/enrolled-user native MFA consent
+path. The server fence worked; there was no MFA bypass. Typed recovery and the
+existing step-up form now pass web44 and native-auth49 component checks, with
+NATIVE-23 covering actual Home/return. Rebuilt Android acceptance is still required;
+do not close these from source tests. See the dated native build checkpoint.
+
 Malformed native identity and mutable identity snapshots reproduced in unit
 tests before correction. Picker-origin login/lifecycle identity must survive the
 OS round trip unchanged; native upload now checks that version under the real

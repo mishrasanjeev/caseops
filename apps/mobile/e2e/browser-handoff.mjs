@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { click, find, read, selector, visible } from './native-ui.mjs';
 import { firefoxLogin } from './firefox-handoff.mjs';
-import { fixtureMfaCode } from './mfa.mjs';
+import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage } from './mfa.mjs';
 
 export function browserOrigin(value) {
   const url = new URL(value);
@@ -82,6 +82,7 @@ async function attachBrowser(context) {
 
 export async function browserLogin(context) {
   const { driver, fixture, platform } = context;
+  const stage = mfaStage(fixture.auth);
   const credentials = loginCredentials(fixture.auth);
   browserOrigin(fixture.auth.webOrigin);
   await click(context, 'id', 'sign-in');
@@ -115,24 +116,51 @@ export async function browserLogin(context) {
     await (await dom(driver, 'form[aria-label="Sign in"] button[type="submit"]')).click();
     await driver.waitUntil(async () => (await driver.$$('#mfa-code')).length === 1 || (await driver.$$('main dl dd')).length === 2,
       { timeout: 15000, interval: 250, timeoutMsg: 'BROWSER_LOGIN_NOT_ACKNOWLEDGED' });
-    if ((await driver.$$('#mfa-code')).length === 1) {
+    const loginChallenge = (await driver.$$('#mfa-code')).length === 1;
+    assert.equal(loginChallenge, stage === 'login', 'BROWSER_LOGIN_MFA_STAGE_MISMATCH');
+    if (stage === 'login') {
       assert.deepEqual(authorizationIdentity(await driver.getUrl(), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
       await (await dom(driver, '#mfa-code')).setValue(fixtureMfaCode(fixture.auth));
       await (await dom(driver, 'form[aria-label="MFA challenge"] button[type="submit"]')).click();
-    } else assert.notEqual(fixture.auth.mfaRequired, true, 'REQUIRED_BROWSER_MFA_NOT_EXERCISED');
+    }
     await driver.waitUntil(async () => {
       const current = new URL(await driver.getUrl());
       assert.equal(current.origin, browserOrigin(fixture.auth.webOrigin), 'UNSAFE_BROWSER_ORIGIN');
       return current.pathname === '/native/sign-in' && (await driver.$$('main dl dd')).length === 2;
     }, { timeout: 15000, interval: 250, timeoutMsg: 'BROWSER_LOGIN_OR_MFA_NOT_COMPLETED' });
-    assert.deepEqual(authorizationIdentity(await driver.getUrl(), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
-    const facts = await driver.$$('main dl dd');
-    const normalize = (text) => text.replace(/\s+/g, ' ').trim();
-    assert.equal(normalize(await facts[0].getText()), normalize(`${fixture.principalLabel} ${credentials.email}`), 'WRONG_BROWSER_PRINCIPAL');
-    assert.equal(normalize(await facts[1].getText()), normalize(`${fixture.workspaceLabel} / ${credentials.companySlug}`), 'WRONG_BROWSER_WORKSPACE');
-    const connect = await dom(driver, 'main button');
-    assert.equal((await connect.getText()).trim(), 'Connect app', 'REAL_CONNECT_CONTROL_REQUIRED');
-    await connect.click();
+    const verifyIdentity = async () => {
+      assert.deepEqual(authorizationIdentity(await driver.getUrl(), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
+      const facts = await driver.$$('main dl dd');
+      assert.equal(facts.length, 2, 'BROWSER_IDENTITY_FACTS_REQUIRED');
+      const normalize = (text) => text.replace(/\s+/g, ' ').trim();
+      assert.equal(normalize(await facts[0].getText()), normalize(`${fixture.principalLabel} ${credentials.email}`), 'WRONG_BROWSER_PRINCIPAL');
+      assert.equal(normalize(await facts[1].getText()), normalize(`${fixture.workspaceLabel} / ${credentials.companySlug}`), 'WRONG_BROWSER_WORKSPACE');
+    };
+    const connectExplicitly = async () => {
+      const connect = await dom(driver, 'main button');
+      assert.equal((await connect.getText()).trim(), 'Connect app', 'REAL_CONNECT_CONTROL_REQUIRED');
+      assert.equal(await connect.isEnabled(), true, 'CONNECT_CONTROL_DISABLED');
+      await connect.click();
+    };
+    await verifyIdentity();
+    await connectExplicitly();
+    if (stage === 'consent') {
+      // Only the typed native_mfa_required recovery renders this known form.
+      await driver.waitUntil(async () => (await driver.$$('#native-mfa-code')).length === 1,
+        { timeout: 10000, interval: 200, timeoutMsg: 'NATIVE_CONSENT_MFA_CHALLENGE_REQUIRED' });
+      assert.deepEqual(authorizationIdentity(await driver.getUrl(), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
+      const verify = await dom(driver, 'form:has(#native-mfa-code) button[type="submit"]');
+      assert.equal((await verify.getText()).trim(), 'Verify code', 'REAL_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
+      await (await dom(driver, '#native-mfa-code')).setValue(fixtureMfaCode(fixture.auth));
+      await verify.click();
+      await driver.waitUntil(async () => (await driver.$$('#native-mfa-code')).length === 0
+        && (await driver.$$('main dl dd')).length === 2 && (await driver.$$('main button')).length === 1,
+      { timeout: 15000, interval: 200, timeoutMsg: 'NATIVE_CONSENT_MFA_NOT_COMPLETED' });
+      assert.equal((await (await dom(driver, 'main [role="status"]')).getText()).trim(), CONSENT_MFA_VERIFIED,
+        'NATIVE_CONSENT_MFA_VERIFIED_NOTICE_REQUIRED');
+      await verifyIdentity();
+      await connectExplicitly();
+    }
   } finally {
     await driver.switchContext('NATIVE_APP');
   }

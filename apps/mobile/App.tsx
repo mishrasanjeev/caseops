@@ -40,7 +40,10 @@ export default function App() {
   const [identity, setIdentity] = useState<SessionIdentity | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const foreground = useRef(AppState.currentState === "active");
+  const [isForeground, setIsForeground] = useState(
+    AppState.currentState === "active",
+  );
+  const foreground = useRef(isForeground);
   const loginInFlight = useRef(false);
   const alive = useRef(true);
   const viewerEvents = useMemo(() => {
@@ -155,6 +158,7 @@ export default function App() {
     })();
     const listener = AppState.addEventListener("change", (state) => {
       foreground.current = state === "active";
+      setIsForeground(foreground.current);
       if (state !== "active") {
         // Unmount private screens and discard their memory-only records/drafts.
         setIdentity(null);
@@ -252,7 +256,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      {identity && foreground.current ? (
+      {identity && isForeground ? (
         <View style={{ flex: 1 }}>
           {error ? (
             <Text
@@ -304,7 +308,7 @@ export default function App() {
             }}
           />
         </View>
-      ) : foreground.current ? (
+      ) : isForeground ? (
         <SignInPanel
           busy={busy}
           error={error}

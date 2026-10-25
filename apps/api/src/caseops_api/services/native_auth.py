@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from caseops_api.core.native_auth import create_native_access_token, require_native_issuance
+from caseops_api.core.problem_details import ProblemHTTPException
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     CompanyMembership,
@@ -125,7 +126,11 @@ def _mfa_proof(
         select(UserMFASetting).where(UserMFASetting.user_id == context.user.id)
     )
     if state["mfa_challenge_required"]:
-        raise HTTPException(403, "Complete MFA in the browser before native sign-in.")
+        raise ProblemHTTPException(
+            403,
+            problem_type="native_mfa_required",
+            detail="Complete MFA in the browser before native sign-in.",
+        )
     if setting is None or setting.status != "enrolled":
         return None, None
     proof = session.scalar(
@@ -141,7 +146,11 @@ def _mfa_proof(
         .limit(1)
     )
     if proof is None:
-        raise HTTPException(403, "Complete MFA in this browser session before native sign-in.")
+        raise ProblemHTTPException(
+            403,
+            problem_type="native_mfa_required",
+            detail="Complete MFA in this browser session before native sign-in.",
+        )
     return proof.completed_at, proof.expires_at
 
 

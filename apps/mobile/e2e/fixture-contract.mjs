@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { browserOrigin, loginCredentials } from './browser-handoff.mjs';
 import { validateFirefoxRecipe } from './firefox-handoff.mjs';
-import { fixtureMfaCode } from './mfa.mjs';
+import { fixtureMfaCode, mfaStage } from './mfa.mjs';
 import { MARKER } from './support.mjs';
 import { verifiedFile } from './evidence.mjs';
 export { verifiedFile } from './evidence.mjs';
@@ -61,6 +61,7 @@ export function validateCoreFixture(fixture, environment = process.env) {
   for (const key of ['backendSha', 'webSha']) assert.match(fixture[key] || '', /^[0-9a-f]{40}$/, 'EXACT_SERVING_SHA_REQUIRED');
   browserOrigin(fixture.auth?.webOrigin);
   loginCredentials(fixture.auth, environment);
+  mfaStage(fixture.auth);
   if (fixture.auth.mfaRequired) fixtureMfaCode(fixture.auth, environment);
   assert.ok(['web-context', 'native-firefox'].includes(fixture.auth.mode), 'EXPLICIT_BROWSER_AUTOMATION_MODE_REQUIRED');
   if (fixture.auth.mode === 'native-firefox') validateFirefoxRecipe(fixture.auth);

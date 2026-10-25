@@ -10,13 +10,13 @@ paid call, commit, push or worktree creation is authorized by this sidecar.
 ## Executable Inventory
 
 `apps/mobile/e2e/core-20261025.json` is the independent intended inventory;
-`journeys.mjs` supplies discovery. Each platform has exactly 22 identities,
+`journeys.mjs` supplies discovery. Each platform has exactly 23 identities,
 prefixed `android:` or `ios:`. Collection is not execution. Windows cannot
 certify iOS; the same harness still needs an actual Mac/Xcode Simulator run.
 
 | Case | Concrete native boundary | Status |
 | --- | --- | --- |
-| NATIVE-01 | Real browser form, optional real MFA form, unchanged PKCE state/challenge/callback, Connect app, exact principal/workspace | Not run |
+| NATIVE-01 | Real browser form, explicit login/consent MFA stage, unchanged PKCE and principal/workspace; consent has 403 attempt, one verified MFA/fresh identity read, explicit second Connect, one 200 grant/token | Not run |
 | NATIVE-02 | Today, Matters, Calendar and Work destinations | Not run |
 | NATIVE-03 | Seeded Today task title, source identity, date/status and exact Matter navigation | Not run |
 | NATIVE-04 | Exact matter-code search, detail, authoritative reload and restart | Not run |
@@ -36,13 +36,15 @@ certify iOS; the same harness still needs an actual Mac/Xcode Simulator run.
 | NATIVE-18 | Dedicated held Matter loses access through real owner; reload denies and hides source labels; notes unchanged | Fixture owner required; not run |
 | NATIVE-19 | Real seeded foreign-tenant search produces no foreign row/title/code | Foreign seed required; not run |
 | NATIVE-20 | Native device-session Current flag, cancel without DELETE, confirm one 204 DELETE, real logout, restart signed out | Not run |
-| NATIVE-21 | Complete API gateway ledger includes native and actual browser authorization; zero rejected markers/routes or overflow | Not run |
+| NATIVE-21 | Complete ledger includes exact per-login MFA attempt/grant/token sequence; zero rejected markers/routes or overflow | Not run |
 | NATIVE-22 | Acknowledged logout once, no private surface, no refresh after restart | Not run |
+| NATIVE-23 | After NATIVE-22 passes all phases: actual Android Home keycode 3 / iOS Home, observed running background (Android package left), activate bound app without termination; signed-out panel and enabled sign-in restored, no private UI or auth requests | Not run |
 
 The historical `inventory.json`, `core.mjs` and `testids.json` remain the original
 six-case subset. The reconciler selects that subset only for its original
 scope and absent inventory ID. It never relabels six-case receipts as the dated
-22. No failed or historical report is rewritten.
+23. Prior dated 22-case receipts remain historical and cannot certify the new
+case. No failed or historical report is rewritten.
 
 ## Parent Integration Contract
 
@@ -82,7 +84,18 @@ receipt. No sample customer or invented legal record is admitted.
   and explicit `mode: "native-firefox"` or `"web-context"`.
   Environment names must begin `CASEOPS_MOBILE_`; values never enter fixtures,
   arguments, journals or screenshots. Optional `mfaRequired: true` requires
-  `totpSecretEnv` holding only this synthetic account's enrollment secret.
+  `totpSecretEnv` holding only this synthetic account's enrollment secret and
+  explicit `mfaStage: "login" | "consent"`. Enrollment never guesses the stage.
+  For this observed optional-tenant setup, use `mfaRequired: true` and
+  `mfaStage: "consent"`: initial login must not challenge. After checking
+  account/workspace and PKCE, click Connect once, require the typed-error-only
+  `native-mfa-code` form, submit one current TOTP via Verify code, require
+  `Code verified. Select Connect app to continue.`, recheck identity and
+  unchanged PKCE, then explicitly click Connect a second time. No automatic
+  authorization/replay is accepted. The ledger must contain exactly
+  authorize 403 -> one step-up 200 -> fresh identity 200 -> authorize 200 ->
+  one token 200. Login-stage fixtures still require their actual login MFA
+  challenge and only one successful authorization/token pair.
   Codes are entered into the actual MFA form once; enrollment/recovery is not
   automated. iOS web-context mode can explicitly request the normal consent
   sheet with `iosConsent: true`; it never accepts arbitrary alerts.
@@ -136,11 +149,18 @@ has `kind: "observed-native-firefox-locators"`, the package/version and the
 identical locator map. Parent must observe these controls on the real browser
 before adding them; unit recipes are not device observations.
 
-Each locator is `{kind: "id" | "label" | "text", value}` with an exact unique
-visible match. Required keys: `urlOpen`, `urlValue`, `urlClose`, `companySlug`,
+Each locator is `{kind: "id" | "label" | "text" | "buttonText", value}` with an exact unique
+visible match. Required keys: `urlOpen`, `urlValue`, `companySlug`,
 `email`, `password`, `submit`, `principal`, `emailFact`, `workspace`, `connect`.
 Optional actual `signInLink` / `useAnotherAccount` locators enter the real form;
-MFA requires `mfaCode` / `mfaSubmit`. Up to three observed `prepare` actions
+MFA requires `mfaCode` / `mfaSubmit`. Consent specifically requires
+`mfaCode: {kind: "id", value: "native-mfa-code"}`, exact Verify code
+`mfaSubmit`, and `mfaVerified: {kind: "text", value:
+"Code verified. Select Connect app to continue."}` in the hash-bound observed
+recipe. A new unobserved control stays incomplete, not inferred from source.
+Use `urlCloseMode: "android-back"` only with its observed evidence; Back loops
+at most twice while the exact URL editor remains visible, stopping as soon as
+it closes. Otherwise `urlClose` is required. Up to three observed `prepare` actions
 can open the custom tab in Firefox; up to two `afterConnect` actions can
 complete the normal app-opening prompt. No XPath, ordinal field, coordinate
 login, cookie scrape, browser storage read, token injection or forged callback.
@@ -180,6 +200,10 @@ Gateway admission must include the actual read/auth/note routes and the new
 server-owned session ID, admitted safely from the real bounded session list;
 do not introduce unrestricted route wildcards. Record count is bounded at 500;
 overflow or missing marker is a failure, not permission to discard history.
+Consent recovery also needs marked `POST /api/auth/mfa/step-up` and marked
+`GET /api/auth/me`. The parent-observed CustomTab preparation is More options
+then Open in Firefox; those two label locators must be present in the pinned
+external observation/recipe, not added as an unverified fallback.
 
 ## Full Matrix Still Open
 
@@ -192,7 +216,7 @@ named boundary, not its entire acceptance group.
 | MOB-02 | NATIVE-01 real PKCE path; invalid invitation/reset/replay/expiry negatives missing |
 | MOB-03 | Missing OTP recovery, biometrics, enrollment-change and app-lock proof |
 | MOB-04 | NATIVE-15/20; expired-access, refresh replay and external device-revocation negatives missing |
-| MOB-05 | NATIVE-19/22; tenant switching and mixed-realm/cookie negatives missing |
+| MOB-05 | NATIVE-19/22/23; tenant switching and mixed-realm/cookie negatives missing |
 | MOB-06 | Missing verified cold/warm links and forged/revoked/wrong-account link negatives |
 | MOB-07 | NATIVE-03; ownership/team/unassigned/count/continuation semantics missing |
 | MOB-08 | NATIVE-04..08; five real fixture identifiers and native execution required |
@@ -222,8 +246,8 @@ named boundary, not its entire acceptance group.
 | MOB-32 | Missing real TalkBack/VoiceOver/200%-text/contrast/reduced-motion proof |
 | MOB-33 | NATIVE-14 back control only; full target/keyboard/safe-area/iOS gesture proof missing |
 | MOB-34 | Missing small/large phone/tablet geometry and long-content execution |
-| MOB-35 | Missing actual offline/slow/error/stale/foreground-authority journeys |
-| MOB-36 | NATIVE-14/16; real unsaved/kill execution and physical privacy checks missing |
+| MOB-35 | NATIVE-23 signed-out warm resume only; actual offline/slow/error/stale/authenticated foreground-authority journeys missing |
+| MOB-36 | NATIVE-14/16/23; real unsaved/kill/signed-out resume execution and physical privacy checks missing |
 | MOB-37 | Missing previous-client/additive rollout/minimum-version/rollback proof |
 | MOB-38 | Missing named-device startup/work/tab budgets, row/query bounds and responsiveness proof |
 | MOB-39 | Binary/source/backend/harness binding implemented; signing/SBOM/store/privacy/deletion review missing |
@@ -251,8 +275,34 @@ and recheck serving revisions/source/harness after the run. Existing evidence
 is never overwritten. Unit doubles test orchestration only; they do not count
 as native, Docker, browser-login or iOS E2E acceptance.
 
-Sidecar verification on 25 October: **56/56 tooling unit cases passed**, zero
-failures/skips/cancellations/todos; both collection CLIs independently discover
-the exact **22/22** inventory. Scoped `git diff --check` passed. **Zero native
-cases executed by this sidecar.** No emulator, Appium, Docker or server process
-was started/stopped here, and no existing acceptance report was rewritten.
+Historical initial sidecar verification on 25 October: **56/56 tooling unit
+cases passed**, zero failures/skips/cancellations/todos; both collection CLIs
+then independently discovered the exact **22/22** inventory. That result is
+not evidence for NATIVE-23. Later Firefox setup evidence and the 64-case
+source-freeze manifest were retained outside Git, without credential entry.
+
+NATIVE-23 is a separate regression for the parent-reproduced signed-out
+foreground privacy-cover defect. Its setup cannot authenticate and requires
+NATIVE-22's setup/call/teardown to have passed in this same run. A process kill,
+app still foreground after Home, missing/disabled sign-in, private UI or any
+auth request (including an in-flight refresh) fails the case. iOS uses its
+actual Home button and observes running background/suspended state; Windows
+collection does not certify that behavior. No new fixture mutation is needed.
+The sidecar does not touch the parent's current device/Appium inspector.
+**NATIVE-23 native execution is not run; the reported bug remains Inconclusive
+until the parent runs the source-bound rebuilt binary.** Existing reports
+remain untouched. Files/source/upload groups remain explicitly missing until
+actual fixture metadata and native journeys are integrated.
+
+Post-regression tooling verification: **73/73 unit cases passed**, zero
+failures/skips/cancellations/todos. Both collection CLIs independently
+reconciled the exact **23/23** intended/discovered inventory. Scoped
+`git diff --check` passed. These are harness checks, not native execution.
+
+Consent-MFA follow-up: **84/84 tooling unit cases passed**, zero failures,
+skips, cancellations or todos; intended/discovered collection remains
+**23/23 per platform**. The suite covers explicit consent/login staging,
+typed-error-form absence, refused verification, changed account/PKCE,
+automatic Connect rejection, exact traffic ordering and editor-visible-only
+Back dismissal. These checks use unit doubles, not native/browser acceptance.
+No device, Appium, service or historical report was changed by this update.

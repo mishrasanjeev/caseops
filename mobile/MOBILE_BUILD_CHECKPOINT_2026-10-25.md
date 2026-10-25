@@ -87,3 +87,36 @@ long-path setting or security policy is changed. The complete build-tool input
 closure is now included in the fingerprint. Component checks pass; the next
 actual build is still required. Original build logs remain under the two unique
 `$HOME/.cache/caseops-mobile/builds/android-*` directories.
+
+## First Actual Device Findings
+
+The 51036056 Android candidate compiled successfully: 655 Gradle tasks, 7m6s,
+non-debug local acceptance APK. The first packaging verifier incorrectly assumed
+an unoptimized resource ZIP path; aapt proves the actual manifest/network/CA
+resource-ID chain and pinned bytes. The corrected verifier has a retained
+reproduction and complete component replacement; a new wrapper run is required.
+
+Actual native startup and system-browser navigation were exercised, not a core
+acceptance pass. The emulator's default WebView Shell was replaced through normal
+default-browser settings with the already verified Firefox; no production browser
+or OS security policy changed. Raw public control observations stay outside Git.
+
+Two real native-path defects were discovered before certification:
+
+- Signed-out return from background could retain the privacy cover because only
+  a ref changed. Foreground visibility now has React state. NATIVE-23 adds an
+  actual Home/return/no-auth-request regression; its rebuilt execution is pending.
+- An enrolled user under optional login-MFA policy could reach native consent
+  without fresh same-browser MFA. The server correctly refused Connect, but the
+  page lacked a verification form. The refusal now has type `native_mfa_required`;
+  consent invokes the existing TOTP step-up, checks the same current principal
+  afterward and requires another explicit Connect. There is no automatic grant or
+  mutation replay. Ordinary forbidden responses never open that MFA recovery.
+
+Replacement web inventory: **44 passed in four intended files**; full web/mobile
+TypeScript and all **295 mobile component cases** pass. Backend native/MFA
+inventory: **49 passed, including eight real PostgreSQL cases**, retaining the
+pre-fix failure under `outputs/native-mfa-9mf7`. The native inventory now has
+**23 cases per platform** and requires explicit login-versus-consent MFA staging.
+These are component/discovery results, not completed native execution. The initial
+438 API/web Docker receipts remain historical; rebuild after this batch freezes.

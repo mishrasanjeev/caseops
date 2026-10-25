@@ -63,6 +63,9 @@ export function inspectLocalPlan(plan, platform, environment = process.env) {
     lifecycleMatter: expected.lifecycleMatter, accessMatter: expected.accessMatter, ownerControls: plan.ownerControls,
   };
   admitApplication(fixture, platform);
+  if (fixture.auth.mfaRequired && !['login', 'consent'].includes(fixture.auth.mfaStage)) {
+    block('EXPLICIT_MFA_STAGE_REQUIRED', ['auth.mfaStage']);
+  }
   if (plan.firefoxRecipe) {
     fixture.auth.firefoxUi = readReference(plan.firefoxRecipe);
     if (fixture.auth.firefoxUi.status !== 'complete') block('FIREFOX_RECIPE_INCOMPLETE', ['firefoxRecipe']);

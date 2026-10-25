@@ -4,7 +4,7 @@
 
 J20/M22 remains **Partially implemented; release NO-GO**. Integrated file/session/
 date/source/private-reader components pass 295 mobile tests and strict TypeScript;
-native 22-case collection is not execution. Exact candidate Docker/APK acceptance,
+native 23-case collection is not execution. Exact candidate Docker/APK acceptance,
 MacBook iOS, complete MOB-01..40, signed distribution, shared regression and
 dependency/privacy/security gates remain open. Do not suppress the four existing
 node-forge findings. See `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-25.md`.

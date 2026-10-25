@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { find, read, selector, visible } from './native-ui.mjs';
-import { fixtureMfaCode } from './mfa.mjs';
+import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage } from './mfa.mjs';
 import { verifiedFile } from './evidence.mjs';
 
 const REQUIRED = ['urlOpen', 'urlValue', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace', 'connect'];
 export function validateFirefoxRecipe(auth) {
+  const stage = mfaStage(auth);
   const recipe = auth.firefoxUi;
   assert.equal(recipe?.status, 'complete', 'FIREFOX_RECIPE_INCOMPLETE');
   assert.equal(recipe?.packageName, 'org.mozilla.firefox', 'DEDICATED_FIREFOX_REQUIRED');
@@ -24,6 +25,12 @@ export function validateFirefoxRecipe(auth) {
   if (recipe.urlCloseMode === 'android-back') assert.equal(recipe.packageName, 'org.mozilla.firefox', 'DEDICATED_FIREFOX_REQUIRED');
   else { assert.ok(!recipe.urlCloseMode || recipe.urlCloseMode === 'locator', 'FIREFOX_URL_DISMISSAL_UNSUPPORTED'); assert.ok(recipe.locators.urlClose, 'FIREFOX_OBSERVED_LOCATORS_REQUIRED'); }
   if (auth.mfaRequired) for (const key of ['mfaCode', 'mfaSubmit']) assert.ok(recipe.locators[key], 'FIREFOX_MFA_LOCATORS_REQUIRED');
+  if (stage === 'consent') {
+    assert.deepEqual(recipe.locators.mfaCode, { kind: 'id', value: 'native-mfa-code' }, 'EXACT_NATIVE_CONSENT_MFA_FIELD_REQUIRED');
+    assert.ok(['text', 'buttonText'].includes(recipe.locators.mfaSubmit.kind), 'EXACT_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
+    assert.equal(recipe.locators.mfaSubmit.value, 'Verify code', 'EXACT_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
+    assert.deepEqual(recipe.locators.mfaVerified, { kind: 'text', value: CONSENT_MFA_VERIFIED }, 'EXACT_NATIVE_MFA_VERIFIED_NOTICE_REQUIRED');
+  }
   for (const locator of [...Object.values(recipe.locators), ...(recipe.prepare || []), ...(recipe.afterConnect || [])]) {
     assert.ok(['id', 'text', 'label', 'buttonText'].includes(locator.kind), 'SAFE_FIREFOX_LOCATOR_REQUIRED');
     assert.ok(!/certificate|advanced|accept.*risk|proceed.*unsafe|continue.*site|risk.*continue/i.test(locator.value), 'TLS_WARNING_ACTION_FORBIDDEN');
@@ -55,6 +62,7 @@ export async function firefoxLogin(context, credentials, authorizationIdentity) 
   assert.equal(context.platform, 'android', 'FIREFOX_ANDROID_ONLY');
   const recipe = validateFirefoxRecipe(context.fixture.auth);
   const { driver, fixture, platform } = context;
+  const stage = mfaStage(fixture.auth);
   await driver.switchContext('NATIVE_APP');
   await driver.waitUntil(async () => await driver.getCurrentPackage() === recipe.packageName,
     { timeout: 15000, interval: 250, timeoutMsg: 'FIREFOX_CUSTOM_TAB_NOT_OPENED' });
@@ -69,18 +77,33 @@ export async function firefoxLogin(context, credentials, authorizationIdentity) 
     await (await locate(context, recipe.locators[key])).setValue(value);
   }
   await press(context, recipe.locators.submit);
-  if (fixture.auth.mfaRequired) {
+  if (stage === 'login') {
     await (await locate(context, recipe.locators.mfaCode)).setValue(fixtureMfaCode(fixture.auth));
     await press(context, recipe.locators.mfaSubmit);
   }
-  await locate(context, recipe.locators.connect);
-  assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
-  for (const [key, expected] of Object.entries({ principal: fixture.principalLabel, emailFact: credentials.email,
-    workspace: `${fixture.workspaceLabel} / ${credentials.companySlug}` })) {
-    assert.equal((await (await locate(context, recipe.locators[key])).getText()).replace(/\s+/g, ' ').trim(), expected, 'WRONG_BROWSER_PRINCIPAL_OR_WORKSPACE');
-  }
-  assert.equal((await (await locate(context, recipe.locators.connect)).getText()).trim(), 'Connect app', 'REAL_CONNECT_CONTROL_REQUIRED');
+  const verifyIdentity = async () => {
+    await locate(context, recipe.locators.connect);
+    assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
+    for (const [key, expected] of Object.entries({ principal: fixture.principalLabel, emailFact: credentials.email,
+      workspace: `${fixture.workspaceLabel} / ${credentials.companySlug}` })) {
+      assert.equal((await (await locate(context, recipe.locators[key])).getText()).replace(/\s+/g, ' ').trim(), expected, 'WRONG_BROWSER_PRINCIPAL_OR_WORKSPACE');
+    }
+    assert.equal((await (await locate(context, recipe.locators.connect)).getText()).trim(), 'Connect app', 'REAL_CONNECT_CONTROL_REQUIRED');
+  };
+  await verifyIdentity();
   await press(context, recipe.locators.connect);
+  if (stage === 'consent') {
+    await locate(context, recipe.locators.mfaCode);
+    assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
+    assert.equal((await (await locate(context, recipe.locators.mfaSubmit)).getText()).trim(), 'Verify code', 'REAL_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
+    await (await locate(context, recipe.locators.mfaCode)).setValue(fixtureMfaCode(fixture.auth));
+    await press(context, recipe.locators.mfaSubmit);
+    await locate(context, recipe.locators.mfaVerified);
+    await verifyIdentity();
+    assert.equal(await visible(driver, selector(platform, recipe.locators.mfaCode.kind, recipe.locators.mfaCode.value)), undefined,
+      'NATIVE_CONSENT_MFA_NOT_COMPLETED');
+    await press(context, recipe.locators.connect);
+  }
   for (const locator of recipe.afterConnect || []) await press(context, locator);
   await find(context, 'id', 'account-open');
 }

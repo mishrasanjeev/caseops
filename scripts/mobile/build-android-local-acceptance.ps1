@@ -61,35 +61,53 @@ try {
     } finally { Pop-Location }
     $apk = Join-Path $app 'android/app/build/outputs/apk/localAcceptance/app-localAcceptance.apk'
     if (-not (Test-Path -LiteralPath $apk -PathType Leaf)) { throw 'Current local acceptance APK missing' }
+    $retainedApk = Join-Path $run 'caseops-local-acceptance.apk'
+    Copy-Item -LiteralPath $apk -Destination $retainedApk
+    $apk = $retainedApk
     $aapt = Join-Path $env:ANDROID_HOME 'build-tools/37.0.0/aapt2.exe'
     $badging = @(& $aapt dump badging $apk 2>&1)
     $badging | Set-Content -LiteralPath (Join-Path $run 'apk-badging.log')
     if ($LASTEXITCODE -ne 0 -or -not ($badging -match "package: name='ai.caseops.mobile.dev.localacceptance'")) { throw 'QA package identity not proved' }
     if ($badging -match '^application-debuggable') { throw 'Acceptance APK is debuggable' }
+    $resourcePlanFile = Join-Path $run 'android-resources.json'
+    Invoke-BuildCommand 'node' @($proof, 'android-resources', (Join-Path $run 'before.json'), $apk, $aapt, $run, $resourcePlanFile) 'resource-inspection.log'
+    $resourcePlan = Get-Content -LiteralPath $resourcePlanFile -Raw | ConvertFrom-Json
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($apk)
     try {
+        if ($zip.Entries.Count -gt 30000) { throw 'APK ZIP entry bound exceeded' }
+        $inventory = @($zip.Entries | ForEach-Object { [pscustomobject]@{ name = $_.FullName; length = $_.Length } })
+        [System.IO.File]::WriteAllText((Join-Path $run 'apk-zip-inventory.json'), (ConvertTo-Json -InputObject $inventory -Depth 3), [System.Text.UTF8Encoding]::new($false))
+        foreach ($required in @('AndroidManifest.xml', 'assets/index.android.bundle', 'assets/app.config', $resourcePlan.ca.path, $resourcePlan.network.path)) {
+            if (@($zip.Entries | Where-Object { $_.FullName -ceq $required }).Count -ne 1) { throw 'Required APK ZIP entry missing or duplicated' }
+        }
         $bundle = $zip.GetEntry('assets/index.android.bundle')
-        if (-not $bundle -or $bundle.Length -eq 0) { throw 'Bundled JavaScript missing' }
+        if (-not $bundle -or $bundle.Length -eq 0 -or $bundle.Length -gt 33554432) { throw 'Bundled JavaScript missing or unbounded' }
         $config = $zip.GetEntry('assets/app.config')
-        if (-not $config) { throw 'Embedded Expo configuration missing' }
+        if (-not $config -or $config.Length -eq 0 -or $config.Length -gt 1048576) { throw 'Embedded Expo configuration missing or unbounded' }
         $reader = [System.IO.StreamReader]::new($config.Open())
         try { [System.IO.File]::WriteAllText((Join-Path $run 'embedded-config.json'), $reader.ReadToEnd(), [System.Text.UTF8Encoding]::new($false)) }
         finally { $reader.Dispose() }
-        $ca = $zip.GetEntry('res/raw/caseops_local_acceptance_ca.pem')
-        if (-not $ca) { throw 'QA public CA missing from APK' }
-        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $ca = $zip.GetEntry($resourcePlan.ca.path)
+        if (-not $ca -or $ca.Length -eq 0 -or $ca.Length -gt 16384) { throw 'QA public CA missing or unbounded' }
         $stream = $ca.Open()
-        try { $actual = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+        $memory = [System.IO.MemoryStream]::new()
+        try {
+            $buffer = New-Object byte[] 4096
+            while (($count = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                if ($memory.Length + $count -gt 16384) { throw 'APK CA stream size bound exceeded' }
+                $memory.Write($buffer, 0, $count)
+            }
+            [System.IO.File]::WriteAllBytes((Join-Path $run 'public-ca-from-apk.pem'), $memory.ToArray())
+        }
         finally {
             $stream.Dispose()
-            $sha.Dispose()
+            $memory.Dispose()
         }
-        if ($actual -ne $PublicCaSha256) { throw 'APK public CA hash mismatch' }
     } finally { $zip.Dispose() }
-    $retainedApk = Join-Path $run 'caseops-local-acceptance.apk'
-    Copy-Item -LiteralPath $apk -Destination $retainedApk
-    Invoke-BuildCommand 'node' @($proof, 'finish', 'android', (Join-Path $run 'before.json'), $retainedApk, (Join-Path $run 'embedded-config.json'), (Join-Path $run 'receipt.json')) 'receipt.log'
+    $securityProof = Join-Path $run 'android-security.json'
+    Invoke-BuildCommand 'node' @($proof, 'android-zip', $resourcePlanFile, (Join-Path $run 'apk-zip-inventory.json'), (Join-Path $run 'public-ca-from-apk.pem'), (Join-Path $run 'before.json'), $apk, $securityProof) 'zip-inspection.log'
+    Invoke-BuildCommand 'node' @($proof, 'finish', 'android', (Join-Path $run 'before.json'), $retainedApk, (Join-Path $run 'embedded-config.json'), (Join-Path $run 'receipt.json'), $securityProof) 'receipt.log'
     Write-Output "Standalone APK and receipts: $run"
     Write-Output 'Build only. Parent owns emulator, browser trust, installation and core E2E.'
 } catch {

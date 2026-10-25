@@ -79,3 +79,27 @@ export async function restart(context) {
   await context.driver.activateApp(context.fixture.appId);
   await context.driver.switchContext('NATIVE_APP');
 }
+
+export async function backgroundAndResume(context) {
+  const { driver, platform, fixture: { appId } } = context;
+  assert.equal(await driver.queryAppState(appId), 4, 'HOME_REQUIRES_FOREGROUND_APP');
+  if (platform === 'android') {
+    assert.equal(await driver.getCurrentPackage(), appId, 'HOME_REQUIRES_EXACT_APP_PACKAGE');
+    await driver.pressKeyCode(3);
+  } else {
+    assert.equal(platform, 'ios', 'NATIVE_PLATFORM_REQUIRED');
+    await driver.execute('mobile: pressButton', { name: 'home' });
+  }
+  let backgroundState;
+  await driver.waitUntil(async () => {
+    backgroundState = await driver.queryAppState(appId);
+    const leftPackage = platform !== 'android' || await driver.getCurrentPackage() !== appId;
+    return leftPackage && (platform === 'android' ? backgroundState === 3 : [2, 3].includes(backgroundState));
+  }, { timeout: 10000, interval: 150, timeoutMsg: 'HOME_DID_NOT_BACKGROUND_RUNNING_APP' });
+  context.record?.({ type: 'native_home_observed', platform, leftApp: true, backgroundState });
+  await driver.activateApp(appId);
+  await driver.switchContext('NATIVE_APP');
+  await driver.waitUntil(async () => await driver.queryAppState(appId) === 4
+    && (platform !== 'android' || await driver.getCurrentPackage() === appId),
+  { timeout: 10000, interval: 150, timeoutMsg: 'HOME_RESUME_DID_NOT_FOREGROUND_EXACT_APP' });
+}

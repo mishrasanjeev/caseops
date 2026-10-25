@@ -13,10 +13,10 @@ import { scenarios } from '../../apps/mobile/e2e/core.mjs';
 import { createGateway } from './no-paid-gateway.mjs';
 import { authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
-import { fixtureMfaCode, totp } from '../../apps/mobile/e2e/mfa.mjs';
+import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { admitApplication, FixtureUnavailable, ownerControl, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
-import { delta, readOnlyTraffic, scenarios as datedScenarios } from '../../apps/mobile/e2e/journeys.mjs';
-import { find, selector, visible } from '../../apps/mobile/e2e/native-ui.mjs';
+import { delta, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, signedOutResumeTraffic } from '../../apps/mobile/e2e/journeys.mjs';
+import { backgroundAndResume, find, selector, visible } from '../../apps/mobile/e2e/native-ui.mjs';
 import { collect, harnessFingerprint, inventory as datedInventory, receiptInventory } from '../../apps/mobile/e2e/suite.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { inspectLocalPlan, prepareLocalPlan } from '../../apps/mobile/e2e/local-run.mjs';
@@ -228,8 +228,8 @@ test('request evidence case uses retained traffic without touching authenticated
 
 const EXPECTED_DATED = ['NATIVE-01', 'NATIVE-02', 'NATIVE-03', 'NATIVE-04', 'NATIVE-05', 'NATIVE-06',
   'NATIVE-07', 'NATIVE-08', 'NATIVE-09', 'NATIVE-10', 'NATIVE-11', 'NATIVE-12', 'NATIVE-13', 'NATIVE-14',
-  'NATIVE-15', 'NATIVE-16', 'NATIVE-17', 'NATIVE-18', 'NATIVE-19', 'NATIVE-20', 'NATIVE-21', 'NATIVE-22'];
-test('dated intended and executable inventories equal the independent literal 22-case contract', () => {
+  'NATIVE-15', 'NATIVE-16', 'NATIVE-17', 'NATIVE-18', 'NATIVE-19', 'NATIVE-20', 'NATIVE-21', 'NATIVE-22', 'NATIVE-23'];
+test('dated intended and executable inventories equal the independent literal 23-case contract', () => {
   assert.deepEqual(datedInventory.cases.map(({ id }) => id), EXPECTED_DATED);
   assert.deepEqual(datedScenarios.map(({ id }) => id), EXPECTED_DATED);
   assert.deepEqual(SEARCH_KINDS, ['matter_code', 'case_number', 'filing_number', 'cnr_number', 'temporary_e_case_number']);
@@ -240,11 +240,133 @@ test('dated intended and executable inventories equal the independent literal 22
   }
 });
 
-test('both collection CLIs discover all 22 without opening Appium or requiring a fixture', () => {
+test('both collection CLIs discover all 23 without opening Appium or requiring a fixture', () => {
   for (const platform of ['android', 'ios']) {
     const result = JSON.parse(execFileSync(process.execPath, [fileURLToPath(new URL('./run-native.mjs', import.meta.url)), platform, '--collect'], { encoding: 'utf8' }));
     assert.equal(result.inventoryId, 'native-core-2026-10-25');
     assert.deepEqual(result.discovered, EXPECTED_DATED.map((id) => `${platform}:${id}`));
+  }
+});
+
+const signedOutResume = datedScenarios.find(({ id }) => id === 'NATIVE-23');
+function resumeDriver(platform, options = {}) {
+  const actions = [], records = [];
+  const appId = platform === 'android' ? 'ai.caseops.mobile.dev.localacceptance' : 'ai.caseops.mobile.dev.simulatoracceptance';
+  let phase = 'initial';
+  const driver = {
+    queryAppState: async (id) => {
+      assert.equal(id, appId);
+      return phase === 'background' ? options.backgroundState ?? 3 : phase === 'resumed' ? options.resumeState ?? 4 : 4;
+    },
+    getCurrentPackage: async () => phase === 'background' && !options.homeKeepsPackage ? 'unit.launcher'
+      : phase === 'resumed' && options.wrongResumePackage ? 'org.mozilla.firefox' : appId,
+    pressKeyCode: async (key) => { assert.equal(key, 3); actions.push('android-home'); phase = 'background'; },
+    execute: async (command, arguments_) => {
+      assert.equal(command, 'mobile: pressButton'); assert.deepEqual(arguments_, { name: 'home' });
+      actions.push('ios-home'); phase = 'background';
+    },
+    activateApp: async (id) => { assert.equal(id, appId); actions.push('activate-bound-app'); phase = 'resumed'; },
+    switchContext: async (name) => { assert.equal(name, 'NATIVE_APP'); actions.push('native-context'); },
+    waitUntil: async (predicate, { timeoutMsg }) => assert.equal(await predicate(), true, timeoutMsg),
+    $$: async (query) => {
+      const usable = !(phase === 'resumed' && options.privacyCover);
+      const isSignIn = query === selector(platform, 'id', 'sign-in');
+      if (usable && (isSignIn || query === selector(platform, 'id', 'signed-out'))
+        || options.privateId && query === selector(platform, 'id', options.privateId)) {
+        return [{ isDisplayed: async () => true, isEnabled: async () => !options.disabledSignIn,
+          click: async () => { throw new Error('REGRESSION_MUST_NOT_CLICK_SIGN_IN'); } }];
+      }
+      return [];
+    },
+  };
+  return { context: { driver, platform, fixture: { appId, principalLabel: 'unit-principal', workspaceLabel: 'unit-workspace',
+    matter: { title: 'unit-private-title', identityLabel: 'unit-code' } }, record: (event) => records.push(event) }, actions, records };
+}
+
+test('post-logout regression has an independent signed-out prerequisite after NATIVE-22', () => {
+  assert.equal(datedInventory.cases.at(-1).id, 'NATIVE-23');
+  assert.equal(datedInventory.cases.at(-1).signedOutAfter, 'NATIVE-22');
+  assert.equal(signedOutResume.signedOutAfter, 'NATIVE-22');
+  assert.equal(signedOutResume.authenticateInCall, undefined);
+});
+
+test('post-logout setup blocks without a fully completed logout and never tries login', async () => {
+  const driver = new Proxy({}, { get: () => { throw new Error('NO_DEVICE_OR_AUTH_WITHOUT_LOGOUT_PREREQUISITE'); } });
+  await assert.rejects(() => prepareScenario({ driver }, signedOutResume, new Set()), /PREREQUISITE_SCENARIO_NOT_PASSED/);
+  for (const platform of ['android', 'ios']) {
+    const fake = resumeDriver(platform);
+    await prepareScenario(fake.context, signedOutResume, new Set(['NATIVE-22']));
+    assert.deepEqual(fake.actions, []);
+  }
+});
+
+test('Home/resume uses actual platform Home, observes background and activates without process termination', async () => {
+  for (const [platform, backgroundState] of [['android', 3], ['ios', 3], ['ios', 2]]) {
+    const fake = resumeDriver(platform, { backgroundState });
+    await backgroundAndResume(fake.context);
+    assert.deepEqual(fake.actions, [`${platform}-home`, 'activate-bound-app', 'native-context']);
+    assert.deepEqual(fake.records, [{ type: 'native_home_observed', platform, leftApp: true, backgroundState }]);
+  }
+});
+
+test('Android Home must positively leave the exact app package before activation', async () => {
+  const fake = resumeDriver('android', { homeKeepsPackage: true });
+  await assert.rejects(() => backgroundAndResume(fake.context), /HOME_DID_NOT_BACKGROUND_RUNNING_APP/);
+  assert.deepEqual(fake.actions, ['android-home']);
+});
+
+test('a terminated or unobserved Home transition cannot masquerade as warm background', async () => {
+  for (const platform of ['android', 'ios']) for (const backgroundState of [0, 1, 4]) {
+    const fake = resumeDriver(platform, { backgroundState });
+    await assert.rejects(() => backgroundAndResume(fake.context), /HOME_DID_NOT_BACKGROUND_RUNNING_APP/);
+    assert.deepEqual(fake.actions, [`${platform}-home`]);
+  }
+});
+
+test('activation must restore foreground state and the exact Android package', async () => {
+  for (const [platform, options] of [['android', { resumeState: 3 }], ['ios', { resumeState: 2 }], ['android', { wrongResumePackage: true }]]) {
+    const fake = resumeDriver(platform, options);
+    await assert.rejects(() => backgroundAndResume(fake.context), /HOME_RESUME_DID_NOT_FOREGROUND_EXACT_APP/);
+  }
+});
+
+test('post-logout setup rejects disabled sign-in and retained private surfaces', async () => {
+  for (const platform of ['android', 'ios']) {
+    await assert.rejects(() => prepareScenario(resumeDriver(platform, { disabledSignIn: true }).context,
+      signedOutResume, new Set(['NATIVE-22'])), /SIGNED_OUT_SIGN_IN_NOT_USABLE/);
+    for (const privateId of ['account-open', 'account-screen', 'matter-code', 'note-input', 'screen-today', 'tab-work']) {
+      await assert.rejects(() => prepareScenario(resumeDriver(platform, { privateId }).context,
+        signedOutResume, new Set(['NATIVE-22'])), /PRIVATE_OR_FORBIDDEN_SURFACE_VISIBLE/);
+    }
+  }
+});
+
+test('signed-out resume rejects refresh, token exchange, authorization or any other auth attempt, including pending requests', () => {
+  signedOutResumeTraffic([]);
+  signedOutResumeTraffic([{ method: 'GET', route: '/api/build', status: 200 }]);
+  for (const route of ['/api/auth/native/refresh', '/api/auth/native/token', '/api/auth/native/authorize', '/api/auth/login', '/api/auth/me']) {
+    for (const status of [null, 200, 401]) assert.throws(() => signedOutResumeTraffic([{ method: 'POST', route, status }]), /SIGNED_OUT_RESUME_ATTEMPTED_AUTHENTICATION/);
+  }
+});
+
+test('NATIVE-23 orchestration restores signed-out controls and rejects the reported persistent privacy cover (unit doubles only)', async (t) => {
+  const server = http.createServer((request, response) => {
+    assert.equal(request.url, '/__caseops_e2e/status');
+    assert.equal(request.headers[MARKER_HEADER.toLowerCase()], MARKER);
+    response.setHeader('content-type', 'application/json');
+    response.end(JSON.stringify({ runId: 'unit-resume', lastSequence: 0, overflow: false, markerRejected: 0, routeRejected: 0, requests: [] }));
+  });
+  t.after(() => server.close());
+  const gatewayUrl = await listen(server);
+  for (const platform of ['android', 'ios']) {
+    for (const privacyCover of [false, true]) {
+      const fake = resumeDriver(platform, { privacyCover });
+      Object.assign(fake.context.fixture, { gatewayUrl, gatewayRunId: 'unit-resume' });
+      await prepareScenario(fake.context, signedOutResume, new Set(['NATIVE-22']));
+      if (privacyCover) await assert.rejects(() => signedOutResume.run(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+      else await signedOutResume.run(fake.context);
+      assert.deepEqual(fake.actions, [`${platform}-home`, 'activate-bound-app', 'native-context']);
+    }
   }
 });
 
@@ -337,20 +459,25 @@ test('browser credentials come only from bounded named environment values, never
   assert.throws(() => loginCredentials({ ...auth, passwordEnv: 'PATH' }, { PATH: 'private' }), /ENV_NAME/);
 });
 
-function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, externalOrigin = false, duplicatePassword = false, mfa = false } = {}) {
-  let stage = 'app', native = true;
+function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, externalOrigin = false, duplicatePassword = false,
+  mfa = false, consent = false, platform = 'android', wrongAfterMfa = false, changedAfterMfa = false, autoConnect = false,
+  noConsentChallenge = false, verifyRefused = false } = {}) {
+  let stage = 'app', native = true, verified = false;
   const writes = [], clicks = [], records = [];
   const url = () => {
     if (externalOrigin) return authUrl('https://example.com');
     const value = new URL(authUrl('https://127.0.0.1:3443'));
-    if (stage === 'connect' && changedHandoff) value.searchParams.set('state', 'c'.repeat(64));
+    value.searchParams.set('platform', platform);
+    if (stage === 'connect' && changedHandoff || verified && changedAfterMfa) value.searchParams.set('state', 'c'.repeat(64));
     return ['login', 'mfa'].includes(stage) ? `${value.origin}/sign-in?${new URLSearchParams({ next: value.pathname + value.search })}` : value.href;
   };
   const element = (key, text = '') => ({
-    isDisplayed: async () => true, getText: async () => text,
+    isDisplayed: async () => true, isEnabled: async () => true, getText: async () => text,
     setValue: async (value) => { writes.push([key, value]); },
     click: async () => { clicks.push(key); if (key === 'sign-in') stage = 'landing'; if (key === 'link') stage = 'login';
-      if (key === 'submit') stage = mfa ? 'mfa' : 'connect'; if (key === 'mfa-submit') stage = 'connect'; if (key === 'connect') stage = 'complete'; },
+      if (key === 'submit') stage = mfa ? 'mfa' : 'connect'; if (key === 'mfa-submit') stage = 'connect';
+      if (key === 'connect') stage = consent && !verified ? noConsentChallenge ? 'connect' : 'consent-mfa' : 'complete';
+      if (key === 'consent-verify' && !verifyRefused) { verified = true; stage = autoConnect ? 'complete' : 'connect'; } },
   });
   const driver = {
     switchContext: async (name) => { native = name === 'NATIVE_APP'; },
@@ -359,8 +486,8 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
     waitUntil: async (callback) => assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED'),
     $$: async (query) => {
       if (native) {
-        if (query === 'id=sign-in' && stage === 'app') return [element('sign-in')];
-        if (query === 'id=account-open' && stage === 'complete') return [element('account')];
+        if (query === selector(platform, 'id', 'sign-in') && stage === 'app') return [element('sign-in')];
+        if (query === selector(platform, 'id', 'account-open') && stage === 'complete') return [element('account')];
         return [];
       }
       if (query === 'a[href^="/sign-in?next="]' && stage === 'landing') return [element('link')];
@@ -368,12 +495,15 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
       if (query === 'form[aria-label="Sign in"] button[type="submit"]' && stage === 'login') return [element('submit')];
       if (query === '#mfa-code' && stage === 'mfa') return [element('#mfa-code')];
       if (query === 'form[aria-label="MFA challenge"] button[type="submit"]' && stage === 'mfa') return [element('mfa-submit')];
-      if (query === 'main dl dd' && stage === 'connect') return [element('principal', `${wrongPrincipal ? 'Wrong' : 'Unit Person'} unit@example.invalid`), element('workspace', 'Unit Workspace / unit')];
+      if (query === '#native-mfa-code' && stage === 'consent-mfa') return [element('native-mfa-code')];
+      if (query === 'form:has(#native-mfa-code) button[type="submit"]' && stage === 'consent-mfa') return [element('consent-verify', 'Verify code')];
+      if (query === 'main [role="status"]' && verified && stage === 'connect') return [element('consent-notice', CONSENT_MFA_VERIFIED)];
+      if (query === 'main dl dd' && stage === 'connect') return [element('principal', `${wrongPrincipal || verified && wrongAfterMfa ? 'Wrong' : 'Unit Person'} unit@example.invalid`), element('workspace', 'Unit Workspace / unit')];
       if (query === 'main button' && stage === 'connect') return [element('connect', 'Connect app')];
       return [];
     },
   };
-  return { context: { driver, platform: 'android', fixture: { principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace',
+  return { context: { driver, platform, fixture: { principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace',
     auth: { mode: 'web-context', webOrigin: 'https://127.0.0.1:3443', companySlug: 'unit', emailEnv: 'CASEOPS_MOBILE_UNIT_EMAIL', passwordEnv: 'CASEOPS_MOBILE_UNIT_PASSWORD' } }, record: (row) => records.push(row) },
   writes, clicks, records, isNative: () => native };
 }
@@ -505,12 +635,16 @@ test('an uncertain owner command poisons the shared adapter and cannot be replay
   assert.equal(calls, 1);
 });
 
-function firefoxRecipe(t) {
+function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [] } = {}) {
   const locators = Object.fromEntries(['urlOpen', 'urlValue', 'urlClose', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace', 'connect', 'signInLink']
     .map((key) => [key, { kind: 'id', value: `unit-${key}` }]));
-  const evidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: 'org.mozilla.firefox', version: '158.0.2', locators });
-  return { firefoxUi: { status: 'complete', packageName: 'org.mozilla.firefox', version: '158.0.2', signerSha256: 'A78B62A5165B4494B2FEAD9E76A280D22D937FEE6251AECE599446B2EA319B04',
-    caTrustedThroughSettings: true, locatorEvidencePath: evidence.path, locatorEvidenceSha256: evidence.sha256, locators } };
+  if (consent) Object.assign(locators, { mfaCode: { kind: 'id', value: 'native-mfa-code' }, mfaSubmit: { kind: 'buttonText', value: 'Verify code' },
+    mfaVerified: { kind: 'text', value: CONSENT_MFA_VERIFIED } });
+  const urlCloseMode = androidBack ? 'android-back' : 'locator';
+  const evidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: 'org.mozilla.firefox', version: '158.0.2', locators, urlCloseMode, prepare });
+  return { ...(consent ? { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' } : {}),
+    firefoxUi: { status: 'complete', packageName: 'org.mozilla.firefox', version: '158.0.2', signerSha256: 'A78B62A5165B4494B2FEAD9E76A280D22D937FEE6251AECE599446B2EA319B04',
+    caTrustedThroughSettings: true, locatorEvidencePath: evidence.path, locatorEvidenceSha256: evidence.sha256, locators, urlCloseMode, prepare } };
 }
 test('Firefox native automation requires observed exact locators, trusted CA and reviewed package signer', (t) => {
   const auth = firefoxRecipe(t);
@@ -522,6 +656,18 @@ test('Firefox native automation requires observed exact locators, trusted CA and
     (copy) => { copy.firefoxUi.locatorEvidenceSha256 = '0'.repeat(64); },
     (copy) => { copy.firefoxUi.packageName = 'foreign.browser'; },
   ]) { const copy = structuredClone(auth); mutate(copy); assert.throws(() => validateFirefoxRecipe(copy)); }
+});
+
+test('Firefox consent recipes require hash-bound exact challenge, Verify code and verified notice locators', (t) => {
+  for (const key of ['mfaCode', 'mfaSubmit', 'mfaVerified']) {
+    const auth = firefoxRecipe(t, { consent: true });
+    auth.firefoxUi.locators[key] = { kind: 'text', value: 'Wrong control' };
+    const recipe = auth.firefoxUi;
+    const evidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: recipe.packageName,
+      version: recipe.version, locators: recipe.locators, prepare: recipe.prepare, urlCloseMode: recipe.urlCloseMode });
+    Object.assign(recipe, { locatorEvidencePath: evidence.path, locatorEvidenceSha256: evidence.sha256 });
+    assert.throws(() => validateFirefoxRecipe(auth), /EXACT_NATIVE/);
+  }
 });
 
 test('MFA codes match independent RFC 4226/6238 SHA-1 six-digit vectors', () => {
@@ -591,7 +737,7 @@ test('standalone receipt field substitution never authorizes another build or a 
     assert.throws(() => validateBuildReceipt(copy, 'android', hash));
   }
 });
-test('dated documentation retains all forty acceptance groups and all 22 executable cases without a passed claim', () => {
+test('dated documentation retains all forty acceptance groups and all 23 executable cases without a passed claim', () => {
   const doc = readFileSync(new URL('../../docs/mobile/ANDROID_CORE_INVENTORY_2026-10-25.md', import.meta.url), 'utf8');
   assert.deepEqual([...doc.matchAll(/^\| (MOB-\d{2}) \|/gm)].map((match) => match[1]), Array.from({ length: 40 }, (_, index) => `MOB-${String(index + 1).padStart(2, '0')}`));
   assert.deepEqual([...doc.matchAll(/^\| (NATIVE-\d{2}) \|/gm)].map((match) => match[1]), EXPECTED_DATED);
@@ -601,18 +747,95 @@ test('dated documentation retains all forty acceptance groups and all 22 executa
 test('actual MFA-form orchestration submits one entered code and never logs its seed', async (t) => {
   browserEnvironment(t);
   const fake = domBrowserDouble({ mfa: true });
-  Object.assign(fake.context.fixture.auth, { mfaRequired: true, totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
+  Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'login', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
   await browserLogin(fake.context);
   assert.equal(fake.clicks.filter((key) => key === 'mfa-submit').length, 1);
   assert.match(fake.writes.find(([key]) => key === '#mfa-code')[1], /^\d{6}$/);
   assert.equal(JSON.stringify(fake.records).includes(process.env.CASEOPS_MOBILE_UNIT_TOTP), false);
 });
 
+test('required MFA has an explicit login or consent stage; enrollment never guesses the stage', () => {
+  assert.equal(mfaStage({}), 'none');
+  for (const stage of ['login', 'consent']) assert.equal(mfaStage({ mfaRequired: true, mfaStage: stage }), stage);
+  for (const auth of [{ mfaRequired: true }, { mfaRequired: true, mfaStage: 'auto' },
+    { mfaRequired: false, mfaStage: 'consent' }, { mfaRequired: 'true', mfaStage: 'login' }]) assert.throws(() => mfaStage(auth));
+});
+
+test('browser refuses missing MFA stage before any sign-in or credential entry', async (t) => {
+  browserEnvironment(t);
+  const fake = domBrowserDouble();
+  fake.context.fixture.auth.mfaRequired = true;
+  await assert.rejects(() => browserLogin(fake.context), /EXPLICIT_MFA_STAGE_REQUIRED/);
+  assert.deepEqual(fake.clicks, []);
+  assert.deepEqual(fake.writes, []);
+});
+
+test('consent MFA browser orchestration has two explicit Connect clicks around one real code submission on Android and iOS', async (t) => {
+  browserEnvironment(t);
+  for (const platform of ['android', 'ios']) {
+    const fake = domBrowserDouble({ consent: true, platform });
+    Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
+    await browserLogin(fake.context);
+    assert.deepEqual(fake.clicks, ['sign-in', 'link', 'submit', 'connect', 'consent-verify', 'connect']);
+    assert.deepEqual(fake.writes.map(([key]) => key), ['#company-slug', '#email', '#password', 'native-mfa-code']);
+    assert.match(fake.writes.at(-1)[1], /^\d{6}$/);
+    assert.equal(JSON.stringify(fake.records).includes(process.env.CASEOPS_MOBILE_UNIT_TOTP), false);
+    assert.equal(fake.isNative(), true);
+  }
+});
+
+test('consent MFA refuses generic errors, failed verification, account/PKCE changes or automatic Connect without replay', async (t) => {
+  browserEnvironment(t);
+  for (const options of [{ noConsentChallenge: true }, { verifyRefused: true }, { wrongAfterMfa: true }, { changedAfterMfa: true }, { autoConnect: true }]) {
+    const fake = domBrowserDouble({ consent: true, ...options });
+    Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
+    await assert.rejects(() => browserLogin(fake.context));
+    assert.equal(fake.clicks.filter((key) => key === 'connect').length, 1);
+    assert.ok(fake.clicks.filter((key) => key === 'consent-verify').length <= 1);
+    assert.equal(fake.isNative(), true);
+  }
+});
+
+test('login-stage and consent-stage MFA challenges cannot silently substitute for each other', async (t) => {
+  browserEnvironment(t);
+  for (const [options, stage] of [[{}, 'login'], [{ mfa: true }, 'consent']]) {
+    const fake = domBrowserDouble(options);
+    Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: stage, totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
+    await assert.rejects(() => browserLogin(fake.context), /BROWSER_LOGIN_MFA_STAGE_MISMATCH/);
+    assert.equal(fake.clicks.includes('connect'), false);
+    assert.equal(fake.writes.some(([key]) => key.includes('mfa-code')), false);
+  }
+});
+
+test('authorization receipts distinguish the consent 403 attempt from the sole successful grant and token exchange', () => {
+  const authorize = (status) => ({ method: 'POST', route: '/api/auth/native/authorize', status });
+  const token = (status = 200) => ({ method: 'POST', route: '/api/auth/native/token', status });
+  const consent = { mfaRequired: true, mfaStage: 'consent' };
+  const verification = { method: 'POST', route: '/api/auth/mfa/step-up', status: 200 };
+  const identity = { method: 'GET', route: '/api/auth/me', status: 200 };
+  const success = [authorize(403), verification, identity, authorize(200), token()];
+  validateAuthorizationTraffic(success, consent, { single: true });
+  validateAuthorizationTraffic([...success, ...structuredClone(success)], consent);
+  validateAuthorizationTraffic([authorize(200), token()], { mfaRequired: true, mfaStage: 'login' }, { single: true });
+  for (const rows of [[], [authorize(403)], [authorize(200), token()], [authorize(403), authorize(403), authorize(200), token()],
+    [authorize(403), token(), authorize(200)], [authorize(403), authorize(200), token(401)],
+    [authorize(403), authorize(200), token(), token()], [authorize(401), authorize(200), token()],
+    [authorize(403), authorize(200), { ...token(), status: null }]]) {
+    assert.throws(() => validateAuthorizationTraffic(rows, consent));
+  }
+  assert.throws(() => validateAuthorizationTraffic([...success, ...success], consent, { single: true }));
+  assert.throws(() => validateAuthorizationTraffic(success, {}));
+  for (const window of [[], [verification], [identity, verification], [verification, verification, identity],
+    [{ ...verification, status: 403 }, identity], [verification, { ...identity, status: 401 }]]) {
+    assert.throws(() => validateAuthorizationTraffic([authorize(403), ...window, authorize(200), token()], consent));
+  }
+});
+
 // These deterministic accessibility doubles test Firefox orchestration only.
 // Their recipe is deliberately synthetic and is never a native observation.
-function firefoxDouble(t, foreign = false) {
-  const auth = firefoxRecipe(t);
-  let stage = 'app', editing = false;
+function firefoxDouble(t, foreign = false, options = {}) {
+  const auth = firefoxRecipe(t, options);
+  let stage = 'app', editing = false, verified = false, backCount = 0;
   const writes = [], clicks = [], records = [];
   const values = auth.firefoxUi.locators;
   const fixture = { appId: 'ai.caseops.mobile.dev.localacceptance', principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace',
@@ -620,34 +843,46 @@ function firefoxDouble(t, foreign = false) {
   const driver = {
     switchContext: async (name) => assert.equal(name, 'NATIVE_APP'),
     getCurrentPackage: async () => stage === 'complete' ? fixture.appId : 'org.mozilla.firefox',
+    pressKeyCode: async (code) => {
+      assert.equal(code, 4); assert.equal(editing, true, 'BACK_MUST_NOT_NAVIGATE_WHEN_EDITOR_CLOSED');
+      clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) editing = false;
+    },
     waitUntil: async (callback) => assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED'),
     $$: async (query) => {
+      const preparationIndex = auth.firefoxUi.prepare.findIndex((locator) => query === selector('android', locator.kind, locator.value));
       const key = query === 'id=sign-in' ? 'sign-in' : query === 'id=account-open' ? 'account-open'
-        : Object.keys(values).find((name) => query === `id=${values[name].value}`);
+        : Object.keys(values).find((name) => query === selector('android', values[name].kind, values[name].value))
+          || (preparationIndex >= 0 ? `prepare-${preparationIndex}` : undefined);
       const shown = key === 'sign-in' ? stage === 'app' : key === 'account-open' ? stage === 'complete'
         : key === 'urlOpen' ? stage !== 'app' && stage !== 'complete' && !editing
         : ['urlValue', 'urlClose'].includes(key) ? editing
         : key === 'signInLink' ? stage === 'landing' && !editing
         : ['companySlug', 'email', 'password', 'submit'].includes(key) ? stage === 'login' && !editing
-        : ['principal', 'emailFact', 'workspace', 'connect'].includes(key) ? stage === 'connect' && !editing : false;
+        : ['principal', 'emailFact', 'workspace', 'connect'].includes(key) ? stage === 'connect' && !editing
+        : ['mfaCode', 'mfaSubmit'].includes(key) ? stage === 'consent-mfa' && !editing
+        : key === 'mfaVerified' ? verified && stage === 'connect' && !editing
+        : key && key.startsWith('prepare-') ? stage === 'landing' : false;
       if (!shown) return [];
       return [{ isDisplayed: async () => true,
         setValue: async (value) => { writes.push([key, value]); },
         getText: async () => {
           if (key === 'urlValue') {
             const target = new URL(authUrl(foreign ? 'https://example.com' : fixture.auth.webOrigin));
+            if (verified && options.changedAfterMfa) target.searchParams.set('state', 'c'.repeat(64));
             return stage === 'login' ? `${target.origin}/sign-in?${new URLSearchParams({ next: target.pathname + target.search })}` : target.href;
           }
-          return { principal: fixture.principalLabel, emailFact: 'unit@example.invalid', workspace: 'Unit Workspace / unit', connect: 'Connect app' }[key] || '';
+          return { principal: verified && options.wrongAfterMfa ? 'Wrong' : fixture.principalLabel, emailFact: 'unit@example.invalid',
+            workspace: 'Unit Workspace / unit', connect: 'Connect app', mfaSubmit: 'Verify code', mfaVerified: CONSENT_MFA_VERIFIED }[key] || '';
         },
         click: async () => {
           clicks.push(key);
           if (key === 'sign-in') stage = 'landing';
-          if (key === 'urlOpen') editing = true;
+          if (key === 'urlOpen') { editing = true; backCount = 0; }
           if (key === 'urlClose') editing = false;
           if (key === 'signInLink') stage = 'login';
           if (key === 'submit') stage = 'connect';
-          if (key === 'connect') stage = 'complete';
+          if (key === 'connect') stage = options.consent && !verified ? options.noConsentChallenge ? 'connect' : 'consent-mfa' : 'complete';
+          if (key === 'mfaSubmit' && !options.verifyRefused) { verified = true; stage = options.autoConnect ? 'complete' : 'connect'; }
         } }];
     },
   };
@@ -669,6 +904,41 @@ test('Firefox native UI refuses an external address before entering any credenti
   await assert.rejects(() => browserLogin(fake.context), /UNSAFE_BROWSER_ORIGIN/);
   assert.deepEqual(fake.writes, []);
   assert.equal(fake.clicks.includes('connect'), false);
+});
+
+test('Firefox consent MFA submits one code between exactly two explicit Connect actions (unit accessibility double)', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true });
+  await browserLogin(fake.context);
+  assert.deepEqual(fake.writes.map(([key]) => key), ['companySlug', 'email', 'password', 'mfaCode']);
+  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit'].includes(key)), ['connect', 'mfaSubmit', 'connect']);
+  assert.equal(JSON.stringify(fake.records).includes(process.env.CASEOPS_MOBILE_UNIT_TOTP), false);
+});
+
+test('Firefox consent MFA refuses missing challenge, failed verification and changed identity/PKCE without reconnecting', async (t) => {
+  browserEnvironment(t);
+  for (const options of [{ noConsentChallenge: true }, { verifyRefused: true }, { wrongAfterMfa: true }, { changedAfterMfa: true }, { autoConnect: true }]) {
+    const fake = firefoxDouble(t, false, { consent: true, ...options });
+    await assert.rejects(() => browserLogin(fake.context));
+    assert.equal(fake.clicks.filter((key) => key === 'connect').length, 1);
+    assert.ok(fake.clicks.filter((key) => key === 'mfaSubmit').length <= 1);
+  }
+});
+
+test('Firefox URL editor Back dismissal stops when closed, supports keyboard plus editor, and never issues a blind extra Back', async (t) => {
+  browserEnvironment(t);
+  const prepare = [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }];
+  for (const backPressesRequired of [1, 2]) {
+    const fake = firefoxDouble(t, false, { androidBack: true, backPressesRequired, prepare });
+    await browserLogin(fake.context);
+    assert.deepEqual(fake.clicks.filter((key) => key.startsWith('prepare-')), ['prepare-0', 'prepare-1']);
+    assert.equal(fake.clicks.filter((key) => key === 'android-back').length,
+      fake.clicks.filter((key) => key === 'urlOpen').length * backPressesRequired);
+  }
+  const stuck = firefoxDouble(t, false, { androidBack: true, backPressesRequired: 3 });
+  await assert.rejects(() => browserLogin(stuck.context), /FIREFOX_URL_EDITOR_NOT_DISMISSED/);
+  assert.equal(stuck.clicks.filter((key) => key === 'android-back').length, 2);
+  assert.deepEqual(stuck.writes, []);
 });
 
 function setupTraffic() {
@@ -749,8 +1019,24 @@ test('offline local preparation maps exact Docker and seed metadata without load
   assert.equal(result.readiness.credentialFilesRead, false);
   assert.equal(result.fixture.matter.id, plan.expectations.matter.id);
   assert.equal(result.fixture.appId, 'ai.caseops.mobile.dev.localacceptance');
-  assert.equal(result.readiness.intended.length, 22);
+  assert.equal(result.readiness.intended.length, 23);
   assert.equal(result.fixture.auth.webOrigin, 'https://10.0.2.2:3443');
+});
+
+test('offline preparation retains enrolled MFA as required but blocks unspecified stage instead of guessing login', (t) => {
+  const plan = localPlan(t), seed = JSON.parse(readFileSync(plan.seed.path, 'utf8'));
+  seed.mfaEnrolled = true; plan.seed = ownedFile(t, seed);
+  const environment = { ...unitCredentials, CASEOPS_MOBILE_UNIT_TOTP: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' };
+  plan.auth.totpSecretEnv = 'CASEOPS_MOBILE_UNIT_TOTP';
+  const blocked = prepareLocalPlan(plan, 'android', environment);
+  assert.equal(blocked.fixture.auth.mfaRequired, true);
+  assert.equal(blocked.fixture.auth.mfaStage, undefined);
+  assert.ok(blocked.readiness.blockers.some(({ code }) => code === 'EXPLICIT_MFA_STAGE_REQUIRED'));
+  assert.throws(() => readFileSync(plan.outputFixture), /ENOENT/);
+  plan.auth.mfaStage = 'consent';
+  const ready = inspectLocalPlan(plan, 'android', environment);
+  assert.equal(ready.readiness.status, 'ready-for-native-preflight');
+  assert.equal(ready.fixture.auth.mfaStage, 'consent');
 });
 test('dirty web identity and incomplete seed retain the complete inventory and refuse fixture creation', (t) => {
   const plan = localPlan(t), receipt = JSON.parse(readFileSync(plan.dockerReceipt.path, 'utf8'));
@@ -760,7 +1046,7 @@ test('dirty web identity and incomplete seed retain the complete inventory and r
   const codes = result.readiness.blockers.map(({ code }) => code);
   assert.ok(codes.includes('EXACT_SERVING_SHA_UNAVAILABLE'));
   assert.ok(codes.includes('SERVING_SOURCE_NOT_FROZEN'));
-  assert.equal(result.readiness.intended.length, 22);
+  assert.equal(result.readiness.intended.length, 23);
   assert.equal(result.readiness.status, 'incomplete');
   assert.equal(result.fixture.matter.searches[0].value, 'UNIT-CODE');
   assert.equal(result.readiness.blockers.filter(({ code }) => code === 'EXACT_SEARCH_IDENTIFIER_EXPECTATION_MISSING').length, 4);

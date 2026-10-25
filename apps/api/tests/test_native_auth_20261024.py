@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
-from sqlalchemy import inspect, select
+from sqlalchemy import func, inspect, select
 
 from caseops_api.core.native_auth import (
     LOCAL_REDIRECT,
@@ -80,6 +80,136 @@ def _device(client, browser_headers):
 
 def _headers(device):
     return {"Authorization": "Bearer " + device["access_token"]}
+
+
+def _assert_no_native_issuance():
+    with get_session_factory()() as session:
+        for model in (NativeAuthorizationCode, NativeDeviceSession, NativeRefreshToken):
+            assert session.scalar(select(func.count()).select_from(model)) == 0
+
+
+def test_optional_policy_native_mfa_requires_same_browser_proof_and_explicit_recovery(client):
+    import time
+
+    from caseops_api.services.security import TOTP_PERIOD_SECONDS, _hotp
+
+    auth, original_browser = _browser(client)
+    with get_session_factory()() as session:
+        session.add(TenantSecurityPolicy(
+            company_id=auth["company"]["id"], all_users_mfa_required=False,
+            tenant_admin_mfa_required=False,
+        ))
+        session.commit()
+    enrollment = client.post("/api/auth/mfa/enroll", headers=original_browser)
+    assert enrollment.status_code == 200, enrollment.text
+    secret = enrollment.json()["secret"]
+    verified = client.post(
+        "/api/auth/mfa/enroll/verify", headers=original_browser,
+        json={"code": _hotp(secret, int(time.time()) // TOTP_PERIOD_SECONDS)},
+    )
+    assert verified.status_code == 200, verified.text
+    _assert_no_native_issuance()
+    login = client.post("/api/auth/login", json={
+        "email": "owner@asterlegal.in", "password": "FoundersPass123!",
+        "company_slug": "aster-legal",
+    })
+    assert login.status_code == 200, login.text
+    assert login.json()["mfa_challenge_required"] is False
+    token = login.json()["access_token"]
+    issued = float(decode_access_token(token)["issued_at_precise"])
+    assert issued != float(decode_access_token(auth["access_token"])["issued_at_precise"])
+    csrf = client.cookies.get("caseops_csrf")
+    browser = {
+        "Cookie": f"caseops_session={token}; caseops_csrf={csrf}",
+        "X-CSRF-Token": csrf,
+    }
+    client.cookies.clear()
+
+    def refused():
+        response = _authorize(client, browser)
+        assert response.status_code == 403, response.text
+        assert response.headers["content-type"].startswith("application/problem+json")
+        assert response.json()["type"] == "native_mfa_required", response.text
+        assert response.json()["detail"] == (
+            "Complete MFA in this browser session before native sign-in."
+        )
+        _assert_no_native_issuance()
+
+    # Enrollment proved the older browser, never this newly logged-in token.
+    refused()
+    wrong = client.post(
+        "/api/auth/mfa/step-up", headers=browser,
+        json={"code": "not-a-real-recovery-code", "method": "recovery_code", "purpose": "step_up"},
+    )
+    assert wrong.status_code == 403, wrong.text
+    assert wrong.json()["type"] != "native_mfa_required"
+    refused()
+    for stale in ("before-token", "expired"):
+        with get_session_factory()() as session:
+            proof = session.scalar(select(UserMFAStepUp))
+            proof.source_token_issued_at = issued
+            proof.completed_at = (
+                datetime.fromtimestamp(issued, UTC) - timedelta(seconds=1)
+                if stale == "before-token" else datetime.now(UTC)
+            )
+            proof.expires_at = datetime.now(UTC) + timedelta(
+                seconds=300 if stale == "before-token" else -1
+            )
+            session.commit()
+        refused()
+    ordinary = _authorize(client, {"Cookie": browser["Cookie"]})
+    assert ordinary.status_code == 403, ordinary.text
+    assert ordinary.json()["type"] != "native_mfa_required"
+    stepped = client.post(
+        "/api/auth/mfa/step-up", headers=browser,
+        json={"code": _hotp(secret, int(time.time()) // TOTP_PERIOD_SECONDS), "purpose": "step_up"},
+    )
+    assert stepped.status_code == 200, stepped.text
+    _assert_no_native_issuance()
+    grant = _authorize(client, browser)
+    assert grant.status_code == 200, grant.text
+    with get_session_factory()() as session:
+        code = session.scalar(select(NativeAuthorizationCode))
+        assert code.source_issued_at == issued
+        assert code.consumed_at is None
+        assert session.scalar(select(func.count()).select_from(NativeDeviceSession)) == 0
+    exchanged = _exchange(client, grant.json()["code"])
+    assert exchanged.status_code == 200, exchanged.text
+    assert client.get("/api/auth/me", headers=_headers(exchanged.json())).status_code == 200
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(NativeDeviceSession)) == 1
+        assert session.scalar(select(NativeAuthorizationCode)).consumed_at is not None
+
+
+@pytest.mark.parametrize("enrolled", [False, True])
+def test_required_policy_native_mfa_proof_refusal_is_typed_without_grants(client, enrolled):
+    from caseops_api.core.problem_details import ProblemHTTPException
+    from caseops_api.schemas.native_auth import NativeAuthorizeRequest
+    from caseops_api.services.identity import get_session_context
+
+    auth, _ = _browser(client)
+    with get_session_factory()() as session:
+        session.add(TenantSecurityPolicy(
+            company_id=auth["company"]["id"], all_users_mfa_required=True,
+            mfa_enforced_at=datetime.now(UTC) - timedelta(minutes=1),
+        ))
+        if enrolled:
+            session.add(UserMFASetting(user_id=auth["user"]["id"], status="enrolled"))
+        session.commit()
+        context = get_session_context(
+            session, auth["membership"]["id"],
+            token_issued_at=float(decode_access_token(auth["access_token"])["issued_at_precise"]),
+        )
+        with pytest.raises(ProblemHTTPException) as error:
+            native_auth.authorize(session, context, NativeAuthorizeRequest(
+                code_challenge=native_auth.pkce_challenge(VERIFIER), state=STATE,
+                platform="android", redirect_uri=LOCAL_REDIRECT,
+            ))
+        assert error.value.status_code == 403
+        assert error.value.problem_type == "native_mfa_required"
+        assert error.value.detail == "Complete MFA in the browser before native sign-in."
+        session.rollback()
+    _assert_no_native_issuance()
 
 
 def test_pkce_handoff_has_canonical_context_and_only_hashed_secrets(client):

@@ -4,7 +4,7 @@
   "scope": "J20/M22 dated concrete native core; partial MOB-01..40, not full-v1 acceptance",
   "platforms": ["android", "ios"],
   "cases": [
-    {"id":"NATIVE-01","groups":["MOB-01","MOB-02"],"title":"Real system-browser form login, unchanged PKCE handoff and exact principal/workspace"},
+    {"id":"NATIVE-01","groups":["MOB-01","MOB-02"],"title":"Real browser login, explicit login/consent MFA stage, unchanged PKCE/principal/workspace and exactly one successful grant/token exchange"},
     {"id":"NATIVE-02","groups":["MOB-07","MOB-15","MOB-19"],"title":"Four actual native destinations"},
     {"id":"NATIVE-03","groups":["MOB-07"],"title":"Seeded Today task identity/date/status opens exact source Matter"},
     {"id":"NATIVE-04","groups":["MOB-08"],"title":"Matter code search, exact detail and authoritative reload"},
@@ -24,7 +24,8 @@
     {"id":"NATIVE-18","groups":["MOB-09"],"title":"Held dedicated Matter loses access; reload hides labels and bytes","ownerCapabilities":["revokeMatterAccess","readNoteState"]},
     {"id":"NATIVE-19","groups":["MOB-05","MOB-09"],"title":"Seeded other-tenant identifier search returns no foreign label or row"},
     {"id":"NATIVE-20","groups":["MOB-04"],"title":"Current native device-session revocation: cancel, confirm once and stay signed out on restart"},
-    {"id":"NATIVE-21","groups":["MOB-30"],"title":"Whole-run native/browser gateway evidence has zero missing markers or unadmitted routes"},
-    {"id":"NATIVE-22","groups":["MOB-05"],"title":"Acknowledged logout hides private content and stays signed out after restart"}
+    {"id":"NATIVE-21","groups":["MOB-30"],"title":"Whole-run native/browser ledger has exact staged-MFA attempt/grant/token sequences and zero missing markers or unadmitted routes"},
+    {"id":"NATIVE-22","groups":["MOB-05"],"title":"Acknowledged logout hides private content and stays signed out after restart"},
+    {"id":"NATIVE-23","groups":["MOB-05","MOB-35","MOB-36"],"title":"After acknowledged logout, actual Home background and warm resume restore usable signed-out controls without private UI or authentication","signedOutAfter":"NATIVE-22"}
   ]
 }

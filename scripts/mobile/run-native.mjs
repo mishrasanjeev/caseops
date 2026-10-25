@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { authenticate, scenarios } from '../../apps/mobile/e2e/journeys.mjs';
+import { prepareScenario, scenarios } from '../../apps/mobile/e2e/journeys.mjs';
 import { admitApplication, FixtureUnavailable, loadOwnerControls, validateBuildReceipt, validateCoreFixture } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { collect, harnessFingerprint, inventory } from '../../apps/mobile/e2e/suite.mjs';
 import { binaryHash, Journal, localJson, localUrl, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
@@ -129,9 +129,10 @@ if (mode === '--collect') {
     preflightFailed = true;
     journal.write({ type: 'preflight_result', status: 'failed', reason: safeFailure(error, 'NATIVE_PREREQUISITE_MISSING_OR_MISMATCHED') });
   }
+  const completedCases = new Set();
   for (const scenario of scenarios) {
     const id = `${platform}:${scenario.id}`;
-    let driver, context, setupPassed = false;
+    let driver, context, setupPassed = false, callPassed = false;
     journal.write({ type: 'phase_started', id, phase: 'setup' });
     try {
       assert.equal(preflightFailed, false, 'PREFLIGHT_FAILED');
@@ -148,7 +149,7 @@ if (mode === '--collect') {
       await driver.switchContext('NATIVE_APP');
       context = { driver, fixture, platform, owner, runId, gatewayBaseline: runGatewayBaseline,
         record: (event) => journal.write({ ...event, id }), noteText: `CaseOps native QA ${runId} ${scenario.id}` };
-      if (!scenario.authenticateInCall) await authenticate(context);
+      await prepareScenario(context, scenario, completedCases);
       setupPassed = true;
       journal.write({ type: 'phase_result', id, phase: 'setup', status: 'passed' });
     } catch (error) {
@@ -160,6 +161,7 @@ if (mode === '--collect') {
     else {
       try {
         await scenario.run(context);
+        callPassed = true;
         journal.write({ type: 'phase_result', id, phase: 'call', status: 'passed' });
       } catch (error) {
         journal.write({ type: 'phase_result', id, phase: 'call', status: error instanceof FixtureUnavailable ? 'blocked' : 'failed',
@@ -170,6 +172,7 @@ if (mode === '--collect') {
     try {
       if (driver) await driver.deleteSession();
       journal.write({ type: 'phase_result', id, phase: 'teardown', status: 'passed' });
+      if (setupPassed && callPassed) completedCases.add(scenario.id);
     } catch {
       journal.write({ type: 'phase_result', id, phase: 'teardown', status: 'failed', reason: 'NATIVE_SESSION_CLEANUP_FAILED' });
     }

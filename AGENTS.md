@@ -1241,6 +1241,16 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- Native authorization can require fresh browser-session MFA even when ordinary
+  tenant login policy is optional. Exercise that exact combination through the
+  real system browser; a working server refusal without an inline verification
+  path is not a usable sign-in. Keep the typed refusal, same-browser proof,
+  principal recheck and explicit post-verification Connect; never auto-grant or
+  turn off MFA to make the native journey pass.
+- A privacy foreground flag that only updates a ref cannot redraw a signed-out
+  app after background. Test actual Home/return with no credential or identity
+  update, require the usable sign-in panel, and prove no automatic auth request.
+
 - A native system picker can background and unmount private screens. Preserve
   only opaque tenant/user/membership/login/parent identity and the originally
   observed lifecycle version at the root; revalidate on return, require an

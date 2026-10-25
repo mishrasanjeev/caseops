@@ -22,6 +22,137 @@ const certificate = `${rootCertificates.find((pem) => {
 }).trim()}\n`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 
+const resourceDump = `Package name=ai.caseops.mobile.dev.localacceptance id=7f
+  type raw id=10 entryCount=1
+    resource 0x7f100000 raw/caseops_local_acceptance_ca
+      () (file) res/Ap.pem
+  type xml id=14 entryCount=1
+    resource 0x7f140000 xml/caseops_local_acceptance_network
+      () (file) res/RM.xml type=XML
+`;
+const manifestDump = `N: android=http://schemas.android.com/apk/res/android (line=2)
+  E: manifest (line=2)
+    A: package="ai.caseops.mobile.dev.localacceptance" (Raw: "ai.caseops.mobile.dev.localacceptance")
+      E: application (line=3)
+        A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=false
+        A: http://schemas.android.com/apk/res/android:usesCleartextTraffic(0x010104ec)=false
+        A: http://schemas.android.com/apk/res/android:networkSecurityConfig(0x01010527)=@0x7f140000
+`;
+const networkDump = `E: network-security-config (line=2)
+    E: base-config (line=3)
+      A: cleartextTrafficPermitted=false
+        E: trust-anchors (line=4)
+            E: certificates (line=4)
+              A: src="system" (Raw: "system")
+    E: domain-config (line=7)
+      A: cleartextTrafficPermitted=false
+        E: domain (line=8)
+          A: includeSubdomains=false
+            T: 'localhost'
+        E: domain (line=9)
+          A: includeSubdomains=false
+            T: 'ip6-localhost'
+        E: domain (line=10)
+          A: includeSubdomains=false
+            T: '127.0.0.1'
+        E: domain (line=11)
+          A: includeSubdomains=false
+            T: '[::1]'
+        E: trust-anchors (line=12)
+            E: certificates (line=12)
+              A: src="system" (Raw: "system")
+    E: domain-config (line=14)
+      A: cleartextTrafficPermitted=false
+        E: domain (line=15)
+          A: includeSubdomains=false
+            T: '10.0.2.2'
+        E: trust-anchors (line=16)
+            E: certificates (line=16)
+              A: src=@0x7f100000
+`;
+const zipInventory = [
+  { name: 'AndroidManifest.xml', length: 1000 },
+  { name: 'assets/index.android.bundle', length: 2000 },
+  { name: 'assets/app.config', length: 1000 },
+  { name: 'res/Ap.pem', length: Buffer.byteLength(certificate) },
+  { name: 'res/RM.xml', length: 1000 },
+];
+
+test('optimized APK names resolve through SDK identities and compiled manifest/XML pointers', async () => {
+  const build = await import('./build-acceptance.mjs');
+  const resources = build.resolveAndroidAcceptanceResources(resourceDump);
+  assert.deepEqual(resources.ca, { id: '0x7f100000', path: 'res/Ap.pem' });
+  assert.deepEqual(resources.network, { id: '0x7f140000', path: 'res/RM.xml' });
+  build.verifyAndroidCompiledSecurity(resources, manifestDump, networkDump, ['10.0.2.2']);
+  assert.equal(build.verifyAndroidZipEvidence(resources, zipInventory, Buffer.from(certificate), digest(certificate)).publicCaSha256, digest(certificate));
+  const renamed = resourceDump.replaceAll('res/Ap.pem', 'res/Another.pem').replaceAll('res/RM.xml', 'res/Another.xml')
+    .replaceAll('0x7f100000', '0x7f210005').replaceAll('0x7f140000', '0x7f220007');
+  const dynamic = build.resolveAndroidAcceptanceResources(renamed);
+  build.verifyAndroidCompiledSecurity(dynamic, manifestDump.replaceAll('0x7f140000', '0x7f220007'),
+    networkDump.replaceAll('0x7f100000', '0x7f210005'), ['10.0.2.2']);
+});
+
+for (const [label, altered] of [
+  ['missing', resourceDump.replace('raw/caseops_local_acceptance_ca', 'raw/not_the_ca')],
+  ['duplicate name', resourceDump + '    resource 0x7f100008 raw/caseops_local_acceptance_ca\n      () (file) res/other.pem\n'],
+  ['duplicate ID', resourceDump + '    resource 0x7f100000 raw/other\n      () (file) res/other.pem\n'],
+  ['qualified alternate', resourceDump.replace('() (file) res/Ap.pem', '() (file) res/Ap.pem\n      (v37) (file) res/other.pem')],
+  ['traversal', resourceDump.replace('res/Ap.pem', 'res/../outside.pem')],
+  ['absolute', resourceDump.replace('res/Ap.pem', '/res/Ap.pem')],
+  ['backslash', resourceDump.replace('res/Ap.pem', 'res\\Ap.pem')],
+  ['misleading suffix', resourceDump.replace('raw/caseops_local_acceptance_ca', 'raw/caseops_local_acceptance_ca_fake')],
+  ['shared ZIP path', resourceDump.replace('res/RM.xml', 'res/Ap.pem')],
+  ['malformed extra header', resourceDump + '    resource invalid raw/caseops_local_acceptance_ca\n'],
+]) {
+  test(`SDK resource lookup rejects ${label}`, async () => {
+    const { resolveAndroidAcceptanceResources } = await import('./build-acceptance.mjs');
+    assert.throws(() => resolveAndroidAcceptanceResources(altered), /RESOURCE|ZIP/);
+  });
+}
+
+test('APK ZIP verification rejects missing/duplicate entries, traversal and wrong CA bytes or source hash', async () => {
+  const build = await import('./build-acceptance.mjs');
+  const resources = build.resolveAndroidAcceptanceResources(resourceDump);
+  for (const inventory of [zipInventory.slice(0, -1), [...zipInventory, zipInventory[3]],
+    [...zipInventory, { name: 'res/../evil', length: 1 }],
+    [...zipInventory, { name: '/absolute', length: 1 }],
+    [...zipInventory, { name: 'res\\evil', length: 1 }],
+    zipInventory.map((entry) => entry.name === 'res/Ap.pem' ? { ...entry, length: 16385 } : entry)]) {
+    assert.throws(() => build.verifyAndroidZipEvidence(resources, inventory, Buffer.from(certificate), digest(certificate)), /ZIP|APK/);
+  }
+  assert.throws(() => build.verifyAndroidZipEvidence(resources, zipInventory, Buffer.from(certificate), '0'.repeat(64)), /CA_HASH_MISMATCH/);
+  assert.throws(() => build.verifyAndroidZipEvidence(resources, zipInventory, Buffer.from(certificate.replace('CERTIFICATE', 'NOT_CERTIFICATE')), digest(certificate)), /CA_HASH_MISMATCH/);
+});
+
+for (const [label, manifest, network] of [
+  ['wrong manifest pointer', manifestDump.replace('@0x7f140000', '@0x7f140001'), networkDump],
+  ['wrong CA pointer', manifestDump, networkDump.replace('@0x7f100000', '@0x7f100001')],
+  ['duplicate manifest pointer', manifestDump + '        A: http://schemas.android.com/apk/res/android:networkSecurityConfig(0x01010527)=@0x7f140000\n', networkDump],
+  ['cleartext', manifestDump, networkDump.replace('cleartextTrafficPermitted=false', 'cleartextTrafficPermitted=true')],
+  ['user CA substitute', manifestDump, networkDump.replace('src=@0x7f100000', 'src="user" (Raw: "user")')],
+  ['foreign CA host', manifestDump, networkDump.replace("T: '10.0.2.2'", "T: 'caseops.ai'")],
+  ['wildcard host', manifestDump, networkDump.replace('includeSubdomains=false', 'includeSubdomains=true')],
+  ['backup', manifestDump.replace('allowBackup(0x01010280)=false', 'allowBackup(0x01010280)=true'), networkDump],
+  ['debuggable', manifestDump + '        A: http://schemas.android.com/apk/res/android:debuggable(0x0101000f)=true\n', networkDump],
+  ['fake named CA string', manifestDump, networkDump.replace('src=@0x7f100000', 'src="@raw/caseops_local_acceptance_ca" (Raw: "@raw/caseops_local_acceptance_ca")')],
+  ['wrong framework attribute ID', manifestDump.replace('networkSecurityConfig(0x01010527)', 'networkSecurityConfig(0x01010001)'), networkDump],
+  ['extra trust source', manifestDump, networkDump + '            E: certificates (line=18)\n              A: src="system" (Raw: "system")\n'],
+]) {
+  test(`compiled security verification rejects ${label}`, async () => {
+    const build = await import('./build-acceptance.mjs');
+    assert.throws(() => build.verifyAndroidCompiledSecurity(build.resolveAndroidAcceptanceResources(resourceDump), manifest, network, ['10.0.2.2']),
+      /SDK_XML|COMPILED|MANIFEST|NETWORK|BASE|SUBDOMAIN|TRUST|DOMAIN|CERTIFICATE|FRAMEWORK/);
+  });
+}
+
+test('SDK resource and XML parsers enforce byte, line and structural bounds', async () => {
+  const build = await import('./build-acceptance.mjs');
+  assert.throws(() => build.resolveAndroidAcceptanceResources('x'.repeat(16 * 1024 * 1024 + 1)), /SDK_DUMP_SIZE_BOUND/);
+  assert.throws(() => build.resolveAndroidAcceptanceResources('x'.repeat(8193)), /SDK_DUMP_LINE_BOUND/);
+  assert.throws(() => build.verifyAndroidCompiledSecurity(build.resolveAndroidAcceptanceResources(resourceDump),
+    manifestDump, networkDump + 'E: network-security-config (line=100)\n', ['10.0.2.2']), /ONE_COMPILED_XML_ROOT_REQUIRED/);
+});
+
 test('Windows native staging is short, outside sources, module-isolated and part of build evidence', () => {
   const init = readFileSync(path.join(repo,'scripts/mobile/windows-native-paths.gradle'),'utf8');
   assert.match(init, /gradle\.beforeProject/);

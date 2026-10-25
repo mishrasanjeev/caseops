@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { authenticate } from './browser-handoff.mjs';
 import { FixtureUnavailable, ownerControl, SEARCH_KINDS } from './fixture-contract.mjs';
-import { absent, click, expectText, find, findQuery, home, input, read, restart, selector, visible } from './native-ui.mjs';
+import { absent, backgroundAndResume, click, expectText, find, findQuery, home, input, read, restart, selector, visible } from './native-ui.mjs';
 import { localJson } from './support.mjs';
 import { validateTraffic } from './traffic.mjs';
+import { validateAuthorizationTraffic } from './mfa.mjs';
 
 export { authenticate };
 export async function traffic(context) {
@@ -83,16 +84,33 @@ function seeded(context, key) {
   return context.fixture[key];
 }
 
+async function signedOutSurface(context) {
+  await find(context, 'id', 'signed-out');
+  assert.equal(await (await find(context, 'id', 'sign-in')).isEnabled(), true, 'SIGNED_OUT_SIGN_IN_NOT_USABLE');
+  for (const id of ['session-loading', 'account-open', 'account-screen', 'account-principal', 'matter-code',
+    'note-input', 'note-confirmed', 'screen-today', 'screen-matters', 'screen-calendar', 'screen-work',
+    'tab-today', 'tab-matters', 'tab-calendar', 'tab-work']) await absent(context, 'id', id);
+  for (const label of [context.fixture.principalLabel, context.fixture.workspaceLabel, context.fixture.matter.title,
+    context.fixture.matter.identityLabel]) await absent(context, 'text', label);
+}
+
+export async function prepareScenario(context, scenario, completedCases) {
+  if (scenario.signedOutAfter) {
+    if (!completedCases.has(scenario.signedOutAfter)) throw new FixtureUnavailable('PREREQUISITE_SCENARIO_NOT_PASSED');
+    await signedOutSurface(context);
+  } else if (!scenario.authenticateInCall) await authenticate(context);
+}
+
+export function signedOutResumeTraffic(requests) {
+  assert.equal(requests.filter((request) => request.route.startsWith('/api/auth/')).length, 0, 'SIGNED_OUT_RESUME_ATTEMPTED_AUTHENTICATION');
+}
+
 export const scenarios = [
   { id: 'NATIVE-01', authenticateInCall: true, run: async (context) => {
     const before = await traffic(context);
     await authenticate(context, { fresh: true });
     const requests = delta(before, await traffic(context));
-    assert.equal(requestCount(requests, 'POST', '/api/auth/native/authorize'), 1, 'REAL_BROWSER_AUTHORIZATION_NOT_ONCE');
-    assert.equal(requestCount(requests, 'POST', '/api/auth/native/token'), 1, 'REAL_PKCE_EXCHANGE_NOT_ONCE');
-    for (const route of ['/api/auth/native/authorize', '/api/auth/native/token']) {
-      assert.ok(requests.some((request) => request.route === route && [200, 201].includes(request.status)), 'REAL_PKCE_EXCHANGE_NOT_ACKNOWLEDGED');
-    }
+    validateAuthorizationTraffic(requests, context.fixture.auth, { single: true });
   } },
   { id: 'NATIVE-02', run: async (context) => { for (const tab of ['today', 'matters', 'calendar', 'work']) await home(context, tab); } },
   { id: 'NATIVE-03', run: async (context) => {
@@ -335,6 +353,7 @@ export const scenarios = [
     const requests = state.requests.filter((row) => row.sequence > (context.gatewayBaseline?.lastSequence || 0));
     assert.ok(requests.some((row) => row.route === '/api/me/today' && row.status === 200), 'MEANINGFUL_NATIVE_TRAFFIC_MISSING');
     assert.ok(requests.some((row) => row.route === '/api/auth/native/authorize' && row.status === 200), 'SYSTEM_BROWSER_TRAFFIC_NOT_IN_LEDGER');
+    validateAuthorizationTraffic(requests, context.fixture.auth);
   } },
   { id: 'NATIVE-22', run: async (context) => {
     await openMatter(context);
@@ -351,5 +370,12 @@ export const scenarios = [
     assert.equal(requestCount(requests, 'POST', '/api/auth/native/logout'), 1, 'LOGOUT_NOT_ONCE');
     assert.ok(requests.some((request) => request.route === '/api/auth/native/logout' && [200, 204].includes(request.status)), 'LOGOUT_NOT_ACKNOWLEDGED');
     assert.equal(requestCount(requests, 'POST', '/api/auth/native/refresh'), 0, 'LOGOUT_RESTORED_DEVICE_SESSION');
+  } },
+  { id: 'NATIVE-23', signedOutAfter: 'NATIVE-22', run: async (context) => {
+    await signedOutSurface(context);
+    const before = await traffic(context);
+    await backgroundAndResume(context);
+    await signedOutSurface(context);
+    signedOutResumeTraffic(delta(before, await traffic(context)));
   } },
 ];
