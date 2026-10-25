@@ -23,6 +23,54 @@ import { inspectLocalPlan, prepareLocalPlan } from '../../apps/mobile/e2e/local-
 import { configuredSessionDeleteAdmission, MAX_SESSION_ADMISSION_EVENTS, proveCurrentSessionDeletion } from '../../apps/mobile/e2e/session-admission.mjs';
 import { browserStep } from '../../apps/mobile/e2e/browser-progress.mjs';
 import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
+import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
+
+const installedHash = 'a'.repeat(64);
+const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
+const installedFixture = { appId: 'ai.caseops.mobile.dev', udid: 'emulator-5580', appPath: path.resolve('acceptance.apk') };
+function androidCommandDouble({ install = 'Performing Streamed Install\nSuccess', paths = `package:${installedPath}`, digest = `${installedHash}  ${installedPath}` } = {}) {
+  const calls = [];
+  return { calls, command: (binary, args, options) => {
+    assert.equal(binary, 'adb'); assert.deepEqual(args.slice(0, 2), ['-s', 'emulator-5580']);
+    assert.equal(options.shell, false); assert.equal(options.windowsHide, true); assert.ok(options.timeout <= 120000);
+    calls.push(args.slice(2));
+    if (args[2] === 'install') return install;
+    return args[3] === 'pm' ? paths : digest;
+  } };
+}
+test('Android preflight explicitly replaces the APK without clearing data and attests installed bytes', () => {
+  const stub = androidCommandDouble();
+  const proof = attestAndroidBinary(installedFixture, installedHash, { ...stub, install: true });
+  assert.equal(proof.explicitReplaceInstall, true); assert.equal(proof.appDataCleared, false);
+  assert.deepEqual(stub.calls, [['install', '-r', installedFixture.appPath], ['shell', 'pm', 'path', installedFixture.appId], ['shell', 'sha256sum', installedPath]]);
+});
+test('Android per-case and final attestations never reinstall or clear session data', () => {
+  const stub = androidCommandDouble();
+  assert.equal(attestAndroidBinary(installedFixture, installedHash, stub).explicitReplaceInstall, false);
+  assert.equal(stub.calls.length, 2); assert.ok(stub.calls.every(args => args[0] === 'shell'));
+});
+test('Android stale same-version installed APK cannot pass a source-bound run', () => {
+  const stub = androidCommandDouble({ digest: `${'b'.repeat(64)}  ${installedPath}` });
+  assert.throws(() => attestAndroidBinary(installedFixture, installedHash, stub), /INSTALLED_ANDROID_APK_HASH_MISMATCH/);
+});
+test('Android failed install cannot fall through to an older installed APK', () => {
+  const stub = androidCommandDouble({ install: 'Failure [INSTALL_FAILED]' });
+  assert.throws(() => attestAndroidBinary(installedFixture, installedHash, { ...stub, install: true }), /EXACT_ANDROID_APK_INSTALL_FAILED/);
+  assert.equal(stub.calls.length, 1);
+});
+test('Android split APK and unsafe package paths fail closed', () => {
+  for (const paths of [`package:${installedPath}\npackage:/data/app/split.apk`, 'package:/data/app/../base.apk', 'package:/sdcard/base.apk'])
+    assert.throws(() => attestAndroidBinary(installedFixture, installedHash, androidCommandDouble({ paths })));
+});
+test('Android install rejects non-owned application and ambiguous device identity before any command', () => {
+  for (const fixture of [{ ...installedFixture, appId: 'another.app' }, { ...installedFixture, udid: '-s other-device' }])
+    assert.throws(() => attestAndroidBinary(fixture, installedHash, { command: () => assert.fail('must not execute') }));
+});
+test('canonical Android runner attests device bytes before preflight success, every case and postflight success', () => {
+  const runner = readFileSync(new URL('./run-native.mjs', import.meta.url), 'utf8');
+  assert.equal((runner.match(/attestAndroidBinary\(fixture, selectedBinaryHash/g) || []).length, 3);
+  assert.ok(runner.indexOf('{ install: true }') < runner.indexOf("type: 'preflight_result', status: 'passed'"));
+});
 
 const inventory = JSON.parse(readFileSync(new URL('../../apps/mobile/e2e/inventory.json', import.meta.url), 'utf8'));
 test('core discovered inventory exactly matches canonical identities on both platforms', () => {
@@ -765,7 +813,7 @@ test('canonical N9 uses the acknowledged ID at both checkpoints and retains one-
 
 async function calendarDriver(t, { omitReloadRead = false, wrongEventId = false } = {}) {
   const requests = [], clicks = [], waits = [];
-  const event = { hearingId: 'unit-hearing', day: '2026-10-25', dayLabel: '25 Oct 2026', title: 'Unit recorded hearing', metaLabel: 'Unit hearing value',
+  const event = { hearingId: 'unit-hearing', eventId: 'hearing:unit-hearing', day: '2026-10-25', dayLabel: '25 Oct 2026', title: 'Unit recorded hearing', metaLabel: 'Unit hearing value',
     matter: { id: 'unit-matter', identityLabel: 'UNIT-MATTER', title: 'Unit source matter' }, nextHearingLabel: '25 Oct 2026 next hearing' };
   let page = 'calendar', draftDay = '', invalid = false;
   const appendRead = () => requests.push({ sequence: requests.length + 1, method: 'GET', route: '/api/calendar/events', status: 200, nativeMarker: true });
@@ -781,7 +829,7 @@ async function calendarDriver(t, { omitReloadRead = false, wrongEventId = false 
     getWindowRect: async () => ({ width: 400, height: 800 }), performActions: async () => {}, releaseActions: async () => {},
     $$: async (query) => {
       const ids = ['tab-calendar', ...(page === 'calendar' ? ['screen-calendar', 'calendar-go-date', 'reload',
-        `event-${wrongEventId ? 'another-hearing' : event.hearingId}`] : ['matter-code'])];
+        `event-${wrongEventId ? 'another-hearing' : event.eventId}`] : ['matter-code'])];
       const id = ids.find((id) => query === selector('android', 'id', id));
       const dateInput = page === 'calendar' && query === selector('android', 'label', 'Agenda date, YYYY-MM-DD');
       const texts = page === 'calendar' ? [event.dayLabel, event.title, event.metaLabel,
@@ -794,7 +842,7 @@ async function calendarDriver(t, { omitReloadRead = false, wrongEventId = false 
           if (id === 'tab-calendar') page = 'calendar';
           if (id === 'calendar-go-date') { invalid = draftDay !== event.day; if (!invalid) appendRead(); }
           if (id === 'reload' && !omitReloadRead) appendRead();
-          if (id === `event-${event.hearingId}`) page = 'matter';
+          if (id === `event-${event.eventId}`) page = 'matter';
           if (text) throw new Error('CALENDAR_TEXT_LEAF_IS_NOT_AN_ACTION_CONTROL');
         } }];
     },
@@ -806,7 +854,7 @@ async function calendarDriver(t, { omitReloadRead = false, wrongEventId = false 
 test('N10/N11 use actual date/reload IDs and retain exact event/source values plus invalid-date zero-read boundary (unit double)', async (t) => {
   const positive = await calendarDriver(t);
   await datedScenarios.find(({ id }) => id === 'NATIVE-10').run(positive.context);
-  assert.deepEqual(positive.clicks, ['tab-calendar', 'calendar-go-date', 'reload', 'event-unit-hearing']);
+  assert.deepEqual(positive.clicks, ['tab-calendar', 'calendar-go-date', 'reload', 'event-hearing:unit-hearing']);
   assert.equal(positive.requests.length, 2);
   assert.ok(positive.waits.some(({ timeout, interval, timeoutMsg }) => timeout === 10000 && interval === 200 && timeoutMsg === 'AGENDA_REREAD_MISSING'));
   const invalid = await calendarDriver(t);
@@ -826,6 +874,21 @@ test('N10 missing authoritative reload GET still fails without clicking twice or
 test('N10 rejects a different event ID even if its visible title/date/meta values match, without a title-click fallback', async (t) => {
   const fake = await calendarDriver(t, { wrongEventId: true });
   await assert.rejects(() => datedScenarios.find(({ id }) => id === 'NATIVE-10').run(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.deepEqual(fake.clicks, ['tab-calendar', 'calendar-go-date', 'reload']);
+});
+
+test('N10 preserves an opaque Calendar event identity instead of deriving it from the hearing primary key', async (t) => {
+  const fake = await calendarDriver(t);
+  fake.context.fixture.calendar.eventId = 'opaque:v3-event-42';
+  await datedScenarios.find(({ id }) => id === 'NATIVE-10').run(fake.context);
+  assert.deepEqual(fake.clicks, ['tab-calendar', 'calendar-go-date', 'reload', 'event-opaque:v3-event-42']);
+  assert.ok(!fake.clicks.includes('event-unit-hearing'));
+});
+
+test('N10 missing server-owned Calendar event identity cannot fall back to a hearing ID', async (t) => {
+  const fake = await calendarDriver(t);
+  delete fake.context.fixture.calendar.eventId;
+  await assert.rejects(() => datedScenarios.find(({ id }) => id === 'NATIVE-10').run(fake.context), /SEEDED_CALENDAR_EVENT_ID_REQUIRED/);
   assert.deepEqual(fake.clicks, ['tab-calendar', 'calendar-go-date', 'reload']);
 });
 
@@ -902,7 +965,7 @@ function coreFixture(t) {
   const fixture = { environment: 'docker-integration', syntheticDataOnly: true, coreInventory: datedInventory.inventoryId,
     backendSha: 'a'.repeat(40), backendRevision: 'unit-api', webSha: 'a'.repeat(40), webRevision: 'unit-web', gatewayRunId: 'unit-run',
     browserApiMarkerVerified: true, matter, today: task, work: { task, draft: { ...task, id: 'unit-draft', kind: 'draft', entry: 'matter-work', revisionLabel: 'Revision 1', body: 'Synthetic draft', statusLabel: 'review Read-only', citations: ['Synthetic citation'], verifiedCitationCountLabel: '0 server-marked verified citations. This is not certification of legal accuracy.' } },
-    calendar: { matter, day: '2026-10-25', dayLabel: '25 Oct 2026', title: 'Synthetic hearing', metaLabel: 'hearing', nextHearingLabel: '25 Oct 2026' },
+    calendar: { eventId: 'hearing:unit-hearing', matter, day: '2026-10-25', dayLabel: '25 Oct 2026', title: 'Synthetic hearing', metaLabel: 'hearing', nextHearingLabel: '25 Oct 2026' },
     auth: { mode: 'web-context', webOrigin: 'https://127.0.0.1:3443', companySlug: 'unit', emailEnv: 'CASEOPS_MOBILE_UNIT_EMAIL', passwordEnv: 'CASEOPS_MOBILE_UNIT_PASSWORD' } };
   fixture.isolationEvidence = ownedFile(t, { ...Object.fromEntries(['backendSha', 'backendRevision', 'gatewayRunId'].map((key) => [key, fixture[key]])),
     environment: 'docker-integration', syntheticDataOnly: true, project: 'unit-project',
@@ -1171,6 +1234,7 @@ test('authorization receipts distinguish the consent 403 attempt from the sole s
 function firefoxDouble(t, foreign = false, options = {}) {
   const auth = firefoxRecipe(t, options);
   let stage = 'app', editing = false, verified = false, backCount = 0, consentCodeEntered = false;
+  let fullBrowser = !options.prepare?.length || options.fullBrowserInitially === true;
   let clock = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0;
   const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [];
   const values = auth.firefoxUi.locators;
@@ -1219,7 +1283,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
           || (preparationIndex >= 0 ? `prepare-${preparationIndex}` : afterConnectIndex >= 0 ? `prompt-${afterConnectIndex}` : undefined);
       lastLookup = key;
       const shown = key === 'sign-in' ? stage === 'app' : key === 'account-open' ? stage === 'complete'
-        : key === 'urlOpen' ? stage !== 'app' && stage !== 'complete' && !editing
+        : key === 'urlOpen' ? fullBrowser && stage !== 'app' && stage !== 'complete' && !editing
         : ['urlValue', 'urlClose'].includes(key) ? editing
         : key === 'signInLink' ? stage === 'landing' && !editing
         : ['companySlug', 'email', 'password', 'submit'].includes(key) ? stage === 'login' && !editing
@@ -1248,6 +1312,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
         click: async () => {
           clicks.push(key);
           if (key === 'sign-in') stage = 'landing';
+          if (key === `prepare-${auth.firefoxUi.prepare.length - 1}`) fullBrowser = true;
           if (key === 'urlOpen') { editing = true; backCount = 0; }
           if (key === 'urlClose') editing = false;
           if (key === 'signInLink') stage = 'login';
@@ -1268,6 +1333,26 @@ function firefoxDouble(t, foreign = false, options = {}) {
   return { context: { driver, fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes,
     elapsed: () => clock };
 }
+test('Firefox already-full browser skips Custom Tab menu conversion but retains MFA, PKCE and one explicit grant', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, androidBack: true, fullBrowserInitially: true,
+    prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] });
+  await browserLogin(fake.context);
+  assert.deepEqual(fake.clicks.filter(key => key.startsWith('prepare-')), []);
+  assert.equal(fake.clicks.filter(key => key === 'mfaSubmit').length, 1);
+  assert.equal(fake.clicks.filter(key => key === 'connect').length, 2);
+  assert.equal(fake.clicks.filter(key => key === 'appOpen').length, 1);
+});
+
+test('Firefox already-full browser still rejects an external origin before entering credentials', async (t) => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, true, { androidBack: true, fullBrowserInitially: true,
+    prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] });
+  await assert.rejects(browserLogin(fake.context), /UNSAFE_BROWSER_ORIGIN/);
+  assert.deepEqual(fake.writes, []);
+  assert.deepEqual(fake.clicks.filter(key => key.startsWith('prepare-')), []);
+});
+
 test('Firefox native UI orchestration inspects location, fills labelled controls and connects exactly once', async (t) => {
   browserEnvironment(t);
   const fake = firefoxDouble(t);
@@ -1653,7 +1738,7 @@ function localPlan(t) {
   matter.searches[0].value = matter.identityLabel;
   const seed = { environment: 'docker-integration', syntheticDataOnly: true,
     principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace', companyId: 'unit-company', membershipId: 'unit-membership',
-    matter, taskId: fixture.today.id, draftId: fixture.work.draft.id, hearingId: 'unit-hearing', calendarDate: fixture.calendar.day,
+    matter, taskId: fixture.today.id, draftId: fixture.work.draft.id, hearingId: 'unit-hearing', calendarDate: fixture.calendar.day, calendar: { eventId: fixture.calendar.eventId },
     otherMatterId: 'unit-foreign', mfaEnrolled: false };
   const module = ownedFile(t, 'export async function control() { throw new Error("UNIT_ONLY_NOT_A_REAL_OWNER"); }', 'owner-unit.mjs');
   const output = ownedFile(t, 'output parent marker');

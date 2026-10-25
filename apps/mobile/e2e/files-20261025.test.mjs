@@ -1,17 +1,20 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { FixtureUnavailable } from './fixture-contract.mjs';
-import { collectFiles, expandSourceDetails, inventory, scenarios, source, uploadFilesSource, validateFilesContext, validateSourceAnchor, validateSourceReceipt } from './files-20261025.mjs';
+import { collectFiles, expandSourceDetails, inventory, scenarios, source, uploadFilesSource, validateFilesContext, validateSourceAnchor, validateSourceReceipt, validateUploadFixture } from './files-20261025.mjs';
 import { selector } from './native-ui.mjs';
+import { gatewayBaseline } from './traffic.mjs';
 
 // Sidecar unit/discovery tests only. No driver, browser, Appium or HTTP is run.
 test('files supplement reconciles its independent exact inventory without changing the 23-case core', () => {
   assert.deepEqual(collectFiles().intended, ['android:FILES-01', 'android:FILES-02']);
   assert.deepEqual(collectFiles().discovered, ['android:FILES-01', 'android:FILES-02']);
   assert.deepEqual(scenarios.map(({ id }) => id), ['FILES-01', 'FILES-02']);
-  assert.equal(inventory.cases[1].blocked, 'ANDROID_PICKER_AND_UPLOAD_EVIDENCE_REQUIRED');
+  assert.equal(inventory.cases[1].requiresNativeFixture, 'ANDROID_PICKER_AND_UPLOAD_EVIDENCE_REQUIRED');
   assert.throws(() => collectFiles('ios'), /FILES_ANDROID_ONLY/);
   const core = JSON.parse(readFileSync(new URL('./core-20261025.json', import.meta.url), 'utf8'));
   assert.equal(core.cases.length, 23);
@@ -91,3 +94,177 @@ test('missing, invisible, duplicate or contradictory exact source-details captio
     assert.equal(clicked, 0);
   }
 });
+
+// Synthetic proof files and explicit UI/transport doubles, never native evidence.
+function offlineUploadFixture(t) {
+  const root = mkdtempSync(join(tmpdir(), 'caseops-files-offline-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+  const evidence = (name, value) => {
+    const bytes = JSON.stringify(value);
+    const path = join(root, `${name}.json`);
+    writeFileSync(path, bytes, { flag: 'wx' });
+    return { path, sha256: sha256(bytes) };
+  };
+  const text = 'Synthetic CaseOps offline upload. No legal authority or customer data.\n';
+  const upload = { filename: 'CaseOps-native-clean-012345abcdef.txt', text, sha256: sha256(text), sizeBytes: Buffer.byteLength(text) };
+  upload.devicePath = `/sdcard/Download/${upload.filename}`;
+  const device = { filename: upload.filename, devicePath: upload.devicePath, sha256: upload.sha256,
+    sizeBytes: upload.sizeBytes, observedDeviceHash: upload.sha256, udid: 'offline-unit-device', syntheticDataOnly: true };
+  const picker = { kind: 'observed-native-android-document-picker', package: 'com.android.documentsui',
+    controls: { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: 'com.android.documentsui:id/roots_list' },
+      downloads: { kind: 'text', value: 'Downloads' }, fileTitleId: 'android:id/title' } };
+  upload.deviceEvidence = evidence('device', device);
+  upload.pickerEvidence = evidence('picker', picker);
+  const fixture = { environment: 'docker-integration', syntheticDataOnly: true, appId: 'ai.caseops.mobile.dev',
+    udid: device.udid, backendSha: 'a'.repeat(40), webSha: 'a'.repeat(40), binarySourceSha: 'a'.repeat(40),
+    apiOrigin: 'https://127.0.0.1:1', gatewayUrl: 'http://127.0.0.1:1', gatewayRunId: 'offline-files-unit',
+    companyId: 'offline-company', membershipId: 'offline-member', principalLabel: 'Offline principal', workspaceLabel: 'Offline workspace',
+    matter: { id: source.matterId, search: 'OFFLINE-001', identityLabel: 'OFFLINE-001', title: 'Synthetic offline Matter' }, upload };
+  fixture.seedEvidence = evidence('seed', { environment: fixture.environment, syntheticDataOnly: true,
+    companyId: fixture.companyId, membershipId: fixture.membershipId, matter: { id: source.matterId },
+    sourceId: source.attachmentId, sourceSha256: source.sha256, cleanUploadAndDownload: true });
+  const ledger = { runId: fixture.gatewayRunId, overflow: false, markerRejected: 0, routeRejected: 0, lastSequence: 0, requests: [] };
+  const context = { platform: 'android', fixture, gatewayBaseline: gatewayBaseline(ledger, fixture),
+    driver: { $() { assert.fail('UNEXPECTED_OFFLINE_DRIVER_CALL'); }, waitUntil() { assert.fail('UNEXPECTED_OFFLINE_DRIVER_CALL'); } },
+    admitUploadedFileRead() { assert.fail('UNACKNOWLEDGED_SOURCE_MUST_NOT_BE_ADMITTED'); } };
+  return { context, upload, device, picker, ledger, evidence };
+}
+
+test('offline upload validation accepts only its hash-bound synthetic seed/device/picker contract', t => {
+  const { context, upload, picker } = offlineUploadFixture(t);
+  assert.deepEqual(validateUploadFixture(context), { ...upload, picker });
+});
+
+for (const key of ['seedEvidence', 'deviceEvidence', 'pickerEvidence']) {
+  test(`offline upload validation rejects corrupted ${key} bytes`, t => {
+    const { context, upload } = offlineUploadFixture(t);
+    const proof = key === 'seedEvidence' ? context.fixture[key] : upload[key];
+    writeFileSync(proof.path, '{}');
+    assert.throws(() => validateUploadFixture(context), /FIXTURE_EVIDENCE_CHANGED/);
+  });
+}
+
+test('offline upload validation rejects other-device, wrong-path and nonsynthetic device proofs', t => {
+  const { context, upload, device, evidence } = offlineUploadFixture(t);
+  const deltas = [{ udid: 'other-device' }, { devicePath: '/sdcard/Download/other.txt' }, { syntheticDataOnly: false },
+    { observedDeviceHash: '0'.repeat(64) }, { sha256: '0'.repeat(64) }, { sizeBytes: device.sizeBytes + 1 }];
+  for (const [index, delta] of deltas.entries()) {
+    upload.deviceEvidence = evidence(`bad-device-${index}`, { ...device, ...delta });
+    assert.throws(() => validateUploadFixture(context), assert.AssertionError);
+  }
+});
+
+test('offline upload validation rejects wrong filenames, unbound paths, content hashes and sizes before UI', t => {
+  const { context, upload } = offlineUploadFixture(t);
+  for (const delta of [{ filename: 'customer-document.txt' }, { filename: '../CaseOps-native-clean-012345abcdef.txt' },
+    { devicePath: '/sdcard/Documents/CaseOps-native-clean-012345abcdef.txt' }, { sha256: '0'.repeat(64) },
+    { sizeBytes: 0 }, { sizeBytes: 4097 }, { sizeBytes: upload.sizeBytes + 1 }, { text: 'changed' }]) {
+    context.fixture.upload = { ...upload, ...delta };
+    assert.throws(() => validateUploadFixture(context), assert.AssertionError);
+  }
+});
+
+test('offline upload validation rejects unsafe or unobserved picker packages and actions', t => {
+  const { context, upload, picker, evidence } = offlineUploadFixture(t);
+  const deltas = [{ package: 'other.picker' }, { kind: 'invented-picker' },
+    { controls: { ...picker.controls, roots: { kind: 'text', value: 'Show roots' } } },
+    { controls: { ...picker.controls, downloads: { kind: 'text', value: 'Delete' } } },
+    { controls: { ...picker.controls, fileTitleId: 'android:id/other' } },
+    { controls: { ...picker.controls, extraAction: 'delete' } }];
+  for (const [index, delta] of deltas.entries()) {
+    upload.pickerEvidence = evidence(`bad-picker-${index}`, { ...picker, ...delta });
+    assert.throws(() => validateUploadFixture(context), assert.AssertionError);
+  }
+});
+
+test('offline upload requires explicit acknowledged-source read admission before any UI action', async t => {
+  const { context } = offlineUploadFixture(t);
+  delete context.admitUploadedFileRead;
+  await assert.rejects(uploadFilesSource(context), /EXACT_ACKNOWLEDGED_UPLOAD_READ_ADMISSION_REQUIRED/);
+});
+
+function offlineFailedUpload(t, outcome) {
+  const value = offlineUploadFixture(t);
+  const { context, upload, ledger } = value;
+  const clicks = [], queries = [], records = [];
+  let selected = false, submitted = false, pickerOpen = false, downloadsOpen = false, expanded = false;
+  const append = (method, route, status) => ledger.requests.push({ sequence: ++ledger.lastSequence,
+    method, route, status, nativeMarker: true, requestId: `offline-${ledger.lastSequence}` });
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, `${context.fixture.gatewayUrl}/__caseops_e2e/status`);
+    assert.equal(options.headers['X-CaseOps-Automated-Test'], 'no-paid-providers');
+    assert.equal(options.redirect, 'error');
+    assert.equal(options.method, undefined);
+    return new Response(JSON.stringify(ledger));
+  });
+  const element = (id, text = '') => ({
+    async isDisplayed() { return true; }, async isEnabled() { return true; }, async getText() { return text; },
+    async setValue(value) { assert.equal(id, 'matter-search'); assert.equal(value, context.fixture.matter.search); },
+    async click() {
+      clicks.push(id);
+      if (id === 'files-choose') pickerOpen = true;
+      if (id === 'Downloads') { assert.equal(pickerOpen, true); downloadsOpen = true; }
+      if (id === 'picked-file') { assert.equal(downloadsOpen, true); pickerOpen = false; selected = true; }
+      if (id === 'Source details') expanded = true;
+      if (id === 'files-upload') {
+        assert.equal(selected, true);
+        assert.equal(submitted, false, 'OFFLINE_DOUBLE_DETECTED_UPLOAD_REPLAY');
+        submitted = true;
+        append('POST', `/api/matters/${source.matterId}/attachments`, outcome === 'rejected' ? 422 : outcome === 'no-ack' ? 200 : 0);
+      }
+    },
+  });
+  const controls = new Map(['account-open', 'back', 'tab-matters', 'screen-matters', 'matter-search', 'matter-search-submit',
+    `matter-row-${source.matterId}`, 'matter-files', 'files-choose', `files-row-${source.attachmentId}`]
+    .map(id => [selector('android', 'id', id), element(id)]));
+  for (const [id, text] of Object.entries({ 'account-principal': context.fixture.principalLabel,
+    'account-workspace': context.fixture.workspaceLabel, 'matter-code': context.fixture.matter.identityLabel,
+    'files-matter-code': context.fixture.matter.identityLabel, 'files-matter-title': context.fixture.matter.title,
+    [`files-name-${source.attachmentId}`]: source.filename, [`files-hash-${source.attachmentId}`]: source.sha256 }))
+    controls.set(selector('android', 'id', id), element(id, text));
+  controls.set(selector('android', 'text', context.fixture.matter.title), element('matter-title'));
+  controls.set(selector('android', 'id', `files-source-${source.attachmentId}`), {
+    async isDisplayed() { return true; }, async $$(query) {
+      return query === selector('android', 'text', expanded ? 'Hide source details' : 'Source details')
+        ? [element(expanded ? 'Hide source details' : 'Source details')] : [];
+    },
+  });
+  context.driver = {
+    $() { assert.fail('UNEXPECTED_SINGLE_ELEMENT_LOOKUP'); },
+    async switchContext(name) { assert.equal(name, 'NATIVE_APP'); },
+    async getCurrentPackage() { return pickerOpen ? 'com.android.documentsui' : context.fixture.appId; },
+    async waitUntil(predicate, options) { if (!await predicate()) throw new Error(options.timeoutMsg); },
+    async $$(query) {
+      queries.push(query);
+      if (controls.has(query)) return [controls.get(query)];
+      if (query === '~Show roots' && pickerOpen) return [element('Show roots')];
+      if (query === 'id=com.android.documentsui:id/roots_list' && pickerOpen) return [{ async isDisplayed() { return true; },
+        async $$(child) { assert.equal(child, selector('android', 'text', 'Downloads')); return [element('Downloads')]; } }];
+      if (query === `android=new UiSelector().resourceId("android:id/title").text(${JSON.stringify(upload.filename)})` && downloadsOpen)
+        return [element('picked-file', upload.filename)];
+      if (selected && ['id=files-selection', 'id=files-upload'].includes(query)) return [element(query.slice(3))];
+      if (submitted && query === `id=files-upload-${outcome === 'no-ack' ? 'persisted' : outcome}` && outcome !== 'missing-persistence')
+        return [element('outcome')];
+      if ([`android=new UiSelector().resourceIdMatches("files-name-.*").text(${JSON.stringify(upload.filename)})`,
+        'id=files-upload-unknown', 'id=files-upload-rejected', 'id=files-upload-persisted'].includes(query)) return [];
+      assert.fail(`UNEXPECTED_OFFLINE_UI_QUERY: ${query}`);
+    },
+  };
+  context.record = event => records.push(event);
+  return { context, ledger, clicks, queries, records };
+}
+
+for (const [outcome, expected] of [['unknown', /UPLOAD_OUTCOME_UNKNOWN_NO_REPLAY/], ['rejected', /NATIVE_UPLOAD_REJECTED/],
+  ['no-ack', /NATIVE_UPLOAD_NOT_ACKNOWLEDGED/], ['missing-persistence', /NATIVE_UPLOAD_PERSISTENCE_NOT_ACKNOWLEDGED/]]) {
+  test(`offline ${outcome} upload response is never retried or admitted for source opening`, async t => {
+    const { context, ledger, clicks, queries, records } = offlineFailedUpload(t, outcome);
+    await assert.rejects(uploadFilesSource(context), expected);
+    assert.equal(clicks.filter(id => id === 'files-upload').length, 1);
+    assert.deepEqual(ledger.requests.map(({ method, route }) => ({ method, route })),
+      [{ method: 'POST', route: `/api/matters/${source.matterId}/attachments` }]);
+    assert.equal(queries.some(query => query.startsWith('id=files-open-')), false);
+    assert.equal(records.some(event => event.boundary === 'native-picker-upload-reload-open'), false);
+    assert.equal(clicks.includes('files-reload'), false);
+  });
+}

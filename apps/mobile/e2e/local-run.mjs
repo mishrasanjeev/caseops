@@ -59,7 +59,7 @@ export function inspectLocalPlan(plan, platform, environment = process.env) {
       task: { ...expected.work.task, id: seed.taskId, kind: 'task', matter: matterRef },
       draft: { ...expected.work.draft, id: seed.draftId, kind: 'draft', matter: matterRef },
     } : undefined,
-    calendar: expected.calendar ? { ...expected.calendar, hearingId: seed.hearingId, day: seed.calendarDate, matter: matterRef } : undefined,
+    calendar: expected.calendar ? { ...expected.calendar, eventId: seed.calendar?.eventId, hearingId: seed.hearingId, day: seed.calendarDate, matter: matterRef } : undefined,
     foreignMatter: expected.foreignMatter ? { ...expected.foreignMatter, id: seed.otherMatterId } : undefined,
     lifecycleMatter: expected.lifecycleMatter, accessMatter: expected.accessMatter, ownerControls: plan.ownerControls,
   };

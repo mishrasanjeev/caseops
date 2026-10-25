@@ -3350,3 +3350,22 @@ requirements when using the fallback.
   observed platform dialog captions. Long native acceptance must renew MFA
   through the real browser at declared phase boundaries, never extend its policy
   lifetime or replay an uncertain mutation to keep a suite running.
+- An Appium app path and enforce-install flag do not prove the installed binary.
+  UiAutomator2 noReset can bypass installation. Replace only the owned emulator
+  package without clearing its data and hash the actual installed base APK at
+  preflight, every session boundary and postflight; retain wrong-binary runs as
+  incomplete evidence, never as tests of the newer source.
+- Native multipart acceptance must execute the pinned transport SDK's real
+  encoder. An append-only FormData double can approve a URI part that Expo fetch
+  rejects before network dispatch. Preserve bounded staged bytes, canonical
+  server filename handling, explicit lifecycle version, redirect/privacy fences
+  and no replay after an uncertain outcome, then prove picker/upload/reload/open
+  on the rebuilt binary. A successful picker is not an uploaded file.
+- Calendar event identities are opaque server DTO values, not hearing/task
+  primary keys. Retain the returned event ID in fixture evidence and use that
+  exact native control; matching titles and dates cannot authorize a guessed ID.
+- Expensive fixture-worker imports belong in bounded, hash-bound preflight
+  readiness, not inside each short authoritative command. Keep operation/SQL
+  deadlines, current tenant/ACL/lifecycle checks, single-inflight command limits,
+  durable no-replay claims and cleanup unchanged; do not retain a DB transaction
+  while the worker waits. Classify a fixture deadline separately from app bugs.

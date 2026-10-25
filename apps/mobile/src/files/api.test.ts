@@ -12,11 +12,21 @@ import {
   scope,
 } from "./test-fixtures.ts";
 
-test("MOB-22 native multipart appends one URI file and the observed lifecycle version", () => {
-  const calls: { name: string; value: NativeFilePart | string }[] = [];
+test("MOB-22 native multipart appends one Expo File-like body and the observed lifecycle version", async () => {
+  const calls: {
+    name: string;
+    value:
+      | { name: string; type: string; bytes: () => Promise<Uint8Array> }
+      | string;
+  }[] = [];
   const original = globalThis.FormData;
   class NativeFormDataFixture {
-    append(name: string, value: NativeFilePart | string) {
+    append(
+      name: string,
+      value:
+        | { name: string; type: string; bytes: () => Promise<Uint8Array> }
+        | string,
+    ) {
       calls.push({ name, value });
     }
   }
@@ -27,12 +37,22 @@ test("MOB-22 native multipart appends one URI file and the observed lifecycle ve
       name: "synthetic.txt",
       type: "text/plain",
     };
-    const body = nativeMultipart(part, 7);
+    const body = nativeMultipart(part, 7, async () => bytes, bytes.length);
     assert.ok(body instanceof NativeFormDataFixture);
-    assert.deepEqual(calls, [
-      { name: "file", value: part },
-      { name: "expected_lifecycle_version", value: "7" },
-    ]);
+    assert.equal(calls[0].name, "file");
+    const sent = calls[0].value as {
+      name: string;
+      type: string;
+      bytes: () => Promise<Uint8Array>;
+    };
+    assert.equal(sent.name, part.name);
+    assert.equal(sent.type, part.type);
+    assert.equal(Object.hasOwn(sent, "uri"), false);
+    assert.deepEqual(await sent.bytes(), bytes);
+    assert.deepEqual(calls[1], {
+      name: "expected_lifecycle_version",
+      value: "7",
+    });
   } finally {
     globalThis.FormData = original;
   }

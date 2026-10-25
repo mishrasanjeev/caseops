@@ -85,6 +85,14 @@ async function location(context, recipe) {
   }
 }
 
+export async function prepareFirefox(context, recipe) {
+  browserStep(context, 'prepare-ready', 'check');
+  const locator = recipe.locators.urlOpen;
+  if (await visible(context.driver, selector(context.platform, locator.kind, locator.value))) return;
+  for (const [index, action] of (recipe.prepare || []).entries()) await press(context, `prepare-${index}`, action);
+  await locate(context, 'urlOpen');
+}
+
 // This drives Firefox's real Android accessibility tree. Recipes come from the
 // parent's observed, secret-free UI inspection; no XPath/index or webview fiction.
 export async function firefoxLogin(context, credentials, authorizationIdentity) {
@@ -97,7 +105,7 @@ export async function firefoxLogin(context, credentials, authorizationIdentity) 
   browserStep(context, 'firefox-context', 'wait');
   await driver.waitUntil(async () => await driver.getCurrentPackage() === recipe.packageName,
     { timeout: 15000, interval: 250, timeoutMsg: 'FIREFOX_CUSTOM_TAB_NOT_OPENED' });
-  for (const [index, locator] of (recipe.prepare || []).entries()) await press(context, `prepare-${index}`, locator);
+  await prepareFirefox(context, recipe);
   browserStep(context, 'handoff', 'check');
   const handoff = authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform);
   for (const key of ['useAnotherAccount', 'signInLink']) {

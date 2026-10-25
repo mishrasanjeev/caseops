@@ -212,7 +212,7 @@ def main():
                 "body": current["body"], "citations": current["citations"],
                 "verifiedCitationCountLabel": f"{current['verified_citation_count']} server-marked verified citations. This is not certification of legal accuracy.",
             }},
-            "calendar": {"day": base["calendarDate"], "dayLabel": day_label, "title": event["title"],
+            "calendar": {"eventId": event["id"], "day": base["calendarDate"], "dayLabel": day_label, "title": event["title"],
                          "metaLabel": calendar_meta, "matter": primary_ref,
                          "nextHearingLabel": inputs["dateLabels"][primary["next_hearing_on"]]},
             "foreignMatter": matter_ref(foreign_row, foreign_search),

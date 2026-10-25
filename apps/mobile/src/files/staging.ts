@@ -1,6 +1,7 @@
 import { ContractError } from "../domain/contracts.ts";
 import type { StagedFile } from "./api.ts";
 import type { MatterFileAsset, UploadPolicy } from "./contracts.ts";
+import { MAX_NATIVE_UPLOAD_BYTES } from "./contracts.ts";
 
 // services/file_security.py: ALLOWED_UPLOADS and DEFAULT_MAX_BYTES.
 const kinds: Record<string, readonly string[]> = {
@@ -45,7 +46,7 @@ export async function copyBounded(
 }
 export function uploadByteLimit(policy: UploadPolicy): number {
   return Math.min(
-    50 * 1024 * 1024,
+    MAX_NATIVE_UPLOAD_BYTES,
     policy.max_upload_size_bytes,
     policy.remaining_bytes ?? Infinity,
   );

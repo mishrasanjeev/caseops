@@ -14,6 +14,7 @@ import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
 import { inspectLocalPlan, prepareLocalPlan } from '../../apps/mobile/e2e/local-run.mjs';
 import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
+import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const platform = process.argv[2];
@@ -44,13 +45,25 @@ if (mode === '--collect') {
   const report = path.join(reportRoot, runId);
   mkdirSync(report);
   const journal = new Journal(path.join(report, 'events.jsonl'));
+  let runCompleted = false;
+  const onExit = (code) => {
+    if (!runCompleted) {
+      journal.write({ type: 'run_interrupted', reason: 'PROCESS_EXIT_BEFORE_COMPLETION', exitCode: code });
+      journal.close();
+      process.exitCode = code || 1;
+    }
+  };
+  process.once('exit', onExit);
   let initialSnapshot;
   try { initialSnapshot = sourceSnapshot(root); } catch { initialSnapshot = { sourceIdentity: 'unavailable' }; }
   const deadline = setTimeout(() => {
-    journal.write({ type: 'run_interrupted', reason: 'TWENTY_MINUTE_RUN_BOUND' });
+    process.removeListener('exit', onExit);
+    journal.write({ type: 'run_interrupted', reason: 'THIRTY_MINUTE_SERIAL_INVENTORY_BOUND' });
     journal.close();
     process.exit(124);
-  }, 20 * 60 * 1000);
+  // The 23-case serial inventory includes three complete browser/MFA cycles.
+  // Individual UI, transport, owner-operation and SQL deadlines are unchanged.
+  }, 30 * 60 * 1000);
   deadline.unref();
   const initialHarness = harnessFingerprint();
   journal.write({ type: 'run_started', ...collection, harnessFingerprint: initialHarness, ...initialSnapshot });
@@ -102,6 +115,7 @@ if (mode === '--collect') {
     appiumUrl = localUrl(process.env.CASEOPS_MOBILE_APPIUM_URL || 'http://127.0.0.1:4723');
     const appium = await localJson(new URL('status', `${appiumUrl.href.replace(/\/$/, '')}/`).href);
     assert.equal(appium.value.ready, true, 'APPIUM_NOT_READY');
+    if (platform === 'android') journal.write({ ...attestAndroidBinary(fixture, selectedBinaryHash, { install: true }), boundary: 'preflight' });
     capabilities = {
       platformName: platform === 'android' ? 'Android' : 'iOS',
       'appium:automationName': platform === 'android' ? 'UiAutomator2' : 'XCUITest',
@@ -124,6 +138,7 @@ if (mode === '--collect') {
       webSha: web.release_sha, webRevision: web.revision,
       platformVersion: fixture.platformVersion, gatewayRunId: status.runId,
       harnessFingerprint: initialHarness, browserMode: fixture.auth.mode, ownerCapabilities: owner?.capabilities || [],
+      ownerReadinessEvidenceSha256: owner?.readiness?.evidenceSha256 || null,
       appId: fixture.appId, isolationEvidenceSha256: fixture.isolationEvidence.sha256,
       buildReceiptSha256: fixture.buildReceipt?.sha256 || null, gatewayBaseline: runGatewayBaseline });
   } catch (error) {
@@ -132,6 +147,7 @@ if (mode === '--collect') {
   }
   const completedCases = new Set();
   const authGate = authenticationGate((event) => journal.write(event));
+  const lastOwnerCase = inventory.cases.filter(item => item.ownerCapabilities?.length).at(-1)?.id;
   let previousCase;
   for (const scenario of scenarios) {
     const id = `${platform}:${scenario.id}`;
@@ -153,6 +169,7 @@ if (mode === '--collect') {
       ownedSessionId = sessionCreated.sessionId;
       journal.write({ ...sessionCreated, id });
       await configureNativeDriver(driver, platform, (event) => journal.write({ ...event, id }));
+      if (platform === 'android') journal.write({ ...attestAndroidBinary(fixture, selectedBinaryHash), boundary: 'case-setup', id });
       const contexts = await driver.getContexts();
       assert.ok(contexts.includes('NATIVE_APP'), 'NATIVE_CONTEXT_REQUIRED');
       await driver.switchContext('NATIVE_APP');
@@ -194,14 +211,23 @@ if (mode === '--collect') {
       if (ownedSessionId) journal.write({ ...appiumSessionEvent(ownedSessionId, 'cleanup-failed'), id });
       journal.write({ type: 'phase_result', id, phase: 'teardown', status: 'failed', reason: 'NATIVE_SESSION_CLEANUP_FAILED' });
     }
+    if (scenario.id === lastOwnerCase && typeof owner?.close === 'function') {
+      try { await owner.close(); owner.closed = true; journal.write({ type: 'owner_worker_closed', status: 'passed', id }); }
+      catch { owner.poisoned = true; journal.write({ type: 'owner_worker_closed', status: 'failed', id, reason: 'OWNER_WORKER_CLEANUP_FAILED' }); }
+    }
     previousCase = { id: scenario.id, failedCall: callFailed,
       cleanupUncertain: previousCase?.cleanupUncertain || !!driver && !teardownPassed };
   }
   if (!preflightFailed) {
     try {
+      if (!owner?.closed && typeof owner?.close === 'function') {
+        await owner.close();
+        journal.write({ type: 'owner_worker_closed', status: 'passed' });
+      }
       assert.equal(sourceSnapshot(root).sourceFingerprint, fixture.binarySourceFingerprint, 'SOURCE_CHANGED_DURING_RUN');
       assert.equal(harnessFingerprint(), initialHarness, 'HARNESS_CHANGED_DURING_RUN');
       assert.equal(binaryHash(fixture.appPath), selectedBinaryHash, 'BINARY_CHANGED_DURING_RUN');
+      if (platform === 'android') journal.write({ ...attestAndroidBinary(fixture, selectedBinaryHash), boundary: 'postflight' });
       assert.notEqual(owner?.poisoned, true, 'OWNER_CONTROL_PREVIOUSLY_UNCERTAIN');
       const backend = await localJson(`${fixture.gatewayUrl}/api/build`);
       assert.equal(backend.release_sha, fixture.backendSha, 'BACKEND_RELEASE_CHANGED');
@@ -215,7 +241,13 @@ if (mode === '--collect') {
       journal.write({ type: 'postflight_result', status: 'failed', reason: safeFailure(error, 'SOURCE_RECHECK_FAILED') });
     }
   }
+  if (preflightFailed && typeof owner?.close === 'function') {
+    try { await owner.close(); journal.write({ type: 'owner_worker_closed', status: 'passed' }); }
+    catch { journal.write({ type: 'owner_worker_closed', status: 'failed', reason: 'OWNER_WORKER_CLEANUP_FAILED' }); }
+  }
   journal.write({ type: 'run_completed', platform, intendedCount: intended.length });
+  runCompleted = true;
+  process.removeListener('exit', onExit);
   const result = reconcileResults(journal.events, intended);
   clearTimeout(deadline);
   journal.close();

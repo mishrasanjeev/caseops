@@ -204,8 +204,8 @@ export const scenarios = [
       { timeout: 10000, interval: 200, timeoutMsg: 'AGENDA_REREAD_MISSING' });
     await expectText(context, event.title);
     await expectText(context, event.metaLabel);
-    assert.match(event.hearingId || '', /^[a-zA-Z0-9_-]{1,100}$/, 'SEEDED_CALENDAR_EVENT_ID_REQUIRED');
-    await click(context, 'id', `event-${event.hearingId}`, { scroll: true });
+    assert.match(event.eventId || '', /^[A-Za-z0-9_:.-]{1,160}$/, 'SEEDED_CALENDAR_EVENT_ID_REQUIRED');
+    await click(context, 'id', `event-${event.eventId}`, { scroll: true });
     assert.equal(await read(context, 'id', 'matter-code'), event.matter.identityLabel, 'AGENDA_WRONG_SOURCE');
     await expectText(context, event.matter.title);
     await expectText(context, event.nextHearingLabel);

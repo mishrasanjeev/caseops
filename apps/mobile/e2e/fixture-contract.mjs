@@ -99,6 +99,7 @@ export function validateCoreFixture(fixture, environment = process.env) {
     assert.equal(fixture.work?.task?.id, seed.taskId, 'SEED_TASK_MISMATCH');
     assert.equal(fixture.work?.draft?.id, seed.draftId, 'SEED_DRAFT_MISMATCH');
     assert.equal(fixture.calendar?.day, seed.calendarDate, 'SEED_CALENDAR_MISMATCH');
+    assert.equal(fixture.calendar?.eventId, seed.calendar?.eventId, 'SEED_CALENDAR_EVENT_ID_MISMATCH');
     if (fixture.foreignMatter) assert.equal(fixture.foreignMatter.id, seed.otherMatterId, 'SEED_FOREIGN_MATTER_MISMATCH');
   }
   matter(fixture.matter);
@@ -130,6 +131,7 @@ export function validateCoreFixture(fixture, environment = process.env) {
   for (const citation of draft.citations) nonempty(citation);
   nonempty(draft.verifiedCitationCountLabel);
   matter(fixture.calendar?.matter);
+  assert.match(fixture.calendar.eventId || '', /^[A-Za-z0-9_:.-]{1,160}$/, 'SEEDED_CALENDAR_EVENT_ID_REQUIRED');
   assert.match(fixture.calendar.day, /^\d{4}-\d{2}-\d{2}$/, 'SEEDED_CALENDAR_DAY_REQUIRED');
   for (const key of ['dayLabel', 'title', 'metaLabel', 'nextHearingLabel']) nonempty(fixture.calendar[key]);
   // Negative records must come from the seed ledger too, not invented UUID probes.
@@ -150,8 +152,16 @@ export async function loadOwnerControls(fixture) {
   assert.ok(Array.isArray(capabilities) && capabilities.length > 0 && capabilities.every((operation) => OWNER_OPERATIONS.includes(operation)), 'INVALID_OWNER_CAPABILITY');
   assert.equal(new Set(capabilities).size, capabilities.length, 'DUPLICATE_OWNER_CAPABILITY');
   const adapter = await import(`${pathToFileURL(modulePath).href}?sha256=${sha256}`);
-  assert.equal(typeof adapter.control, 'function', 'REAL_FIXTURE_CONTROL_REQUIRED');
-  return { control: adapter.control, capabilities };
+  const instance = typeof adapter.createOwnerControls === 'function' ? adapter.createOwnerControls() : adapter;
+  assert.equal(typeof instance.control, 'function', 'REAL_FIXTURE_CONTROL_REQUIRED');
+  try {
+    const readiness = typeof instance.prepare === 'function'
+      ? await instance.prepare({ fixture, signal: AbortSignal.timeout(30000) }) : undefined;
+    return { control: instance.control, close: instance.close, readiness, capabilities };
+  } catch (error) {
+    if (typeof instance.close === 'function') await instance.close().catch(() => {});
+    throw error;
+  }
 }
 
 export async function ownerControl(context, operation, targetId) {

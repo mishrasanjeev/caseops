@@ -188,3 +188,4 @@ export function uploadRestriction(
     return "Uploads are unavailable under the current storage policy.";
   return null;
 }
+export const MAX_NATIVE_UPLOAD_BYTES = 50 * 1024 * 1024;

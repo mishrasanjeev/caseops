@@ -17,7 +17,11 @@ import { createMatterFilesApi } from "../../files/api";
 import { matchesSelection, uploadRestriction } from "../../files/contracts";
 import type { MatterFile, MatterFileSelection } from "../../files/contracts";
 import { createFilesController } from "../../files/controller";
-import { cleanupPickedFile, nativeFileStager } from "../../files/native";
+import {
+  cleanupPickedFile,
+  nativeFileStager,
+  nativeFileMultipart,
+} from "../../files/native";
 import { uploadByteLimit, validateAsset } from "../../files/staging";
 import { viewerFormat, attachmentViewerSource } from "../../viewer/contracts";
 import type { ViewerSource } from "../../viewer/contracts";
@@ -77,6 +81,7 @@ function ScopedFilesScreen(props: FilesScreenProps) {
         createMatterFilesApi(
           (path, init) => requestRef.current(path, init),
           scope,
+          nativeFileMultipart,
         ),
         nativeFileStager,
         scope,

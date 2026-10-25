@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { FixtureUnavailable, admitApplication, verifiedFile } from './fixture-contract.mjs';
 import { authenticate, delta, openMatter, readOnlyTraffic, traffic } from './journeys.mjs';
-import { absent, click, find, read, selector, visible } from './native-ui.mjs';
+import { absent, click, find, findQuery, read, selector, visible } from './native-ui.mjs';
 import { reconcileInventory } from './support.mjs';
 
 // Supplement only: not part of core-20261025.json or a claim of native execution.
@@ -19,12 +19,12 @@ export const inventory = Object.freeze({
   schemaVersion: 1,
   inventoryId: 'native-files-supplement-2026-10-25',
   platforms: Object.freeze(['android']),
-  scope: 'Supplementary real Android Files/TXT read; not full MOB-21..26 or an upload acceptance receipt',
+  scope: 'Supplementary Android Files/TXT and explicit native picker upload; not full MOB-21..26 acceptance',
   cases: Object.freeze([
     Object.freeze({ id: 'FILES-01', title: 'Exact seeded Files row, source SHA-256, reload, private TXT open and return to Files', groups: ['MOB-21', 'MOB-26', 'MOB-30'],
       prerequisites: ['parent-owned admitted APK/Appium context and real Firefox/MFA authentication', 'hash-verified seedEvidence with exact sourceId/sourceSha256/matter', 'unchanged synthetic source fixture and read-admitted marked gateway', 'exact source controls and visible TXT content in the actual APK'] }),
     Object.freeze({ id: 'FILES-02', title: 'Actual Android picker upload and persisted exact source readback', groups: ['MOB-22', 'MOB-24', 'MOB-25'],
-      blocked: 'ANDROID_PICKER_AND_UPLOAD_EVIDENCE_REQUIRED',
+      requiresNativeFixture: 'ANDROID_PICKER_AND_UPLOAD_EVIDENCE_REQUIRED',
       prerequisites: ['parent-observed Android picker package, source and selectors', 'actual device file metadata/hash and explicit mutation authorization', 'exact serving upload route admission and lifecycle-version contract', 'server acknowledgement identity and persisted source readback'] }),
   ]),
 });
@@ -91,13 +91,13 @@ export async function expandSourceDetails(control, platform) {
   if (show) await show.click();
 }
 
-async function sourceDetails(context) {
-  await find(context, 'id', `files-row-${source.attachmentId}`, { scroll: true });
-  assert.equal(await read(context, 'id', `files-name-${source.attachmentId}`, { scroll: true }), source.filename, 'FILES_WRONG_SOURCE_FILENAME');
-  const hashId = `files-hash-${source.attachmentId}`;
-  const details = await find(context, 'id', `files-source-${source.attachmentId}`, { scroll: true });
+async function sourceDetails(context, anchor = source) {
+  await find(context, 'id', `files-row-${anchor.attachmentId}`, { scroll: true });
+  assert.equal(await read(context, 'id', `files-name-${anchor.attachmentId}`, { scroll: true }), anchor.filename, 'FILES_WRONG_SOURCE_FILENAME');
+  const hashId = `files-hash-${anchor.attachmentId}`;
+  const details = await find(context, 'id', `files-source-${anchor.attachmentId}`, { scroll: true });
   await expandSourceDetails(details, context.platform);
-  assert.equal(await read(context, 'id', hashId, { scroll: true }), source.sha256, 'FILES_SOURCE_HASH_MISMATCH');
+  assert.equal(await read(context, 'id', hashId, { scroll: true }), anchor.sha256, 'FILES_SOURCE_HASH_MISMATCH');
 }
 
 async function enterFiles(context) {
@@ -159,10 +159,88 @@ export async function openNativeFilesPickerForInspection(context) {
   return { state: 'blocked', reason: 'ANDROID_PICKER_AND_UPLOAD_EVIDENCE_REQUIRED' };
 }
 
-export async function uploadFilesSource() {
-  // Never guess DocumentsUI selectors, push private bytes, use direct API upload,
-  // fabricate a returned attachment ID, or treat an opened picker as an upload.
-  throw new FixtureUnavailable('ANDROID_PICKER_AND_UPLOAD_EVIDENCE_REQUIRED');
+export function validateUploadFixture(context) {
+  const value = context?.fixture?.upload;
+  if (!value) throw new FixtureUnavailable('ANDROID_PICKER_AND_UPLOAD_EVIDENCE_REQUIRED');
+  validateFilesContext(context);
+  assert.match(value.filename || '', /^CaseOps-native-clean-[a-f0-9]{12}\.txt$/, 'OWNED_PICKER_FILENAME_REQUIRED');
+  assert.equal(value.devicePath, `/sdcard/Download/${value.filename}`, 'EXACT_OWNED_DEVICE_PATH_REQUIRED');
+  assert.match(value.sha256 || '', /^[a-f0-9]{64}$/, 'OWNED_UPLOAD_HASH_REQUIRED');
+  assert.ok(Number.isSafeInteger(value.sizeBytes) && value.sizeBytes > 0 && value.sizeBytes <= 4096, 'SMALL_SYNTHETIC_PICKER_FIXTURE_REQUIRED');
+  assert.equal(Buffer.byteLength(value.text), value.sizeBytes, 'OWNED_UPLOAD_TEXT_SIZE_MISMATCH');
+  assert.equal(createHash('sha256').update(value.text).digest('hex'), value.sha256, 'OWNED_UPLOAD_TEXT_HASH_MISMATCH');
+  const proof = JSON.parse(verifiedFile(value.deviceEvidence.path, value.deviceEvidence.sha256, 8192));
+  for (const key of ['filename', 'devicePath', 'sha256', 'sizeBytes']) assert.equal(proof[key], value[key], 'DEVICE_UPLOAD_PROOF_MISMATCH');
+  assert.equal(proof.observedDeviceHash, value.sha256);
+  assert.equal(proof.udid, context.fixture.udid);
+  assert.equal(proof.syntheticDataOnly, true);
+  const picker = JSON.parse(verifiedFile(value.pickerEvidence.path, value.pickerEvidence.sha256, 65536));
+  assert.equal(picker.kind, 'observed-native-android-document-picker');
+  assert.equal(picker.package, 'com.android.documentsui');
+  assert.deepEqual(picker.controls, { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: 'com.android.documentsui:id/roots_list' }, downloads: { kind: 'text', value: 'Downloads' }, fileTitleId: 'android:id/title' });
+  assert.equal(typeof context.admitUploadedFileRead, 'function', 'EXACT_ACKNOWLEDGED_UPLOAD_READ_ADMISSION_REQUIRED');
+  return { ...value, picker };
+}
+
+export async function uploadFilesSource(context) {
+  const upload = validateUploadFixture(context);
+  await authenticate(context);
+  await enterFiles(context);
+  const before = await traffic(context);
+  const expectedNameQuery = `android=new UiSelector().resourceIdMatches("files-name-.*").text(${JSON.stringify(upload.filename)})`;
+  assert.equal(await visible(context.driver, expectedNameQuery), undefined, 'UPLOAD_FIXTURE_FILENAME_ALREADY_RETAINED');
+  await click(context, 'id', 'files-choose', { scroll: true });
+  await context.driver.waitUntil(async () => await context.driver.getCurrentPackage() === upload.picker.package,
+    { timeout: 15000, interval: 200, timeoutMsg: 'EXACT_DOCUMENT_PICKER_NOT_OPENED' });
+  await click(context, upload.picker.controls.roots.kind, upload.picker.controls.roots.value);
+  const roots = await find(context, 'id', upload.picker.controls.rootList.value);
+  let downloads;
+  await context.driver.waitUntil(async () => !!(downloads = await visible(roots, selector('android', 'text', 'Downloads'))),
+    { timeout: 10000, interval: 150, timeoutMsg: 'OBSERVED_DOWNLOADS_ROOT_NOT_READY' });
+  await downloads.click();
+  const chosen = await findQuery(context, `android=new UiSelector().resourceId("android:id/title").text(${JSON.stringify(upload.filename)})`);
+  assert.equal(await chosen.getText(), upload.filename);
+  await chosen.click();
+  await context.driver.waitUntil(async () => await context.driver.getCurrentPackage() === context.fixture.appId,
+    { timeout: 15000, interval: 200, timeoutMsg: 'PICKER_DID_NOT_RETURN_TO_BOUND_APP' });
+  await find(context, 'id', 'files-selection', { scroll: true });
+  assert.equal(await read(context, 'id', 'files-matter-code', { scroll: true }), context.fixture.matter.identityLabel);
+  const button = await find(context, 'id', 'files-upload', { scroll: true });
+  assert.equal(await button.isEnabled(), true, 'NATIVE_UPLOAD_NOT_ENABLED');
+  await button.click();
+  await context.driver.waitUntil(async () => {
+    if (await visible(context.driver, 'id=files-upload-unknown')) throw new FixtureUnavailable('UPLOAD_OUTCOME_UNKNOWN_NO_REPLAY');
+    assert.equal(await visible(context.driver, 'id=files-upload-rejected'), undefined, 'NATIVE_UPLOAD_REJECTED');
+    return !!(await visible(context.driver, 'id=files-upload-persisted'));
+  }, { timeout: 30000, interval: 200, timeoutMsg: 'NATIVE_UPLOAD_PERSISTENCE_NOT_ACKNOWLEDGED' });
+  const changes = delta(before, await traffic(context));
+  const posts = changes.filter(row => row.method === 'POST');
+  assert.equal(posts.length, 1, 'NATIVE_UPLOAD_NOT_EXACTLY_ONCE');
+  assert.equal(posts[0].route, `/api/matters/${source.matterId}/attachments`);
+  assert.equal(posts[0].status, 201, 'NATIVE_UPLOAD_NOT_ACKNOWLEDGED');
+  const name = await findQuery(context, expectedNameQuery, { scroll: true });
+  const match = /^files-name-([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/.exec(await name.getAttribute('resource-id'));
+  assert.ok(match, 'ACTUAL_UPLOADED_ATTACHMENT_ID_REQUIRED');
+  const anchor = { ...upload, matterId: source.matterId, attachmentId: match[1] };
+  assert.notEqual(anchor.attachmentId, source.attachmentId);
+  await sourceDetails(context, anchor);
+  await click(context, 'id', 'files-reload', { scroll: true });
+  await sourceDetails(context, anchor);
+  const admission = await context.admitUploadedFileRead({ ...anchor, acknowledgement: posts[0] });
+  const downloadRoute = `/api/matters/${source.matterId}/attachments/${anchor.attachmentId}/download`;
+  assert.equal(admission.route, `GET ${downloadRoute}`, 'EXACT_NEW_SOURCE_ROUTE_REQUIRED');
+  const opening = await traffic(context);
+  await click(context, 'id', `files-open-${anchor.attachmentId}`, { scroll: true });
+  assert.equal(await read(context, 'id', 'viewer-filename'), upload.filename);
+  assert.equal((await read(context, 'id', 'viewer-text')).trimEnd(), upload.text.trimEnd());
+  const reads = delta(opening, await traffic(context)).filter(row => row.method === 'GET' && row.route === downloadRoute);
+  assert.equal(reads.filter(row => row.status === 200).length, 1);
+  assert.ok(reads.filter(row => row.status === 206).length >= 2);
+  await click(context, 'id', 'viewer-close');
+  await absent(context, 'id', 'viewer-text');
+  assert.equal(delta(before, await traffic(context)).filter(row => row.method === 'POST').length, 1, 'UPLOAD_REPLAY_AFTER_READBACK');
+  context.record?.({ type: 'assertion', boundary: 'native-picker-upload-reload-open', attachmentId: anchor.attachmentId,
+    sha256: upload.sha256, sizeBytes: upload.sizeBytes, acknowledgementRequestId: posts[0].requestId, admission });
 }
 
 export const scenarios = Object.freeze([

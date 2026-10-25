@@ -3,9 +3,13 @@
 J20/M22; US-MOB-01..06/08; underlying J01/J03/J04/J08/J14,
 M01/M02/M03/M08/M13/M14 and FT-002/003/006/007/008/011..015/042/061.
 Implementation status: Partially implemented. Native acceptance: **Incomplete**.
-Earlier real runs failed at NATIVE-01 browser handoff and blocked the remaining
-22 calls. The explicit Open CaseOps / server-lifetime replacement requires fresh
-source-frozen builds and a complete replay; retained failed runs are not passes.
+The exact installed ee8dde90 APK completed a 23-case attempt: NATIVE-01..09 and
+NATIVE-11..15 passed (14 calls); NATIVE-10/16/17 failed, and NATIVE-18..23 did not
+execute after the owner-helper deadline. Postflight remained fail-closed.
+A separate NATIVE-16 component replay and native Files/TXT read passed. The
+new upload replacement passes mobile304/22 files but still requires rebuild and
+full native replay. Retained wrong-binary/interrupted/failed runs are not passes.
+See `MOBILE_BUILD_CHECKPOINT_2026-10-25.md` for current evidence and open gates.
 The parent owns emulator, browser/CA installation, binary build, services and
 serialized execution. No Metro launch, policy workaround, production access,
 paid call, commit, push or worktree creation is authorized by this sidecar.
@@ -17,7 +21,10 @@ paid call, commit, push or worktree creation is authorized by this sidecar.
 prefixed `android:` or `ios:`. Collection is not execution. Windows cannot
 certify iOS; the same harness still needs an actual Mac/Xcode Simulator run.
 
-| Case | Concrete native boundary | Status |
+The following table retains the original sidecar discovery state, not the
+latest runtime verdicts summarized above.
+
+| Case | Concrete native boundary | Original Sidecar State (Historical) |
 | --- | --- | --- |
 | NATIVE-01 | Real browser form, explicit login/consent MFA stage, unchanged PKCE and principal/workspace; consent has 403 attempt, one verified MFA/fresh identity read, explicit second Connect, Open CaseOps gesture, one 200 grant/token | Earlier handoff failed; replacement not run |
 | NATIVE-02 | Today, Matters, Calendar and Work destinations | Not run |

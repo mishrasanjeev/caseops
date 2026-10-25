@@ -1,5 +1,17 @@
 # CaseOps  - Work To Be Done
 
+## October 25 Native Runtime Follow-Up
+
+J20/M22 remains release NO-GO. The source-bound ee8dde90 Android run has 14
+passed calls, three failed calls and six unexecuted calls. Files/TXT read passes
+separately; picker return is observed but its single attempted upload was not
+acknowledged and was not replayed. The actual Expo encoder rejects the prior
+URI part. The replacement passes mobile304/22 files and strict TypeScript;
+rebuild and actual picker/upload/reload/open plus complete core replay remain
+required. Preserve the wrong-binary, interrupted and failed receipts. Mac native
+iOS, physical/privacy/accessibility/push and release/security gates remain open.
+See `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-25.md` for current evidence.
+
 ## October 25 Native Handoff Replay
 
 The standalone Android APK runs without a Metro development server. Actual

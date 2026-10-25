@@ -2,9 +2,15 @@ import * as DocumentPicker from "expo-document-picker";
 import { Directory, File, FileMode, Paths } from "expo-file-system";
 import { randomUUID } from "expo-crypto";
 import type { MatterFileAsset } from "./contracts";
+import { nativeMultipart, stagedMultipartUri } from "./api";
+import type { MultipartFactory } from "./api";
 import { copyBounded, createStagingArea, pickerMimeTypes } from "./staging";
 
 const root = () => new Directory(Paths.cache, "caseops-matter-files-v1");
+export const nativeFileMultipart: MultipartFactory = (part, version, size) => {
+  const file = new File(stagedMultipartUri(part.uri, root().uri));
+  return nativeMultipart(part, version, () => file.bytes(), size);
+};
 export const nativeFileStager = createStagingArea({
   get rootUri() {
     return root().uri;
