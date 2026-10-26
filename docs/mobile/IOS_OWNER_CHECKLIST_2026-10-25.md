@@ -8,7 +8,7 @@ do not execute its gated steps before their blockers are resolved.
 
 ## Superseding 26 October status
 
-Latest source update: source-gates-12 verifies348 mobile tests;530 tooling cases/528 pass/two Windows-only skips;96 Python; selected API124 pass/five platform skips;2022 web tests with real coverage thresholds;8 actual built-browser cases and both builds/types. Guarded HTTPS production configuration is prepared, not signed/deployed/association-verified. Android753 APK/static16KiB and preserved API/web receipts are historical after this source update; final matching iOS/Android builds and40 cases each remain pending. Earlier dated counts/receipts below are retained history; STORE_RELEASE_2026-10-26.md has the current evidence map.
+Latest source update: source-gates-12 verifies348 mobile tests;533 tooling cases/531 pass/two Windows-only skips;96 Python; selected API124 pass/five platform skips;2022 web tests with real coverage thresholds;8 actual built-browser cases and both builds/types. Guarded HTTPS production configuration is prepared, not signed/deployed/association-verified. Android753 APK/static16KiB and preserved API/web receipts are historical after this source update; final matching iOS/Android builds and40 cases each remain pending. Earlier dated counts/receipts below are retained history; STORE_RELEASE_2026-10-26.md has the current evidence map.
 
 
 The Windows-only25 October checklist and unchecked case table below are retained historical handoff material; their `NOT RUN` labels do not erase later actual Mac executions. Current evidence and release blockers are maintained in [STORE_RELEASE_2026-10-26.md](STORE_RELEASE_2026-10-26.md).

@@ -3481,3 +3481,8 @@ requirements when using the fallback.
   Apply the documented own-LOAD exception and compare rounded protection against
   every writable LOAD range. Retain the incomplete modulo-only report and prove
   the negative shared-tail/overlap controls; static alignment is not device proof.
+- A DocumentsUI resource namespace must match the observed system provider,
+  rather than assume every Android image uses the AOSP package. Verify the
+  installed system APK and actual picker controls, allow only reviewed packages,
+  and reject mixed namespaces before a click. Mocked package support is not UI
+  visibility, URI readability or upload proof.

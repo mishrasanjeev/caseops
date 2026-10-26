@@ -111,13 +111,14 @@ export function validateAndroidFileAsset(context, kind) {
 export function validateAndroidPicker(context, asset) {
   const value = context.provider, proof = json(value?.evidence);
   for (const [key, expected] of Object.entries({ schemaVersion: 1, observed: true, platform: 'android', udid: context.fixture.udid,
-    appId: context.fixture.appId, packageName: 'com.android.documentsui' })) assert.equal(proof[key], expected, 'ANDROID_FILES_OBSERVED_PICKER_REQUIRED');
+    appId: context.fixture.appId })) assert.equal(proof[key], expected, 'ANDROID_FILES_OBSERVED_PICKER_REQUIRED');
+  assert.ok(['com.android.documentsui', 'com.google.android.documentsui'].includes(proof.packageName), 'ANDROID_FILES_SYSTEM_PICKER_PACKAGE_REQUIRED');
   assert.ok(/^CaseOpsFiles-[A-Za-z0-9-]{6,64}$/.test(value.folderName || ''), 'ANDROID_FILES_OWNED_FOLDER_REQUIRED');
   assert.equal(proof.folderName, value.folderName, 'ANDROID_FILES_PICKER_FOLDER_MISMATCH');
   verifiedFile(context.fixture.buildReceipt?.path, context.fixture.buildReceipt?.sha256);
   assert.deepEqual(proof.buildReceipt, context.fixture.buildReceipt, 'ANDROID_FILES_PICKER_BUILD_MISMATCH');
   assert.deepEqual(proof.manifestEvidence, context.assets.manifestEvidence, 'ANDROID_FILES_PICKER_MANIFEST_MISMATCH');
-  const controls = { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: 'com.android.documentsui:id/roots_list' },
+  const controls = { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: `${proof.packageName}:id/roots_list` },
     downloads: { kind: 'text', value: 'Downloads' }, folder: { kind: 'text', value: value.folderName }, fileTitleId: 'android:id/title', cancel: 'android-back' };
   assert.deepEqual(proof.controls, controls, 'ANDROID_FILES_OBSERVED_PICKER_CONTROLS_REQUIRED');
   if (asset) assert.equal(proof.assets?.filter(item => item.filename === asset.filename && item.sha256 === asset.sha256

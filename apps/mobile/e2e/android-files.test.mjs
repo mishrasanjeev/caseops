@@ -13,7 +13,7 @@ import { gatewayBaseline } from './traffic.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const APP = 'ai.caseops.mobile.dev.localacceptance', matterId = '11111111-2222-4333-8444-555555555555';
-function fixture(t) {
+function fixture(t, packageName = 'com.android.documentsui') {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'caseops-android-files-unit-'));
   t.after(() => rmSync(directory, { recursive: true, force: true })); let serial = 0;
   const evidence = (name, value) => { const file = path.join(directory, `${name}-${serial++}.json`), bytes = Buffer.from(JSON.stringify(value)); writeFileSync(file, bytes); return { path: file, sha256: sha(bytes) }; };
@@ -31,8 +31,8 @@ function fixture(t) {
   const buildReceipt = evidence('build', { kind: 'explicit-unit-fixture-not-native-execution' });
   const manifestEvidence = evidence('manifest', { schemaVersion: 1, kind: 'android-files-synthetic-fixtures', platform: 'android', syntheticDataOnly: true, assets: Object.values(uploads) });
   const folderName = 'CaseOpsFiles-unit-files-run';
-  const picker = { schemaVersion: 1, observed: true, platform: 'android', udid: 'emulator-5584', appId: APP, packageName: 'com.android.documentsui',
-    folderName, buildReceipt, manifestEvidence, controls: { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: 'com.android.documentsui:id/roots_list' },
+  const picker = { schemaVersion: 1, observed: true, platform: 'android', udid: 'emulator-5584', appId: APP, packageName,
+    folderName, buildReceipt, manifestEvidence, controls: { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: `${packageName}:id/roots_list` },
       downloads: { kind: 'text', value: 'Downloads' }, folder: { kind: 'text', value: folderName }, fileTitleId: 'android:id/title', cancel: 'android-back' },
     assets: Object.values(uploads).map(asset => ({ filename: asset.filename, sha256: asset.sha256, sizeBytes: asset.sizeBytes, observedProviderHash: asset.sha256, pickerName: asset.filename })) };
   const context = { platform: 'android', source, filesState: { uploads: {} }, gatewayBaseline: { runId: 'unit-run' },
@@ -109,19 +109,20 @@ test('observed Android picker binds exact selected device, app, build, manifest,
 
 function pickerDouble(context, asset, cancel = false) {
   let state = 'app'; const commands = [], callbacks = new Map();
+  const packageName = JSON.parse(readFileSync(context.provider.evidence.path)).packageName;
   const element = (id, text = '', next) => {
     callbacks.set(id, () => { commands.push(id); if (next) state = next; });
     return { elementId: id, isDisplayed: async () => true, isEnabled: async () => true, getText: async () => text,
       click: async () => assert.fail('WRAPPED_NATIVE_CLICK_FORBIDDEN') };
   };
   const driver = { elementClick: async id => { assert.ok(callbacks.has(id)); callbacks.get(id)(); },
-    getCurrentPackage: async () => state === 'app' || state === 'selected' ? APP : 'com.android.documentsui',
+    getCurrentPackage: async () => state === 'app' || state === 'selected' ? APP : packageName,
     pressKeyCode: async code => { assert.equal(code, 4); assert.equal(cancel, true); commands.push('android-back'); state = 'app'; },
     waitUntil: async (predicate, options) => { if (!await predicate()) throw new Error(options.timeoutMsg); },
     $$: async query => {
       if (query === 'id=files-choose') return [element('choose', '', 'picker')];
       if (query === '~Show roots' && state === 'picker') return [element('roots', '', 'roots')];
-      if (query === 'id=com.android.documentsui:id/roots_list' && state === 'roots') return [{ isDisplayed: async () => true,
+      if (query === `id=${packageName}:id/roots_list` && state === 'roots') return [{ isDisplayed: async () => true,
         $$: async value => { assert.equal(value, selector('android', 'text', 'Downloads')); return [element('downloads', '', 'downloads')]; } }];
       if (query === selector('android', 'text', context.provider.folderName) && state === 'downloads') return [element('folder', '', 'folder')];
       if (query === `android=new UiSelector().resourceId("android:id/title").text(${JSON.stringify(asset?.filename)})` && state === 'folder') return [element('chosen-file', asset.filename, 'selected')];
@@ -131,11 +132,45 @@ function pickerDouble(context, asset, cancel = false) {
   context.driver = driver; return { driver, commands, state: () => state };
 }
 test('actual Android picker wrapper uses only observed Downloads/folder/file controls or one explicit Back cancellation', async t => {
-  for (const cancel of [false, true]) {
-    const f = fixture(t), fake = pickerDouble(f.context, f.uploads.txt, cancel);
+  for (const packageName of ['com.android.documentsui', 'com.google.android.documentsui']) for (const cancel of [false, true]) {
+    const f = fixture(t, packageName), fake = pickerDouble(f.context, f.uploads.txt, cancel);
     await chooseAndroidFile(f.context, cancel ? null : f.uploads.txt, { cancel });
     assert.deepEqual(fake.commands, cancel ? ['choose', 'android-back'] : ['choose', 'roots', 'downloads', 'folder', 'chosen-file']);
     assert.equal(fake.state(), cancel ? 'app' : 'selected');
+  }
+});
+
+test('Google DocumentsUI evidence retains its exact package and resource namespace without an AOSP alias', t => {
+  const f = fixture(t, 'com.google.android.documentsui');
+  const observed = validateAndroidPicker(f.context, f.uploads.txt);
+  assert.equal(observed.packageName, 'com.google.android.documentsui');
+  assert.deepEqual(observed.controls.rootList, { kind: 'id', value: 'com.google.android.documentsui:id/roots_list' });
+  assert.notEqual(observed.controls.rootList.value, 'com.android.documentsui:id/roots_list');
+});
+
+test('unknown picker packages and cross-package root namespaces reject before any native click or lookup', async t => {
+  for (const packageName of ['com.android.documentsui', 'com.google.android.documentsui']) {
+    const f = fixture(t, packageName), otherPackage = packageName === 'com.android.documentsui' ? 'com.google.android.documentsui' : 'com.android.documentsui';
+    const changes = [
+      { patch: { controls: { ...f.picker.controls, rootList: { kind: 'id', value: `${otherPackage}:id/roots_list` } } }, reason: /ANDROID_FILES_OBSERVED_PICKER_CONTROLS_REQUIRED/ },
+      { patch: { packageName: 'other.documentsui', controls: { ...f.picker.controls, rootList: { kind: 'id', value: 'other.documentsui:id/roots_list' } } }, reason: /ANDROID_FILES_SYSTEM_PICKER_PACKAGE_REQUIRED/ },
+    ];
+    for (const { patch, reason } of changes) {
+      const commands = [];
+      const context = { ...f.context, provider: { ...f.context.provider, evidence: f.evidence('wrong-package', { ...f.picker, ...patch }) },
+        driver: { elementClick: async () => commands.push('click'), $$: async () => { commands.push('lookup'); return []; } } };
+      await assert.rejects(chooseAndroidFile(context, f.uploads.txt), reason);
+      assert.deepEqual(commands, []);
+    }
+  }
+});
+
+test('observed picker package cannot substitute another reviewed system package after opening', async t => {
+  for (const packageName of ['com.android.documentsui', 'com.google.android.documentsui']) {
+    const f = fixture(t, packageName), fake = pickerDouble(f.context, f.uploads.txt);
+    fake.driver.getCurrentPackage = async () => packageName === 'com.android.documentsui' ? 'com.google.android.documentsui' : 'com.android.documentsui';
+    await assert.rejects(chooseAndroidFile(f.context, f.uploads.txt), /ANDROID_FILES_PICKER_PACKAGE_REQUIRED/);
+    assert.deepEqual(fake.commands, ['choose']);
   }
 });
 
