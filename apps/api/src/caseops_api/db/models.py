@@ -15443,6 +15443,30 @@ class IpPortfolioExportJob(Base):
             "created_at",
         ),
         Index("ix_ip_portfolio_exports_requester", "requested_by_membership_id"),
+        Index(
+            "ix_ip_portfolio_exports_requester_status",
+            "company_id", "requested_by_membership_id", "status", "id",
+        ),
+        Index(
+            "ix_ip_portfolio_exports_queue",
+            "dispatch_protocol_version", "status", "created_at", "id",
+        ),
+        Index(
+            "ix_ip_portfolio_exports_recovery",
+            "dispatch_protocol_version", "status", "worker_claim_expires_at", "created_at", "id",
+        ),
+        CheckConstraint(
+            "dispatch_protocol_version IN (0, 1)",
+            name="ck_ip_portfolio_export_dispatch_protocol",
+        ),
+        CheckConstraint(
+            "dispatch_protocol_version = 0 OR "
+            "(status = 'running' AND worker_claim_token IS NOT NULL "
+            "AND worker_claim_expires_at IS NOT NULL) OR "
+            "(status <> 'running' AND worker_claim_token IS NULL "
+            "AND worker_claim_expires_at IS NULL)",
+            name="ck_ip_portfolio_export_claim_state",
+        ),
         CheckConstraint(
             "status IN ('pending', 'running', 'completed', 'failed')",
             name="ck_ip_portfolio_export_status",
@@ -15460,6 +15484,14 @@ class IpPortfolioExportJob(Base):
     )
     requested_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    # Zero deliberately identifies old writers that cannot fence finalization.
+    dispatch_protocol_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    worker_claim_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    worker_claim_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     format: Mapped[str] = mapped_column(String(12), nullable=False, default="csv")
     filters_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
     columns_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)

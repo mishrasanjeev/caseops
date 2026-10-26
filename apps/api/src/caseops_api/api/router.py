@@ -51,6 +51,7 @@ from caseops_api.api.routes import (
     platform_console,
     portal,
     portal_ip,
+    portfolio_export_worker,
     private_retrieval,
     product_guide,
     provider_operations,
@@ -69,6 +70,10 @@ def register_api_routes(application: FastAPI) -> None:
     """Register each feature directly, without cloning the entire API twice."""
     application.include_router(health.router, prefix="/api", tags=["health"])
     application.include_router(meta.router, prefix="/api", tags=["meta"])
+    application.include_router(
+        portfolio_export_worker.router, prefix="/api/internal/portfolio-exports",
+        tags=["portfolio-export-worker"],
+    )
     application.include_router(
         machine_readiness.router,
         prefix="/api/internal/machine-readiness",

@@ -21,6 +21,36 @@
 
 ---
 
+## Portfolio Export Execution
+
+`scripts/deploy-prod.sh` owns the export queue setup and readback through
+`scripts/portfolio_export_release.py provision|verify --expected-sha <full-main-sha>`.
+It uses only the existing production project/region and API runtime identity.
+No manual console or account setup is required unless Google reports an actual
+missing prerequisite. The helper does not create App Engine or accept terms.
+
+The `caseops-portfolio-exports` Cloud Tasks queue dispatches at most two requests
+concurrently to the exact-body, dedicated-HMAC `/api/internal/portfolio-exports/run`
+boundary. Only the runtime service account receives the queue-scoped enqueuer
+grant and access to `caseops-portfolio-export-worker-secret`; never log its value
+or reuse browser JWT/readiness keys. The worker request remains active until its
+durable result, preserving request-based billing rather than post-response CPU.
+No browser or reports-admin JWT can authorize that internal callback.
+
+The release-pinned `caseops-portfolio-export-recovery` job runs every five minutes
+and considers at most five new-protocol pending/expired records. It has no model
+provider credentials. Protocol0 legacy rows are diagnosed, not automatically
+claimed; new recovery must not race an unfenced old API background writer.
+Existing failed jobs still require the existing explicit retry command.
+
+Queue acknowledgment is not artifact completion. Retain the unchanged15-second
+IP18 desktop/mobile gate, exact51-row CSV output and duplicate/source/ACL races.
+Queue outages use durable bounded recovery; the cadence is not a guaranteed
+15-second outage-recovery promise. A failed release stays uncertified and must
+not resume private maintenance outside its canonical post-successful-QA guard.
+
+---
+
 ## 0. Prerequisites
 
 - `gcloud` CLI installed + authenticated: `gcloud auth login`
