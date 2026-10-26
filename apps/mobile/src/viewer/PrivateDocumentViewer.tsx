@@ -18,7 +18,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { getRandomBytes } from "expo-crypto";
 import { WebView } from "react-native-webview";
 import { colors, styles, target } from "../components/theme";
-import { PrivateViewerController } from "./controller.ts";
+import { displayAcknowledged, PrivateViewerController } from "./controller.ts";
+import type { RendererAcknowledgement } from "./controller.ts";
 import { VIEWER_LIMITS, sourceKey, viewerFormat } from "./contracts.ts";
 import type { ViewerContent, ViewerPorts, ViewerSource } from "./contracts.ts";
 import { encodeBase64 } from "./encoding.ts";
@@ -39,6 +40,9 @@ export type PrivateDocumentViewerProps = {
   onPositionChange?: (position: ViewerPosition) => void;
 };
 type Position = { page: number; pages: number; zoom: number };
+type DisplayedPosition = Position & {
+  acknowledgement: RendererAcknowledgement | null;
+};
 
 function IconButton({
   icon,
@@ -106,6 +110,8 @@ function ViewerInstance({
     controller.subscribe,
     controller.getSnapshot,
   );
+  const liveController = useRef(controller);
+  liveController.current = controller;
   useLayoutEffect(() => {
     if (state.phase !== "ready") {
       hiddenCommit.current?.();
@@ -114,7 +120,8 @@ function ViewerInstance({
   }, [state.revision, state.phase]);
   const initial =
     initialPosition?.sourceKey === key ? initialPosition : undefined;
-  const [position, setPosition] = useState<Position>({
+  const [position, setPosition] = useState<DisplayedPosition>({
+    acknowledgement: null,
     page:
       initial && Number.isSafeInteger(initial.page) && initial.page > 0
         ? initial.page
@@ -141,8 +148,14 @@ function ViewerInstance({
       hiddenCommit.current = null;
     };
   }, [controller]);
-  const changed = (next: Position) => {
-    setPosition(next);
+  const changed = (next: Position, revision: number) => {
+    const acknowledgement = { controller, revision };
+    if (
+      liveController.current !== controller ||
+      !displayAcknowledged(controller, acknowledgement)
+    )
+      return;
+    setPosition({ ...next, acknowledgement });
     onPositionChange?.({ sourceKey: key, page: next.page, zoom: next.zoom });
   };
   const close = () => {
@@ -150,6 +163,10 @@ function ViewerInstance({
     onClose();
   };
   const kind = viewerFormat(source)?.kind;
+  const displayReady = displayAcknowledged(
+    controller,
+    position.acknowledgement,
+  );
   const zoomIndex = ZOOMS.indexOf(position.zoom as (typeof ZOOMS)[number]);
   return (
     <View style={local.root} testID="private-document-viewer">
@@ -173,7 +190,7 @@ function ViewerInstance({
           icon="chevron-back"
           label="Previous page or text segment"
           testID="viewer-previous"
-          disabled={state.phase !== "ready" || position.page <= 1}
+          disabled={!displayReady || position.page <= 1}
           onPress={() => navigate.current(position.page - 1, position.zoom)}
         />
         <Text
@@ -181,14 +198,17 @@ function ViewerInstance({
           testID="viewer-position"
           accessibilityLiveRegion="polite"
         >
-          {["text", "docx-text"].includes(kind || "") ? "Segment" : "Page"}{" "}
-          {position.page} of {position.pages}
+          {displayReady
+            ? `${["text", "docx-text"].includes(kind || "") ? "Segment" : "Page"} ${position.page} of ${position.pages}`
+            : state.phase === "ready"
+              ? "Opening document"
+              : "No page displayed"}
         </Text>
         <IconButton
           icon="chevron-forward"
           label="Next page or text segment"
           testID="viewer-next"
-          disabled={state.phase !== "ready" || position.page >= position.pages}
+          disabled={!displayReady || position.page >= position.pages}
           onPress={() => navigate.current(position.page + 1, position.zoom)}
         />
         <View style={local.zoom}>
@@ -196,7 +216,7 @@ function ViewerInstance({
             icon="remove"
             label="Zoom out"
             testID="viewer-zoom-out"
-            disabled={state.phase !== "ready" || zoomIndex <= 0}
+            disabled={!displayReady || zoomIndex <= 0}
             onPress={() =>
               navigate.current(position.page, ZOOMS[zoomIndex - 1])
             }
@@ -208,7 +228,7 @@ function ViewerInstance({
             icon="add"
             label="Zoom in"
             testID="viewer-zoom-in"
-            disabled={state.phase !== "ready" || zoomIndex === ZOOMS.length - 1}
+            disabled={!displayReady || zoomIndex === ZOOMS.length - 1}
             onPress={() =>
               navigate.current(position.page, ZOOMS[zoomIndex + 1])
             }
@@ -220,7 +240,7 @@ function ViewerInstance({
           key={state.revision}
           controller={controller}
           position={positionRef.current}
-          changed={changed}
+          changed={(next) => changed(next, state.revision)}
           navigate={navigate}
         />
       ) : (

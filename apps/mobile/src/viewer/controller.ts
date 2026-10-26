@@ -63,6 +63,11 @@ export class PrivateViewerController {
     this.source = validateSource(source);
   }
   getSnapshot = (): ViewerState => this.state;
+  isCurrentRender = (revision: number): boolean =>
+    Number.isSafeInteger(revision) &&
+    this.state.phase === "ready" &&
+    this.state.revision === revision &&
+    this.clock.now() < this.state.expiresAt;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -290,4 +295,21 @@ export class PrivateViewerController {
       this.clock.clearTimeout(deadline);
     }
   }
+}
+
+export type RendererAcknowledgement = Readonly<{
+  controller: PrivateViewerController;
+  revision: number;
+}>;
+
+// Downloaded bytes do not establish that a native renderer has displayed them.
+// Bind its acknowledgement to the same controller, content revision and lease.
+export function displayAcknowledged(
+  controller: PrivateViewerController,
+  acknowledgement: RendererAcknowledgement | null,
+): boolean {
+  return (
+    acknowledgement?.controller === controller &&
+    controller.isCurrentRender(acknowledgement.revision)
+  );
 }

@@ -38,6 +38,36 @@ export function rendererMain(config: {
     renderTask: any = null;
   let image: HTMLImageElement | null = null,
     objectUrl = "";
+  type TextRead = {
+    reader: ReadableStreamDefaultReader<any>;
+    strings: string[];
+    cancelled: boolean;
+    released: boolean;
+  };
+  let textRead: TextRead | null = null;
+  const finishTextRead = (active: TextRead, cancel: boolean) => {
+    if (textRead === active) textRead = null;
+    active.strings.length = 0;
+    const release = () => {
+      if (active.released) return;
+      try {
+        active.reader.releaseLock();
+        active.released = true;
+      } catch {
+        // A pending cancellation gets one further release after settling.
+      }
+    };
+    if (cancel && !active.cancelled) {
+      active.cancelled = true;
+      try {
+        void active.reader.cancel().then(release, release);
+      } catch {
+        // Cancellation failure cannot retain collected private text.
+      }
+    }
+    release();
+    return active.released;
+  };
   const seenEvents = new WeakSet<Event>();
   const send = (type: string, extra: Record<string, unknown> = {}) =>
     host.ReactNativeWebView?.postMessage(
@@ -52,6 +82,7 @@ export function rendererMain(config: {
     clearTimeout(renderTimer);
     payload?.fill(0);
     payload = null;
+    if (textRead) finishTextRead(textRead, true);
     renderTask?.cancel();
     void task?.destroy();
     pdf = null;
@@ -104,6 +135,7 @@ export function rendererMain(config: {
     if (rendering) {
       renderAgain = true;
       renderTask?.cancel();
+      if (textRead) finishTextRead(textRead, true);
       return;
     }
     rendering = true;
@@ -169,21 +201,62 @@ export function rendererMain(config: {
           }
           renderTask = null;
           requireLive();
-          const content = await page.getTextContent({
-            disableNormalization: false,
-          });
-          requireLive();
-          let chars = 0;
-          const strings: string[] = [];
-          for (const item of content.items) {
-            if (typeof item.str !== "string") continue;
-            chars += item.str.length + 1;
-            if (chars > config.limits.maxPageTextCharacters)
-              throw new Error("Page text exceeds budget");
-            strings.push(item.str, item.hasEOL ? "\n" : " ");
+          if (renderAgain) {
+            page.cleanup();
+            continue;
           }
-          text.textContent =
-            strings.join("") || "No embedded text is available on this page.";
+          const active: TextRead = {
+            reader: page
+              .streamTextContent({ disableNormalization: false })
+              .getReader(),
+            strings: [],
+            cancelled: false,
+            released: false,
+          };
+          textRead = active;
+          let complete = false,
+            chars = 0,
+            reads = 0,
+            items = 0;
+          try {
+            for (;;) {
+              requireLive();
+              if (active.cancelled || renderAgain) break;
+              if (++reads > config.limits.maxPageTextCharacters + 1)
+                throw new Error("Page text stream exceeds budget");
+              const chunk = await active.reader.read();
+              requireLive();
+              if (active.cancelled || renderAgain) break;
+              if (typeof chunk.done !== "boolean")
+                throw new Error("Invalid page text completion");
+              if (chunk.done) {
+                complete = true;
+                break;
+              }
+              if (!chunk.value || !Array.isArray(chunk.value.items))
+                throw new Error("Invalid page text stream");
+              for (const item of chunk.value.items) {
+                requireLive();
+                if (++items > config.limits.maxPageTextCharacters + 1)
+                  throw new Error("Page text items exceed budget");
+                if (typeof item.str !== "string") continue;
+                chars += item.str.length + 1;
+                if (chars > config.limits.maxPageTextCharacters)
+                  throw new Error("Page text exceeds budget");
+                active.strings.push(item.str, item.hasEOL ? "\n" : " ");
+              }
+            }
+            if (complete && !renderAgain)
+              text.textContent =
+                active.strings.join("") ||
+                "No embedded text is available on this page.";
+          } finally {
+            const released = finishTextRead(active, !complete);
+            if (complete && !released) {
+              finishTextRead(active, true);
+              throw new Error("Page text reader could not be released");
+            }
+          }
           page.cleanup();
         } else {
           context.drawImage(image!, 0, 0, canvas.width, canvas.height);

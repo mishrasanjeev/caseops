@@ -3497,3 +3497,13 @@ requirements when using the fallback.
   scrolling, reject ambiguity/read errors, and dispatch each resolved navigation
   once outside polling. A delayed-control unit counterexample does not establish
   the cause of an earlier native failure that fresh device probes did not repeat.
+- A static renderer program embedded in Hermes does not prove compatibility
+  with Apple's shipped WKWebView. PDF.js text extraction can require stream
+  async iteration absent in that runtime even when Chromium or Playwright
+  WebKit passes. Use bounded serial getReader reads, preserve embedded text,
+  cancel and release on every exit, and prove the exact native failure boundary
+  without widening CSP, network access, authority leases or render deadlines.
+- Downloaded document bytes are not a displayed page acknowledgement. Do not
+  enable navigation or zoom from the default Page 1 of 1 position. Bind the
+  acknowledged position to its live controller, content revision and authority
+  lease; renewal, source changes and retained late callbacks need fresh proof.
