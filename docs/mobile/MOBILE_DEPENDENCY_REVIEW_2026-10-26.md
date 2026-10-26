@@ -74,9 +74,19 @@ ambient setting and cached settings in this fixture only; unmocked HTTP transpor
 is rejected. Production admission, authentication and no-paid fences are unchanged.
 The original selection failed16/passed33; replacement49 selected cases pass with
 all147 phases, zero failures. All53 module identities were collected, but four
-PostgreSQL cases were deselected and remain a separate required replay. The five
-new ambient-setting/transport regressions pass; two originally failed.
+PostgreSQL cases were initially deselected; preserve that component-only receipt.
+The five new ambient-setting/transport regressions pass; two originally failed.
+
+The subsequent full module on unchanged test bytes at8d89ceb2 passes53/53,
+all159 setup/call/teardown phases, zero failures/skips/deselections. Independent
+collection, live journal and final JUnit agree, including all four PostgreSQL
+claim/transport/stale-completion races. This replay used a fresh owned PostgreSQL
+server and separately migrated, connection-disabled HTTP template; no retained
+application rows were cloned. Original catalogue rows were checked unchanged.
+Owned containers/network were removed. The first internal-network connection
+timeout is retained as failed setup, not a product reproduction or test pass.
 
 Evidence: primary Windows workspace outputs/fix-561-20261026/mobile-backend-fixture
 and mobile-current-recovery. These source results do not clear the dependency
 gate, hosted CI, complete native acceptance, store release or production rollout.
+Full-module proof: outputs/fix-561-20261026/mobile-leads-full-02-validation.json.
