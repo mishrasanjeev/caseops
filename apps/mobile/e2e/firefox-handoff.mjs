@@ -92,16 +92,31 @@ async function location(context, recipe) {
 export async function prepareFirefox(context, recipe) {
   browserStep(context, 'prepare-ready', 'check');
   const locator = recipe.locators.fullBrowser;
-  let fullBrowser = false;
+  let nextAction = 0;
+  let failure;
   await context.driver.waitUntil(async () => {
-    fullBrowser = !!locator && !!await visible(context.driver, selector(context.platform, locator.kind, locator.value));
-    if (fullBrowser) return true;
-    const first = recipe.prepare?.[0];
-    return !!first && !!await visible(context.driver, selector(context.platform, first.kind, first.value));
+    try {
+      assert.equal(await context.driver.getCurrentPackage(), recipe.packageName, 'WRONG_SYSTEM_BROWSER_PACKAGE');
+      browserStep(context, 'fullBrowser', 'find');
+      if (locator && await visible(context.driver, selector(context.platform, locator.kind, locator.value))) return true;
+      // An already open menu must not be toggled closed, and a completed
+      // conversion must not demand an obsolete menu action.
+      for (let index = (recipe.prepare?.length || 0) - 1; index >= nextAction; index--) {
+        const action = recipe.prepare[index];
+        browserStep(context, `prepare-${index}`, 'find');
+        const control = await visible(context.driver, selector(context.platform, action.kind, action.value));
+        if (!control) continue;
+        assert.equal(await control.isEnabled(), true, 'FIREFOX_PREPARATION_CONTROL_DISABLED');
+        browserStep(context, `prepare-${index}`, 'click');
+        await dispatchNativeClick(context, control, action.kind, action.value);
+        nextAction = index + 1;
+        return false;
+      }
+      return !locator && nextAction === (recipe.prepare?.length || 0)
+        && !!await visible(context.driver, selector(context.platform, recipe.locators.urlOpen.kind, recipe.locators.urlOpen.value));
+    } catch (error) { failure = error; return true; }
   }, { timeout: 10000, interval: 150, timeoutMsg: 'FIREFOX_BROWSER_CHROME_NOT_READY' });
-  if (fullBrowser) return;
-  for (const [index, action] of (recipe.prepare || []).entries()) await press(context, `prepare-${index}`, action);
-  if (locator) await locate(context, 'fullBrowser');
+  if (failure) throw failure;
   await locate(context, 'urlOpen');
 }
 

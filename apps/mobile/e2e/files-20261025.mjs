@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { FixtureUnavailable, admitApplication, verifiedFile } from './fixture-contract.mjs';
 import { authenticate, delta, openMatter, readOnlyTraffic, traffic } from './journeys.mjs';
-import { absent, click, dispatchNativeClick, find, findQuery, read, selector, visible } from './native-ui.mjs';
+import { absent, click, dispatchNativeClick, find, findQuery, read, selector, swipe, visible } from './native-ui.mjs';
 import { reconcileInventory } from './support.mjs';
 
 // Supplement only: not part of core-20261025.json or a claim of native execution.
@@ -84,20 +84,59 @@ export function validateFilesContext(context) {
   return source;
 }
 
-export async function expandSourceDetails(context, control) {
+export async function expandSourceDetails(context, control, requested = new Set()) {
   const show = await visible(control, selector(context.platform, 'text', 'Source details'));
   const hide = await visible(control, selector(context.platform, 'text', 'Hide source details'));
   assert.equal(Number(!!show) + Number(!!hide), 1, 'FILES_SOURCE_DETAILS_STATE_UNOBSERVED');
-  if (show) await dispatchNativeClick(context, show, 'text', 'Source details');
+  if (show) {
+    if (requested.has(show.elementId)) return;
+    assert.ok(requested.size < 2, 'FILES_SOURCE_REPLACEMENT_BOUND');
+    requested.add(show.elementId);
+    await dispatchNativeClick(context, show, 'text', 'Source details');
+  }
+}
+
+export async function readSourceHash(context, anchor) {
+  const hashId = `files-hash-${anchor.attachmentId}`;
+  const detailsId = `files-source-${anchor.attachmentId}`;
+  await find(context, 'id', detailsId, { scroll: true });
+  const requested = new Set();
+  let hash;
+  // Reload unmounts FileRow. Reacquire its current control, never replay an
+  // expansion whose acknowledgement is missing, and retain the existing bound.
+  for (let attempt = 0; attempt <= 9; attempt++) {
+    let failure;
+    try {
+      await context.driver.waitUntil(async () => {
+        try {
+          for (const id of ['files-inactive', 'files-restricted', 'files-error'])
+            assert.equal(await visible(context.driver, selector(context.platform, 'id', id)), undefined, 'FILES_SOURCE_NOT_CURRENTLY_READABLE');
+          if (await visible(context.driver, selector(context.platform, 'id', 'files-loading'))) return false;
+          const details = await visible(context.driver, selector(context.platform, 'id', detailsId));
+          if (details) {
+            const prior = requested.size;
+            await expandSourceDetails(context, details, requested);
+            if (requested.size > prior) context.record?.({ type: 'source_details_expansion', attachmentId: anchor.attachmentId,
+              requestCount: requested.size, attempt });
+          }
+          hash = await visible(context.driver, selector(context.platform, 'id', hashId));
+          return !!hash;
+        } catch (error) { failure = error; return true; }
+      }, { timeout: 1500, interval: 150, timeoutMsg: 'NATIVE_CONTROL_NOT_VISIBLE' });
+    } catch (error) {
+      if (!error.message.includes('NATIVE_CONTROL_NOT_VISIBLE') || attempt === 9) throw error;
+      await swipe(context, attempt < 3 ? 'up' : 'down');
+      continue;
+    }
+    if (failure) throw failure;
+    return hash.getText();
+  }
 }
 
 async function sourceDetails(context, anchor = source) {
   await find(context, 'id', `files-row-${anchor.attachmentId}`, { scroll: true });
   assert.equal(await read(context, 'id', `files-name-${anchor.attachmentId}`, { scroll: true }), anchor.filename, 'FILES_WRONG_SOURCE_FILENAME');
-  const hashId = `files-hash-${anchor.attachmentId}`;
-  const details = await find(context, 'id', `files-source-${anchor.attachmentId}`, { scroll: true });
-  await expandSourceDetails(context, details);
-  assert.equal(await read(context, 'id', hashId, { scroll: true }), anchor.sha256, 'FILES_SOURCE_HASH_MISMATCH');
+  assert.equal(await readSourceHash(context, anchor), anchor.sha256, 'FILES_SOURCE_HASH_MISMATCH');
 }
 
 async function enterFiles(context) {

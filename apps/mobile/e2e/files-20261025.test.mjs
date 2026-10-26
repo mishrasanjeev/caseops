@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { FixtureUnavailable } from './fixture-contract.mjs';
-import { collectFiles, expandSourceDetails, inventory, scenarios, source, uploadFilesSource, validateFilesContext, validateSourceAnchor, validateSourceReceipt, validateUploadFixture } from './files-20261025.mjs';
+import { collectFiles, expandSourceDetails, inventory, readSourceHash, scenarios, source, uploadFilesSource, validateFilesContext, validateSourceAnchor, validateSourceReceipt, validateUploadFixture } from './files-20261025.mjs';
 import { selector } from './native-ui.mjs';
 import { gatewayBaseline } from './traffic.mjs';
 
@@ -96,6 +96,108 @@ test('missing, invisible, duplicate or contradictory exact source-details captio
       state === 'duplicate' ? /AMBIGUOUS_VISIBLE_NATIVE_LOCATOR/ : /FILES_SOURCE_DETAILS_STATE_UNOBSERVED/);
     assert.equal(clicked, 0);
   }
+});
+
+function reloadingSource({ missingHash = false, wrongHash = false, remount = true, loading = false, blockedState, dispatchFailure } = {}) {
+  let expanded = true, replaced = false, clicked = 0, clock = 0, swipes = 0, loadingObserved = false;
+  const text = value => ({ async isDisplayed() { return true; }, async getText() { return value; } });
+  const driver = {
+    async elementClick(id) {
+      assert.equal(id, replaced ? 'fresh-source-caption' : 'old-source-caption');
+      clicked++;
+      if (dispatchFailure) throw dispatchFailure;
+      expanded = !expanded;
+    },
+    async $$(query) {
+      if (blockedState && query === `id=${blockedState}`) return [text('Not currently readable')];
+      if (query === 'id=files-loading' && loading && !loadingObserved) {
+        loadingObserved = true; replaced = true; expanded = false;
+        return [text('Loading current files and access')];
+      }
+      if (query === `id=files-source-${source.attachmentId}`) return [{
+        async isDisplayed() { return true; }, async $$(child) {
+          return child === selector('android', 'text', expanded ? 'Hide source details' : 'Source details') ? [{
+            ...text('caption'), elementId: replaced ? 'fresh-source-caption' : 'old-source-caption',
+            async click() { assert.fail('ELEMENT_CLICK_WRAPPER_MUST_NOT_BE_CALLED'); },
+          }] : [];
+        },
+      }];
+      if (query === `id=files-hash-${source.attachmentId}`) {
+        if (remount && !replaced) { replaced = true; expanded = false; }
+        return expanded && !missingHash ? [text(wrongHash ? '0'.repeat(64) : source.sha256)] : [];
+      }
+      if (['files-loading', 'files-inactive', 'files-error', 'files-restricted'].some(id => query === `id=${id}`)) return [];
+      assert.fail(`UNEXPECTED_SOURCE_QUERY: ${query}`);
+    },
+    async waitUntil(predicate, { timeout = 10000, interval = 150, timeoutMsg } = {}) {
+      const start = clock;
+      while (!await predicate()) {
+        if (clock - start >= timeout) throw new Error(timeoutMsg);
+        clock += Math.min(interval, timeout - (clock - start));
+      }
+    },
+    async getWindowRect() { return { width: 1080, height: 2424 }; },
+    async performActions() { swipes++; }, async releaseActions() {},
+  };
+  return { context: { driver, platform: 'android' }, clicks: () => clicked, swipes: () => swipes, elapsed: () => clock };
+}
+
+test('source hash recovery reacquires the collapsed row replaced after reload', async () => {
+  const fake = reloadingSource();
+  assert.equal(await readSourceHash(fake.context, source), source.sha256);
+  assert.equal(fake.clicks(), 1);
+});
+
+test('source hash recovery never toggles an expanded row or relabels an altered hash', async () => {
+  const fake = reloadingSource({ remount: false, wrongHash: true });
+  assert.equal(await readSourceHash(fake.context, source), '0'.repeat(64));
+  assert.equal(fake.clicks(), 0);
+});
+
+test('source hash recovery ignores old matching content during loading and re-expands the current row', async () => {
+  const fake = reloadingSource({ remount: false, loading: true });
+  assert.equal(await readSourceHash(fake.context, source), source.sha256);
+  assert.equal(fake.clicks(), 1);
+});
+
+test('source expansion dispatches once per resolved caption and refuses a third replacement', async () => {
+  const requested = new Set(), clicks = [];
+  const context = { platform: 'android', driver: { async elementClick(id) { clicks.push(id); } } };
+  const control = elementId => ({ async $$(query) {
+    return query === selector('android', 'text', 'Source details') ? [{ elementId, async isDisplayed() { return true; } }] : [];
+  } });
+  for (let count = 0; count < 3; count++) await expandSourceDetails(context, control('first'), requested);
+  await expandSourceDetails(context, control('second'), requested);
+  await assert.rejects(expandSourceDetails(context, control('third'), requested), /FILES_SOURCE_REPLACEMENT_BOUND/);
+  assert.deepEqual(clicks, ['first', 'second']);
+});
+
+test('source hash recovery rejects inactive, restricted and failed reads before accepting an old hash', async () => {
+  for (const blockedState of ['files-inactive', 'files-restricted', 'files-error']) {
+    const fake = reloadingSource({ remount: false, blockedState });
+    await assert.rejects(readSourceHash(fake.context, source), /FILES_SOURCE_NOT_CURRENTLY_READABLE/);
+    assert.equal(fake.clicks(), 0);
+  }
+});
+
+test('source hash recovery retains the finite scroll budget and never repeats an unacknowledged expansion', async () => {
+  const fake = reloadingSource({ missingHash: true });
+  await assert.rejects(readSourceHash(fake.context, source), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.equal(fake.clicks(), 1);
+  assert.ok(fake.swipes() <= 9 && fake.elapsed() <= 15000);
+  for (const message of ['stale element reference', 'native acknowledgement lost']) {
+    const failure = new Error(message), lost = reloadingSource({ dispatchFailure: failure });
+    await assert.rejects(readSourceHash(lost.context, source), error => error === failure);
+    assert.equal(lost.clicks(), 1);
+    assert.equal(lost.swipes(), 0);
+  }
+});
+
+test('legacy and current Android source readers share recovery but keep their independent exact hash assertions', () => {
+  const legacy = readFileSync(new URL('./files-20261025.mjs', import.meta.url), 'utf8');
+  const current = readFileSync(new URL('./android-files.mjs', import.meta.url), 'utf8');
+  assert.ok(legacy.includes("assert.equal(await readSourceHash(context, anchor), anchor.sha256, 'FILES_SOURCE_HASH_MISMATCH')"));
+  assert.ok(current.includes("assert.equal(await readSourceHash(context, anchor), anchor.sha256, 'ANDROID_FILES_WRONG_SOURCE_HASH')"));
 });
 
 // Synthetic proof files and explicit UI/transport doubles, never native evidence.
@@ -304,7 +406,7 @@ function offlineUpload(t, outcome, { status = 200, acknowledgement = 'visible' }
     async releaseActions() {},
     async $$(query) {
       queries.push(query);
-      if (query === selector('android', 'id', 'session-loading')) return [];
+      if (['session-loading', 'files-loading', 'files-inactive', 'files-restricted', 'files-error'].some(id => query === selector('android', 'id', id))) return [];
       if (controls.has(query)) return [controls.get(query)];
       if (submitted && outcome === 'persisted') {
         if (uploadedControls.has(query)) return [uploadedControls.get(query)];
