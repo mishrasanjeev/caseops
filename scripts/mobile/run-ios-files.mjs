@@ -24,8 +24,12 @@ const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const ref = (file) => ({ path: file, sha256: digest(readFileSync(file)) });
 export function knownFileSources(assets) {
   const previous = assets.priorManifestEvidence || [];
-  assert.ok(Array.isArray(previous) && previous.length <= 4, 'BOUNDED_PRIOR_FILES_COHORTS_REQUIRED');
-  return [{ id: 'seeded-txt', ...assets.source, marker: assets.source.text?.trim() },
+  assert.ok(Array.isArray(previous) && previous.length <= 5, 'BOUNDED_PRIOR_FILES_COHORTS_REQUIRED');
+  const current = readRef(assets.manifestEvidence);
+  assert.equal(current.syntheticDataOnly, true, 'SYNTHETIC_CURRENT_FILES_REQUIRED');
+  assert.equal(current.kind, 'ios-files-synthetic-fixtures', 'CURRENT_FILES_MANIFEST_REQUIRED');
+  assert.ok(Array.isArray(current.assets) && current.assets.length > 0 && current.assets.length <= 16, 'BOUNDED_CURRENT_FILES_REQUIRED');
+  const known = [{ id: 'seeded-txt', ...assets.source, marker: assets.source.text?.trim() },
     ...previous.flatMap((reference, index) => {
       const manifest = readRef(reference);
       assert.equal(manifest.syntheticDataOnly, true, 'SYNTHETIC_PRIOR_FILES_REQUIRED');
@@ -33,6 +37,8 @@ export function knownFileSources(assets) {
       assert.ok(Array.isArray(manifest.assets) && manifest.assets.length <= 12, 'BOUNDED_PRIOR_FILES_REQUIRED');
       return manifest.assets.map(asset => ({ ...asset, id: `prior-${index}-${asset.id}` }));
     })];
+  assert.ok(known.length + current.assets.length <= 60, 'BOUNDED_TOTAL_FILES_SOURCES_REQUIRED');
+  return known;
 }
 export function assertStrictIosFilesEnvironment(fixture, environment = process.env) {
   assert.notEqual(environment.NODE_TLS_REJECT_UNAUTHORIZED, '0', 'STRICT_FILES_TLS_REQUIRED');

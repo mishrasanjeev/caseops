@@ -1,5 +1,10 @@
 # CaseOps agent instructions
 
+- A SwiftUI control embedded in a React Native safe-area container must not
+  apply that container inset again. Compare native button and host frames,
+  visibility and hittability after scrolling; a visible label does not prove
+  its control is tappable. Preserve keyboard insets when adjusting the host.
+
 - An iOS picker URI returned without the SDK's cache copy is not guaranteed
   immediately readable. Use the documented cache-copy contract, validate the
   returned direct-child path, size and ownership before staging, and purge every

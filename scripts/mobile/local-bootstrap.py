@@ -274,15 +274,16 @@ def compose(cache, config):
     env.setdefault("CASEOPS_MOBILE_WEB_DOCKERFILE", str(REPO / "apps/web/Dockerfile"))
     env.update(json.loads((cache / "compose-secrets.json").read_text()))
     command = ["docker", "compose", "-f", str(REPO / "compose.mobile-local.yml")]
-    if config["CASEOPS_MOBILE_PLATFORM"] == "ios":
+    platform = config["CASEOPS_MOBILE_PLATFORM"]
+    scanner_platform = ios_scanner_platform()
+    if platform == "ios" or scanner_platform:
         # Keep canonical image pins and inherited TLS/CORS/network fences intact.
         override = {"services": {service: {"environment": {"CASEOPS_PUBLIC_APP_URL": config["CASEOPS_MOBILE_WEB_ORIGIN"]}}
-                                 for service in ("api", "migrate")}}
-        scanner_platform = ios_scanner_platform()
+                                 for service in ("api", "migrate")} if platform == "ios" else {}}
         if scanner_platform:
             override["services"]["scanner"] = {"platform": scanner_platform}
         content = json.dumps(override, sort_keys=True)
-        path = cache / f"ios-compose-{hashlib.sha256(content.encode()).hexdigest()[:12]}.json"
+        path = cache / f"{platform}-compose-{hashlib.sha256(content.encode()).hexdigest()[:12]}.json"
         if path.exists():
             assert json.loads(path.read_text(encoding="utf-8")) == override, "Compose platform override changed"
         else:

@@ -81,6 +81,7 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   assert.ok(rootInstall < typecheck && mobileInstall < typecheck);
   assert.ok(rootInstall < browserInstall && browserInstall < tests);
   const nodeSetup = steps.find(step => step.uses === 'actions/setup-node@v4');
+  assert.equal(nodeSetup.with['node-version'], '24.15.0', 'NATIVE_WRAPPER_RUNTIME_MUST_MATCH_SOURCE_CI');
   assert.deepEqual(nodeSetup.with['cache-dependency-path'].trim().split(/\s+/).sort(),
     ['apps/mobile/package-lock.json', 'package-lock.json']);
   for (const event of ['push', 'pull_request']) {

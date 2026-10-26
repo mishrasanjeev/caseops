@@ -147,6 +147,28 @@ test('additional seeded-reader sources are scanned without joining or changing p
   assert.ok(!JSON.stringify(snapshot).includes(marker));
 });
 
+test('privacy independently includes all five prior cohorts and charges current assets at the combined sixty-source bound', (t) => {
+  const f = fixture(t), manifest = JSON.parse(readFileSync(f.manifest));
+  for (let index = 2; index < 7; index++) {
+    const filename = `current-${index}.txt`, file = path.join(f.root, 'public-assets', filename), data = Buffer.from(`Synthetic current asset ${index}.`);
+    writeFileSync(file, data);
+    manifest.assets.push({ id: `current-${index}`, filename, path: file, sha256: sha(data), sizeBytes: data.length });
+  }
+  writeFileSync(f.manifest, JSON.stringify(manifest));
+  const { stagingEvidence } = stageIosFilesAssets({ ...f.options, manifestEvidence: ref(f.manifest) });
+  const source = index => ({ id: `known-${index}`, filename: `known-${index}.txt`, sha256: sha(`Synthetic known asset ${index}.`), sizeBytes: 24 });
+  const fiveCohortsAndSeed = Array.from({ length: 36 }, (_, index) => source(index));
+  const cohort = f.snapshot(stagingEvidence, 'five-cohorts.json', { knownSources: fiveCohortsAndSeed }).snapshot;
+  assert.equal(cohort.knownSources.length, 36); assert.equal(cohort.providerOriginals.length, 7);
+  assert.equal(cohort.providerOriginalsPreserved, true); assert.equal(cohort.complete, true);
+  const sixty = Array.from({ length: 53 }, (_, index) => source(index));
+  const accepted = f.snapshot(stagingEvidence, 'sixty.json', { knownSources: sixty }).snapshot;
+  assert.equal(accepted.knownSources.length + accepted.providerOriginals.length, 60);
+  assert.deepEqual(accepted.limits, { files: 4096, entries: 8192, depth: 16, fileBytes: 8388608, totalBytes: 67108864 });
+  assert.throws(() => f.snapshot(stagingEvidence, 'sixty-one.json', { knownSources: [...sixty, source(53)] }), /BOUNDED_KNOWN_SOURCE_INVENTORY_REQUIRED/);
+  assert.equal(existsSync(path.join(f.root, 'sixty-one.json')), false);
+});
+
 test('missing or changed provider originals cannot be reported as successful app cleanup', (t) => {
   const f = fixture(t), { stagingEvidence, staging } = stageIosFilesAssets(f.options);
   rmSync(staging.assets[0].path);

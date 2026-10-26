@@ -13,6 +13,8 @@ import {
 import { colors } from "./theme";
 import { AdaptiveSegments } from "./AccessibleSegments";
 import type { ButtonProps, SegmentsProps } from "./NativeControls.types";
+// React Native owns the enclosing safe-area frame. Reapplying its container
+// inset clips embedded SwiftUI controls after the parent scrolls.
 export function NativeButton({
   label,
   onPress,
@@ -22,6 +24,7 @@ export function NativeButton({
 }: ButtonProps) {
   return (
     <Host
+      ignoreSafeArea="container"
       matchContents={{ vertical: true }}
       style={{ width: "100%", minHeight: 44 }}
       colorScheme="light"
@@ -45,7 +48,7 @@ export function NativeButton({
 export function NativeProgress() {
   return (
     <View accessibilityLabel="Loading" accessibilityRole="progressbar">
-      <Host style={{ width: 44, height: 44 }} colorScheme="light">
+      <Host ignoreSafeArea="container" style={{ width: 44, height: 44 }} colorScheme="light">
         <ProgressView />
       </Host>
     </View>
@@ -55,6 +58,7 @@ export function NativeSegments(props: SegmentsProps) {
   return (
     <AdaptiveSegments {...props}>
       <Host
+        ignoreSafeArea="container"
         matchContents={{ vertical: true }}
         style={{ width: "100%", minHeight: 44 }}
         colorScheme="light"

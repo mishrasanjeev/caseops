@@ -175,7 +175,7 @@ export function snapshotIosFilesPrivacy({ containers, stagingEvidence, output, k
   assert.equal(staging.folderPath, path.join(containers.provider.storagePath, staging.folderName), 'STAGED_PROVIDER_FOLDER_SCOPE_MISMATCH');
   directory(staging.folderPath);
   const assets = manifestAssets(staging.manifestEvidence);
-  assert.ok(Array.isArray(knownSources) && knownSources.length <= 32, 'BOUNDED_KNOWN_SOURCE_INVENTORY_REQUIRED');
+  assert.ok(Array.isArray(knownSources) && knownSources.length + assets.length <= 60, 'BOUNDED_KNOWN_SOURCE_INVENTORY_REQUIRED');
   const scannedSources = [...assets, ...knownSources.map(knownSource)];
   assert.equal(new Set(scannedSources.map(({ id }) => id)).size, scannedSources.length, 'DUPLICATE_KNOWN_SOURCE_ID');
   assert.deepEqual(staging.assets.map(({ id, filename, sha256, sizeBytes }) => ({ id, filename, sha256, sizeBytes })),

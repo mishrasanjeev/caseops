@@ -63,17 +63,36 @@ test('a failed picker remains pending across blocked reader dependencies and res
   await recovery.prepare(context);
   assert.equal(calls.length, 3);
 });
-test('privacy source inventory includes all four retained cohorts with exact hashes and rejects missing or altered evidence', (t) => {
+test('privacy source inventory includes all five retained cohorts with exact hashes and rejects missing or altered evidence', (t) => {
   const {reportRoot}=environment(t),priorManifestEvidence=[];
-  for(let index=0;index<4;index++){
-    const file=path.join(reportRoot,`prior-${index}.json`),bytes=Buffer.from(JSON.stringify({syntheticDataOnly:true,kind:'ios-files-synthetic-fixtures',assets:[{id:'txt',filename:`prior-${index}.txt`,sha256:String(index+1).repeat(64)}]}));
+  for(let index=0;index<5;index++){
+    const file=path.join(reportRoot,`prior-${index}.json`),bytes=Buffer.from(JSON.stringify({syntheticDataOnly:true,kind:'ios-files-synthetic-fixtures',assets:Array.from({length:7},(_,asset)=>({id:`asset-${asset}`,filename:`prior-${index}-${asset}.txt`,sha256:String(index+1).repeat(64)}))}));
     writeFileSync(file,bytes);priorManifestEvidence.push({path:file,sha256:createHash('sha256').update(bytes).digest('hex')});
   }
-  const assets={source:{filename:'source.txt',sha256:'0'.repeat(64),text:'Synthetic seed.'},priorManifestEvidence};
-  assert.deepEqual(knownFileSources(assets).map(({id})=>id),['seeded-txt','prior-0-txt','prior-1-txt','prior-2-txt','prior-3-txt']);
+  const current=path.join(reportRoot,'current.json');
+  writeFileSync(current,JSON.stringify({syntheticDataOnly:true,kind:'ios-files-synthetic-fixtures',assets:Array.from({length:7},(_,id)=>({id}))}));
+  const manifestEvidence={path:current,sha256:createHash('sha256').update(readFileSync(current)).digest('hex')};
+  const assets={source:{filename:'source.txt',sha256:'0'.repeat(64),text:'Synthetic seed.'},priorManifestEvidence,manifestEvidence};
+  assert.deepEqual(knownFileSources(assets).map(({id})=>id),['seeded-txt',...Array.from({length:5},(_,index)=>Array.from({length:7},(_,asset)=>`prior-${index}-asset-${asset}`)).flat()]);
   assert.throws(()=>knownFileSources({...assets,priorManifestEvidence:[...priorManifestEvidence,priorManifestEvidence[0]]}),/BOUNDED_PRIOR_FILES_COHORTS_REQUIRED/);
   assert.throws(()=>knownFileSources({...assets,priorManifestEvidence:[{...priorManifestEvidence[0],sha256:'f'.repeat(64)}]}));
   assert.throws(()=>knownFileSources({...assets,priorManifestEvidence:[{path:path.join(reportRoot,'absent.json'),sha256:'f'.repeat(64)}]}));
+  assert.throws(()=>knownFileSources({...assets,manifestEvidence:undefined}));
+  assert.throws(()=>knownFileSources({...assets,manifestEvidence:{...manifestEvidence,sha256:'f'.repeat(64)}}));
+});
+test('privacy source total independently charges the hashed current manifest and seed at the unchanged sixty-asset boundary', (t) => {
+  const {reportRoot}=environment(t);
+  const manifest=(name,count,change={})=>{
+    const file=path.join(reportRoot,name),bytes=Buffer.from(JSON.stringify({syntheticDataOnly:true,kind:'ios-files-synthetic-fixtures',assets:Array.from({length:count},(_,id)=>({id})),...change}));
+    writeFileSync(file,bytes);return {path:file,sha256:createHash('sha256').update(bytes).digest('hex')};
+  };
+  const priorManifestEvidence=Array.from({length:5},(_,index)=>manifest(`prior-${index}.json`,10));
+  const assets={source:{filename:'seed.txt',sha256:'0'.repeat(64)},priorManifestEvidence,manifestEvidence:manifest('current60.json',9)};
+  assert.equal(knownFileSources(assets).length,51); // 50 prior + seed + nine current = 60.
+  assert.throws(()=>knownFileSources({...assets,manifestEvidence:manifest('current61.json',10)}),/BOUNDED_TOTAL_FILES_SOURCES_REQUIRED/);
+  assert.throws(()=>knownFileSources({...assets,priorManifestEvidence:[manifest('oversize-prior.json',13)]}),/BOUNDED_PRIOR_FILES_REQUIRED/);
+  assert.throws(()=>knownFileSources({...assets,manifestEvidence:manifest('wrong-current.json',1,{syntheticDataOnly:false})}),/SYNTHETIC_CURRENT_FILES_REQUIRED/);
+  assert.throws(()=>knownFileSources({...assets,priorManifestEvidence:[manifest('wrong-prior.json',1,{kind:'invented'})]}),/PRIOR_FILES_MANIFEST_REQUIRED/);
 });
 
 test('Files CLI independently collects its complete ordered 17-case inventory without executing or creating a report', (t) => {

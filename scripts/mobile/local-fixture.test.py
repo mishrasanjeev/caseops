@@ -230,7 +230,7 @@ class PortabilityTests(unittest.TestCase):
 
     def test_android_compose_and_build_commands_are_unchanged(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(bootstrap_module.sys, "platform", "darwin"), patch.object(
-                bootstrap_module, "machine", return_value="arm64"):
+                bootstrap_module, "machine", return_value="x86_64"):
             root = Path(directory)
             (root / "compose-secrets.json").write_text("{}")
             config = self.config("android")
@@ -245,6 +245,34 @@ class PortabilityTests(unittest.TestCase):
                 "CASEOPS_RELEASE_SHA=" + "a" * 40, "--build-arg", "NEXT_PUBLIC_API_BASE_URL=https://10.0.2.2:8443",
                 "--build-arg", "NEXT_PUBLIC_APP_URL=https://10.0.2.2:3443", "--build-arg",
                 "NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE=1", "-t", "unit-image", "."])
+
+    def test_android_apple_silicon_compose_overrides_only_the_exact_pinned_scanner(self):
+        for architecture in ("arm64", "aarch64"):
+            with self.subTest(architecture=architecture), tempfile.TemporaryDirectory() as directory, patch.object(
+                    bootstrap_module.sys, "platform", "darwin"), patch.object(
+                    bootstrap_module, "machine", return_value=architecture), patch.dict(bootstrap_module.os.environ, {}, clear=True):
+                root = Path(directory)
+                (root / "compose-secrets.json").write_text("{}")
+                canonical = bootstrap_module.REPO / "compose.mobile-local.yml"
+                original = canonical.read_bytes()
+                command, environment = bootstrap_module.compose(root, self.config("android"))
+                override = next(root.glob("android-compose-*.json"))
+                expected = {"services": {"scanner": {"platform": "linux/amd64"}}}
+                self.assertEqual(json.loads(override.read_text()), expected)
+                content_hash = bootstrap_module.hashlib.sha256(json.dumps(expected, sort_keys=True).encode()).hexdigest()
+                self.assertEqual(override.name, f"android-compose-{content_hash[:12]}.json")
+                self.assertEqual(command, ["docker", "compose", "-f", str(canonical), "-f", str(override),
+                                          "--project-name", "owned-unit-project"])
+                self.assertNotIn("DOCKER_DEFAULT_PLATFORM", environment)
+                self.assertEqual(environment["CASEOPS_MOBILE_API_ORIGIN"], "https://10.0.2.2:8443")
+                self.assertEqual(environment["CASEOPS_MOBILE_WEB_ORIGIN"], "https://10.0.2.2:3443")
+                self.assertEqual(canonical.read_bytes(), original)
+                before = override.read_bytes()
+                bootstrap_module.compose(root, self.config("android"))
+                self.assertEqual(override.read_bytes(), before)
+                override.write_text(json.dumps({"services": {"scanner": {"platform": "linux/arm64"}}}))
+                with self.assertRaisesRegex(AssertionError, "override changed"):
+                    bootstrap_module.compose(root, self.config("android"))
 
     def test_ios_locale_uses_only_exact_bounded_read_only_commands(self):
         expected = [["xcrun", "simctl", "list", "devices", "available", "--json"],

@@ -178,3 +178,16 @@ a4770e87192a9d872d2af3ed19b1c339846e2589:apps/api/tests/test_platform_console_em
 # The reviewed origin is an ancestor and the complete span is byte-identical.
 # No path/rule exemption, changed value or future origin is covered.
 438c79f776373ff31eba881e933ab07b9900231f:scripts/mobile/tooling.test.mjs:generic-api-key:528
+
+# 2026-10-26: six exact historical public-key fingerprint report lines from
+# Mozilla's signed Firefox 158.0.2 ARM64 APK, not private/signing material.
+# https://archive.mozilla.org/pub/fenix/releases/158.0.2/android/fenix-158.0.2-android-arm64-v8a/fenix-158.0.2.multi.android-arm64-v8a.apk
+# SDK37 apksigner cryptographically verified the retained APK again; the three
+# public fingerprint lines match both immutable fixture copies byte-for-byte.
+# Exact-origin provenance applies; changed bytes and future origins still fail.
+e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/android-native-proof.test.mjs:generic-api-key:36
+e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/android-native-proof.test.mjs:generic-api-key:37
+e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/android-native-proof.test.mjs:generic-api-key:38
+e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acceptance.test.mjs:generic-api-key:30
+e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acceptance.test.mjs:generic-api-key:31
+e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acceptance.test.mjs:generic-api-key:32

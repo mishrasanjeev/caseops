@@ -138,6 +138,33 @@ class GitFixture(unittest.TestCase):
 class ReviewedPublicVectorTests(GitFixture):
     """Public-vector review remains bound to one exact immutable origin span."""
 
+    def test_repository_public_apk_report_review_requires_all_six_exact_origins(self):
+        origin = "e8c3049b7150219073718689d7106d4a82df7c5a"
+        digests = (
+            "d00f58706ee970aa5bc7268ba1a0146ab7707de76a09ca69bb19a9b359d1af71",
+            "f45e8bba92099f478ca005fa2afa5a578ec2b424d4371d209c61dc8a88e5521d",
+            "6b5ba4627d6a58f9fba527746694ec0d2f18da22627c440262228dbbd9de5e28",
+        )
+        policy = (ROOT / ".gitleaksignore").read_text().splitlines()
+        for path, start in (
+            ("scripts/mobile/android-native-proof.test.mjs", 36),
+            ("scripts/mobile/build-android-local-acceptance.test.mjs", 30),
+        ):
+            source = scan.git(ROOT, "show", f"{origin}:{path}")
+            for offset, digest in enumerate(digests):
+                line = start + offset
+                entry = f"{origin}:{path}:generic-api-key:{line}"
+                self.assertEqual(policy.count(entry), 1)
+                self.assertNotIn(f"{path}:generic-api-key:{line}", policy)
+                span = source.splitlines(keepends=True)[line - 1]
+                self.assertTrue(span.startswith(b"V2 Signer: public key "))
+                self.assertEqual(hashlib.sha256(span).hexdigest(), digest)
+        ancestor = REAL_RUN(
+            ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", origin, "HEAD"],
+            capture_output=True, timeout=30, check=False,
+        )
+        self.assertEqual(ancestor.returncode, 0)
+
     def test_repository_review_matches_only_the_public_rfc6238_origin(self):
         origin = "438c79f776373ff31eba881e933ab07b9900231f"
         path = "scripts/mobile/tooling.test.mjs"
