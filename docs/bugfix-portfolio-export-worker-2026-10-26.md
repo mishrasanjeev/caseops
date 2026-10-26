@@ -71,6 +71,25 @@ EXW-07: old insert after migration remains protocol0, upgrade/downgrade from
 fresh databases, repeat upgrade, and no legacy-running claim takeover.
 EXW-08: unchanged IP18 desktop/mobile, source IDs, single enqueue,15seconds and
 all51 CSV records; full intended local/production inventories, not a file filter.
+EXW-09: complete deployment rehearsal intercepts both exact-scope worker-helper
+phases offline, parses actual API environment/key references into helper readback,
+and retains named main-drift/denial gates before routing and certification.
+
+## Reopen And Verification Lessons
+
+The initial local export gate could not prove Cloud Run's post-response CPU
+behavior. The exact-release production run correctly exposed that gap; neither
+an eventual artifact nor a longer test timeout would fix it. The worker now has
+an explicit request-owned execution boundary, but only its actual serving
+production replay can establish the completion outcome.
+
+The first focused repair selection also omitted the full deployment fake
+harness. Dedicated queue-helper tests passed while that harness forwarded the
+new helper into unintended real code and later guard assertions became
+unreachable. The repaired rehearsal validates both exact helper invocations,
+uses network-disabled execution and named main fences, and preserves earlier
+failed/interrupted evidence. It is not enough to assert that the deploy script
+contains a helper name or to rerun only the first failing test.
 
 Verdict: Not fixed until complete source, Docker, CI, deployment and exact
 production replacement evidence pass. Keep every failed receipt. The live

@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A new release helper must be integrated into the complete offline deployment
+  rehearsal, not just unit-tested separately. Fake dispatch must validate its
+  exact scope and must not fall through to live helper code. Address main-drift
+  tests by named fences while preserving every required/forbidden side effect;
+  run the impacted rehearsal before freezing an expensive full Docker gate.
+
 - Queued exports must recheck current IP capability as well as membership at
   preparation and publication. Preserve an immutable attempt receipt with its
   planned object identity before storage; a cleared lease is not cleanup proof.

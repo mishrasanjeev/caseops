@@ -43,9 +43,21 @@ def test_recovery_is_release_pinned_finite_and_has_no_model_provider_credentials
     assert runtime["command"] == ["caseops-portfolio-export-worker"]
     assert runtime["args"] == ["--once", "--batch-size=5"]
     assert runtime["max_retries"] == 0
+    assert runtime["service_account"] == (
+        "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com"
+    )
+    assert runtime["cloud_sql_instances"] == "perfect-period-305406:asia-south1:caseops-db"
     assert set(runtime["secrets"]) == {"CASEOPS_DATABASE_URL", "CASEOPS_AUTH_SECRET"}
     assert runtime["environment"]["CASEOPS_LLM_PROVIDER"] == "mock"
     assert runtime["environment"]["CASEOPS_EMBEDDING_PROVIDER"] == "mock"
+    assert runtime["environment"]["CASEOPS_ENV"] == "cloud"
+    assert runtime["environment"]["CASEOPS_AUTO_MIGRATE"] == "false"
+    assert runtime["environment"]["CASEOPS_DOCUMENT_STORAGE_BACKEND"] == "gcs"
+    assert runtime["environment"]["CASEOPS_DOCUMENT_STORAGE_GCS_BUCKET"] == "caseops-prod-documents"
+    assert runtime["environment"]["CASEOPS_GCP_PROJECT_ID"] == "perfect-period-305406"
+    assert runtime["environment"]["CASEOPS_DB_STATEMENT_TIMEOUT_MS"] == "60000"
+    assert runtime["environment"]["CASEOPS_DB_LOCK_TIMEOUT_MS"] == "5000"
+    assert runtime["environment"]["CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS"] == "60000"
 
 
 def test_reported_completion_budget_and_single_enqueue_proof_remain_intact():
