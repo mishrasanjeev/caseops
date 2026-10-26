@@ -354,8 +354,6 @@ def test_registered_https_handoff_exchanges_once_under_nonlocal_native_policy(
 
     from pydantic import SecretStr
 
-    import caseops_api.core.native_auth as native_policy
-
     auth, browser = _browser(client)
     callback = "https://native.example.org/native/oauth/callback"
     other_callback = "https://native.example.org/native/oauth/other-callback"
@@ -369,7 +367,7 @@ def test_registered_https_handoff_exchanges_once_under_nonlocal_native_policy(
         "native_signing_secret": SecretStr(secrets.token_hex(32)),
         "native_redirect_uris": [callback, other_callback],
     })
-    monkeypatch.setattr(native_policy, "get_settings", lambda: settings)
+    monkeypatch.setattr("caseops_api.core.native_auth.get_settings", lambda: settings)
     custom_scheme = _authorize(client, browser, platform=platform)
     assert custom_scheme.status_code == 400
     _assert_no_native_issuance()
