@@ -50,6 +50,13 @@ rechecked; no new browser run or lead submission. The initial collector's raw
 body text includes inert scripts; preserve it and use the separate semantic-main
 privacy read plus browser receipt for content/visibility, not that raw label.
 
+The canonical identity helper was used once before checking its headers; its
+two public metadata GETs omitted the required test marker. No paid or lead route
+was called. Preserve that receipt as a protocol deviation and use the separate
+two-read marked replay as the accepted final boundary. An offline actual-Request
+probe confirms the omission; [issue561](https://github.com/mishrasanjeev/caseops/issues/561)
+tracks a focused engineering repair without competing SEO implementation.
+
 #513/#515 stay OPEN: admission/protected Leads and notice2026-10-21 serve, but
 real delivery, genuine lead qualification, reviewed retention and deferred owner
 MFA remain separate. No GA4/client tracking, synthetic lead, paid provider call,
