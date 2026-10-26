@@ -659,10 +659,7 @@ class Release:
             "queue": self.queue,
             "queue_state": "RUNNING",
             "runtime_service_account": RUNTIME_SA,
-            "secret_name": SECRET,
-            "secret_version_ref": version,
-            "secret_latest_ref": f"{self.secret}/versions/latest",
-            "api_secret_binding": f"{SECRET_ENV}={SECRET}:latest",
+            "dedicated_worker_key_verified": True,
             "api_revision": revision,
             "api_release_verified": not provision,
         }
@@ -679,10 +676,7 @@ def main(argv: list[str] | None = None) -> int:
         result = Release(
             args.expected_sha, project=args.project, region=args.region
         ).run(args.command)
-    except Error as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+    except (Error, OSError, ValueError, TypeError, KeyError, AttributeError):
         print(
             "ERROR: portfolio export release checks failed; "
             "no retry or broader provisioning authorized.",

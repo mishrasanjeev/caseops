@@ -28,6 +28,8 @@
 It uses only the existing production project/region and API runtime identity.
 No manual console or account setup is required unless Google reports an actual
 missing prerequisite. The helper does not create App Engine or accept terms.
+Its output contains verification booleans and non-credential release/queue
+identity only; key references, payloads and raw exception text are not emitted.
 
 The `caseops-portfolio-exports` Cloud Tasks queue dispatches at most two requests
 concurrently to the exact-body, dedicated-HMAC `/api/internal/portfolio-exports/run`

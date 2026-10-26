@@ -227,7 +227,7 @@ def harness(monkeypatch):
         if args[:2] == ["auth", "print-access-token"]:
             assert kwargs["expect_json"] is False
             return "opaque-test-token"
-        pytest.fail(f"unowned gcloud command {args[:3]}")
+        raise AssertionError(f"unowned gcloud command {args[:3]}")
 
     class Response:
         status = 200
@@ -323,9 +323,8 @@ def test_existing_idempotent_no_rotation_or_payload_read(harness, monkeypatch, c
     first = h.release.run(command)
     assert h.release.run(command) == first
     assert not h.state["mutations"] and not h.state["files"]
-    assert first["secret_name"] == h.module.SECRET
-    assert first["secret_version_ref"].endswith("/versions/7")
-    assert first["api_secret_binding"] == f"{h.module.SECRET_ENV}={h.module.SECRET}:latest"
+    assert first["dedicated_worker_key_verified"] is True
+    assert h.state["version"] == "7"
     assert first["api_release_verified"] is (command == "verify")
     assert h.state["fetches"] == 4
 
@@ -825,12 +824,32 @@ def test_cli_json_contains_only_safe_metadata_and_errors_are_redacted(harness, c
     )
     output = capsys.readouterr()
     result = json.loads(output.out)
-    assert result["secret_latest_ref"].endswith(f"/secrets/{h.module.SECRET}/versions/latest")
+    assert result["dedicated_worker_key_verified"] is True
+    assert not any("secret" in key for key in result)
+    assert h.module.SECRET not in output.out and "/versions/" not in output.out
     assert "opaque-test-token" not in output.out
     h.state["deny_secret_list"] = True
     assert h.module.main(["provision", "--expected-sha", SHA]) == 1
     output = capsys.readouterr()
     assert not output.out and "sensitive-canary" not in output.err
+
+
+@pytest.mark.parametrize("exception_type", [OSError, ValueError, "inventory"])
+def test_cli_never_emits_raw_exception_or_credential_material(
+    harness, capsys, monkeypatch, exception_type,
+):
+    h = harness
+    kind = h.module.Error if exception_type == "inventory" else exception_type
+
+    def fail(_command):
+        raise kind("sensitive-canary credential-material")
+
+    monkeypatch.setattr(h.module.Release, "run", lambda _self, command: fail(command))
+    assert h.module.main(["verify", "--expected-sha", SHA]) == 1
+    output = capsys.readouterr()
+    assert not output.out
+    assert "sensitive-canary" not in output.err and "credential-material" not in output.err
+    assert "portfolio export release checks failed" in output.err
 
 
 @pytest.mark.parametrize(

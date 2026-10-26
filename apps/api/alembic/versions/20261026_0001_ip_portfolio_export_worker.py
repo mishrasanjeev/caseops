@@ -2,7 +2,8 @@
 
 Revision ID: 20261026_0001
 Revises: 20261022_0001
-DATA-GOVERNANCE-MAP: docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml.
+DATA-GOVERNANCE-MAP: updated
+Map: docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml.
 Dispatch state, ownership identifiers and expiry retain the existing tenant
 profile. No new retention, provider transmission or disposition is authorized.
 MIGRATION-LOCK-RISK: acknowledged. Additive metadata uses env.py's lock/SQL
