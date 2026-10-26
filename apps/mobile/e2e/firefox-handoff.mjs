@@ -105,6 +105,54 @@ export async function prepareFirefox(context, recipe) {
   await locate(context, 'urlOpen');
 }
 
+export async function resolveFirefoxEntry(context, recipe) {
+  const deadline = Date.now() + 20000, attempted = new Set();
+  browserStep(context, 'companySlug', 'wait');
+  for (;;) {
+    assert.ok(Date.now() < deadline, 'FIREFOX_ENTRY_NOT_READY');
+    let ready, terminal;
+    await context.driver.waitUntil(async () => {
+      try {
+        assert.equal(await context.driver.getCurrentPackage(), recipe.packageName, 'WRONG_SYSTEM_BROWSER_PACKAGE');
+        const form = await visible(context.driver, selector('android', recipe.locators.companySlug.kind, recipe.locators.companySlug.value));
+        const entries = [];
+        for (const key of ['useAnotherAccount', 'signInLink']) {
+          const locator = recipe.locators[key];
+          if (locator) {
+            const control = await visible(context.driver, selector('android', locator.kind, locator.value));
+            if (control) entries.push({ key, locator, control });
+          }
+        }
+        assert.ok(entries.length <= 1, 'AMBIGUOUS_FIREFOX_ENTRY_STATE');
+        assert.ok(Date.now() <= deadline, 'FIREFOX_ENTRY_NOT_READY');
+        // An acknowledged link may remain in accessibility while navigation
+        // settles. Wait under the original deadline; never dispatch it again.
+        if (entries.some(({ key }) => attempted.has(key))) return false;
+        if (form) {
+          assert.equal(entries.length, 0, 'AMBIGUOUS_FIREFOX_ENTRY_STATE');
+          // This exact hash-bound login anchor is enough to enter the form.
+          // Lower fields retain their normal independent find/scroll checks.
+          if (await form.isEnabled()) { ready = { form: true }; return true; }
+        } else if (entries.length === 1 && await entries[0].control.isEnabled()) {
+          ready = entries[0]; return true;
+        }
+        return false;
+      } catch (error) {
+        // WDIO waitUntil normally catches callback errors. Exit its polling
+        // loop, then preserve ambiguity/transport errors without retrying them.
+        terminal = error; return true;
+      }
+    }, { timeout: Math.max(1, deadline - Date.now()), interval: 150, timeoutMsg: 'FIREFOX_ENTRY_NOT_READY' });
+    if (terminal) throw terminal;
+    assert.ok(ready && Date.now() <= deadline, 'FIREFOX_ENTRY_NOT_READY');
+    if (ready.form) return;
+    assert.ok(Date.now() < deadline && !attempted.has(ready.key), 'FIREFOX_ENTRY_NOT_READY');
+    attempted.add(ready.key);
+    browserStep(context, ready.key, 'click');
+    await dispatchNativeClick(context, ready.control, ready.locator.kind, ready.locator.value);
+  }
+}
+
 // This drives Firefox's real Android accessibility tree. Recipes come from the
 // parent's observed, secret-free UI inspection; no XPath/index or webview fiction.
 export async function firefoxLogin(context, credentials, authorizationIdentity) {
@@ -120,13 +168,7 @@ export async function firefoxLogin(context, credentials, authorizationIdentity) 
   await prepareFirefox(context, recipe);
   browserStep(context, 'handoff', 'check');
   const handoff = authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform);
-  for (const key of ['useAnotherAccount', 'signInLink']) {
-    const locator = recipe.locators[key];
-    if (locator) {
-      browserStep(context, key, 'check');
-      if (await visible(driver, selector(platform, locator.kind, locator.value))) await press(context, key);
-    }
-  }
+  await resolveFirefoxEntry(context, recipe);
   assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
   for (const [key, value] of Object.entries({ companySlug: credentials.companySlug, email: credentials.email, password: credentials.password })) {
     await fill(context, key, value);

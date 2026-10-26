@@ -12,7 +12,7 @@ import { binaryHash, byTestId, Journal, localJson, localUrl, MARKER, MARKER_HEAD
 import { scenarios } from '../../apps/mobile/e2e/core.mjs';
 import { createGateway } from './no-paid-gateway.mjs';
 import { authenticate, authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
-import { validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
+import { resolveFirefoxEntry, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { admitApplication, FixtureUnavailable, ownerControl, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, selectMatterActivity, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
@@ -1109,11 +1109,12 @@ test('an uncertain owner command poisons the shared adapter and cannot be replay
   assert.equal(calls, 1);
 });
 
-function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], afterConnect = [] } = {}) {
+function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], afterConnect = [], entryLocators = {} } = {}) {
   const locators = Object.fromEntries(['urlOpen', 'urlValue', 'urlClose', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace', 'connect', 'signInLink']
     .map((key) => [key, { kind: 'id', value: `unit-${key}` }]));
   locators.appOpen = { kind: 'id', value: 'native-app-open' };
   locators.fullBrowser = { kind: 'id', value: 'ADDRESSBAR_TABS_COUNTER' };
+  Object.assign(locators, entryLocators);
   if (consent) Object.assign(locators, { mfaCode: { kind: 'id', value: 'native-mfa-code' }, mfaSubmit: { kind: 'buttonText', value: 'Verify code' },
     mfaVerified: { kind: 'text', value: CONSENT_MFA_VERIFIED } });
   const urlCloseMode = androidBack ? 'android-back' : 'locator';
@@ -1361,7 +1362,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
       clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) editing = false;
     },
     waitUntil: async (callback, settings = {}) => {
-      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined) {
+      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined && options.entryDelayMs === undefined && !options.lowerFieldsNeedScroll) {
         return assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED');
       }
       const start = clock, timeout = settings.timeout ?? 10000, interval = settings.interval ?? 150;
@@ -1403,8 +1404,9 @@ function firefoxDouble(t, foreign = false, options = {}) {
         : key === 'fullBrowser' ? fullBrowser && stage !== 'app' && stage !== 'complete' && !editing && clock >= (options.chromeDelayMs ?? 0)
         : key === 'urlOpen' ? (fullBrowser || options.customTabUrlShared) && stage !== 'app' && stage !== 'complete' && !editing && clock >= (options.chromeDelayMs ?? 0)
         : ['urlValue', 'urlClose'].includes(key) ? editing
-        : key === 'signInLink' ? stage === 'landing' && !editing
+        : key === 'signInLink' ? stage === 'landing' && !editing && clock >= (options.entryDelayMs ?? 0)
         : ['companySlug', 'email', 'password', 'submit'].includes(key) ? stage === 'login' && !editing
+          && (key === 'companySlug' || !options.lowerFieldsNeedScroll || swipes.length > 0)
         : ['principal', 'emailFact', 'workspace', 'connect'].includes(key) ? stage === 'connect' && !editing
           && clock - connectedAt >= (options.connectDelayMs ?? 0)
         : ['mfaCode', 'mfaSubmit'].includes(key) ? stage === 'consent-mfa' && !editing
@@ -1430,7 +1432,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
         },
         click: async () => {
           clicks.push(key);
-          if (key === 'sign-in') stage = 'landing';
+          if (key === 'sign-in') stage = options.directForm ? 'login' : 'landing';
           if (key === `prepare-${auth.firefoxUi.prepare.length - 1}` && !options.neverFullBrowser) fullBrowser = true;
           if (key === 'urlOpen') { editing = true; backCount = 0; }
           if (key === 'urlClose') editing = false;
@@ -1452,6 +1454,120 @@ function firefoxDouble(t, foreign = false, options = {}) {
   return { context: { driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes,
     elapsed: () => clock };
 }
+
+test('Firefox waits for a delayed observed entry before any credential write without scrolling or replay', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { entryDelayMs: 4011 });
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  await browserLogin(fake.context);
+  assert.equal(fake.clicks.filter(key => key === 'signInLink').length, 1);
+  assert.equal(fake.clicks.filter(key => key === 'submit').length, 1);
+  assert.equal(fake.swipes.length, 0);
+  assert.deepEqual(fake.writes.slice(0, 3).map(([key]) => key), ['companySlug', 'email', 'password']);
+  assert.ok(fake.elapsed() >= 4011 && fake.elapsed() <= 20000);
+});
+
+function firefoxEntryDouble(t, state, { dispatchFailure, lostAcknowledgement = false, readFailure } = {}) {
+  const recipe = validateFirefoxRecipe(firefoxRecipe(t, { entryLocators: { useAnotherAccount: { kind: 'label', value: 'Use another account' } } }));
+  let clock = 0, polling = false, wrapperClicks = 0, swallowed = 0;
+  const attempts = [], acknowledged = [], queries = [], waits = [], records = [];
+  const driver = {
+    getCurrentPackage: async () => recipe.packageName,
+    $$: async query => {
+      if (readFailure) throw readFailure;
+      const key = Object.keys(recipe.locators).find(name => query === selector('android', recipe.locators[name].kind, recipe.locators[name].value));
+      queries.push(key);
+      const count = state({ key, clock, acknowledged, attempts }) ?? 0;
+      return Array.from({ length: typeof count === 'number' ? count : 1 }, (_, index) => ({ elementId: `${key}-original-${index}`,
+        isDisplayed: async () => true, isEnabled: async () => count !== 'disabled',
+        click: async () => { wrapperClicks++; assert.fail('ENTRY_ELEMENT_CLICK_MUST_NOT_BE_CALLED'); } }));
+    },
+    elementClick: async id => {
+      assert.equal(polling, false, 'ENTRY_CLICK_MUST_BE_OUTSIDE_POLL'); attempts.push({ id, clock, queries: queries.length });
+      if (!dispatchFailure || lostAcknowledgement) acknowledged.push({ id, clock });
+      if (dispatchFailure) throw dispatchFailure;
+    },
+    waitUntil: async (callback, settings) => {
+      const start = clock; waits.push({ start, ...settings });
+      for (;;) {
+        polling = true;
+        try { if (await callback()) return; } catch { swallowed++; }
+        finally { polling = false; }
+        if (clock - start >= settings.timeout) throw Error(settings.timeoutMsg);
+        clock += Math.min(settings.interval, settings.timeout - (clock - start));
+      }
+    },
+  };
+  t.mock.method(Date, 'now', () => clock);
+  return { recipe, context: { driver, platform: 'android', record: event => records.push(event) }, attempts, acknowledged, queries, waits,
+    elapsed: () => clock, wrapperClicks: () => wrapperClicks, swallowed: () => swallowed, records };
+}
+
+test('Firefox direct form anchor retains normal lower-field scrolling without an entry navigation', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { directForm: true, lowerFieldsNeedScroll: true });
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  await browserLogin(fake.context);
+  assert.equal(fake.clicks.filter(key => key === 'signInLink').length, 0);
+  assert.equal(fake.swipes.length, 1);
+  assert.deepEqual(fake.writes.slice(0, 3).map(([key]) => key), ['companySlug', 'email', 'password']);
+  assert.equal(fake.clicks.filter(key => key === 'submit').length, 1);
+});
+
+test('Firefox acknowledged entry lingering while the form loads waits without a second dispatch', async t => {
+  const fake = firefoxEntryDouble(t, ({ key, clock, acknowledged }) => !acknowledged.length ? Number(key === 'useAnotherAccount')
+    : Number(clock < 4500 ? key === 'useAnotherAccount' : key === 'companySlug'));
+  await resolveFirefoxEntry(fake.context, fake.recipe);
+  assert.equal(fake.attempts.length, 1); assert.equal(fake.attempts[0].id, 'useAnotherAccount-original-0');
+  assert.equal(fake.elapsed(), 4500); assert.equal(fake.wrapperClicks(), 0); assert.equal(fake.swallowed(), 0);
+  assert.ok(fake.waits[1].timeout <= 20000);
+});
+
+test('Firefox unknown or disabled entry states exhaust one 20 second bound without credentials or gestures', async t => {
+  for (const state of [() => 0, ({ key }) => key === 'useAnotherAccount' ? 'disabled' : 0]) {
+    const fake = firefoxEntryDouble(t, state);
+    await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), /FIREFOX_ENTRY_NOT_READY/);
+    assert.equal(fake.elapsed(), 20000); assert.equal(fake.attempts.length, 0); assert.equal(fake.wrapperClicks(), 0);
+  }
+});
+
+test('Firefox entry ambiguity and read transport failures remain terminal rather than waitUntil-swallowed', async t => {
+  for (const state of [({ key }) => key === 'companySlug' ? 2 : 0,
+    ({ key }) => Number(['useAnotherAccount', 'signInLink'].includes(key)),
+    ({ key }) => Number(['companySlug', 'useAnotherAccount'].includes(key))]) {
+    const fake = firefoxEntryDouble(t, state);
+    await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), /AMBIGUOUS/);
+    assert.equal(fake.elapsed(), 0); assert.equal(fake.attempts.length, 0); assert.equal(fake.swallowed(), 0);
+  }
+  const failure = Error('UNIT_ENTRY_TRANSPORT_CLOSED'), fake = firefoxEntryDouble(t, () => 0, { readFailure: failure });
+  await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), error => error === failure);
+  assert.equal(fake.elapsed(), 0); assert.equal(fake.swallowed(), 0); assert.equal(fake.attempts.length, 0);
+});
+
+test('Firefox entry stale and lost acknowledgements dispatch original ID once without refetch or wrapper replay', async t => {
+  for (const lostAcknowledgement of [false, true]) {
+    const failure = Error(lostAcknowledgement ? 'UNIT_ENTRY_ACK_UNKNOWN' : 'UNIT_ENTRY_STALE');
+    const fake = firefoxEntryDouble(t, ({ key }) => Number(key === 'useAnotherAccount'), { dispatchFailure: failure, lostAcknowledgement });
+    await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), error => error === failure);
+    assert.equal(fake.attempts.length, 1); assert.equal(fake.attempts[0].id, 'useAnotherAccount-original-0');
+    assert.equal(fake.queries.length, fake.attempts[0].queries); assert.equal(fake.wrapperClicks(), 0); assert.equal(fake.elapsed(), 0);
+    assert.equal(fake.acknowledged.length, lostAcknowledgement ? 1 : 0);
+  }
+});
+
+test('Firefox optional transitions share the original deadline instead of starting another 20 seconds', async t => {
+  const fake = firefoxEntryDouble(t, ({ key, clock, acknowledged }) => {
+    if (clock < 12000) return 0;
+    if (!acknowledged.length) return Number(key === 'useAnotherAccount');
+    if (clock < 18000) return Number(key === 'useAnotherAccount');
+    if (acknowledged.length === 1) return Number(key === 'signInLink');
+    return Number(key === 'signInLink');
+  });
+  await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), /FIREFOX_ENTRY_NOT_READY/);
+  assert.equal(fake.elapsed(), 20000); assert.equal(fake.attempts.length, 2);
+  assert.deepEqual(fake.attempts.map(row => row.id), ['useAnotherAccount-original-0', 'signInLink-original-0']);
+  assert.ok(fake.waits[1].timeout <= 8000 && fake.waits[2].timeout <= 2000); assert.equal(fake.wrapperClicks(), 0);
+});
 
 test('actual Android Firefox wrapper dispatches resolved submit, consent, MFA and app-open IDs once after stale/lost acknowledgements', async t => {
   browserEnvironment(t);

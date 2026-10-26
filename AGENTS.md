@@ -3492,3 +3492,8 @@ requirements when using the fallback.
   installed system APK and actual picker controls, allow only reviewed packages,
   and reject mixed namespaces before a click. Mocked package support is not UI
   visibility, URI readability or upload proof.
+- A native browser's optional entry controls need one finite readiness contract
+  before credentials. Poll only exact admitted controls, preserve lower-field
+  scrolling, reject ambiguity/read errors, and dispatch each resolved navigation
+  once outside polling. A delayed-control unit counterexample does not establish
+  the cause of an earlier native failure that fresh device probes did not repeat.
