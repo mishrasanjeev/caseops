@@ -51,6 +51,7 @@ try {
     try { $repoKey = [BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($repo.ToLowerInvariant()))).Replace('-', '').Substring(0, 12).ToLowerInvariant() }
     finally { $sha.Dispose() }
     $env:CASEOPS_MOBILE_NATIVE_STAGING = Join-Path $HOME ('.cache/caseops-mobile/cxx/' + $repoKey)
+    Invoke-BuildCommand 'node' @((Join-Path $PSScriptRoot 'prepare-viewer-assets.mjs'), '--check') 'viewer-assets-check.log'
     Invoke-BuildCommand 'node' @($proof, 'check', 'android', (Join-Path $run 'before.json')) 'before.log'
     Invoke-BuildCommand 'node' @('./node_modules/expo/bin/cli', 'prebuild', '--platform', 'android', '--no-install') 'prebuild.log'
     Push-Location (Join-Path $app 'android')

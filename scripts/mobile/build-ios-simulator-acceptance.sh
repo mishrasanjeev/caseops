@@ -17,6 +17,7 @@ export CASEOPS_MOBILE_BUILD_PROFILE=ios-simulator-acceptance
 export CASEOPS_MOBILE_AUTOMATED_TEST=1
 export CASEOPS_MOBILE_RELEASE_SHA="$(git rev-parse HEAD)"
 export NODE_ENV=production EXPO_NO_DOTENV=1
+node "$repo/scripts/mobile/prepare-viewer-assets.mjs" --check 2>&1 | tee "$run/viewer-assets-check.log"
 node "$repo/scripts/mobile/build-acceptance.mjs" check ios "$run/before.json" 2>&1 | tee "$run/check.log"
 node ./node_modules/expo/bin/cli prebuild --platform ios --no-install 2>&1 | tee "$run/prebuild.log"
 (

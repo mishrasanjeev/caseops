@@ -63,9 +63,9 @@ test('a failed picker remains pending across blocked reader dependencies and res
   await recovery.prepare(context);
   assert.equal(calls.length, 3);
 });
-test('privacy source inventory includes all five retained cohorts with exact hashes and rejects missing or altered evidence', (t) => {
+test('privacy source inventory includes all six retained cohorts with exact hashes and rejects missing or altered evidence', (t) => {
   const {reportRoot}=environment(t),priorManifestEvidence=[];
-  for(let index=0;index<5;index++){
+  for(let index=0;index<6;index++){
     const file=path.join(reportRoot,`prior-${index}.json`),bytes=Buffer.from(JSON.stringify({syntheticDataOnly:true,kind:'ios-files-synthetic-fixtures',assets:Array.from({length:7},(_,asset)=>({id:`asset-${asset}`,filename:`prior-${index}-${asset}.txt`,sha256:String(index+1).repeat(64)}))}));
     writeFileSync(file,bytes);priorManifestEvidence.push({path:file,sha256:createHash('sha256').update(bytes).digest('hex')});
   }
@@ -73,7 +73,7 @@ test('privacy source inventory includes all five retained cohorts with exact has
   writeFileSync(current,JSON.stringify({syntheticDataOnly:true,kind:'ios-files-synthetic-fixtures',assets:Array.from({length:7},(_,id)=>({id}))}));
   const manifestEvidence={path:current,sha256:createHash('sha256').update(readFileSync(current)).digest('hex')};
   const assets={source:{filename:'source.txt',sha256:'0'.repeat(64),text:'Synthetic seed.'},priorManifestEvidence,manifestEvidence};
-  assert.deepEqual(knownFileSources(assets).map(({id})=>id),['seeded-txt',...Array.from({length:5},(_,index)=>Array.from({length:7},(_,asset)=>`prior-${index}-asset-${asset}`)).flat()]);
+  assert.deepEqual(knownFileSources(assets).map(({id})=>id),['seeded-txt',...Array.from({length:6},(_,index)=>Array.from({length:7},(_,asset)=>`prior-${index}-asset-${asset}`)).flat()]);
   assert.throws(()=>knownFileSources({...assets,priorManifestEvidence:[...priorManifestEvidence,priorManifestEvidence[0]]}),/BOUNDED_PRIOR_FILES_COHORTS_REQUIRED/);
   assert.throws(()=>knownFileSources({...assets,priorManifestEvidence:[{...priorManifestEvidence[0],sha256:'f'.repeat(64)}]}));
   assert.throws(()=>knownFileSources({...assets,priorManifestEvidence:[{path:path.join(reportRoot,'absent.json'),sha256:'f'.repeat(64)}]}));
@@ -86,10 +86,10 @@ test('privacy source total independently charges the hashed current manifest and
     const file=path.join(reportRoot,name),bytes=Buffer.from(JSON.stringify({syntheticDataOnly:true,kind:'ios-files-synthetic-fixtures',assets:Array.from({length:count},(_,id)=>({id})),...change}));
     writeFileSync(file,bytes);return {path:file,sha256:createHash('sha256').update(bytes).digest('hex')};
   };
-  const priorManifestEvidence=Array.from({length:5},(_,index)=>manifest(`prior-${index}.json`,10));
-  const assets={source:{filename:'seed.txt',sha256:'0'.repeat(64)},priorManifestEvidence,manifestEvidence:manifest('current60.json',9)};
-  assert.equal(knownFileSources(assets).length,51); // 50 prior + seed + nine current = 60.
-  assert.throws(()=>knownFileSources({...assets,manifestEvidence:manifest('current61.json',10)}),/BOUNDED_TOTAL_FILES_SOURCES_REQUIRED/);
+  const priorManifestEvidence=Array.from({length:6},(_,index)=>manifest(`prior-${index}.json`,8));
+  const assets={source:{filename:'seed.txt',sha256:'0'.repeat(64)},priorManifestEvidence,manifestEvidence:manifest('current60.json',11)};
+  assert.equal(knownFileSources(assets).length,49); // 48 prior + seed + eleven current = 60.
+  assert.throws(()=>knownFileSources({...assets,manifestEvidence:manifest('current61.json',12)}),/BOUNDED_TOTAL_FILES_SOURCES_REQUIRED/);
   assert.throws(()=>knownFileSources({...assets,priorManifestEvidence:[manifest('oversize-prior.json',13)]}),/BOUNDED_PRIOR_FILES_REQUIRED/);
   assert.throws(()=>knownFileSources({...assets,manifestEvidence:manifest('wrong-current.json',1,{syntheticDataOnly:false})}),/SYNTHETIC_CURRENT_FILES_REQUIRED/);
   assert.throws(()=>knownFileSources({...assets,priorManifestEvidence:[manifest('wrong-prior.json',1,{kind:'invented'})]}),/PRIOR_FILES_MANIFEST_REQUIRED/);

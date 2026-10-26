@@ -191,7 +191,9 @@ async function waitForUrl(url, timeoutMs) {
   while (Date.now() - start < timeoutMs) {
     try {
       const status = await new Promise((resolve, reject) => {
-        const request = http.get(url, (response) => {
+        const request = http.get(url, {
+          headers: { "X-CaseOps-Automated-Test": "no-paid-providers" },
+        }, (response) => {
           response.resume();
           response.on("end", () => resolve(response.statusCode ?? 0));
         });

@@ -24,7 +24,7 @@ const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const ref = (file) => ({ path: file, sha256: digest(readFileSync(file)) });
 export function knownFileSources(assets) {
   const previous = assets.priorManifestEvidence || [];
-  assert.ok(Array.isArray(previous) && previous.length <= 5, 'BOUNDED_PRIOR_FILES_COHORTS_REQUIRED');
+  assert.ok(Array.isArray(previous) && previous.length <= 6, 'BOUNDED_PRIOR_FILES_COHORTS_REQUIRED');
   const current = readRef(assets.manifestEvidence);
   assert.equal(current.syntheticDataOnly, true, 'SYNTHETIC_CURRENT_FILES_REQUIRED');
   assert.equal(current.kind, 'ios-files-synthetic-fixtures', 'CURRENT_FILES_MANIFEST_REQUIRED');

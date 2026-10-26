@@ -1,5 +1,16 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 26 Verification Isolation Coverage
+
+ARCH-OPS-23/QG-SEC-004/SEC-031 add VR561-01..05 across actual primary/adjacent
+verification transports, retaining all authentication/TLS/deadline boundaries.
+Primary module9/9 and five local metadata-client cases pass after their retained
+REDs. Full frozen candidate Docker/current CI/guarded exact-main release is
+still required; the earlier29865557production417-case receipt is not a rerun
+of this new source. The October26 GSC daily log is included for J19/M21/US-063.
+Native558Files recovery remains independently unverified, not part of those
+public-Web or operator-CLI counts. See the dated verification-markers brief.
+
 ## October 25 Handoff Runtime Findings
 
 US-MOB-01/02 and NATIVE-01 now require explicit Open CaseOps after the one

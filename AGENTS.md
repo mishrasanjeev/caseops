@@ -51,6 +51,14 @@
   lifecycle version through the request DTO and check it under the same parent
   lock as the mutation, including close/reopen between read and submit.
 
+- Verification isolation belongs on each actual HTTP constructor, including
+  curl, urllib, container fetch, readiness and signed verification clients.
+  A Playwright fixture cannot supply another client's no-paid marker. Regress
+  the received headers/native argument array on happy, failed and retried
+  requests; preserve TLS, authentication, payloads and original time bounds.
+  An unmarked public metadata read is a protocol deviation, not proof of a
+  billable provider call. Retain it and replay the marked boundary explicitly.
+
 - Workstation gates must own their dependency installation exclusively. Do
   not run a host npm install/ci while Vitest, a build or another gate uses that
   same worktree's node_modules. Activate the pinned Node runtime first, finish
@@ -3448,3 +3456,19 @@ requirements when using the fallback.
   then scroll within the existing bound and assert the reachable confirmation
   plus persisted source identity and bytes. A server200 alone cannot certify
   UI completion, and an offscreen message never authorizes another upload.
+- A function bundled into Hermes bytecode is not a serializable browser program.
+  Actual pinned Hermes returned a `[bytecode]` function placeholder from
+  `Function.toString()`; interpolating it into WebView HTML prevented reader
+  readiness and page/zoom acknowledgements despite Node/Chromium unit passes.
+  Generate the self-contained public browser script before Metro/Hermes, check
+  its deterministic output before native source capture, and regress bytecode,
+  native and unavailable function-source behavior. Preserve CSP, nonce, bridge,
+  network and asset bounds; prove PDF and image acknowledgements on each rebuilt
+  signed platform. A Hermes round-trip or exported bundle alone is not native
+  WebView acceptance, and earlier failed full inventories must remain retained.
+- A test emulator that installs environment values directly must register their
+  originals with the same pytest monkeypatch scope before installation. A later
+  negative-test override may otherwise outlive close(), then undo to the closed
+  adapter URL and poison unrelated tests. Regress absent and preexisting values
+  plus the complete adjacent notification inventory; preserve the correctly
+  refusing production transport fence and the original ordered failure.

@@ -63,6 +63,7 @@ aapt="$ANDROID_HOME/build-tools/37.0.0/aapt2"
 apksigner="$ANDROID_HOME/build-tools/37.0.0/apksigner"
 [[ -x "$aapt" && -x "$apksigner" ]] || { echo 'Pinned AAPT2 and apksigner are required; no SDK installation is performed.' >&2; exit 1; }
 cd "$repo/apps/mobile"
+node "$repo/scripts/mobile/prepare-viewer-assets.mjs" --check 2>&1 | tee "$run/viewer-assets-check.log"
 node "$proof" check android "$run/before.json" 2>&1 | tee "$run/check.log"
 node ./node_modules/expo/bin/cli prebuild --platform android --no-install 2>&1 | tee "$run/prebuild.log"
 node - "$PWD/android" "$run" <<'NODE'

@@ -1,5 +1,22 @@
 # Strict Enterprise Gap Tasklist
 
+## October 26 Verification Request Marker #561
+
+ARCH-OPS-23/QG-SEC-004/SEC-031: Partially implemented; new-candidate release
+NO-GO until full acceptance. Independent urllib/curl/PowerShell/Node clients
+did not inherit browser fixture headers. Add the authoritative marker on actual
+requests while preserving credentials/HMAC/body, TLS and original deadlines.
+Five actual Request/CLI regressions fail on old code; complete module9/9 passes
+locally. Five native/local-harness header cases also fail then pass5/5. These
+component results do not replace full Docker, green current CI/Security, protected
+main merge, guarded deployment or exact-serving QA. See the dated issue561brief.
+
+The prior559dependency release is now certified on29865557, QA40256221597,
+with399passes/18explicit skips and clean guarded/natural projection cadence.
+Keep its original failed attempts and remaining consent/provider/MFA caveats.
+Mobile558remains independently NO-GO; its resumed Files work cannot be summed
+with the earlier23-case core receipt or labelled production from this fix.
+
 ## October 26 Mobile Distribution Gate
 
 J20/M22 remains **Partially implemented; release NO-GO**. Organization-first

@@ -75,12 +75,20 @@ function fixture(t, extra = {}) {
   const file = (name, data, executable = false) => { const p = path.join(root, name); mkdirSync(path.dirname(p), { recursive: true });
     writeFileSync(p, data); if (executable) chmodSync(p, 0o700); return p; };
   const files = ['scripts/mobile/build-android-local-acceptance.sh', 'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/source-snapshot.mjs',
+    'scripts/mobile/prepare-viewer-assets.mjs', 'apps/mobile/src/viewer/renderer-runtime.ts',
+    ...['LICENSES.txt', 'manifest.json', 'pdfjs-assets.ts', 'renderer-runtime-source.ts'].map(name => `apps/mobile/src/viewer/generated/${name}`),
     'apps/mobile/package.json', 'apps/mobile/app.config.ts', 'apps/mobile/plugins/with-local-acceptance.cjs', 'apps/mobile/e2e/support.mjs'];
   for (const name of files) { const destination = path.join(checkout, name); mkdirSync(path.dirname(destination), { recursive: true }); copyFileSync(path.join(repo, name), destination); }
+  // Trace actual source capture in the temporary contract fixture, so an order
+  // assertion cannot pass merely because the wrapper contains command strings.
+  const snapshot = path.join(checkout, 'scripts/mobile/source-snapshot.mjs');
+  writeFileSync(snapshot, readFileSync(snapshot, 'utf8')
+    .replace("import { readFileSync } from 'node:fs';", "import { appendFileSync, readFileSync } from 'node:fs';")
+    .replace('  const paths = [', "  appendFileSync(process.env.CASEOPS_TEST_TRACE, 'source-snapshot\\n');\n  const paths = ["));
   file('repo/package.json', '{"type":"module"}\n'); file('repo/.gitignore', 'node_modules/\napps/mobile/android/\n');
   mkdirSync(path.join(checkout, 'apps/mobile/node_modules'), { recursive: true });
   symlinkSync(path.join(repo, 'apps/mobile/node_modules/@expo'), path.join(checkout, 'apps/mobile/node_modules/@expo'), 'dir');
-  for (const module of ['expo-secure-store', 'expo-web-browser'])
+  for (const module of ['expo-secure-store', 'expo-web-browser', 'pdfjs-dist'])
     symlinkSync(path.join(repo, 'apps/mobile/node_modules', module), path.join(checkout, 'apps/mobile/node_modules', module), 'dir');
   file('repo/apps/mobile/node_modules/expo/package.json', '{"name":"expo","version":"58.0.19"}');
   file('repo/apps/mobile/node_modules/expo/bin/cli', `const fs=require('fs'),path=require('path');
@@ -91,6 +99,16 @@ fs.writeFileSync(path.join(root,'gradle/wrapper/gradle-wrapper.properties'),'dis
 fs.copyFileSync(process.env.CASEOPS_TEST_GRADLE,path.join(root,'gradlew'));fs.chmodSync(path.join(root,'gradlew'),0o700);
 `);
   file('tools/uname', '#!/bin/bash\nif [[ "$1" = -s ]]; then echo "${CASEOPS_TEST_OS:-Darwin}"; else echo arm64; fi\n', true);
+  file('tools/node', `#!/bin/bash
+if [[ "$1" = */scripts/mobile/prepare-viewer-assets.mjs ]]; then
+  printf 'viewer-check:%s\\n' "$2" >> "$CASEOPS_TEST_TRACE"
+  "$CASEOPS_TEST_NODE_REAL" "$@"
+  result=$?
+  printf 'viewer-check-result:%s\\n' "$result" >> "$CASEOPS_TEST_TRACE"
+  exit "$result"
+fi
+exec "$CASEOPS_TEST_NODE_REAL" "$@"
+`, true);
   for (const [name, version] of [['jdk21', '21.0.12.1+1'], ['jdk17', '17.0.20.1+1']])
     file(`${name}/bin/java`, `#!/bin/bash\necho 'OpenJDK Runtime Environment Temurin-${version} (synthetic version fixture)' >&2\n`, true);
   for (const [name, version] of [['platforms/android-37.0', '2'], ['build-tools/36.0.0', '36.0.0'], ['build-tools/37.0.0', '37.0.0'], ['ndk/27.1.12297006', '27.1.12297006'], ['cmake/3.30.5', '3.30.5']])
@@ -139,7 +157,7 @@ with zipfile.ZipFile(p,'w') as z:
     CASEOPS_ANDROID_JDK17_HOME: path.join(root, 'jdk17'), GRADLE_USER_HOME: path.join(root, 'gradle-cache'), ANDROID_UDID: 'emulator-5582',
     CASEOPS_MOBILE_ANDROID_CA_FILE: ca, CASEOPS_MOBILE_ANDROID_CA_SHA256: hash(cert), EXPO_PUBLIC_API_ORIGIN: 'https://10.0.2.2:8443',
     EXPO_PUBLIC_WEB_ORIGIN: 'https://10.0.2.2:3443', CASEOPS_ANDROID_BUILD_ROOT: path.join(root, 'builds'),
-    CASEOPS_TEST_ROOT: root, CASEOPS_TEST_GRADLE: gradle, CASEOPS_TEST_TRACE: trace, ...extra };
+    CASEOPS_TEST_ROOT: root, CASEOPS_TEST_GRADLE: gradle, CASEOPS_TEST_TRACE: trace, CASEOPS_TEST_NODE_REAL: process.execPath, ...extra };
   for (const key of ['EX_UPDATES_NATIVE_DEBUG', 'SKIP_BUNDLING']) delete env[key];
   const run = () => spawnSync('/bin/bash', [path.join(checkout, 'scripts/mobile/build-android-local-acceptance.sh')], { cwd: checkout, env, encoding: 'utf8', timeout: 45000, maxBuffer: 262144 });
   const outputs = () => readdirSync(path.join(root, 'builds')).map(name => path.join(root, 'builds', name));
@@ -160,6 +178,36 @@ test('actual shell orchestration binds portable source/CA receipt, ARM64 ELF and
   assert.match(trace, /assembleLocalAcceptance.*reactNativeArchitectures=arm64-v8a/); assert.match(trace, /android.builder.sdkDownload=false/);
   assert.match(trace, /org.gradle.java.installations.auto-download=false/); assert.doesNotMatch(trace, /adb|emulator|--licenses|sdkmanager|expo.*start/);
   assert.match(readFileSync(path.join(output, 'gradle-wrapper-gradle-wrapper.properties'), 'utf8'), /distributionSha256Sum=2ab2958f/);
+});
+
+test('actual preflight order verifies generated public renderer bytes before source snapshots, prebuild and Gradle', t => {
+  const f = fixture(t), result = f.run(); assert.equal(result.status, 0, result.stdout + result.stderr);
+  const stages = readFileSync(f.trace, 'utf8').trim().split('\n').map(line => line.split(':')[0]);
+  assert.deepEqual(stages, ['viewer-check', 'viewer-check-result', 'source-snapshot', 'expo', 'gradle', 'source-snapshot']);
+  assert.match(readFileSync(f.trace, 'utf8'), /^viewer-check:--check\nviewer-check-result:0\n/);
+  const [output] = f.outputs();
+  assert.match(readFileSync(path.join(output, 'viewer-assets-check.log'), 'utf8'), /PDF\.js 6\.4\.299: verified 4 deterministic public outputs/);
+  assert.ok(existsSync(path.join(output, 'before.json')) && existsSync(path.join(output, 'receipt.json')));
+});
+
+test('stale generated public renderer is refused without rewriting it or capturing a build source snapshot', t => {
+  const f = fixture(t), generated = path.join(f.checkout, 'apps/mobile/src/viewer/generated/renderer-runtime-source.ts');
+  const stale = readFileSync(generated, 'utf8') + '// Deliberately stale public output in this offline fixture.\n';
+  writeFileSync(generated, stale);
+  // A clean committed stale output reproduces the gap that a source hash alone
+  // cannot detect: the generated bytes must match their canonical program.
+  execFileSync('git', ['add', 'apps/mobile/src/viewer/generated/renderer-runtime-source.ts'], { cwd: f.checkout, stdio: 'pipe' });
+  execFileSync('git', ['-c', 'user.name=Offline fixture', '-c', 'user.email=offline@example.invalid', '-c', 'commit.gpgsign=false',
+    'commit', '--quiet', '-m', 'Synthetic stale renderer control'], { cwd: f.checkout, stdio: 'pipe' });
+  const result = f.run(); assert.notEqual(result.status, 0);
+  assert.match(result.stdout + result.stderr, /Stale public asset: renderer-runtime-source\.ts/);
+  assert.equal(readFileSync(generated, 'utf8'), stale, 'preflight must not silently regenerate reviewed inputs');
+  assert.equal(readFileSync(f.trace, 'utf8'), 'viewer-check:--check\nviewer-check-result:1\n');
+  const [output] = f.outputs();
+  assert.match(readFileSync(path.join(output, 'viewer-assets-check.log'), 'utf8'), /Stale public asset: renderer-runtime-source\.ts/);
+  for (const file of ['before.json', 'check.log', 'prebuild.log', 'gradle.log', 'caseops-local-acceptance-arm64.apk', 'receipt.json'])
+    assert.equal(existsSync(path.join(output, file)), false, `${file} must not exist after failed renderer preflight`);
+  assert.equal(existsSync(path.join(f.checkout, 'apps/mobile/android')), false);
 });
 
 test('actual wrapper orchestration accepts the verbatim SDK37 single V2 signer report', t => {

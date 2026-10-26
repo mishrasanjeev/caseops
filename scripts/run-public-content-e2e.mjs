@@ -45,7 +45,10 @@ async function waitForServer(child) {
       throw new Error(`Next.js server exited before becoming ready (${child.exitCode}).`);
     }
     try {
-      const response = await fetch(localBaseUrl, { cache: "no-store" });
+      const response = await fetch(localBaseUrl, {
+        cache: "no-store",
+        headers: { "X-CaseOps-Automated-Test": "no-paid-providers" },
+      });
       if (response.status < 500) return;
     } catch {
       // The socket is expected to refuse connections during startup.

@@ -6,6 +6,76 @@ mark unavailable or processing fields rather than treating them as zero.
 Do not count an indexing request, directory prospect, or owned link as organic
 traffic, a backlink, or a conversion.
 
+## 2026-10-26 IST - Successful Direct GSC Retry
+
+Release-integration annotation: the owner subsequently requested including
+this actual audit log with issue561. This focused code candidate carries the
+unchanged dated observations below; its new release acceptance is separate
+and pending. Do not retroactively describe these stored Google crawls as a
+crawl of the forthcoming release or erase the earlier marker qualification.
+
+J19/M21/US-063; FT-094..096, NFT-023/SEC-031. The earlier safety-stopped
+attempt was incomplete. A fresh URL-bound temporary browser tab succeeded,
+visibly signed in as `sanjeev@orchestrum.in` for `https://caseops.ai/`, and was
+closed after the audit. No access, consent or connector purchase changed.
+
+Fresh canonical main and API/web match
+`29865557c2745997f6b7d6253e995404b5a11673` (API00503-kw2/web00480-fmx),
+including the final boundary. This is today's separately certified security
+release; #559 is CLOSED and main Security40250284246 passes all eight jobs.
+This SEO audit did not deploy, advance main or alter runtime/provider policy.
+
+| Direct GSC Web, Equal Mature Windows | October 17-23 | October 10-16 |
+| --- | ---: | ---: |
+| Clicks | 1 | 1 |
+| Impressions | 70 | 34 |
+| CTR | 1.4% | 2.9% |
+| Average position | 7.1 | 7.3 |
+
+All10query,10page,20country and2device rows retained; country/device totals
+reconcile, while page99/43 and query42/15 impression aggregates legitimately
+differ. The current query click is branded. No qualified demand, international
+product fit, conversion or ranking improvement is inferred from this tiny sample.
+GenerativeAIfeaturesBeta same windows16/10impressions, all4page/8country/2device
+rows retained. No AI click/query/CTR/position claim or additive Web demand.
+
+Nine completed stored inspections confirm eight indexed/self-canonical
+marketing URLs and sign-in's noindex exclusion (#521 remains CLOSED). Stored
+crawls predate this morning's release, not proof of its Google recrawl. Sitemap
+Success/8/lastreadOctober25; no resubmit. Aggregate indexing now datedOctober19:
+9indexed/6notindexed. All6exclusion examples are auth/form/app or image assets,
+not canonical marketing pages. Law-firms' discovery processing error coexists
+with successful fetch/indexing. CWV updatedOctober21 still lacks both devices'
+90-day usage. Google manual/security: No issues detected. Links4/x.com and
+internal37 are unchanged GSC observations, not new editorial acquisitions.
+
+Fresh15unique marked public URLs pass status/canonical/noindex/JSON-LD/sitemap/
+redirect/no-static-tracking checks. Reused **49/49** complete same-release public
+Playwright cases from production QA40256221597, with native hashes/bindings
+rechecked; no new browser run or lead submission. The initial collector's raw
+body text includes inert scripts; preserve it and use the separate semantic-main
+privacy read plus browser receipt for content/visibility, not that raw label.
+
+The canonical identity helper was used once before checking its headers; its
+two public metadata GETs omitted the required test marker. No paid or lead route
+was called. Preserve that receipt as a protocol deviation and use the separate
+two-read marked replay as the accepted final boundary. An offline actual-Request
+probe confirms the omission; [issue561](https://github.com/mishrasanjeev/caseops/issues/561)
+tracks a focused engineering repair without competing SEO implementation.
+
+#513/#515 stay OPEN: admission/protected Leads and notice2026-10-21 serve, but
+real delivery, genuine lead qualification, reviewed retention and deferred owner
+MFA remain separate. No GA4/client tracking, synthetic lead, paid provider call,
+outreach, consent or deletion activated. PR558 is still draft6de2bacc, not a
+shipped native app. No new page/rewrite warranted from one-impression phrases;
+next measure mature buyer intent and real funnel evidence when authorized.
+
+Full dated evidence and validated structured rows:
+`C:/Users/mishr/OneDrive/Documents/CaseOps/outputs/seo-daily-20261026-01/`.
+Continuation checkpoint: `outputs/ip-calendar-open-items-20261017/SEO_GSC_CHECKPOINT_2026-10-26.md`
+in the primary workspace. This isolated documentation update does not publish
+to main or require a production redeploy; no competing mobile release was started.
+
 ## 2026-10-12 IST - Direct GSC And Qualified Growth
 
 ### Account, Schedule And Release

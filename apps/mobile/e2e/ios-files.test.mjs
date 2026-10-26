@@ -78,7 +78,7 @@ test('separate frozen iOS files inventory reconciles all17 literal identities wi
   assert.equal(iosFilesScenarios.at(-1).requiresSignedOut, true);
   assert.deepEqual(iosFilesScenarios[8].requires, ['FILES-05']);
   assert.deepEqual(iosFilesScenarios.flatMap((scenario, index) => scenario.freshAuthentication ? [{ id: scenario.id, index }] : []),
-    [{ id: 'FILES-09', index: 8 }]);
+    [{ id: 'FILES-07', index: 6 }, { id: 'FILES-09', index: 8 }]);
   assert.deepEqual(iosFilesScenarios.slice(3, 8).map(({ id }) => id), ['FILES-04', 'FILES-05', 'FILES-06', 'FILES-07', 'FILES-08']);
   const core = JSON.parse(readFileSync(new URL('./core-20261025.json', import.meta.url)));
   assert.equal(core.cases.length, 23);

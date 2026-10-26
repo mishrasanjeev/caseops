@@ -6,7 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, chooseAndroidFile,
   collectAndroidFiles, rapidActivateAndroidUpload, validateAndroidFileAsset, validateAndroidFilesContext,
-  validateAndroidPicker, validateAndroidPrivacyReceipt, validateAndroidSourceAnchor, validateAndroidSourceSeed,
+  validateAndroidPicker, validateAndroidPrivacyReceipt, validateAndroidSourceSeed,
   validateAndroidUploadAcknowledgement } from './android-files.mjs';
 import { selector } from './native-ui.mjs';
 import { gatewayBaseline } from './traffic.mjs';

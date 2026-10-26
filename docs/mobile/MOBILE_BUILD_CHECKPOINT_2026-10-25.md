@@ -4,7 +4,19 @@ J20/M22; US-MOB-01..08. **Partially implemented. Public release: NO-GO.**
 This checkpoint separates component tests from native and production acceptance.
 No production deployment or paid-provider call is part of this native task.
 
-## Superseding Android 16 Acceptance
+## Superseding 26 October source handoff
+
+The detailed25 October receipts below are preserved as historical evidence. The current release boundary is [STORE_RELEASE_2026-10-26.md](STORE_RELEASE_2026-10-26.md); no store or production release is approved.
+
+The latest integrated working-tree gates in `pr558-release-20261026/canonical-final-10/` are523 tooling cases collected,521 passed and two existing Windows-only skips;346/346 mobile tests with strict TypeScript and deterministic renderer assets;96/96 Python fixture/admission tests; selected API72 passed with one Windows-only curl.exe skip and Ruff pass; complete web249 files/1979 tests, web/E2E types and production build passed. The initial web PowerShell-PATH failures and API output-directory preflight refusal are retained alongside the replacements. These are source gates before the canonical merge/freeze and native rebuild, not an immutable release receipt.
+
+Actual iOS8Tddh13c Files run `2026-10-26T05-38-23-294Z-ios-files-9bff0dd1` completed15/17 calls, all51 phases and17 sessions. PDF page and image zoom acknowledgements failed; five native uploads/readbacks,13 privacy boundaries, six historical provider cohorts, zero private copies and final signed-out restart passed. Actual pinned Hermes proved runtime function serialization produced a bytecode placeholder. The replacement generated browser-program string passes source/browser and native-Hermes controls; rebuilt Simulator17 Files/fresh23 core and matching Android23core/17Files/privacy remain unverified. Earlier23/23 results on either platform retain their older binary/source scope.
+
+A completed required hosted API shard11/13 on older published762980ab is failed:14 failures,876 passes,452 skips, including `tests/test_public_lead_notifications_20261021.py`. Incoming-main marker/transport expectations remain under investigation; local scoped passes are not replacement hosted acceptance. Preserve that failed head and require fresh canonical checks.
+
+The fresh mobile audit still has four high package entries through Expo certificate tooling/node-forge, with no patched official release admitted. That security failure and the incomplete native/distribution/production gates keep public release **NO-GO**. See the current store handoff for exact proof locators and enrollment/production callback blockers.
+
+## Historical 25 October Android 16 Acceptance
 
 Actual source/API/web: `4959129a0108bd332c4eacc86a3e0ec18f05711c`.
 App-input fingerprint: `be52fcdc07d205e7d5b2c3ca80fef382957e90f74224b06b13d94ca57fb5c000`.
@@ -41,7 +53,7 @@ controls within the original 20-second deadline. Six focused regressions cover i
 The older API37 AVD's retained OS/SystemUI/Quickstep ANRs are not a passing
 Android17 result. No automatic system-dialog dismissal was added to acceptance.
 
-## Current Files Supplement
+## Historical 25 October Files Supplement
 
 `native-files-20261025-aaee0c34-3027-4f38-943f-a3d509896cbc` completed **1/2**:
 FILES-01 passed the rebuilt APK's source/hash/reload/private-TXT/range/full-read
@@ -94,7 +106,7 @@ the independent Files supplement retain different harness fingerprints; no singl
 clean combined-release certification is claimed. Only the local APK/API/web
 runtime stayed identical.
 
-## Current iOS And Security Boundary
+## Historical 25 October iOS And Security Boundary
 
 The actual finite Windows iOS export is
 `ios-hermes-4959129a-20261025-e3162c/receipt.json`: 900 logged modules,
