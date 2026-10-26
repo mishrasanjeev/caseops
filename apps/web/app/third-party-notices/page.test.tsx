@@ -66,7 +66,7 @@ describe("third-party license notices", () => {
       ["@fontsource/atkinson-hyperlegible", "5.2.8"],
       ["@fontsource/jetbrains-mono", "5.2.8"],
       ["@fontsource/libre-caslon-text", "5.2.7"],
-      ["nodemailer", "10.0.13"],
+      ["nodemailer", "10.2.1"],
       ["pako", "1.0.11"],
       ["qrcode.react", "4.2.0"],
     ]);

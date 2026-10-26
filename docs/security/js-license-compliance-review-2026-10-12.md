@@ -31,7 +31,7 @@ The reviewed families are:
 | Ten `@img/sharp-libvips-*` Darwin, Linux and musl platform packages | 1.3.4 | LGPL-3.0-or-later |
 | Three `@img/sharp-win32-*` arm64, ia32, x64 packages | 0.35.5 | Apache-2.0 AND LGPL-3.0-or-later |
 | `@img/sharp-wasm32` | 0.35.5 | Apache-2.0 AND LGPL-3.0-or-later AND MIT |
-| `nodemailer` | 10.0.13 | MIT-0 |
+| `nodemailer` | 10.2.1 | MIT-0 |
 | `pako` | 1.0.11 | MIT AND Zlib |
 
 Every exact platform identity and SRI is retained in the registry. All 19 npm
@@ -47,6 +47,24 @@ Cairo 1.18.6 and AOM 3.15.1. WASM also identifies Emscripten 6.0.10 and resvg
 Future corresponding-source delivery must trace its vendored source separately.
 
 ## Obligations And Implementation
+
+### October 25 Security Maintenance
+
+Issue #559 replaces Nodemailer10.0.13 with the stable10.2.1 release to remove
+the reported address-parser vulnerabilities. Its registry archive identity,
+installed package metadata and original LICENSE were reviewed afresh. The
+MIT-0 expression and complete copyright/license bytes are unchanged; the
+exact-version registry and visible/downloadable notice now identify10.2.1.
+No global allowlist, SaaS-only scope or redistribution condition was relaxed.
+Retained10.0.13 metadata is archived under `license-policy/history`, outside
+the current Cloud Build/Docker upload inventory, not admitted as current code.
+The real parser regression uses only example-domain strings and sends no mail.
+
+Undici7.30.1 is the patched supported major for the Node22.14 compatibility
+gate; Undici8 requires Node22.19 or newer. This focused advisory repair does
+not silently change the supported engine baseline. Zod4.6.7 and Filelock4.2.4
+are stable patched releases. Full graph/audit, image and workflow acceptance
+remain separate from this licence-material review.
 
 ### Distributed Fonts And JavaScript
 

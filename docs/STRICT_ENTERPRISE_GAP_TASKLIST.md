@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## October 25 Dependency Security #559
+
+QG-SEC-001/002/004 and ARCH-OPS-23: Partially implemented; release NO-GO
+until new exact-source acceptance. Current-main E3B Security40180159530
+reports Filelock, Undici, Zod and Nodemailer advisories. The focused candidate
+pins stable patched releases4.2.4/7.30.1/4.6.7/10.2.1, retains exact upstream
+licence material, and adds real parser/cache-lock plus all-copy lock regressions.
+The old parser reproduces an incorrect example-domain recipient without sending
+mail. No breach is established, and no audit threshold or fence is waived.
+Full Docker, hosted CI/Security, protected main merge, guarded deployment and
+the exact-serving browser replay remain mandatory. Mobile PR558 is separate.
+See `security/dependency-security-559-2026-10-25.md`.
+
 ## October 23 Async Export Acceptance Drift
 
 Partially implemented under existing IP15-018/IPLF-030/037 and J08/M08 ownership.

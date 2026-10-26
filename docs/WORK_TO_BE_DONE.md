@@ -1,5 +1,13 @@
 # CaseOps  - Work To Be Done
 
+## October 25 Security Dependency Closure
+
+Issue559 is the current release priority under QG-SEC-001/002/004. Candidate
+dependency repair and parser/cache-lock regressions are present; Docker, current
+hosted gates, protected merge and exact production replay are not yet complete.
+Do not merge unfinished mobile development or describe a manifest change as a
+shipped fix. See `security/dependency-security-559-2026-10-25.md`.
+
 ## October 23 Batch 3 Replacement Release
 
 The complete88 Docker gate passed3376 native and630 browser cases,with10
