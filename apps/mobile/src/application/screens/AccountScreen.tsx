@@ -73,7 +73,8 @@ export function AccountScreen({
       </View>
       <Text style={styles.muted}>
         Changing workspace requires sign-out and a new secure sign-in.
-        Account-deletion requests remain in the web account settings.
+        For account and organization data requests, contact your organization
+        administrator.
       </Text>
       {error ? (
         <Text

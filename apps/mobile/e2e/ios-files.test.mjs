@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { gatewayBaseline } from './traffic.mjs';
-import { collectIosFiles, expandIosSourceDetails, iosFilesInventory, iosFilesScenarios, validateAsset, validateIosFilesContext,
+import { collectIosFiles, expandIosSourceDetails, proveIosSelectedFile, iosFilesInventory, iosFilesScenarios, validateAsset, validateIosFilesContext,
   validatePickerAsset, validatePickerProvider, validatePrivacyReceipt, validateSourceAnchor, validateSourceSeed, textSegments, chooseIosFile,
   IOS_UPLOAD_PERSISTED_MESSAGE, proveIosReaderEntry, proveIosUploadPersisted, findIosUploadPersisted,
   assertIosUploadErrorsAbsent, assertIosViewerAbsent, findIosFileFact, validateIosUploadAcknowledgement, rapidActivateIosUpload } from './ios-files.mjs';
@@ -515,4 +515,13 @@ test('native source disclosure preserves the resolved identity and dispatches a 
   const button={elementId:'owned-source-button',getAttribute:async key=>({type:'XCUIElementTypeButton',accessible:'true',label:'Source details'})[key],isEnabled:async()=>true,click:async()=>{monadClicks++;}};
   const context={driver:{elementClick:async id=>{dispatches++;assert.equal(id,button.elementId);throw failure;},$$:()=>assert.fail('REFETCH_FORBIDDEN')}};
   await assert.rejects(expandIosSourceDetails(context,button),error=>error===failure);assert.equal(dispatches,1);assert.equal(monadClicks,0);
+});
+
+test('selected-file proof requires exact visible filename and enabled Upload within a unique structural marker', async t => {
+  const create=options=>{const {context,uploads}=fixture(t),asset=uploads.txt;
+    const control=(id,shown=true)=>({elementId:id,isDisplayed:async()=>shown,isEnabled:async()=>true,getText:async()=>asset.filename,getAttribute:async key=>key==='type'?(id==='files-selection'?'XCUIElementTypeOther':'XCUIElementTypeStaticText'):key==='name'?id:key==='accessible'?'true':asset.filename});
+    context.driver={waitUntil:async(check,opts)=>{if(!await check())throw new Error(opts?.timeoutMsg||'EXPECTED_FACT_MISSING');},$$:async query=>query==='~files-upload'?[control('files-upload')]:query==='~files-selection'?Array.from({length:options.duplicate?2:1},()=>control('files-selection',false)):query.includes('label == '+JSON.stringify(asset.filename))&&!options.wrongName?[control('selected-filename')]:[]};
+    measuredFileDriver(context,id=>id==='files-selection'?{x:20,y:150,width:362,height:options.outside?20:200}:id==='files-upload'?{x:140,y:250,width:122,height:51}:{x:20,y:160,width:300,height:25});return{context,asset};};
+  const good=create({});await proveIosSelectedFile(good.context,good.asset);
+  for(const options of[{duplicate:true},{wrongName:true},{outside:true}]){const c=create(options);await assert.rejects(proveIosSelectedFile(c.context,c.asset));}
 });

@@ -68,13 +68,17 @@ jobs:
         working-directory: apps/mobile
         run: npm test
       - name: Verify the native evidence harness
-        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs apps/mobile/e2e/ios-files.test.mjs scripts/mobile/ios-browser-context.test.mjs scripts/mobile/ios-native-locators.test.mjs scripts/mobile/ios-simulator-signing.test.mjs scripts/mobile/prepare-gateway-routes.test.mjs scripts/mobile/prepare-ios-local-run.test.mjs scripts/mobile/ios-files-privacy.test.mjs scripts/mobile/run-ios-files.test.mjs scripts/mobile/filesystem-security.test.mjs scripts/mobile/build-android-local-acceptance.test.mjs scripts/mobile/android-native-proof.test.mjs scripts/mobile/prepare-android-local-run.test.mjs
+        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs apps/mobile/e2e/ios-files.test.mjs apps/mobile/e2e/android-files.test.mjs scripts/mobile/ios-browser-context.test.mjs scripts/mobile/ios-native-locators.test.mjs scripts/mobile/ios-simulator-signing.test.mjs scripts/mobile/prepare-gateway-routes.test.mjs scripts/mobile/prepare-ios-local-run.test.mjs scripts/mobile/ios-files-privacy.test.mjs scripts/mobile/run-ios-files.test.mjs scripts/mobile/filesystem-security.test.mjs scripts/mobile/build-android-local-acceptance.test.mjs scripts/mobile/android-native-proof.test.mjs scripts/mobile/prepare-android-local-run.test.mjs scripts/mobile/android-files-privacy.test.mjs scripts/mobile/run-android-files.test.mjs
       - name: Verify isolated fixture preparation and gateway
         run: python3 scripts/mobile/local-fixture.test.py
       - name: Verify synthetic iOS Files picker inputs
         run: python3 scripts/mobile/prepare-ios-files-fixture.test.py
       - name: Verify acknowledged iOS Files source admission
         run: python3 scripts/mobile/admit-ios-file-source.test.py
+      - name: Verify synthetic Android Files picker inputs
+        run: python3 scripts/mobile/prepare-android-files-fixture.test.py
+      - name: Verify acknowledged Android Files source admission
+        run: python3 scripts/mobile/admit-android-file-source.test.py
       - name: Enforce the unwaived high-severity dependency gate
         working-directory: apps/mobile
         run: npm audit --audit-level=high

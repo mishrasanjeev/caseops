@@ -1,5 +1,16 @@
 # CaseOps agent instructions
 
+- A clean filesystem audit needs complete, unique root-present inventories and
+  final path/metadata reconciliation. Charge both observations to the existing
+  entry/byte/deadline limits; an empty successful command or a file inserted
+  after discovery cannot become a complete zero-copy result.
+- Public fixture staging must transfer the descriptor-verified bytes. Keep the
+  bounded verified buffer through the exclusive device write; reopening its
+  pathname can disclose replacement bytes before a later hash refusal.
+- Fixture provenance must bind immutable configuration bytes, not a mutable
+  gateway configuration path that a normal ledger reset replaces. Validate that
+  snapshot in both producer and consumer and retain the original run separately.
+
 - A SwiftUI control embedded in a React Native safe-area container must not
   apply that container inset again. Compare native button and host frames,
   visibility and hittability after scrolling; a visible label does not prove

@@ -270,8 +270,7 @@ export async function assertIosViewerAbsent(context) {
   for (const id of ['viewer-filename', 'viewer-text', 'viewer-isolated-renderer']) await absent(context, 'id', id);
 }
 async function noSelection(context) {
-  await absent(context, 'id', 'files-selection');
-  await absent(context, 'id', 'files-upload');
+  for (const id of ['files-selection', 'files-upload']) assert.equal((await context.driver.$$(selector('ios', 'id', id))).length, 0, 'IOS_FILES_SELECTION_STRUCTURALLY_RETAINED');
   assert.equal(await (await findIosFileFact(context, 'files-choose', 'XCUIElementTypeButton')).getAttribute('label'), 'Choose file', 'IOS_FILES_SELECTION_NOT_CLEARED');
 }
 async function enterFiles(context) {
@@ -416,16 +415,17 @@ async function choose(context, asset, { cancel = false } = {}) {
   }
   await wait(context, async () => !await visible(context.driver, pickerBar), 15000, 'IOS_FILES_PICKER_RETURN_REQUIRED');
   await findIosFileFact(context, 'files-matter-code', 'XCUIElementTypeStaticText');
-  if (!cancel) {
-    const upload = await findIosFileFact(context, 'files-upload', 'XCUIElementTypeButton');
-    assert.equal(await upload.isEnabled(), true, 'IOS_FILES_UPLOAD_DISABLED');
-    const selection = await marker(context, 'files-selection');
-    const name = await find(context, 'text', asset.filename);
-    const frame = await context.driver.getElementRect(selection.elementId);
-    assert.ok(validFrame(frame) && containsFrame(frame, await context.driver.getElementRect(upload.elementId))
-      && containsFrame(frame, await context.driver.getElementRect(name.elementId)), 'IOS_FILES_SELECTION_FACT_OUTSIDE_MARKER');
-    event(context, 'ios-selected-file-structure-and-visible-facts', { frame });
-  }
+  if (!cancel) await proveIosSelectedFile(context, asset);
+}
+export async function proveIosSelectedFile(context, asset) {
+  const upload = await findIosFileFact(context, 'files-upload', 'XCUIElementTypeButton');
+  assert.equal(await upload.isEnabled(), true, 'IOS_FILES_UPLOAD_DISABLED');
+  const selection = await marker(context, 'files-selection');
+  const name = await find(context, 'text', asset.filename);
+  const frame = await context.driver.getElementRect(selection.elementId);
+  assert.ok(validFrame(frame) && containsFrame(frame, await context.driver.getElementRect(upload.elementId))
+    && containsFrame(frame, await context.driver.getElementRect(name.elementId)), 'IOS_FILES_SELECTION_FACT_OUTSIDE_MARKER');
+  event(context, 'ios-selected-file-structure-and-visible-facts', { frame });
 }
 export { choose as chooseIosFile };
 function uploadAnchor(context, kind) {
@@ -626,7 +626,7 @@ export const iosFilesScenarios = Object.freeze([
   { id: 'FILES-11', requires: ['FILES-08'], run: async (context) => { const before = await traffic(context); await enterFiles(context); const anchor = uploadAnchor(context, 'docx'); await details(context, anchor); assert.equal(await (await findIosFileFact(context, `files-open-${anchor.attachmentId}`, 'XCUIElementTypeButton')).isEnabled(), false, 'IOS_FILES_DOCX_MUST_REMAIN_UNAVAILABLE'); await findIosFileFact(context, `files-viewer-unavailable-${anchor.attachmentId}`, 'XCUIElementTypeStaticText'); await assertIosViewerAbsent(context); assert.equal(delta(before, await traffic(context)).filter(({ route }) => route.endsWith('/download') || route.endsWith('/preview')).length, 0, 'IOS_FILES_UNSUPPORTED_DOCX_WAS_OPENED'); await noPosts(context, before); } },
   { id: 'FILES-12', run: async (context) => { await enterFiles(context); await openReader(context, context.source); await find(context, 'id', 'viewer-text'); const before = await traffic(context); await backgroundAndResume(context); await assertIosViewerAbsent(context); await enterFiles(context); await noPosts(context, before); await privacy(context, 'viewer-background'); } },
   { id: 'FILES-13', run: async (context) => { await enterFiles(context); const before = await traffic(context); await choose(context, validateAsset(context, 'txt')); await backgroundAndResume(context); await enterFiles(context); await noSelection(context); await noPosts(context, before); await privacy(context, 'selection-background'); } },
-  { id: 'FILES-14', run: async (context) => { await enterFiles(context); const before = await traffic(context); await choose(context, validateAsset(context, 'txt')); await click(context, 'id', 'back'); await find(context, 'text', 'Discard file selection?'); await click(context, 'text', 'Stay'); await find(context, 'id', 'files-selection', { scroll: true, scrollDirection: 'down' }); await click(context, 'id', 'back'); await find(context, 'text', 'Discard file selection?'); await click(context, 'text', 'Leave Files'); await enterFiles(context); await noSelection(context); await noPosts(context, before); await privacy(context, 'selection-discard'); } },
+  { id: 'FILES-14', run: async (context) => { await enterFiles(context); const before = await traffic(context); await choose(context, validateAsset(context, 'txt')); await click(context, 'id', 'back'); await find(context, 'text', 'Discard file selection?'); await click(context, 'text', 'Stay'); await proveIosSelectedFile(context, validateAsset(context, 'txt')); await click(context, 'id', 'back'); await find(context, 'text', 'Discard file selection?'); await click(context, 'text', 'Leave Files'); await enterFiles(context); await noSelection(context); await noPosts(context, before); await privacy(context, 'selection-discard'); } },
   { id: 'FILES-15', run: async (context) => { await enterFiles(context); const before = await traffic(context); await choose(context, validateAsset(context, 'txt')); await restart(context); await enterFiles(context); await noSelection(context); await openReader(context, context.source); await find(context, 'id', 'viewer-text'); await restart(context); await assertIosViewerAbsent(context); await enterFiles(context); await noSelection(context); await noPosts(context, before); await privacy(context, 'process-restart'); } },
   { id: 'FILES-16', run: async (context) => { await enterFiles(context); await readText(context, context.source); const before = await traffic(context); await click(context, 'id', 'account-open'); await click(context, 'id', 'sign-out', { scroll: true }); await signedOut(context); const changes = delta(before, await traffic(context)), rows = changes.filter(({ method, route }) => method === 'POST' && route === '/api/auth/native/logout'); assert.equal(rows.length, 1, 'IOS_FILES_LOGOUT_NOT_ONCE'); assert.ok([200, 204].includes(rows[0].status), 'IOS_FILES_LOGOUT_NOT_ACKNOWLEDGED'); await assertIosViewerAbsent(context); await absent(context, 'id', 'files-selection'); await privacy(context, 'logout'); context.filesState.logoutAcknowledged = true; } },
   { id: 'FILES-17', requires: ['FILES-16'], requiresSignedOut: true, run: async (context) => { validateIosFilesContext(context); assert.equal(context.filesState.logoutAcknowledged, true, 'IOS_FILES_PRIOR_LOGOUT_ACK_REQUIRED'); const before = await traffic(context); await restart(context); await signedOut(context); await assertIosViewerAbsent(context); for (const id of ['files-selection', 'files-matter-code']) await absent(context, 'id', id); assert.equal(delta(before, await traffic(context)).length, 0, 'IOS_FILES_SIGNED_OUT_RESTORED_PRIVATE_TRAFFIC'); await privacy(context, 'signed-out-restart'); } },

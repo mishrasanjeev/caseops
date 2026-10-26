@@ -27,14 +27,15 @@ test('mobile CI selects every tooling module and audits before either platform e
   const steps = workflow.jobs.source.steps;
   const expected = ['scripts/mobile/build-config.test.mjs', 'scripts/mobile/tooling.test.mjs',
     'scripts/mobile/local-owner-controls.test.mjs', 'apps/mobile/e2e/files-20261025.test.mjs',
-    'apps/mobile/e2e/ios-files.test.mjs',
+    'apps/mobile/e2e/ios-files.test.mjs', 'apps/mobile/e2e/android-files.test.mjs',
     'scripts/mobile/ios-browser-context.test.mjs', 'scripts/mobile/ios-native-locators.test.mjs',
     'scripts/mobile/ios-simulator-signing.test.mjs',
     'scripts/mobile/prepare-gateway-routes.test.mjs',
     'scripts/mobile/prepare-ios-local-run.test.mjs', 'scripts/mobile/ios-files-privacy.test.mjs',
     'scripts/mobile/run-ios-files.test.mjs',
     'scripts/mobile/filesystem-security.test.mjs', 'scripts/mobile/build-android-local-acceptance.test.mjs',
-    'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs'];
+    'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs',
+    'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
@@ -45,6 +46,8 @@ test('mobile CI selects every tooling module and audits before either platform e
   const filesFixtureCommands = [
     ['Verify synthetic iOS Files picker inputs', 'python3 scripts/mobile/prepare-ios-files-fixture.test.py'],
     ['Verify acknowledged iOS Files source admission', 'python3 scripts/mobile/admit-ios-file-source.test.py'],
+    ['Verify synthetic Android Files picker inputs', 'python3 scripts/mobile/prepare-android-files-fixture.test.py'],
+    ['Verify acknowledged Android Files source admission', 'python3 scripts/mobile/admit-android-file-source.test.py'],
   ];
   for (const [name, command] of filesFixtureCommands) {
     const matches = steps.filter(step => step.name === name);
