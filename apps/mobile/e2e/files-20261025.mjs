@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { FixtureUnavailable, admitApplication, verifiedFile } from './fixture-contract.mjs';
 import { authenticate, delta, openMatter, readOnlyTraffic, traffic } from './journeys.mjs';
-import { absent, click, find, findQuery, read, selector, visible } from './native-ui.mjs';
+import { absent, click, dispatchNativeClick, find, findQuery, read, selector, visible } from './native-ui.mjs';
 import { reconcileInventory } from './support.mjs';
 
 // Supplement only: not part of core-20261025.json or a claim of native execution.
@@ -84,11 +84,11 @@ export function validateFilesContext(context) {
   return source;
 }
 
-export async function expandSourceDetails(control, platform) {
-  const show = await visible(control, selector(platform, 'text', 'Source details'));
-  const hide = await visible(control, selector(platform, 'text', 'Hide source details'));
+export async function expandSourceDetails(context, control) {
+  const show = await visible(control, selector(context.platform, 'text', 'Source details'));
+  const hide = await visible(control, selector(context.platform, 'text', 'Hide source details'));
   assert.equal(Number(!!show) + Number(!!hide), 1, 'FILES_SOURCE_DETAILS_STATE_UNOBSERVED');
-  if (show) await show.click();
+  if (show) await dispatchNativeClick(context, show, 'text', 'Source details');
 }
 
 async function sourceDetails(context, anchor = source) {
@@ -96,7 +96,7 @@ async function sourceDetails(context, anchor = source) {
   assert.equal(await read(context, 'id', `files-name-${anchor.attachmentId}`, { scroll: true }), anchor.filename, 'FILES_WRONG_SOURCE_FILENAME');
   const hashId = `files-hash-${anchor.attachmentId}`;
   const details = await find(context, 'id', `files-source-${anchor.attachmentId}`, { scroll: true });
-  await expandSourceDetails(details, context.platform);
+  await expandSourceDetails(context, details);
   assert.equal(await read(context, 'id', hashId, { scroll: true }), anchor.sha256, 'FILES_SOURCE_HASH_MISMATCH');
 }
 
@@ -123,7 +123,7 @@ export async function readFilesSource(context) {
   const opening = await traffic(context);
   const open = await find(context, 'id', `files-open-${source.attachmentId}`, { scroll: true });
   assert.equal(await open.isEnabled(), true, 'FILES_TXT_READER_UNAVAILABLE');
-  await open.click();
+  await dispatchNativeClick(context, open, 'id', `files-open-${source.attachmentId}`);
   await find(context, 'id', 'private-document-viewer');
   assert.equal(await read(context, 'id', 'viewer-filename'), source.filename, 'FILES_VIEWER_WRONG_SOURCE');
   // UiAutomator may omit a terminal line break. The byte identity is separately
@@ -155,7 +155,7 @@ export async function openNativeFilesPickerForInspection(context) {
   await enterFiles(context);
   const choose = await find(context, 'id', 'files-choose', { scroll: true });
   assert.equal(await choose.isEnabled(), true, 'FILES_PICKER_UNAVAILABLE');
-  await choose.click();
+  await dispatchNativeClick(context, choose, 'id', 'files-choose');
   return { state: 'blocked', reason: 'ANDROID_PICKER_AND_UPLOAD_EVIDENCE_REQUIRED' };
 }
 
@@ -197,17 +197,17 @@ export async function uploadFilesSource(context) {
   let downloads;
   await context.driver.waitUntil(async () => !!(downloads = await visible(roots, selector('android', 'text', 'Downloads'))),
     { timeout: 10000, interval: 150, timeoutMsg: 'OBSERVED_DOWNLOADS_ROOT_NOT_READY' });
-  await downloads.click();
+  await dispatchNativeClick(context, downloads, 'text', 'Downloads');
   const chosen = await findQuery(context, `android=new UiSelector().resourceId("android:id/title").text(${JSON.stringify(upload.filename)})`);
   assert.equal(await chosen.getText(), upload.filename);
-  await chosen.click();
+  await dispatchNativeClick(context, chosen, 'text', upload.filename);
   await context.driver.waitUntil(async () => await context.driver.getCurrentPackage() === context.fixture.appId,
     { timeout: 15000, interval: 200, timeoutMsg: 'PICKER_DID_NOT_RETURN_TO_BOUND_APP' });
   await find(context, 'id', 'files-selection', { scroll: true });
   assert.equal(await read(context, 'id', 'files-matter-code', { scroll: true }), context.fixture.matter.identityLabel);
   const button = await find(context, 'id', 'files-upload', { scroll: true });
   assert.equal(await button.isEnabled(), true, 'NATIVE_UPLOAD_NOT_ENABLED');
-  await button.click();
+  await dispatchNativeClick(context, button, 'id', 'files-upload');
   await context.driver.waitUntil(async () => {
     if (await visible(context.driver, 'id=files-upload-unknown')) throw new FixtureUnavailable('UPLOAD_OUTCOME_UNKNOWN_NO_REPLAY');
     assert.equal(await visible(context.driver, 'id=files-upload-rejected'), undefined, 'NATIVE_UPLOAD_REJECTED');

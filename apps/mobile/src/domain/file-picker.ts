@@ -3,6 +3,7 @@ import type {
   MatterFileAsset,
   MatterFileSelection,
 } from "../files/contracts.ts";
+import { TempCleanupError } from "../files/staging.ts";
 
 export type PickerIntent = Readonly<{
   companyId: string;
@@ -41,8 +42,11 @@ export function createFilePickerCoordinator(
     intent = null;
     const previous = asset;
     asset = null;
-    if (previous) cleanup(previous);
-    changed();
+    try {
+      if (previous) cleanup(previous);
+    } finally {
+      changed();
+    }
   };
   return {
     get picking() {
@@ -99,7 +103,10 @@ export function createFilePickerCoordinator(
         }
         asset = { ...result };
         changed();
-      } catch {
+      } catch (cause) {
+        // Cleanup failure remains actionable even if logout invalidated the
+        // picker. An unrelated late provider rejection still stays silent.
+        if (cause instanceof TempCleanupError) throw cause;
         if (owner !== epoch) return;
         clear();
         throw new Error(

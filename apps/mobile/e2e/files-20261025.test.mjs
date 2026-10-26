@@ -72,10 +72,12 @@ test('Compose source-details wrapper text is never read; exact visible child cap
       getText() { assert.fail('COMPOSE_WRAPPER_TEXT_MUST_NOT_BE_READ'); },
       async $$(query) {
         queried.push(query);
-        return query === expected ? [{ async isDisplayed() { return true; }, async click() { clicked++; } }] : [];
+        return query === expected ? [{ elementId: 'source-details-unit', async isDisplayed() { return true; },
+          async click() { assert.fail('ELEMENT_CLICK_WRAPPER_MUST_NOT_BE_CALLED'); } }] : [];
       },
     };
-    await expandSourceDetails(control, 'android');
+    const context = { platform: 'android', driver: { async elementClick(id) { assert.equal(id, 'source-details-unit'); clicked++; } } };
+    await expandSourceDetails(context, control);
     assert.deepEqual(queried, [selector('android', 'text', 'Source details'), selector('android', 'text', 'Hide source details')]);
     assert.equal(clicked, expanded ? 0 : 1);
   }
@@ -90,7 +92,8 @@ test('missing, invisible, duplicate or contradictory exact source-details captio
       if (state === 'contradictory') return [child];
       return query === selector('android', 'text', 'Source details') ? (state === 'duplicate' ? [child, child] : [child]) : [];
     } };
-    await assert.rejects(expandSourceDetails(control, 'android'), state === 'duplicate' ? /AMBIGUOUS_VISIBLE_NATIVE_LOCATOR/ : /FILES_SOURCE_DETAILS_STATE_UNOBSERVED/);
+    await assert.rejects(expandSourceDetails({ platform: 'android', driver: { elementClick() { clicked++; } } }, control),
+      state === 'duplicate' ? /AMBIGUOUS_VISIBLE_NATIVE_LOCATOR/ : /FILES_SOURCE_DETAILS_STATE_UNOBSERVED/);
     assert.equal(clicked, 0);
   }
 });
@@ -199,10 +202,13 @@ function offlineUpload(t, outcome, { status = 200, acknowledgement = 'visible' }
     assert.equal(url, `${context.fixture.gatewayUrl}/__caseops_e2e/status`);
     assert.equal(options.headers['X-CaseOps-Automated-Test'], 'no-paid-providers');
     assert.equal(options.redirect, 'error');
-    assert.equal(options.method, undefined);
+    assert.equal(options.method, 'GET');
+    assert.equal(options.body, undefined);
     return new Response(JSON.stringify(ledger));
   });
-  const element = (id, text = '') => ({
+  const nativeClicks = new Map();
+  const element = (id, text = '') => {
+    const control = { elementId: id,
     async isDisplayed() { return true; }, async isEnabled() { return true; },
     async getText() { reads.push({ id, text }); return text; },
     async getAttribute(name) { assert.equal(name, 'resource-id'); return id; },
@@ -233,7 +239,10 @@ function offlineUpload(t, outcome, { status = 200, acknowledgement = 'visible' }
       }
       if (id === 'viewer-close') { assert.equal(viewerOpen, true); viewerOpen = false; }
     },
-  });
+    };
+    nativeClicks.set(id, control.click.bind(control));
+    return control;
+  };
   const controls = new Map(['account-open', 'back', 'tab-matters', 'screen-matters', 'matter-search', 'matter-search-submit',
     `matter-row-${source.matterId}`, 'matter-files', 'files-choose', `files-row-${source.attachmentId}`]
     .map(id => [selector('android', 'id', id), element(id)]));
@@ -276,6 +285,10 @@ function offlineUpload(t, outcome, { status = 200, acknowledgement = 'visible' }
     return { route: `GET ${downloadRoute}` };
   };
   context.driver = {
+    async elementClick(id) {
+      assert.ok(nativeClicks.has(id), 'UNIT_RESOLVED_NATIVE_ID_REQUIRED');
+      await nativeClicks.get(id)();
+    },
     $() { assert.fail('UNEXPECTED_SINGLE_ELEMENT_LOOKUP'); },
     async switchContext(name) { assert.equal(name, 'NATIVE_APP'); },
     async getCurrentPackage() { return pickerOpen ? 'com.android.documentsui' : context.fixture.appId; },
@@ -319,6 +332,56 @@ function offlineUpload(t, outcome, { status = 200, acknowledgement = 'visible' }
   context.record = event => records.push(event);
   return { context, ledger, clicks, queries, records, reads, admissions, swipes, uploadedId, downloadRoute, upload };
 }
+
+test('actual Android Files wrapper never refetches or replays resolved details, picker or upload clicks after stale/lost acknowledgements', async t => {
+  for (const target of ['Source details', 'Downloads', 'picked-file', 'files-upload']) for (const lostAcknowledgement of [false, true]) {
+    const fake = offlineUpload(t, 'persisted'), { driver } = fake.context;
+    const lookup = driver.$$.bind(driver), rawClick = driver.elementClick.bind(driver);
+    let wrapperClicks = 0, lookups = 0, lookupsAtFailure;
+    const dispatched = [], failure = new Error(lostAcknowledgement ? 'UNIT_NATIVE_CLICK_ACK_UNKNOWN' : 'UNIT_STALE_NATIVE_ELEMENT');
+    driver.$$ = async query => {
+      lookups++;
+      const controls = await lookup(query);
+      for (const control of controls) {
+        if (control.elementId === target) control.click = async () => { wrapperClicks++; throw new Error('ELEMENT_CLICK_WRAPPER_MUST_NOT_BE_CALLED'); };
+        if (typeof control.$$ === 'function') {
+          const scoped = control.$$.bind(control);
+          control.$$ = async value => {
+            lookups++;
+            const children = await scoped(value);
+            for (const child of children) if (child.elementId === target) {
+              child.click = async () => { wrapperClicks++; throw new Error('ELEMENT_CLICK_WRAPPER_MUST_NOT_BE_CALLED'); };
+            }
+            return children;
+          };
+        }
+      }
+      return controls;
+    };
+    driver.elementClick = async id => {
+      dispatched.push(id);
+      if (id !== target) return rawClick(id);
+      if (lostAcknowledgement) await rawClick(id);
+      lookupsAtFailure = lookups;
+      throw failure;
+    };
+    await assert.rejects(uploadFilesSource(fake.context), error => error === failure);
+    assert.equal(wrapperClicks, 0); assert.equal(dispatched.filter(id => id === target).length, 1);
+    assert.equal(lookups, lookupsAtFailure, 'FAILED_NATIVE_CLICK_MUST_NOT_REFETCH');
+    assert.equal(fake.clicks.filter(id => id === target).length, lostAcknowledgement ? 1 : 0);
+    assert.equal(fake.ledger.requests.filter(row => row.method === 'POST').length, target === 'files-upload' && lostAcknowledgement ? 1 : 0);
+    assert.deepEqual(fake.admissions, []); assert.equal(fake.clicks.includes('files-reload'), false);
+  }
+});
+
+test('Android source-details wrapper requires the resolved native element ID before any dispatch', async () => {
+  let rawClicks = 0, wrapperClicks = 0;
+  const context = { platform: 'android', driver: { async elementClick() { rawClicks++; } } };
+  const control = { async $$(query) { return query === selector('android', 'text', 'Source details')
+    ? [{ async isDisplayed() { return true; }, async click() { wrapperClicks++; } }] : []; } };
+  await assert.rejects(expandSourceDetails(context, control), /NATIVE_CLICK_ELEMENT_ID_REQUIRED/);
+  assert.equal(rawClicks, 0); assert.equal(wrapperClicks, 0);
+});
 
 for (const [outcome, expected] of [['unknown', /UPLOAD_OUTCOME_UNKNOWN_NO_REPLAY/], ['rejected', /NATIVE_UPLOAD_REJECTED/],
   ['no-ack', /NATIVE_UPLOAD_NOT_ACKNOWLEDGED/], ['missing-persistence', /NATIVE_UPLOAD_PERSISTENCE_NOT_ACKNOWLEDGED/]]) {

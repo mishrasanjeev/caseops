@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { find, read, selector, visible } from './native-ui.mjs';
+import { dispatchNativeClick, find, read, selector, visible } from './native-ui.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage } from './mfa.mjs';
 import { verifiedFile } from './evidence.mjs';
 import { browserStep } from './browser-progress.mjs';
@@ -52,8 +52,9 @@ async function locate(context, key, locator = context.fixture.auth.firefoxUi.loc
 }
 async function press(context, key, locator) {
   const control = await locate(context, key, locator);
+  const observed = locator || context.fixture.auth.firefoxUi.locators[key];
   browserStep(context, key, 'click');
-  await control.click();
+  await dispatchNativeClick(context, control, observed.kind, observed.value);
 }
 async function fill(context, key, value) {
   const control = await locate(context, key);
@@ -165,7 +166,7 @@ export async function firefoxLogin(context, credentials, authorizationIdentity) 
   browserStep(context, 'appOpen', 'check');
   assert.equal(await appOpen.isEnabled(), true, 'NATIVE_APP_OPEN_CONTROL_DISABLED');
   browserStep(context, 'appOpen', 'click');
-  await appOpen.click();
+  await dispatchNativeClick(context, appOpen, recipe.locators.appOpen.kind, recipe.locators.appOpen.value);
   for (const [index, locator] of (recipe.afterConnect || []).entries()) await press(context, `afterConnect-${index}`, locator);
   browserStep(context, 'native-return', 'wait');
   await find(context, 'id', 'account-open');

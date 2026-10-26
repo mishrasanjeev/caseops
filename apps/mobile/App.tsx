@@ -32,6 +32,8 @@ import {
   pickFile,
   purgeMatterFileTemps,
 } from "./src/files/native";
+import { TempCleanupError } from "./src/files/staging";
+import { runPrivateFileCleanup } from "./src/files/private-imports";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -101,8 +103,7 @@ export default function App() {
         if (alive.current) setIdentity(null);
         viewerEvents.notify("logout");
         try {
-          picker.clear();
-          purgeMatterFileTemps();
+          runPrivateFileCleanup([() => picker.clear(), purgeMatterFileTemps]);
         } catch {
           if (alive.current)
             setError(
@@ -287,10 +288,12 @@ export default function App() {
                   matterId,
                   expectedLifecycleVersion,
                 })
-                .catch(() => {
+                .catch((cause) => {
                   if (alive.current)
                     setError(
-                      "The file could not be selected. Please choose it again.",
+                      cause instanceof TempCleanupError
+                        ? "Private temporary-file cleanup could not be confirmed. Restart CaseOps before choosing another file."
+                        : "The file could not be selected. Please choose it again.",
                     );
                 });
             }}

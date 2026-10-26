@@ -1,12 +1,94 @@
 # Owner MacBook: Standalone iOS Simulator Build And XCUITest
 
-**macOS/Xcode/iOS: NOT RUN.** This is an owner-run local-development handoff,
-not native iOS build, Simulator, signing, distribution or interaction evidence.
-No production change or signing is authorized by this guide.
+**Local Mac update, 25 October 2026:** a locally ad-hoc-signed Release Simulator
+build passes strict signature and private Keychain-group verification.
+The complete authenticated iOS core inventory now passes **23/23**:
+all 69 setup/call/teardown phases and preflight/postflight checks passed, with
+zero failed, blocked or unexecuted calls. The earlier failed runs remain retained.
+The final harness passes 352 tests with two Windows-only skips; all 304 mobile
+tests and 43 Python fixture tests pass. The rebuilt app also passed an actual
+open-keyboard scroll proof with unchanged note text and zero note submission.
+The original Windows handoff instructions below do not constitute additional
+native evidence. No production change or distribution signing is authorized.
+
+## Observed Local Mac Setup
+
+The dedicated checkout uses `codex/mobile-app-build-20261024` at
+`6de2bacc3d8afaa5f352e6b811f1297be07379ed`, with the local Apple Silicon fixture
+override documented by its uncommitted helper diff. Current signed app inputs have
+fingerprint `432546c21e973b621e09719650702fd3cda3d3fcaf8bd9e8f1e64052caa1803e`.
+Observed tools: Xcode 27.1 (updated from 26.6 during setup), iOS Simulator 26.5,
+Node 24.15.0/npm 11.12.1,
+Ruby 4.0.9/CocoaPods 1.17.0, Watchman 2026.10.19.00, Appium 3.8.0 and
+XCUITest 12.20.0. The shell-local developer directory avoids changing the
+global Xcode selection. The activation file is local to this Mac, outside Git:
+
+```bash
+source "$HOME/.cache/caseops-mobile/ios-setup/use-env.sh"
+cd "$CASEOPS_REPO"
+python scripts/mobile/local-bootstrap.py status --platform ios --cache "$CASEOPS_MOBILE_LOCAL_FIXTURE_CACHE"
+xcrun simctl launch "$SIMULATOR_UDID" ai.caseops.mobile.dev.simulatoracceptance
+# Rebuild the locally ad-hoc-signed Simulator app when needed:
+bash scripts/mobile/build-ios-simulator-acceptance.sh
+```
+
+`CaseOps iPhone 17` is the dedicated Simulator. The owned Colima profile is
+`caseops-ios`; Docker configuration is isolated from the user's default context.
+API and web use `https://127.0.0.1:8443` and `https://127.0.0.1:3443`.
+The new fixture CA is trusted only in this Simulator, with a process-local Node
+CA setting. Synthetic credentials/private keys remain protected in the fixture
+cache; they are not committed or printed here.
+
+Xcode 27.1 uses `Contents/Applications/DeviceHub.app` for the Simulator UI.
+Absence of the older `Contents/Developer/Applications/Simulator.app` path is
+not an installation failure. The pinned XCUITest driver supports DeviceHub.
+The earlier build with signing disabled failed actual SecureStore startup;
+preserve that failure rather than using it as authenticated-test evidence.
+
+Evidence is retained under `$HOME/.cache/caseops-mobile/ios-setup/environment.json`,
+which references the actual build, installed-binary hash, smoke result and fixture
+receipts. Mobile TypeScript, all 304 mobile cases, and all 43 Python fixture
+cases passed. The harness collected 354 cases: 352 passed and two intentional
+Windows-only cases were skipped. The real backend's
+status/TLS/authentication/scanner probes passed. Startup checks verified native
+context, enabled SwiftUI sign-in, background/resume and cold relaunch. Existing
+screen-capture protection produces black captures; these are not visual-rendering
+acceptance results. The first CoreSimulator discovery hang and interrupted build
+are retained alongside the successful targeted-service-recovery build.
+
+The full native inventory and Files supplement remain separate gates. The
+existing four high Expo CLI/node-forge audit findings are still open.
+
+Final standalone build receipt:
+`~/.cache/caseops-mobile/ios-build-kat0eU0h/receipt.json`.
+Canonical app hash:
+`e4f1abd01e6ebc328fde08359afe5e3b8ced2cbada20a8d38db88ddd453c4f34`.
+Final native report:
+`~/.cache/caseops-mobile/ios-acceptance-i47Hqf5B/native-reports/2026-10-25T16-20-32-949Z-ios-1cd06c81/summary.json`.
+Its frozen harness hash is
+`1b67b4ba6a86f6882337015fbebd354258cf21241f8bde1a9c706b8de51be486`.
+The run used fresh synthetic member/terminal-action targets, real browser MFA,
+the actual installed signed app, and isolated API/web images at the source SHA
+above. Native traffic finished with zero marker/route rejections or overflow.
+
+Retain each failed native report under the acceptance directory. iOS browser
+attachment must identify a fresh, visible, focused authorization page and verify
+its full PKCE identity before credentials; process-wide window lists can repeat
+retained pages. Native rows may expose their complete text as one accessible
+button label, and an empty iOS text view's `getText()` can return its label.
+Use the verified native value and exact control scope instead of weakening
+identity, content or privacy assertions. iOS swipes target the measured outer
+ScrollView gutter, avoiding child controls and localized keyboard containers;
+the note form uses native iOS keyboard insets. An off-screen home heading must
+be bound to its own visible scroll container before any additional Back action.
+
+Gateway descriptors now retain an exclusive `.routes.json` snapshot beside
+their status evidence. The mutable fixture inventory is provenance only;
+extending the fixture must not invalidate an earlier run's route evidence.
 
 ## 1. Evidence And Publication Gate
 
-Current observed Android app/API/web source is
+Retained Android app/API/web evidence uses source
 `4959129a0108bd332c4eacc86a3e0ec18f05711c`. The actual Android16/API36 dated
 core completed23/23 with passed postflight; that is not an iOS or full-v1 pass.
 Older60f1decc references are historical snapshots.
@@ -284,7 +366,12 @@ Missing strict TLS is failed setup, not a native product result.
 After parent-approved source/fixture prerequisites, use the checked-in wrapper.
 No Metro, Expo Go or `run:ios` development-server substitute. It uses local
 Expo prebuild, CocoaPods and Release `xcodebuild -sdk iphonesimulator`, with
-`CODE_SIGNING_ALLOWED=NO` and `CODE_SIGNING_REQUIRED=NO`. It is not a
+`CODE_SIGNING_ALLOWED=YES`, `CODE_SIGNING_REQUIRED=YES`, local identity `-`,
+and Xcode base-entitlement injection. Strict signature verification, bound
+Info/resources and embedded per-architecture application identifiers prove
+the app's exact private Keychain group. Apple may derive the default private
+group from the application identifier without an explicit Keychain-groups array.
+No shared group, provisioning profile or Apple account is required. It is not a
 physical-device, distribution-signing or App Store build.
 
 ```bash

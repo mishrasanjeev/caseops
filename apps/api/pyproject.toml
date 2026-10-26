@@ -31,6 +31,7 @@ dependencies = [
   "openai>=2.0.0",
   "voyageai>=0.3.7",
   "fastembed>=0.4.0",
+  "filelock==4.2.4",
   "clamd>=1.0.2",
   "temporalio==1.27.2",
   # P0-004 (2026-04-24): cryptography is REQUIRED for SendGrid
@@ -56,12 +57,14 @@ ocr = [
 # local + CI stay fast. Cloud Run / staging builds install via
 # `pip install .[observability]` in the Dockerfile.
 observability = [
-  "opentelemetry-api>=1.29.0",
-  "opentelemetry-sdk>=1.29.0",
-  "opentelemetry-exporter-otlp-proto-http>=1.29.0",
-  "opentelemetry-instrumentation-fastapi>=0.50b0",
-  "opentelemetry-instrumentation-sqlalchemy>=0.50b0",
-  "opentelemetry-instrumentation-httpx>=0.50b0",
+  # CVE-2026-114603: keep the patched API and its exact compatible SDK /
+  # instrumentation cohort together; these remain optional and disabled by default.
+  "opentelemetry-api==1.45.1",
+  "opentelemetry-sdk==1.45.1",
+  "opentelemetry-exporter-otlp-proto-http==1.45.1",
+  "opentelemetry-instrumentation-fastapi==0.66b1",
+  "opentelemetry-instrumentation-sqlalchemy==0.66b1",
+  "opentelemetry-instrumentation-httpx==0.66b1",
 ]
 
 [project.scripts]

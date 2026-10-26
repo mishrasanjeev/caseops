@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifiedFile } from './evidence.mjs';
 import { admitApplication, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture } from './fixture-contract.mjs';
-import { binaryHash, safeFailure } from './support.mjs';
+import { binaryHash, localUrl, safeFailure } from './support.mjs';
 import { collect } from './suite.mjs';
 import { validateSessionDeletePolicy } from './session-admission.mjs';
 
@@ -19,6 +19,62 @@ function noEmbeddedSecrets(value) {
 function readReference(reference) { return JSON.parse(verifiedFile(reference?.path, reference?.sha256)); }
 function nonempty(value) { return typeof value === 'string' && !!value.trim(); }
 
+// Historical Windows receipts have no transport extension. A Mac ARM64 proof
+// cannot use that historical path: both its plan and final fixture must bind
+// the isolated ADB, Appium and UiAutomator2 transports explicitly.
+export function validateAndroidTransport(fixture, platform, build) {
+  const value = fixture.androidTransport;
+  if (platform !== 'android') {
+    assert.equal(value, undefined, 'ANDROID_TRANSPORT_REQUIRES_ANDROID'); return null;
+  }
+  build ??= fixture.buildReceipt ? readReference(fixture.buildReceipt) : undefined;
+  const mandatory = build?.androidSecurity != null && Object.hasOwn(build.androidSecurity, 'nativeArtifactEvidence');
+  if (value === undefined) {
+    assert.equal(mandatory, false, 'MAC_ANDROID_TRANSPORT_REQUIRED'); return null;
+  }
+  assert.ok(value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).length === 3 && ['adbPort', 'appiumUrl', 'systemPort'].every(key => Object.hasOwn(value, key)),
+  'ANDROID_TRANSPORT_SCHEMA_REQUIRED');
+  assert.equal(fixture.udid, 'emulator-5584', 'ANDROID_TRANSPORT_DEVICE_MISMATCH');
+  assert.equal(value.adbPort, 5038, 'ANDROID_TRANSPORT_ADB_PORT_MISMATCH');
+  assert.equal(value.appiumUrl, 'http://127.0.0.1:4725', 'ANDROID_TRANSPORT_APPIUM_URL_MISMATCH');
+  assert.equal(value.systemPort, 8202, 'ANDROID_TRANSPORT_SYSTEM_PORT_MISMATCH');
+  return { adbPort: value.adbPort, appiumUrl: value.appiumUrl, systemPort: value.systemPort };
+}
+
+export function androidSessionTransport(fixture, platform, environment = process.env) {
+  const transport = validateAndroidTransport(fixture, platform);
+  if (!transport) return { appiumUrl: localUrl(environment.CASEOPS_MOBILE_APPIUM_URL || 'http://127.0.0.1:4723'), capabilities: {} };
+  if (environment.CASEOPS_MOBILE_APPIUM_URL !== undefined) assert.equal(environment.CASEOPS_MOBILE_APPIUM_URL,
+    transport.appiumUrl, 'ANDROID_TRANSPORT_APPIUM_ENVIRONMENT_MISMATCH');
+  // attestAndroidBinary invokes plain adb; its server must be the same one the
+  // UiAutomator2 driver receives, not the inherited global5037 server.
+  assert.equal(environment.ADB_SERVER_SOCKET, 'tcp:127.0.0.1:5038', 'ANDROID_TRANSPORT_ADB_SOCKET_REQUIRED');
+  if (environment.ANDROID_ADB_SERVER_PORT !== undefined) assert.equal(environment.ANDROID_ADB_SERVER_PORT,
+    String(transport.adbPort), 'ANDROID_TRANSPORT_ADB_ENVIRONMENT_MISMATCH');
+  if (environment.ANDROID_SERIAL !== undefined) assert.equal(environment.ANDROID_SERIAL,
+    fixture.udid, 'ANDROID_TRANSPORT_SERIAL_ENVIRONMENT_MISMATCH');
+  return { appiumUrl: localUrl(transport.appiumUrl), capabilities: {
+    'appium:adbPort': transport.adbPort, 'appium:systemPort': transport.systemPort } };
+}
+
+export function verifyAndroidSessionTransport(fixture, platform, capabilities) {
+  const transport = validateAndroidTransport(fixture, platform);
+  if (!transport) return null;
+  assert.ok(capabilities && typeof capabilities === 'object' && !Array.isArray(capabilities), 'ANDROID_SESSION_CAPABILITIES_REQUIRED');
+  assert.equal(capabilities.platformName, 'Android', 'ANDROID_SESSION_PLATFORM_MISMATCH');
+  // Appium's base driver strips appium: prefixes. Accept either returned form,
+  // but every present alias must agree; an omitted capability is no proof.
+  for (const [key, expected] of Object.entries({ automationName: 'UiAutomator2', udid: fixture.udid,
+    appPackage: fixture.appId, platformVersion: fixture.platformVersion, adbPort: transport.adbPort, systemPort: transport.systemPort })) {
+    const keys = [key, `appium:${key}`].filter(name => Object.hasOwn(capabilities, name));
+    assert.ok(keys.length > 0, 'ANDROID_SESSION_CAPABILITY_MISSING');
+    for (const name of keys) assert.equal(capabilities[name], expected, 'ANDROID_SESSION_CAPABILITY_MISMATCH');
+  }
+  return { type: 'android_transport_verified', source: 'new-session-response', udid: fixture.udid, appId: fixture.appId,
+    appiumUrl: transport.appiumUrl, adbPort: transport.adbPort, systemPort: transport.systemPort };
+}
+
 export function inspectLocalPlan(plan, platform, environment = process.env) {
   noEmbeddedSecrets(plan);
   assert.equal(plan.schemaVersion, 1, 'LOCAL_RUN_PLAN_VERSION_REQUIRED');
@@ -30,6 +86,8 @@ export function inspectLocalPlan(plan, platform, environment = process.env) {
   let build;
   if (plan.buildReceipt) build = readReference(plan.buildReceipt);
   else block('STANDALONE_BUILD_RECEIPT_MISSING', ['buildReceipt']);
+  const androidTransport = validateAndroidTransport({ androidTransport: plan.androidTransport,
+    udid: plan.device?.udid }, platform, build);
   const expected = plan.expectations || {}, sourceMatter = seed.matter;
   const matter = { ...expected.matter, id: sourceMatter.id, identityLabel: sourceMatter.identityLabel, search: sourceMatter.search };
   const suppliedSearches = expected.matter?.searches || [];
@@ -49,6 +107,7 @@ export function inspectLocalPlan(plan, platform, environment = process.env) {
     binarySourceFingerprint: build?.sourceFingerprint,
     binaryVersion: plan.binaryVersion, binaryBuild: plan.binaryBuild,
     deviceName: plan.device?.deviceName, platformVersion: plan.device?.platformVersion, udid: plan.device?.udid,
+    ...(androidTransport ? { androidTransport } : {}),
     principalLabel: seed.principalLabel, workspaceLabel: seed.workspaceLabel,
     companyId: seed.companyId, membershipId: seed.membershipId,
     browserApiMarkerVerified: receipt.webAcceptanceMarkerBuild === true && receipt.webMarkerTransportSourcePresent === true,

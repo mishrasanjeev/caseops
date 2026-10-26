@@ -11,6 +11,7 @@ import { binaryHash } from '../../apps/mobile/e2e/support.mjs';
 const appRoot = fileURLToPath(new URL('../../apps/mobile/', import.meta.url));
 const require = createRequire(path.join(appRoot, 'package.json'));
 const { getConfig } = require('@expo/config');
+const { parse: parsePlist } = require('@expo/plist').default;
 const { acceptanceSettings } = require(path.join(appRoot, 'plugins/with-local-acceptance.cjs'));
 
 function boundedLines(value, limit) {
@@ -223,6 +224,108 @@ export function inspectAndroidAcceptanceResources(apk, sdk, before, directory) {
   return { ...resources, compiledSecurity, apkSha256: hash };
 }
 
+export function decodeIosSimulatorEntitlements(dump) {
+  const lines = boundedLines(dump, 256 * 1024).filter((line) => line.trim());
+  const headers = lines.flatMap((line, index) => line === '(__TEXT,__entitlements) section:' ? [index] : []);
+  assert.equal(headers.length, 1, 'EMBEDDED_SIMULATOR_ENTITLEMENTS_REQUIRED');
+  const chunks = [];
+  let nextAddress, total = 0;
+  for (const line of lines.slice(headers[0] + 1)) {
+    const row = /^0x([0-9a-fA-F]+): ((?:[0-9a-fA-F]{2} ){0,15}[0-9a-fA-F]{2})\s*$/.exec(line);
+    assert.ok(row, 'SIMULATOR_ENTITLEMENT_SECTION_INVALID');
+    const address = Number.parseInt(row[1], 16);
+    assert.ok(Number.isSafeInteger(address) && (nextAddress === undefined || address === nextAddress), 'SIMULATOR_ENTITLEMENT_SECTION_GAP');
+    const bytes = Buffer.from(row[2].replaceAll(' ', ''), 'hex');
+    total += bytes.length;
+    assert.ok(total <= 65536, 'SIMULATOR_ENTITLEMENT_SECTION_BOUND');
+    chunks.push(bytes);
+    nextAddress = address + bytes.length;
+  }
+  const xml = Buffer.concat(chunks).toString('utf8').replace(/\0+$/, '');
+  assert.ok(xml.length > 0 && !xml.includes('\0') && xml.trimStart().startsWith('<?xml'), 'EMBEDDED_SIMULATOR_ENTITLEMENTS_REQUIRED');
+  return xml;
+}
+
+export function parseIosSimulatorEntitlements(dump) {
+  const xml = decodeIosSimulatorEntitlements(dump);
+  return { xml, entitlements: parsePlist(xml) };
+}
+
+export function verifyIosSimulatorSigning(appId, info, entitlements, metadata) {
+  assert.equal(appId, 'ai.caseops.mobile.dev.simulatoracceptance', 'SIMULATOR_ACCEPTANCE_APP_REQUIRED');
+  assert.equal(info.CFBundleIdentifier, appId, 'SIGNED_SIMULATOR_BUNDLE_ID_MISMATCH');
+  assert.equal(info.DTPlatformName, 'iphonesimulator', 'SIMULATOR_BINARY_REQUIRED');
+  assert.deepEqual(info.CFBundleSupportedPlatforms, ['iPhoneSimulator'], 'SIMULATOR_BINARY_REQUIRED');
+  boundedLines(metadata, 1048576);
+  assert.equal(metadata.split(/\r?\n/).filter((line) => line === `Identifier=${appId}`).length, 1, 'SIGNED_BUNDLE_IDENTIFIER_REQUIRED');
+  assert.match(metadata, /^Signature=adhoc$/m, 'SIMULATOR_LOCAL_ADHOC_SIGNING_REQUIRED');
+  assert.doesNotMatch(metadata, /linker-signed|Info\.plist=not bound|Sealed Resources=none/, 'COMPLETE_APP_SIGNATURE_REQUIRED');
+  assert.match(metadata, /^Info\.plist entries=\d+$/m, 'SIGNED_INFO_PLIST_REQUIRED');
+  assert.match(metadata, /^Sealed Resources version=\d+ /m, 'SIGNED_BUNDLE_RESOURCES_REQUIRED');
+  const applicationIdentifier = entitlements['application-identifier'];
+  const suffix = `.${appId}`;
+  assert.ok(typeof applicationIdentifier === 'string' && applicationIdentifier.endsWith(suffix)
+    && /^[A-Za-z0-9]+$/.test(applicationIdentifier.slice(0, -suffix.length)), 'EMBEDDED_APPLICATION_IDENTIFIER_REQUIRED');
+  const declaredGroups = entitlements['keychain-access-groups'];
+  if (Object.hasOwn(entitlements, 'keychain-access-groups')) {
+    assert.ok(Array.isArray(declaredGroups) && declaredGroups.length <= 1
+      && declaredGroups.every((group) => group === applicationIdentifier), 'EXACT_PRIVATE_KEYCHAIN_GROUP_REQUIRED');
+  }
+  const appGroups = entitlements['com.apple.security.application-groups'];
+  if (Object.hasOwn(entitlements, 'com.apple.security.application-groups')) {
+    assert.ok(Array.isArray(appGroups) && appGroups.length === 0, 'SIMULATOR_SHARED_KEYCHAIN_GROUP_FORBIDDEN');
+  }
+  // Apple's access-group list always includes the signed application identifier.
+  // Without explicit Keychain groups it is the default, private access group:
+  // https://developer.apple.com/documentation/security/ksecattraccessgroup
+  return { applicationIdentifier, keychainAccessGroups: [applicationIdentifier],
+    keychainGroupSource: declaredGroups?.length ? 'explicit-private-group' : 'application-identifier-default' };
+}
+
+export function inspectIosSimulatorSigning(artifact, appId, directory) {
+  assert.equal(process.platform, 'darwin', 'ACTUAL_MAC_SIGNING_INSPECTION_REQUIRED');
+  assert.ok(path.isAbsolute(artifact) && path.isAbsolute(directory), 'ABSOLUTE_SIGNING_EVIDENCE_PATH_REQUIRED');
+  const relative = path.relative(artifact, directory);
+  assert.ok(relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative), 'SIGNING_EVIDENCE_MUST_STAY_OUTSIDE_APP');
+  const initialHash = binaryHash(artifact), evidence = [];
+  const run = (binary, args, name) => {
+    const result = spawnSync(binary, args, { encoding: 'utf8', timeout: 20000, maxBuffer: 1048576 });
+    const file = path.join(directory, name);
+    const log = `${result.stdout || ''}${result.stderr || ''}`;
+    writeFileSync(file, log, { flag: 'wx', mode: 0o600 });
+    evidence.push({ path: file, sha256: createHash('sha256').update(log).digest('hex') });
+    assert.ok(!result.error && result.status === 0, 'IOS_SIGNING_INSPECTION_FAILED_SEE_RETAINED_LOGS');
+    return result;
+  };
+  run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', artifact], 'ios-signature-verify.log');
+  const info = JSON.parse(run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path.join(artifact, 'Info.plist')], 'ios-signed-info.json').stdout);
+  assert.ok(typeof info.CFBundleExecutable === 'string' && /^[A-Za-z0-9_.-]+$/.test(info.CFBundleExecutable), 'SIGNED_EXECUTABLE_NAME_REQUIRED');
+  const executable = path.join(artifact, info.CFBundleExecutable);
+  const metadataResult = run('/usr/bin/codesign', ['--display', '--verbose=4', artifact], 'ios-signature-metadata.log');
+  const metadata = `${metadataResult.stdout || ''}${metadataResult.stderr || ''}`;
+  run('/usr/bin/codesign', ['--display', '--entitlements', '-', '--xml', artifact], 'ios-signature-entitlements.log');
+  const architectures = run('/usr/bin/xcrun', ['lipo', '-archs', executable], 'ios-signature-architectures.log').stdout.trim().split(/\s+/);
+  assert.ok(architectures.length > 0 && architectures.length <= 2 && new Set(architectures).size === architectures.length
+    && architectures.every((arch) => ['arm64', 'x86_64'].includes(arch)), 'SIMULATOR_ARCHITECTURES_REQUIRED');
+  const slices = architectures.map((arch) => {
+    // Xcode embeds Simulator entitlements in Mach-O __TEXT rather than necessarily
+    // placing them in the code-signature entitlement blob. Inspect the executable.
+    const dump = run('/usr/bin/xcrun', ['dyld_info', '-arch', arch, '-section_bytes', '__TEXT', '__entitlements', executable], `ios-entitlements-${arch}.log`).stdout;
+    const { xml, entitlements } = parseIosSimulatorEntitlements(dump);
+    const file = path.join(directory, `ios-entitlements-${arch}.plist`);
+    writeFileSync(file, xml, { flag: 'wx', mode: 0o600 });
+    evidence.push({ path: file, sha256: createHash('sha256').update(xml).digest('hex') });
+    return { architecture: arch, ...verifyIosSimulatorSigning(appId, info, entitlements, metadata) };
+  });
+  for (const slice of slices) assert.deepEqual(slice.keychainAccessGroups, slices[0].keychainAccessGroups, 'SIMULATOR_ARCHITECTURE_ENTITLEMENTS_MISMATCH');
+  assert.equal(binaryHash(artifact), initialHash, 'SIGNED_APP_CHANGED_DURING_INSPECTION');
+  return { kind: 'ios-simulator-ad-hoc-signing', appId, strictVerified: true, signingIdentity: '-',
+    applicationIdentifier: slices[0].applicationIdentifier, keychainAccessGroups: slices[0].keychainAccessGroups,
+    keychainGroupSource: slices[0].keychainGroupSource,
+    entitlementsLocation: 'Mach-O __TEXT,__entitlements', slices, evidence, artifactSha256: initialHash,
+    distributionSigning: false, nativeExecution: 'not-run-by-signing-verifier' };
+}
+
 export function checkBuildConfig(platform) {
   const settings = acceptanceSettings(process.env);
   assert.equal(settings?.platform, platform, 'MATCHED_ACCEPTANCE_PROFILE_REQUIRED');
@@ -242,7 +345,7 @@ export function checkBuildConfig(platform) {
     nativeExecution: 'not-run-by-build-wrapper' };
 }
 
-export function finishBuild(platform, before, artifact, embeddedConfig, androidSecurity) {
+export function finishBuild(platform, before, artifact, embeddedConfig, nativeSecurity) {
   const after = checkBuildConfig(platform);
   assert.deepEqual(after, before, 'SOURCE_OR_CONFIGURATION_CHANGED_DURING_BUILD');
   assert.ok(path.isAbsolute(artifact), 'ABSOLUTE_ARTIFACT_REQUIRED');
@@ -252,12 +355,18 @@ export function finishBuild(platform, before, artifact, embeddedConfig, androidS
   assert.equal(embeddedConfig.extra.releaseSha, after.sourceSha, 'EMBEDDED_SOURCE_MISMATCH');
   if (platform === 'ios') assert.equal(embeddedConfig.ios.bundleIdentifier, after.appId, 'EMBEDDED_QA_BUNDLE_ID_REQUIRED');
   const hash = binaryHash(artifact);
-  if (platform === 'android' && androidSecurity) {
-    assert.equal(androidSecurity.kind, 'compiled-android-acceptance-security', 'COMPILED_ANDROID_SECURITY_PROOF_REQUIRED');
-    assert.equal(androidSecurity.apkSha256, hash, 'ANDROID_SECURITY_ARTIFACT_MISMATCH');
-    assert.equal(androidSecurity.publicCaSha256, before.publicCaSha256, 'ANDROID_SECURITY_CA_MISMATCH');
+  if (platform === 'android' && nativeSecurity) {
+    assert.equal(nativeSecurity.kind, 'compiled-android-acceptance-security', 'COMPILED_ANDROID_SECURITY_PROOF_REQUIRED');
+    assert.equal(nativeSecurity.apkSha256, hash, 'ANDROID_SECURITY_ARTIFACT_MISMATCH');
+    assert.equal(nativeSecurity.publicCaSha256, before.publicCaSha256, 'ANDROID_SECURITY_CA_MISMATCH');
   }
-  return { ...after, artifact, binaryHash: hash, ...(androidSecurity ? { androidSecurity } : {}),
+  if (platform === 'ios') {
+    assert.equal(nativeSecurity?.kind, 'ios-simulator-ad-hoc-signing', 'IOS_SIMULATOR_SIGNING_PROOF_REQUIRED');
+    assert.equal(nativeSecurity.appId, before.appId, 'SIGNED_SIMULATOR_BUNDLE_ID_MISMATCH');
+    assert.equal(nativeSecurity.strictVerified, true, 'STRICT_SIMULATOR_SIGNATURE_REQUIRED');
+    assert.equal(nativeSecurity.artifactSha256, hash, 'IOS_SIGNING_ARTIFACT_MISMATCH');
+  }
+  return { ...after, artifact, binaryHash: hash, ...(nativeSecurity ? { [platform === 'android' ? 'androidSecurity' : 'iosSigning']: nativeSecurity } : {}),
     binaryHashKind: 'sha256-file-or-canonical-bundle-tree' };
 }
 
@@ -296,8 +405,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   else {
     assert.equal(command, 'finish', 'UNKNOWN_BUILD_COMMAND');
     if (platform === 'android') assert.ok(androidProofFile, 'COMPILED_ANDROID_SECURITY_PROOF_REQUIRED');
-    result = finishBuild(platform, JSON.parse(readFileSync(beforeFile, 'utf8')),
-      artifact, JSON.parse(readFileSync(configFile, 'utf8')), androidProofFile ? readJson(androidProofFile) : undefined);
+    const before = JSON.parse(readFileSync(beforeFile, 'utf8'));
+    const nativeSecurity = platform === 'ios' ? inspectIosSimulatorSigning(artifact, before.appId, path.dirname(outputFile))
+      : androidProofFile ? readJson(androidProofFile) : undefined;
+    result = finishBuild(platform, before, artifact, JSON.parse(readFileSync(configFile, 'utf8')), nativeSecurity);
   }
   const json = `${JSON.stringify(result, null, 2)}\n`;
   const destination = command === 'check' ? beforeFile : outputFile;

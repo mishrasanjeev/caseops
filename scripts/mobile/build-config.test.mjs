@@ -26,19 +26,65 @@ test('mobile CI selects every tooling module and audits before either platform e
   const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
   const steps = workflow.jobs.source.steps;
   const expected = ['scripts/mobile/build-config.test.mjs', 'scripts/mobile/tooling.test.mjs',
-    'scripts/mobile/local-owner-controls.test.mjs', 'apps/mobile/e2e/files-20261025.test.mjs'];
+    'scripts/mobile/local-owner-controls.test.mjs', 'apps/mobile/e2e/files-20261025.test.mjs',
+    'apps/mobile/e2e/ios-files.test.mjs',
+    'scripts/mobile/ios-browser-context.test.mjs', 'scripts/mobile/ios-native-locators.test.mjs',
+    'scripts/mobile/ios-simulator-signing.test.mjs',
+    'scripts/mobile/prepare-gateway-routes.test.mjs',
+    'scripts/mobile/prepare-ios-local-run.test.mjs', 'scripts/mobile/ios-files-privacy.test.mjs',
+    'scripts/mobile/run-ios-files.test.mjs',
+    'scripts/mobile/filesystem-security.test.mjs', 'scripts/mobile/build-android-local-acceptance.test.mjs',
+    'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
   const harness = steps.find(step => step.name === 'Verify the native evidence harness');
   assert.equal(harness.run, `node --test ${expected.join(' ')}`);
+  const fixturePreparation = steps.find(step => step.name === 'Verify isolated fixture preparation and gateway');
+  assert.equal(fixturePreparation?.run, 'python3 scripts/mobile/local-fixture.test.py');
+  const filesFixtureCommands = [
+    ['Verify synthetic iOS Files picker inputs', 'python3 scripts/mobile/prepare-ios-files-fixture.test.py'],
+    ['Verify acknowledged iOS Files source admission', 'python3 scripts/mobile/admit-ios-file-source.test.py'],
+  ];
+  for (const [name, command] of filesFixtureCommands) {
+    const matches = steps.filter(step => step.name === name);
+    assert.equal(matches.length, 1, 'EXACT_FILES_FIXTURE_CI_STEP_REQUIRED');
+    assert.equal(matches[0].run, command, 'FILES_FIXTURE_REGRESSION_CI_COMMAND_REQUIRED');
+    assert.notEqual(matches[0]['continue-on-error'], true);
+    assert.equal(matches[0].if, undefined, 'FILES_FIXTURE_CI_MUST_RUN_UNCONDITIONALLY');
+    assert.ok(!matches[0]['working-directory'] || matches[0]['working-directory'] === '.', 'FILES_FIXTURE_CI_REPOSITORY_ROOT_REQUIRED');
+    assert.ok(existsSync(path.join(repo, command.split(' ')[1])), 'FILES_FIXTURE_TEST_SOURCE_REQUIRED');
+  }
   const audit = steps.findIndex(step => step.name === 'Enforce the unwaived high-severity dependency gate');
   assert.ok(audit >= 0);
   assert.equal(steps[audit].run, 'npm audit --audit-level=high');
   assert.notEqual(steps[audit]['continue-on-error'], true);
+  for (const [, command] of filesFixtureCommands) {
+    assert.ok(steps.findIndex(step => step.run === command) < audit, 'FILES_FIXTURE_REGRESSIONS_MUST_PRECEDE_PLATFORM_EXPORT_GATE');
+  }
   for (const command of ['npm run export:android', 'npm run export:ios']) {
     const exporting = steps.findIndex(step => step.run === command);
     assert.ok(exporting > audit, 'DEPENDENCY_AUDIT_MUST_PRECEDE_PLATFORM_EXPORT');
+  }
+});
+
+test('mobile source CI installs the renderer browser and both locked dependency graphs', () => {
+  const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
+  const steps = workflow.jobs.source.steps;
+  const isRoot = (step) => !step['working-directory'] || step['working-directory'] === '.';
+  const rootInstall = steps.findIndex(step => isRoot(step) && step.run === 'npm ci --include=dev');
+  const mobileInstall = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'npm ci');
+  const browserInstall = steps.findIndex(step => isRoot(step) && step.run === 'npx --no-install playwright install --with-deps chromium');
+  const typecheck = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'npm run typecheck');
+  const tests = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'npm test');
+  assert.ok(rootInstall >= 0 && mobileInstall >= 0 && browserInstall >= 0);
+  assert.ok(rootInstall < typecheck && mobileInstall < typecheck);
+  assert.ok(rootInstall < browserInstall && browserInstall < tests);
+  const nodeSetup = steps.find(step => step.uses === 'actions/setup-node@v4');
+  assert.deepEqual(nodeSetup.with['cache-dependency-path'].trim().split(/\s+/).sort(),
+    ['apps/mobile/package-lock.json', 'package-lock.json']);
+  for (const event of ['push', 'pull_request']) {
+    for (const dependency of ['package.json', 'package-lock.json']) assert.ok(workflow.on[event].paths.includes(dependency));
   }
 });
 
@@ -414,7 +460,10 @@ test('build wrappers never start Metro, use distinct standalone tasks and retain
   assert.match(android, /GetEntry\('assets\/index.android.bundle'\)/);
   assert.match(android, /application-debuggable/);
   assert.match(ios, /-configuration Release/);
-  assert.match(ios, /CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO/);
+  assert.match(ios, /CODE_SIGNING_ALLOWED=YES/);
+  assert.match(ios, /CODE_SIGN_IDENTITY=-/);
+  assert.match(ios, /CODE_SIGN_INJECT_BASE_ENTITLEMENTS=YES/);
+  assert.doesNotMatch(ios, /CODE_SIGNING_ALLOWED=NO|CODE_SIGNING_REQUIRED=NO/);
   assert.match(ios, /test -s "\$app\/main.jsbundle"/);
   for (const script of [android, ios]) {
     assert.doesNotMatch(script, /expo[^\n]* start |Set-ExecutionPolicy|ExecutionPolicy Bypass|--insecure|NODE_TLS_REJECT_UNAUTHORIZED|allowProvisioningUpdates/);

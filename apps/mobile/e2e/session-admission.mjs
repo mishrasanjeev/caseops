@@ -38,6 +38,9 @@ export function validateSessionDeletePolicy(descriptor, routeEvidence, isolation
   assert.ok(Array.isArray(descriptor.routes) && descriptor.routes.length <= 500
     && descriptor.routes.every((route) => typeof route === 'string' && route.length <= 400), 'GATEWAY_ROUTE_INVENTORY_REQUIRED');
   assert.equal(new Set(descriptor.routes).size, descriptor.routes.length, 'DUPLICATE_GATEWAY_ROUTE');
+  if (descriptor.routeInventoryEvidence) {
+    assert.deepEqual(readReference(descriptor.routeInventoryEvidence).routes, descriptor.routes, 'GATEWAY_ROUTE_SOURCE_CHANGED');
+  }
   assert.ok(descriptor.routes.includes(SOURCE), 'DEVICE_SESSION_LIST_ROUTE_MISSING');
   const deletes = descriptor.routes.filter((route) => route.startsWith('DELETE /api/auth/native/sessions'));
   for (const route of deletes) assert.match(route, DELETE_ROUTE, 'SESSION_DELETE_WILDCARD_FORBIDDEN');

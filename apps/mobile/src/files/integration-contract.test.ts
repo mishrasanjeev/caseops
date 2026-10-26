@@ -49,9 +49,12 @@ test("MOB-22 source contract: real upload remains multipart file and response re
   assert.match(schemas, /storage_governance: StorageUploadPolicy/);
 });
 
-test("MOB-25 root-owned picker has no forced copy; screen never launches or resumes it or exports private bytes", () => {
+test("MOB-25 root-owned picker owns the readable iOS SDK copy; Android keeps its URI and neither exports private bytes", () => {
   const native = read("./native.ts");
-  assert.match(native, /copyToCacheDirectory: false/);
+  assert.match(native, /copyToCacheDirectory: Platform\.OS === "ios"/);
+  assert.match(native, /pickPrivateIosCopy\(/);
+  assert.match(native, /privatePickerCopies\.cleanupPickedFile\(asset\)/);
+  assert.match(native, /privatePickerCopies\.purge\(\)/);
   assert.match(native, /multiple: false/);
   assert.match(native, /base64: false/);
   const screen = read("../application/screens/FilesScreen.tsx");

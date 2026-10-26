@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   Text,
@@ -101,11 +100,9 @@ export function NoteEditor({
     }
   };
   return (
-    <KeyboardAvoidingView
-      style={styles.fill}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={styles.fill}>
       <ScrollView
+        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
       >
@@ -220,6 +217,6 @@ export function NoteEditor({
           draft.
         </Text>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }

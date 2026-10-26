@@ -6,6 +6,7 @@ import { createMatterFilesApi } from "./api.ts";
 import type { StagedFile } from "./api.ts";
 import { createFilesController } from "./controller.ts";
 import { TempCleanupError } from "./staging.ts";
+import { createNativePreparationDiagnostics } from "./native-preparation-diagnostics.ts";
 import {
   attachmentFixture,
   bytes,
@@ -339,6 +340,21 @@ test("MOB-25 duplicate tap and disposal during native preparation never submit f
   assert.equal(run.counts().cleanups, 1);
   assert.equal(run.controller.getSnapshot().view.state, "inactive");
   assert.equal(run.controller.getSnapshot().upload.state, "idle");
+});
+test("QA preparation failure carries only a fixed memory diagnostic while production errors retain safe user copy", async () => {
+  for (const enabled of [false, true]) {
+    const error = new Error("file:///private/source?secret=value"), diagnostic = createNativePreparationDiagnostics(enabled, () => {});
+    const run = setup({ prepare: async () => { diagnostic.failed("source-open"); diagnostic.report(error); throw error; } });
+    await run.controller.activate();
+    await run.controller.submit(selection);
+    const result = run.controller.getSnapshot();
+    assert.equal(result.upload.state, "rejected");
+    assert.equal(result.upload.preparationStep, enabled ? "source-open" : undefined);
+    assert.match(result.upload.message, /could not be prepared safely/);
+    assert.equal(JSON.stringify(result).includes("file:///private/source"), false);
+    assert.equal(JSON.stringify(result).includes("secret=value"), false);
+    assert.equal(run.counts().uploads, 0);
+  }
 });
 
 test("MOB-26 dispose during access readback aborts and purges private state; late response cannot start upload", async () => {

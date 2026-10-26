@@ -57,6 +57,7 @@ build/
 node_modules/
 .e2e/
 playwright-report/
+outputs/mobile-web-auth/
 test-results/
 tests/e2e/.auth/
 e2e-screenshots/

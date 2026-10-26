@@ -26,12 +26,13 @@ node ./node_modules/expo/bin/cli prebuild --platform ios --no-install 2>&1 | tee
 cp ios/Podfile.lock "$run/Podfile.lock"
 xcodebuild -workspace ios/CaseOps.xcworkspace -scheme CaseOps -configuration Release \
   -sdk iphonesimulator -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-  -derivedDataPath "$run/DerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+  -derivedDataPath "$run/DerivedData" -jobs 4 \
+  CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_INJECT_BASE_ENTITLEMENTS=YES \
   build 2>&1 | tee "$run/xcodebuild.log"
 app="$run/DerivedData/Build/Products/Release-iphonesimulator/CaseOps.app"
 test -s "$app/main.jsbundle"
 test "$(plutil -extract CFBundleIdentifier raw -o - "$app/Info.plist")" = ai.caseops.mobile.dev.simulatoracceptance
 node "$repo/scripts/mobile/build-acceptance.mjs" finish ios "$run/before.json" "$app" \
   "$app/EXConstants.bundle/app.config" "$run/receipt.json" 2>&1 | tee "$run/finish.log"
-printf 'Unsigned standalone simulator build only: %s\n' "$app"
+printf 'Locally ad-hoc-signed standalone simulator build only: %s\n' "$app"
 printf 'Owner/parent must separately install, launch, and run the native acceptance inventory.\n'

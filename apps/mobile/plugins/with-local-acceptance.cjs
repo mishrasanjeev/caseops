@@ -33,21 +33,31 @@ function readPublicCa(file, expectedSha256, now = Date.now()) {
   assert.ok(file && path.isAbsolute(file), 'EXTERNAL_PUBLIC_CA_FILE_REQUIRED');
   assert.match(expectedSha256 || '', /^[a-f0-9]{64}$/, 'PUBLIC_CA_SHA256_REQUIRED');
   const resolved = fs.realpathSync(file);
-  const git = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], {
-    cwd: path.dirname(resolved), encoding: 'utf8', windowsHide: true,
-    env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
-  });
-  assert.ok(!git.error && git.status === 128 && /not a git repository/.test(git.stderr), 'PUBLIC_CA_MUST_BE_OUTSIDE_GIT');
-  const size = fs.statSync(resolved).size;
-  assert.ok(size > 0 && size <= 16384, 'PUBLIC_CA_SIZE_BOUND');
-  const pem = fs.readFileSync(resolved, 'utf8');
-  assert.match(pem, /^-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+\r?\n-----END CERTIFICATE-----\r?\n?$/, 'ONE_PUBLIC_CERTIFICATE_ONLY');
-  const sha256 = createHash('sha256').update(pem).digest('hex');
-  assert.equal(sha256, expectedSha256, 'PUBLIC_CA_HASH_MISMATCH');
-  const cert = new X509Certificate(pem);
-  assert.ok(cert.ca && cert.checkIssued(cert) && cert.verify(cert.publicKey), 'SELF_SIGNED_CA_REQUIRED');
-  assert.ok(Date.parse(cert.validFrom) <= now && now < Date.parse(cert.validTo), 'PUBLIC_CA_NOT_CURRENT');
-  return { pem, sha256, fingerprint256: cert.fingerprint256 };
+  const fd = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+  try {
+    const opened = fs.fstatSync(fd, { bigint: true });
+    assert.ok(opened.isFile() && opened.size > 0n && opened.size <= 16384n, 'PUBLIC_CA_SIZE_BOUND');
+    const named = fs.lstatSync(resolved, { bigint: true });
+    // Windows lstat reports dev=0 while fstat supplies a volume identity.
+    assert.ok(named.isFile() && !named.isSymbolicLink() && named.ino === opened.ino
+      && (process.platform === 'win32' || named.dev === opened.dev), 'PUBLIC_CA_FILE_REPLACED');
+    const git = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], {
+      cwd: path.dirname(resolved), encoding: 'utf8', windowsHide: true,
+      env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
+    });
+    assert.ok(!git.error && git.status === 128 && /not a git repository/.test(git.stderr), 'PUBLIC_CA_MUST_BE_OUTSIDE_GIT');
+    const pem = fs.readFileSync(fd, 'utf8');
+    const after = fs.fstatSync(fd, { bigint: true });
+    assert.ok(opened.size === after.size && opened.mtimeNs === after.mtimeNs && opened.ctimeNs === after.ctimeNs
+      && BigInt(Buffer.byteLength(pem)) === opened.size, 'PUBLIC_CA_FILE_CHANGED');
+    assert.match(pem, /^-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+\r?\n-----END CERTIFICATE-----\r?\n?$/, 'ONE_PUBLIC_CERTIFICATE_ONLY');
+    const sha256 = createHash('sha256').update(pem).digest('hex');
+    assert.equal(sha256, expectedSha256, 'PUBLIC_CA_HASH_MISMATCH');
+    const cert = new X509Certificate(pem);
+    assert.ok(cert.ca && cert.checkIssued(cert) && cert.verify(cert.publicKey), 'SELF_SIGNED_CA_REQUIRED');
+    assert.ok(Date.parse(cert.validFrom) <= now && now < Date.parse(cert.validTo), 'PUBLIC_CA_NOT_CURRENT');
+    return { pem, sha256, fingerprint256: cert.fingerprint256 };
+  } finally { fs.closeSync(fd); }
 }
 
 function acceptanceSettings(env) {

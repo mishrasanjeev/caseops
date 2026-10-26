@@ -3,10 +3,10 @@ name: Mobile source gates
 on:
   pull_request:
     branches: [main]
-    paths: ["apps/mobile/**", "apps/api/**", "apps/web/app/native/**", "apps/web/lib/native-authorization*", "apps/web/lib/safe-next-path*", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml"]
+    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/app/native/**", "apps/web/lib/native-authorization*", "apps/web/lib/safe-next-path*", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml"]
   push:
     branches: [main]
-    paths: ["apps/mobile/**", "apps/api/**", "apps/web/app/native/**", "apps/web/lib/native-authorization*", "apps/web/lib/safe-next-path*", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml"]
+    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/app/native/**", "apps/web/lib/native-authorization*", "apps/web/lib/safe-next-path*", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml"]
 
 permissions:
   contents: read
@@ -37,10 +37,11 @@ jobs:
 
   source:
     name: Mobile source, not device acceptance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       CASEOPS_MOBILE_AUTOMATED_TEST: "1"
+      PYTHON: "python3"
       CASEOPS_MOBILE_RELEASE_SHA: ${{ github.sha }}
       EXPO_PUBLIC_API_ORIGIN: http://127.0.0.1:8000
       EXPO_PUBLIC_WEB_ORIGIN: http://127.0.0.1:3000
@@ -50,10 +51,16 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: apps/mobile/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            apps/mobile/package-lock.json
+      - name: Install the shared browser test dependency graph
+        run: npm ci --include=dev
       - name: Install the isolated native dependency graph
         working-directory: apps/mobile
         run: npm ci
+      - name: Install the locked Chromium test browser
+        run: npx --no-install playwright install --with-deps chromium
       - name: Type-check both platform adapters
         working-directory: apps/mobile
         run: npm run typecheck
@@ -61,7 +68,13 @@ jobs:
         working-directory: apps/mobile
         run: npm test
       - name: Verify the native evidence harness
-        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs
+        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs apps/mobile/e2e/ios-files.test.mjs scripts/mobile/ios-browser-context.test.mjs scripts/mobile/ios-native-locators.test.mjs scripts/mobile/ios-simulator-signing.test.mjs scripts/mobile/prepare-gateway-routes.test.mjs scripts/mobile/prepare-ios-local-run.test.mjs scripts/mobile/ios-files-privacy.test.mjs scripts/mobile/run-ios-files.test.mjs scripts/mobile/filesystem-security.test.mjs scripts/mobile/build-android-local-acceptance.test.mjs scripts/mobile/android-native-proof.test.mjs scripts/mobile/prepare-android-local-run.test.mjs
+      - name: Verify isolated fixture preparation and gateway
+        run: python3 scripts/mobile/local-fixture.test.py
+      - name: Verify synthetic iOS Files picker inputs
+        run: python3 scripts/mobile/prepare-ios-files-fixture.test.py
+      - name: Verify acknowledged iOS Files source admission
+        run: python3 scripts/mobile/admit-ios-file-source.test.py
       - name: Enforce the unwaived high-severity dependency gate
         working-directory: apps/mobile
         run: npm audit --audit-level=high
@@ -74,7 +87,7 @@ jobs:
 
   browser-handoff:
     name: Local built-browser handoff, not native E2E
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000

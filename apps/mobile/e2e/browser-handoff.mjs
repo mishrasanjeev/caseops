@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { click, find, read, selector, visible } from './native-ui.mjs';
+import { click, dispatchNativeClick, find, read, selector, swipe, visible } from './native-ui.mjs';
 import { firefoxLogin } from './firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage } from './mfa.mjs';
 import { browserStep } from './browser-progress.mjs';
@@ -60,8 +60,74 @@ async function domPress(context, key, css) {
   await control.click();
 }
 
-async function attachBrowser(context) {
+async function iosAuthorizationContexts(context) {
   const { driver, fixture, platform } = context;
+  browserStep(context, 'browser-context', 'read');
+  // The pinned XCUITest metadata command identifies each page without attaching
+  // its inspector. A context already represents one page; its process-wide
+  // window list can include unrelated and retained authorization pages.
+  const contexts = await driver.execute('mobile: getContexts', { waitForWebviewMs: 0 });
+  assert.ok(Array.isArray(contexts) && contexts.length <= 8, 'SYSTEM_BROWSER_CONTEXT_BOUND');
+  const candidates = [];
+  for (const entry of contexts) {
+    assert.ok(entry && typeof entry === 'object' && typeof entry.id === 'string', 'IOS_BROWSER_CONTEXT_METADATA_REQUIRED');
+    if (entry.id === 'NATIVE_APP') continue;
+    assert.equal(typeof entry.url, 'string', 'IOS_BROWSER_CONTEXT_METADATA_REQUIRED');
+    const url = new URL(entry.url);
+    const nativeLoginReturn = url.pathname === '/sign-in'
+      && url.searchParams.getAll('next').some((next) => next.startsWith('/native/sign-in'));
+    if (url.origin !== browserOrigin(fixture.auth.webOrigin)
+      || !(url.pathname === '/native/sign-in' || nativeLoginReturn)) continue;
+    // Validate even retained pages before ignoring their identities. A malformed
+    // native-looking page must never become an ordinary unrelated browser tab.
+    const identity = authorizationIdentity(url.href, fixture.auth.webOrigin, platform);
+    if (!fixture.auth.context || entry.id === fixture.auth.context) candidates.push({ name: entry.id, identity });
+  }
+  return candidates;
+}
+
+async function attachIosBrowser(context, before) {
+  const { driver, fixture, platform } = context;
+  const inspect = async (candidate) => {
+    browserStep(context, 'browser-context', 'switch-context');
+    await driver.switchContext(candidate.name);
+    assert.ok(await driver.getWindowHandle(), 'CURRENT_SYSTEM_BROWSER_WINDOW_REQUIRED');
+    assert.ok(JSON.stringify(authorizationIdentity(await driver.getUrl(), fixture.auth.webOrigin, platform))
+      === JSON.stringify(candidate.identity), 'BROWSER_CONTEXT_METADATA_CHANGED');
+    browserStep(context, 'browser-context', 'read');
+    const foreground = await driver.execute(() => ({ visibilityState: document.visibilityState, hasFocus: document.hasFocus() }));
+    assert.ok(foreground && typeof foreground.visibilityState === 'string' && typeof foreground.hasFocus === 'boolean',
+      'SYSTEM_BROWSER_FOREGROUND_PROOF_REQUIRED');
+    return foreground.visibilityState === 'visible' && foreground.hasFocus;
+  };
+  let selected;
+  browserStep(context, 'browser-context', 'wait');
+  await driver.waitUntil(async () => {
+    // waitUntil may retry a rejected inspection while still in that web page.
+    // Every readiness read must therefore restore the native context first.
+    await driver.switchContext('NATIVE_APP');
+    // During ASWebAuthenticationSession's presentation transition the inspector
+    // can report a retained page before the current sheet is ready. Stay native
+    // until its exact Cancel button is visible and enabled.
+    const cancel = await visible(driver, '-ios predicate string:type == "XCUIElementTypeButton" AND (label == "Cancel" OR name == "Cancel")');
+    if (!cancel || !await cancel.isEnabled()) return false;
+    const candidates = (await iosAuthorizationContexts(context))
+      .filter(({ identity }) => !before.has(JSON.stringify(identity)));
+    const foreground = [];
+    // The metadata can retain a hidden authorization page which was absent
+    // before presentation. Inspect only strictly validated native pages and
+    // require both document visibility and focus for the current handoff.
+    for (const candidate of candidates) if (await inspect(candidate)) foreground.push(candidate);
+    assert.ok(foreground.length <= 1, 'AMBIGUOUS_SYSTEM_BROWSER');
+    selected = foreground[0];
+    return !!selected;
+  }, { timeout: 20000, interval: 500, timeoutMsg: 'SYSTEM_BROWSER_CONTEXT_UNAVAILABLE' });
+  assert.equal(await inspect(selected), true, 'SYSTEM_BROWSER_FOREGROUND_CHANGED');
+}
+
+async function attachBrowser(context, before) {
+  const { driver, fixture, platform } = context;
+  if (platform === 'ios') return attachIosBrowser(context, before);
   let selected;
   browserStep(context, 'browser-context', 'wait');
   await driver.waitUntil(async () => {
@@ -79,7 +145,13 @@ async function attachBrowser(context) {
       for (const handle of handles) {
         await driver.switchToWindow(handle);
         const url = new URL(await driver.getUrl());
-        if (url.origin === browserOrigin(fixture.auth.webOrigin) && ['/native/sign-in', '/sign-in'].includes(url.pathname)) {
+        const nativeLoginReturn = url.pathname === '/sign-in'
+          && url.searchParams.getAll('next').some((next) => next.startsWith('/native/sign-in'));
+        // A prior ordinary Safari login tab is not this app's authorization
+        // session. Native-looking return URLs still undergo the strict query,
+        // PKCE, callback and platform checks below before any credential write.
+        if (url.origin === browserOrigin(fixture.auth.webOrigin)
+          && (url.pathname === '/native/sign-in' || nativeLoginReturn)) {
           authorizationIdentity(url.href, fixture.auth.webOrigin, platform);
           candidates.push({ name, handle });
         }
@@ -99,6 +171,10 @@ export async function browserLogin(context) {
   const stage = mfaStage(fixture.auth);
   const credentials = loginCredentials(fixture.auth);
   browserOrigin(fixture.auth.webOrigin);
+  // App.tsx creates a fresh verifier/challenge and state for every sign-in
+  // attempt. Keep prior valid identities only in memory, never in run evidence.
+  const before = platform === 'ios' && fixture.auth.mode !== 'native-firefox'
+    ? new Set((await iosAuthorizationContexts(context)).map(({ identity }) => JSON.stringify(identity))) : undefined;
   browserStep(context, 'sign-in', 'click');
   await click(context, 'id', 'sign-in');
   if (fixture.auth.mode === 'native-firefox') {
@@ -113,14 +189,14 @@ export async function browserLogin(context) {
       browserStep(context, 'ios-consent', 'wait');
       await driver.waitUntil(async () => {
         try { await driver.getAlertText(); return true; }
-        catch (error) { if (/no such alert|no alert/i.test(error.message)) return false; throw error; }
+        catch (error) { if (error.name === 'no such alert' || /no such alert|no alert/i.test(error.message)) return false; throw error; }
       }, { timeout: 5000, interval: 200 });
       const buttons = await driver.execute('mobile: alert', { action: 'getButtons' });
       assert.ok(buttons.includes('Continue'), 'IOS_AUTH_CONSENT_NOT_RECOGNIZED');
       browserStep(context, 'ios-consent', 'click');
       await driver.execute('mobile: alert', { action: 'accept', buttonLabel: 'Continue' });
     }
-    await attachBrowser(context);
+    await attachBrowser(context, before);
     browserStep(context, 'handoff', 'read');
     handoff = authorizationIdentity(await driver.getUrl(), fixture.auth.webOrigin, platform);
     const another = await driver.$$('a[href^="/sign-in?next="]');
@@ -227,14 +303,55 @@ async function waitForSessionReady(context, { signedOutOnly = false } = {}) {
   }, { timeout: 20000, interval: 200, timeoutMsg: 'NATIVE_SESSION_NOT_READY' });
 }
 
+async function settleIosFreshAccount(context) {
+  const { driver, fixture } = context;
+  let signOut, identityFailure, identityVerified = false, scrolls = 0;
+  await driver.waitUntil(async () => {
+    signOut = undefined;
+    if (await visible(driver, '~session-loading')) return false;
+    const signedOut = await visible(driver, '~signed-out');
+    const signIn = await visible(driver, '~sign-in');
+    // Automatic session expiry can finish while Account is opening. Its
+    // completed signed-out state needs a new browser/MFA journey, not another
+    // attempt to locate or invoke the former account's sign-out control.
+    if (signedOut || signIn) return !!signedOut && !!signIn && await signIn.isEnabled();
+    const principal = await visible(driver, '~account-principal');
+    const workspace = await visible(driver, '~account-workspace');
+    if (principal && workspace) {
+      if (await principal.getText() !== fixture.principalLabel) { identityFailure = 'WRONG_PRINCIPAL'; return true; }
+      if (await workspace.getText() !== fixture.workspaceLabel) { identityFailure = 'WRONG_WORKSPACE'; return true; }
+      identityVerified = true;
+    }
+    if (!identityVerified) return false;
+    signOut = await visible(driver, '~sign-out');
+    if (signOut && await signOut.isEnabled()) return true;
+    if (scrolls < 9) { scrolls++; await swipe(context, 'down'); }
+    return false;
+  }, { timeout: 20000, interval: 200, timeoutMsg: 'NATIVE_FRESH_ACCOUNT_NOT_READY' });
+  // WebDriver waitUntil retries callback rejections. Carry an observed wrong
+  // identity out as a terminal result so a later expiry cannot erase it.
+  if (identityFailure) throw new Error(identityFailure);
+  context.record?.({ type: 'assertion', boundary: 'native-fresh-authentication-settled',
+    state: signOut ? 'verified-account' : 'automatic-sign-out' });
+  return signOut;
+}
+
 export async function authenticate(context, { fresh = false } = {}) {
   const { driver, fixture, platform } = context;
   await driver.switchContext('NATIVE_APP');
   await waitForSessionReady(context);
   if (fresh && await visible(driver, selector(platform, 'id', 'account-open'))) {
     await click(context, 'id', 'account-open');
-    await click(context, 'id', 'sign-out', { scroll: true });
-    await find(context, 'id', 'signed-out');
+    if (platform === 'ios') {
+      const signOut = await settleIosFreshAccount(context);
+      if (signOut) {
+        await dispatchNativeClick(context, signOut, 'id', 'sign-out');
+        await find(context, 'id', 'signed-out');
+      }
+    } else {
+      await click(context, 'id', 'sign-out', { scroll: true });
+      await find(context, 'id', 'signed-out');
+    }
     await waitForSessionReady(context, { signedOutOnly: true });
   }
   if (!await visible(driver, selector(platform, 'id', 'account-open'))) await browserLogin(context);

@@ -1,5 +1,29 @@
 # CaseOps  - Work To Be Done
 
+## October 26 Two-Platform Store Preparation
+
+J20/M22 remains **Partially implemented; release NO-GO**. PR #558 is being
+integrated with current main while the remaining native iOS Files cases and
+fresh Mac Android acceptance are completed. Earlier platform receipts retain
+their original binary/source identities; they do not certify the merged release.
+The iOS private Inbox leak and independent rapid-input cleanup race have source
+repairs and regression evidence. A new iOS candidate uses Expo's documented
+cache-copy contract for the reproduced unreadable raw picker URI; its complete
+native Files and replacement core runs remain required. The SDK copy occurs
+before JavaScript size validation. No ambiguous upload is replayed and all failed
+runs remain retained.
+
+The selected publisher is **Orchestrum Technologies LLP from the first release**.
+D-U-N-S, Apple organization membership, Play organization account, final app
+identities and distribution signing are not provisioned. Android's seven
+approved SDK packages are installed and verified. The Expo/node-forge high
+advisory remains unpatched and blocks release. The Python OpenTelemetry repair
+passes its current installed audit and scoped regressions; that does not waive
+Linux/Docker, full CI or deployed acceptance. Production HTTPS app links also
+need implementation and native proof: the current local custom-scheme callback
+does not satisfy the non-local API's registered HTTPS-only policy.
+Current evidence and enrollment steps: [store preparation](mobile/STORE_RELEASE_2026-10-26.md).
+
 ## October 25 Android Core Result
 
 J20/M22: **23/23 dated Android core cases pass** on the real Android16/API36
@@ -77,6 +101,14 @@ viewer/cache behavior require actual contracts and proof. Preserve existing
 server owners and keep private offline mutation queues, lifecycle commands,
 paid AI generation and formal legal approvals outside v1. iOS needs approved
 macOS/Xcode/signing/device access; workstation Docker is not iOS acceptance.
+
+## October 25 Security Dependency Closure
+
+Issue559 is the current release priority under QG-SEC-001/002/004. Candidate
+dependency repair and parser/cache-lock regressions are present; Docker, current
+hosted gates, protected merge and exact production replay are not yet complete.
+Do not merge unfinished mobile development or describe a manifest change as a
+shipped fix. See `security/dependency-security-559-2026-10-25.md`.
 
 ## October 23 Batch 3 Replacement Release
 

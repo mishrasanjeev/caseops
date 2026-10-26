@@ -7,6 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.meta.url))) {
   const paths = ['apps/mobile', 'package.json', 'package-lock.json',
     'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/build-android-local-acceptance.ps1',
+    'scripts/mobile/build-android-local-acceptance.sh',
+    'scripts/mobile/generate-app-icons.mjs',
     'scripts/mobile/build-ios-simulator-acceptance.sh', 'scripts/mobile/source-snapshot.mjs',
     'scripts/mobile/windows-native-paths.gradle', 'scripts/mobile/use-android-env.ps1',
     'scripts/mobile/android-tooling.ps1', 'scripts/mobile/prepare-viewer-assets.mjs'];

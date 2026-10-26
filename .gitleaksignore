@@ -169,3 +169,12 @@ f87d19d62468ed6d6add4d289be49d9d357973f0:apps/api/vendor/fastembed-0.8.0-1caseop
 # current code uses a repeated low-entropy local-only value. No test-file,
 # path-wide, rule-wide or future-origin exception is introduced.
 a4770e87192a9d872d2af3ed19b1c339846e2589:apps/api/tests/test_platform_console_emulator_20261020.py:generic-api-key:426
+
+# 2026-10-26: exact public RFC 6238 Appendix B SHA-1 test vector, encoded
+# as Base32 in the pure mobile TOTP unit test; never an enrolled account key.
+# https://www.rfc-editor.org/rfc/rfc6238.html#appendix-B
+# Immutable whole-line SHA256:
+# 92e61d715b87e88b3152d737e72f08862cd37b51b80871373ff6b18c5cd0a60e
+# The reviewed origin is an ancestor and the complete span is byte-identical.
+# No path/rule exemption, changed value or future origin is covered.
+438c79f776373ff31eba881e933ab07b9900231f:scripts/mobile/tooling.test.mjs:generic-api-key:528

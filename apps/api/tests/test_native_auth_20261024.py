@@ -400,14 +400,14 @@ def test_rotation_survives_access_expiry_and_replay_durably_revokes_family(clien
     assert second["session_id"] == first["session_id"]
     assert second["refresh_token"] != first["refresh_token"]
     assert client.get("/api/auth/me", headers=_headers(second)).status_code == 200
-    assert (
-        client.post(BASE + "/refresh", json={"refresh_token": first["refresh_token"]}).status_code
-        == 401
+    replayed_refresh = client.post(
+        BASE + "/refresh", json={"refresh_token": first["refresh_token"]}
     )
-    assert (
-        client.post(BASE + "/refresh", json={"refresh_token": second["refresh_token"]}).status_code
-        == 401
+    assert replayed_refresh.status_code == 401
+    revoked_refresh = client.post(
+        BASE + "/refresh", json={"refresh_token": second["refresh_token"]}
     )
+    assert revoked_refresh.status_code == 401
     assert client.get("/api/auth/me", headers=_headers(second)).status_code == 401
     with get_session_factory()() as session:
         family = session.get(NativeDeviceSession, first["session_id"])
@@ -429,40 +429,37 @@ def test_mixed_native_cookie_authority_never_selects_a_principal(client, cookie)
     device = _device(client, browser)
     headers = {**_headers(device), "Cookie": f"{cookie}=other-realm"}
     assert client.get("/api/auth/me", headers=headers).status_code == 401
-    assert (
-        client.post(
-            BASE + "/refresh",
-            headers={"Cookie": f"{cookie}=other-realm"},
-            json={"refresh_token": device["refresh_token"]},
-        ).status_code
-        == 401
+    mixed_refresh = client.post(
+        BASE + "/refresh",
+        headers={"Cookie": f"{cookie}=other-realm"},
+        json={"refresh_token": device["refresh_token"]},
     )
+    assert mixed_refresh.status_code == 401
     # Rejection does not consume the credential.
-    assert (
-        client.post(BASE + "/refresh", json={"refresh_token": device["refresh_token"]}).status_code
-        == 200
+    cookie_free_refresh = client.post(
+        BASE + "/refresh", json={"refresh_token": device["refresh_token"]}
     )
+    assert cookie_free_refresh.status_code == 200
 
 
 def test_native_cannot_mint_browser_cookie_or_enter_platform_or_portal_realms(client):
     _, browser = _browser(client)
     device = _device(client, browser)
-    assert client.post("/api/auth/refresh", headers=_headers(device)).status_code == 401
+    browser_refresh = client.post("/api/auth/refresh", headers=_headers(device))
+    assert browser_refresh.status_code == 401
     assert client.get("/api/platform-admin/overview", headers=_headers(device)).status_code == 401
     assert client.get("/api/portal/me", headers=_headers(device)).status_code == 401
-    assert (
-        client.post(
-            BASE + "/token",
-            headers=_headers(device),
-            json={
-                "code": "a" * 43,
-                "code_verifier": VERIFIER,
-                "platform": "android",
-                "redirect_uri": LOCAL_REDIRECT,
-            },
-        ).status_code
-        == 401
+    native_token = client.post(
+        BASE + "/token",
+        headers=_headers(device),
+        json={
+            "code": "a" * 43,
+            "code_verifier": VERIFIER,
+            "platform": "android",
+            "redirect_uri": LOCAL_REDIRECT,
+        },
     )
+    assert native_token.status_code == 401
 
 
 def test_device_list_revoke_and_logout_do_not_revoke_other_device_or_browser(client):
@@ -474,30 +471,24 @@ def test_device_list_revoke_and_logout_do_not_revoke_other_device_or_browser(cli
     assert {row["id"] for row in rows} == {first["session_id"], second["session_id"]}
     assert [row["id"] for row in rows if row["current"]] == [first["session_id"]]
     assert {row["platform"] for row in rows} == {"android"}
-    assert (
-        client.delete(
-            f"/api/auth/native/sessions/{first['session_id']}",
-            headers=browser,
-        ).status_code
-        == 204
+    revoked = client.delete(
+        f"/api/auth/native/sessions/{first['session_id']}",
+        headers=browser,
     )
+    assert revoked.status_code == 204
     assert client.get("/api/auth/me", headers=_headers(first)).status_code == 401
     assert client.get("/api/auth/me", headers=_headers(second)).status_code == 200
     assert client.get("/api/auth/me", headers=browser).status_code == 200
-    assert (
-        client.post(
-            "/api/auth/native/logout",
-            json={"refresh_token": second["refresh_token"]},
-        ).status_code
-        == 204
+    logout_response = client.post(
+        "/api/auth/native/logout",
+        json={"refresh_token": second["refresh_token"]},
     )
-    assert (
-        client.post(
-            "/api/auth/native/logout",
-            json={"refresh_token": second["refresh_token"]},
-        ).status_code
-        == 204
+    assert logout_response.status_code == 204
+    repeated_logout_response = client.post(
+        "/api/auth/native/logout",
+        json={"refresh_token": second["refresh_token"]},
     )
+    assert repeated_logout_response.status_code == 204
     assert client.get("/api/auth/me", headers=_headers(second)).status_code == 401
 
 
@@ -522,10 +513,10 @@ def test_native_access_and_refresh_recheck_authoritative_identity(client, change
     assert client.get("/api/auth/me", headers=_headers(device)).status_code == (
         401 if change.endswith("cutoff") else 403
     )
-    assert (
-        client.post(BASE + "/refresh", json={"refresh_token": device["refresh_token"]}).status_code
-        == 401
+    inactive_identity_refresh = client.post(
+        BASE + "/refresh", json={"refresh_token": device["refresh_token"]}
     )
+    assert inactive_identity_refresh.status_code == 401
 
 
 def test_native_mfa_proof_is_current_session_bound_and_not_borrowed_later(client):
@@ -583,10 +574,10 @@ def test_native_mfa_proof_is_current_session_bound_and_not_borrowed_later(client
         )
         session.commit()
     assert client.get("/api/auth/me", headers=_headers(device)).status_code == 403
-    assert (
-        client.post(BASE + "/refresh", json={"refresh_token": device["refresh_token"]}).status_code
-        == 403
+    expired_mfa_refresh = client.post(
+        BASE + "/refresh", json={"refresh_token": device["refresh_token"]}
     )
+    assert expired_mfa_refresh.status_code == 403
 
 
 def test_cross_membership_cannot_list_or_revoke_native_family(client):
@@ -613,9 +604,8 @@ def test_cross_membership_cannot_list_or_revoke_native_family(client):
         )
     other = {"Authorization": "Bearer " + token}
     assert client.get(BASE + "/sessions", headers=other).json() == {"sessions": []}
-    assert (
-        client.delete(BASE + "/sessions/" + device["session_id"], headers=other).status_code == 404
-    )
+    denied_revoke = client.delete(BASE + "/sessions/" + device["session_id"], headers=other)
+    assert denied_revoke.status_code == 404
     assert client.get("/api/auth/me", headers=_headers(device)).status_code == 200
 
 
@@ -711,15 +701,13 @@ def test_actual_browser_mfa_enrollment_proof_is_bound_to_its_source_session(clie
     assert _authorize(client, second_browser).status_code == 200
     assert client.get("/api/auth/me", headers=_headers(device)).status_code == 403
     assert client.get("/api/matters/?limit=25", headers=_headers(device)).status_code == 403
-    assert (
-        client.post(
-            "/api/auth/native/refresh",
-            json={
-                "refresh_token": device["refresh_token"],
-            },
-        ).status_code
-        == 403
+    unrelated_step_up_refresh = client.post(
+        "/api/auth/native/refresh",
+        json={
+            "refresh_token": device["refresh_token"],
+        },
     )
+    assert unrelated_step_up_refresh.status_code == 403
 
 
 def test_nonlocal_grants_disabled_unless_all_explicit_release_settings_present(client, monkeypatch):
@@ -797,9 +785,7 @@ def test_refresh_family_has_non_sliding_expiry(client):
         family = session.get(NativeDeviceSession, device["session_id"])
         family.expires_at = datetime.now(UTC) - timedelta(seconds=1)
         session.commit()
-    assert (
-        client.post(
-            BASE + "/refresh", json={"refresh_token": response.json()["refresh_token"]}
-        ).status_code
-        == 401
+    expired_family_refresh = client.post(
+        BASE + "/refresh", json={"refresh_token": response.json()["refresh_token"]}
     )
+    assert expired_family_refresh.status_code == 401

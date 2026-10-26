@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { authenticate } from './browser-handoff.mjs';
 import { FixtureUnavailable, ownerControl, SEARCH_KINDS } from './fixture-contract.mjs';
-import { absent, backgroundAndResume, click, expectText, find, findQuery, home, input, read, restart, selector, visible } from './native-ui.mjs';
+import { absent, backgroundAndResume, click, dispatchNativeClick, expectText, find, findQuery, home, input, read, restart, selector, swipe, visible } from './native-ui.mjs';
 import { localJson } from './support.mjs';
 import { validateTraffic } from './traffic.mjs';
 import { validateAuthorizationTraffic } from './mfa.mjs';
@@ -81,15 +81,78 @@ export async function discard(context, action = 'leave') {
     await click(context, 'text', action === 'stay' ? 'Stay' : 'Leave editor');
   }
 }
+async function iosRecordRow(element, fields, boundary) {
+  assert.equal(await element.getAttribute('type'), 'XCUIElementTypeButton', `${boundary}_BUTTON_REQUIRED`);
+  const accessible = await element.getAttribute('accessible');
+  assert.ok(accessible === true || accessible === 'true', `${boundary}_ACCESSIBILITY_REQUIRED`);
+  assert.equal(await element.getAttribute('label'), fields.join(', '), `${boundary}_VALUE_MISMATCH`);
+  assert.equal(await element.getText(), fields.join(', '), `${boundary}_VALUE_MISMATCH`);
+}
 async function row(context, item) {
   const element = await find(context, 'id', `today-item-${item.kind}-${item.id}`, { scroll: true });
-  for (const text of [item.title, `${item.matter.identityLabel} \u00b7 ${item.matter.title}`, item.metaLabel]) {
+  const fields = [item.title, `${item.matter.identityLabel} \u00b7 ${item.matter.title}`, item.metaLabel];
+  if (context.platform === 'ios') {
+    await iosRecordRow(element, fields, 'SEEDED_WORK_ROW');
+    return element;
+  }
+  for (const text of fields) {
     assert.ok(await visible(element, selector(context.platform, 'text', text)), 'SEEDED_WORK_ROW_VALUE_MISMATCH');
   }
   return element;
 }
-async function freshNoteAbsent(context) {
-  assert.equal(await (await find(context, 'id', 'note-input')).getText(), '', 'MEMORY_ONLY_NOTE_RESTORED');
+export async function verifyIosCalendarRow(context, event) {
+  assert.equal(context.platform, 'ios', 'IOS_CALENDAR_ROW_REQUIRED');
+  assert.match(event.eventId || '', /^[A-Za-z0-9_:.-]{1,160}$/, 'SEEDED_CALENDAR_EVENT_ID_REQUIRED');
+  const element = await find(context, 'id', `event-${event.eventId}`, { scroll: true });
+  await iosRecordRow(element, [event.title, `${event.matter.identityLabel} \u00b7 ${event.matter.title}`, event.metaLabel],
+    'SEEDED_CALENDAR_ROW');
+  return element;
+}
+export async function selectMatterDraft(context, draft) {
+  if (context.platform !== 'ios') return click(context, 'text', draft.title, { scroll: true });
+  const container = await find(context, 'id', 'matter-detail');
+  const fields = [draft.title, draft.statusLabel];
+  const query = '-ios predicate string:type == "XCUIElementTypeButton" AND label == ' + JSON.stringify(fields.join(', '));
+  let element;
+  for (let attempt = 0; attempt <= 9; attempt++) {
+    try {
+      await context.driver.waitUntil(async () => !!(element = await visible(container, query)),
+        { timeout: 1500, interval: 150, timeoutMsg: 'SEEDED_DRAFT_ROW_UNAVAILABLE' });
+      break;
+    } catch (error) {
+      if (error?.message?.includes('AMBIGUOUS_VISIBLE_NATIVE_LOCATOR')) throw error;
+      if (attempt === 9) throw new Error('SEEDED_DRAFT_ROW_UNAVAILABLE');
+      await swipe(context, attempt < 3 ? 'up' : 'down');
+    }
+  }
+  await iosRecordRow(element, fields, 'SEEDED_DRAFT_ROW');
+  assert.equal(await element.isEnabled(), true, 'SEEDED_DRAFT_ROW_DISABLED');
+  await dispatchNativeClick(context, element);
+}
+export async function freshNoteAbsent(context) {
+  const element = await find(context, 'id', 'note-input');
+  if (context.platform === 'ios') {
+    assert.equal(await element.getAttribute('type'), 'XCUIElementTypeTextView', 'NOTE_INPUT_TEXT_VIEW_REQUIRED');
+    // WDA's getText() falls back to the label for an empty text view. Only its
+    // actual value can establish that the unsaved private text is absent.
+    const value = await element.getAttribute('value');
+    assert.ok(value === null || value === '', 'MEMORY_ONLY_NOTE_RESTORED');
+    return;
+  }
+  assert.equal(await element.getText(), '', 'MEMORY_ONLY_NOTE_RESTORED');
+}
+export async function selectMatterActivity(context) {
+  if (context.platform !== 'ios') return click(context, 'id', 'matter-activity');
+  const picker = await findQuery(context,
+    '-ios predicate string:type == "XCUIElementTypeSegmentedControl" AND label == "Matter view"', { scroll: true });
+  assert.equal(await picker.getAttribute('type'), 'XCUIElementTypeSegmentedControl', 'MATTER_VIEW_CONTROL_REQUIRED');
+  assert.equal(await picker.getAttribute('label'), 'Matter view', 'MATTER_VIEW_CONTROL_REQUIRED');
+  const button = await visible(picker, '-ios predicate string:type == "XCUIElementTypeButton" AND label == "Activity"');
+  assert.ok(button, 'MATTER_ACTIVITY_BUTTON_REQUIRED');
+  assert.equal(await button.getAttribute('type'), 'XCUIElementTypeButton', 'MATTER_ACTIVITY_BUTTON_REQUIRED');
+  assert.equal(await button.getAttribute('label'), 'Activity', 'MATTER_ACTIVITY_BUTTON_REQUIRED');
+  assert.equal(await button.isEnabled(), true, 'MATTER_ACTIVITY_BUTTON_DISABLED');
+  await dispatchNativeClick(context, button);
 }
 function seeded(context, key) {
   if (!context.fixture[key]) throw new FixtureUnavailable('REQUIRED_NEGATIVE_SEED_UNAVAILABLE');
@@ -152,7 +215,8 @@ export const scenarios = [
   { id: 'NATIVE-02', run: async (context) => { for (const tab of ['today', 'matters', 'calendar', 'work']) await home(context, tab); } },
   { id: 'NATIVE-03', run: async (context) => {
     await home(context, 'today');
-    await (await row(context, context.fixture.today)).click();
+    const today = context.fixture.today;
+    await dispatchNativeClick(context, await row(context, today), 'id', `today-item-${today.kind}-${today.id}`);
     assert.equal(await read(context, 'id', 'matter-code'), context.fixture.today.matter.identityLabel, 'TODAY_WRONG_SOURCE');
     await expectText(context, context.fixture.today.matter.title);
   } },
@@ -183,7 +247,7 @@ export const scenarios = [
     await restart(context);
     await authenticate(context);
     await openMatter(context);
-    await click(context, 'id', 'matter-activity');
+    await selectMatterActivity(context);
     await verifySavedNote(context, savedId, 'restart');
     const requests = delta(before, await traffic(context));
     assert.equal(requestCount(requests, 'POST', context.fixture.noteRoute), 1, 'NOTE_NOT_SUBMITTED_EXACTLY_ONCE');
@@ -193,17 +257,23 @@ export const scenarios = [
   { id: 'NATIVE-10', run: async (context) => {
     const event = context.fixture.calendar;
     await home(context, 'calendar');
-    await input(context, 'label', 'Agenda date, YYYY-MM-DD', event.day);
-    await click(context, 'id', 'calendar-go-date');
+    await input(context, 'id', 'calendar-date-input', event.day, { scroll: true });
+    await click(context, 'id', 'calendar-go-date', { scroll: true });
     await expectText(context, event.dayLabel);
-    await expectText(context, event.title);
-    await expectText(context, event.metaLabel);
+    if (context.platform === 'ios') await verifyIosCalendarRow(context, event);
+    else {
+      await expectText(context, event.title);
+      await expectText(context, event.metaLabel);
+    }
     const before = await traffic(context);
     await click(context, 'id', 'reload', { scroll: true });
     await context.driver.waitUntil(async () => delta(before, await traffic(context)).some((item) => item.method === 'GET' && item.route === '/api/calendar/events' && item.status === 200),
       { timeout: 10000, interval: 200, timeoutMsg: 'AGENDA_REREAD_MISSING' });
-    await expectText(context, event.title);
-    await expectText(context, event.metaLabel);
+    if (context.platform === 'ios') await verifyIosCalendarRow(context, event);
+    else {
+      await expectText(context, event.title);
+      await expectText(context, event.metaLabel);
+    }
     assert.match(event.eventId || '', /^[A-Za-z0-9_:.-]{1,160}$/, 'SEEDED_CALENDAR_EVENT_ID_REQUIRED');
     await click(context, 'id', `event-${event.eventId}`, { scroll: true });
     assert.equal(await read(context, 'id', 'matter-code'), event.matter.identityLabel, 'AGENDA_WRONG_SOURCE');
@@ -213,30 +283,32 @@ export const scenarios = [
   { id: 'NATIVE-11', run: async (context) => {
     await home(context, 'calendar');
     const event = context.fixture.calendar;
-    await input(context, 'label', 'Agenda date, YYYY-MM-DD', event.day);
-    await click(context, 'id', 'calendar-go-date');
+    await input(context, 'id', 'calendar-date-input', event.day, { scroll: true });
+    await click(context, 'id', 'calendar-go-date', { scroll: true });
     await expectText(context, event.dayLabel);
-    await expectText(context, event.title);
+    if (context.platform === 'ios') await verifyIosCalendarRow(context, event);
+    else await expectText(context, event.title);
     const before = await traffic(context);
-    await input(context, 'label', 'Agenda date, YYYY-MM-DD', '2026-02-30');
-    await click(context, 'id', 'calendar-go-date');
+    await input(context, 'id', 'calendar-date-input', '2026-02-30', { scroll: true });
+    await click(context, 'id', 'calendar-go-date', { scroll: true });
     await expectText(context, 'Enter a valid date as YYYY-MM-DD.');
     await expectText(context, event.dayLabel);
+    if (context.platform === 'ios') await verifyIosCalendarRow(context, event);
     assert.equal(requestCount(delta(before, await traffic(context)), 'GET', '/api/calendar/events'), 0, 'INVALID_DATE_FETCHED');
   } },
   { id: 'NATIVE-12', run: async (context) => {
     const before = await traffic(context), { task, draft } = context.fixture.work;
     await home(context, 'work');
-    await (await row(context, task)).click();
+    await dispatchNativeClick(context, await row(context, task), 'id', `today-item-${task.kind}-${task.id}`);
     assert.equal(await read(context, 'id', 'matter-code'), task.matter.identityLabel, 'WORK_WRONG_SOURCE');
     await expectText(context, task.title);
     if (draft.entry === 'reviews') {
       await home(context, 'work');
       await click(context, 'text', 'Reviews');
-      await (await row(context, draft)).click();
+      await dispatchNativeClick(context, await row(context, draft), 'id', `today-item-${draft.kind}-${draft.id}`);
     } else {
       assert.equal(draft.matter.id, task.matter.id, 'DRAFT_TASK_SOURCE_MISMATCH');
-      await click(context, 'text', draft.title, { scroll: true });
+      await selectMatterDraft(context, draft);
     }
     const facts = [draft.title, draft.statusLabel, draft.revisionLabel, draft.body, draft.verifiedCitationCountLabel,
       ...(draft.citations.length ? draft.citations : ['No citations supplied for this version.'])];

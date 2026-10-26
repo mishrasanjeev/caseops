@@ -3,7 +3,7 @@
   "scope": "managed-saas-only",
   "review_document": {
     "path": "docs/security/js-license-compliance-review-2026-10-12.md",
-    "sha256": "9e34d4e4ed25d6eea0d96325309ecd744e30bb0114a2151784ca72d970f442c6"
+    "sha256": "564bf5e1e216c3bcd6f22cd876689e05c2e4c7362c716cad11ae083a25d1562c"
   },
   "packages": [
     {
@@ -520,16 +520,16 @@
     },
     {
       "name": "nodemailer",
-      "version": "10.0.13",
+      "version": "10.2.1",
       "license": "MIT-0",
-      "integrity": "sha512-SzG86OlvcW/NNhUFC6uROMwRTL4n7MswfQqC/T8mhkmnY1YVa23zUEMYi4ijSeXSl9GLz9ZeTJDUatEDuY5FeQ==",
+      "integrity": "sha512-ZrDNsPFoDMwefNs7sJwrYiEJ/CG4ClJWDZv05iNJsEBWa8GRDry1QJHTJxsuTAY9eDDKjX4k+q3SxslXJOao7w==",
       "materials": [
         {
-          "path": "license-policy/upstream/nodemailer_10.0.13/package.json",
-          "sha256": "752b02543bfc7bd1ee662dddebd52995f14d6261ea1ca1a160d3f91e8a759827"
+          "path": "license-policy/upstream/nodemailer_10.2.1/package.json",
+          "sha256": "f5ca64abb16d0107e5860bf685f8399b280e6238fdbfab9dedde1c22a14e632a"
         },
         {
-          "path": "apps/web/public/third-party-notices/nodemailer-10.0.13-LICENSE.txt",
+          "path": "apps/web/public/third-party-notices/nodemailer-10.2.1-LICENSE.txt",
           "sha256": "4f814dcacd2da618d62829ea1f6238701cf421f18a6b36c91c5d8212245e2c78"
         }
       ]

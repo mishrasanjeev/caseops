@@ -7,6 +7,7 @@ const config: ExpoConfig = {
   name: "CaseOps",
   slug: "caseops-mobile",
   version: "0.1.0",
+  icon: "./assets/app-icon.png",
   orientation: "default",
   scheme: "caseops",
   userInterfaceStyle: "light",
@@ -22,6 +23,11 @@ const config: ExpoConfig = {
     package: "ai.caseops.mobile.dev",
     allowBackup: false,
     permissions: [],
+    adaptiveIcon: {
+      foregroundImage: "./assets/app-icon-foreground.png",
+      monochromeImage: "./assets/app-icon-foreground.png",
+      backgroundColor: "#0b1220",
+    },
   },
   plugins: [
     "expo-secure-store",

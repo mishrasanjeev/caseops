@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { appendFileSync, closeSync, fsyncSync, lstatSync, openSync, readFileSync, readdirSync } from 'node:fs';
+import { appendFileSync, closeSync, constants, fstatSync, fsyncSync, lstatSync, openSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 export const MARKER = 'no-paid-providers';
@@ -15,12 +15,24 @@ export function localUrl(value) {
 }
 
 export async function localJson(url, options = {}) {
-  localUrl(url);
-  const response = await fetch(url, {
-    ...options,
+  const parsed = localUrl(url);
+  assert.ok(options && Object.keys(options).length === 0, 'READ_ONLY_LOCAL_PROBE_REQUIRED');
+  // This client reads status/build evidence only. Reconstruct the request from
+  // reviewed literals so an input file cannot supply arbitrary path/header/body
+  // data, even to a local listener.
+  const protocol = parsed.protocol === 'https:' ? 'https:' : 'http:';
+  const hostname = parsed.hostname === 'localhost' ? 'localhost' : parsed.hostname === '[::1]' ? '[::1]' : '127.0.0.1';
+  const port = parsed.port ? Number(parsed.port) : protocol === 'https:' ? 443 : 80;
+  assert.ok(Number.isInteger(port) && port > 0 && port <= 65535, 'LOCAL_PROBE_PORT_REQUIRED');
+  const pathname = ['/api/build', '/api/release-identity', '/__caseops_e2e/status', '/status', '/wd/hub/status']
+    .find(candidate => candidate === parsed.pathname);
+  assert.ok(pathname, 'LOCAL_PROBE_ENDPOINT_REQUIRED');
+  const destination = `${protocol}//${hostname}:${port}${pathname}`;
+  const response = await fetch(destination, {
+    method: 'GET',
     redirect: 'error',
     signal: AbortSignal.timeout(10000),
-    headers: { ...options.headers, [MARKER_HEADER]: MARKER },
+    headers: { [MARKER_HEADER]: MARKER },
   });
   assert.ok(response.ok, 'LOCAL_REQUEST_FAILED');
   const reader = response.body.getReader();
@@ -40,25 +52,47 @@ export async function localJson(url, options = {}) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
+function readBinaryFile(file, remaining, allowEmpty = true) {
+  const fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  try {
+    const opened = fstatSync(fd, { bigint: true });
+    assert.ok(opened.isFile(), 'BINARY_REGULAR_FILE_REQUIRED');
+    assert.ok(opened.size <= BigInt(remaining) && (allowEmpty || opened.size > 0n), 'BINARY_BOUND_EXCEEDED');
+    const named = lstatSync(file, { bigint: true });
+    assert.ok(named.isFile() && !named.isSymbolicLink() && named.ino === opened.ino
+      && (process.platform === 'win32' || named.dev === opened.dev), 'BINARY_FILE_REPLACED');
+    const content = readFileSync(fd);
+    const after = fstatSync(fd, { bigint: true });
+    assert.ok(opened.size === after.size && opened.mtimeNs === after.mtimeNs && opened.ctimeNs === after.ctimeNs
+      && BigInt(content.length) === opened.size, 'BINARY_FILE_CHANGED');
+    return content;
+  } finally { closeSync(fd); }
+}
+
 export function binaryHash(root) {
   const rootStat = lstatSync(root);
   if (rootStat.isFile()) {
     assert.ok(rootStat.size > 0 && rootStat.size <= 2147483648, 'BINARY_BOUND_EXCEEDED');
-    return createHash('sha256').update(readFileSync(root)).digest('hex');
+    return createHash('sha256').update(readBinaryFile(root, 2147483648, false)).digest('hex');
   }
   const hash = createHash('sha256');
   let files = 0;
   let bytes = 0;
   const visit = (file, relative) => {
-    const stat = lstatSync(file);
+    const stat = lstatSync(file, { bigint: true });
     assert.ok(!stat.isSymbolicLink(), 'BINARY_SYMLINK_UNSUPPORTED');
     if (stat.isDirectory()) {
       for (const entry of readdirSync(file).sort()) visit(path.join(file, entry), `${relative}/${entry}`);
+      const after = lstatSync(file, { bigint: true });
+      assert.ok(after.isDirectory() && stat.dev === after.dev && stat.ino === after.ino
+        && stat.mtimeNs === after.mtimeNs && stat.ctimeNs === after.ctimeNs, 'BINARY_DIRECTORY_CHANGED');
     } else {
       assert.ok(stat.isFile(), 'BINARY_REGULAR_FILE_REQUIRED');
-      assert.ok(++files <= 30000 && (bytes += stat.size) <= 2147483648, 'BINARY_BOUND_EXCEEDED');
-      hash.update(`${relative}\0${stat.size}\0`);
-      hash.update(readFileSync(file));
+      assert.ok(++files <= 30000, 'BINARY_BOUND_EXCEEDED');
+      const content = readBinaryFile(file, 2147483648 - bytes);
+      bytes += content.length;
+      hash.update(`${relative}\0${content.length}\0`);
+      hash.update(content);
     }
   };
   visit(root, '');

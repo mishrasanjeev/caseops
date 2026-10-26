@@ -3,6 +3,7 @@ import test from "node:test";
 import { createFilePickerCoordinator } from "./file-picker.ts";
 import type { SessionIdentity } from "../auth/types.ts";
 import type { MatterFileAsset } from "../files/contracts.ts";
+import { TempCleanupError } from "../files/staging.ts";
 
 const identity: SessionIdentity = {
   company: { id: "company", name: "Local", slug: "local" },
@@ -125,4 +126,30 @@ test("a cancelled picker rejection cannot publish an error into another login", 
   reject(new Error("provider unavailable"));
   await pending;
   assert.equal(coordinator.snapshot(identity, "epoch-2"), null);
+});
+
+test("late imported-file cleanup failure is surfaced after logout instead of silently retained", async () => {
+  let resolve!: (value: MatterFileAsset) => void;
+  const coordinator = createFilePickerCoordinator(
+    () => new Promise((done) => { resolve = done; }),
+    () => { throw new TempCleanupError(); },
+    () => {},
+  );
+  const pending = coordinator.choose(intent);
+  coordinator.clear();
+  resolve(asset);
+  await assert.rejects(pending, TempCleanupError);
+  assert.equal(coordinator.snapshot(identity, "epoch-2"), null);
+  assert.equal(coordinator.picking, false);
+});
+
+test("failed selected-file cleanup still publishes cleared private selection", async () => {
+  let changed = 0;
+  const coordinator = createFilePickerCoordinator(async () => asset,
+    () => { throw new TempCleanupError(); }, () => { changed++; });
+  await coordinator.choose(intent);
+  const before = changed;
+  assert.throws(() => coordinator.clear(), TempCleanupError);
+  assert.equal(changed, before + 1);
+  assert.equal(coordinator.snapshot(identity, "epoch-1"), null);
 });

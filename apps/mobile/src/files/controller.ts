@@ -11,6 +11,8 @@ import type {
 } from "./contracts.ts";
 import { TempCleanupError } from "./staging.ts";
 import type { FileStager } from "./staging.ts";
+import { nativePreparationFailureStep } from "./native-preparation-diagnostics.ts";
+import type { NativePreparationStep } from "./native-preparation-diagnostics.ts";
 
 export type FilesView =
   | { state: "inactive" | "loading" }
@@ -27,6 +29,7 @@ export type UploadOutcome = {
     | "unknown";
   message: string;
   attachmentId?: string;
+  preparationStep?: NativePreparationStep;
 };
 export type FilesSnapshot = {
   view: FilesView;
@@ -108,8 +111,8 @@ export function createFilesController(
       publish({ cleanupFailed: true });
     }
   };
-  const reject = (message: string) =>
-    publish({ upload: { state: "rejected", message } });
+  const reject = (message: string, preparationStep?: NativePreparationStep) =>
+    publish({ upload: { state: "rejected", message, ...(preparationStep ? { preparationStep } : {}) } });
 
   const controller = {
     getSnapshot: () => snapshot,
@@ -380,6 +383,7 @@ export function createFilesController(
               abort.signal.aborted
                 ? "Upload cancelled before sending. No file was submitted."
                 : "The file could not be prepared safely. Check its type, size and local availability, then select it again.",
+              nativePreparationFailureStep(error),
             );
         }
       } finally {

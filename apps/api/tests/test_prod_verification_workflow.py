@@ -901,6 +901,7 @@ BROWSER_WORKFLOW_JOBS = {
         "scheduled-statute-verification",
     ),
     "release-verify.yml": ("release-playwright",),
+    "mobile-source.yml": ("source", "browser-handoff"),
 }
 
 

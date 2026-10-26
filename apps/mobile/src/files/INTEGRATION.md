@@ -51,10 +51,23 @@ type MatterFileSelection = Readonly<{
 
 `files/native.ts` exports `pickFile(): Promise<MatterFileAsset | null>`,
 `cleanupPickedFile(asset): void`, and `purgeMatterFileTemps(): void`.
-`pickFile` requests a single system selection, `copyToCacheDirectory: false`,
-and no base64. It requests no camera, media-library or contact permission.
-Provider URI access is not assumed to survive indefinitely; preparation can
-fail honestly and require another explicit selection.
+`pickFile` requests a single system selection and no base64. On iOS it uses
+`copyToCacheDirectory: true`, because raw provider URLs are not guaranteed to
+remain readable after the native picker callback. The app owns only direct
+files in its exact `Library/Caches/DocumentPicker` directory, validates the
+completed cache copy's metadata against the existing global upload cap, and
+purges the redundant OS Inbox import. Android keeps
+`copyToCacheDirectory: false` and its provider URI.
+
+The SDK cache copy and OS import happen before JavaScript size enforcement;
+they are not claimed to obey the bounded staging byte budget. Oversized,
+unavailable or incomplete cache copies are immediately cleaned. Before any
+upload, staging independently revalidates the authoritative workspace policy,
+byte limit, lifecycle, exact size and SHA-256 under its existing deadline.
+Selected SDK copies and orphan imports are removed on clear, cancellation,
+error, background, discarded/late picker results, logout and cold startup.
+Provider originals remain untouched. No camera, media-library or contact
+permission is requested.
 
 `FilesScreenProps.onChooseFile(expectedLifecycleVersion: number): void` receives
 the CURRENT loaded workspace's `matter.lifecycle_version` at the explicit Choose
@@ -74,11 +87,17 @@ at root with safe error copy. Never log selected URIs or filenames.
 
 Call `purgeMatterFileTemps()` on cold startup before private screens and on
 sign-out after unmounting private screens. Handle cleanup errors visibly; do not
-claim successful purge. This removes only `Paths.cache/caseops-matter-files-v1`,
-never all cache or DocumentPicker data. `cleanupPickedFile` deletes only exact
-owned staging filenames, never a provider original. Root-selected provider
-URIs do not create an application cache copy. Platform/import-provider staging
-outside that owned directory is not claimed to be app-controlled or cleaned.
+claim successful purge. The pinned iOS picker uses `asCopy: true`: disabling
+Expo's extra cache copy still imports a file into the app's temporary
+`tmp/{bundleIdentifier}-Inbox`. A native select/clear probe reproduced retention
+there. Cleanup now covers that exact app-private Inbox and
+`Paths.cache/caseops-matter-files-v1`; it never purges all cache/tmp or an external
+provider. Selected-file cleanup admits only a direct local file in this app's
+Inbox or an exact owned staging filename. Cold-start/sign-out purge removes
+orphan imports, including process-death leftovers. A new picker first requires
+successful cleanup. Late-result cleanup failures remain visible after logout;
+unrelated late provider rejections stay silent. Provider originals are preserved.
+This source fix requires a rebuilt binary and native post-action evidence.
 
 The controller rejects mismatched session/parent/account identities and a picker
 version differing from the current loaded workspace before preparation. It then

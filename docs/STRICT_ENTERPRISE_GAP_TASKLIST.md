@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## October 26 Mobile Distribution Gate
+
+J20/M22 remains **Partially implemented; release NO-GO**. Organization-first
+publication under Orchestrum Technologies LLP is selected, with enrollment,
+D-U-N-S, final identifiers and signing still absent. Current local custom-scheme
+sign-in is incompatible with production's registered HTTPS callback policy;
+verified Universal Links/App Links and actual native production handoff are
+required, not a policy relaxation. Preserve the strict unpatched Expo/forge
+audit failure. Patched Python dependencies and local API/web source gates do
+not certify the full native matrix, physical devices, store declarations,
+signed beta, current main/CI or deployed release. See
+[store preparation and scoped evidence](mobile/STORE_RELEASE_2026-10-26.md).
+
 ## October 25 Native Runtime Replacement
 
 Release remains **NO-GO**. Standalone Android startup and manual native/browser
@@ -55,6 +68,19 @@ green protected-main gates and signed-beta/store review. macOS/Xcode/Apple and
 Play ownership, privacy/retention and approved spend remain explicit dependencies.
 See `mobile/MOBILE_APP_PLAN_2026-10-23.md`; no infrastructure, provider or legal
 data was changed during planning and no native pass is claimed.
+
+## October 25 Dependency Security #559
+
+QG-SEC-001/002/004 and ARCH-OPS-23: Partially implemented; release NO-GO
+until new exact-source acceptance. Current-main E3B Security40180159530
+reports Filelock, Undici, Zod and Nodemailer advisories. The focused candidate
+pins stable patched releases4.2.4/7.30.1/4.6.7/10.2.1, retains exact upstream
+licence material, and adds real parser/cache-lock plus all-copy lock regressions.
+The old parser reproduces an incorrect example-domain recipient without sending
+mail. No breach is established, and no audit threshold or fence is waived.
+Full Docker, hosted CI/Security, protected main merge, guarded deployment and
+the exact-serving browser replay remain mandatory. Mobile PR558 is separate.
+See `security/dependency-security-559-2026-10-25.md`.
 
 ## October 23 Async Export Acceptance Drift
 

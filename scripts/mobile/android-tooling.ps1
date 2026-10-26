@@ -151,7 +151,8 @@ if (-not $SelfTest) { return }
 # Offline fixtures only. Retain the entire unique run, including failed parts and a live journal.
 $ErrorActionPreference = 'Stop'
 function curl.exe { throw 'Offline self-test forbids network transport' }
-$testRoot = Join-Path ([IO.Path]::GetTempPath()) ('caseops-android-offline-' + [Guid]::NewGuid().ToString('N'))
+$evidenceBase = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) { [IO.Path]::GetTempPath() } else { [IO.Path]::GetFullPath($env:RUNNER_TEMP) }
+$testRoot = Join-Path $evidenceBase ('caseops-android-offline-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($testRoot) | Out-Null
 $journalPath = Join-Path $testRoot 'results.jsonl'
 $journalStream = [IO.File]::Open($journalPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::Read)
@@ -335,6 +336,7 @@ $tests = [ordered]@{
         }
         Assert-OfflineThrows { Get-VerifiedArchive 'https://offline.invalid/archive.zip' 'archive.zip' $fixtureHash $caseRoot } 'after 3 attempts.*exit code 28'
         Assert-Offline (@(Get-ChildItem -LiteralPath $caseRoot -Filter '*.part').Count -eq 3) 'Curl failures lost attempt evidence'
+        Assert-Offline ($global:LASTEXITCODE -eq 28) 'Curl negative control did not retain its actual nonzero exit code'
     }
     'JDK validation requires all five nonempty components' = {
         foreach ($missing in @('bin/java.exe', 'bin/javac.exe', 'bin/jar.exe', 'lib/modules', 'release')) {
@@ -506,3 +508,7 @@ try {
 } finally { $journal.Dispose(); $journalStream.Dispose() }
 Write-Output "Selected=$($tests.Count) Completed=$completed Passed=$($completed - $failed) Failed=$failed Journal=$journalPath"
 if ($failed -gt 0 -or $completed -ne $tests.Count) { throw "Offline Android tooling tests failed: $failed / $($tests.Count)" }
+# The complete successful inventory includes a deliberate native-exit-28
+# control. GitHub's PowerShell wrapper must receive this suite's outcome,
+# rather than that retained and asserted mock result. Failures never reach here.
+$global:LASTEXITCODE = 0

@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
 
 const runDirectory = `outputs/mobile-web-auth/${new Date().toISOString().replace(/[:.]/g, '-')}`;
 
@@ -20,7 +21,7 @@ export default defineConfig({
   reporter: [['list'], ['json', { outputFile: `${runDirectory}/results.json` }]],
   use: {
     baseURL: 'http://127.0.0.1:3107',
-    extraHTTPHeaders: { 'X-CaseOps-Automated-Test': 'no-paid-providers' },
+    extraHTTPHeaders: noPaidProviderHeaders,
     trace: 'off',
   },
   projects: [

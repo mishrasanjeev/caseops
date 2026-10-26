@@ -165,7 +165,8 @@ class PortabilityTests(unittest.TestCase):
             self.assertEqual((root / "config.json").read_text(), config)
 
     def test_ios_compose_override_changes_only_public_url_and_preserves_fences(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, patch.object(bootstrap_module.sys, "platform", "darwin"), patch.object(
+                bootstrap_module, "machine", return_value="x86_64"):
             root = Path(directory)
             (root / "compose-secrets.json").write_text("{}")
             original = (bootstrap_module.REPO / "compose.mobile-local.yml").read_bytes()
@@ -188,8 +189,48 @@ class PortabilityTests(unittest.TestCase):
                 bootstrap_module.compose(root, self.config())
             self.assertEqual(override.read_text(), '{"services":{}}')
 
+    def test_scanner_architecture_override_is_scoped_to_apple_silicon(self):
+        for host, architecture, expected in (("darwin", "arm64", "linux/amd64"),
+                ("darwin", "aarch64", "linux/amd64"), ("darwin", "ARM64", "linux/amd64"),
+                ("darwin", "x86_64", None), ("darwin", "aarch64_be", None),
+                ("linux", "arm64", None), ("linux", "aarch64", None), ("win32", "ARM64", None)):
+            with self.subTest(host=host, architecture=architecture), patch.object(
+                    bootstrap_module.sys, "platform", host), patch.object(bootstrap_module, "machine", return_value=architecture):
+                self.assertEqual(bootstrap_module.ios_scanner_platform(), expected)
+
+    def test_apple_silicon_compose_selects_only_pinned_scanner_architecture(self):
+        for architecture in ("arm64", "aarch64"):
+            with self.subTest(architecture=architecture), tempfile.TemporaryDirectory() as directory, patch.object(
+                    bootstrap_module.sys, "platform", "darwin"), patch.object(
+                    bootstrap_module, "machine", return_value=architecture), patch.dict(bootstrap_module.os.environ, {}, clear=True):
+                root = Path(directory)
+                (root / "compose-secrets.json").write_text("{}")
+                canonical = bootstrap_module.REPO / "compose.mobile-local.yml"
+                original = canonical.read_bytes()
+                command, environment = bootstrap_module.compose(root, self.config())
+                override = next(root.glob("ios-compose-*.json"))
+                expected = {"services": {
+                    "api": {"environment": {"CASEOPS_PUBLIC_APP_URL": "https://127.0.0.1:3443"}},
+                    "migrate": {"environment": {"CASEOPS_PUBLIC_APP_URL": "https://127.0.0.1:3443"}},
+                    "scanner": {"platform": "linux/amd64"}}}
+                self.assertEqual(json.loads(override.read_text()), expected)
+                content_hash = bootstrap_module.hashlib.sha256(json.dumps(expected, sort_keys=True).encode()).hexdigest()
+                self.assertEqual(override.name, f"ios-compose-{content_hash[:12]}.json")
+                self.assertEqual(command, ["docker", "compose", "-f", str(canonical), "-f", str(override),
+                                          "--project-name", "owned-unit-project"])
+                self.assertNotIn("DOCKER_DEFAULT_PLATFORM", environment)
+                self.assertIn(b"clamav/clamav@sha256:71fbb76b397cd84a90043caf1178a7f81bd0c131a031e7b0619afd721fbfad41", original)
+                self.assertEqual(canonical.read_bytes(), original)
+                before = override.read_bytes()
+                bootstrap_module.compose(root, self.config())
+                self.assertEqual(override.read_bytes(), before)
+                override.write_text(json.dumps({"services": {"scanner": {"platform": "linux/arm64"}}}))
+                with self.assertRaisesRegex(AssertionError, "override changed"):
+                    bootstrap_module.compose(root, self.config())
+
     def test_android_compose_and_build_commands_are_unchanged(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, patch.object(bootstrap_module.sys, "platform", "darwin"), patch.object(
+                bootstrap_module, "machine", return_value="arm64"):
             root = Path(directory)
             (root / "compose-secrets.json").write_text("{}")
             config = self.config("android")
@@ -230,6 +271,24 @@ class PortabilityTests(unittest.TestCase):
                 with self.assertRaises(AssertionError):
                     bootstrap_module.observe_device_locale("ios", udid)
                 run.assert_not_called()
+
+    def test_ios_locale_preserves_observed_icu_region_override(self):
+        expected = [["xcrun", "simctl", "list", "devices", "available", "--json"],
+                    ["xcrun", "simctl", "spawn", self.udid, "defaults", "read", "NSGlobalDomain", "AppleLocale"]]
+        with patch.object(bootstrap_module.sys, "platform", "darwin"), patch.object(
+                bootstrap_module, "run", side_effect=[json.dumps(self.listing()), "en_GB@rg=inzzzz"]) as run:
+            evidence = bootstrap_module.observe_device_locale("ios", self.udid)
+        self.assertEqual(evidence["locale"], "en-GB-u-rg-inzzzz")
+        self.assertEqual(evidence["observations"]["AppleLocale"], "en_GB@rg=inzzzz")
+        self.assertEqual(run.call_args_list, [call(command, timeout=5) for command in expected])
+
+    def test_icu_locale_conversion_rejects_invalid_or_multiple_modifiers(self):
+        self.assertEqual(bootstrap_module.normalized_locale("en_US@rg=GBZZZZ"), "en-US-u-rg-gbzzzz")
+        self.assertEqual(bootstrap_module.normalized_locale("es_MX@rg=419zzzz"), "es-MX-u-rg-419zzzz")
+        for locale in ("en_GB@rg=in", "en_GB@rg=inzzzz;calendar=gregorian",
+                       "en_GB@rg=inzzzz@rg=gbzzzz", "en_GB@rg=invalid", "en_GB@rg=inzzzz\necho-bad"):
+            with self.subTest(locale=locale), self.assertRaises(AssertionError):
+                bootstrap_module.normalized_locale(locale)
 
     def test_ios_inventory_must_identify_one_available_booted_ios_device(self):
         bad = [None, {}, {"devices": []}, self.listing(state="Shutdown"), self.listing(isAvailable=False),
@@ -473,8 +532,9 @@ class PortabilityTests(unittest.TestCase):
                 self.assertTrue(commands)
 
     def test_finish_receipt_uses_selected_origins_and_preserves_control_plane_tls_and_release_identity(self):
-        for platform in ("android", "ios"):
-            with tempfile.TemporaryDirectory() as directory:
+        for platform, architecture in (("android", "arm64"), ("ios", "arm64"), ("ios", "x86_64")):
+            with self.subTest(platform=platform, architecture=architecture), tempfile.TemporaryDirectory() as directory, patch.object(
+                    bootstrap_module.sys, "platform", "darwin"), patch.object(bootstrap_module, "machine", return_value=architecture):
                 root = Path(directory)
                 (root / "compose-secrets.json").write_text("{}")
                 (root / "seed.json").write_text("{}")
@@ -519,8 +579,14 @@ class PortabilityTests(unittest.TestCase):
                     override = next(root.glob("ios-compose-*.json"))
                     self.assertEqual(receipt["platformComposeOverride"], {"path": str(override),
                         "sha256": bootstrap_module.hashlib.sha256(override.read_bytes()).hexdigest()})
+                    services = json.loads(override.read_text())["services"]
+                    self.assertEqual(services.get("scanner"), {"platform": "linux/amd64"} if architecture == "arm64" else None)
                 else:
                     self.assertNotIn("platformComposeOverride", receipt)
+                self.assertEqual(receipt["composeSha256"], bootstrap_module.hashlib.sha256(
+                    (bootstrap_module.REPO / "compose.mobile-local.yml").read_bytes()).hexdigest())
+                self.assertEqual(receipt["fixtureSourceHashes"]["scripts/mobile/local-bootstrap.py"], bootstrap_module.hashlib.sha256(
+                    (bootstrap_module.REPO / "scripts/mobile/local-bootstrap.py").read_bytes()).hexdigest())
                 self.assertTrue(receipt["apiWebPostgresScannerNetworkInternal"])
                 self.assertFalse(receipt["productionAccessed"] or receipt["metroLaunched"])
                 self.assertEqual(https.call_args_list, [

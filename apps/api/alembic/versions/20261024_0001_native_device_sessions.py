@@ -1,7 +1,9 @@
 """J20/M22 hashed native handoff, session families and rotating replay ledger.
 
 DATA-GOVERNANCE-MAP: updated
-MIGRATION-LOCK-RISK: additive empty tables only; no existing-row rewrite.
+MIGRATION-LOCK-RISK: acknowledged: indexes are created only on the new empty
+native-auth tables in this transaction, before they have any concurrent writers;
+no existing table or row is rewritten.
 MIGRATION-ROLLBACK: revoke native grants before downgrade; credential history
 is security evidence and is retained by a roll-forward/restore-only boundary.
 """

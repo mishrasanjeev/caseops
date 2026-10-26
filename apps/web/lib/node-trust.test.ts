@@ -42,7 +42,9 @@ async function child(args: string[], env = cleanEnv()) {
 }
 
 beforeAll(() => {
-  temp = fs.mkdtempSync(path.join(os.tmpdir(), "caseops-node-trust-"));
+  // Node resolves the copied module's __dirname through macOS /var -> /private/var.
+  // Use that same canonical fixture path in the child's exact trust environment.
+  temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "caseops-node-trust-")));
   trust = path.join(temp, "trust");
   fs.mkdirSync(trust);
   for (const name of ["node-trust.cjs", "node-trust-start.cjs"]) {

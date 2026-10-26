@@ -22490,10 +22490,14 @@ class AssistantActionPreview(Base):
 
 # PostgreSQL does not create indexes for referencing foreign-key columns. Keep
 # model-created schemas and migration-created schemas on the same coverage contract.
-from caseops_api.db.native_auth_models import (  # noqa: E402, F401
-    NativeAuthorizationCode,
-    NativeDeviceSession,
-    NativeRefreshToken,
+from caseops_api.db.native_auth_models import (  # noqa: E402
+    NativeAuthorizationCode as NativeAuthorizationCode,
+)
+from caseops_api.db.native_auth_models import (  # noqa: E402
+    NativeDeviceSession as NativeDeviceSession,
+)
+from caseops_api.db.native_auth_models import (  # noqa: E402
+    NativeRefreshToken as NativeRefreshToken,
 )
 from caseops_api.db.patent_proceeding_models import (  # noqa: E402, F401
     IpPatentProceedingDetail,

@@ -6,6 +6,7 @@ import { validateFirefoxRecipe } from './firefox-handoff.mjs';
 import { fixtureMfaCode, mfaStage } from './mfa.mjs';
 import { MARKER } from './support.mjs';
 import { verifiedFile } from './evidence.mjs';
+import { validateAndroidNativeProof } from './android-native-proof.mjs';
 export { verifiedFile } from './evidence.mjs';
 
 export const SEARCH_KINDS = ['matter_code', 'case_number', 'filing_number', 'cnr_number', 'temporary_e_case_number'];
@@ -22,6 +23,29 @@ export function admitApplication(fixture, platform) {
     assert.equal(fixture.coreInventory, 'native-core-2026-10-25', 'DATED_CORE_FIXTURE_REQUIRED');
   }
   return fixture.appId;
+}
+
+export function validateIosSigningReceipt(signing, appId, actualHash) {
+  assert.equal(signing?.kind, 'ios-simulator-ad-hoc-signing', 'IOS_SIMULATOR_SIGNING_PROOF_REQUIRED');
+  assert.equal(signing.appId, appId, 'SIGNED_SIMULATOR_BUNDLE_ID_MISMATCH');
+  assert.equal(signing.strictVerified, true, 'STRICT_SIMULATOR_SIGNATURE_REQUIRED');
+  assert.equal(signing.signingIdentity, '-', 'SIMULATOR_LOCAL_ADHOC_SIGNING_REQUIRED');
+  assert.equal(signing.distributionSigning, false, 'SIMULATOR_LOCAL_ADHOC_SIGNING_REQUIRED');
+  assert.equal(signing.nativeExecution, 'not-run-by-signing-verifier', 'BUILD_SIGNING_IS_NOT_NATIVE_EXECUTION');
+  assert.equal(signing.artifactSha256, actualHash, 'IOS_SIGNING_ARTIFACT_MISMATCH');
+  assert.equal(signing.entitlementsLocation, 'Mach-O __TEXT,__entitlements', 'EMBEDDED_SIMULATOR_ENTITLEMENTS_REQUIRED');
+  const id = signing.applicationIdentifier, suffix = `.${appId}`;
+  assert.ok(typeof id === 'string' && id.endsWith(suffix) && /^[A-Za-z0-9]+$/.test(id.slice(0, -suffix.length)), 'EMBEDDED_APPLICATION_IDENTIFIER_REQUIRED');
+  assert.deepEqual(signing.keychainAccessGroups, [id], 'EXACT_PRIVATE_KEYCHAIN_GROUP_REQUIRED');
+  assert.ok(Array.isArray(signing.slices) && signing.slices.length > 0 && signing.slices.length <= 2, 'SIMULATOR_ARCHITECTURES_REQUIRED');
+  assert.equal(new Set(signing.slices.map((slice) => slice.architecture)).size, signing.slices.length, 'SIMULATOR_ARCHITECTURES_REQUIRED');
+  for (const slice of signing.slices) {
+    assert.ok(['arm64', 'x86_64'].includes(slice.architecture), 'SIMULATOR_ARCHITECTURES_REQUIRED');
+    assert.equal(slice.applicationIdentifier, id, 'SIMULATOR_ARCHITECTURE_ENTITLEMENTS_MISMATCH');
+    assert.deepEqual(slice.keychainAccessGroups, [id], 'SIMULATOR_ARCHITECTURE_ENTITLEMENTS_MISMATCH');
+  }
+  assert.ok(Array.isArray(signing.evidence) && signing.evidence.length > 0 && signing.evidence.length <= 16, 'SIGNATURE_EVIDENCE_REQUIRED');
+  for (const reference of signing.evidence) verifiedFile(reference.path, reference.sha256);
 }
 
 export function validateBuildReceipt(fixture, platform, actualHash) {
@@ -45,7 +69,9 @@ export function validateBuildReceipt(fixture, platform, actualHash) {
   if (platform === 'android') {
     verifiedFile(fixture.publicCa?.path, fixture.publicCa?.sha256);
     assert.equal(receipt.publicCaSha256, fixture.publicCa.sha256, 'QA_BINARY_CA_MISMATCH');
+    validateAndroidNativeProof(fixture, receipt, actualHash);
   }
+  if (platform === 'ios') validateIosSigningReceipt(receipt.iosSigning, fixture.appId, actualHash);
 }
 
 function nonempty(value) { assert.ok(typeof value === 'string' && value.trim() && value.length <= 4000, 'SEEDED_EXPECTATION_REQUIRED'); }

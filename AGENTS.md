@@ -1,5 +1,32 @@
 # CaseOps agent instructions
 
+- An iOS picker URI returned without the SDK's cache copy is not guaranteed
+  immediately readable. Use the documented cache-copy contract, validate the
+  returned direct-child path, size and ownership before staging, and purge every
+  owned private copy. The SDK's native copy precedes JavaScript size validation.
+  Preserve the OS-managed Inbox parent while purging validated owned files;
+  directory preservation alone did not repair the observed unreadable URI.
+  Prove repeated select/clear/select on the native build without a host byte-read
+  that can prewarm the provider under investigation.
+- A rejected busy command must not run the first command's completion cleanup.
+  Hold a synchronous interaction lease outside React's render cycle, read live
+  state in retained Clear/Choose/leave callbacks, and exercise rapid input with
+  the actual controller, staging and provider cleanup composed together.
+- WebdriverIO element click wrappers can refetch and reexecute a stale click
+  even with transport retries disabled. Dispatch native clicks through the
+  driver's single protocol command; preserve stale/lost acknowledgements and
+  never silently replay a possible mutation.
+
+- Passive native diagnostics must return the original promise unchanged; adding
+  an async wrapper or await can change the race being investigated. Keep fixed,
+  secret-free operation labels behind the explicit QA flag and retain the failed
+  candidate separately from later diagnostic builds.
+- Descriptor identity must remain portable without weakening file ownership.
+  Windows can report lstat.dev=0 while fstat.dev is nonzero; require the same
+  inode and a regular, non-symlink pathname on every platform, and compare device
+  IDs on platforms that expose them consistently. Simulated metadata is not
+  actual Windows acceptance.
+
 - Native acceptance is not a platform-named JavaScript export. Bind the actual
   APK or Simulator app, source fingerprint, backend revision and complete Appium
   inventory independently for Android and iOS. A stable wrapper can contain
@@ -7,6 +34,18 @@
 - Native save preflight does not close a lifecycle race. Carry the observed
   lifecycle version through the request DTO and check it under the same parent
   lock as the mutation, including close/reopen between read and submit.
+
+- Workstation gates must own their dependency installation exclusively. Do
+  not run a host npm install/ci while Vitest, a build or another gate uses that
+  same worktree's node_modules. Activate the pinned Node runtime first, finish
+  installation, then run verification. Preserve interrupted or mixed-runtime
+  reports as incomplete and replay the full frozen inventory without retries.
+
+- A dependency override is not a resolved security repair. Reconcile every
+  nested locked and installed identity after targeted regeneration; npm can
+  retain an older transitive copy even after its override changes. Preserve
+  parser-level reproductions and exact-version licence provenance alongside
+  fresh full-source audit, Docker and deployed-workflow evidence.
 
 - A dated asynchronous-job check must own its bounded completion contract,
   not silently inherit a different local or production UI assertion timeout.

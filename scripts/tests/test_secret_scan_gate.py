@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.util
 import json
@@ -132,6 +133,75 @@ class GitFixture(unittest.TestCase):
         self.write("record.txt", content)
         merged = self.commit("resolve merge")
         return before, side, merged
+
+
+class ReviewedPublicVectorTests(GitFixture):
+    """Public-vector review remains bound to one exact immutable origin span."""
+
+    def test_repository_review_matches_only_the_public_rfc6238_origin(self):
+        origin = "438c79f776373ff31eba881e933ab07b9900231f"
+        path = "scripts/mobile/tooling.test.mjs"
+        entry = f"{origin}:{path}:generic-api-key:528"
+        policy = (ROOT / ".gitleaksignore").read_text().splitlines()
+        self.assertEqual(policy.count(entry), 1)
+        self.assertNotIn(f"{path}:generic-api-key:528", policy)
+        source = scan.git(ROOT, "show", f"{origin}:{path}")
+        span = source.splitlines(keepends=True)[527]
+        public_vector = base64.b32encode(b"12345678901234567890").decode()
+        expected = f"  const secret = '{public_vector}';\n".encode()
+        # Only digests can enter failure diagnostics, never a changed key value.
+        self.assertEqual(hashlib.sha256(span).hexdigest(), hashlib.sha256(expected).hexdigest())
+        self.assertEqual(
+            hashlib.sha256(span).hexdigest(),
+            "92e61d715b87e88b3152d737e72f08862cd37b51b80871373ff6b18c5cd0a60e",
+        )
+        ancestor = REAL_RUN(
+            ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", origin, "HEAD"],
+            capture_output=True, timeout=30, check=False,
+        )
+        self.assertEqual(ancestor.returncode, 0)
+
+    def vector_fixture(self):
+        public_vector = base64.b32encode(b"12345678901234567890").decode()
+        self.span = f"const secret = '{public_vector}';\n"
+        self.write("record.txt", self.span)
+        origin = self.commit("public RFC vector")
+        self.write(".gitleaksignore", f"{origin}:record.txt:generic-api-key:1\n")
+        return origin, self.commit("exact origin review")
+
+    def finding(self, head, start=1):
+        return {"ruleId": "generic-api-key", "partialFingerprints": {"commitSha": head},
+                "locations": [{"physicalLocation": {"artifactLocation": {"uri": "record.txt"},
+                               "region": {"startLine": start, "endLine": start}}}]}
+
+    def resolve(self, head, finding, boundary):
+        tree = self.root / (boundary + "-tree")
+        scan.tracked_tree(self.repo, head, tree)
+        output = self.root / (boundary + "-evidence")
+        output.mkdir()
+        if boundary == "tree":
+            return scan.tree_policy_provenance(self.repo, tree, [finding], output, head)
+        return scan.history_policy_provenance(self.repo, tree, [finding], output, head, "--all")
+
+    def test_shifted_public_vector_requires_exact_origin_in_tree_and_history(self):
+        origin, _ = self.vector_fixture()
+        self.write("record.txt", "// harmless line drift\n" + self.span)
+        head = self.commit("preserved reviewed line")
+        for boundary in ("tree", "history"):
+            result = self.resolve(head, self.finding(head, 2), boundary)
+            self.assertEqual(result, f"/scan/{boundary}-policy.ignore")
+            proof = json.loads((self.root / (boundary + "-evidence") / (boundary + "-policy-provenance.json")).read_text())
+            self.assertEqual(proof["accepted_existing_policy"], 1)
+            self.assertEqual(proof["findings"][0]["existing_fingerprint"], f"{origin}:record.txt:generic-api-key:1")
+
+    def test_changed_value_same_path_and_line_cannot_inherit_public_vector_review(self):
+        self.vector_fixture()
+        self.write("record.txt", self.span.replace("';\n", "A';\n"))
+        head = self.commit("unreviewed changed span")
+        for boundary in ("tree", "history"):
+            with self.assertRaisesRegex(scan.ScanError, "unreviewed findings"):
+                self.resolve(head, self.finding(head), boundary)
+            self.assertFalse((self.root / (boundary + "-policy.ignore")).exists())
 
 
 class SelectionTests(GitFixture):

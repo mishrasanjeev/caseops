@@ -15,11 +15,11 @@ import { authenticate, authorizationIdentity, browserLogin, browserOrigin, login
 import { validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { admitApplication, FixtureUnavailable, ownerControl, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
-import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
+import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, selectMatterActivity, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
 import { backgroundAndResume, click, find, input, nativeAction, read, selector, visible } from '../../apps/mobile/e2e/native-ui.mjs';
 import { collect, harnessFingerprint, inventory as datedInventory, receiptInventory } from '../../apps/mobile/e2e/suite.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
-import { inspectLocalPlan, prepareLocalPlan } from '../../apps/mobile/e2e/local-run.mjs';
+import { androidSessionTransport, inspectLocalPlan, prepareLocalPlan, validateAndroidTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
 import { configuredSessionDeleteAdmission, MAX_SESSION_ADMISSION_EVENTS, proveCurrentSessionDeletion } from '../../apps/mobile/e2e/session-admission.mjs';
 import { browserStep } from '../../apps/mobile/e2e/browser-progress.mjs';
 import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
@@ -28,6 +28,48 @@ import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs
 const installedHash = 'a'.repeat(64);
 const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
 const installedFixture = { appId: 'ai.caseops.mobile.dev', udid: 'emulator-5580', appPath: path.resolve('acceptance.apk') };
+// Model the raw protocol endpoint separately from element lookup/refetch. The
+// existing state-machine callbacks are the synthetic endpoint's server effects.
+function nativeProtocolDouble(driver) {
+  const query = driver.$$.bind(driver), callbacks = new Map();
+  let sequence = 0;
+  driver.$$ = async (...args) => {
+    const matches = await query(...args);
+    for (const element of matches) if (typeof element.click === 'function') {
+      element.elementId ??= `unit-native-${++sequence}`;
+      callbacks.set(element.elementId, element.click.bind(element));
+    }
+    return matches;
+  };
+  driver.elementClick = async id => {
+    assert.ok(callbacks.has(id), 'UNIT_RESOLVED_NATIVE_ID_REQUIRED');
+    await callbacks.get(id)();
+  };
+  return driver;
+}
+
+test('scoped native Activity tap preserves a lost or stale acknowledgement without refinding or replaying', async () => {
+  for (const message of ['stale element reference', 'native click acknowledgement lost']) {
+    const failure = new Error(message), events = [], dispatches = [];
+    let scopeReads = 0, buttonReads = 0, fallbackClicks = 0;
+    const button = { elementId: 'resolved-activity-original', isDisplayed: async () => true, isEnabled: async () => true,
+      getAttribute: async key => ({ type: 'XCUIElementTypeButton', label: 'Activity' })[key],
+      click: async () => { fallbackClicks++; } };
+    const picker = { isDisplayed: async () => true,
+      getAttribute: async key => ({ type: 'XCUIElementTypeSegmentedControl', label: 'Matter view' })[key],
+      $$: async query => { buttonReads++; assert.equal(buttonReads, 1); assert.match(query, /label == "Activity"/); return [button]; } };
+    const context = { platform: 'ios', record: event => events.push(event), driver: {
+      waitUntil: async callback => assert.ok(await callback()),
+      $$: async query => { scopeReads++; assert.equal(scopeReads, 1); assert.match(query, /label == "Matter view"/); return [picker]; },
+      elementClick: async id => { dispatches.push(id); throw failure; },
+    } };
+    await assert.rejects(selectMatterActivity(context), error => error === failure);
+    assert.deepEqual(dispatches, ['resolved-activity-original']);
+    assert.deepEqual({ scopeReads, buttonReads, fallbackClicks }, { scopeReads: 1, buttonReads: 1, fallbackClicks: 0 });
+    assert.deepEqual(events.filter(({ action }) => action === 'click'), [{ type: 'native_ui_action', action: 'click' }]);
+  }
+});
+
 function androidCommandDouble({ install = 'Performing Streamed Install\nSuccess', paths = `package:${installedPath}`,
   digest = `${installedHash}  ${installedPath}`, initialDigest = digest, initialPaths = paths } = {}) {
   const calls = [];
@@ -366,7 +408,7 @@ function resumeDriver(platform, options = {}) {
       return [];
     },
   };
-  return { context: { driver, platform, fixture: { appId, principalLabel: 'unit-principal', workspaceLabel: 'unit-workspace',
+  return { context: { driver: nativeProtocolDouble(driver), platform, fixture: { appId, principalLabel: 'unit-principal', workspaceLabel: 'unit-workspace',
     matter: { title: 'unit-private-title', identityLabel: 'unit-code' } }, record: (event) => records.push(event) }, actions, records };
 }
 
@@ -579,11 +621,27 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
   });
   const driver = {
     switchContext: async (name) => { native = name === 'NATIVE_APP'; },
-    getContexts: async () => ['NATIVE_APP', 'WEBVIEW_browser'], getUrl: async () => url(),
-    getWindowHandles: async () => ['browser-window'], switchToWindow: async () => {},
+    execute: async (command, args) => {
+      assert.equal(platform, 'ios', 'IOS_BROWSER_METADATA_COMMAND_REQUIRED');
+      if (typeof command === 'function') {
+        assert.equal(native, false, 'IOS_FOREGROUND_PROOF_REQUIRES_WEB_CONTEXT');
+        return { visibilityState: 'visible', hasFocus: true };
+      }
+      assert.equal(command, 'mobile: getContexts');
+      assert.deepEqual(args, { waitForWebviewMs: 0 });
+      return [{ id: 'NATIVE_APP' }, ...(stage === 'app' ? [] : [{ id: 'WEBVIEW_browser', url: url(),
+        title: 'Synthetic browser unit', bundleId: 'com.apple.SafariViewService' }])];
+    },
+    getContexts: async () => { assert.equal(platform, 'android'); return ['NATIVE_APP', 'WEBVIEW_browser']; },
+    getUrl: async () => url(),
+    getWindowHandle: async () => { assert.equal(native, false); return 'browser-window'; },
+    getWindowHandles: async () => { assert.equal(platform, 'android'); return ['browser-window']; },
+    switchToWindow: async () => { assert.equal(platform, 'android'); },
     waitUntil: async (callback) => assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED'),
     $$: async (query) => {
       if (native) {
+        if (platform === 'ios' && query === '-ios predicate string:type == "XCUIElementTypeButton" AND (label == "Cancel" OR name == "Cancel")'
+          && stage !== 'app') return [element('cancel')];
         if (query === selector(platform, 'id', 'sign-in') && stage === 'app') return [element('sign-in')];
         if (query === selector(platform, 'id', 'account-open') && stage === 'complete') return [element('account')];
         if (query === selector(platform, 'id', 'signed-out') && stage === 'app') return [element('signed-out')];
@@ -609,7 +667,7 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
       return [];
     },
   };
-  return { context: { driver, platform, fixture: { principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace',
+  return { context: { driver: nativeProtocolDouble(driver), platform, fixture: { principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace',
     auth: { mode: 'web-context', webOrigin: 'https://127.0.0.1:3443', companySlug: 'unit', emailEnv: 'CASEOPS_MOBILE_UNIT_EMAIL', passwordEnv: 'CASEOPS_MOBILE_UNIT_PASSWORD' } }, record: (row) => records.push(row) },
   writes, clicks, records, requests, isNative: () => native };
 }
@@ -689,7 +747,7 @@ function discardDriver(platform, captions = {}) {
       } }];
     },
   };
-  return { context: { driver, platform, fixture: { appId }, record: (event) => records.push(event) }, clicks, records };
+  return { context: { driver: nativeProtocolDouble(driver), platform, fixture: { appId }, record: (event) => records.push(event) }, clicks, records };
 }
 
 test('Android discard validates observed title and exact uppercase canonical button IDs for Stay and Leave', async () => {
@@ -728,6 +786,7 @@ test('native UI action stages retain IDs only, never text selectors, read bodies
     waitUntil: async (predicate) => assert.ok(await predicate()),
     $$: async () => [{ isDisplayed: async () => true, setValue: async () => {}, getText: async () => secret, click: async () => {} }],
   } };
+  nativeProtocolDouble(context.driver);
   await input(context, 'id', 'note-input', secret);
   assert.equal(await read(context, 'id', 'note-body-unit'), secret);
   await click(context, 'id', 'android:id/button1');
@@ -813,7 +872,7 @@ function savedNoteDriver(platform, options = {}) {
       return id === `note-body-${savedId}` && options.duplicateBodyId ? [element, element] : [element];
     },
   };
-  return { context: { driver, platform, fixture: { matter: { identityLabel: 'UNIT-MATTER' } }, noteText: body }, savedId, queries };
+  return { context: { driver: nativeProtocolDouble(driver), platform, fixture: { matter: { identityLabel: 'UNIT-MATTER' } }, noteText: body }, savedId, queries };
 }
 
 test('N9 exact acknowledged body ID proves ack/restart persistence despite a flattened leaf row marker (unit double)', async () => {
@@ -867,7 +926,7 @@ async function calendarDriver(t, { omitReloadRead = false, wrongEventId = false 
       const ids = ['tab-calendar', ...(page === 'calendar' ? ['screen-calendar', 'calendar-go-date', 'reload',
         `event-${wrongEventId ? 'another-hearing' : event.eventId}`] : ['matter-code'])];
       const id = ids.find((id) => query === selector('android', 'id', id));
-      const dateInput = page === 'calendar' && query === selector('android', 'label', 'Agenda date, YYYY-MM-DD');
+      const dateInput = page === 'calendar' && query === selector('android', 'id', 'calendar-date-input');
       const texts = page === 'calendar' ? [event.dayLabel, event.title, event.metaLabel,
         ...(invalid ? ['Enter a valid date as YYYY-MM-DD.'] : [])] : [event.matter.title, event.nextHearingLabel];
       const text = texts.find((text) => query === selector('android', 'text', text));
@@ -883,7 +942,7 @@ async function calendarDriver(t, { omitReloadRead = false, wrongEventId = false 
         } }];
     },
   };
-  return { context: { driver, platform: 'android', fixture: { calendar: event, gatewayRunId: 'unit-calendar', gatewayUrl: await listen(server) } },
+  return { context: { driver: nativeProtocolDouble(driver), platform: 'android', fixture: { calendar: event, gatewayRunId: 'unit-calendar', gatewayUrl: await listen(server) } },
     requests, clicks, waits };
 }
 
@@ -972,7 +1031,7 @@ test('N20 clicks only the fixed server-current revoke ID while retaining cancel,
       } }];
     },
   };
-  await datedScenarios.find(({ id }) => id === 'NATIVE-20').run({ driver, fixture, platform: 'android', record: (event) => records.push(event) });
+  await datedScenarios.find(({ id }) => id === 'NATIVE-20').run({ driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (event) => records.push(event) });
   assert.deepEqual(clicks, ['account-open', 'account-session-current-revoke', 'account-session-cancel',
     'account-session-current-revoke', 'account-session-confirm']);
   assert.equal(state.requests.filter(({ method }) => method === 'DELETE').length, 1);
@@ -1153,15 +1212,29 @@ function acceptanceReceipt(t, platform) {
     appId: fixture.appId, sourceSha: fixture.binarySourceSha, sourceFingerprint: fixture.binarySourceFingerprint,
     automatedTest: true, devEnabled: false, apiOrigin: fixture.apiOrigin, webOrigin: fixture.auth.webOrigin,
     artifact: fixture.appPath, binaryHash: binary.sha256, publicCaSha256: ca.sha256 };
+  if (platform === 'ios') {
+    const applicationIdentifier = `XCODETEAM1.${fixture.appId}`;
+    proof.iosSigning = { kind: 'ios-simulator-ad-hoc-signing', appId: fixture.appId, strictVerified: true,
+      signingIdentity: '-', distributionSigning: false, nativeExecution: 'not-run-by-signing-verifier',
+      artifactSha256: binary.sha256, entitlementsLocation: 'Mach-O __TEXT,__entitlements',
+      applicationIdentifier, keychainAccessGroups: [applicationIdentifier],
+      slices: [{ architecture: 'arm64', applicationIdentifier, keychainAccessGroups: [applicationIdentifier] }],
+      evidence: [ownedFile(t, 'Synthetic unit signing evidence; not actual Mac code signing.')] };
+  }
   fixture.buildReceipt = ownedFile(t, proof);
   return { fixture, proof, hash: binary.sha256 };
 }
 test('standalone build receipts bind platform, source, artifact hash, origins and Android CA without loosening base fences', (t) => {
   for (const platform of ['android', 'ios']) {
-    const { fixture, hash } = acceptanceReceipt(t, platform);
+    const { fixture, proof, hash } = acceptanceReceipt(t, platform);
     validateBuildReceipt(fixture, platform, hash);
     assert.throws(() => validateBuildReceipt({ ...fixture, buildReceipt: undefined }, platform, hash));
     assert.throws(() => validateBuildReceipt(fixture, platform, '0'.repeat(64)), /HASH_MISMATCH/);
+    if (platform === 'ios') {
+      const unsigned = { ...proof };
+      delete unsigned.iosSigning;
+      assert.throws(() => validateBuildReceipt({ ...fixture, buildReceipt: ownedFile(t, unsigned) }, platform, hash), /IOS_SIMULATOR_SIGNING_PROOF_REQUIRED/);
+    }
   }
 });
 test('standalone receipt field substitution never authorizes another build or a debug/markerless binary', (t) => {
@@ -1376,9 +1449,51 @@ function firefoxDouble(t, foreign = false, options = {}) {
         } }];
     },
   };
-  return { context: { driver, fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes,
+  return { context: { driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes,
     elapsed: () => clock };
 }
+
+test('actual Android Firefox wrapper dispatches resolved submit, consent, MFA and app-open IDs once after stale/lost acknowledgements', async t => {
+  browserEnvironment(t);
+  for (const key of ['submit', 'connect', 'mfaSubmit', 'appOpen']) for (const lostAcknowledgement of [false, true]) {
+    const fake = firefoxDouble(t, false, { consent: true }), { driver } = fake.context;
+    const locator = fake.context.fixture.auth.firefoxUi.locators[key], query = selector('android', locator.kind, locator.value);
+    const lookup = driver.$$.bind(driver), rawClick = driver.elementClick.bind(driver);
+    let resolvedId, lookups = 0, lookupsAtFailure, wrapperClicks = 0;
+    const dispatched = [], failure = new Error(lostAcknowledgement ? 'UNIT_NATIVE_CLICK_ACK_UNKNOWN' : 'UNIT_STALE_NATIVE_ELEMENT');
+    driver.$$ = async value => {
+      lookups++;
+      const controls = await lookup(value);
+      if (value === query) for (const element of controls) {
+        resolvedId = element.elementId;
+        element.click = async () => { wrapperClicks++; throw new Error('ELEMENT_CLICK_WRAPPER_MUST_NOT_BE_CALLED'); };
+      }
+      return controls;
+    };
+    driver.elementClick = async id => {
+      dispatched.push(id);
+      if (id !== resolvedId) return rawClick(id);
+      if (lostAcknowledgement) await rawClick(id);
+      lookupsAtFailure = lookups;
+      throw failure;
+    };
+    await assert.rejects(browserLogin(fake.context), error => error === failure);
+    assert.equal(wrapperClicks, 0); assert.equal(dispatched.filter(id => id === resolvedId).length, 1);
+    assert.equal(lookups, lookupsAtFailure, 'FAILED_NATIVE_CLICK_MUST_NOT_REFETCH');
+    assert.equal(fake.clicks.filter(value => value === key).length, lostAcknowledgement ? 1 : 0);
+    assert.equal(fake.records.some(event => event.type === 'browser_step' && event.key === 'native-return'), false);
+    assert.ok(!JSON.stringify(fake.records).includes('unit-only'));
+  }
+});
+
+test('current Android Firefox and Files wrappers contain no refetching element click calls', () => {
+  for (const file of ['firefox-handoff.mjs', 'files-20261025.mjs']) {
+    const source = readFileSync(new URL(`../../apps/mobile/e2e/${file}`, import.meta.url), 'utf8');
+    assert.equal(/\.click\s*\(/.test(source), false, file);
+    assert.ok(source.includes('dispatchNativeClick('), file);
+  }
+});
+
 test('Firefox already-full browser skips Custom Tab menu conversion but retains MFA, PKCE and one explicit grant', async (t) => {
   browserEnvironment(t);
   const fake = firefoxDouble(t, false, { consent: true, androidBack: true, fullBrowserInitially: true,
@@ -1881,6 +1996,121 @@ function localPlan(t) {
     outputFixture: path.join(path.dirname(output.path), 'native-fixture.json') };
 }
 
+function macTransportPlan(t) {
+  const plan = localPlan(t), receipt = JSON.parse(readFileSync(plan.buildReceipt.path, 'utf8'));
+  plan.device.udid = 'emulator-5584';
+  plan.androidTransport = { adbPort: 5038, appiumUrl: 'http://127.0.0.1:4725', systemPort: 8202 };
+  const directory = path.dirname(receipt.artifact);
+  const save = (name, value) => {
+    const file = path.join(directory, name), bytes = Buffer.from(typeof value === 'string' ? value : JSON.stringify(value));
+    writeFileSync(file, bytes, { flag: 'wx' });
+    return { path: file, sha256: createHash('sha256').update(bytes).digest('hex') };
+  };
+  const inputs = ['build.gradle', 'settings.gradle', 'gradle.properties', 'app/build.gradle', 'gradle/wrapper/gradle-wrapper.properties']
+    .map(relativePath => { const bytes = `explicit synthetic generated input ${relativePath}`;
+      const ref = save(relativePath.replaceAll('/', '-'), bytes);
+      return { relativePath, sha256: ref.sha256, sizeBytes: Buffer.byteLength(bytes) }; });
+  const proof = { schemaVersion: 1, kind: 'android-local-arm64-signature-proof', appId: plan.appId, artifactSha256: receipt.binaryHash,
+    versionCode: 1, versionName: 'unit', architecture: 'arm64-v8a', signatureVerified: true, signatureSchemeV2: true,
+    certificateSha256: '3'.repeat(64), intendedDeviceSerial: plan.device.udid, distributionSigning: false, nativeExecution: 'not-run-by-build-wrapper',
+    evidence: [save('apk-badging.log', `package: name='${plan.appId}' versionCode='1' versionName='unit'\nnative-code: 'arm64-v8a'\n`),
+      save('apk-signing.log', `Verifies\nVerified using v2 scheme (APK Signature Scheme v2): true\nNumber of signers: 1\nV2 Signer: certificate SHA-256 digest: ${'3'.repeat(64)}\n`),
+      save('apk-abi.json', { schemaVersion: 1, abis: ['arm64-v8a'], nativeLibraryCount: 4, elfClass: 64, elfMachine: 183 }),
+      save('generated-android-inputs.json', { schemaVersion: 1, files: inputs }),
+      save('java21.log', 'Temurin-21.0.12.1+1 explicit synthetic fixture'), save('java17.log', 'Temurin-17.0.20.1+1 explicit synthetic fixture')] };
+  receipt.androidSecurity = { kind: 'compiled-android-acceptance-security', apkSha256: receipt.binaryHash,
+    nativeArtifactEvidence: save('android-native-proof.json', proof) };
+  plan.buildReceipt = ownedFile(t, receipt);
+  return plan;
+}
+
+const androidTransportEnvironment = { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5038', ANDROID_ADB_SERVER_PORT: '5038',
+  ANDROID_SERIAL: 'emulator-5584', CASEOPS_MOBILE_APPIUM_URL: 'http://127.0.0.1:4725' };
+function returnedAndroidCapabilities(fixture, prefixed = false) {
+  return { platformName: 'Android', ...Object.fromEntries(Object.entries({ automationName: 'UiAutomator2', udid: fixture.udid,
+    appPackage: fixture.appId, platformVersion: fixture.platformVersion, adbPort: 5038, systemPort: 8202 })
+    .map(([key, value]) => [prefixed ? `appium:${key}` : key, value])) };
+}
+
+test('generated Mac plan preserves isolated transport through prepared fixture, requested capabilities and actual session readback', (t) => {
+  const plan = macTransportPlan(t), prepared = prepareLocalPlan(plan, 'android', unitCredentials);
+  assert.deepEqual(prepared.readiness.blockers, []);
+  const fixture = JSON.parse(readFileSync(prepared.readiness.fixturePath, 'utf8'));
+  assert.deepEqual(fixture.androidTransport, plan.androidTransport);
+  const requested = androidSessionTransport(fixture, 'android', androidTransportEnvironment);
+  assert.equal(requested.appiumUrl.href, 'http://127.0.0.1:4725/');
+  assert.deepEqual(requested.capabilities, { 'appium:adbPort': 5038, 'appium:systemPort': 8202 });
+  for (const prefixed of [false, true]) {
+    const proof = verifyAndroidSessionTransport(fixture, 'android', returnedAndroidCapabilities(fixture, prefixed));
+    assert.deepEqual(proof, { type: 'android_transport_verified', source: 'new-session-response', udid: 'emulator-5584',
+      appId: fixture.appId, appiumUrl: 'http://127.0.0.1:4725', adbPort: 5038, systemPort: 8202 });
+  }
+});
+
+test('Mac proof plans reject absent, malformed, wrong-port, wrong-URL and wrong-device transport before fixture output', (t) => {
+  for (const edit of [plan => { delete plan.androidTransport; }, plan => { plan.androidTransport = null; },
+    plan => { plan.androidTransport.adbPort = 5037; }, plan => { plan.androidTransport.adbPort = '5038'; },
+    plan => { plan.androidTransport.systemPort = 8200; }, plan => { plan.androidTransport.appiumUrl = 'http://127.0.0.1:4723'; },
+    plan => { plan.androidTransport.appiumUrl = 'http://127.0.0.1:4725/?unsafe=1'; }, plan => { plan.device.udid = 'emulator-5554'; },
+    plan => { plan.androidTransport.unreviewedFallback = 5037; }]) {
+    const plan = macTransportPlan(t); edit(plan);
+    assert.throws(() => prepareLocalPlan(plan, 'android', unitCredentials), /MAC_ANDROID_TRANSPORT_REQUIRED|ANDROID_TRANSPORT_/);
+    assert.throws(() => readFileSync(plan.outputFixture), /ENOENT/);
+  }
+});
+
+test('plain-adb socket and runner endpoint cannot disagree with the bound Mac transport before creating a session', (t) => {
+  const fixture = inspectLocalPlan(macTransportPlan(t), 'android', unitCredentials).fixture;
+  for (const patch of [{ ADB_SERVER_SOCKET: undefined }, { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5037' },
+    { ANDROID_ADB_SERVER_PORT: '5037' }, { ANDROID_SERIAL: 'emulator-5554' },
+    { CASEOPS_MOBILE_APPIUM_URL: 'http://127.0.0.1:4723' }]) {
+    let sessions = 0;
+    assert.throws(() => { androidSessionTransport(fixture, 'android', { ...androidTransportEnvironment, ...patch }); sessions++; }, /ANDROID_TRANSPORT_/);
+    assert.equal(sessions, 0);
+  }
+  const explicitPlanUrl = androidSessionTransport(fixture, 'android', { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5038' });
+  assert.equal(explicitPlanUrl.appiumUrl.port, '4725');
+});
+
+test('omitted, mismatched or conflicting returned capability aliases prevent native actions and retain one owned cleanup', async (t) => {
+  const fixture = inspectLocalPlan(macTransportPlan(t), 'android', unitCredentials).fixture;
+  for (const edit of [caps => { delete caps.adbPort; }, caps => { caps.adbPort = 5037; }, caps => { delete caps.systemPort; },
+    caps => { caps.systemPort = 8200; }, caps => { delete caps.udid; }, caps => { caps.udid = 'emulator-5554'; },
+    caps => { caps.appPackage = 'foreign.app'; }, caps => { caps.platformVersion = 'guessed'; },
+    caps => { caps['appium:adbPort'] = 5037; }, caps => { caps.platformName = 'iOS'; }]) {
+    const driver = { capabilities: returnedAndroidCapabilities(fixture), async deleteSession() { cleanups++; } };
+    let nativeActions = 0, cleanups = 0; edit(driver.capabilities);
+    await assert.rejects(async () => {
+      try { verifyAndroidSessionTransport(fixture, 'android', driver.capabilities); nativeActions++; }
+      finally { await driver.deleteSession(); }
+    }, /ANDROID_SESSION_/);
+    assert.equal(nativeActions, 0); assert.equal(cleanups, 1);
+  }
+});
+
+test('historical Windows plans without Mac proof or transport retain their existing endpoint and capability behavior', (t) => {
+  const plan = localPlan(t), result = inspectLocalPlan(plan, 'android', unitCredentials);
+  assert.deepEqual(result.readiness.blockers, []); assert.equal(Object.hasOwn(result.fixture, 'androidTransport'), false);
+  assert.equal(validateAndroidTransport(result.fixture, 'android'), null);
+  assert.deepEqual(androidSessionTransport(result.fixture, 'android', {}).capabilities, {});
+  assert.equal(androidSessionTransport(result.fixture, 'android', {}).appiumUrl.href, 'http://127.0.0.1:4723/');
+  assert.equal(verifyAndroidSessionTransport(result.fixture, 'android', undefined), null);
+});
+
+test('actual runner binds transport before preflight device work and checks returned capabilities before every native action', () => {
+  const source = readFileSync(new URL('./run-native.mjs', import.meta.url), 'utf8');
+  assert.ok(source.indexOf('const sessionTransport = androidSessionTransport(') < source.indexOf('owner = await loadOwnerControls('));
+  assert.ok(source.indexOf('...sessionTransport.capabilities') < source.indexOf('driver = await remote('));
+  const check = source.indexOf('verifyAndroidSessionTransport(fixture, platform, driver.capabilities)');
+  assert.ok(check > source.indexOf('ownedSessionId = sessionCreated.sessionId'));
+  assert.ok(check < source.indexOf('await configureNativeDriver('));
+  assert.ok(check < source.indexOf("boundary: 'case-setup'"));
+  assert.ok(check < source.indexOf('const contexts = await driver.getContexts()'));
+  assert.ok(source.indexOf("assert.equal(androidTransportRejected, false, 'ANDROID_TRANSPORT_PREVIOUSLY_REFUSED')") < source.indexOf('driver = await remote('));
+  assert.ok(source.includes('androidTransportRejected = true; throw error;'));
+  assert.equal(source.match(/if \(driver\) await driver\.deleteSession\(\)/g)?.length, 1);
+});
+
 function dynamicSessionPlan(t) {
   const plan = localPlan(t), receipt = JSON.parse(readFileSync(plan.dockerReceipt.path, 'utf8'));
   const source = fileURLToPath(new URL('./local-gateway.py', import.meta.url));
@@ -2145,7 +2375,7 @@ function readinessDouble({ initial = 'restoring', restoreAt = Infinity, logoutRe
     },
     performActions: async () => { gestures.push(time); assert.fail('NO_GESTURE_DURING_OFFLINE_READINESS'); },
   };
-  const context = { driver, platform: 'android', fixture: {
+  const context = { driver: nativeProtocolDouble(driver), platform: 'android', fixture: {
     principalLabel: 'Synthetic Restart Principal', workspaceLabel: 'Synthetic Restart Workspace',
     auth: { mode: 'web-context', webOrigin: 'https://127.0.0.1:3443', companySlug: 'synthetic-restart',
       mfaRequired: true, mfaStage: 'consent', emailEnv: 'CASEOPS_MOBILE_UNIT_EMAIL', passwordEnv: 'CASEOPS_MOBILE_UNIT_PASSWORD' },

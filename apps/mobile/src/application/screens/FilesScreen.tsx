@@ -17,6 +17,7 @@ import { createMatterFilesApi } from "../../files/api";
 import { matchesSelection, uploadRestriction } from "../../files/contracts";
 import type { MatterFile, MatterFileSelection } from "../../files/contracts";
 import { createFilesController } from "../../files/controller";
+import { createFilesInteractionActions } from "../../files/interaction-actions";
 import {
   cleanupPickedFile,
   nativeFileStager,
@@ -94,6 +95,7 @@ function ScopedFilesScreen(props: FilesScreenProps) {
     controller.getSnapshot,
     controller.getSnapshot,
   );
+  const interactions = useMemo(() => createFilesInteractionActions(controller), [controller]);
   const [visible, setVisible] = useState(25);
   const [privacyClosed, setPrivacyClosed] = useState(false);
   useEffect(() => {
@@ -121,15 +123,18 @@ function ScopedFilesScreen(props: FilesScreenProps) {
   const unknown = snapshot.upload.state === "unknown";
   useEffect(() => {
     props.guard.current = (leave) => {
-      if (busy) {
+      const state = controller.getSnapshot().upload.state;
+      const pending = state === "preparing" || state === "uploading";
+      const outcomeUnknown = state === "unknown";
+      if (pending) {
         Alert.alert(
           "Upload in progress",
           "Wait for the upload outcome, or use Stop waiting before leaving.",
         );
-      } else if (unknown || selectedFile) {
+      } else if (outcomeUnknown || selectedFile) {
         Alert.alert(
-          unknown ? "Upload outcome unknown" : "Discard file selection?",
-          unknown
+          outcomeUnknown ? "Upload outcome unknown" : "Discard file selection?",
+          outcomeUnknown
             ? "The file may already be saved. Leaving does not cancel it or upload it again. Reload Files before deciding whether another upload is needed."
             : "The selected file has not been uploaded.",
           [
@@ -142,7 +147,7 @@ function ScopedFilesScreen(props: FilesScreenProps) {
     return () => {
       props.guard.current = null;
     };
-  }, [busy, unknown, selectedFile, props.guard]);
+  }, [controller, selectedFile, props.guard]);
   const workspace =
     snapshot.view.state === "ready" ? snapshot.view.workspace : null;
   const scopedSelection =
@@ -169,7 +174,7 @@ function ScopedFilesScreen(props: FilesScreenProps) {
           "This file is unsupported, unavailable or exceeds the current size limit. Choose a PDF, Word, text, PNG or JPEG file within the limit.";
       }
   }
-  const clearSelection = () => {
+  const clearSelectionOwned = () => {
     try {
       if (selectedFile) cleanupPickedFile(selectedFile.asset);
     } catch {
@@ -178,11 +183,10 @@ function ScopedFilesScreen(props: FilesScreenProps) {
       onClearSelectedFile();
     }
   };
+  const clearSelection = () => interactions.clear(clearSelectionOwned);
   const upload = async () => {
     if (!scopedSelection) return;
-    await controller.submit(scopedSelection);
-    // Root owns provider URIs. An orphan completion must not mutate root state.
-    if (controller.getSnapshot().view.state !== "inactive") clearSelection();
+    await interactions.upload(scopedSelection, clearSelectionOwned);
   };
 
   if (privacyClosed || snapshot.view.state === "inactive")
@@ -325,10 +329,10 @@ function ScopedFilesScreen(props: FilesScreenProps) {
                 label={selectedFile ? "Choose another file" : "Choose file"}
                 secondary={!!selectedFile}
                 disabled={busy || unknown || snapshot.cleanupFailed}
-                onPress={() => {
+                onPress={() => interactions.choose(() => {
                   controller.clearOutcome();
                   onChooseFile(workspace.matter.lifecycle_version);
-                }}
+                })}
               />
             </View>
           )}
@@ -349,6 +353,9 @@ function ScopedFilesScreen(props: FilesScreenProps) {
           >
             {snapshot.upload.message}
           </Text>
+          {snapshot.upload.preparationStep ? (
+            <View collapsable={false} testID={`files-preparation-failure-${snapshot.upload.preparationStep}`} style={{ width: 1, height: 1 }} />
+          ) : null}
           {busy ? (
             <NativeButton
               testID="files-upload-cancel"

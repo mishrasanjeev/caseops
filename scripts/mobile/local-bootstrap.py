@@ -7,6 +7,7 @@ import http.client
 import json
 import os
 from pathlib import Path
+from platform import machine
 import secrets
 import re
 import socket
@@ -55,9 +56,18 @@ def validated_config(config, requested_platform=None):
 
 
 def normalized_locale(value):
-    assert isinstance(value, str) and len(value) <= 64 and re.fullmatch(
-        r"[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*", value), "Observed device locale required"
-    return value.replace("_", "-")
+    assert isinstance(value, str) and len(value) <= 64, "Observed device locale required"
+    base, separator, modifier = value.partition("@")
+    assert re.fullmatch(r"[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*", base), "Observed device locale required"
+    locale = base.replace("_", "-")
+    if separator:
+        # AppleLocale uses ICU syntax for a region distinct from its language.
+        # Keep that observed region in Intl's Unicode extension rather than
+        # dropping it or changing the dedicated Simulator's preferences.
+        region = re.fullmatch(r"rg=((?:[A-Za-z]{2}|[0-9]{3})[zZ]{4})", modifier)
+        assert region is not None, "Observed device locale modifier required"
+        locale += "-u-rg-" + region[1].lower()
+    return locale
 
 
 def device_output(command):
@@ -248,6 +258,11 @@ def extend_fixture(cache, config, args, stamp):
                       "destructiveControlsExecuted": False, "apiRebuilt": False}), flush=True)
 
 
+def ios_scanner_platform():
+    # The pinned ClamAV index has only a linux/amd64 executable manifest.
+    return "linux/amd64" if sys.platform == "darwin" and machine().lower() in {"arm64", "aarch64"} else None
+
+
 def compose(cache, config):
     config = validated_config(config)
     env = os.environ.copy()
@@ -260,9 +275,12 @@ def compose(cache, config):
     env.update(json.loads((cache / "compose-secrets.json").read_text()))
     command = ["docker", "compose", "-f", str(REPO / "compose.mobile-local.yml")]
     if config["CASEOPS_MOBILE_PLATFORM"] == "ios":
-        # Override only the Android public URL; inherited TLS/CORS/network fences stay intact.
+        # Keep canonical image pins and inherited TLS/CORS/network fences intact.
         override = {"services": {service: {"environment": {"CASEOPS_PUBLIC_APP_URL": config["CASEOPS_MOBILE_WEB_ORIGIN"]}}
                                  for service in ("api", "migrate")}}
+        scanner_platform = ios_scanner_platform()
+        if scanner_platform:
+            override["services"]["scanner"] = {"platform": scanner_platform}
         content = json.dumps(override, sort_keys=True)
         path = cache / f"ios-compose-{hashlib.sha256(content.encode()).hexdigest()[:12]}.json"
         if path.exists():

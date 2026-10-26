@@ -12,7 +12,7 @@ import { binaryHash, Journal, localJson, localUrl, reconcileResults, safeFailure
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
-import { inspectLocalPlan, prepareLocalPlan } from '../../apps/mobile/e2e/local-run.mjs';
+import { androidSessionTransport, inspectLocalPlan, prepareLocalPlan, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
 import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 
@@ -67,11 +67,14 @@ if (mode === '--collect') {
   deadline.unref();
   const initialHarness = harnessFingerprint();
   journal.write({ type: 'run_started', ...collection, harnessFingerprint: initialHarness, ...initialSnapshot });
-  let fixture, owner, remote, appiumUrl, capabilities, selectedBinaryHash, runGatewayBaseline, preflightFailed = false;
+  let fixture, owner, remote, appiumUrl, capabilities, selectedBinaryHash, runGatewayBaseline, preflightFailed = false,
+    androidTransportRejected = false;
   try {
     if (platform === 'ios') assert.equal(process.platform, 'darwin', 'IOS_REQUIRES_OWNER_MACBOOK_XCODE');
     assert.ok(process.env.CASEOPS_MOBILE_FIXTURE, 'ISOLATED_FIXTURE_MISSING');
     fixture = JSON.parse(readFileSync(process.env.CASEOPS_MOBILE_FIXTURE, 'utf8'));
+    const sessionTransport = androidSessionTransport(fixture, platform);
+    appiumUrl = sessionTransport.appiumUrl;
     validateCoreFixture(fixture);
     owner = await loadOwnerControls(fixture);
     assert.equal(fixture.syntheticDataOnly, true, 'NO_PRIVATE_FIXTURES');
@@ -112,7 +115,6 @@ if (mode === '--collect') {
     validateBuildReceipt(fixture, platform, selectedBinaryHash);
     const tooling = process.env.CASEOPS_MOBILE_TOOLING_HOME || path.join(os.homedir(), '.cache/caseops-mobile/tooling');
     remote = createRequire(path.join(tooling, 'package.json'))('webdriverio').remote;
-    appiumUrl = localUrl(process.env.CASEOPS_MOBILE_APPIUM_URL || 'http://127.0.0.1:4723');
     const appium = await localJson(new URL('status', `${appiumUrl.href.replace(/\/$/, '')}/`).href);
     assert.equal(appium.value.ready, true, 'APPIUM_NOT_READY');
     if (platform === 'android') journal.write({ ...attestAndroidBinary(fixture, selectedBinaryHash, { install: true }), boundary: 'preflight' });
@@ -126,6 +128,7 @@ if (mode === '--collect') {
       'appium:noReset': true,
       'appium:enforceAppInstall': true,
       'appium:newCommandTimeout': 60,
+      ...sessionTransport.capabilities,
       ...(platform === 'android' ? { 'appium:appPackage': fixture.appId,
         'appium:dontStopAppOnReset': true, 'appium:ensureWebviewsHavePages': true,
         'appium:enableWebviewDetailsCollection': true } : { 'appium:bundleId': fixture.appId,
@@ -155,6 +158,7 @@ if (mode === '--collect') {
     journal.write({ type: 'phase_started', id, phase: 'setup' });
     try {
       assert.equal(preflightFailed, false, 'PREFLIGHT_FAILED');
+      assert.equal(androidTransportRejected, false, 'ANDROID_TRANSPORT_PREVIOUSLY_REFUSED');
       authGate.assertSetup();
       if (previousCase?.cleanupUncertain) throw new FixtureUnavailable('PREVIOUS_NATIVE_SESSION_CLEANUP_UNCERTAIN');
       assert.notEqual(owner?.poisoned, true, 'OWNER_CONTROL_PREVIOUSLY_UNCERTAIN');
@@ -168,6 +172,10 @@ if (mode === '--collect') {
       const sessionCreated = appiumSessionEvent(driver.sessionId, 'created');
       ownedSessionId = sessionCreated.sessionId;
       journal.write({ ...sessionCreated, id });
+      try {
+        const transportProof = verifyAndroidSessionTransport(fixture, platform, driver.capabilities);
+        if (transportProof) journal.write({ ...transportProof, id });
+      } catch (error) { androidTransportRejected = true; throw error; }
       await configureNativeDriver(driver, platform, (event) => journal.write({ ...event, id }));
       if (platform === 'android') journal.write({ ...attestAndroidBinary(fixture, selectedBinaryHash), boundary: 'case-setup', id });
       const contexts = await driver.getContexts();
