@@ -1,5 +1,13 @@
 # CaseOps agent instructions
 
+- Verification isolation belongs on each actual HTTP constructor, including
+  curl, urllib, container fetch, readiness and signed verification clients.
+  A Playwright fixture cannot supply another client's no-paid marker. Regress
+  the received headers/native argument array on happy, failed and retried
+  requests; preserve TLS, authentication, payloads and original time bounds.
+  An unmarked public metadata read is a protocol deviation, not proof of a
+  billable provider call. Retain it and replay the marked boundary explicitly.
+
 - Workstation gates must own their dependency installation exclusively. Do
   not run a host npm install/ci while Vitest, a build or another gate uses that
   same worktree's node_modules. Activate the pinned Node runtime first, finish

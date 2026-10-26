@@ -1,5 +1,23 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 26 Verification Marker #561
+
+Partially fixed at the local verification-client boundary; production closure
+pending. Original source sends Accept without the mandatory no-paid marker.
+Retained actual request-construction/certificate/retry/CLI RED:5failed/4passed;
+complete repaired module9passed. Local startup/Docker/cold diagnostic RED:5
+missing-marker assertions, followed by complete5passed. No fixture error is
+counted as a product reproduction. Adjacent independent verification clients
+are included without weakening authentication, TLS, deadlines or provider fences.
+Required final gates and stableVR561-01..05: bugfix-verification-markers-2026-10-26.md.
+
+Serving29865557and its successful exact QA40256221597 supersede older pending
+Batch3 checkpoints below:399passed/18explicit skips,zero failures/retries,
+including all51datedIP/Calendar writes and49public cases. That is the earlier
+release's evidence, not this new candidate's regression result. The interrupted
+native Files0/2 evidence remains failed; its separate recovery is active and
+the prior Android23/23receipt is not promoted to its newer HEAD.
+
 ## October 23 IP18 Export Completion Contract
 
 Serving875 is deployed but production39915271013 is NO-GO:414 actual cases,

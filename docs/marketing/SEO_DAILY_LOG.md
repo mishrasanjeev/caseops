@@ -8,6 +8,12 @@ traffic, a backlink, or a conversion.
 
 ## 2026-10-26 IST - Successful Direct GSC Retry
 
+Release-integration annotation: the owner subsequently requested including
+this actual audit log with issue561. This focused code candidate carries the
+unchanged dated observations below; its new release acceptance is separate
+and pending. Do not retroactively describe these stored Google crawls as a
+crawl of the forthcoming release or erase the earlier marker qualification.
+
 J19/M21/US-063; FT-094..096, NFT-023/SEC-031. The earlier safety-stopped
 attempt was incomplete. A fresh URL-bound temporary browser tab succeeded,
 visibly signed in as `sanjeev@orchestrum.in` for `https://caseops.ai/`, and was

@@ -73,7 +73,7 @@ LAST_INGESTED=""
 DOC_COUNT="?"
 AGE_HOURS="?"
 
-STATS=$(curl -sS -m 60 "https://api.caseops.ai/api/health/ingest" 2>/dev/null) || STATS=""
+STATS=$(curl -sS -m 60 --header 'X-CaseOps-Automated-Test:no-paid-providers' "https://api.caseops.ai/api/health/ingest" 2>/dev/null) || STATS=""
 if [[ -z "$STATS" ]]; then
   FALLTHROUGH="api_unreachable"
 else
