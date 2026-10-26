@@ -106,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
             "Content-Type": "application/json",
             "X-CaseOps-Machine-Timestamp": timestamp,
             "X-CaseOps-Machine-Signature": signature,
+            "X-CaseOps-Automated-Test": "no-paid-providers",
         },
     )
     try:

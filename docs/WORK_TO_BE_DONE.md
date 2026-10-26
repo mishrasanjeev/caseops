@@ -1,5 +1,20 @@
 # CaseOps  - Work To Be Done
 
+## October 26 Verification Isolation And Interrupted Native Work
+
+Current focused release: issue561and the actual October26 SEO daily evidence.
+The previous559release is certified on29865557; do not repeat its obsolete
+pending deployment descriptions below. Preserve failed and skipped evidence.
+Actual-client marker regressions are locally green, but full frozen Docker,
+current CI/Security, protected main merge and exact-serving production replay
+remain required. Ownership/bounds: bugfix-verification-markers-2026-10-26.md.
+
+Resume the independently interrupted Android Files diagnostics/recovery in
+mobile558, preserving the failed0/2replacement and accepted23-case older core
+receipt. Full native/core/security/release and owner-MacBook iOS acceptance are
+not established by the verification-client release. Keep heavyweight workstation
+gates exclusive and preserve deferred external cleanup/consent boundaries.
+
 ## October 25 Security Dependency Closure
 
 Issue559 is the current release priority under QG-SEC-001/002/004. Candidate

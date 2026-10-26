@@ -19,6 +19,7 @@ $RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $ComposeFile = Join-Path $RepoRoot "docker-compose.yml"
 $ApiDir = Join-Path $RepoRoot "apps\api"
 $ApiPython = Join-Path $ApiDir ".venv\Scripts\python.exe"
+$AutomatedTestHeaders = @{ "X-CaseOps-Automated-Test" = "no-paid-providers" }
 $TestApiProxyScript = Join-Path $RepoRoot "scripts\docker-acceptance-api-proxy.mjs"
 # Browser acceptance must use the candidate's own config, specs and installed
 # Playwright. A relative --config or npx lookup follows the caller's working
@@ -1319,15 +1320,15 @@ try {
         }
     }
 
-    $ApiHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health"
-    $ApiIdentity = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/build"
-    $WebIdentity = Invoke-RestMethod "http://127.0.0.1:$WebPort/api/release-identity"
+    $ApiHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health" -Headers $AutomatedTestHeaders
+    $ApiIdentity = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/build" -Headers $AutomatedTestHeaders
+    $WebIdentity = Invoke-RestMethod "http://127.0.0.1:$WebPort/api/release-identity" -Headers $AutomatedTestHeaders
     if ($ApiHealth.status -ne "ok") { throw "API health probe did not return ok." }
     if ($ApiIdentity.release_sha -ne $ReleaseSha) { throw "API runtime identity does not match the candidate." }
     if ($WebIdentity.release_sha -ne $ReleaseSha) { throw "Web runtime identity does not match the candidate." }
 
     Write-Host "[docker-acceptance] verifying the web server's internal API origin"
-    $ServerOriginProbe = "(async()=>{const base=process.env.CASEOPS_API_BASE_URL;if(base!=='http://api:8000')throw new Error('Invalid internal API origin');const health=await fetch(base+'/api/health',{signal:AbortSignal.timeout(5000)});const build=await fetch(base+'/api/build',{signal:AbortSignal.timeout(5000)});if(!health.ok||!build.ok)throw new Error('Internal API unavailable');if((await health.json()).status!=='ok'||(await build.json()).release_sha!==process.env.CASEOPS_RELEASE_SHA)throw new Error('Internal API identity mismatch');process.stdout.write('internal-api-origin-and-identity-ok');})().catch(()=>process.exit(1))"
+    $ServerOriginProbe = "(async()=>{const base=process.env.CASEOPS_API_BASE_URL;if(base!=='http://api:8000')throw new Error('Invalid internal API origin');const headers={'X-CaseOps-Automated-Test':'no-paid-providers'};const health=await fetch(base+'/api/health',{headers,signal:AbortSignal.timeout(5000)});const build=await fetch(base+'/api/build',{headers,signal:AbortSignal.timeout(5000)});if(!health.ok||!build.ok)throw new Error('Internal API unavailable');if((await health.json()).status!=='ok'||(await build.json()).release_sha!==process.env.CASEOPS_RELEASE_SHA)throw new Error('Internal API identity mismatch');process.stdout.write('internal-api-origin-and-identity-ok');})().catch(()=>process.exit(1))"
     & docker compose --project-name $ComposeProject --file $ComposeFile exec --no-TTY web node -e $ServerOriginProbe
     if ($LASTEXITCODE -ne 0) { throw "Web server-to-server API origin/identity preflight failed." }
 
@@ -1442,7 +1443,7 @@ try {
     foreach ($Attempt in 1..30) {
         if ($TestApiProxyProcess.HasExited) { break }
         try {
-            $ProxyHealth = Invoke-RestMethod "http://127.0.0.1:$TestApiPort/api/health" -TimeoutSec 5
+            $ProxyHealth = Invoke-RestMethod "http://127.0.0.1:$TestApiPort/api/health" -Headers $AutomatedTestHeaders -TimeoutSec 5
             if ($ProxyHealth.status -eq "ok") {
                 $ProxyReady = $true
                 break
@@ -1480,7 +1481,7 @@ try {
     if ($WorkerStateAfterPlaywright -ne "running") {
         throw "Document worker was $WorkerStateAfterPlaywright after Playwright."
     }
-    $PostTestHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health"
+    $PostTestHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health" -Headers $AutomatedTestHeaders
     if ($PostTestHealth.status -ne "ok") { throw "API became unhealthy after Playwright." }
     Assert-CandidateSourceUnchanged -Stage "before acceptance certification"
     $Succeeded = $true

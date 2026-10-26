@@ -116,7 +116,7 @@ function Invoke-UrlCheck {
     try {
         $curlExe = (Get-Command curl.exe -ErrorAction Stop).Source
         $process = Start-Process -FilePath $curlExe `
-            -ArgumentList @("-sS", "-L", "-o", $bodyFile, "-w", "%{http_code}", $Url) `
+            -ArgumentList @("-sS", "-L", "--header", "X-CaseOps-Automated-Test:no-paid-providers", "-o", $bodyFile, "-w", "%{http_code}", $Url) `
             -NoNewWindow `
             -PassThru `
             -Wait `
