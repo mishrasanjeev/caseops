@@ -30,12 +30,17 @@ function fixture(t) {
   const context = { platform: 'ios', driver: { $$: async () => [], waitUntil: async () => {} }, source, filesState: { uploads: {} },
     gatewayBaseline: { runId: 'offline-ios-files' }, fixture: { appId: 'ai.caseops.mobile.dev.simulatoracceptance', environment: 'docker-integration', syntheticDataOnly: true,
       coreInventory: 'native-core-2026-10-25', backendSha: 'a'.repeat(40), webSha: 'a'.repeat(40), binarySourceSha: 'a'.repeat(40),
-      apiOrigin: 'https://127.0.0.1:8443', gatewayUrl: 'https://127.0.0.1:8443', gatewayRunId: 'offline-ios-files', udid: 'offline-simulator',
+      apiOrigin: 'https://127.0.0.1:8443', gatewayUrl: 'https://127.0.0.1:8443', gatewayRunId: 'offline-ios-files', udid: '33333333-3333-4333-8333-333333333333',
       matter: { id: matterId }, companyId: 'offline-company', membershipId: 'offline-member', seedEvidence: evidence('seed', seed) },
     assets: { uploads, manifestEvidence: evidence('assets', { syntheticDataOnly: true, assets: Object.values(uploads) }) } };
   const provider = { folderName: 'CaseOps offline fixtures', folderQuery: '-ios predicate string:type == "XCUIElementTypeCell" AND name == "CaseOps offline fixtures"',
     fileQueryTemplate: '-ios predicate string:type == "XCUIElementTypeCell" AND name == {pickerNameJSON}' };
+  const deviceInventory = evidence('devices', { devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-5': [
+    { udid: context.fixture.udid, name: 'CaseOps offline phone', state: 'Booted', isAvailable: true,
+      deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17' },
+  ] } });
   const picker = { observed: true, platform: 'ios', udid: context.fixture.udid, ...provider,
+    localRoot: { label: 'On My iPhone', deviceInventory },
     assets: Object.values(uploads).map((asset) => ({ ...asset, observedProviderHash: asset.sha256,
       pickerName: asset.filename.slice(0, asset.filename.lastIndexOf('.')) + ', ' + asset.filename.slice(asset.filename.lastIndexOf('.') + 1) })) };
   context.provider = { ...provider, evidence: evidence('picker', picker) };
@@ -184,7 +189,9 @@ test('real observed picker recipe handles retained folder cancellation and exten
     assert.equal(clicks.filter((value) => value === 'exact-provider-file').length, cancel ? 0 : 1);
   }
 });
-function pickerRouteDouble(context, asset, initial, { duplicateLocation = false, unknownAfterBrowse = false } = {}) {
+function pickerRouteDouble(context, asset, initial, { duplicateLocation = false, unknownAfterBrowse = false,
+  localRootLabel = 'On My iPhone', actualRootLabel = localRootLabel } = {}) {
+  const rootToken = actualRootLabel.replaceAll(' ', '-');
   let state = 'files';
   const clicks = [];
   const element = (name, next) => ({ isDisplayed: async () => true, isEnabled: async () => true,
@@ -196,10 +203,10 @@ function pickerRouteDouble(context, asset, initial, { duplicateLocation = false,
       if (query.includes('FullDocumentManagerViewControllerNavigationBar')) return !['files','selected'].includes(state) ? [element('bar')] : [];
       if (query.includes('name == "Cancel"')) return ['root','locations'].includes(state) ? [element('cancel', 'files')] : [];
       if (query.includes('Actions Menu')) return state === 'folder' ? [element('owned-folder-heading')] : [];
-      if (query.includes('name == "BackButton"')) return state === 'old-folder' ? [element('back-On-My-iPhone', 'root')] : [];
-      if (query.includes('name == "DOC.sidebar.item.On My iPhone"')) return state === 'locations'
-        ? Array.from({ length: duplicateLocation ? 2 : 1 }, () => element('On-My-iPhone-location', 'root')) : [];
-      if (query.includes('XCUIElementTypeStaticText') && query.includes('name == "On My iPhone"')) return state === 'root' ? [element('On-My-iPhone-root')] : [];
+      if (query.includes('name == "BackButton"') && query.includes(`label == ${JSON.stringify(actualRootLabel)}`)) return state === 'old-folder' ? [element(`back-${rootToken}`, 'root')] : [];
+      if (query.includes(`name == ${JSON.stringify(`DOC.sidebar.item.${actualRootLabel}`)}`)) return state === 'locations'
+        ? Array.from({ length: duplicateLocation ? 2 : 1 }, () => element(`${rootToken}-location`, 'root')) : [];
+      if (query.includes('XCUIElementTypeStaticText') && query.includes(`name == ${JSON.stringify(actualRootLabel)}`)) return state === 'root' ? [element(`${rootToken}-root`)] : [];
       if (query.includes('name == "Browse"')) return state === 'recents' ? [element('browse', unknownAfterBrowse ? 'unknown-provider' : 'locations')] : [];
       if (query === context.provider.folderQuery) return state === 'root' ? [element('owned-folder', 'folder')] : [];
       if (query.includes('name == "CaseOps-ios-txt-unit, txt"')) return state === 'folder' ? [element('exact-owned-file', 'selected')] : [];
@@ -226,6 +233,84 @@ test('picker selection follows only observed old-folder, On My iPhone, Locations
     assert.deepEqual(fake.clicks, expected);
     assert.equal(fake.clicks.filter((name) => name === 'exact-owned-file').length, 1);
     assert.ok(fake.clicks.length <= 5);
+  }
+});
+test('picker local root binds exact booted device family and inventory bytes without guessing a display name', (t) => {
+  const { context, picker, evidence } = fixture(t);
+  const runtime = 'com.apple.CoreSimulator.SimRuntime.iOS-26-5';
+  const device = { udid: context.fixture.udid, name: 'Renamed iPhone display name', state: 'Booted', isAvailable: true,
+    deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB' };
+  const bind = (value, inventory = { devices: { [runtime]: [device] } }) => ({ ...context, provider: { ...context.provider,
+    evidence: evidence('device-root', { ...picker, localRoot: { label: 'On My iPad', deviceInventory: evidence('device-inventory', inventory) }, ...value }) } });
+  assert.equal(validatePickerProvider(bind({})).folderName, context.provider.folderName);
+  for (const inventory of [
+    { devices: { [runtime]: [{ ...device, udid: '44444444-4444-4444-8444-444444444444' }] } },
+    { devices: { [runtime]: [device, device] } },
+    { devices: { [runtime]: [device], 'com.apple.CoreSimulator.SimRuntime.iOS-27-0': [device] } },
+    { devices: { [runtime]: [{ ...device, state: 'Shutdown' }] } },
+    { devices: { [runtime]: [{ ...device, isAvailable: false }] } },
+    { devices: { [runtime]: [{ ...device, deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.Apple-TV-4K' }] } },
+    { devices: { [runtime]: [{ ...device, deviceTypeIdentifier: 'iPad-Pro-11-inch' }] } },
+    { devices: { 'com.apple.CoreSimulator.SimRuntime.tvOS-27-0': [device] } },
+  ]) assert.throws(() => validatePickerProvider(bind({}, inventory)));
+  for (const label of ['On My iPhone', 'On my iPad', 'iCloud Drive', '', ['On My iPad']]) {
+    const current = bind({}), proof = JSON.parse(readFileSync(current.provider.evidence.path));
+    current.provider.evidence = evidence('wrong-local-root', { ...proof, localRoot: { ...proof.localRoot, label } });
+    assert.throws(() => validatePickerProvider(current), /IOS_FILES_OBSERVED_LOCAL_ROOT_MISMATCH/);
+  }
+  assert.throws(() => validatePickerProvider(bind({ localRoot: undefined })), /IOS_FILES_OBSERVED_LOCAL_ROOT_REQUIRED/);
+  const changed = bind({}), proof = JSON.parse(readFileSync(changed.provider.evidence.path));
+  changed.provider.evidence = evidence('wrong-inventory-hash', { ...proof,
+    localRoot: { ...proof.localRoot, deviceInventory: { ...proof.localRoot.deviceInventory, sha256: 'b'.repeat(64) } } });
+  assert.throws(() => validatePickerProvider(changed), /FIXTURE_EVIDENCE_CHANGED/);
+  const replaced = bind({}), replacement = JSON.parse(readFileSync(replaced.provider.evidence.path));
+  writeFileSync(replacement.localRoot.deviceInventory.path, '{}');
+  assert.throws(() => validatePickerProvider(replaced), /FIXTURE_EVIDENCE_CHANGED/);
+});
+function ipadPickerFixture(t) {
+  const value = fixture(t), { context, picker, evidence } = value;
+  const inventory = evidence('ipad-inventory', { devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-5': [
+    { udid: context.fixture.udid, name: 'CaseOps tablet', state: 'Booted', isAvailable: true,
+      deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB' },
+  ] } });
+  context.provider.evidence = evidence('ipad-observation', { ...picker, localRoot: { label: 'On My iPad', deviceInventory: inventory } });
+  return value;
+}
+test('device-bound iPad picker selection and cancellation use only exact tablet root controls within the original action bound', async (t) => {
+  for (const [initial, expected] of [
+    ['folder', ['choose','exact-owned-file']],
+    ['old-folder', ['choose','back-On-My-iPad','owned-folder','exact-owned-file']],
+    ['root', ['choose','owned-folder','exact-owned-file']],
+    ['locations', ['choose','On-My-iPad-location','owned-folder','exact-owned-file']],
+    ['recents', ['choose','browse','On-My-iPad-location','owned-folder','exact-owned-file']],
+  ]) {
+    const { context, uploads } = ipadPickerFixture(t), asset = uploads.txt;
+    const fake = pickerRouteDouble(context, asset, initial, { localRootLabel: 'On My iPad' });
+    await chooseIosFile(context, asset);
+    assert.deepEqual(fake.clicks, expected);
+    assert.equal(fake.state(), 'selected');
+    assert.equal(fake.clicks.filter((name) => name === 'exact-owned-file').length, 1);
+    assert.ok(fake.clicks.length <= 5);
+  }
+  for (const initial of ['old-folder','root','locations']) {
+    const { context, uploads } = ipadPickerFixture(t);
+    const fake = pickerRouteDouble(context, uploads.txt, initial, { localRootLabel: 'On My iPad' });
+    await chooseIosFile(context, uploads.txt, { cancel: true });
+    assert.equal(fake.state(), 'files');
+    assert.deepEqual(fake.clicks, initial === 'old-folder' ? ['choose','back-On-My-iPad','cancel'] : ['choose','cancel']);
+  }
+});
+test('iPad picker rejects ambiguous or mismatched actual root controls before any owned-folder or file selection', async (t) => {
+  for (const [options, reason] of [
+    [{ duplicateLocation: true }, 'AMBIGUOUS_VISIBLE_NATIVE_LOCATOR'],
+    [{ actualRootLabel: 'On My iPhone' }, 'NATIVE_CONTROL_NOT_VISIBLE'],
+  ]) {
+    const { context, uploads } = ipadPickerFixture(t), asset = uploads.txt;
+    const fake = pickerRouteDouble(context, asset, 'locations', { localRootLabel: 'On My iPad', ...options });
+    await assert.rejects(chooseIosFile(context, asset), new RegExp(reason));
+    assert.equal(fake.clicks.includes('exact-owned-file'), false);
+    assert.equal(fake.clicks.includes('owned-folder'), false);
+    assert.ok(fake.clicks.filter((name) => name === 'browse').length <= 1);
   }
 });
 test('picker cancellation is cohort-independent while duplicate and unknown location states never select a file', async (t) => {

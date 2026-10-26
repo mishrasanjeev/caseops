@@ -20,10 +20,9 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: acceptance?.iosBundleIdentifier || links?.projections.mobile.ios.bundleIdentifier || "ai.caseops.mobile.dev",
-    ...(links ? { associatedDomains: links.projections.mobile.ios.associatedDomains } : {}),
+    ...(links ? { associatedDomains: links.projections.mobile.ios.associatedDomains, deploymentTarget: "17.4" } : {}),
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
-      NSCameraUsageDescription: "Attach a photograph to the matter you select.",
     },
   },
   android: {
@@ -31,6 +30,12 @@ const config: ExpoConfig = {
     ...(links ? { intentFilters: links.projections.mobile.android.intentFilters } : {}),
     allowBackup: false,
     permissions: [],
+    blockedPermissions: [
+      "android.permission.SYSTEM_ALERT_WINDOW",
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+    ],
     adaptiveIcon: {
       foregroundImage: "./assets/app-icon-foreground.png",
       monochromeImage: "./assets/app-icon-foreground.png",

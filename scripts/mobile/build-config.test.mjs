@@ -264,8 +264,8 @@ function cleanEnv(extra = {}) {
     !/^(CASEOPS_MOBILE_|CASEOPS_NATIVE_LINK_|EXPO_PUBLIC_|__EXPO_CONFIG_MODE$|EX_UPDATES_NATIVE_DEBUG$|SKIP_BUNDLING$)/.test(key))),
   EXPO_NO_DOTENV: '1', ...extra };
 }
-function expoConfig(env = {}) {
-  return JSON.parse(execFileSync(process.execPath, ['./node_modules/expo/bin/cli', 'config', '--type', 'public', '--json'], {
+function expoConfig(env = {}, type = 'public') {
+  return JSON.parse(execFileSync(process.execPath, ['./node_modules/expo/bin/cli', 'config', '--type', type, '--json'], {
     cwd: app, env: cleanEnv(env), encoding: 'utf8', timeout: 30000,
   }));
 }
@@ -422,6 +422,43 @@ test('iOS simulator acceptance has a distinct ID, HTTPS, marker and no Android C
   assert.deepEqual(config.extra.nativeLinkPolicy, { mode: 'local', redirectUri: 'caseops://oauth/callback' });
   assert.equal(config.ios.infoPlist.NSAppTransportSecurity, undefined);
   assert.equal(config.android.package, 'ai.caseops.mobile.dev');
+});
+
+test('actual Expo native manifest projection blocks only unused inherited permissions and omits an unused camera claim', t => {
+  const android = fixture(t), production = publicLinkFixture(t, false);
+  const ios = { CASEOPS_MOBILE_BUILD_PROFILE: plugin.IOS_PROFILE, CASEOPS_MOBILE_AUTOMATED_TEST: '1',
+    CASEOPS_MOBILE_RELEASE_SHA: sha, EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443' };
+  const blocked = ['android.permission.SYSTEM_ALERT_WINDOW', 'android.permission.READ_MEDIA_IMAGES',
+    'android.permission.READ_EXTERNAL_STORAGE', 'android.permission.WRITE_EXTERNAL_STORAGE'];
+  for (const env of [android.env, ios, { ...production.env, NODE_ENV: 'production' }]) {
+    const config = expoConfig(env, 'introspect');
+    assert.deepEqual(config.android.blockedPermissions, blocked);
+    const permissions = config._internal.modResults.android.manifest.manifest['uses-permission'];
+    assert.deepEqual(permissions.filter(row => row.$['tools:node'] === 'remove').map(row => row.$['android:name']).sort(), [...blocked].sort());
+    for (const name of blocked) {
+      assert.equal(permissions.filter(row => row.$['android:name'] === name).length, 1);
+      assert.equal(permissions.find(row => row.$['android:name'] === name).$['tools:node'], 'remove');
+    }
+    assert.ok(permissions.some(row => row.$['android:name'] === 'android.permission.INTERNET' && row.$['tools:node'] !== 'remove'));
+    assert.equal(config._internal.modResults.ios.infoPlist.NSCameraUsageDescription, undefined);
+    assert.equal(config.ios.infoPlist.NSCameraUsageDescription, undefined);
+  }
+});
+
+test('pinned Expo deployment-target hooks project HTTPS production 17.4 and retain both local QA defaults', t => {
+  const production = publicLinkFixture(t, false), android = fixture(t);
+  const ios = { CASEOPS_MOBILE_BUILD_PROFILE: plugin.IOS_PROFILE, CASEOPS_MOBILE_AUTOMATED_TEST: '1',
+    CASEOPS_MOBILE_RELEASE_SHA: sha, EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443' };
+  const config = expoConfig({ ...production.env, NODE_ENV: 'production' }, 'introspect');
+  assert.equal(config.ios.deploymentTarget, '17.4');
+  assert.equal(config._internal.modResults.ios.podfileProperties['ios.deploymentTarget'], '17.4');
+  assert.equal(config.extra.nativeLinkPolicy.mode, 'https');
+  for (const env of [android.env, ios]) {
+    const local = expoConfig(env, 'introspect');
+    assert.equal(local.ios.deploymentTarget, undefined);
+    assert.equal(local._internal.modResults.ios.podfileProperties['ios.deploymentTarget'], undefined);
+    assert.deepEqual(local.extra.nativeLinkPolicy, { mode: 'local', redirectUri: 'caseops://oauth/callback' });
+  }
 });
 
 test('unknown profiles and CA variables without the Android profile fail closed', () => {

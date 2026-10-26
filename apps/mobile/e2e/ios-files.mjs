@@ -139,6 +139,28 @@ export function validateAsset(context, kind) {
   return { ...asset, filename, kind };
 }
 
+function observedLocalPickerRoot(context, proof) {
+  const root = proof.localRoot;
+  assert.ok(root && typeof root === 'object', 'IOS_FILES_OBSERVED_LOCAL_ROOT_REQUIRED');
+  const inventory = json(root.deviceInventory);
+  assert.ok(inventory.devices && typeof inventory.devices === 'object' && !Array.isArray(inventory.devices), 'IOS_FILES_DEVICE_INVENTORY_REQUIRED');
+  const runtimes = Object.entries(inventory.devices);
+  assert.ok(runtimes.length > 0 && runtimes.length <= 64
+    && runtimes.every(([, devices]) => Array.isArray(devices) && devices.length <= 256), 'IOS_FILES_DEVICE_INVENTORY_REQUIRED');
+  const matches = runtimes.flatMap(([runtime, devices]) => devices
+    .filter((device) => device?.udid === context.fixture.udid).map((device) => ({ ...device, runtime })));
+  assert.equal(matches.length, 1, 'IOS_FILES_EXACT_PICKER_DEVICE_REQUIRED');
+  const device = matches[0];
+  assert.equal(device.isAvailable, true, 'IOS_FILES_AVAILABLE_PICKER_DEVICE_REQUIRED');
+  assert.equal(device.state, 'Booted', 'IOS_FILES_BOOTED_PICKER_DEVICE_REQUIRED');
+  assert.match(device.runtime, /^com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9]+(?:-[0-9]+)*$/, 'IOS_FILES_PICKER_RUNTIME_REQUIRED');
+  const family = /^com\.apple\.CoreSimulator\.SimDeviceType\.(iPhone|iPad)-[A-Za-z0-9-]+$/.exec(device.deviceTypeIdentifier || '');
+  assert.ok(family, 'IOS_FILES_PICKER_DEVICE_FAMILY_REQUIRED');
+  const label = family[1] === 'iPad' ? 'On My iPad' : 'On My iPhone';
+  assert.equal(root.label, label, 'IOS_FILES_OBSERVED_LOCAL_ROOT_MISMATCH');
+  return label;
+}
+
 export function validatePickerProvider(context) {
   const value = context.provider;
   if (!value?.evidence) fail('IOS_FILES_OBSERVED_PICKER_REQUIRED');
@@ -146,6 +168,7 @@ export function validatePickerProvider(context) {
   assert.equal(proof.observed, true, 'IOS_FILES_OBSERVED_PICKER_REQUIRED');
   assert.equal(proof.platform, 'ios', 'IOS_FILES_PICKER_PLATFORM_MISMATCH');
   assert.equal(proof.udid, context.fixture.udid, 'IOS_FILES_PICKER_DEVICE_MISMATCH');
+  observedLocalPickerRoot(context, proof);
   assert.ok(typeof value.folderName === 'string' && value.folderName.length > 0 && value.folderName.length <= 160 && !/[\x00-\x1f/\\]/.test(value.folderName), 'IOS_FILES_OWNED_PROVIDER_FOLDER_REQUIRED');
   assert.equal(proof.folderName, value.folderName, 'IOS_FILES_PICKER_FOLDER_MISMATCH');
   for (const key of ['folderQuery', 'fileQueryTemplate']) assert.equal(proof[key], value[key], 'IOS_FILES_PICKER_CONTROLS_MISMATCH');
@@ -171,9 +194,14 @@ export function validatePickerAsset(context, asset) {
 const cancelPicker = '-ios predicate string:type == "XCUIElementTypeButton" AND name == "Cancel" AND label == "Cancel"';
 const browsePicker = '-ios predicate string:type == "XCUIElementTypeButton" AND name == "Browse" AND label == "Browse"';
 const pickerBar = '-ios predicate string:type == "XCUIElementTypeNavigationBar" AND name == "FullDocumentManagerViewControllerNavigationBar"';
-const pickerBackToRoot = '-ios predicate string:type == "XCUIElementTypeButton" AND name == "BackButton" AND label == "On My iPhone"';
-const pickerRoot = '-ios predicate string:type == "XCUIElementTypeStaticText" AND name == "On My iPhone" AND label == "On My iPhone"';
-const pickerLocation = '-ios predicate string:type == "XCUIElementTypeCell" AND name == "DOC.sidebar.item.On My iPhone" AND label == "On My iPhone"';
+function pickerRootControls(label) {
+  return {
+    back: '-ios predicate string:type == "XCUIElementTypeButton" AND name == "BackButton" AND label == ' + JSON.stringify(label),
+    root: '-ios predicate string:type == "XCUIElementTypeStaticText" AND name == ' + JSON.stringify(label) + ' AND label == ' + JSON.stringify(label),
+    location: '-ios predicate string:type == "XCUIElementTypeCell" AND name == ' + JSON.stringify(`DOC.sidebar.item.${label}`)
+      + ' AND label == ' + JSON.stringify(label),
+  };
+}
 const folderHeading = (folderName) => '-ios predicate string:type == "XCUIElementTypeButton" AND name == '
   + JSON.stringify(`${folderName}, Actions Menu`) + ' AND label == ' + JSON.stringify(`${folderName}, Actions Menu`);
 
@@ -370,6 +398,8 @@ async function reload(context, anchor) {
 }
 async function choose(context, asset, { cancel = false } = {}) {
   const observed = cancel ? validatePickerProvider(context) : validatePickerAsset(context, asset);
+  const { back: pickerBackToRoot, root: pickerRoot, location: pickerLocation } = pickerRootControls(
+    observedLocalPickerRoot(context, json(observed.evidence)));
   await clickIosFileFact(context, 'files-choose');
   await findQuery(context, pickerBar);
   let navigationActions = 0;

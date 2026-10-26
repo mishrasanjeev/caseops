@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Empty Expo permission lists do not remove permissions inherited from native
+  libraries. Prove reviewed removals through the actual manifest projection and
+  a fresh APK; preserve unrelated permissions. Match the production iOS minimum
+  deployment target to its HTTPS authentication requirement while retaining
+  separately bound local QA behavior. Configuration checks are not store archives.
+
 - A clean filesystem audit needs complete, unique root-present inventories and
   final path/metadata reconciliation. Charge both observations to the existing
   entry/byte/deadline limits; an empty successful command or a file inserted
