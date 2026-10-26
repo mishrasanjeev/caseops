@@ -11,7 +11,10 @@ export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.met
     'scripts/mobile/generate-app-icons.mjs',
     'scripts/mobile/build-ios-simulator-acceptance.sh', 'scripts/mobile/source-snapshot.mjs',
     'scripts/mobile/windows-native-paths.gradle', 'scripts/mobile/use-android-env.ps1',
-    'scripts/mobile/android-tooling.ps1', 'scripts/mobile/prepare-viewer-assets.mjs'];
+    'scripts/mobile/android-tooling.ps1', 'scripts/mobile/prepare-viewer-assets.mjs',
+    'scripts/mobile/prepare-native-links.mjs',
+    'apps/web/lib/native-link-policy.cjs', 'apps/web/lib/native-link-policy.d.cts',
+    'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts'];
   const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...paths], {
     cwd: root, encoding: 'utf8', timeout: 5000, maxBuffer: 1048576,
   }).split('\0').filter((file) => file && !/\/(e2e|node_modules|\.expo|dist|build)\//.test(file)

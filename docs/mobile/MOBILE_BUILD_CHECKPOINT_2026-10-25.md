@@ -6,6 +6,9 @@ No production deployment or paid-provider call is part of this native task.
 
 ## Superseding 26 October source handoff
 
+Latest source update: source-gates-12 verifies348 mobile tests;530 tooling cases/528 pass/two Windows-only skips;96 Python; selected API124 pass/five platform skips;2022 web tests with real coverage thresholds;8 actual built-browser cases and both builds/types. Guarded HTTPS production configuration is prepared, not signed/deployed/association-verified. Android753 APK/static16KiB and preserved API/web receipts are historical after this source update; final matching iOS/Android builds and40 cases each remain pending. Earlier dated counts/receipts below are retained history; STORE_RELEASE_2026-10-26.md has the current evidence map.
+
+
 The detailed25 October receipts below are preserved as historical evidence. The current release boundary is [STORE_RELEASE_2026-10-26.md](STORE_RELEASE_2026-10-26.md); no store or production release is approved.
 
 The latest integrated working-tree gates in `pr558-release-20261026/canonical-final-10/` are523 tooling cases collected,521 passed and two existing Windows-only skips;346/346 mobile tests with strict TypeScript and deterministic renderer assets;96/96 Python fixture/admission tests; selected API72 passed with one Windows-only curl.exe skip and Ruff pass; complete web249 files/1979 tests, web/E2E types and production build passed. The initial web PowerShell-PATH failures and API output-directory preflight refusal are retained alongside the replacements. These are source gates before the canonical merge/freeze and native rebuild, not an immutable release receipt.

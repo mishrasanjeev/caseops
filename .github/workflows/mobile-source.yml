@@ -3,10 +3,10 @@ name: Mobile source gates
 on:
   pull_request:
     branches: [main]
-    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/app/native/**", "apps/web/lib/native-authorization*", "apps/web/lib/safe-next-path*", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml"]
+    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/**", "tests/e2e/support/**", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml"]
   push:
     branches: [main]
-    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/app/native/**", "apps/web/lib/native-authorization*", "apps/web/lib/safe-next-path*", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml"]
+    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/**", "tests/e2e/support/**", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml"]
 
 permissions:
   contents: read
@@ -95,6 +95,8 @@ jobs:
     timeout-minutes: 20
     env:
       NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+      NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE: "1"
+      NEXT_PUBLIC_APP_URL: https://127.0.0.1:3443
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

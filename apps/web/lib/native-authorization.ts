@@ -8,13 +8,14 @@ export type NativeAuthorization = {
 export function prepareNativeHandoff(
   request: NativeAuthorization,
   response: unknown,
+  policy: NativeLinkPolicy = DISABLED_NATIVE_LINK_POLICY,
 ): { callback: string; expiresIn: number } {
   const value =
     response && typeof response === "object" && !Array.isArray(response)
       ? (response as Record<string, unknown>)
       : {};
   if (
-    request.redirect_uri !== "caseops://oauth/callback" ||
+    !allowsNativeRedirect(request.redirect_uri, policy) ||
     value.redirect_uri !== request.redirect_uri ||
     value.state !== request.state ||
     typeof value.code !== "string" ||
@@ -31,12 +32,10 @@ export function prepareNativeHandoff(
   return { callback: callback.href, expiresIn: value.expires_in };
 }
 
-export function openNativeApp(callback: string): void {
+export function openNativeApp(callback: string, policy: NativeLinkPolicy = DISABLED_NATIVE_LINK_POLICY): void {
   const target = new URL(callback);
   if (
-    target.protocol !== "caseops:" ||
-    target.hostname !== "oauth" ||
-    target.pathname !== "/callback" ||
+    !allowsNativeRedirect(`${target.protocol}//${target.host}${target.pathname}`, policy) ||
     target.username ||
     target.password ||
     target.port ||
@@ -51,6 +50,7 @@ export function openNativeApp(callback: string): void {
 
 export function parseNativeAuthorization(
   query: string,
+  policy: NativeLinkPolicy = DISABLED_NATIVE_LINK_POLICY,
 ): NativeAuthorization | null {
   const values = new URLSearchParams(query);
   const allowed = ["code_challenge", "state", "platform", "redirect_uri"];
@@ -62,12 +62,12 @@ export function parseNativeAuthorization(
   const challenge = values.get("code_challenge") || "";
   const state = values.get("state") || "";
   const platform = values.get("platform");
-  const redirect = values.get("redirect_uri");
+  const redirect = values.get("redirect_uri") || "";
   if (
     !/^[A-Za-z0-9_-]{43}$/.test(challenge) ||
     !/^[A-Za-z0-9_-]{32,128}$/.test(state) ||
     !["android", "ios"].includes(platform || "") ||
-    redirect !== "caseops://oauth/callback"
+    !allowsNativeRedirect(redirect, policy)
   )
     return null;
   return {
@@ -77,3 +77,4 @@ export function parseNativeAuthorization(
     redirect_uri: redirect,
   };
 }
+import { allowsNativeRedirect, DISABLED_NATIVE_LINK_POLICY, type NativeLinkPolicy } from './native-link-policy.cjs';

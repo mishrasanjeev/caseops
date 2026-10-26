@@ -75,6 +75,9 @@ function fixture(t, extra = {}) {
   const file = (name, data, executable = false) => { const p = path.join(root, name); mkdirSync(path.dirname(p), { recursive: true });
     writeFileSync(p, data); if (executable) chmodSync(p, 0o700); return p; };
   const files = ['scripts/mobile/build-android-local-acceptance.sh', 'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/source-snapshot.mjs',
+    'scripts/mobile/prepare-native-links.mjs', 'apps/mobile/metro.config.js',
+    'apps/web/lib/native-link-policy.cjs', 'apps/web/lib/native-link-policy.d.cts',
+    'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts',
     'scripts/mobile/prepare-viewer-assets.mjs', 'apps/mobile/src/viewer/renderer-runtime.ts',
     ...['LICENSES.txt', 'manifest.json', 'pdfjs-assets.ts', 'renderer-runtime-source.ts'].map(name => `apps/mobile/src/viewer/generated/${name}`),
     'apps/mobile/package.json', 'apps/mobile/app.config.ts', 'apps/mobile/plugins/with-local-acceptance.cjs', 'apps/mobile/e2e/support.mjs'];
@@ -182,6 +185,10 @@ test('actual shell orchestration binds portable source/CA receipt, ARM64 ELF and
 
 test('actual preflight order verifies generated public renderer bytes before source snapshots, prebuild and Gradle', t => {
   const f = fixture(t), result = f.run(); assert.equal(result.status, 0, result.stdout + result.stderr);
+  for (const input of ['scripts/mobile/prepare-native-links.mjs', 'apps/mobile/metro.config.js',
+    'apps/web/lib/native-link-policy.cjs', 'apps/web/lib/native-link-policy.d.cts',
+    'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts'])
+    assert.deepEqual(readFileSync(path.join(f.checkout, input)), readFileSync(path.join(repo, input)), 'EXACT_SHARED_NATIVE_LINK_INPUT_CLOSURE_REQUIRED');
   const stages = readFileSync(f.trace, 'utf8').trim().split('\n').map(line => line.split(':')[0]);
   assert.deepEqual(stages, ['viewer-check', 'viewer-check-result', 'source-snapshot', 'expo', 'gradle', 'source-snapshot']);
   assert.match(readFileSync(f.trace, 'utf8'), /^viewer-check:--check\nviewer-check-result:0\n/);

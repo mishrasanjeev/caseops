@@ -1,0 +1,9 @@
+export type NativeLinkPolicy = { readonly mode: 'disabled' } | { readonly mode: 'local'; readonly redirectUri: string } | { readonly mode: 'https'; readonly redirectUri: string; readonly configSha256: string };
+export type NativeLinkConfig = { schemaVersion: 1; kind: 'caseops-native-links'; syntheticDataOnly: boolean; redirectUri: string; ios: { bundleIdentifier: string; applicationIdentifierPrefix: string }; android: { packageName: string; signingCertificateSha256: string[] } };
+export const CALLBACK_PATH: string;
+export const DISABLED_NATIVE_LINK_POLICY: NativeLinkPolicy;
+export const LOCAL_NATIVE_LINK_POLICY: NativeLinkPolicy;
+export function validateNativeLinkConfig(value: unknown): NativeLinkConfig;
+export function nativeLinkPolicy(config: NativeLinkConfig, sha256: string): NativeLinkPolicy;
+export function allowsNativeRedirect(uri: unknown, policy: NativeLinkPolicy): boolean;
+export function nativeLinkProjections(config: NativeLinkConfig, sha256: string): { schemaVersion: number; configSha256: string; syntheticDataOnly: boolean; policy: NativeLinkPolicy; mobile: { ios: { bundleIdentifier: string; associatedDomains: string[] }; android: { package: string; intentFilters: { action: string; autoVerify: boolean; category: string[]; data: { scheme: string; host: string; path: string }[] }[] } }; apiEnvironment: Record<string, string>; appleAppSiteAssociation: unknown; assetlinks: unknown };

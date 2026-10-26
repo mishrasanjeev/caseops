@@ -2,6 +2,12 @@ import type { ExpoConfig } from "expo/config";
 
 const { acceptanceSettings } = require("./plugins/with-local-acceptance.cjs");
 const acceptance = acceptanceSettings(process.env);
+const { readNativeLinkConfig } = require("../web/lib/native-link-config.cjs");
+const { DISABLED_NATIVE_LINK_POLICY, LOCAL_NATIVE_LINK_POLICY } = require("../web/lib/native-link-policy.cjs");
+const hasLinkConfig = !!(process.env.CASEOPS_NATIVE_LINK_CONFIG_FILE || process.env.CASEOPS_NATIVE_LINK_CONFIG_SHA256);
+if (acceptance && hasLinkConfig) throw new Error("ACCEPTANCE_AND_PRODUCTION_LINK_CONFIG_CANNOT_MIX");
+const links = hasLinkConfig ? readNativeLinkConfig(process.env) : null;
+if (!acceptance && process.env.NODE_ENV === "production" && !links) throw new Error("IMMUTABLE_NATIVE_LINK_CONFIG_REQUIRED");
 
 const config: ExpoConfig = {
   name: "CaseOps",
@@ -9,18 +15,20 @@ const config: ExpoConfig = {
   version: "0.1.0",
   icon: "./assets/app-icon.png",
   orientation: "default",
-  scheme: "caseops",
+  scheme: acceptance ? "caseops" : undefined,
   userInterfaceStyle: "light",
   ios: {
     supportsTablet: true,
-    bundleIdentifier: acceptance?.iosBundleIdentifier || "ai.caseops.mobile.dev",
+    bundleIdentifier: acceptance?.iosBundleIdentifier || links?.projections.mobile.ios.bundleIdentifier || "ai.caseops.mobile.dev",
+    ...(links ? { associatedDomains: links.projections.mobile.ios.associatedDomains } : {}),
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSCameraUsageDescription: "Attach a photograph to the matter you select.",
     },
   },
   android: {
-    package: "ai.caseops.mobile.dev",
+    package: links?.projections.mobile.android.package || "ai.caseops.mobile.dev",
+    ...(links ? { intentFilters: links.projections.mobile.android.intentFilters } : {}),
     allowBackup: false,
     permissions: [],
     adaptiveIcon: {
@@ -36,6 +44,7 @@ const config: ExpoConfig = {
   ],
   updates: { enabled: false },
   extra: {
+    nativeLinkPolicy: acceptance ? LOCAL_NATIVE_LINK_POLICY : links?.projections.policy || DISABLED_NATIVE_LINK_POLICY,
     apiOrigin: process.env.EXPO_PUBLIC_API_ORIGIN || "https://caseops.ai",
     webOrigin:
       process.env.EXPO_PUBLIC_WEB_ORIGIN ||

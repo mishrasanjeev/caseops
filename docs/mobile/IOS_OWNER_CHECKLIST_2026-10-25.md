@@ -8,6 +8,9 @@ do not execute its gated steps before their blockers are resolved.
 
 ## Superseding 26 October status
 
+Latest source update: source-gates-12 verifies348 mobile tests;530 tooling cases/528 pass/two Windows-only skips;96 Python; selected API124 pass/five platform skips;2022 web tests with real coverage thresholds;8 actual built-browser cases and both builds/types. Guarded HTTPS production configuration is prepared, not signed/deployed/association-verified. Android753 APK/static16KiB and preserved API/web receipts are historical after this source update; final matching iOS/Android builds and40 cases each remain pending. Earlier dated counts/receipts below are retained history; STORE_RELEASE_2026-10-26.md has the current evidence map.
+
+
 The Windows-only25 October checklist and unchecked case table below are retained historical handoff material; their `NOT RUN` labels do not erase later actual Mac executions. Current evidence and release blockers are maintained in [STORE_RELEASE_2026-10-26.md](STORE_RELEASE_2026-10-26.md).
 
 An older signed Simulator app passed23/23 core cases. The later host-fixed8Tddh13c app completed the full17 Files inventory with15/17 calls passed and two genuine embedded-reader failures (FILES09 PDF page readiness, FILES10 image zoom acknowledgement), all51 phases/17 sessions retained. Its five uploads/source-byte admissions,13 privacy boundaries, six-cohort original preservation, zero private copies and final signed-out restart passed. Runtime `Function.toString()` under the actual pinned Hermes produced a bytecode placeholder; the generated static browser-script replacement is source/browser/Hermes-control verified and awaits a new canonical signed app and actual17 Files/fresh23 core replay. Android requires its own matching rebuilt23core/17Files/privacy execution; no platform export or older native pass substitutes for it.

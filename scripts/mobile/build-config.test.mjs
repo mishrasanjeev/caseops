@@ -8,11 +8,14 @@ import path from 'node:path';
 import { rootCertificates } from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { sourceSnapshot } from './source-snapshot.mjs';
 
 const app = fileURLToPath(new URL('../../apps/mobile/', import.meta.url));
 const repo = path.resolve(app, '../..');
 const require = createRequire(path.join(app, 'package.json'));
 const plugin = require(path.join(app, 'plugins/with-local-acceptance.cjs'));
+const linkPolicy = require(path.join(repo, 'apps/web/lib/native-link-policy.cjs'));
+const { readNativeLinkConfig } = require(path.join(repo, 'apps/web/lib/native-link-config.cjs'));
 const { compileModsAsync, XML } = require('@expo/config-plugins');
 const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
 const certificate = `${rootCertificates.find((pem) => {
@@ -88,8 +91,14 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   assert.deepEqual(nodeSetup.with['cache-dependency-path'].trim().split(/\s+/).sort(),
     ['apps/mobile/package-lock.json', 'package-lock.json']);
   for (const event of ['push', 'pull_request']) {
-    for (const dependency of ['package.json', 'package-lock.json']) assert.ok(workflow.on[event].paths.includes(dependency));
+    for (const dependency of ['package.json', 'package-lock.json', 'apps/web/**', 'tests/e2e/support/**', 'playwright.mobile-handoff.config.ts', 'tsconfig.e2e.json'])
+      assert.ok(workflow.on[event].paths.includes(dependency), `NATIVE_SHARED_INPUT_TRIGGER_REQUIRED:${event}:${dependency}`);
   }
+  assert.deepEqual(workflow.jobs['browser-handoff'].env, {
+    NEXT_PUBLIC_API_BASE_URL: 'http://127.0.0.1:8000',
+    NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE: '1',
+    NEXT_PUBLIC_APP_URL: 'https://127.0.0.1:3443',
+  }, 'BUILT_BROWSER_MOCKS_REQUIRE_EXPLICIT_ISOLATED_POLICY_WITHOUT_PRODUCTION_CONFIG');
 });
 
 const resourceDump = `Package name=ai.caseops.mobile.dev.localacceptance id=7f
@@ -252,7 +261,7 @@ function fixture(t) {
 
 function cleanEnv(extra = {}) {
   return { ...Object.fromEntries(Object.entries(process.env).filter(([key]) =>
-    !/^(CASEOPS_MOBILE_|EXPO_PUBLIC_|EX_UPDATES_NATIVE_DEBUG$|SKIP_BUNDLING$)/.test(key))),
+    !/^(CASEOPS_MOBILE_|CASEOPS_NATIVE_LINK_|EXPO_PUBLIC_|__EXPO_CONFIG_MODE$|EX_UPDATES_NATIVE_DEBUG$|SKIP_BUNDLING$)/.test(key))),
   EXPO_NO_DOTENV: '1', ...extra };
 }
 function expoConfig(env = {}) {
@@ -274,15 +283,126 @@ test('default Expo config retains production origins, native IDs and no QA trust
   assert.equal(config.extra.webOrigin, 'https://caseops.ai');
   assert.equal(config.extra.automatedTest, false);
   assert.equal(config.updates.enabled, false);
+  assert.deepEqual(config.extra.nativeLinkPolicy, { mode: 'disabled' });
   assert.equal(config.ios.infoPlist.NSAppTransportSecurity, undefined);
   assert.equal(config.android.networkSecurityConfig, undefined);
   assert.doesNotMatch(JSON.stringify(config), /BEGIN CERTIFICATE|public-ca\.pem|fingerprint256/);
+});
+
+function publicLinkFixture(t, syntheticDataOnly = true) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'caseops-native-links-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const config = { schemaVersion: 1, kind: 'caseops-native-links', syntheticDataOnly,
+    redirectUri: syntheticDataOnly ? 'https://native.invalid/native/oauth/callback' : 'https://native.caseops.ai/native/oauth/callback',
+    ios: { bundleIdentifier: 'ai.caseops.mobile', applicationIdentifierPrefix: 'X9Y8Z7W6V5' },
+    android: { packageName: 'ai.caseops.mobile', signingCertificateSha256: [digest('public synthetic signing certificate test bytes')] } };
+  const file = path.join(dir, 'links.json'), bytes = JSON.stringify(config) + '\n'; writeFileSync(file, bytes);
+  return { dir, file, config, bytes, env: { CASEOPS_NATIVE_LINK_CONFIG_FILE: file, CASEOPS_NATIVE_LINK_CONFIG_SHA256: digest(bytes) } };
+}
+test('production Expo configuration refuses absent, partial, tampered and synthetic public link inputs', t => {
+  assert.throws(() => expoConfig({ NODE_ENV: 'production', __EXPO_CONFIG_MODE: 'production' }), /IMMUTABLE_NATIVE_LINK_CONFIG_REQUIRED/);
+  const f = publicLinkFixture(t);
+  assert.throws(() => readNativeLinkConfig(f.env), /SYNTHETIC_NATIVE_LINK_CONFIG_FORBIDDEN/);
+  assert.throws(() => readNativeLinkConfig({ CASEOPS_NATIVE_LINK_CONFIG_FILE: f.file }), /IMMUTABLE_NATIVE_LINK_CONFIG_REQUIRED/);
+  writeFileSync(f.file, f.bytes + ' ');
+  assert.throws(() => readNativeLinkConfig(f.env, { allowSynthetic: true }), /HASH_MISMATCH/);
+});
+test('complete immutable structural config projects exactly matching mobile, web, API and association identities without enabling auth', t => {
+  const f = publicLinkFixture(t, false), loaded = readNativeLinkConfig(f.env);
+  const config = expoConfig({ ...f.env, NODE_ENV: 'production' }), p = loaded.projections;
+  assert.equal(config.scheme, undefined);
+  assert.equal(config.ios.bundleIdentifier, f.config.ios.bundleIdentifier);
+  assert.deepEqual(config.ios.associatedDomains, ['applinks:native.caseops.ai']);
+  assert.deepEqual(config.android.intentFilters, p.mobile.android.intentFilters);
+  assert.equal(config.android.package, f.config.android.packageName);
+  assert.deepEqual(config.extra.nativeLinkPolicy, p.policy);
+  assert.deepEqual(JSON.parse(p.apiEnvironment.CASEOPS_NATIVE_REDIRECT_URIS), [config.extra.nativeLinkPolicy.redirectUri]);
+  assert.deepEqual(Object.keys(p.apiEnvironment), ['CASEOPS_NATIVE_REDIRECT_URIS']);
+  assert.deepEqual(p.appleAppSiteAssociation.applinks.details[0].appIDs, ['X9Y8Z7W6V5.ai.caseops.mobile']);
+  assert.equal(p.assetlinks[0].target.package_name, config.android.package);
+  assert.deepEqual(p.assetlinks[0].target.sha256_cert_fingerprints, [f.config.android.signingCertificateSha256[0].toUpperCase().match(/../g).join(':')]);
+  assert.equal(config.extra.nativeLinkPolicy.configSha256, digest(f.bytes));
+});
+test('production policy rejects reserved endpoints, scheme downgrade, QA identities and malformed or unknown fields', t => {
+  const f = publicLinkFixture(t, false);
+  for (const redirectUri of ['caseops://oauth/callback', 'http://native.caseops.ai/native/oauth/callback', 'https://native.invalid/native/oauth/callback', 'https://example.com/native/oauth/callback', 'https://native.caseops.ai/native/oauth/callback/extra', 'https://native.caseops.ai:8443/native/oauth/callback', 'https://native.caseops.ai/native/oauth/callback?x=1'])
+    assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, redirectUri }));
+  assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, arbitrary: true }));
+  assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, ios: { ...f.config.ios, bundleIdentifier: 'ai.caseops.mobile.dev' } }));
+  assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, ios: { ...f.config.ios, applicationIdentifierPrefix: 1234567890 } }));
+  assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, android: { ...f.config.android, signingCertificateSha256: ['a'.repeat(64)] } }));
+});
+test('native public config is read and hashed from the opened descriptor, with no parse-error content reflection', t => {
+  const f = publicLinkFixture(t), fs = require('node:fs'), original = fs.readFileSync;
+  let descriptorReads = 0;
+  try {
+    fs.readFileSync = function(file, ...args) {
+      if (typeof file === 'number') { descriptorReads++; writeFileSync(f.file + '.replacement', '{}'); }
+      return original.call(this, file, ...args);
+    };
+    const loaded = readNativeLinkConfig(f.env, { allowSynthetic: true });
+    assert.equal(descriptorReads, 1); assert.equal(loaded.bytes.toString(), f.bytes);
+  } finally { fs.readFileSync = original; }
+  const malformed = 'PRIVATE_INVALID_INPUT_NOT_FOR_ERROR_MESSAGES'; writeFileSync(f.file, malformed);
+  assert.throws(() => readNativeLinkConfig({ ...f.env, CASEOPS_NATIVE_LINK_CONFIG_SHA256: digest(malformed) }, { allowSynthetic: true }), error => {
+    assert.equal(error.message, 'NATIVE_LINK_CONFIG_JSON_REQUIRED'); assert.ok(!error.message.includes(malformed)); return true;
+  });
+  const output = path.join(f.dir, 'malformed-output');
+  const refused = spawnSync(process.execPath, [path.join(repo, 'scripts/mobile/prepare-native-links.mjs'),
+    '--config', f.file, '--sha256', digest(malformed), '--output', output, '--synthetic'], {
+    cwd: repo, encoding: 'utf8', timeout: 10000,
+  });
+  assert.equal(refused.status, 1);
+  assert.equal(refused.stdout, '');
+  assert.equal(refused.stderr.trim(), 'NATIVE_LINK_CONFIG_JSON_REQUIRED');
+  assert.ok(!refused.stderr.includes(malformed));
+  assert.equal(existsSync(output), false);
+});
+test('actual offline generator emits deterministic hash-bound public projections only into a fresh directory, preserves earlier snapshots', async t => {
+  const { prepareNativeLinks } = await import('./prepare-native-links.mjs');
+  const f = publicLinkFixture(t), first = path.join(f.dir, 'first'), second = path.join(f.dir, 'second');
+  assert.throws(() => prepareNativeLinks({ file: f.file, sha256: digest(f.bytes), output: first }), /SYNTHETIC/);
+  const a = prepareNativeLinks({ file: f.file, sha256: digest(f.bytes), output: first, synthetic: true });
+  prepareNativeLinks({ file: f.file, sha256: digest(f.bytes), output: second, synthetic: true });
+  for (const file of ['config-evidence.json', 'projections.json', 'apple-app-site-association', 'assetlinks.json', 'api-environment.json'])
+    assert.deepEqual(readFileSync(path.join(first, file)), readFileSync(path.join(second, file)));
+  assert.equal(a.productionEnabled, false); assert.equal(a.platformAssociationVerified, false);
+  writeFileSync(f.file, '{}\n');
+  assert.equal(readFileSync(a.configEvidence.path, 'utf8'), f.bytes);
+  assert.throws(() => readNativeLinkConfig(f.env, { allowSynthetic: true }), /HASH_MISMATCH/);
+  assert.throws(() => prepareNativeLinks({ file: a.configEvidence.path, sha256: a.configEvidence.sha256, output: first, synthetic: true }), /NEW_ABSOLUTE/);
+});
+test('native link runtime/generator imports are in the actual source snapshot and existing web builder closure', () => {
+  const snapshot = readFileSync(path.join(repo, 'scripts/mobile/source-snapshot.mjs'), 'utf8');
+  for (const file of ['apps/web/lib/native-link-policy.cjs', 'apps/web/lib/native-link-policy.d.cts', 'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts', 'scripts/mobile/prepare-native-links.mjs']) assert.ok(snapshot.includes(file));
+  assert.match(readFileSync(path.join(repo, 'apps/web/Dockerfile'), 'utf8'), /COPY apps\/web \.\//);
+  const metro = require(path.join(app, 'metro.config.js'));
+  assert.ok(metro.watchFolders.includes(path.join(repo, 'apps/web/lib')), 'SHARED_PUBLIC_RUNTIME_POLICY_MUST_BE_VISIBLE_TO_METRO');
+  assert.doesNotMatch(readFileSync(path.join(app, 'src/auth/handoff.ts'), 'utf8'), /native-link-config\.cjs|node:fs|node:crypto/);
+});
+test('actual source fingerprint and dirty fence include shared callback policy changes', t => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'caseops-link-snapshot-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(path.join(dir, 'apps/mobile'), { recursive: true });
+  mkdirSync(path.join(dir, 'apps/web/lib'), { recursive: true });
+  writeFileSync(path.join(dir, 'apps/mobile/index.ts'), 'export {};\n');
+  const policy = path.join(dir, 'apps/web/lib/native-link-policy.cjs');
+  writeFileSync(policy, 'module.exports = { mode: "disabled" };\n');
+  execFileSync('git', ['init', '--quiet'], { cwd: dir });
+  execFileSync('git', ['add', '.'], { cwd: dir });
+  execFileSync('git', ['-c', 'user.name=Offline fixture', '-c', 'user.email=offline@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'Synthetic source snapshot'], { cwd: dir });
+  const before = sourceSnapshot(dir); assert.equal(before.sourceDirty, false);
+  writeFileSync(policy, 'module.exports = { mode: "changed" };\n');
+  const after = sourceSnapshot(dir); assert.equal(after.sourceDirty, true);
+  assert.notEqual(after.sourceFingerprint, before.sourceFingerprint);
+  assert.equal(after.sourceSha, before.sourceSha);
 });
 
 test('Android public config is marker-enforced, exact-source and leaves iOS defaults intact', (t) => {
   const { env, file } = fixture(t);
   const config = expoConfig(env);
   assert.equal(config.extra.automatedTest, true);
+  assert.deepEqual(config.extra.nativeLinkPolicy, { mode: 'local', redirectUri: 'caseops://oauth/callback' });
   assert.equal(config.extra.apiOrigin, env.EXPO_PUBLIC_API_ORIGIN);
   assert.equal(config.extra.webOrigin, env.EXPO_PUBLIC_WEB_ORIGIN);
   assert.equal(config.extra.releaseSha, sha);
@@ -299,6 +419,7 @@ test('iOS simulator acceptance has a distinct ID, HTTPS, marker and no Android C
     EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443' });
   assert.equal(config.ios.bundleIdentifier, plugin.IOS_BUNDLE_ID);
   assert.equal(config.extra.automatedTest, true);
+  assert.deepEqual(config.extra.nativeLinkPolicy, { mode: 'local', redirectUri: 'caseops://oauth/callback' });
   assert.equal(config.ios.infoPlist.NSAppTransportSecurity, undefined);
   assert.equal(config.android.package, 'ai.caseops.mobile.dev');
 });

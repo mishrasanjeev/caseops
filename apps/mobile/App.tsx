@@ -11,9 +11,10 @@ import { MobileApplication } from "./src/application/MobileApplication";
 import { SignInPanel } from "./src/components/SignInPanel";
 import {
   authorizationUrl,
-  NATIVE_CALLBACK,
+  authSessionCallback,
   parseCallback,
 } from "./src/auth/handoff";
+import { DISABLED_NATIVE_LINK_POLICY, type NativeLinkPolicy } from "../web/lib/native-link-policy.cjs";
 import { NativeSession } from "./src/auth/session";
 import {
   credentialStore,
@@ -199,6 +200,8 @@ export default function App() {
     setBusy(true);
     setError(null);
     try {
+      const nativeLinkPolicy: NativeLinkPolicy = Constants.expoConfig?.extra?.nativeLinkPolicy || DISABLED_NATIVE_LINK_POLICY;
+      const callback = authSessionCallback(nativeLinkPolicy, Platform.OS, Platform.Version);
       picker.clear();
       purgeMatterFileTemps();
       const bytes = await Crypto.getRandomBytesAsync(32);
@@ -225,19 +228,19 @@ export default function App() {
           challenge,
           state,
           platform,
-        }),
-        NATIVE_CALLBACK,
-        { preferEphemeralSession: true },
+        }, nativeLinkPolicy),
+        callback.redirectUri,
+        callback.options,
       );
       if (result.type !== "success") {
         setError("Sign-in was cancelled. No new device session was retained.");
         return;
       }
-      const code = parseCallback(result.url, state);
+      const code = parseCallback(result.url, state, nativeLinkPolicy);
       await runtime.session.exchange({
         code,
         code_verifier: verifier,
-        redirect_uri: NATIVE_CALLBACK,
+        redirect_uri: callback.redirectUri,
         platform,
       });
       const current = await runtime.session.revalidate();
@@ -245,7 +248,11 @@ export default function App() {
     } catch (cause) {
       setError(
         cause instanceof Error
-          ? cause.message
+          ? cause.message === "IOS_HTTPS_CALLBACK_REQUIRES_17_4"
+            ? "Secure sign-in requires iOS 17.4 or later. Update iOS before signing in."
+            : cause.message === "NATIVE_SIGN_IN_NOT_CONFIGURED"
+              ? "Native sign-in is not configured for this app build."
+              : cause.message
           : "The secure sign-in could not be completed.",
       );
     } finally {

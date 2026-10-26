@@ -3472,3 +3472,12 @@ requirements when using the fallback.
   adapter URL and poison unrelated tests. Regress absent and preexisting values
   plus the complete adjacent notification inventory; preserve the correctly
   refusing production transport fence and the original ordered failure.
+- A route handler's security headers may be suppressed by headers already set
+  by Next proxy or global configuration. Regress the installed sendResponse
+  behavior, then verify effective CSP/referrer headers and the actual fixed-script
+  URL scrub in the built browser. Scope exceptions to the exact document/method;
+  preserve every other page's nonce policy and never exchange callback secrets.
+- A nonzero GNU_RELRO end modulo does not by itself prove 16 KiB incompatibility.
+  Apply the documented own-LOAD exception and compare rounded protection against
+  every writable LOAD range. Retain the incomplete modulo-only report and prove
+  the negative shared-tail/overlap controls; static alignment is not device proof.

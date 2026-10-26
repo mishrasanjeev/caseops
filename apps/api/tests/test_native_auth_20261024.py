@@ -346,6 +346,68 @@ def test_handoff_binds_verifier_platform_and_exact_redirect(client, changes):
     assert _exchange(client, grant["code"]).status_code == 200
 
 
+@pytest.mark.parametrize("platform", ["android", "ios"])
+def test_registered_https_handoff_exchanges_once_under_nonlocal_native_policy(
+    client, monkeypatch, platform,
+):
+    import secrets
+
+    from pydantic import SecretStr
+
+    import caseops_api.core.native_auth as native_policy
+
+    auth, browser = _browser(client)
+    callback = "https://native.example.org/native/oauth/callback"
+    other_callback = "https://native.example.org/native/oauth/other-callback"
+    # Exercise the real HTTP endpoints with production native issuance rules.
+    # The database, browser bootstrap and transports remain the offline fixture;
+    # this does not claim a signed app or deployed-domain association.
+    settings = get_settings().model_copy(update={
+        "env": "production",
+        "native_auth_enabled": True,
+        "native_signing_enabled": True,
+        "native_signing_secret": SecretStr(secrets.token_hex(32)),
+        "native_redirect_uris": [callback, other_callback],
+    })
+    monkeypatch.setattr(native_policy, "get_settings", lambda: settings)
+    custom_scheme = _authorize(client, browser, platform=platform)
+    assert custom_scheme.status_code == 400
+    _assert_no_native_issuance()
+    grant = _authorize(client, browser, platform=platform, redirect_uri=callback)
+    assert grant.status_code == 200, grant.text
+    assert grant.json()["redirect_uri"] == callback
+    assert grant.json()["state"] == STATE
+    code = grant.json()["code"]
+    for changes in (
+        {"redirect_uri": other_callback},
+        {"platform": "ios" if platform == "android" else "android"},
+        {"code_verifier": "w" * 64},
+    ):
+        rejected = _exchange(
+            client, code, **{"platform": platform, "redirect_uri": callback, **changes},
+        )
+        assert rejected.status_code == 401
+        assert rejected.headers["Cache-Control"] == "no-store"
+        with get_session_factory()() as session:
+            stored = session.scalar(select(NativeAuthorizationCode))
+            assert stored.consumed_at is None
+            assert session.scalar(select(func.count()).select_from(NativeDeviceSession)) == 0
+    exchanged = _exchange(client, code, platform=platform, redirect_uri=callback)
+    assert exchanged.status_code == 200, exchanged.text
+    assert exchanged.json()["membership"]["id"] == auth["membership"]["id"]
+    assert exchanged.headers["Cache-Control"] == "no-store"
+    assert not exchanged.headers.get("set-cookie")
+    principal = client.get("/api/auth/me", headers=_headers(exchanged.json()))
+    assert principal.status_code == 200
+    assert principal.json()["user"]["id"] == auth["user"]["id"]
+    replay = _exchange(client, code, platform=platform, redirect_uri=callback)
+    assert replay.status_code == 401
+    with get_session_factory()() as session:
+        assert session.scalar(select(NativeAuthorizationCode)).consumed_at is not None
+        assert session.scalar(select(func.count()).select_from(NativeDeviceSession)) == 1
+        assert session.scalar(select(func.count()).select_from(NativeRefreshToken)) == 1
+
+
 def test_authorize_requires_cookie_csrf_and_never_native_authority(client):
     auth, browser = _browser(client)
     assert _authorize(client, {}).status_code == 403

@@ -5,6 +5,10 @@ import {
   prepareNativeHandoff,
 } from "./native-authorization";
 
+const LOCAL_POLICY = { mode: "local", redirectUri: "caseops://oauth/callback" } as const;
+const DISABLED_POLICY = { mode: "disabled" } as const;
+const HTTPS_POLICY = { mode: "https", redirectUri: "https://native.invalid/native/oauth/callback", configSha256: "a".repeat(64) } as const;
+
 const query = new URLSearchParams({
   code_challenge: "a".repeat(43),
   state: "b".repeat(64),
@@ -13,7 +17,7 @@ const query = new URLSearchParams({
 }).toString();
 describe("native browser authorization admission", () => {
   it("preserves only the bounded native parameters", () => {
-    expect(parseNativeAuthorization(query)).toMatchObject({
+    expect(parseNativeAuthorization(query, LOCAL_POLICY)).toMatchObject({
       platform: "android",
       state: "b".repeat(64),
     });
@@ -26,16 +30,16 @@ describe("native browser authorization admission", () => {
     "state=extra",
     "return_to=https://attacker.test",
   ])("rejects malformed or duplicate %s", (suffix) => {
-    expect(parseNativeAuthorization(`${query}&${suffix}`)).toBeNull();
+    expect(parseNativeAuthorization(`${query}&${suffix}`, LOCAL_POLICY)).toBeNull();
   });
   it("rejects an incomplete request", () => {
-    expect(parseNativeAuthorization("")).toBeNull();
+    expect(parseNativeAuthorization("", LOCAL_POLICY)).toBeNull();
   });
 });
 
 describe("bounded single-use native callback", () => {
   afterEach(() => vi.unstubAllGlobals());
-  const request = parseNativeAuthorization(query)!;
+  const request = parseNativeAuthorization(query, LOCAL_POLICY)!;
   const response = {
     code: "c".repeat(43),
     state: request.state,
@@ -50,13 +54,13 @@ describe("bounded single-use native callback", () => {
       const prepared = prepareNativeHandoff(request, {
         ...response,
         expires_in,
-      });
+      }, LOCAL_POLICY);
       expect(prepared.expiresIn).toBe(expires_in);
       expect(prepared.callback).toBe(
         `caseops://oauth/callback?code=${response.code}&state=${request.state}`,
       );
       expect(assign).not.toHaveBeenCalled();
-      openNativeApp(prepared.callback);
+      openNativeApp(prepared.callback, LOCAL_POLICY);
       expect(assign).toHaveBeenCalledExactlyOnceWith(prepared.callback);
     },
   );
@@ -72,7 +76,7 @@ describe("bounded single-use native callback", () => {
     { ...response, expires_in: 121 },
     { ...response, expires_in: NaN },
   ])("rejects an invalid grant response %#", (value) => {
-    expect(() => prepareNativeHandoff(request, value)).toThrow(
+    expect(() => prepareNativeHandoff(request, value, LOCAL_POLICY)).toThrow(
       "Invalid native handoff response.",
     );
   });
@@ -88,7 +92,83 @@ describe("bounded single-use native callback", () => {
   ])("refuses a forged callback before browser navigation %#", (callback) => {
     const assign = vi.fn();
     vi.stubGlobal("window", { location: { assign } });
+    expect(() => openNativeApp(callback, LOCAL_POLICY)).toThrow("Invalid native callback.");
+    expect(assign).not.toHaveBeenCalled();
+  });
+});
+
+describe("configured HTTPS native callback", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const nativeQuery = (redirect: string = HTTPS_POLICY.redirectUri, platform: string = "ios") => new URLSearchParams({
+    code_challenge: "a".repeat(43), state: "b".repeat(64), platform, redirect_uri: redirect,
+  }).toString();
+  const response = { code: "c".repeat(43), state: "b".repeat(64), redirect_uri: HTTPS_POLICY.redirectUri, expires_in: 60 };
+
+  it.each(["ios", "android"])("preserves the exact four-field API contract for configured %s HTTPS callbacks", (platform) => {
+    const request = parseNativeAuthorization(nativeQuery(HTTPS_POLICY.redirectUri, platform), HTTPS_POLICY)!;
+    expect(request).toEqual({ code_challenge: "a".repeat(43), state: "b".repeat(64), platform, redirect_uri: HTTPS_POLICY.redirectUri });
+    const assign = vi.fn(); vi.stubGlobal("window", { location: { assign } });
+    const handoff = prepareNativeHandoff(request, response, HTTPS_POLICY);
+    expect(handoff.callback).toBe(`${HTTPS_POLICY.redirectUri}?code=${response.code}&state=${response.state}`);
+    expect(handoff.expiresIn).toBe(60); expect(assign).not.toHaveBeenCalled();
+    openNativeApp(handoff.callback, HTTPS_POLICY);
+    expect(assign).toHaveBeenCalledExactlyOnceWith(handoff.callback);
+  });
+
+  it("fails closed without configured policy and never downgrades HTTPS policy to the local custom scheme", () => {
+    expect(parseNativeAuthorization(query)).toBeNull();
+    expect(parseNativeAuthorization(query, DISABLED_POLICY)).toBeNull();
+    expect(parseNativeAuthorization(query, HTTPS_POLICY)).toBeNull();
+    expect(parseNativeAuthorization(nativeQuery(), LOCAL_POLICY)).toBeNull();
+    expect(parseNativeAuthorization(nativeQuery(), DISABLED_POLICY)).toBeNull();
+    expect(parseNativeAuthorization(nativeQuery(), { ...HTTPS_POLICY, configSha256: "not-a-hash" })).toBeNull();
+    const assign = vi.fn(); vi.stubGlobal("window", { location: { assign } });
+    const callback = `caseops://oauth/callback?code=${response.code}&state=${response.state}`;
+    expect(() => openNativeApp(callback, HTTPS_POLICY)).toThrow("Invalid native callback.");
     expect(() => openNativeApp(callback)).toThrow("Invalid native callback.");
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "https://attacker.invalid/native/oauth/callback",
+    "https://native.invalid.attacker.test/native/oauth/callback",
+    "http://native.invalid/native/oauth/callback",
+    "https://person@native.invalid/native/oauth/callback",
+    "https://native.invalid:443/native/oauth/callback",
+    "https://native.invalid:8443/native/oauth/callback",
+    "https://native.invalid/native/oauth/callback/",
+    "https://native.invalid/native/oauth/%63allback",
+    "https://native.invalid/native/oauth/callback?return_to=https://attacker.test",
+    "https://native.invalid/native/oauth/callback#fragment",
+    "javascript:alert(1)",
+  ])("rejects an unsafe or non-exact configured redirect %s", (redirect) => {
+    expect(parseNativeAuthorization(nativeQuery(redirect), HTTPS_POLICY)).toBeNull();
+  });
+
+  it.each(["state=extra", "platform=android", "redirect_uri=caseops%3A%2F%2Foauth%2Fcallback", "configSha256=untrusted"])("does not admit duplicate or invented authorization field %s", (suffix) => {
+    expect(parseNativeAuthorization(`${nativeQuery()}&${suffix}`, HTTPS_POLICY)).toBeNull();
+  });
+
+  it("does not trust a forged request or drifted grant response when preparing HTTPS handoff", () => {
+    const request = parseNativeAuthorization(nativeQuery(), HTTPS_POLICY)!;
+    for (const value of [{ ...response, redirect_uri: "caseops://oauth/callback" }, { ...response, state: "d".repeat(64) },
+      { ...response, code: "short" }, { ...response, expires_in: 121 }]) {
+      expect(() => prepareNativeHandoff(request, value, HTTPS_POLICY)).toThrow("Invalid native handoff response.");
+    }
+    const local = parseNativeAuthorization(query, LOCAL_POLICY)!;
+    expect(() => prepareNativeHandoff(local, { ...response, redirect_uri: local.redirect_uri }, HTTPS_POLICY)).toThrow("Invalid native handoff response.");
+    expect(() => prepareNativeHandoff(request, response, DISABLED_POLICY)).toThrow("Invalid native handoff response.");
+  });
+
+  it.each([
+    `https://native.invalid/native/oauth/callback?code=${response.code}&state=${response.state}&access_token=private`,
+    `https://native.invalid/native/oauth/callback?code=${response.code}&state=${response.state}&state=duplicate`,
+    `https://person@native.invalid/native/oauth/callback?code=${response.code}&state=${response.state}`,
+    `https://native.invalid/native/oauth/callback?code=${response.code}&state=${response.state}#secret`,
+    `https://attacker.invalid/native/oauth/callback?code=${response.code}&state=${response.state}`,
+  ])("rejects forged HTTPS callback before any browser navigation %#", (callback) => {
+    const assign = vi.fn(); vi.stubGlobal("window", { location: { assign } });
+    expect(() => openNativeApp(callback, HTTPS_POLICY)).toThrow("Invalid native callback.");
     expect(assign).not.toHaveBeenCalled();
   });
 });
