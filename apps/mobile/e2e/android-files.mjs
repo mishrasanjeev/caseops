@@ -4,7 +4,7 @@ import { admitApplication, FixtureUnavailable, verifiedFile } from './fixture-co
 import { browserOrigin } from './browser-handoff.mjs';
 import { delta, openMatter, readOnlyTraffic, traffic } from './journeys.mjs';
 import { absent, backgroundAndResume, click, dispatchNativeClick, find, findQuery, nativeAction, read, restart, selector, visible } from './native-ui.mjs';
-import { expandSourceDetails } from './files-20261025.mjs';
+import { readSourceHash } from './files-20261025.mjs';
 import { reconcileInventory } from './support.mjs';
 
 const APP = 'ai.caseops.mobile.dev.localacceptance', SHA = /^[a-f0-9]{64}$/;
@@ -133,8 +133,7 @@ async function enterFiles(context) {
 }
 async function details(context, anchor) {
   assert.equal(await read(context, 'id', `files-name-${anchor.attachmentId}`, { scroll: true }), anchor.filename, 'ANDROID_FILES_WRONG_FILENAME');
-  await expandSourceDetails(context, await find(context, 'id', `files-source-${anchor.attachmentId}`, { scroll: true }));
-  assert.equal(await read(context, 'id', `files-hash-${anchor.attachmentId}`, { scroll: true }), anchor.sha256, 'ANDROID_FILES_WRONG_SOURCE_HASH');
+  assert.equal(await readSourceHash(context, anchor), anchor.sha256, 'ANDROID_FILES_WRONG_SOURCE_HASH');
 }
 async function reload(context, anchor) {
   const before = await traffic(context); await click(context, 'id', 'files-reload', { scroll: true });

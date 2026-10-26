@@ -30,13 +30,21 @@ CUTOFF = NOW - timedelta(hours=1)
 
 
 @pytest.fixture(autouse=True)
-def offline_mail(monkeypatch):
+def offline_mail(monkeypatch, request):
     """Use the real SendGrid adapter, but never let its HTTP POST reach a socket."""
+    if hasattr(request, "param"):
+        if request.param is None:
+            monkeypatch.delenv("CASEOPS_PUBLIC_LEAD_TEST_MAIL_URL", raising=False)
+        else:
+            monkeypatch.setenv("CASEOPS_PUBLIC_LEAD_TEST_MAIL_URL", request.param)
+    # This SendGrid contract fixture does not opt into the separate e2e mail adapter.
+    monkeypatch.delenv("CASEOPS_PUBLIC_LEAD_TEST_MAIL_URL", raising=False)
     mail = SimpleNamespace(calls=[], status=202, error=None, on_send=None)
     monkeypatch.setenv("CASEOPS_SENDGRID_API_KEY", "offline-mail-fixture")
     monkeypatch.setenv("CASEOPS_SENDGRID_SENDER_EMAIL", "sender@example.com")
     monkeypatch.setenv("CASEOPS_DEMO_NOTIFICATION_ENABLED", "true")
     monkeypatch.setenv("CASEOPS_DEMO_RETENTION_ENABLED", "false")
+    get_settings.cache_clear()
 
     def post(url, **kwargs):
         assert url == "https://api.sendgrid.com/v3/mail/send"
@@ -50,6 +58,10 @@ def offline_mail(monkeypatch):
             headers={"X-Message-Id": "offline-message-reference"},
         )
 
+    def deny_transport(*args, **kwargs):
+        raise AssertionError("Unmocked HTTP transport in offline public-lead fixture")
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", deny_transport)
     monkeypatch.setattr(httpx, "post", post)
     yield mail
     get_settings.cache_clear()
@@ -93,6 +105,26 @@ def _change(identity, **changes):
         demo._save(row, state)
         session.commit()
     return state
+
+
+@pytest.mark.parametrize("offline_mail", [
+    None, "", "http://127.0.0.1:1/ambient-public-lead-mail",
+    "https://unowned.example.invalid/public-lead-mail",
+], indirect=True, ids=["unset", "empty", "loopback", "nonlocal"])
+def test_offline_mail_fixture_isolates_inherited_test_adapter(client, clock, offline_mail):
+    assert demo._local_notification_adapter() is None
+    identity = _admit()
+    demo.deliver_demo_notification(identity)
+    state = _state(identity)
+    assert state["notification_status"] == "sent" and state["attempts"] == 1
+    assert len(offline_mail.calls) == 1
+
+
+def test_offline_mail_fixture_rejects_unmocked_http_transport(offline_mail):
+    with httpx.Client(trust_env=False) as transport:
+        with pytest.raises(AssertionError, match="Unmocked HTTP transport"):
+            transport.get("https://unowned.example.invalid/public-lead-mail")
+    assert offline_mail.calls == []
 
 
 @pytest.mark.parametrize("value", [None, "", "invalid", "1", "yes"])
