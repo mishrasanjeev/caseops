@@ -6,6 +6,48 @@ mark unavailable or processing fields rather than treating them as zero.
 Do not count an indexing request, directory prospect, or owned link as organic
 traffic, a backlink, or a conversion.
 
+## 2026-10-27 IST - Marked Public Checks; GSC Safety Stop
+
+J19/M21/US-063. Seventeen fresh marked observations cover fifteen unique
+public/policy/release URLs, bounded before and after by serving API/web
+`f49b274e2098cdbd0284e505c2eb5fc363b820d2`. HTTP, canonical, noindex,
+robots, sitemap, JSON-LD and public tracking checks pass after normalizing the
+homepage's equivalent slash form. The original raw-comparison failure is
+retained; this is a correction on the same responses, not an invented replay.
+These are HTTP components, not fresh responsive Playwright acceptance.
+
+Direct Search Console retry did not establish access to the preferred
+`sanjeev@orchestrum.in` identity/property. Browser automation stopped when it
+could not safely verify its current URL; no alternate automation or expanded
+OAuth access was used to bypass that stop. Today's Web/AEO metrics, inspection,
+CWV, security/manual-action and link reports remain **unverified**. October 26
+numbers below remain historical observations, not today's results. No sitemap
+resubmission, indexing request, synthetic lead, paid-provider probe, outreach,
+GA4, marketing telemetry or tracking-cookie change occurred.
+
+Engineering update: PR565 merged as
+`d1099288b7e61224aa06088437c7a4b207bb43b9`, with a tree identical to its
+accepted local Docker candidate:3425 PostgreSQL passes,1906 frontend passes,
+630 browser passes and10 explicit browser skips. Its production attempt
+stopped **before routing** at the queue helper's container-identity check.
+Actual gcloud JSON omitted repeated container fields lacking `[]`; the fake
+CLI had incorrectly supplied them. The stopped release is not certified and
+the subsequent focused projection repair needs its own gate evidence.
+
+The daily SEO automation is temporarily held for this active human release
+critical path and must be restored with its existing account, schedule and
+quiet-notification intent after the critical work. This is a deferral, not a
+completed GSC audit. Native Android recovery remains active and unshipped;
+current-source device workflows, Files security acceptance and owner-MacBook
+iOS results remain separate. Owner-held MFA, Ram's external Calendar cleanup
+and #513/#515 real-delivery/privacy/retention/qualified-lead dependencies stay
+open. No unsupported mobile availability or conversion claim is published.
+
+Evidence: `outputs/fix-561-20261026/portfolio-export-worker/seo-daily-20261027/`
+and the retained `deploy-d1099288-01` logs in that parent directory. Next: finish
+the protected engineering release and exact-serving browser replay, then
+resume a URL-verifiable GSC session without repeating the unchanged sitemap.
+
 ## 2026-10-26 IST - Successful Direct GSC Retry
 
 Release-integration annotation: the owner subsequently requested including

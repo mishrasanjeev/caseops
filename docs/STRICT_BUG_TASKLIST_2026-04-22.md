@@ -1,5 +1,24 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 27 Export Release Projection Stop
+
+PR565 merged as d1099288b7e61224aa06088437c7a4b207bb43b9 with accepted
+Docker tree db59d73f0a3a5875ded6e8055cd6b99186883c1e. Local acceptance is
+3425 PostgreSQL passes,1906 frontend passes and630 browser passes/10 skips.
+The canonical deploy stopped before routing at the new queue helper's runtime
+identity fence. Actual gcloud JSON projection omitted `spec.containers`
+because its repeated traversal lacked `[]`; the fake supplied absent fields.
+Cloud Tasks was still disabled and no dedicated worker secret existed in the
+read-only diagnosis. The old serving f49 remains uncertified after QA40323857026.
+
+Preserved RED: both pre-route and post-route constructor cases fail with the
+same runtime-identity error after making the fake honor repeated projection.
+Repair name/image/env traversal, retain all runtime/sidecar/ACL/main fences,
+audit adjacent projections and replay the full offline deployment rehearsal.
+Do not waive the guard or count the stopped attempt as production acceptance.
+Issue561 and independent564 remain open until complete replacement release
+evidence. The dated SEO log records today's incomplete GSC retry separately.
+
 ## October 26 Verification Marker #561
 
 Partially fixed at the local verification-client boundary; production closure

@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Cloud CLI JSON projections must explicitly traverse repeated fields (for
+  example `spec.containers[].name`). A fake CLI must not return fields that
+  the actual projection omits. Regress the real formatter's response shape,
+  both pre-route and post-route checks, and preserve a stopped deployment as
+  incomplete rather than weakening runtime identity validation.
+
 - A new release helper must be integrated into the complete offline deployment
   rehearsal, not just unit-tested separately. Fake dispatch must validate its
   exact scope and must not fall through to live helper code. Address main-drift
