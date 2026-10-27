@@ -3359,3 +3359,17 @@ requirements when using the fallback.
   existing authorized serialized role; reconcile the complete semantic union
   and independent per-role inventories. Require an actual passed zero-retry
   receipt for the repaired journey, not a skip or a green collection alone.
+- A filtered cloud list with a small limit cannot prove resource absence: the
+  limit may precede the local identity filter. Read the exact owned ServiceUsage
+  resource against the verified numeric project, service name and state; read
+  only the dedicated Secret Manager resource name. Only bounded HTTP404 with
+  typed404/NOT_FOUND proves secret absence. Denials, malformed responses and
+  outages remain unverified, never permission to broaden API/IAM scope, accept
+  terms, bootstrap App Engine, read secret bytes or rotate an existing key.
+- Operational failure phases must come from a fixed allowlist, not raw cloud
+  exceptions, response bodies or credentials. Preserve canonical-main/runtime
+  checks immediately before each mutation and retain failed readbacks.
+- Windows pytest parameter IDs enter PYTEST_CURRENT_TEST and can exceed the
+  process environment bound before assertions run. Keep large response bodies
+  in fixtures with short explicit IDs, preserve setup/teardown failures and
+  require a complete replacement phase inventory; never weaken payload bounds.

@@ -8,6 +8,22 @@ traffic, a backlink, or a conversion.
 
 ## 2026-10-27 IST - Marked Public Checks; GSC Safety Stop
 
+Later engineering update,17:09 UTC: protected PR566/main
+`b9946c71f7e9912d56b5372f2dcfedd3cf82eea6` passed full local acceptance
+(3425 PostgreSQL,1906 frontend,630 browser passes/10 explicit browser skips)
+and main CI/Security/CodeQL. Its deployment stopped before API/web routing:
+an enabled Cloud Tasks API was misreported absent by filtered CLI list/limit
+ordering. Exact official metadata proves ENABLED; the worker secret is still
+absent. The source correction replaces both this and the adjacent secret
+existence check with exact metadata reads and typed absence, not broader IAM,
+secret access or an opaque retry. Its complete focused replacement passes
+142/142; full new-candidate release acceptance remains required. Existing
+business worker schedules/admission were canonically restored at17:09 UTC;
+private and unreleased export-recovery cadences remain held. Fresh marked
+API/web identity at17:02 UTC remains `f49b274e`, not B994. No new GSC access,
+metrics, indexing, leads, conversion or deployed-fix claim follows from this
+engineering update. See `docs/bugfix-export-resource-readiness-2026-10-27.md`.
+
 J19/M21/US-063. Seventeen fresh marked observations cover fifteen unique
 public/policy/release URLs, bounded before and after by serving API/web
 `f49b274e2098cdbd0284e505c2eb5fc363b820d2`. HTTP, canonical, noindex,

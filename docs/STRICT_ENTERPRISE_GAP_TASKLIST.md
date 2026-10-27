@@ -1,5 +1,45 @@
 # Strict Enterprise Gap Tasklist
 
+## October 27 Exact Export Resource Readiness
+
+**Partially implemented; production release NO-GO.** IPLF-030B/037, UJ-04,
+J08/M08, NFT-005 and SEC-003/004 map to EXW-MD01..07 in the
+[metadata-readiness brief](bugfix-export-resource-readiness-2026-10-27.md).
+gcloud list filter+limit2 falsely reported the enabled Cloud Tasks API absent;
+the secret-list lookup had the adjacent risk. The local helper now uses exact
+owned ServiceUsage GET and Secret Manager name-only GET, verifies project and
+resource identity/state, and accepts secret absence only from bounded typed
+HTTP404/NOT_FOUND. Denials/malformed metadata remain fail-closed. Canonical-main,
+runtime, resource IAM/etag preservation and no-rotation/no-secret-payload fences
+remain; diagnostics expose only allowlisted phases, not cloud exception text.
+
+Evidence directory: `outputs/fix-561-20261026/portfolio-export-worker` under the
+primary workspace (called E2 below). Retained `E2/serviceusage-red-01.jsonl`
+has2 failed cases/6 phases/exit1;
+`serviceusage-green-03.jsonl` has142 passed cases/426 phases/exit0, including the
+earlier missing identity, typed404/denial and scope negatives. Green02's Windows
+PYTEST_CURRENT_TEST oversized-ID setup/teardown failure and complete receipts
+remain preserved. Bounded replacement IDs do not reduce the payload test size.
+These are local uncommitted-helper results, not new full-source or deployed proof.
+
+B994 built/migrated/seeded and reconciled12 runtime jobs, then stopped16:06UTC
+before API routing at API-enablement readback. Cloud Tasks was actually ENABLED;
+no owned queue or dedicated worker secret was created. F49 still serves and b994
+is uncertified. The canonical three business cadences were restored17:09UTC in
+`E2/business-cadences-restore-b994-stop-02/completion.json`; private cadence and
+unreleased export recovery remain held. Future closure must bind the actual new
+accepted main/tree and canonical Docker/CI/deploy/production/cadence receipts,
+not assume old tree89e or add an ad-hoc closure helper as a release gate.
+
+Adjacent static risks remain separate follow-ups: the optional QA manual-grant
+helper's filtered job-list limit2 can skip its existing-execution inventory on
+an empty result; deploy-prod's latest50 run list filters active status afterward
+and can miss an older unfinished run. Cloud Run CLI ordering/current overlap
+were not reproduced by this read-only audit. Neither is proof those paths ran
+in the stopped deploy. No original workbook or unrelated verdict is upgraded;
+legal/source, owner MFA, Ram external cleanup, native, unidentified reopening
+and provider/mail UNKNOWN holds remain unchanged.
+
 ## October 26 Portfolio Export Execution #564
 
 NO-GO for whole-release closure at f49b274e. Exact QA40323857026's IP18 1280px
