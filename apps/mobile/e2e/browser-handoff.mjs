@@ -166,6 +166,51 @@ async function attachBrowser(context, before) {
   await driver.switchToWindow(selected.handle);
 }
 
+async function resolveIosBrowserEntry(context, handoff) {
+  const { driver, fixture, platform } = context;
+  const deadline = Date.now() + 10000;
+  let attempted = false;
+  browserStep(context, 'companySlug', 'wait');
+  for (;;) {
+    assert.ok(Date.now() < deadline, 'REAL_BROWSER_LOGIN_FORM_REQUIRED');
+    let ready, terminal;
+    await driver.waitUntil(async () => {
+      try {
+        assert.deepEqual(authorizationIdentity(await driver.getUrl(), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
+        const anchors = await driver.$$('form[aria-label="Sign in"] #company-slug');
+        assert.ok(anchors.length <= 1, 'AMBIGUOUS_IOS_BROWSER_ENTRY_STATE');
+        const form = anchors[0] && await anchors[0].isDisplayed() ? anchors[0] : undefined;
+        const entries = [];
+        for (const control of await driver.$$('a[href^="/sign-in?next="]')) if (await control.isDisplayed()) entries.push(control);
+        assert.ok(entries.length <= 1, 'AMBIGUOUS_IOS_BROWSER_ENTRY_STATE');
+        assert.ok(Date.now() <= deadline, 'REAL_BROWSER_LOGIN_FORM_REQUIRED');
+        // A clicked link can linger while navigation settles. Preserve the
+        // original shared deadline and never dispatch that navigation again.
+        if (attempted && entries.length) return false;
+        assert.ok(!form || entries.length === 0, 'AMBIGUOUS_IOS_BROWSER_ENTRY_STATE');
+        if (form && await form.isEnabled()) { ready = { form: true }; return true; }
+        if (!attempted && entries.length && await entries[0].isEnabled()) { ready = { control: entries[0] }; return true; }
+        return false;
+      } catch (error) {
+        // waitUntil retries callback rejections. Carry observed ambiguity,
+        // PKCE drift and transport failures out without polling them again.
+        terminal = error; return true;
+      }
+    }, { timeout: Math.max(1, deadline - Date.now()), interval: 200, timeoutMsg: 'REAL_BROWSER_LOGIN_FORM_REQUIRED' });
+    if (terminal) throw terminal;
+    assert.ok(ready && Date.now() <= deadline, 'REAL_BROWSER_LOGIN_FORM_REQUIRED');
+    if (ready.form) return;
+    const id = ready.control?.elementId;
+    assert.ok(typeof id === 'string' && id.length > 0 && id.trim() === id, 'IOS_ENTRY_ELEMENT_ID_REQUIRED');
+    assert.equal(typeof driver.elementClick, 'function', 'IOS_ENTRY_PROTOCOL_CLICK_REQUIRED');
+    assert.ok(!attempted && Date.now() < deadline, 'REAL_BROWSER_LOGIN_FORM_REQUIRED');
+    attempted = true;
+    browserStep(context, 'useAnotherAccount', 'click');
+    // Keep this mutation outside polling; element.click() may refetch/replay.
+    await driver.elementClick(id);
+  }
+}
+
 export async function browserLogin(context) {
   const { driver, fixture, platform } = context;
   const stage = mfaStage(fixture.auth);
@@ -199,14 +244,17 @@ export async function browserLogin(context) {
     await attachBrowser(context, before);
     browserStep(context, 'handoff', 'read');
     handoff = authorizationIdentity(await driver.getUrl(), fixture.auth.webOrigin, platform);
-    const another = await driver.$$('a[href^="/sign-in?next="]');
-    for (const element of another) if (await element.isDisplayed()) {
-      browserStep(context, 'useAnotherAccount', 'click');
-      await element.click();
+    if (platform === 'ios') await resolveIosBrowserEntry(context, handoff);
+    else {
+      const another = await driver.$$('a[href^="/sign-in?next="]');
+      for (const element of another) if (await element.isDisplayed()) {
+        browserStep(context, 'useAnotherAccount', 'click');
+        await element.click();
+      }
+      browserStep(context, 'companySlug', 'wait');
+      await driver.waitUntil(async () => (await driver.$$('#company-slug')).length === 1,
+        { timeout: 10000, interval: 200, timeoutMsg: 'REAL_BROWSER_LOGIN_FORM_REQUIRED' });
     }
-    browserStep(context, 'companySlug', 'wait');
-    await driver.waitUntil(async () => (await driver.$$('#company-slug')).length === 1,
-      { timeout: 10000, interval: 200, timeoutMsg: 'REAL_BROWSER_LOGIN_FORM_REQUIRED' });
     assert.deepEqual(authorizationIdentity(await driver.getUrl(), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
     await domFill(context, 'companySlug', '#company-slug', credentials.companySlug);
     await domFill(context, 'email', '#email', credentials.email);

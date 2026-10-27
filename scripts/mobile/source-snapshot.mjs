@@ -13,6 +13,7 @@ export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.met
     'scripts/mobile/windows-native-paths.gradle', 'scripts/mobile/use-android-env.ps1',
     'scripts/mobile/android-tooling.ps1', 'scripts/mobile/prepare-viewer-assets.mjs',
     'scripts/mobile/prepare-native-links.mjs',
+    'scripts/mobile/prepare-store-packaging.mjs',
     'apps/web/lib/native-link-policy.cjs', 'apps/web/lib/native-link-policy.d.cts',
     'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts'];
   const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...paths], {

@@ -120,8 +120,95 @@ The current iOS read-only precheck failed the **initial** PDF page acknowledgeme
 
 The same 6,094,557-byte HTML and verified 1,064-byte two-page public PDF rendered successfully in Chromium with zero network requests. A separately signed native WK probe proved navigation, ready/begin/chunk/end transfer and PDF canvas rendering, then failed in `page.getTextContent()` with TypeError. The actual iOS 26.5 runtime reports stream async iteration absent and `getReader` available. The owned portable-reader candidate then completed embedded text and acknowledged page 1 of 2 on that runtime. This agrees with the primary [PDF.js Safari report](https://github.com/mozilla/pdf.js/issues/21924); no supplier bytes, global polyfill, CSP or 15-second lease/render budget were changed.
 
+## Isolated packaging preparation — 2026-10-27
+
+A separate draft based exactly on canonical48f prepares explicit production
+version/build metadata and plan-only manual Xcode device archive/export and
+Android release AAB recipes. It changes neither the current48/118 QA candidate
+nor its installed artifacts or native reports. The declared previous counters
+are hash-bound operator inputs, not independently verified store maxima. The
+draft refuses execution and makes signing-material/toolchain/archive/AAB
+verification explicit before activation; it creates no keys, membership,
+agreement acceptance, payments or store upload. See `STORE_PACKAGING_DRAFT.md`.
+
+`NATIVE_DATA_INVENTORY_2026-10-27.md` records current narrow app/SDK data paths
+and a dated correction to the older private publishing review: camera-purpose
+copy and the former web-account-deletion destination are historical; current
+account guidance names the organization administrator. This correction does
+not implement account deletion, a public privacy policy or support workflow.
+The unwaived mobile four-HIGH dependency gate and all required current native,
+distribution and public service/association proof remain separate and open.
+
 The unchanged native PNG engine separately acknowledged its first page, then one 125% zoom request and the corresponding acknowledgement. That proves the engine path with an acknowledged initial page; the earlier app failure's exact early-input cause remains unobserved. The app candidate therefore also keeps page/zoom controls unavailable until an actual position acknowledgement matches the current controller, content revision and authority lease. The initial Page 1 of 1 value is no longer presented as render evidence.
 
 Verification at this checkpoint includes the preserved original portability regression failure, 11 passing focused PDF stream cases, 31 passing controller/readiness/integration cases, TypeScript and generator checks. The intended complete replacement mobile inventory is **365 cases** (348 baseline plus 11 stream and 6 readiness cases), with zero failure, skip, cancellation or todo required. The first complete invocation had 364 passes and one unchanged multipart-parity setup failure because the accepted Python executable was omitted; it is retained, with a full corrected invocation required. Fresh full-source tooling verification, matching canonical app rebuilds, complete Android/iPhone 23+17 and iPad/layout acceptance remain necessary. The isolated WK probes are not CaseOps native-case, production or store acceptance.
 
 Proofs beneath the mobile cache: `ios-build-CrSPw2qo/receipt.json`; `ios-files-20261026/canonical-renderer-readiness-1525da16/`; `ios-files-20261026/wk-isolator-source-1525-zjLqlRq0/{guarded-v2,guarded-stage-v3,guarded-portable-v4}/`; `ios-files-20261026/wk-png-baseline-1525-6_9erme7/`; `ios-files-20261026/chromium-exact-wk-1525-e_sf_nxd/`; `ios-files-20261026/renderer-stage-peer-review-1525-9n3yw0oo/`; `ios-files-20261026/pdf-stream-portability-source-cifyww1u/`. All probe processes were closed, and the original CaseOps installed binary/container and historical provider cohorts were preserved. No production credentials, paid-provider work, production deployment or store submission occurred.
+
+## Engineering checkpoint — 27 October UTC
+
+Frozen source `48f201ef056666cd0540bf442f63fb382e4bce40` completed365/365
+mobile cases and the complete19-module tooling inventory:545 collected,
+543 passed, two existing Windows-only skips, zero failures/cancellations/todos.
+The final accepted-interpreter/frozen-input reports supersede the earlier
+missing-Python and provisional runs without deleting those failures.
+
+Matching48f native artifacts were built and admitted: iOS Simulator binary
+`c42eae345e34dc45f2cc49cdd0665ba9b880ad00552ddcf1e3b3df3650dba88e`
+and Android ARM64 APK
+`5eb7e0a00a9a137a80a0ff415699db3d15fec2034d17072cf1ce9f88e77fab19`.
+Both bundles contain the exact new15,223-byte portable renderer program and
+exclude its predecessor. The APK passes20 static ELF/RELRO/16KiB alignment
+checks and actual permission/backup/cleartext/nondebuggable checks. These
+are artifact/source checks, not complete device acceptance or distribution.
+
+In the installed48f iOS app, the real FILES09/10 reader calls passed PDF
+page2/previous/125% zoom and PNG/JPEG125% zoom, with actual renderer
+acknowledgements, fresh browser/MFA, acknowledged logout and session cleanup.
+No upload or source-admission replay occurred. The preceding standalone
+authentication attempt failed before any credential POST or reader call;
+its original reporter discarded the finer failure boundary. A bounded native
+observation found and cancelled its exact current browser control once,
+proved signed-out idle and zero new POSTs, and preserved the failed report.
+The replacement diagnostic retained fixed, bounded, secret-free operation
+labels without adding device commands or changing protocol promises/timeouts.
+That replacement pass does not establish the original failure's cause.
+
+Independent source tests also reproduced a canonical iOS harness defect:
+a sign-in return link becoming visible just after its single check was missed,
+and duplicate visible links could both be clicked. The candidate resolves the
+exact current form or one observed link within the original10-second/200ms
+budget, rejects ambiguity/changed PKCE, and dispatches the resolved link once
+outside polling without wrapper replay. The affected210 cases pass, including
+11 new cases; this remains source-scoped until the complete integrated gate
+and matching native inventories run. No historical native cause is inferred.
+
+The integrated working candidate additionally prepares immutable production
+version/build metadata and explicitly nonexecuting archive/AAB command plans.
+Its20th tooling module, complete production metadata fixtures and isolated
+native-build fixture closure are included. Counter reservations belong to
+each platform's own app identity. Shared public-link and store metadata
+reads are bounded through their verified descriptors, including file growth,
+and reconcile the final pathname. See [store packaging preparation](STORE_PACKAGING_DRAFT.md)
+and [source-backed data inventory](NATIVE_DATA_INVENTORY_2026-10-27.md).
+Planning never certifies signing possession, store version history, actual
+IPA/AAB contents, production associations or privacy-policy completeness.
+
+Every integrated source/native result retains its own exact source, dependency,
+binary, backend and device scope. The full current Android/iPhone23+17 and
+advertised iPad/layout/accessibility inventories remain separate gates. The
+unpatched Expo/node-forge four-HIGH dependency gate, organization/signing/link
+prerequisites and operational privacy/support declarations still prevent
+release. The owner deferred business details while engineering continues;
+the corporate Site stays private. No merge, CaseOps production deployment,
+store upload, account enrollment or payment is authorized by these reports.
+
+Evidence beneath the mobile cache:
+`pr558-release-20261026/viewer-stream-final-18/summary.json`;
+`ios-files-20261026/pdf-stream-portability-source-cifyww1u/final-verification.json`;
+`ios-build-2PpJjy89/receipt.json`;
+`android-mac-setup/builds/android-arm64-4QoEPlP0/receipt.json`;
+`ios-files-20261026/canonical-renderer-readiness-48f201ef/phone-attempt-01/renderer-readiness.json`;
+`ios-files-20261026/canonical-renderer-readiness-48f201ef-diag-v3/phone-attempt-01/renderer-readiness.json`;
+`ios-files-20261026/ios-entry-counterexample-48f-e4bafivn/code-closure.json`;
+`ios-files-20261026/ios-entry-repair-48f-i5ynj05b/scoped-verification.json`.

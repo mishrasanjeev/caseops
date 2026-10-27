@@ -6,10 +6,13 @@ from contextlib import closing, nullcontext, redirect_stderr, redirect_stdout
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import stat
 import subprocess
 import tempfile
 import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import call, patch
 
@@ -24,6 +27,201 @@ def load(name, file):
 gateway_module = load("local_gateway", "local-gateway.py")
 bootstrap_module = load("local_bootstrap", "local-bootstrap.py")
 extend_module = load("local_extend", "local-extend.py")
+fixture_module = load("local_fixture_files", "local-fixture.py")
+
+
+class PrivateMetadataContractTests(unittest.TestCase):
+    def test_simulated_windows_named_device_exception_preserves_every_other_metadata_field(self):
+        # Pure synthetic metadata contract only; this is not Windows filesystem
+        # or ACL acceptance and does not patch process-global os.name/pathlib.
+        fields = {"st_dev": 31, "st_ino": 42, "st_uid": 501, "st_gid": 20,
+                  "st_mode": stat.S_IFREG | 0o600, "st_nlink": 1, "st_size": 73,
+                  "st_mtime_ns": 101, "st_ctime_ns": 102}
+        opened, named = SimpleNamespace(**fields), SimpleNamespace(**{**fields, "st_dev": 0})
+        for module in (fixture_module, bootstrap_module):
+            self.assertTrue(module.private_metadata_equal(opened, named, windows=True, named_path=True))
+            self.assertFalse(module.private_metadata_equal(opened, named, windows=False, named_path=True))
+            self.assertFalse(module.private_metadata_equal(opened, named, windows=True, named_path=False))
+            for key in fields.keys() - {"st_dev"}:
+                drift = SimpleNamespace(**{**vars(named), key: fields[key] + 1})
+                self.assertFalse(module.private_metadata_equal(opened, drift, windows=True, named_path=True), key)
+            self.assertTrue(module.private_metadata_equal(opened, opened, windows=False, named_path=False))
+            with self.assertRaises(AssertionError):
+                module.private_metadata_equal(opened, named, windows="nt", named_path=True)
+
+
+@unittest.skipUnless(os.name == "posix", "POSIX descriptor/mode controls do not certify Windows cache ACLs")
+class PrivateFixtureFileTests(unittest.TestCase):
+    def private_write_observer(self, module, observed):
+        original = os.write
+
+        def write(descriptor, content):
+            metadata = os.fstat(descriptor)
+            observed.append(stat.S_IMODE(metadata.st_mode))
+            self.assertEqual(stat.S_IMODE(metadata.st_mode), 0o600)
+            self.assertEqual(metadata.st_uid, os.getuid())
+            self.assertEqual(metadata.st_nlink, 1)
+            return original(descriptor, content)
+
+        return patch.object(module.os, "write", side_effect=write)
+
+    def test_secret_creation_is_private_before_first_write_under_permissive_umask(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(fixture_module, "ROOT", Path(directory)):
+            observed = []
+            previous = os.umask(0)
+            try:
+                with self.private_write_observer(fixture_module, observed):
+                    for name in ("credentials.json", "compose-secrets.json", "core-credentials-012345abcdef.json"):
+                        with patch.object(extend_module, "fixture", fixture_module):
+                            (extend_module.save if name.startswith("core-credentials-") else fixture_module.save)(
+                                name, {"synthetic_secret": name})
+                        target = Path(directory) / name
+                        self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
+                        self.assertEqual(json.loads(target.read_bytes()), {"synthetic_secret": name})
+            finally:
+                os.umask(previous)
+            self.assertEqual(observed, [0o600] * 3)
+
+    def test_supplied_credentials_are_private_before_write_and_generic_metadata_contract_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, observed = Path(directory), []
+            previous = os.umask(0)
+            try:
+                with self.private_write_observer(bootstrap_module, observed):
+                    bootstrap_module.write_new(root / "supplied-credentials.json", {"synthetic_secret": True})
+                bootstrap_module.write_new(root / "metadata.json", {"public": True})
+            finally:
+                os.umask(previous)
+            self.assertEqual(observed, [0o600])
+            self.assertEqual(stat.S_IMODE((root / "supplied-credentials.json").stat().st_mode), 0o600)
+            self.assertEqual((root / "metadata.json").read_text(), '{\n  "public": true\n}\n')
+            self.assertEqual(stat.S_IMODE((root / "metadata.json").stat().st_mode), 0o666)
+            with self.assertRaises(FileExistsError):
+                bootstrap_module.write_new(root / "metadata.json", {"overwrite": True})
+
+    def test_private_creation_sets_exact_mode_even_under_owner_write_mask(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(fixture_module, "ROOT", Path(directory)):
+            previous = os.umask(0o777)
+            try:
+                fixture_module.save("credentials.json", {"synthetic": True})
+                bootstrap_module.write_new(Path(directory) / "supplied-credentials.json", {"synthetic": True})
+            finally:
+                os.umask(previous)
+            for path in Path(directory).iterdir():
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+
+    def test_mfa_update_uses_same_private_inode_and_preserves_base_and_failed_evidence(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(fixture_module, "ROOT", Path(directory)):
+            root = Path(directory)
+            for name in ("credentials.json", "core-credentials-012345abcdef.json"):
+                fixture_module.save(name, {"synthetic": name})
+            (root / "seed.json").write_bytes(b"retained base seed")
+            (root / "failed-setup.json").write_bytes(b"retained original failure")
+            retained = {name: (root / name).read_bytes() for name in ("credentials.json", "seed.json", "failed-setup.json")}
+            target = root / "core-credentials-012345abcdef.json"
+            before, observed = target.stat(), []
+            with self.private_write_observer(fixture_module, observed):
+                fixture_module.update_private(target.name, {"synthetic": True, "totp_secret": "synthetic-only"})
+            self.assertEqual((before.st_dev, before.st_ino), (target.stat().st_dev, target.stat().st_ino))
+            self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
+            self.assertEqual(json.loads(target.read_bytes())["totp_secret"], "synthetic-only")
+            self.assertEqual(observed, [0o600])
+            for name, content in retained.items():
+                self.assertEqual((root / name).read_bytes(), content)
+
+    def test_symlink_and_hardlink_refuse_before_creation_or_update_truncate(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(fixture_module, "ROOT", Path(directory)):
+            root = Path(directory)
+            original = root / "original.json"
+            original.write_bytes(b"unchanged synthetic original")
+            original.chmod(0o600)
+            for link in ("symlink", "hardlink"):
+                target = root / "credentials.json"
+                target.symlink_to(original) if link == "symlink" else os.link(original, target)
+                try:
+                    with self.assertRaises((AssertionError, OSError)), patch.object(fixture_module.os, "ftruncate") as truncate:
+                        fixture_module.update_private(target.name, {"synthetic": "replacement"})
+                    truncate.assert_not_called()
+                    with self.assertRaises(FileExistsError):
+                        fixture_module.save(target.name, {"synthetic": "replacement"})
+                    with self.assertRaises(FileExistsError):
+                        bootstrap_module.write_new(target, {"synthetic": "replacement"})
+                    self.assertEqual(original.read_bytes(), b"unchanged synthetic original")
+                finally:
+                    target.unlink()
+
+    def test_permissive_or_foreign_existing_secret_is_not_silently_repaired_or_truncated(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(fixture_module, "ROOT", Path(directory)):
+            target = Path(directory) / "credentials.json"
+            target.write_bytes(b"retained rejected setup")
+            target.chmod(0o644)
+            with self.assertRaises(AssertionError), patch.object(fixture_module.os, "ftruncate") as truncate:
+                fixture_module.update_private(target.name, {"synthetic": True})
+            truncate.assert_not_called()
+            self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o644)
+            target.chmod(0o600)
+            real_uid = os.getuid()
+            with patch.object(fixture_module.os, "getuid", return_value=real_uid + 1), self.assertRaises(AssertionError):
+                fixture_module.update_private(target.name, {"synthetic": True})
+            self.assertEqual(target.read_bytes(), b"retained rejected setup")
+
+    def test_path_replacement_after_open_refuses_before_write_and_closes_descriptor(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(fixture_module, "ROOT", Path(directory)):
+            root = Path(directory)
+            fixture_module.save("credentials.json", {"synthetic": "retained"})
+            target, saved, descriptors = root / "credentials.json", root / "before-swap.json", []
+            original_open = os.open
+
+            def swap(path, flags, *args):
+                self.assertTrue(flags & os.O_NOFOLLOW)
+                self.assertFalse(flags & os.O_TRUNC)
+                descriptor = original_open(path, flags, *args)
+                descriptors.append(descriptor)
+                target.rename(saved)
+                target.write_bytes(b"foreign replacement remains unchanged")
+                target.chmod(0o600)
+                return descriptor
+
+            with patch.object(fixture_module.os, "open", side_effect=swap), self.assertRaises(AssertionError):
+                fixture_module.update_private(target.name, {"synthetic": "must not write"})
+            self.assertEqual(target.read_bytes(), b"foreign replacement remains unchanged")
+            self.assertEqual(json.loads(saved.read_bytes()), {"synthetic": "retained"})
+            self.assertEqual(len(descriptors), 1)
+            with self.assertRaises(OSError):
+                os.fstat(descriptors[0])
+
+    def test_write_failure_closes_private_descriptor_and_retains_private_failed_file(self):
+        for module, create in ((fixture_module, lambda p: fixture_module.save(p.name, {"synthetic": True})),
+                               (bootstrap_module, lambda p: bootstrap_module.write_new(p, {"synthetic": True}))):
+            with tempfile.TemporaryDirectory() as directory, patch.object(fixture_module, "ROOT", Path(directory)):
+                target, descriptors, original_open = Path(directory) / "supplied-credentials.json", [], os.open
+
+                def opened(*args):
+                    descriptor = original_open(*args)
+                    descriptors.append(descriptor)
+                    return descriptor
+
+                with patch.object(module.os, "open", side_effect=opened), patch.object(module.os, "write", side_effect=OSError("synthetic IO failure")), self.assertRaises(OSError):
+                    create(target)
+                self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
+                self.assertEqual(len(descriptors), 1)
+                with self.assertRaises(OSError):
+                    os.fstat(descriptors[0])
+
+    def test_private_update_rejects_outside_names_and_never_overwrites_old_secret_evidence(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(fixture_module, "ROOT", Path(directory)):
+            target = Path(directory) / "credentials.json"
+            target.write_bytes(b"retained original rejected credentials")
+            target.chmod(0o644)
+            with self.assertRaises(FileExistsError):
+                fixture_module.save(target.name, {"synthetic": "replacement"})
+            for name in ("../credentials.json", "/tmp/credentials.json", "seed.json"):
+                with self.assertRaises(AssertionError):
+                    fixture_module.update_private(name, {"synthetic": True})
+            for name in ("../credentials.json", "/tmp/credentials.json"):
+                with self.assertRaises(AssertionError):
+                    fixture_module.save(name, {"synthetic": True})
+            self.assertEqual(target.read_bytes(), b"retained original rejected credentials")
 
 
 class BootstrapTests(unittest.TestCase):

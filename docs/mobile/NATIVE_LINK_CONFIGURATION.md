@@ -11,7 +11,11 @@ association/signing remain owner prerequisites.
 at most 16 KiB. `CASEOPS_NATIVE_LINK_CONFIG_SHA256` must be its exact lowercase
 SHA-256. The reader opens once, rejects a symlink/non-file, validates descriptor
 identity/stability, hashes and parses the bytes from that descriptor, and closes
-on every path. Hash validation proves integrity, not domain or signing ownership.
+on every path. The read itself consumes at most16KiB plus one detection byte,
+including growth after the initial stat, and reconciles the final regular,
+non-symlink pathname and complete stable owner/link metadata. This public
+configuration does not acquire the private credential reader's current-UID or
+single-link policy. Hash validation proves integrity, not domain or signing ownership.
 
 The complete schema (no additional keys) is:
 

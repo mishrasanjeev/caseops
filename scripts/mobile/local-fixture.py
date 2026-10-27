@@ -7,7 +7,9 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import secrets
+import stat
 import sys
 import time
 
@@ -17,7 +19,78 @@ CLEAN = b"Synthetic CaseOps mobile source. No legal authority or customer data.\
 EICAR = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
 
 
+def private_name(name):
+    leaf = Path(name).name if isinstance(name, (str, os.PathLike)) else None
+    return leaf in ("credentials.json", "compose-secrets.json", "supplied-credentials.json") or bool(
+        leaf and re.fullmatch(r"core-credentials-[a-f0-9]{12}\.json", leaf))
+
+
+def _private_metadata(value, *, mode=True):
+    assert stat.S_ISREG(value.st_mode) and value.st_nlink == 1, "Single-link regular private fixture required"
+    if os.name != "nt":
+        assert value.st_uid == os.getuid(), "Owned private fixture required"
+        assert not mode or stat.S_IMODE(value.st_mode) == 0o600, "Private fixture mode must remain 0600"
+
+
+def private_metadata_equal(first, second, *, named_path=False, windows=False):
+    assert type(named_path) is bool and type(windows) is bool, "Explicit private metadata comparison mode required"
+    fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    return all(getattr(first, key) == getattr(second, key) for key in fields
+               if not (windows and named_path and key == "st_dev"))
+
+
+def _write_private(name, value, *, update=False):
+    assert isinstance(name, str) and private_name(name) and Path(name).name == name, "Direct owned secret filename required"
+    content = (json.dumps(value, indent=2) + "\n").encode("utf-8")
+    target = ROOT / name
+    previous = target.lstat() if update else None
+    if previous is not None:
+        _private_metadata(previous)
+    assert os.name == "nt" or hasattr(os, "O_NOFOLLOW"), "No-follow private file support required"
+    flags = os.O_RDWR if update else os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+    descriptor = os.open(target, flags, 0o600)
+    try:
+        opened = os.fstat(descriptor)
+        _private_metadata(opened, mode=update)
+        if not update and os.name != "nt":
+            # Creation is already at most 0600, including under umask 0.
+            # Restore owner access before the first byte if umask was stricter.
+            os.fchmod(descriptor, 0o600)
+            opened = os.fstat(descriptor)
+        named = target.lstat()
+        _private_metadata(opened)
+        _private_metadata(named)
+        assert private_metadata_equal(opened, named, named_path=True, windows=os.name == "nt"), "Private fixture path changed"
+        if previous is not None:
+            assert private_metadata_equal(opened, previous, named_path=True, windows=os.name == "nt"), "Private fixture changed before update"
+            # Never use O_TRUNC: all ownership/path/descriptor checks precede it.
+            os.ftruncate(descriptor, 0)
+        remaining = memoryview(content)
+        while remaining:
+            count = os.write(descriptor, remaining)
+            assert 0 < count <= len(remaining), "Private fixture write incomplete"
+            remaining = remaining[count:]
+        os.fsync(descriptor)
+        final, named = os.fstat(descriptor), target.lstat()
+        _private_metadata(final)
+        _private_metadata(named)
+        assert private_metadata_equal(final, named, named_path=True, windows=os.name == "nt"), "Private fixture path changed during write"
+        assert (final.st_dev, final.st_ino, final.st_uid, final.st_gid, final.st_mode, final.st_nlink) == (
+            opened.st_dev, opened.st_ino, opened.st_uid, opened.st_gid, opened.st_mode, opened.st_nlink), "Private fixture identity changed"
+        assert final.st_size == len(content), "Private fixture write incomplete"
+    finally:
+        os.close(descriptor)
+
+
+def update_private(name, value):
+    _write_private(name, value, update=True)
+
+
 def save(name, value):
+    if private_name(name):
+        _write_private(name, value)
+        return
     with (ROOT / name).open("x", encoding="utf-8") as target:
         json.dump(value, target, indent=2)
         target.write("\n")
@@ -284,7 +357,7 @@ def seed(args):
             secret = enrollment["secret"]
             expect(http.post("/api/auth/mfa/enroll/verify", json={"code": _hotp(secret, int(time.time()) // TOTP_PERIOD_SECONDS)}))
             credentials["totp_secret"] = secret
-            (ROOT / "credentials.json").write_text(json.dumps(credentials), encoding="utf-8")
+            update_private("credentials.json", credentials)
         routes = {"GET /api/build", "GET /api/health", "GET /api/auth/me", "GET /api/auth/security",
                   "POST /api/auth/native/token", "POST /api/auth/native/refresh", "POST /api/auth/native/logout",
                   "GET /api/me/today", "GET /api/matters/", "GET /api/calendar/events",

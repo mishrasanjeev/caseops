@@ -125,7 +125,7 @@ def main():
         }))
         credentials["totp_secret"] = secret
         # The original credentials and initial seed are never changed.
-        (ROOT / credentials_name).write_text(json.dumps(credentials), encoding="utf-8")
+        fixture.update_private(credentials_name, credentials)
         task = fixture.expect(owner.post(f"/api/matters/{mid}/tasks", json={
             "title": f"Inspect native core synthetic file {nonce}", "due_on": base["calendarDate"],
             "owner_membership_id": user["membership_id"], "priority": "high",

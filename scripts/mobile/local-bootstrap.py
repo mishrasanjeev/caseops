@@ -12,6 +12,7 @@ import secrets
 import re
 import socket
 import ssl
+import stat
 import subprocess
 import sys
 import time
@@ -130,7 +131,48 @@ def observe_device_locale(platform, udid):
             "commandsWereReadOnly": True, "renderedNativeLabelsNotYetCertified": True}
 
 
+def private_metadata_equal(first, second, *, named_path=False, windows=False):
+    assert type(named_path) is bool and type(windows) is bool, "Explicit private metadata comparison mode required"
+    fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    return all(getattr(first, key) == getattr(second, key) for key in fields
+               if not (windows and named_path and key == "st_dev"))
+
+
 def write_new(path, value):
+    if path.name in ("credentials.json", "compose-secrets.json", "supplied-credentials.json") or re.fullmatch(
+            r"core-credentials-[a-f0-9]{12}\.json", path.name):
+        content = (json.dumps(value, indent=2) + "\n").encode("utf-8")
+        assert os.name == "nt" or hasattr(os, "O_NOFOLLOW"), "No-follow private file support required"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+        descriptor = os.open(path, flags, 0o600)
+        try:
+            opened = os.fstat(descriptor)
+            assert stat.S_ISREG(opened.st_mode) and opened.st_nlink == 1, "Single-link private fixture required"
+            if os.name != "nt":
+                assert opened.st_uid == os.getuid(), "Owned private fixture required"
+                os.fchmod(descriptor, 0o600)
+                opened = os.fstat(descriptor)
+                assert stat.S_IMODE(opened.st_mode) == 0o600, "Private fixture mode must be 0600"
+            # Windows retains the existing protected cache ACL route. POSIX
+            # mode assertions here do not substitute for that separate policy.
+            named = path.lstat()
+            assert stat.S_ISREG(named.st_mode) and not stat.S_ISLNK(named.st_mode), "Regular private fixture path required"
+            assert private_metadata_equal(opened, named, named_path=True, windows=os.name == "nt"), "Private fixture path changed"
+            remaining = memoryview(content)
+            while remaining:
+                count = os.write(descriptor, remaining)
+                assert 0 < count <= len(remaining), "Private fixture write incomplete"
+                remaining = remaining[count:]
+            os.fsync(descriptor)
+            final, named = os.fstat(descriptor), path.lstat()
+            assert stat.S_ISREG(named.st_mode) and not stat.S_ISLNK(named.st_mode), "Regular private fixture path required"
+            assert private_metadata_equal(final, named, named_path=True, windows=os.name == "nt"), "Private fixture path changed during write"
+            assert (final.st_dev, final.st_ino, final.st_uid, final.st_gid, final.st_mode, final.st_nlink) == (
+                opened.st_dev, opened.st_ino, opened.st_uid, opened.st_gid, opened.st_mode, opened.st_nlink), "Private fixture identity changed"
+            assert final.st_size == len(content), "Private fixture write incomplete"
+        finally:
+            os.close(descriptor)
+        return
     with path.open("x", encoding="utf-8") as target:
         json.dump(value, target, indent=2)
         target.write("\n")

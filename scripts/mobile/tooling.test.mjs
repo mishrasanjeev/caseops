@@ -654,7 +654,7 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
         return [];
       }
       if (query === 'a[href^="/sign-in?next="]' && stage === 'landing') return [element('link')];
-      if (['#company-slug', '#email', '#password'].includes(query) && stage === 'login') return Array.from({ length: query === '#password' && duplicatePassword ? 2 : 1 }, () => element(query));
+      if (['#company-slug', 'form[aria-label="Sign in"] #company-slug', '#email', '#password'].includes(query) && stage === 'login') return Array.from({ length: query === '#password' && duplicatePassword ? 2 : 1 }, () => element(query === 'form[aria-label="Sign in"] #company-slug' ? '#company-slug' : query));
       if (query === 'form[aria-label="Sign in"] button[type="submit"]' && stage === 'login') return [element('submit')];
       if (query === '#mfa-code' && stage === 'mfa') return [element('#mfa-code')];
       if (query === 'form[aria-label="MFA challenge"] button[type="submit"]' && stage === 'mfa') return [element('mfa-submit')];

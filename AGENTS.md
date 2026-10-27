@@ -3507,3 +3507,22 @@ requirements when using the fallback.
   enable navigation or zoom from the default Page 1 of 1 position. Bind the
   acknowledged position to its live controller, content revision and authority
   lease; renewal, source changes and retained late callbacks need fresh proof.
+- Store build reservations belong to one platform and that platform's app
+  identity. Hashing both platform IDs together lets a change to the other app
+  reuse an existing counter. Retain partial reservations, distinguish declared
+  history from an actual store read, and never treat a command plan as a signed
+  archive or bundle.
+- A size check before readFileSync(fd) does not bound descriptor consumption
+  when the file can grow. Bound the read itself through the same descriptor,
+  retain the verified bytes, reconcile final pathname identity and metadata,
+  and close on every refusal. Apply this to every reachable configuration
+  reader, not only the newly added helper.
+- Synthetic credential JSON needs private permissions before its first byte,
+  independent of umask. MFA augmentation must retain an admitted owned regular
+  descriptor and reject symlinks, extra links or changed namespace identity
+  before truncation. A later chmod fixes that one run, not the producer. Keep
+  Windows named-path device portability distinct from actual ACL acceptance.
+- A first-failure pixel observation must precede metadata that can change the
+  state under investigation. Optional window serialization must not discard
+  later same-session accessibility evidence or replace the original failure.
+  A later fresh-session target becoming visible does not prove a setting fix.

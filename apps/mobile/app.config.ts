@@ -8,17 +8,22 @@ const hasLinkConfig = !!(process.env.CASEOPS_NATIVE_LINK_CONFIG_FILE || process.
 if (acceptance && hasLinkConfig) throw new Error("ACCEPTANCE_AND_PRODUCTION_LINK_CONFIG_CANNOT_MIX");
 const links = hasLinkConfig ? readNativeLinkConfig(process.env) : null;
 if (!acceptance && process.env.NODE_ENV === "production" && !links) throw new Error("IMMUTABLE_NATIVE_LINK_CONFIG_REQUIRED");
+const { readStoreBuildSettings } = require("./plugins/store-build.cjs");
+if (acceptance && (process.env.CASEOPS_STORE_BUILD_FILE || process.env.CASEOPS_STORE_BUILD_SHA256)) throw new Error("ACCEPTANCE_AND_STORE_BUILD_CONFIG_CANNOT_MIX");
+if (!links && (process.env.CASEOPS_STORE_BUILD_FILE || process.env.CASEOPS_STORE_BUILD_SHA256)) throw new Error("STORE_BUILD_REQUIRES_NATIVE_LINK_CONFIG");
+const storeBuild = links ? readStoreBuildSettings(process.env, links) : null;
 
 const config: ExpoConfig = {
   name: "CaseOps",
   slug: "caseops-mobile",
-  version: "0.1.0",
+  version: storeBuild?.version || "0.1.0",
   icon: "./assets/app-icon.png",
   orientation: "default",
   scheme: acceptance ? "caseops" : undefined,
   userInterfaceStyle: "light",
   ios: {
     supportsTablet: true,
+    ...(storeBuild ? { buildNumber: storeBuild.iosBuildNumber } : {}),
     bundleIdentifier: acceptance?.iosBundleIdentifier || links?.projections.mobile.ios.bundleIdentifier || "ai.caseops.mobile.dev",
     ...(links ? { associatedDomains: links.projections.mobile.ios.associatedDomains, deploymentTarget: "17.4" } : {}),
     infoPlist: {
@@ -27,6 +32,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: links?.projections.mobile.android.package || "ai.caseops.mobile.dev",
+    ...(storeBuild ? { versionCode: storeBuild.androidVersionCode } : {}),
     ...(links ? { intentFilters: links.projections.mobile.android.intentFilters } : {}),
     allowBackup: false,
     permissions: [],

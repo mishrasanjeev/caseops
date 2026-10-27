@@ -42,7 +42,7 @@ function environment(t) {
 }
 
 function browserDouble({ regularUrl = `${ORIGIN}/sign-in`, authorizationUrl = nativeUrl(), duplicateNative = false,
-  before = [NATIVE], after, ready = [true], currentUrl, platform = 'ios', pageStates = {} } = {}) {
+  before = [NATIVE], after, ready = [true], currentUrl, platform = 'ios', pageStates = {}, landingStage = 'landing' } = {}) {
   let stage = 'app', activeContext = 'NATIVE_APP', activeWindow = 'regular';
   let readinessPolls = 0, afterPolls = 0;
   const writes = [], clicks = [], reads = [], metadata = [], switches = [], waits = [], commands = [], foregroundReads = [];
@@ -121,7 +121,7 @@ function browserDouble({ regularUrl = `${ORIGIN}/sign-in`, authorizationUrl = na
     $$: async (query) => {
       if (query === CANCEL) assert.ok(isNative(), 'BROWSER_READINESS_REQUIRES_NATIVE_CONTEXT');
       if (isNative()) {
-        if (query === (platform === 'ios' ? '~sign-in' : 'id=sign-in') && stage === 'app') return [element('sign-in', '', () => { stage = 'landing'; })];
+        if (query === (platform === 'ios' ? '~sign-in' : 'id=sign-in') && stage === 'app') return [element('sign-in', '', () => { stage = landingStage; })];
         if (query === CANCEL && stage !== 'app') {
           const readiness = ready[Math.min(readinessPolls++, ready.length - 1)];
           return readiness ? [{ ...element('cancel'), isEnabled: async () => readiness === true }] : [];
@@ -131,7 +131,7 @@ function browserDouble({ regularUrl = `${ORIGIN}/sign-in`, authorizationUrl = na
       }
       assert.equal(activeWindow, 'authorization', 'UNRELATED_BROWSER_DOM_TOUCHED');
       if (query === 'a[href^="/sign-in?next="]' && stage === 'landing') return [element('sign-in-link', '', () => { stage = 'login'; })];
-      if (['#company-slug', '#email', '#password'].includes(query) && stage === 'login') return [element(query)];
+      if (['#company-slug', 'form[aria-label="Sign in"] #company-slug', '#email', '#password'].includes(query) && stage === 'login') return [element(query === 'form[aria-label="Sign in"] #company-slug' ? '#company-slug' : query)];
       if (query === 'form[aria-label="Sign in"] button[type="submit"]' && stage === 'login') return [element('submit', '', () => { stage = 'connect'; })];
       if (query === 'main dl dd' && stage === 'connect') return [
         element('principal', 'Context Unit context-unit@example.invalid'),
@@ -150,6 +150,137 @@ function browserDouble({ regularUrl = `${ORIGIN}/sign-in`, authorizationUrl = na
     },
   } } };
 }
+
+function entryDouble(t, { state = 'link', linger = 0, delayedForm = 0, disabledForm = 0, failure, lostAck = false,
+  missingId = false, missingProtocol = false, drift = false } = {}) {
+  environment(t);
+  let clock = 0;
+  t.mock.method(Date, 'now', () => clock);
+  const fake = browserDouble({ landingStage: ['form', 'form-and-link'].includes(state) ? 'login' : 'landing' });
+  const query = fake.driver.$$.bind(fake.driver), protocol = fake.driver.elementClick.bind(fake.driver), url = fake.driver.getUrl.bind(fake.driver);
+  const stats = { linkQueries: 0, formQueries: 0, entryDispatches: [], wrappedClicks: 0, callbackErrorsCaught: 0 };
+  let cachedLink, remainingLinger = linger;
+  fake.driver.getUrl = async () => drift && stats.entryDispatches.length ? nativeUrl('changed') : url();
+  fake.driver.elementClick = async id => {
+    if (id === 'sign-in' && missingProtocol) { await protocol(id); fake.driver.elementClick = undefined; return; }
+    if (id === 'sign-in-link') {
+      stats.entryDispatches.push(id);
+      if (failure && !lostAck) throw failure;
+      const result = await protocol(id);
+      if (failure) throw failure;
+      return result;
+    }
+    return protocol(id);
+  };
+  const wrapLink = (element, visible = true) => ({ ...element, ...(missingId ? { elementId: undefined } : {}),
+    isDisplayed: async () => visible,
+    click: async () => { stats.wrappedClicks++; throw new Error('WRAPPED_ENTRY_CLICK_FORBIDDEN'); } });
+  fake.driver.$$ = async value => {
+    if (value === 'a[href^="/sign-in?next="]') {
+      stats.linkQueries++;
+      const found = await query(value);
+      cachedLink ??= found[0];
+      if (state === 'none') return [];
+      if (state === 'form-and-link') return [wrapLink({ elementId: 'unexpected-link', isEnabled: async () => true })];
+      if (stats.entryDispatches.length && remainingLinger > 0) { remainingLinger--; return [wrapLink(cachedLink)]; }
+      if (state === 'late-link' && stats.linkQueries === 1) return found.map(element => wrapLink(element, false));
+      if (state === 'ambiguous') return [...found.map(element => wrapLink(element)), ...found.map(element => wrapLink({ ...element, elementId: element.elementId + '-other' }))];
+      if (state === 'duplicate') return [...found.map(element => wrapLink(element)), ...found.map(element => wrapLink(element))];
+      return found.map(element => wrapLink(element));
+    }
+    if (value === '#company-slug' || value === 'form[aria-label="Sign in"] #company-slug') {
+      stats.formQueries++;
+      if (failure && state === 'transport') throw failure;
+      if (stats.formQueries <= delayedForm || state === 'none') return [];
+      const found = await query(value);
+      return found.map(element => ({ ...element, isEnabled: async () => stats.formQueries > disabledForm }));
+    }
+    return query(value);
+  };
+  fake.driver.waitUntil = async (condition, options) => {
+    fake.waits.push(options);
+    const end = clock + options.timeout;
+    while (clock <= end) {
+      try { if (await condition()) return; }
+      catch { stats.callbackErrorsCaught++; } // Pinned WDIO normally retries rejected callbacks.
+      if (clock === end) break;
+      clock = Math.min(end, clock + options.interval);
+    }
+    throw new Error(options.timeoutMsg || 'UNIT_WAIT_UNSATISFIED');
+  };
+  return { ...fake, stats, elapsed: () => clock };
+}
+
+test('iOS resolves a login link that appears after the initial read before any credentials', async t => {
+  const f = entryDouble(t, { state: 'late-link' });
+  await browserLogin(f.context);
+  assert.ok(f.stats.linkQueries >= 2);
+  assert.deepEqual(f.stats.entryDispatches, ['sign-in-link']); assert.equal(f.stats.wrappedClicks, 0);
+  assert.deepEqual(f.writes.map(row => row.key), ['#company-slug', '#email', '#password']);
+  assert.ok(f.elapsed() <= 10000);
+});
+test('iOS immediate exact form does not navigate an entry link', async t => {
+  const f = entryDouble(t, { state: 'form' }); await browserLogin(f.context);
+  assert.deepEqual(f.stats.entryDispatches, []); assert.equal(f.stats.wrappedClicks, 0); assert.equal(f.writes.length, 3);
+});
+test('iOS waits for a delayed enabled exact form anchor within the original entry budget', async t => {
+  const f = entryDouble(t, { state: 'form', delayedForm: 2, disabledForm: 4 }); await browserLogin(f.context);
+  assert.ok(f.stats.formQueries >= 5); assert.deepEqual(f.stats.entryDispatches, []); assert.equal(f.writes.length, 3);
+  const policy = f.waits.find(row => row.timeoutMsg === 'REAL_BROWSER_LOGIN_FORM_REQUIRED');
+  assert.deepEqual(policy, { timeout: 10000, interval: 200, timeoutMsg: 'REAL_BROWSER_LOGIN_FORM_REQUIRED' });
+});
+test('iOS refuses distinct or duplicate visible entry matches before navigation or credentials', async t => {
+  for (const state of ['ambiguous', 'duplicate']) {
+    const f = entryDouble(t, { state });
+    await assert.rejects(browserLogin(f.context), /AMBIGUOUS_IOS_BROWSER_ENTRY_STATE/);
+    assert.deepEqual(f.stats.entryDispatches, []); assert.equal(f.stats.wrappedClicks, 0); assert.equal(f.writes.length, 0);
+    assert.equal(f.stats.callbackErrorsCaught, 0);
+  }
+});
+test('iOS refuses simultaneous form and unclicked entry-link states', async t => {
+  const f = entryDouble(t, { state: 'form-and-link' });
+  await assert.rejects(browserLogin(f.context), /AMBIGUOUS_IOS_BROWSER_ENTRY_STATE/);
+  assert.deepEqual(f.stats.entryDispatches, []); assert.equal(f.writes.length, 0);
+});
+test('iOS waits for a clicked entry link to disappear without dispatching it again', async t => {
+  const f = entryDouble(t, { linger: 3 }); await browserLogin(f.context);
+  assert.deepEqual(f.stats.entryDispatches, ['sign-in-link']); assert.equal(f.stats.wrappedClicks, 0); assert.equal(f.writes.length, 3);
+  assert.ok(f.elapsed() >= 600 && f.elapsed() <= 10000);
+});
+test('iOS retained entry and absent form both stop under one original ten-second deadline', async t => {
+  for (const options of [{ linger: Infinity }, { state: 'none' }]) {
+    const f = entryDouble(t, options);
+    await assert.rejects(browserLogin(f.context), /REAL_BROWSER_LOGIN_FORM_REQUIRED/);
+    assert.equal(f.elapsed(), 10000); assert.ok(f.stats.entryDispatches.length <= 1); assert.equal(f.writes.length, 0);
+    assert.ok(f.waits.filter(row => row.timeoutMsg === 'REAL_BROWSER_LOGIN_FORM_REQUIRED').every(row => row.timeout <= 10000 && row.interval === 200));
+  }
+});
+test('iOS entry navigation must retain the full PKCE identity before credential writes', async t => {
+  const f = entryDouble(t, { drift: true });
+  await assert.rejects(browserLogin(f.context), /BROWSER_HANDOFF_CHANGED/);
+  assert.deepEqual(f.stats.entryDispatches, ['sign-in-link']); assert.equal(f.writes.length, 0); assert.equal(f.stats.callbackErrorsCaught, 0);
+});
+test('iOS entry read transport failures remain terminal despite waitUntil callback retry behavior', async t => {
+  const failure = Object.assign(new Error('UNIT_READ_FAILURE'), { code: 'ECONNRESET' });
+  const f = entryDouble(t, { state: 'transport', failure });
+  await assert.rejects(browserLogin(f.context), error => error === failure);
+  assert.equal(f.stats.formQueries, 1); assert.equal(f.stats.callbackErrorsCaught, 0); assert.equal(f.writes.length, 0);
+});
+test('iOS entry stale and lost acknowledgements keep one original-ID raw dispatch and zero wrapped clicks', async t => {
+  for (const [name, lostAck] of [['stale element reference', false], ['unknown error', true]]) {
+    const failure = Object.assign(new Error('UNIT_ENTRY_CLICK_FAILURE'), { name });
+    const f = entryDouble(t, { failure, lostAck });
+    await assert.rejects(browserLogin(f.context), error => error === failure);
+    assert.deepEqual(f.stats.entryDispatches, ['sign-in-link']); assert.equal(f.stats.wrappedClicks, 0); assert.equal(f.writes.length, 0);
+  }
+});
+test('iOS entry click refuses a missing resolved identity or protocol method without a fallback', async t => {
+  for (const options of [{ missingId: true }, { missingProtocol: true }]) {
+    const f = entryDouble(t, options);
+    await assert.rejects(browserLogin(f.context), /IOS_ENTRY_(ELEMENT_ID|PROTOCOL_CLICK)_REQUIRED/);
+    assert.deepEqual(f.stats.entryDispatches, []); assert.equal(f.stats.wrappedClicks, 0); assert.equal(f.writes.length, 0);
+  }
+});
 
 test('iOS native browser login ignores the earlier ordinary Safari TLS-smoke sign-in tab', async (t) => {
   environment(t);
