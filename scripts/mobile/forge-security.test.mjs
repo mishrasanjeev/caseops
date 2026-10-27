@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -51,6 +52,15 @@ test('retained build-tool notice includes the exact installed upstream licence',
   const notice = readFileSync(path.join(app, 'BUILD_TOOL_NOTICES.txt'), 'utf8');
   assert.equal(notice.includes('node-forge 1.4.1'), true);
   assert.equal(notice.includes(licence), true);
+});
+test('Git checkout preserves the exact stored build-tool notice bytes', () => {
+  const repo = path.resolve(app, '../..');
+  const file = 'apps/mobile/BUILD_TOOL_NOTICES.txt';
+  const attributes = execFileSync('git', ['check-attr', 'eol', '--', file], { cwd: repo, encoding: 'utf8', timeout: 5000 });
+  assert.equal(attributes.trim(), `${file}: eol: lf`);
+  const stored = execFileSync('git', ['rev-parse', `:${file}`], { cwd: repo, encoding: 'utf8', timeout: 5000 }).trim();
+  const actual = execFileSync('git', ['hash-object', '--no-filters', '--', file], { cwd: repo, encoding: 'utf8', timeout: 5000 }).trim();
+  assert.equal(actual, stored);
 });
 test('canonical SHA-256 DigestInfo signatures with NULL parameters still verify', () => {
   const result = accepted(info([oid(), nullValue()]));

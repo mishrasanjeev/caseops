@@ -104,7 +104,7 @@ jobs:
         working-directory: apps/mobile
         run: npm test
       - name: Verify the native evidence harness
-        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs apps/mobile/e2e/ios-files.test.mjs apps/mobile/e2e/android-files.test.mjs scripts/mobile/ios-browser-context.test.mjs scripts/mobile/ios-native-locators.test.mjs scripts/mobile/ios-simulator-signing.test.mjs scripts/mobile/prepare-gateway-routes.test.mjs scripts/mobile/prepare-ios-local-run.test.mjs scripts/mobile/ios-files-privacy.test.mjs scripts/mobile/run-ios-files.test.mjs scripts/mobile/filesystem-security.test.mjs scripts/mobile/build-android-local-acceptance.test.mjs scripts/mobile/android-native-proof.test.mjs scripts/mobile/prepare-android-local-run.test.mjs scripts/mobile/android-files-privacy.test.mjs scripts/mobile/run-android-files.test.mjs scripts/mobile/store-packaging.test.mjs scripts/mobile/forge-security.test.mjs
+        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs apps/mobile/e2e/ios-files.test.mjs apps/mobile/e2e/android-files.test.mjs scripts/mobile/ios-browser-context.test.mjs scripts/mobile/ios-native-locators.test.mjs scripts/mobile/ios-simulator-signing.test.mjs scripts/mobile/prepare-gateway-routes.test.mjs scripts/mobile/prepare-ios-local-run.test.mjs scripts/mobile/ios-files-privacy.test.mjs scripts/mobile/run-ios-files.test.mjs scripts/mobile/filesystem-security.test.mjs scripts/mobile/build-android-local-acceptance.test.mjs scripts/mobile/android-native-proof.test.mjs scripts/mobile/prepare-android-local-run.test.mjs scripts/mobile/android-files-privacy.test.mjs scripts/mobile/run-android-files.test.mjs scripts/mobile/store-packaging.test.mjs scripts/mobile/forge-security.test.mjs scripts/mobile/prepare-source-exports.test.mjs
       - name: Verify isolated fixture preparation and gateway
         run: python3 scripts/mobile/local-fixture.test.py
       - name: Verify synthetic iOS Files picker inputs
@@ -118,11 +118,25 @@ jobs:
       - name: Enforce the unwaived high-severity dependency gate
         working-directory: apps/mobile
         run: npm audit --audit-level=high
+      - name: Prepare loopback-only source-export inputs
+        env:
+          CASEOPS_MOBILE_SOURCE_EXPORT: "1"
+        run: node scripts/mobile/prepare-source-exports.mjs >> "$GITHUB_ENV"
       - name: Export Android JavaScript, not an APK
         working-directory: apps/mobile
+        env:
+          CASEOPS_MOBILE_BUILD_PROFILE: android-local-acceptance
+          EXPO_PUBLIC_API_ORIGIN: https://10.0.2.2:8453
+          EXPO_PUBLIC_WEB_ORIGIN: https://10.0.2.2:3453
+          CASEOPS_MOBILE_ANDROID_CA_FILE: ${{ env.CASEOPS_MOBILE_SOURCE_EXPORT_CA_FILE }}
+          CASEOPS_MOBILE_ANDROID_CA_SHA256: ${{ env.CASEOPS_MOBILE_SOURCE_EXPORT_CA_SHA256 }}
         run: npm run export:android
       - name: Export iOS JavaScript, not an Xcode build
         working-directory: apps/mobile
+        env:
+          CASEOPS_MOBILE_BUILD_PROFILE: ios-simulator-acceptance
+          EXPO_PUBLIC_API_ORIGIN: https://127.0.0.1:8443
+          EXPO_PUBLIC_WEB_ORIGIN: https://127.0.0.1:3443
         run: npm run export:ios
 
   browser-handoff:

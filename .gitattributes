@@ -10,3 +10,4 @@ apps/api/vendor/fastembed-0.8.0-1caseops1.json text eol=lf
 apps/api/vendor/fastembed-0.8.0-1caseops1-py3-none-any.whl -text
 apps/api/tests/fixtures/fastembed/fastembed-0.8.0-py3-none-any.whl -text
 apps/mobile/src/viewer/generated/** text eol=lf
+apps/mobile/BUILD_TOOL_NOTICES.txt text eol=lf

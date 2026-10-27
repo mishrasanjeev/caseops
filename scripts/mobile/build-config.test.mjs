@@ -50,6 +50,34 @@ test('mobile dependency closure installs and audits actual Linux and Windows gra
   ]);
 });
 
+test('source exports use existing loopback QA profiles after the audit without weakening production config', () => {
+  const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
+  const steps = workflow.jobs.source.steps;
+  const audit = steps.findIndex(step => step.name === 'Enforce the unwaived high-severity dependency gate');
+  const prepare = steps.findIndex(step => step.name === 'Prepare loopback-only source-export inputs');
+  assert.equal(prepare > audit, true);
+  assert.deepEqual(steps[prepare].env, { CASEOPS_MOBILE_SOURCE_EXPORT: '1' });
+  assert.equal(steps[prepare].run, 'node scripts/mobile/prepare-source-exports.mjs >> "$GITHUB_ENV"');
+  const android = steps.findIndex(step => step.run === 'npm run export:android');
+  const ios = steps.findIndex(step => step.run === 'npm run export:ios');
+  assert.equal(android > prepare && ios > android, true);
+  assert.deepEqual(steps[android].env, {
+    CASEOPS_MOBILE_BUILD_PROFILE: 'android-local-acceptance',
+    EXPO_PUBLIC_API_ORIGIN: 'https://10.0.2.2:8453',
+    EXPO_PUBLIC_WEB_ORIGIN: 'https://10.0.2.2:3453',
+    CASEOPS_MOBILE_ANDROID_CA_FILE: '${{ env.CASEOPS_MOBILE_SOURCE_EXPORT_CA_FILE }}',
+    CASEOPS_MOBILE_ANDROID_CA_SHA256: '${{ env.CASEOPS_MOBILE_SOURCE_EXPORT_CA_SHA256 }}',
+  });
+  assert.deepEqual(steps[ios].env, {
+    CASEOPS_MOBILE_BUILD_PROFILE: 'ios-simulator-acceptance',
+    EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443',
+    EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443',
+  });
+  for (const step of [steps[prepare], steps[android], steps[ios]]) assert.notEqual(step['continue-on-error'], true);
+  assert.equal(workflow.jobs.source.env.CASEOPS_NATIVE_LINK_CONFIG_FILE, undefined);
+  assert.equal(workflow.jobs.source.env.CASEOPS_MOBILE_BUILD_PROFILE, undefined);
+});
+
 test('mobile CI selects every tooling module and audits before either platform export', () => {
   const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
   const steps = workflow.jobs.source.steps;
@@ -64,7 +92,8 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/filesystem-security.test.mjs', 'scripts/mobile/build-android-local-acceptance.test.mjs',
     'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs',
     'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
-    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/forge-security.test.mjs'];
+    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/forge-security.test.mjs',
+    'scripts/mobile/prepare-source-exports.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
