@@ -1,5 +1,19 @@
 # CaseOps agent instructions
 
+- A migrated index catalogue includes historical indexes absent from ORM
+  declarations. Inspect every actual candidate path: adding a full-key index
+  can leave a cheaper redundant prefix scan selected under fresh statistics.
+  Diagnose with indexes created before data and capture pg_class as well as
+  pg_stats; then prove the real retained-width journey. Retire a prefix only
+  after its healthy replacement is verified, preserve shared-reader semantics
+  and use reversible, restart-safe migration steps without planner overrides.
+- Keep native Windows verification basetemp roots short and outside OneDrive.
+  A temporary write can succeed while its longer final CSV rename fails at
+  MAX_PATH. Observe the actual worker exception and retained job before
+  teardown; an unchanged short-root control identifies harness sensitivity,
+  not a new passing full selection. Preserve the failed long-root inventory
+  and repeat the complete intended suite under the short owned root.
+
 - A support index does not prove bounded provenance work on fresh statistics.
   Retain the actual read plans under both fresh and analyzed states, including
   late target rows. Preserve every source/tenant/audit predicate and duplicate

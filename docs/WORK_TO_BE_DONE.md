@@ -8,10 +8,20 @@ not sufficient: unchanged PostgreSQL17.11 reproduction retains excessive
 company/action scans. Finish scoped query and CI-plan-retention repairs,
 prove fresh/analyzed work plus cross-database oracle parity, then complete a
 new frozen Docker/CI/main/deployment/production replacement. Docker11 was
-stopped, not accepted. Native155-case PDF/email replacement is prepared, not
-complete; native platform/security/owner-Mac holds remain separately open.
+stopped, not accepted. The native155-case PDF/email component completed
+152P/3cacheS; platform/security/owner-Mac holds remain separately open.
 Both original workbooks still carry interim results, not final certification.
 The SEO daily automation is ACTIVE and must not compete with these gates.
+
+942 is also rejected: scalar LIMIT did not fix the cold plan. The original
+EXISTS query is retained. A SQL-only cold diagnostic shows69907 to106 visits
+after dropping only the redundant historical company/action prefix; this is
+not application acceptance. Finish guarded0002 consolidation/restoration and
+shared audit-reader coverage before the complete short-root replacement.
+Focused07's348P/1F failure is observed at a265-character Windows CSV rename;
+the unchanged short-root control passes. Keep the failed full inventory open.
+The native155-case compatibility replacement now has152P/3cacheS/0F with
+complete phases/JUnit; it is not whole Android/iOS or production acceptance.
 
 ## October 26 Export Completion Gate Found During Release
 

@@ -56,6 +56,29 @@ completed cleanly for eight tenants with zero rebuilds at21:53:52UTC; it is
 not post-QA certification or scheduler-resume evidence. The original workbook
 verdicts remain interim, and native/iOS/owner dependencies remain separate.
 
+At22:47UTC,942 is rejected: its complete fresh application case still exceeds
+the unchanged work cap (69960/69960/67269 visits); scalar LIMIT is not a repair.
+Its complete349-case non-PG run has348 passes and one failed export; retained
+observation attributes that failure to a Windows rename from242 to265 path
+characters, with an unchanged short-root control passing. All original failed
+evidence remains. Security/CodeQL/review passed, but the parent cancelled its
+own known-unreleasable CI run. No green CI, full Docker or routing is claimed.
+A cold SQL-only diagnostic preserves default planner settings and equal53-row
+proofs while dropping only a redundant historical prefix index: work falls
+from69907 to106. That is hypothesis support, not real application acceptance.
+A separate guarded reversible migration and fresh complete short-root tests
+remain required. The original EXISTS reader is retained; unrelated marketing,
+privacy, legal and provider policy is unchanged.
+
+The interrupted mobile-backend PDF/email replacement completes155 intended
+cases:152 passed, three model-cache skips, zero failures and465 phases. An
+external list/tuple reconciliation error is preserved; an independent stored-
+JSON comparison verifies source/installed identity and all actual outcomes.
+This is a component on F945 plus three dependency files, not a new clean mobile
+release or Android/iOS acceptance. Owner-Mac, native security/Windows and
+external consent dependencies remain. Automation is ACTIVE; no new Google
+report, synthetic lead, provider charge or conversion result is claimed.
+
 ## 2026-10-27 IST - Marked Public Checks; GSC Safety Stop
 
 Later engineering update,17:09 UTC: protected PR566/main

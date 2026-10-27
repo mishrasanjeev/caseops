@@ -68,16 +68,13 @@ def imported_proof_expression():
     source_id = IpTrademarkParticularVersion.representation_json["portfolio_import"][
         "source_row_id"
     ].as_string()
-    # Preserve correlation and LIMIT through planning, including duplicate audits.
     return (
-        select(literal(1))
-        .select_from(IpImportRow)
+        select(IpImportRow.id)
         .where(
             func.length(source_id) == 36,
             IpImportRow.id == source_id,
             IpImportRow.company_id == IpDocketRecord.company_id,
-            select(literal(1))
-            .select_from(AuditEvent)
+            select(AuditEvent.id)
             .where(
                 AuditEvent.company_id == IpDocketRecord.company_id,
                 AuditEvent.action == "ip_docket.source_materialized",
@@ -86,14 +83,10 @@ def imported_proof_expression():
                 AuditEvent.ip_docket_id == IpDocketRecord.id,
             )
             .correlate(IpDocketRecord, IpImportRow)
-            .limit(1)
-            .scalar_subquery()
-            .is_not(None),
+            .exists(),
         )
         .correlate(IpDocketRecord, IpTrademarkParticularVersion)
-        .limit(1)
-        .scalar_subquery()
-        .is_not(None)
+        .exists()
     )
 
 

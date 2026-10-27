@@ -16,6 +16,18 @@ CI's direct native-JSONL upload glob. Correct retention without changing the
 work/latency/SQL-size bounds. Docker11 is stopped and incomplete; no merge,
 production routing or new acceptance is claimed. PRD EXW-PV01..05 apply.
 
+942 confirms scalar LIMIT is insufficient (69960/69960/67269 visits). Its
+complete349-case non-PG run has348P/1F; retained actual exception identifies
+Windows rename from242 to265 path characters. An unchanged short-root case
+passes; this does not make the failed full selection green. Full replacement
+uses a short owned basetemp. The cold catalogue experiment independently
+supports removal of the redundant migration-only company/action prefix,
+after validating the full-key replacement, with a new reversible0002 rather
+than rewriting0001. Original EXISTS semantics stay; shared audit readers,
+restart/cancel/rollback and complete real work bounds remain required.
+EXW-PV06/07 extend this still-open boundary.942 CI was parent-cancelled after
+the actual local failure; Security/CodeQL/review success is not release proof.
+
 ## October 27 Export Release Projection Stop
 
 Dependabot65 separately reports GHSA-xcq7-p3pf-p88h in the optional
