@@ -1,5 +1,25 @@
 # CaseOps agent instructions
 
+- Security timestamp tests must control signing and validation observations
+  independently. A future timestamp's skew shrinks while a request travels;
+  a live `now + 301` is not a stable rejection test for a 300-second window.
+  Prove both exact boundaries and a controlled elapsed second, including zero
+  worker execution on rejection. Do not widen the production window or rerun
+  an unchanged race to obtain a green CI result.
+
+- A resolved query fixture is not a delivered React observer update. For a
+  timing-sensitive fixture, prove query success while its bounded notification
+  is still pending, deliver it inside `act`, and always restore the scheduler
+  and clear the client. Preserve the original loading failure and unchanged UI
+  assertions/deadlines. Finish replacement frontend coverage before freezing
+  the next expensive Docker gate; interrupted native evidence is incomplete.
+
+- Cloud CLI JSON projections must explicitly traverse repeated fields (for
+  example `spec.containers[].name`). A fake CLI must not return fields that
+  the actual projection omits. Regress the real formatter's response shape,
+  both pre-route and post-route checks, and preserve a stopped deployment as
+  incomplete rather than weakening runtime identity validation.
+
 - A new release helper must be integrated into the complete offline deployment
   rehearsal, not just unit-tested separately. Fake dispatch must validate its
   exact scope and must not fall through to live helper code. Address main-drift

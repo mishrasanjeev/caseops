@@ -322,10 +322,10 @@ class Release:
             raise Error("API is not ready on untagged latest-only traffic")
         fields = (
             "metadata.name,metadata.labels,spec.serviceAccountName,"
-            "spec.containers.name,spec.containers.image"
+            "spec.containers[].name,spec.containers[].image"
         )
         if require_release:
-            fields += ",spec.containers.env"
+            fields += ",spec.containers[].env"
         deployed = self._call(
             [
                 "run",

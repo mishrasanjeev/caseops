@@ -177,9 +177,9 @@ def harness(monkeypatch):
             assert args[3] == REVISION
             container = {"name": "api", "image": "registry.invalid/api@sha256:" + "b" * 64}
             projection = next(arg for arg in args if arg.startswith("--format="))
-            if "spec.containers.env" in projection:
+            if "spec.containers[].env" in projection:
                 container["env"] = copy.deepcopy(state["env"])
-            return {
+            result = {
                 "metadata": {
                     "name": REVISION,
                     "labels": {"serving.knative.dev/service": module.SERVICE},
@@ -198,6 +198,11 @@ def harness(monkeypatch):
                     ),
                 },
             }
+            # gcloud JSON projections must traverse repeated fields explicitly.
+            # The old fake returned unrequested containers and hid the deploy failure.
+            if not all(f"spec.containers[].{field}" in projection for field in ("name", "image")):
+                del result["spec"]["containers"]
+            return result
         if args[:2] == ["projects", "describe"]:
             return {"projectId": module.PROJECT, "projectNumber": NUMBER}
         if args[:2] == ["services", "list"]:
@@ -334,6 +339,13 @@ def test_provision_before_rollout_does_not_require_future_env(harness):
     assert harness.release.run("provision")["api_release_verified"] is False
     with pytest.raises(harness.module.Error, match="environment drift"):
         harness.release.run("verify")
+
+
+@pytest.mark.parametrize("require_release", [False, True])
+def test_runtime_cli_projection_traverses_repeated_container_fields(harness, require_release):
+    h = harness
+    h.release.project_number = NUMBER
+    assert h.release._runtime(require_release=require_release) == REVISION
 
 
 def test_new_resources_single_random_secret_and_cleanup(harness):
