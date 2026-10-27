@@ -25,6 +25,31 @@ const certificate = `${rootCertificates.find((pem) => {
 }).trim()}\n`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 
+test('mobile dependency closure installs and audits actual Linux and Windows graphs', () => {
+  const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
+  const job = workflow.jobs['dependency-closure'];
+  assert.deepEqual(job.strategy.matrix.os, ['ubuntu-24.04', 'windows-latest']);
+  assert.equal(job.strategy['fail-fast'], false);
+  assert.equal(job['runs-on'], '${{ matrix.os }}');
+  assert.equal(job.defaults.run['working-directory'], 'apps/mobile');
+  assert.equal(job.defaults.run.shell, 'pwsh');
+  assert.equal(job.steps.find(step => step.uses === 'actions/setup-node@v4').with['node-version'], '24.15.0');
+  const commands = job.steps.filter(step => step.run).map(step => step.run);
+  assert.deepEqual(commands, [
+    'npm ci --no-audit --no-fund',
+    'npm ls --all --json --long > installed-dependencies.json',
+    'node --test ../../scripts/mobile/forge-security.test.mjs',
+    'npm audit --audit-level=high --json > dependency-audit.json',
+  ]);
+  for (const step of job.steps) assert.notEqual(step['continue-on-error'], true);
+  const artifact = job.steps.find(step => step.uses === 'actions/upload-artifact@v4');
+  assert.equal(artifact.if, 'always()');
+  assert.equal(artifact.with['if-no-files-found'], 'error');
+  assert.deepEqual(artifact.with.path.trim().split(/\s+/), [
+    'apps/mobile/installed-dependencies.json', 'apps/mobile/dependency-audit.json',
+  ]);
+});
+
 test('mobile CI selects every tooling module and audits before either platform export', () => {
   const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
   const steps = workflow.jobs.source.steps;
@@ -39,7 +64,7 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/filesystem-security.test.mjs', 'scripts/mobile/build-android-local-acceptance.test.mjs',
     'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs',
     'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
-    'scripts/mobile/store-packaging.test.mjs'];
+    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/forge-security.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
