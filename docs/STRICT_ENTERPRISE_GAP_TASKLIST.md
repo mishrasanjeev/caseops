@@ -2,6 +2,13 @@
 
 ## October 27 Exact Export Resource Readiness
 
+Additional current boundary: PR567 Security40548963348 failed only pip-audit
+for newly published dnspython CVE-2026-114605 and fpdf2 CVE-2026-114609/114610.
+Docker08 remains incomplete, cancelled before stack/product tests. Only the
+two dependency resolutions change to dnspython2.9.0/fpdf2 2.8.9, with patched
+manifest floors and offline regression; a fresh candidate must pass security
+and all release gates. Other successful jobs cannot override this failure.
+
 **Partially implemented; production release NO-GO.** IPLF-030B/037, UJ-04,
 J08/M08, NFT-005 and SEC-003/004 map to EXW-MD01..07 in the
 [metadata-readiness brief](bugfix-export-resource-readiness-2026-10-27.md).

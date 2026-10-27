@@ -24,6 +24,16 @@ API/web identity at17:02 UTC remains `f49b274e`, not B994. No new GSC access,
 metrics, indexing, leads, conversion or deployed-fix claim follows from this
 engineering update. See `docs/bugfix-export-resource-readiness-2026-10-27.md`.
 
+At17:18 UTC, replacement PR567's fresh Security40548963348 found three newly
+published dnspython/fpdf2 advisories despite the prior main scan passing. Full
+Docker08 was stopped during image build, before product tests, and is incomplete.
+Patched dependency floors/lock and fresh acceptance are required; no advisory
+waiver or deployed-success claim is made. Its complete component run has331
+non-PostgreSQL passes and49 PostgreSQL cases pending, not whole-release proof.
+The patched local environment now passes strict OSV audit with no known
+vulnerabilities; compatibility checks pass. This does not replace fresh protected
+CI or the serving-release verification. No new search data is implied.
+
 J19/M21/US-063. Seventeen fresh marked observations cover fifteen unique
 public/policy/release URLs, bounded before and after by serving API/web
 `f49b274e2098cdbd0284e505c2eb5fc363b820d2`. HTTP, canonical, noindex,

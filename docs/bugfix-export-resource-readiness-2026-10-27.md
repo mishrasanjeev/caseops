@@ -50,6 +50,23 @@ EXW-MD07: full deploy rehearsal, canonical release and actual IP18 desktop/mobil
 
 ## Retained Evidence And Remaining Gate
 
+The first frozen follow-up `367176d8` encountered new Security40548963348
+advisories: dnspython CVE-2026-114605 and fpdf2 CVE-2026-114609/114610. Their
+reviewed GitHub records were published after the prior main security acceptance.
+Docker08 was explicitly cancelled during image build, before stack/product tests;
+it remains incomplete. The replacement raises only the two package floors to
+the published patched2.9.0/2.8.8 floors, resolves only dnspython2.9.0 and the
+current stable fpdf2 2.8.9, refreshes their lock entries and adds
+manifest/lock/installed-version plus deterministic offline DNS parser coverage.
+The patched local environment passes strict OSV pip-audit with no known
+vulnerabilities, and all154 installed packages satisfy dependency compatibility.
+Existing PDF layout/native compatibility, email/admin/report and full acceptance
+must pass on that new candidate. No advisory ignore or threshold change is used.
+
+The twelve-module component selection on367176d8 collected380 intended cases:
+331 non-PostgreSQL cases passed with993 phases;49 PostgreSQL identities remain
+pending the canonical replacement. This is not a completed full Docker result.
+
 Both old-source reproduction cases failed as expected. Expanded local run02
 was incomplete:141 call passes and one setup/teardown error from a two-million
 character parametrized ID exceeding Windows environment limits. That is a
