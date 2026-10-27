@@ -37,6 +37,14 @@ acceptance follows. Two line wraps correct E501 only, without changing SQL
 text, predicates or limits. Actual cleanup and failed partial-stop evidence
 are retained. No new search or deployed-release claim follows.
 
+At20:23UTC, canonical Docker10 on62c130a0 stopped before image/PG/browser
+acceptance: the generated runtime data-class projection still carried the old
+map/schema fingerprints. Its strict validator correctly refused release. The
+renderer changes only three artifact fingerprints; admitted class sets,
+reviewed registries, ORM column schema and policy decisions are unchanged.
+Both projection and inventory validators must pass before the replacement
+freeze. No product cases or new search observations are claimed from Docker10.
+
 ## 2026-10-27 IST - Marked Public Checks; GSC Safety Stop
 
 Later engineering update,17:09 UTC: protected PR566/main

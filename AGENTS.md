@@ -3393,3 +3393,8 @@ requirements when using the fallback.
   long acceptance. Preserve any stopped supplemental gate as incomplete and
   execute its full intended inventory in the final canonical replacement;
   formatting errors and correct component results cannot certify a release.
+- After changing a model, index or governance map, regenerate and validate both
+  the governance inventory and its runtime data-class projection before freeze.
+  A rendered map alone leaves the exact-artifact runtime hashes stale. Review
+  generated differences to preserve admitted classes and policy decisions;
+  updating fingerprints is not new retention or disposition authority.
