@@ -129,6 +129,15 @@ class Settings(BaseSettings):
     document_storage_gcs_bucket: str | None = Field(default=None)
     document_storage_gcs_prefix: str = Field(default="documents")
     gcp_project_id: str | None = Field(default=None)
+    portfolio_export_dispatch_mode: Literal["local_background", "cloud_tasks"] = "local_background"
+    portfolio_export_task_region: str = Field(
+        default="asia-south1", pattern=r"^[a-z]+-[a-z]+[0-9]$",
+    )
+    portfolio_export_task_queue: str = Field(
+        default="caseops-portfolio-exports", pattern=r"^[a-z][a-z0-9-]{0,62}$",
+    )
+    portfolio_export_task_url: str = "https://api.caseops.ai/api/internal/portfolio-exports/run"
+    portfolio_export_worker_secret: str | None = Field(default=None, min_length=32)
     document_processing_dispatch_mode: Literal["local_background", "cloud_run_job"] = (
         "local_background"
     )
@@ -608,6 +617,19 @@ class Settings(BaseSettings):
                 "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET must be distinct from "
                 "CASEOPS_AUTH_SECRET.",
             )
+        return self
+
+    @model_validator(mode="after")
+    def _separate_portfolio_export_secret(self) -> "Settings":
+        secret = self.portfolio_export_worker_secret
+        if secret and any(
+            hmac.compare_digest(secret.encode(), existing.encode())
+            for existing in (self.auth_secret, self.machine_readiness_evidence_secret)
+            if existing
+        ):
+            raise ValueError("Portfolio export worker authentication requires a dedicated key.")
+        if self.portfolio_export_task_url != "https://api.caseops.ai/api/internal/portfolio-exports/run":
+            raise ValueError("Portfolio export tasks require the canonical HTTPS worker URL.")
         return self
 
     @model_validator(mode="after")

@@ -1,5 +1,30 @@
 # CaseOps agent instructions
 
+- A new release helper must be integrated into the complete offline deployment
+  rehearsal, not just unit-tested separately. Fake dispatch must validate its
+  exact scope and must not fall through to live helper code. Address main-drift
+  tests by named fences while preserving every required/forbidden side effect;
+  run the impacted rehearsal before freezing an expensive full Docker gate.
+
+- Queued exports must recheck current IP capability as well as membership at
+  preparation and publication. Preserve an immutable attempt receipt with its
+  planned object identity before storage; a cleared lease is not cleanup proof.
+  Keep unfenced legacy work out of new-protocol admission capacity without
+  adopting it or deleting uncertain published bytes.
+
+- An export that eventually completes can still breach its bounded acceptance
+  contract. Correlate the exact persisted job and request timestamps before
+  classifying it. Production work must not depend on CPU after a response on
+  request-based Cloud Run. Durable delivery needs atomic duplicate claims,
+  bounded expiry and stale-finalizer/access fences; rolling legacy workers
+  without those fences must never be swept into new claim recovery. Preserve
+  the original completion budget, single enqueue and failed release evidence.
+- An application's unchanged timestamp does not freeze its asset title or
+  particular-derived date values. Export publication must recheck both scoped
+  source identities and the actual currently authorized CSV under the parent
+  fences. A race regression must change the independently stored visible value
+  without fabricating an application timestamp update to make detection pass.
+
 - Verification isolation belongs on each actual HTTP constructor, including
   curl, urllib, container fetch, readiness and signed verification clients.
   A Playwright fixture cannot supply another client's no-paid marker. Regress

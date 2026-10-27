@@ -440,6 +440,10 @@ from caseops_api.services.ip_portfolio_dates_writer import (
     update_imported_renewal_date,
     update_portfolio_dates,
 )
+from caseops_api.services.ip_portfolio_dispatch import (
+    dispatch_portfolio_export,
+    require_portfolio_export_dispatch_ready,
+)
 from caseops_api.services.ip_portfolio_workflow import (
     create_saved_view,
     delete_saved_view,
@@ -450,7 +454,6 @@ from caseops_api.services.ip_portfolio_workflow import (
     preview_portfolio_export,
     read_portfolio_export,
     retry_portfolio_export,
-    run_portfolio_export_job,
     update_saved_view,
 )
 from caseops_api.services.ip_post_registration import (
@@ -1837,8 +1840,11 @@ async def post_ip_portfolio_export(
     context: IpViewer,
     session: DbSession,
 ) -> IpPortfolioExportRecord:
+    require_portfolio_export_dispatch_ready()
     job = enqueue_portfolio_export(session, context=context, payload=payload)
-    background_tasks.add_task(run_portfolio_export_job, job.id)
+    await dispatch_portfolio_export(
+        session=session, background_tasks=background_tasks, job_id=job.id,
+    )
     return job
 
 
@@ -1853,8 +1859,11 @@ async def post_ip_portfolio_export_retry(
     context: IpViewer,
     session: DbSession,
 ) -> IpPortfolioExportRecord:
+    require_portfolio_export_dispatch_ready()
     job = retry_portfolio_export(session, context=context, job_id=job_id)
-    background_tasks.add_task(run_portfolio_export_job, job.id)
+    await dispatch_portfolio_export(
+        session=session, background_tasks=background_tasks, job_id=job.id,
+    )
     return job
 
 

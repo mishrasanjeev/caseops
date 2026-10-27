@@ -64,6 +64,8 @@ _EXEMPT_PATHS = frozenset({
     # Server-to-server readiness writer authenticates the exact body with a
     # dedicated HMAC key and never accepts browser/app session authority.
     "/api/internal/machine-readiness/evidence",
+    # Dedicated exact-body HMAC; browser/app JWTs cannot authorize this worker.
+    "/api/internal/portfolio-exports/run",
     "/api/billing/trials",
     "/api/billing/enrollments/demo-request",
     # Provider-signed webhooks. Each carries its own integrity check
