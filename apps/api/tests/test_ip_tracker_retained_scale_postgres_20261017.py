@@ -44,7 +44,9 @@ def _fixture(client, monkeypatch, *, target_last=False):
     columns = ["Trademark", "Application Number", "Application Date", "Renewal Date"]
 
     def commit_target():
-        result = _commit(client, actor, _upload(client, actor, columns, target), key=f"target-{run}")
+        result = _commit(
+            client, actor, _upload(client, actor, columns, target), key=f"target-{run}"
+        )
         assert result["job"]["status"] == "committed"
         assert result["job"]["committed_rows"] == 53
         assert result["job"]["failed_rows"] == 0

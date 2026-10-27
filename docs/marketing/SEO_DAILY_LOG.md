@@ -27,6 +27,16 @@ guard to defer competing work while human release/native gates run. External
 holds must not leave it paused. No paid probe, synthetic lead, sitemap request,
 GA4, client tracking or marketing claim is introduced.
 
+At19:53UTC, the complete focused non-PostgreSQL selection passed345 cases with
+1035 setup/call/teardown reports;67 PostgreSQL identities remain reserved.
+The supplementary44-case database run was stopped by the parent agent, not
+the owner, to replace the known lint-unreleasable candidate with the canonical
+full final-source Docker gate. It retained two passing calls, a third passing
+setup and no completion event; no retained-width, migration or whole-database
+acceptance follows. Two line wraps correct E501 only, without changing SQL
+text, predicates or limits. Actual cleanup and failed partial-stop evidence
+are retained. No new search or deployed-release claim follows.
+
 ## 2026-10-27 IST - Marked Public Checks; GSC Safety Stop
 
 Later engineering update,17:09 UTC: protected PR566/main

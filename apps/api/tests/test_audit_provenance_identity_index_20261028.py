@@ -252,7 +252,8 @@ def _object_state(engine):
         if engine.dialect.name == "postgresql":
             return connection.execute(
                 sa.text(
-                    "SELECT c.oid, c.relkind, pg_get_indexdef(i.indexrelid), i.indisvalid, i.indisready "
+                    "SELECT c.oid, c.relkind, pg_get_indexdef(i.indexrelid), "
+                    "i.indisvalid, i.indisready "
                     "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
                     "LEFT JOIN pg_index i ON i.indexrelid = c.oid "
                     "WHERE n.nspname = current_schema() AND c.relname = :name"

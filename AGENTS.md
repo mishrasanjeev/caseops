@@ -3389,3 +3389,7 @@ requirements when using the fallback.
   and explicit ANALYZE, retaining plans beside the structured test journal.
   Add the matching bounded lookup index when required; do not hide a missing
   access path with fixture-only ANALYZE, planner flags or a larger work budget.
+- Run cheap lint and schema-inventory checks before freezing a candidate for
+  long acceptance. Preserve any stopped supplemental gate as incomplete and
+  execute its full intended inventory in the final canonical replacement;
+  formatting errors and correct component results cannot certify a release.
