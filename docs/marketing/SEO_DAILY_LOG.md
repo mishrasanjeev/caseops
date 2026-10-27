@@ -48,6 +48,12 @@ replacement released from component passes or repurpose these historical public
 observations. A new frozen candidate still needs full Docker, green CI, guarded
 deployment and exact-serving end-to-end acceptance.
 
+The same pre-freeze review found Dependabot65, a moderate optional
+OpenTelemetry tracestate parser advisory. The candidate aligns the published
+patched dependency family and adds offline regression; this neither enables
+client telemetry nor establishes a new serving release. Security, CI and full
+Docker evidence must be refreshed after that dependency change.
+
 The daily SEO automation is temporarily held for this active human release
 critical path and must be restored with its existing account, schedule and
 quiet-notification intent after the critical work. This is a deferral, not a

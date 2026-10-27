@@ -2,6 +2,16 @@
 
 ## October 27 Export Release Projection Stop
 
+Dependabot65 separately reports GHSA-xcq7-p3pf-p88h in the optional
+OpenTelemetry API1.41.0 lock. The upstream first patch is1.45.1; align its SDK,
+exporter and instrumentation0.66b1 dependencies rather than upgrading only
+the incompatible API pin. Raise the optional manifest floors and regenerate
+only that dependency closure. Keep the unrelated package graph fixed. Regress
+manifest/lock floors and the actual patched parser's literal comma split with
+large space/tab inputs, plus valid context preservation. Default installs may
+honestly skip the optional parser; the all-extras CI run must execute it. No
+provider, telemetry activation or audit waiver is involved.
+
 CI40467206921/api7 failed one callback future-timestamp expectation after the
 request crossed a second: the header made at now+301 was valid at actual
 skew300. Complete native journal/JUnit and controlled two-clock reproduction

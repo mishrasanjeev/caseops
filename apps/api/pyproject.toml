@@ -57,12 +57,12 @@ ocr = [
 # local + CI stay fast. Cloud Run / staging builds install via
 # `pip install .[observability]` in the Dockerfile.
 observability = [
-  "opentelemetry-api>=1.29.0",
-  "opentelemetry-sdk>=1.29.0",
-  "opentelemetry-exporter-otlp-proto-http>=1.29.0",
-  "opentelemetry-instrumentation-fastapi>=0.50b0",
-  "opentelemetry-instrumentation-sqlalchemy>=0.50b0",
-  "opentelemetry-instrumentation-httpx>=0.50b0",
+  "opentelemetry-api>=1.45.1",
+  "opentelemetry-sdk>=1.45.1",
+  "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+  "opentelemetry-instrumentation-fastapi>=0.66b1",
+  "opentelemetry-instrumentation-sqlalchemy>=0.66b1",
+  "opentelemetry-instrumentation-httpx>=0.66b1",
 ]
 
 [project.scripts]
