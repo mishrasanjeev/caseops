@@ -1,5 +1,21 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 28 Fresh-Statistics Export And Plan Evidence
+
+Still open. PR567/6cc CI40578349238 has one actual failure among3443 PG
+cases: fresh-statistics provenance work exceeds228 visits. All17 additive
+index migration cases and the analyzed variant pass; these do not close it.
+Default-server PostgreSQL17.11 reproduces69854/69854/67218 visits with the
+new index present. The selected company/action index filters1316 unrelated
+rows per candidate. Keep complete failed plans, phases and the original bound.
+Correlated scalar probes are a candidate, not proof of bounded scans.
+Four intended cross-database parity cases cover each source/audit predicate,
+duplicate matches, malformed JSON and manual overrides with the unchanged
+reader oracle. Two expected old-source unit failures prove plans were outside
+CI's direct native-JSONL upload glob. Correct retention without changing the
+work/latency/SQL-size bounds. Docker11 is stopped and incomplete; no merge,
+production routing or new acceptance is claimed. PRD EXW-PV01..05 apply.
+
 ## October 27 Export Release Projection Stop
 
 Dependabot65 separately reports GHSA-xcq7-p3pf-p88h in the optional

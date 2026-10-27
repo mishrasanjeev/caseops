@@ -1,5 +1,18 @@
 # CaseOps  - Work To Be Done
 
+## October 28 Replacement Release Is Still Blocked
+
+PR567/6cc has green Security and CodeQL but one actual CI PostgreSQL failure
+at the unchanged fresh-statistics provenance bound. A full support index is
+not sufficient: unchanged PostgreSQL17.11 reproduction retains excessive
+company/action scans. Finish scoped query and CI-plan-retention repairs,
+prove fresh/analyzed work plus cross-database oracle parity, then complete a
+new frozen Docker/CI/main/deployment/production replacement. Docker11 was
+stopped, not accepted. Native155-case PDF/email replacement is prepared, not
+complete; native platform/security/owner-Mac holds remain separately open.
+Both original workbooks still carry interim results, not final certification.
+The SEO daily automation is ACTIVE and must not compete with these gates.
+
 ## October 26 Export Completion Gate Found During Release
 
 Issue564 is a real production performance failure, not a failed header fix.

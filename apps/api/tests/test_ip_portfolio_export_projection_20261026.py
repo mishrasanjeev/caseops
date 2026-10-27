@@ -101,17 +101,23 @@ def _plans(records, *, directory, candidate_bound, nodeid, measurement=None):
     problems = []
     plans = []
     journal = os.environ.get("CASEOPS_TEST_RESULT_JOURNAL")
-    root = Path(journal).parent if journal else directory
-    directory = root / "export-projection" / hashlib.sha256(nodeid.encode()).hexdigest()[:16]
+    native = os.environ.get("CASEOPS_FINALIZER_EVIDENCE_DIR")
+    root = Path(native) if native else Path(journal).parent if journal else directory
+    digest = hashlib.sha256(nodeid.encode()).hexdigest()[:16]
+    directory = root / "export-projection" / digest
     directory.mkdir(parents=True, exist_ok=False)
+    header = {"nodeid": nodeid, "candidate_bound": candidate_bound,
+              "measurement": measurement}
     with (directory / "measurement.json").open("x", encoding="utf-8") as stream:
-        json.dump({"nodeid": nodeid, "candidate_bound": candidate_bound,
-                   "measurement": measurement}, stream, indent=2)
+        json.dump(header, stream, indent=2)
+    flat = root / f"export-projection-{digest}.jsonl"
+    with flat.open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps({"event": "export_projection_measurement", **header}) + "\n")
     with get_engine().begin() as connection, (directory / "plans.jsonl").open(
         "x", encoding="utf-8"
-    ) as retained:
+    ) as retained, flat.open("a", encoding="utf-8") as uploaded:
         assert connection.dialect.name == "postgresql"
-        for record in records:
+        for index, record in enumerate(records, 1):
             sql = record["statement"]
             assert record["read_only"], record
             plan = connection.exec_driver_sql(
@@ -119,8 +125,11 @@ def _plans(records, *, directory, candidate_bound, nodeid, measurement=None):
                 record["parameters"],
             ).scalar_one()
             plans.append({**record, "plan": plan})
-            retained.write(json.dumps(plans[-1], default=str) + "\n")
+            line = json.dumps(plans[-1], default=str) + "\n"
+            retained.write(line)
             retained.flush()
+            uploaded.write(line)
+            uploaded.flush()
             if len(sql.encode()) > 65_536:
                 problems.append("SQL exceeds the existing 64KiB source-fact bound")
             if any(sql.lower().count(f"from {table}") > 2
@@ -133,7 +142,10 @@ def _plans(records, *, directory, candidate_bound, nodeid, measurement=None):
                 if node.get("Relation Name") in {"audit_events", "ip_import_rows"}
             )
             if work > 4 * candidate_bound + 16:
-                problems.append("Provenance work exceeds the existing candidate bound")
+                problems.append(
+                    "Provenance work exceeds the existing candidate bound: "
+                    f"query={index}, work={work}, limit={4 * candidate_bound + 16}"
+                )
     with (directory / "export-projection-plans.json").open("x", encoding="utf-8") as stream:
         json.dump(plans, stream, indent=2, default=str)
     assert not problems, problems

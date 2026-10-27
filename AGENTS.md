@@ -1,5 +1,16 @@
 # CaseOps agent instructions
 
+- A support index does not prove bounded provenance work on fresh statistics.
+  Retain the actual read plans under both fresh and analyzed states, including
+  late target rows. Preserve every source/tenant/audit predicate and duplicate
+  match semantics; a scalar LIMIT bounds returned rows, not scanned work, so
+  the unchanged row-visit and latency assertions must still pass.
+- Diagnostic artifacts must match the actual CI upload glob. When CI uploads
+  direct JSONL children of CASEOPS_FINALIZER_EVIDENCE_DIR, retain measurement
+  and full plans there before asserting bounds; nested files beside a result
+  journal are not uploaded evidence. Regress the real workflow's paths on both
+  successful and failed bound checks, and retain the original missing evidence.
+
 - Security timestamp tests must control signing and validation observations
   independently. A future timestamp's skew shrinks while a request travels;
   a live `now + 301` is not a stable rejection test for a 300-second window.

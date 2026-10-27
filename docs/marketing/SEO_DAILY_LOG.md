@@ -45,6 +45,17 @@ reviewed registries, ORM column schema and policy decisions are unchanged.
 Both projection and inventory validators must pass before the replacement
 freeze. No product cases or new search observations are claimed from Docker10.
 
+At21:53UTC, CI40578349238 on6cc is complete:3442/3443 PostgreSQL cases pass,
+one fresh-statistics export case fails, and Security/CodeQL pass. Docker11
+was stopped and cleaned up before complete PG/browser acceptance. The
+unchanged default-server reproduction retains69854/69854/67218 provenance
+visits despite the new index; index-only closure is rejected. A scoped query
+repair and complete CI plan retention remain pending real tests. This is not
+a new GSC observation or production release. Ordinary interim maintenance08
+completed cleanly for eight tenants with zero rebuilds at21:53:52UTC; it is
+not post-QA certification or scheduler-resume evidence. The original workbook
+verdicts remain interim, and native/iOS/owner dependencies remain separate.
+
 ## 2026-10-27 IST - Marked Public Checks; GSC Safety Stop
 
 Later engineering update,17:09 UTC: protected PR566/main
