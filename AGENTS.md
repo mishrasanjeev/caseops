@@ -3373,3 +3373,13 @@ requirements when using the fallback.
   process environment bound before assertions run. Keep large response bodies
   in fixtures with short explicit IDs, preserve setup/teardown failures and
   require a complete replacement phase inventory; never weaken payload bounds.
+- Respect each package's supported host runtime before classifying a failure.
+  The native client requires Node24 (its tooling minimum is22.19), whereas the
+  web workspace pins22.14. Do not transpose that older web pin into native
+  descriptor or gateway checks. Preserve unsupported-host results separately,
+  rerun on the documented runtime and keep genuine remaining failures open.
+- A real session-provider page test has separate authentication and report
+  response stages. Control canonical responses and resolve each inside React
+  act before asserting its completed UI; also prove zero private reads before
+  authentication/MFA and no late private data after invalidation. Do not change
+  production deadlines, schema checks or role fences to silence a loading test.

@@ -34,6 +34,22 @@ The patched local environment now passes strict OSV audit with no known
 vulnerabilities; compatibility checks pass. This does not replace fresh protected
 CI or the serving-release verification. No new search data is implied.
 
+Later,2046e2d9 Security and CodeQL passed, and the complete release component
+selection repeated331 passes/49 PostgreSQL cases pending. Full frontend04 is
+red at1905passes/1reports-entry test failure, not accepted: its account label
+was not observed during asynchronous session/report loading. The captured DOM
+cannot identify the exact pending stage. A controlled two-stage fixture and
+invalidation regression are being prepared; production deadlines and access
+checks remain unchanged. Docker09 and deployment have not started. No current
+GSC access or positive native Android/iOS acceptance is inferred from this work.
+
+Controlled replacement proof passes62/62 across the real-provider page,
+reports, session and client modules, including late-response invalidation.
+The unchanged isolated three-case diagnostic also passed, leaving the exact
+original delayed stage unproved. All failed full-run evidence is retained;
+the new1907-case complete frontend run and full Docker/release gates remain
+pending. No production deadline, role fence or telemetry setting changed.
+
 J19/M21/US-063. Seventeen fresh marked observations cover fifteen unique
 public/policy/release URLs, bounded before and after by serving API/web
 `f49b274e2098cdbd0284e505c2eb5fc363b820d2`. HTTP, canonical, noindex,

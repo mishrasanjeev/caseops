@@ -67,6 +67,25 @@ The twelve-module component selection on367176d8 collected380 intended cases:
 331 non-PostgreSQL cases passed with993 phases;49 PostgreSQL identities remain
 pending the canonical replacement. This is not a completed full Docker result.
 
+The same complete component inventory was repeated on2046e2d9:331 passes,
+993 phases and49 PostgreSQL identities still reserved for Docker. Its fresh
+Security and CodeQL passed. Full frontend04 instead finished1905passes/1failure
+of1906: the real-provider reports entry did not observe its account label within
+the unit query wait. The retained prettyDOM is truncated before the report body,
+so it cannot establish whether authentication or report delivery was pending.
+The proposed test-only correction explicitly controls both real-client response
+stages inside React act, preserves anonymous/MFA gates and proves a late response
+cannot expose activity after invalidation. Do not alter production deadlines,
+weaken schema/role checks or call an isolated rerun complete frontend acceptance.
+
+The unchanged three-case diagnostic passed, so the precise original slow stage
+remains unproved. The four controlled page cases and complete adjacent reports,
+session and client modules pass62/62 with zero skips/errors, matching JSON and
+JUnit. All real-provider/client/schema boundaries remain. The closest analogous
+admin-entry fixture was reviewed; it and the six other platform entry modules
+passed frontend04 and are unchanged. Full replacement frontend acceptance is
+still required, with1907 intended cases after the added invalidation regression.
+
 Both old-source reproduction cases failed as expected. Expanded local run02
 was incomplete:141 call passes and one setup/teardown error from a two-million
 character parametrized ID exceeding Windows environment limits. That is a
