@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- Security timestamp tests must control signing and validation observations
+  independently. A future timestamp's skew shrinks while a request travels;
+  a live `now + 301` is not a stable rejection test for a 300-second window.
+  Prove both exact boundaries and a controlled elapsed second, including zero
+  worker execution on rejection. Do not widen the production window or rerun
+  an unchanged race to obtain a green CI result.
+
 - A resolved query fixture is not a delivered React observer update. For a
   timing-sensitive fixture, prove query success while its bounded notification
   is still pending, deliver it inside `act`, and always restore the scheduler

@@ -37,8 +37,16 @@ the subsequent focused projection repair needs its own gate evidence.
 The focused replacement also exposed one local intake fixture loading failure
 in a complete1906-case frontend run (1905passed/1failed). Its controlled
 observer-delivery correction is test-only, not an SEO or production behavior
-change. The interrupted Docker04 remains incomplete. Do not call the replacement
-released from component passes or repurpose these historical public observations.
+change. Fresh full frontend03 passed all 1906 cases with unchanged coverage
+thresholds and no skipped tests. CI40467206921 then failed one callback test:
+a future timestamp created 301 seconds ahead became valid at a 300-second
+skew before validation. Its controlled reproduction and complete failed shard
+are retained. The correction fixes test clocks, not production authentication.
+The callback module passes 42 cases with one explicit missing-PostgreSQL skip.
+Interrupted Docker04 and pre-stack Docker05 remain incomplete. Do not call the
+replacement released from component passes or repurpose these historical public
+observations. A new frozen candidate still needs full Docker, green CI, guarded
+deployment and exact-serving end-to-end acceptance.
 
 The daily SEO automation is temporarily held for this active human release
 critical path and must be restored with its existing account, schedule and

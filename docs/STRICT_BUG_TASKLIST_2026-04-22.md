@@ -2,6 +2,20 @@
 
 ## October 27 Export Release Projection Stop
 
+CI40467206921/api7 failed one callback future-timestamp expectation after the
+request crossed a second: the header made at now+301 was valid at actual
+skew300. Complete native journal/JUnit and controlled two-clock reproduction
+are retained. The original test rejects at301 and reaches its worker sentinel
+at300; this is a test-clock race, not proof of authentication bypass. Freeze
+only the route clock in this test, preserve the production300-second rule and
+all seven unauthorized mutations, and cover exact inside/outside boundaries
+plus deterministic elapsed-second transitions. The complete callback module
+passes 42 cases; its one PostgreSQL case is explicitly skipped without the
+database URL and still requires the canonical Docker gate. Docker05 is
+incomplete before stack/product tests; its npm install subsequently completed
+naturally. CI's complete 35-job result has this sole failed test shard, its
+dependent aggregate failure and skipped downstream browser/staging jobs.
+
 Follow-up local frontend02 completed1906 cases:1905 passed/one failed, no skips.
 The intake invalid-code case was still showing the initial loading skeleton
 before its first button assertion. A separate controlled diagnostic reproduces

@@ -8,6 +8,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -28,6 +29,14 @@ from caseops_api.services import ip_portfolio_dispatch as dispatch
 SECRET = "dedicated-export-worker-secret-20261026-not-jwt"
 JOB = "53e2add5-a74c-45ac-a1a0-b59198cf877b"
 PATH = "/api/internal/portfolio-exports/run"
+
+
+@pytest.fixture
+def callback_clock(monkeypatch):
+    clock = SimpleNamespace(now=1_800_000_000)
+    # Replace only this route's clock reference, not Python's shared time module.
+    monkeypatch.setattr(route, "time", SimpleNamespace(time=lambda: clock.now))
+    return clock
 
 
 @pytest.fixture
@@ -120,21 +129,27 @@ def test_callback_returns_durable_outcome_without_inventing_completion(
     "mutation",
     ["missing", "stale", "future", "tampered-body", "wrong-key", "missing-marker", "bad-signature"],
 )
-def test_callback_authentication_fails_before_worker(worker_client, monkeypatch, mutation):
+def test_callback_authentication_fails_before_worker(
+    worker_client, monkeypatch, mutation, callback_clock
+):
     run = Mock(side_effect=AssertionError("Unauthorized task reached worker"))
     monkeypatch.setattr(route, "run_portfolio_export_job", run)
     payload = body()
-    headers = signed(payload)
+    headers = signed(payload, timestamp=str(callback_clock.now))
     if mutation == "missing":
         headers = {**dispatch.NO_PAID_HEADERS, "Authorization": "Bearer browser-or-admin-jwt"}
     elif mutation in {"stale", "future"}:
         headers = signed(
-            payload, timestamp=str(int(time.time()) + (301 if mutation == "future" else -301))
+            payload, timestamp=str(callback_clock.now + (301 if mutation == "future" else -301))
         )
     elif mutation == "tampered-body":
         payload += b" "
     elif mutation == "wrong-key":
-        headers = signed(payload, secret="another-machine-readiness-or-jwt-key")
+        headers = signed(
+            payload,
+            timestamp=str(callback_clock.now),
+            secret="another-machine-readiness-or-jwt-key",
+        )
     elif mutation == "missing-marker":
         headers.pop("X-CaseOps-Automated-Test")
     else:
@@ -142,6 +157,29 @@ def test_callback_authentication_fails_before_worker(worker_client, monkeypatch,
     headers["Cookie"] = "caseops_csrf=browser-cookie"
     assert worker_client.post(PATH, content=payload, headers=headers).status_code == 401
     run.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "offset,advance,expected",
+    [
+        (-301, 0, 401), (-300, 0, 200), (-299, 0, 200), (0, 0, 200),
+        (299, 0, 200), (300, 0, 200), (301, 0, 401),
+        (301, 1, 200), (-300, 1, 401), (300, 1, 200),
+    ],
+)
+def test_callback_clock_window_and_elapsed_second_are_exact(
+    worker_client, monkeypatch, callback_clock, offset, advance, expected
+):
+    run = Mock(return_value="completed")
+    monkeypatch.setattr(route, "run_portfolio_export_job", run)
+    payload = body()
+    headers = signed(payload, timestamp=str(callback_clock.now + offset))
+    callback_clock.now += advance
+    assert worker_client.post(PATH, content=payload, headers=headers).status_code == expected
+    if expected == 401:
+        run.assert_not_called()
+    else:
+        run.assert_called_once_with(JOB)
 
 
 @pytest.mark.parametrize(
