@@ -14,6 +14,22 @@ unchanged dated observations below; its new release acceptance is separate
 and pending. Do not retroactively describe these stored Google crawls as a
 crawl of the forthcoming release or erase the earlier marker qualification.
 
+Later engineering boundary: #562 merged, and API/web serve
+`f49b274e2098cdbd0284e505c2eb5fc363b820d2` (API00504-478/web00481-qbn).
+Its CI/Security/CodeQL pass, and all49 exact-release public-page cases pass.
+However whole production QA40323857026 is **NO-GO**:414actual/417intended,
+395passed/18explicit skips/1IP18 export failure, three invocations absent.
+Do not turn that public component into whole-release certification. #564 and
+replacement PR565 track the worker repair; they are not deployed from this
+annotation. Today's actual GSC audit above/below is not repeated or rebound.
+
+The daily automation remains active at07:30 with this account preference, but
+now defers before browser work when a human native/Docker/release critical path
+is active. It must not stop its processes, switch its branch, install shared
+dependencies or launch a competing deployment. Native #558/#563 remain draft,
+not publicly shipped: recovered source/fixture evidence is separate from new
+Android Files execution, security acceptance and owner-MacBook iOS evidence.
+
 J19/M21/US-063; FT-094..096, NFT-023/SEC-031. The earlier safety-stopped
 attempt was incomplete. A fresh URL-bound temporary browser tab succeeded,
 visibly signed in as `sanjeev@orchestrum.in` for `https://caseops.ai/`, and was

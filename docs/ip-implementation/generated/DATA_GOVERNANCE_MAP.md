@@ -6,12 +6,12 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `2a1577fd03c5676be6c2567b2054db535e85aaa7752f4697fd7be44a46ebaa71`
+- Canonical map SHA-256: `e4fd6af06f50197b4978b6c5017b10a0a2c3d6d9e7954c1873368a3119afd350`
 - SQL tables: `347`
-- SQL columns: `5469`
-- ORM indexes: `1793`
-- Alembic/raw index declarations: `1577`
-- Non-SQL data classes: `15`
+- SQL columns: `5472`
+- ORM indexes: `1796`
+- Alembic/raw index declarations: `1580`
+- Non-SQL data classes: `16`
 
 ## Boundary
 
@@ -184,7 +184,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_patent_proceeding_details` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
 | `ip_patent_proceeding_events` | `tenant_restricted_legal_content` | 24 | `registry_fail_closed` |
 | `ip_patent_prosecution_events` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
-| `ip_portfolio_export_jobs` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
+| `ip_portfolio_export_jobs` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `ip_portfolio_renewal_occurrences` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `ip_portfolio_renewal_series` | `tenant_restricted_legal_content` | 20 | `registry_fail_closed` |
 | `ip_portfolio_saved_views` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
@@ -373,6 +373,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 
 | ID | Kind | Disposition handler |
 | --- | --- | --- |
+| `portfolio-export-dispatch-envelope` | `queue_outbox_dead_letter` | `registry_fail_closed` |
 | `public-enquiry-reference-notification` | `provider_held_object` | `registry_fail_closed` |
 | `platform-console-account-link-delivery` | `provider_held_object` | `registry_fail_closed` |
 | `document-object-prefix-and-version` | `object_prefix_version` | `registry_fail_closed` |

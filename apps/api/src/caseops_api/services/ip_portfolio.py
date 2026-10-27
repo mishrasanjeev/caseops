@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import json
 from base64 import b64decode, urlsafe_b64decode, urlsafe_b64encode
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -60,10 +61,23 @@ MAX_LIMIT = 200
 DEFAULT_LIMIT = 50
 MAX_FAMILY_LIMIT = 100
 DEFAULT_FAMILY_LIMIT = 25
+MAX_EXPORT_ROWS = 50_000
 REGISTRY_FRESHNESS_WINDOW = timedelta(hours=24)
 
 PROPRIETOR_ROLES = {"applicant", "owner", "proprietor"}
 AGENT_ROLES = {"agent", "attorney", "counsel", "representative"}
+
+PortfolioCandidate = tuple[TrademarkApplication, IpAsset | None, IpDocketRecord]
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioExportDateRow:
+    application_id: str
+    updated_at: datetime
+    asset_title: str | None
+    docket_title: str
+    source_application_on: date | None
+    source_renewal_due_on: date | None
 
 
 def _normalize(values: list[str], *, lower: bool = True) -> list[str]:
@@ -963,18 +977,7 @@ def _incomplete_reasons(
     return reasons
 
 
-def list_ip_portfolio(
-    session: Session,
-    *,
-    context: SessionContext,
-    filters: IpPortfolioFilters,
-    limit: int = DEFAULT_LIMIT,
-    cursor: str | None = None,
-) -> IpPortfolioListResponse:
-    if not 1 <= limit <= MAX_LIMIT:
-        raise HTTPException(status_code=400, detail="limit must be between 1 and 200.")
-
-    statement = _scoped_query(session, context=context, filters=filters)
+def _ordered_portfolio_query(statement: Select, *, cursor: str | None = None) -> Select:
     page = statement.order_by(
         TrademarkApplication.updated_at.desc(), TrademarkApplication.id.desc()
     )
@@ -988,13 +991,34 @@ def list_ip_portfolio(
             )
         )
 
-    # One extra row tells us whether another page exists without a second count.
-    candidates = list(session.execute(page.limit(limit + 1)).all())
-    has_more = len(candidates) > limit
-    candidates = candidates[:limit]
+    return page
 
-    visible = candidates
 
+def _select_portfolio_page(
+    session: Session,
+    *,
+    context: SessionContext,
+    filters: IpPortfolioFilters,
+    limit: int,
+    cursor: str | None,
+) -> tuple[Select, list[PortfolioCandidate], bool]:
+    if not 1 <= limit <= MAX_LIMIT:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 200.")
+    statement = _scoped_query(session, context=context, filters=filters)
+    page = _ordered_portfolio_query(statement, cursor=cursor)
+    candidates = [
+        (application, asset, docket)
+        for application, asset, docket in session.execute(page.limit(limit + 1))
+    ]
+    return statement, candidates[:limit], len(candidates) > limit
+
+
+def _portfolio_rows(
+    session: Session,
+    *,
+    context: SessionContext,
+    visible: list[PortfolioCandidate],
+) -> list[IpPortfolioRow]:
     application_ids = [application.id for application, _asset, _docket in visible]
     docket_ids = [docket.id for _a, _s, docket in visible]
     matter_ids = list({docket.matter_id for _a, _s, docket in visible if docket.matter_id})
@@ -1090,6 +1114,84 @@ def list_ip_portfolio(
             )
         )
 
+    return rows
+
+
+def portfolio_export_manifest(
+    session: Session,
+    *,
+    context: SessionContext,
+    filters: IpPortfolioFilters,
+    row_limit: int,
+) -> tuple[list[tuple[str, datetime]], bool]:
+    """Select the existing preview manifest order without display hydration."""
+    if not 1 <= row_limit <= MAX_EXPORT_ROWS:
+        raise HTTPException(status_code=400, detail="row_limit must be between 1 and 50000.")
+    statement = _scoped_query(session, context=context, filters=filters).with_only_columns(
+        TrademarkApplication.id, TrademarkApplication.updated_at, maintain_column_froms=True
+    )
+    candidates = list(session.execute(_ordered_portfolio_query(statement).limit(row_limit + 1)))
+    return (
+        [(application_id, updated_at) for application_id, updated_at in candidates[:row_limit]],
+        len(candidates) > row_limit,
+    )
+
+
+def portfolio_export_page(
+    session: Session,
+    *,
+    context: SessionContext,
+    filters: IpPortfolioFilters,
+    columns: list[str],
+    limit: int,
+    cursor: str | None = None,
+) -> tuple[list[PortfolioExportDateRow] | list[IpPortfolioRow], str | None]:
+    """Hydrate validated export columns without computing list-only statistics."""
+    _statement, visible, has_more = _select_portfolio_page(
+        session, context=context, filters=filters, limit=limit, cursor=cursor
+    )
+    next_cursor = (
+        _encode_cursor(visible[-1][0].updated_at, visible[-1][0].id)
+        if has_more and visible else None
+    )
+    selected = set(columns)
+    if selected and selected <= {"mark", "application_date", "renewal_due_date"}:
+        from caseops_api.services.ip_portfolio_dates import page_date_details
+
+        dates = (
+            page_date_details(
+                session,
+                company_id=context.company.id,
+                docket_ids=list({docket.id for _application, _asset, docket in visible}),
+            )
+            if selected & {"application_date", "renewal_due_date"} else {}
+        )
+        return [
+            PortfolioExportDateRow(
+                application_id=application.id,
+                updated_at=application.updated_at,
+                asset_title=asset.title if asset else None,
+                docket_title=docket.title,
+                source_application_on=dates.get(docket.id, {}).get("source_application_on"),
+                source_renewal_due_on=dates.get(docket.id, {}).get("source_renewal_due_on"),
+            )
+            for application, asset, docket in visible
+        ], next_cursor
+    return _portfolio_rows(session, context=context, visible=visible), next_cursor
+
+
+def list_ip_portfolio(
+    session: Session,
+    *,
+    context: SessionContext,
+    filters: IpPortfolioFilters,
+    limit: int = DEFAULT_LIMIT,
+    cursor: str | None = None,
+) -> IpPortfolioListResponse:
+    statement, visible, has_more = _select_portfolio_page(
+        session, context=context, filters=filters, limit=limit, cursor=cursor
+    )
+    rows = _portfolio_rows(session, context=context, visible=visible)
     counts, latest_record_updated_at, latest_registry_success_at = _portfolio_counts(
         session,
         context=context,
@@ -1304,4 +1406,9 @@ def list_ip_portfolio_families(
     )
 
 
-__all__ = ["list_ip_portfolio", "list_ip_portfolio_families"]
+__all__ = [
+    "list_ip_portfolio",
+    "list_ip_portfolio_families",
+    "portfolio_export_manifest",
+    "portfolio_export_page",
+]

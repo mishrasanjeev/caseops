@@ -1,5 +1,17 @@
 # CaseOps  - Work To Be Done
 
+## October 26 Export Completion Gate Found During Release
+
+Issue564 is a real production performance failure, not a failed header fix.
+The f49 release is live but NO-GO: QA40323857026 has395passed/18skips/1failed
+and3unexecuted intended cases. Its one51-row export completed16.502seconds
+after post-response execution on request-based Cloud Run. Keep issue561 open
+until full replacement closure. `bugfix-portfolio-export-worker-2026-10-26.md`
+defines EXW-01..08, authenticated durable warm dispatch, explicit rolling-writer
+protocol, bounded duplicate/lease/source/access fences and projection work.
+No completion-budget or billing-mode relaxation. Historical failed evidence is
+retained; an interim clean maintenance is not guarded resume certification.
+
 ## October 26 Verification Isolation And Interrupted Native Work
 
 Current focused release: issue561and the actual October26 SEO daily evidence.

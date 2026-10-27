@@ -1,8 +1,8 @@
 """Lint-style sweep over the live FastAPI app: every mutating route
 MUST pass through a recognized authorization dependency before its handler
 runs, unless it is on the deliberate public/own-auth allowlist. Tenant routes
-use ``require_capability`` or ``require_role``; the one machine-readiness writer
-uses its exact-body HMAC dependency and has no browser/session authority.
+use ``require_capability`` or ``require_role``; machine writers use their
+dedicated exact-body HMAC dependencies and have no browser/session authority.
 
 The hand-rolled ``if role not in (...)`` pattern the codebase used to
 ship is a correctness footgun — one forgotten guard is a permission
@@ -13,6 +13,7 @@ from __future__ import annotations
 import inspect
 
 import pytest
+from fastapi import Depends
 from fastapi.routing import APIRoute
 
 from caseops_api.api.dependencies import (
@@ -24,9 +25,14 @@ from caseops_api.api.dependencies import (
 from caseops_api.api.routes.machine_readiness import (
     require_machine_readiness_evidence_auth,
 )
+from caseops_api.api.routes.portfolio_export_worker import require_export_task
 from caseops_api.main import create_application
 
 MUTATING_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
+MACHINE_AUTH_MUTATING_ROUTES = {
+    "/api/internal/machine-readiness/evidence": require_machine_readiness_evidence_auth,
+    "/api/internal/portfolio-exports/run": require_export_task,
+}
 
 
 # Intentionally unauthenticated or their own-auth'd path. Each entry is
@@ -161,7 +167,10 @@ def _is_guarded(route: APIRoute) -> bool:
         call = getattr(dep, "call", None)
         if call is None:
             continue
-        if call is require_machine_readiness_evidence_auth:
+        if (
+            route.methods == {"POST"}
+            and call is MACHINE_AUTH_MUTATING_ROUTES.get(route.path)
+        ):
             return True
         # Both require_role and require_capability return an inner
         # closure named `_dep`. Identify them by their __closure__
@@ -376,6 +385,45 @@ def test_guard_detection_recognises_machine_evidence_auth_dependency(_app):
         and route.path == "/api/internal/machine-readiness/evidence"
     )
     assert _is_guarded(route)
+
+
+def test_exact_machine_auth_inventory_matches_current_routes(_app):
+    actual = {
+        route.path: dep.call
+        for route in _app.routes if isinstance(route, APIRoute)
+        for dep in route.dependant.dependencies
+        if dep.call in MACHINE_AUTH_MUTATING_ROUTES.values()
+    }
+    assert actual == MACHINE_AUTH_MUTATING_ROUTES
+    for path in actual:
+        assert not _route_is_public("POST", path)
+
+
+@pytest.mark.parametrize("boundary", list(MACHINE_AUTH_MUTATING_ROUTES))
+@pytest.mark.parametrize(
+    "mode", ["exact", "unsigned", "lookalike", "sibling", "method", "other-key"],
+)
+def test_machine_auth_recognition_is_exact_not_a_public_exemption(boundary, mode):
+    async def lookalike():
+        return None
+
+    expected = MACHINE_AUTH_MUTATING_ROUTES[boundary]
+    lookalike.__name__ = expected.__name__
+    guard = (
+        lookalike if mode == "lookalike"
+        else next(value for value in MACHINE_AUTH_MUTATING_ROUTES.values() if value is not expected)
+        if mode == "other-key" else expected
+    )
+
+    def endpoint():
+        return {}
+
+    route = APIRoute(
+        boundary + ("/unreviewed" if mode == "sibling" else ""), endpoint,
+        methods=["DELETE" if mode == "method" else "POST"],
+        dependencies=[] if mode == "unsigned" else [Depends(guard)],
+    )
+    assert _is_guarded(route) is (mode == "exact")
 
 
 def test_no_stray_inspect_use():

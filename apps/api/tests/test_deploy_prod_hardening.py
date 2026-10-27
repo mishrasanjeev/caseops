@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import fnmatch
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -25,6 +26,16 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 def _read_repo_text(relative_path: str) -> str:
     return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+
+
+def _main_refresh_ordinal(phase: str) -> int:
+    phases = [
+        shlex.split(line)[1]
+        for line in _read_repo_text("scripts/deploy-prod.sh").splitlines()
+        if line.startswith("assert_current_main ")
+    ]
+    assert phases.count(phase) == 1, f"Missing or duplicated main fence: {phase}"
+    return phases.index(phase) + 1
 
 
 def test_shell_scripts_are_checked_out_with_lf_line_endings() -> None:
@@ -2016,6 +2027,7 @@ def _run_deploy_with_fakes(
     artifact_describe_failures: int = 0,
     rate_identity_mode: str = "ok",
     document_worker_mode: str = "ok",
+    portfolio_export_mode: str = "ok",
     backup_mode: str = "ok",
     security_mode: str = "ok",
     security_post_build_mode: str = "ok",
@@ -2474,6 +2486,20 @@ if [[ "${1:-}" == "scripts/document_worker_release.py" ]]; then
   printf '%s\\n' '{"schema_version":1,"admission_disabled":true}'
   exit 0
 fi
+if [[ "${1:-}" == "scripts/portfolio_export_release.py" ]]; then
+  printf '%s\\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+  [[ "$#" == "8" && "${3:-}" == "--expected-sha" && \
+     "${4:-}" == "abcdef1234567890abcdef1234567890abcdef12" && \
+     "${5:-}" == "--project" && "${6:-}" == "perfect-period-305406" && \
+     "${7:-}" == "--region" && "${8:-}" == "asia-south1" ]] || exit 97
+  [[ "${2:-}" == "provision" || "${2:-}" == "verify" ]] || exit 97
+  if [[ "${FAKE_PORTFOLIO_EXPORT_MODE}" == "${2:-}" ]]; then
+    printf '%s\\n' 'Portfolio export release failed closed.' >&2
+    exit 61
+  fi
+  printf '%s\\n' '{"dedicated_worker_key_verified":true}'
+  exit 0
+fi
 if [[ "${1:-}" == "scripts/pre_migration_backup.py" ]]; then
   printf '%s\\n' "$*" >> "${FAKE_GCLOUD_LOG}"
   if [[ "${FAKE_BACKUP_MODE:-ok}" != "ok" ]]; then
@@ -2658,6 +2684,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_PENDING_EXECUTION_JSON": _a0_pending_execution_json(immutable_image),
             "FAKE_PYTHON_CRLF": "true" if python_crlf else "false",
             "FAKE_DOCUMENT_WORKER_MODE": document_worker_mode,
+            "FAKE_PORTFOLIO_EXPORT_MODE": portfolio_export_mode,
             "FAKE_REAL_PYTHON": _bash_path(Path(sys.executable)),
             "FAKE_TAG": expected_tag,
             "FAKE_TRAFFIC_MODE": traffic_mode,
@@ -2924,6 +2951,86 @@ def test_deploy_prod_executes_the_complete_two_container_api_contract(tmp_path: 
     ) in _read_repo_text("apps/api/Dockerfile")
 
 
+def test_portfolio_queue_provision_and_exact_readback_bracket_routing(tmp_path, monkeypatch):
+    result = _run_deploy_with_fakes(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    provision = next(index for index, call in enumerate(calls)
+                     if call.startswith("scripts/portfolio_export_release.py provision "))
+    verify = next(index for index, call in enumerate(calls)
+                  if call.startswith("scripts/portfolio_export_release.py verify "))
+    api = next(index for index, call in enumerate(calls)
+               if call.startswith("run deploy caseops-api "))
+    web = next(index for index, call in enumerate(calls)
+               if call.startswith("run deploy caseops-web "))
+    qa = next(index for index, call in enumerate(calls)
+              if call.startswith("run jobs execute caseops-ip-qa-bootstrap "))
+    assert provision < api < web < verify < qa
+    assert sum("scripts/portfolio_export_release.py provision " in call for call in calls) == 1
+    assert sum("scripts/portfolio_export_release.py verify " in call for call in calls) == 1
+    assert (
+        "CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET=caseops-portfolio-export-worker-secret:latest"
+    ) in calls[api]
+    assert "CASEOPS_PORTFOLIO_EXPORT_DISPATCH_MODE=cloud_tasks" in calls[api]
+    assert "CASEOPS_PORTFOLIO_EXPORT_TASK_QUEUE=caseops-portfolio-exports" in calls[api]
+    arguments = shlex.split(calls[api])
+    raw_env = arguments[arguments.index("--update-env-vars") + 1]
+    assert raw_env.startswith("^|^")
+    pairs = [value.split("=", 1) for value in raw_env[3:].split("|")]
+    assert len(pairs) == len({name for name, _value in pairs})
+    environment = dict(pairs)
+    assert {
+        name: environment[name] for name in (
+            "CASEOPS_RELEASE_SHA", "CASEOPS_GCP_PROJECT_ID",
+            "CASEOPS_PORTFOLIO_EXPORT_DISPATCH_MODE", "CASEOPS_PORTFOLIO_EXPORT_TASK_QUEUE",
+            "CASEOPS_PORTFOLIO_EXPORT_TASK_REGION",
+        )
+    } == {
+        "CASEOPS_RELEASE_SHA": "abcdef1234567890abcdef1234567890abcdef12",
+        "CASEOPS_GCP_PROJECT_ID": "perfect-period-305406",
+        "CASEOPS_PORTFOLIO_EXPORT_DISPATCH_MODE": "cloud_tasks",
+        "CASEOPS_PORTFOLIO_EXPORT_TASK_QUEUE": "caseops-portfolio-exports",
+        "CASEOPS_PORTFOLIO_EXPORT_TASK_REGION": "asia-south1",
+    }
+    bindings = arguments[arguments.index("--update-secrets") + 1].split(",")
+    rows = [{"name": name, "value": value} for name, value in pairs]
+    for binding in bindings:
+        name, resource = binding.split("=", 1)
+        secret, version = resource.rsplit(":", 1)
+        rows.append({"name": name, "valueFrom": {"secretKeyRef": {
+            "name": secret, "key": version,
+        }}})
+    monkeypatch.syspath_prepend(str(REPO_ROOT / "scripts"))
+    spec = importlib.util.spec_from_file_location(
+        "portfolio_export_deploy_coupling", REPO_ROOT / "scripts/portfolio_export_release.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    release = module.Release(environment["CASEOPS_RELEASE_SHA"])
+    release._check_env(rows)
+    for required in (
+        "CASEOPS_RELEASE_SHA", "CASEOPS_GCP_PROJECT_ID",
+        "CASEOPS_PORTFOLIO_EXPORT_DISPATCH_MODE", "CASEOPS_PORTFOLIO_EXPORT_TASK_QUEUE",
+        "CASEOPS_PORTFOLIO_EXPORT_TASK_REGION", "CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET",
+    ):
+        with pytest.raises(module.Error):
+            release._check_env([row for row in rows if row["name"] != required])
+
+
+@pytest.mark.parametrize("mode", ["provision", "verify"])
+def test_portfolio_queue_failure_never_bootstraps_or_dispatches_qa(tmp_path, mode):
+    result = _run_deploy_with_fakes(tmp_path, portfolio_export_mode=mode)
+    assert result.returncode != 0 and "Portfolio export release failed closed" in result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert any(f"portfolio_export_release.py {mode} " in call for call in calls)
+    assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
+    assert not any("workflow run prod-verify.yml" in call for call in calls)
+    if mode == "provision":
+        assert not any(call.startswith("run deploy caseops-api ") for call in calls)
+    else:
+        assert any(call.startswith("run deploy caseops-web ") for call in calls)
+
+
 @pytest.mark.parametrize("mode", ["prepare", "verify"])
 def test_deploy_prod_withholds_qa_and_certification_after_rate_identity_failure(
     tmp_path: Path, mode: str,
@@ -3181,21 +3288,23 @@ def test_failed_qa_queue_observation_never_bootstraps_or_dispatches(tmp_path: Pa
     assert "gh workflow run prod-verify.yml" not in calls
 
 
-@pytest.mark.parametrize("fetches,required,phase", [
-    (11, "scheduler_inventory.py resume", "pre-QA document-quiescence gate"),
-    (12, "document_worker_release.py quiesce-qa", "post-QA document-quiescence gate"),
-    (13, "run jobs execute caseops-ip-qa-bootstrap", "post-QA bootstrap gate"),
-    (14, "run jobs execute caseops-ip-qa-bootstrap", "pre-QA dispatch gate"),
+@pytest.mark.parametrize("required,phase", [
+    ("scheduler_inventory.py resume", "pre-QA document-quiescence gate"),
+    ("document_worker_release.py quiesce-qa", "post-QA document-quiescence gate"),
+    ("run jobs execute caseops-ip-qa-bootstrap", "post-QA bootstrap gate"),
+    ("run jobs execute caseops-ip-qa-bootstrap", "pre-QA dispatch gate"),
 ])
 def test_main_drift_around_qa_queue_and_bootstrap_cannot_certify(
-    tmp_path: Path, fetches: int, required: str, phase: str,
+    tmp_path: Path, required: str, phase: str,
 ) -> None:
-    result = _run_deploy_with_fakes(tmp_path, "abcdef1", main_drift_after_fetches=fetches)
+    result = _run_deploy_with_fakes(
+        tmp_path, "abcdef1", main_drift_after_fetches=_main_refresh_ordinal(phase),
+    )
     assert result.returncode != 0
     assert f"main advanced during release at {phase}" in result.stdout
     calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
     assert required in calls
-    if fetches <= 12:
+    if phase in {"pre-QA document-quiescence gate", "post-QA document-quiescence gate"}:
         assert "run jobs execute caseops-ip-qa-bootstrap" not in calls
     assert "gh workflow run prod-verify.yml" not in calls
 
@@ -3242,59 +3351,60 @@ def test_deploy_prod_rejects_invalid_private_projection_scheduler_hold(
 
 
 @pytest.mark.parametrize(
-    ("drift_after_fetches", "required_call", "forbidden_call", "phase"),
+    ("required_call", "forbidden_call", "phase"),
     [
-        (1, None, None, "release preflight"),
+        (None, None, "release preflight"),
         (
-            2,
             "builds submit",
             "run jobs update caseops-migrate-job",
             "post-build pre-migration gate",
         ),
         (
-            3,
             "scheduler_inventory.py quiesce",
             "pre_migration_backup.py",
             "pre-backup mutation gate",
         ),
         (
-            4,
             "pre_migration_backup.py",
             "run jobs update caseops-migrate-job",
             "post-backup pre-migration gate",
         ),
         (
-            5,
             "run jobs update caseops-ip-qa-bootstrap",
             "run deploy caseops-api",
             "final pre-route gate",
         ),
         (
-            6,
             "run jobs update caseops-ip-qa-bootstrap",
             "reconcile_rate_identity_edge.py prepare",
             "before-purpose-edge-reconciliation",
         ),
         (
-            7,
             "reconcile_rate_identity_edge.py prepare",
             "run deploy caseops-api",
             "after-purpose-edge-reconciliation",
         ),
         (
-            8,
+            "reconcile_rate_identity_edge.py prepare",
+            "portfolio_export_release.py provision",
+            "before-portfolio-export-queue",
+        ),
+        (
+            "portfolio_export_release.py provision",
+            "run deploy caseops-api",
+            "after-portfolio-export-queue",
+        ),
+        (
             "run deploy caseops-web",
             "reconcile_rate_identity_edge.py verify",
             "before-effective-purpose-edge-proof",
         ),
         (
-            9,
-            "run deploy caseops-web",
+            "portfolio_export_release.py verify",
             "run jobs execute caseops-ip-qa-bootstrap",
             "post-route pre-certification gate",
         ),
         (
-            10,
             "run deploy caseops-web",
             "document_worker_release.py activate",
             "pre-provider-scheduler-resume gate",
@@ -3303,7 +3413,6 @@ def test_deploy_prod_rejects_invalid_private_projection_scheduler_hold(
 )
 def test_deploy_prod_fails_closed_when_main_advances_during_release(
     tmp_path: Path,
-    drift_after_fetches: int,
     required_call: str | None,
     forbidden_call: str | None,
     phase: str,
@@ -3311,7 +3420,7 @@ def test_deploy_prod_fails_closed_when_main_advances_during_release(
     result = _run_deploy_with_fakes(
         tmp_path,
         "abcdef1",
-        main_drift_after_fetches=drift_after_fetches,
+        main_drift_after_fetches=_main_refresh_ordinal(phase),
     )
 
     assert result.returncode != 0

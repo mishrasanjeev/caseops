@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## October 26 Portfolio Export Execution #564
+
+NO-GO for whole-release closure at f49b274e. Exact QA40323857026's IP18 1280px
+export exceeded its15-second bound with an actual16.502-second completion;
+50other write cases passed, but3later cases never ran. All earlier validated
+component/CI results remain retained, not converted into whole certification.
+EXW-01..08 in `bugfix-portfolio-export-worker-2026-10-26.md` require durable
+warm execution and recovery without weakening provider, source, ownership,
+rolling-worker or request-billing controls. New source is implementation, not
+a deployed repair until complete Docker/CI/main/deploy/exact-QA/cadence proof.
+
 ## October 26 Verification Request Marker #561
 
 ARCH-OPS-23/QG-SEC-004/SEC-031: Partially implemented; new-candidate release
