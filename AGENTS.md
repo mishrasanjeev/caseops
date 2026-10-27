@@ -3383,3 +3383,9 @@ requirements when using the fallback.
   act before asserting its completed UI; also prove zero private reads before
   authentication/MFA and no late private data after invalidation. Do not change
   production deadlines, schema checks or role fences to silence a loading test.
+- Candidate-scoped SQL can still do tenant-wide provenance work at each row.
+  Inspect actual scan/filter/loop counts, not only returned rows or SQL length.
+  Regress late-imported retained records with both controlled fresh statistics
+  and explicit ANALYZE, retaining plans beside the structured test journal.
+  Add the matching bounded lookup index when required; do not hide a missing
+  access path with fixture-only ANALYZE, planner flags or a larger work budget.

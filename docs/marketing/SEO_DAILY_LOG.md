@@ -6,6 +6,27 @@ mark unavailable or processing fields rather than treating them as zero.
 Do not count an indexing request, directory prospect, or owned link as organic
 traffic, a backlink, or a conversion.
 
+## 2026-10-28 IST - Release Replacement, No New Search Observation
+
+J19/M21/US-063. This is an engineering checkpoint, not a new GSC audit. The
+October27 browser safety stop remains authoritative; no current Google report,
+conversion, indexing or backlink result is invented. The previous17 marked
+HTTP observations remain dated F49 components, not a new browser execution.
+
+PR567 at8f8b65d7 has complete1907/1907 frontend passes and green Security/
+CodeQL, but whole CI40558115542 fails one214-case PG14 shard at its unchanged
+provenance-work cap. Local unchanged-source PostgreSQL17.11 reproduces excess
+row visits and identifies repeated company/action scans; the originally
+suggested hashed-plan cause was not observed. A complete-predicate support
+index and fresh/analyzed retained-width regressions are being implemented.
+Docker09 stopped before stack/product tests and is incomplete. MainB994 has
+not routed API/web; serving F49 and all external/native/owner dependencies
+remain separate. At19:22UTC the daily automation was restored ACTIVE with its
+existing07:30IST schedule, preferred account and quiet intent, with an explicit
+guard to defer competing work while human release/native gates run. External
+holds must not leave it paused. No paid probe, synthetic lead, sitemap request,
+GA4, client tracking or marketing claim is introduced.
+
 ## 2026-10-27 IST - Marked Public Checks; GSC Safety Stop
 
 Later engineering update,17:09 UTC: protected PR566/main

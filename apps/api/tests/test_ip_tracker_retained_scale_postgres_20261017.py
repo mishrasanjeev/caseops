@@ -29,7 +29,7 @@ def _save(directory, name, value):
         json.dump(value, stream, indent=2, default=str)
 
 
-def _fixture(client, monkeypatch):
+def _fixture(client, monkeypatch, *, target_last=False):
     now = datetime(2026, 10, 17, 4, tzinfo=UTC)
     _clock(monkeypatch, now)
     actor = _actor(client)
@@ -42,12 +42,17 @@ def _fixture(client, monkeypatch):
         [f"{prefix} due", "", "2020-01-15", due],
     ]
     columns = ["Trademark", "Application Number", "Application Date", "Renewal Date"]
-    result = _commit(client, actor, _upload(client, actor, columns, target), key=f"target-{run}")
-    assert result["job"]["status"] == "committed"
-    assert result["job"]["committed_rows"] == 53
-    assert result["job"]["failed_rows"] == 0
-    target_ids = [row["created_docket_id"] for row in result["rows"]]
-    assert len(target_ids) == len(set(target_ids)) == 53 and all(target_ids)
+
+    def commit_target():
+        result = _commit(client, actor, _upload(client, actor, columns, target), key=f"target-{run}")
+        assert result["job"]["status"] == "committed"
+        assert result["job"]["committed_rows"] == 53
+        assert result["job"]["failed_rows"] == 0
+        target_ids = [row["created_docket_id"] for row in result["rows"]]
+        assert len(target_ids) == len(set(target_ids)) == 53 and all(target_ids)
+        return target_ids
+
+    target_ids = None if target_last else commit_target()
 
     background = []
     for index in range(OBSERVED_PORTFOLIO_WIDTH - 53):
@@ -73,6 +78,8 @@ def _fixture(client, monkeypatch):
         assert committed["job"]["status"] == "committed"
         assert committed["job"]["committed_rows"] == len(rows)
         assert committed["job"]["failed_rows"] == 0
+    if target_last:
+        target_ids = commit_target()
     return actor, prefix, target_ids
 
 

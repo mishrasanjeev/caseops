@@ -1,5 +1,25 @@
 # Strict Enterprise Gap Tasklist
 
+## October 28 Provenance Index Replacement
+
+**NO-GO; replacement unverified.** Current8f8b65d7 frontend05 passes1907/1907,
+Security40558115629 and CodeQL40558115576 pass, but CI40558115542 fails PG14:
+213passes/1failure,642 reconciled phases. The retained-width export returns
+the correct51 records using five reads, then fails its228-row provenance cap.
+The original CI plans are missing. A complete unchanged-source controlled
+fresh-statistics PostgreSQL17.11 reproduction has1484/1484/1377 visits in its
+three source-bearing plans, using company/action scans with25/26 filtered
+events per loop, not the hypothesized hashed alternative. The ten-second
+query assertion was not reached;554.414seconds includes fixture work and is
+not export latency. Docker09 was interrupted before stack/product tests.
+
+Add the exact provenance support index with restart-safe concurrent migration;
+retain every existing authorization/source predicate. Regress late target
+imports under fresh and analyzed statistics, unchanged query/SQL/work/latency
+bounds and independently retained plan journals. Full replacement gates,
+protected main/deployment, IP18 desktop/mobile acceptance and later cadence
+remain required. No workbook verdict or deployed SHA is upgraded here.
+
 ## October 27 Exact Export Resource Readiness
 
 Additional current boundary: PR567 Security40548963348 failed only pip-audit
