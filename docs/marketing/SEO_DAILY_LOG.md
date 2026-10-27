@@ -34,6 +34,12 @@ Actual gcloud JSON omitted repeated container fields lacking `[]`; the fake
 CLI had incorrectly supplied them. The stopped release is not certified and
 the subsequent focused projection repair needs its own gate evidence.
 
+The focused replacement also exposed one local intake fixture loading failure
+in a complete1906-case frontend run (1905passed/1failed). Its controlled
+observer-delivery correction is test-only, not an SEO or production behavior
+change. The interrupted Docker04 remains incomplete. Do not call the replacement
+released from component passes or repurpose these historical public observations.
+
 The daily SEO automation is temporarily held for this active human release
 critical path and must be restored with its existing account, schedule and
 quiet-notification intent after the critical work. This is a deferral, not a

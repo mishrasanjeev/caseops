@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- A resolved query fixture is not a delivered React observer update. For a
+  timing-sensitive fixture, prove query success while its bounded notification
+  is still pending, deliver it inside `act`, and always restore the scheduler
+  and clear the client. Preserve the original loading failure and unchanged UI
+  assertions/deadlines. Finish replacement frontend coverage before freezing
+  the next expensive Docker gate; interrupted native evidence is incomplete.
+
 - Cloud CLI JSON projections must explicitly traverse repeated fields (for
   example `spec.containers[].name`). A fake CLI must not return fields that
   the actual projection omits. Regress the real formatter's response shape,

@@ -2,6 +2,18 @@
 
 ## October 27 Export Release Projection Stop
 
+Follow-up local frontend02 completed1906 cases:1905 passed/one failed, no skips.
+The intake invalid-code case was still showing the initial loading skeleton
+before its first button assertion. A separate controlled diagnostic reproduces
+that exact state with a successful query and one undelivered observer update;
+it is fixture-delivery evidence, not an established production intake defect.
+The unchanged seven-case intake module now explicitly delivers that boundary
+inside act, preserves its invalid-code/no-API-call assertions, clears its client
+and restores the scheduler in finally. No deadline or production code changed.
+Full replacement frontend coverage remains required with unmodified thresholds.
+Docker04 was deliberately interrupted before source editing; its retained
+incremental PG journal has no session completion and is NOT acceptance.
+
 PR565 merged as d1099288b7e61224aa06088437c7a4b207bb43b9 with accepted
 Docker tree db59d73f0a3a5875ded6e8055cd6b99186883c1e. Local acceptance is
 3425 PostgreSQL passes,1906 frontend passes and630 browser passes/10 skips.
