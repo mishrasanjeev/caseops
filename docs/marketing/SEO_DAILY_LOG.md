@@ -79,6 +79,18 @@ release or Android/iOS acceptance. Owner-Mac, native security/Windows and
 external consent dependencies remain. Automation is ACTIVE; no new Google
 report, synthetic lead, provider charge or conversion result is claimed.
 
+At23:26UTC,9aecd60d's targeted preflight completes49 non-PG passes,147 phases,
+zero failures/skips;39 PG identities remain reserved. The full real PostgreSQL,
+Docker, CI and production gates are still pending. A separate second-wait
+native DROP cancellation case is added before that replacement; no failed or
+unverified case is relabelled passing. The earlier mobile upstream-unavailable
+rationale is corrected: the maintainer's CVE-2026-85393 advisory lists1.4.1 as
+patched and official npm1.4.2 was already published before the earlier check.
+The mirror's null patch field was incomplete. Targeted mobile update/audit is
+separate and not yet certified. The saved SEO automation readback is ACTIVE
+with unchanged schedule/account and an explicit non-interruption release guard.
+These engineering results are not a new Search Console observation or release.
+
 ## 2026-10-27 IST - Marked Public Checks; GSC Safety Stop
 
 Later engineering update,17:09 UTC: protected PR566/main

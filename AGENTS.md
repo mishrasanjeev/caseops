@@ -1,5 +1,16 @@
 # CaseOps agent instructions
 
+- A mirror's null first-patched field is not proof that no official fix exists.
+  Reconcile the CVE's maintainer advisory, aliases, released commits and npm
+  tags before declaring an upstream blocker. A GitHub Releases404 can coexist
+  with a genuine signed/integrity-pinned npm release. Still require targeted
+  lock/installed resolution, parser regression and a fresh strict audit; do not
+  invent a patched version, waive an alert or claim distribution from metadata.
+- Concurrent index DROP has two durable invalidation waits. Test cancellation
+  before and after ready/live become false, retain native blocker/state proof,
+  then prove exact restart and responsive ordinary writes. A post-DROP hook
+  cannot substitute for cancellation while the dead index still exists.
+
 - A migrated index catalogue includes historical indexes absent from ORM
   declarations. Inspect every actual candidate path: adding a full-key index
   can leave a cheaper redundant prefix scan selected under fresh statistics.
