@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { createAndroidLocalRun, prepareAndroidLocalRun } from './prepare-android-local-run.mjs';
+import { createAndroidLocalRun, prepareAndroidLocalRun, validateObservedAndroidAuthTraffic } from './prepare-android-local-run.mjs';
 import { androidSessionTransport, inspectLocalPlan, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
 
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -299,6 +299,62 @@ test('logout before login and login-stage MFA after token are not a completed no
     f.replace('authObservation', value => { value.gatewayAfter = ref; });
     assert.throws(() => createAndroidLocalRun(f.request), /ORDERED_NORMAL_AUTH_OBSERVATION_REQUIRED/);
   }
+});
+
+// Public route/status projection of the retained Android 8928 auth01 sequence.
+// These literals are source-contract doubles, not a native execution receipt.
+const recordedBrowserProbeRows = () => [
+  ['GET', '/api/auth/me', 401], ['POST', '/api/auth/refresh', 401], ['GET', '/api/auth/me', 401],
+  ['POST', '/api/auth/login', 200], ['GET', '/api/auth/me', 200], ['POST', '/api/auth/native/authorize', 403],
+  ['POST', '/api/auth/mfa/step-up', 200], ['GET', '/api/auth/me', 200], ['POST', '/api/auth/native/authorize', 200],
+  ['POST', '/api/auth/native/token', 200], ['GET', '/api/auth/me', 200], ['GET', '/api/me/today', 200],
+  ['GET', '/api/auth/native/sessions', 200], ['POST', '/api/auth/native/logout', 204],
+].map(([method, route, status], index) => ({ sequence: index + 1, method, route, status,
+  nativeMarker: true, browserHandoff: index < 9 }));
+
+test('recorded rejected browser refresh prefix preserves the exact later successful native auth spine', () => {
+  const rows = recordedBrowserProbeRows(), original = structuredClone(rows);
+  assert.deepEqual(validateObservedAndroidAuthTraffic(rows, { mfaRequired: true, mfaStage: 'consent' }),
+    { rejectedPreLoginBrowserRefreshes: 1, loggedOutBrowserIdentityReads: 2 });
+  assert.deepEqual(rows, original);
+});
+
+test('both MFA stages export a complete plan after the bounded logged-out browser probe', (t) => {
+  for (const stage of ['login', 'consent']) {
+    const f = fixture(t, stage), after = structuredClone(f.after);
+    after.requests.unshift(...recordedBrowserProbeRows().slice(0, 3));
+    after.requests.forEach((row, index) => { row.sequence = index + 1; }); after.lastSequence = after.requests.length;
+    const ref = f.save('gateway-after-logged-out-probe.json', after);
+    f.replace('authObservation', value => { value.gatewayAfter = ref; });
+    const { plan } = createAndroidLocalRun(f.request);
+    assert.equal(plan.auth.mfaStage, stage);
+    assert.equal(existsSync(path.join(f.root, f.extension.credentialsFile)), false);
+  }
+});
+
+for (const [name, mutate] of [
+  ['successful refresh', rows => { rows.find(row => row.route === '/api/auth/refresh').status = 200; }],
+  ['duplicate refresh', rows => { rows.splice(2, 0, { ...rows[1] }); }],
+  ['native refresh', rows => { rows[1].browserHandoff = false; }],
+  ['refresh after login', rows => { const [row] = rows.splice(1, 1); rows.splice(4, 0, row); }],
+  ['refresh without a preceding rejected browser identity read', rows => { rows[0].status = 200; }],
+  ['native 401 after grant', rows => { rows.find(row => row.route === '/api/me/today').status = 401; }],
+  ['duplicate login', rows => { rows.splice(4, 0, { ...rows[3] }); }],
+  ['unknown POST', rows => { rows.splice(1, 0, { method: 'POST', route: '/api/synthetic-unexpected', status: 401, browserHandoff: true, nativeMarker: true }); }],
+  ['logout before login', rows => { rows.unshift(rows.pop()); }],
+  ['MFA after token', rows => { const [row] = rows.splice(rows.findIndex(item => item.route === '/api/auth/mfa/step-up'), 1); rows.splice(-1, 0, row); }],
+]) test(`logged-out browser probe does not authorize ${name}`, () => {
+  const rows = recordedBrowserProbeRows(); mutate(rows);
+  assert.throws(() => validateObservedAndroidAuthTraffic(rows, { mfaRequired: true, mfaStage: 'consent' }));
+});
+
+test('unknown and excessive browser 401 probes remain refused before login', () => {
+  const rows = recordedBrowserProbeRows(); rows.unshift({ ...rows[0] });
+  assert.throws(() => validateObservedAndroidAuthTraffic(rows, { mfaRequired: true, mfaStage: 'consent' }),
+    /BOUNDED_LOGGED_OUT_BROWSER_IDENTITY_PROBES_REQUIRED/);
+  const other = recordedBrowserProbeRows(); other[0].route = '/api/auth/security';
+  assert.throws(() => validateObservedAndroidAuthTraffic(other, { mfaRequired: true, mfaStage: 'consent' }),
+    /UNEXPECTED_AUTH_OBSERVATION_401/);
 });
 
 test('observed locale captions may change but source identity and content cannot be overridden', (t) => {

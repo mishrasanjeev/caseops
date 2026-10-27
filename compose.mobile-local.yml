@@ -109,9 +109,19 @@ services:
     image: ${CASEOPS_MOBILE_API_IMAGE:?owned API image required}
     command: [python, /mobile-fixture/local-gateway.py]
     environment:
+      CASEOPS_ENV: local
+      CASEOPS_RELEASE_SHA: ${CASEOPS_MOBILE_API_SHA:-unavailable}
+      # Only the explicitly enabled read-only observer uses this isolated DB.
+      # Auth/native signing secrets are not inherited by the gateway.
+      CASEOPS_DATABASE_URL: ${CASEOPS_MOBILE_DATABASE_URL:?isolated database required}
       CASEOPS_MOBILE_RUN_ID: ${CASEOPS_MOBILE_GATEWAY_RUN_ID:-${CASEOPS_MOBILE_PROJECT}}
       CASEOPS_MOBILE_API_PORT: ${CASEOPS_MOBILE_API_PORT:-8443}
       CASEOPS_MOBILE_WEB_PORT: ${CASEOPS_MOBILE_WEB_PORT:-3443}
+      CASEOPS_MOBILE_V1_CONTROLS: ${CASEOPS_MOBILE_V1_CONTROLS:-0}
+      CASEOPS_MOBILE_V1_PROFILE: ${CASEOPS_MOBILE_V1_PROFILE:-source-work-v3}
+      CASEOPS_MOBILE_V1_IMPLEMENTATION_SHA256: ${CASEOPS_MOBILE_V1_IMPLEMENTATION_SHA256:-}
+      CASEOPS_MOBILE_V1_REGISTRATION: ${CASEOPS_MOBILE_V1_REGISTRATION:-}
+      CASEOPS_MOBILE_V1_REGISTRATION_SHA256: ${CASEOPS_MOBILE_V1_REGISTRATION_SHA256:-}
     volumes:
       - ./scripts/mobile:/mobile-fixture:ro
       - ${CASEOPS_MOBILE_CACHE:?outside-Git cache required}:/fixture-state

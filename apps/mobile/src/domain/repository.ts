@@ -1,3 +1,4 @@
+import { createQuickWorkRepository } from "./quick-work.ts";
 import {
   array,
   canAddNote,
@@ -75,6 +76,7 @@ export function createRepository(request: AuthorizedRequest) {
   const get = (path: string, signal?: AbortSignal) =>
     request<unknown>(path, { signal });
   return {
+    quickWork: createQuickWorkRepository(request),
     today: async (signal?: AbortSignal) =>
       decodeToday(await get("/api/me/today?horizon_days=7", signal)),
     matters: async (

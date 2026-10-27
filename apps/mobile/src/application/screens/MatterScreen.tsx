@@ -5,6 +5,8 @@ import { Empty, Fact, RecordRow, ResourceView } from "../../components/Content";
 import { styles } from "../../components/theme";
 import { canAddNote, displayDay } from "../../domain/contracts";
 import type { Matter } from "../../domain/contracts";
+import { quickEditable } from "../../domain/quick-work";
+import type { QuickTarget } from "../../domain/quick-work";
 import type { Repository } from "../../domain/repository";
 import { useResource } from "../useResource";
 
@@ -19,6 +21,10 @@ export function MatterScreen({
   canWrite,
   addNote,
   openDraft,
+  openQuickWork,
+  openCounsel,
+  openRecommendations,
+  openHearingPack,
   files,
   onSectionChange,
 }: {
@@ -28,6 +34,10 @@ export function MatterScreen({
   canWrite: boolean;
   addNote: (matter: Matter) => void;
   openDraft: (id: string) => void;
+  openQuickWork: (matter: Matter, target: QuickTarget) => void;
+  openCounsel: () => void;
+  openRecommendations: () => void;
+  openHearingPack: (hearingId: string) => void;
   files: FilesScreenProps;
   onSectionChange: (section: MatterSection) => void;
 }) {
@@ -112,6 +122,18 @@ export function MatterScreen({
                   label="Description"
                   value={workspace.matter.description}
                 />
+                <NativeButton
+                  testID="matter-counsel"
+                  label="Counsel & spend"
+                  onPress={openCounsel}
+                  secondary
+                />
+                <NativeButton
+                  testID="matter-recommendations"
+                  label="Saved recommendations"
+                  onPress={openRecommendations}
+                  secondary
+                />
               </>
             ) : section === "Activity" ? (
               <>
@@ -180,33 +202,13 @@ export function MatterScreen({
               <FilesScreen {...files} />
             ) : (
               <>
-                <Text accessibilityRole="header" style={styles.heading}>
-                  Matter tasks
-                </Text>
-                {workspace.tasks.length ? (
-                  workspace.tasks
-                    .slice(0, limit)
-                    .map((task) => (
-                      <RecordRow
-                        key={task.id}
-                        title={task.title}
-                        subtitle={task.owner_name || "Unassigned"}
-                        meta={`${task.status} · ${task.due_on ? displayDay(task.due_on) : "No due date"}`}
-                      />
-                    ))
-                ) : (
-                  <Empty
-                    title="No tasks returned"
-                    message="No tasks were returned for this matter."
-                  />
-                )}
-                {workspace.tasks.length > limit ? (
-                  <NativeButton
-                    label="Show more tasks"
-                    onPress={() => setLimit((value) => value + 50)}
-                    secondary
-                  />
-                ) : null}
+                <MatterQuickWork
+                  repository={repository}
+                  matterId={matterId}
+                  canWrite={canWrite}
+                  openQuickWork={openQuickWork}
+                  openHearingPack={openHearingPack}
+                />
                 <MatterDrafts
                   repository={repository}
                   matterId={matterId}
@@ -239,6 +241,136 @@ export function MatterScreen({
         )}
       </ResourceView>
     </ScrollView>
+  );
+}
+
+function MatterQuickWork({
+  repository,
+  matterId,
+  canWrite,
+  openQuickWork,
+  openHearingPack,
+}: {
+  repository: Repository;
+  matterId: string;
+  canWrite: boolean;
+  openQuickWork: (matter: Matter, target: QuickTarget) => void;
+  openHearingPack: (hearingId: string) => void;
+}) {
+  const [limit, setLimit] = useState(50);
+  const current = useResource(`quick-work:${matterId}`, () =>
+    repository.quickWork.load(matterId),
+  );
+  return (
+    <ResourceView resource={current.resource} reload={current.reload}>
+      {(snapshot) => {
+        const mayWrite = canWrite && canAddNote(snapshot.matter);
+        return (
+          <View style={{ gap: 12 }}>
+            <Text accessibilityRole="header" style={styles.heading}>
+              Matter tasks
+            </Text>
+            {snapshot.tasks.length ? (
+              snapshot.tasks.slice(0, limit).map((record) => (
+                <RecordRow
+                  key={record.id}
+                  testID={`task-${record.id}`}
+                  title={record.fields.title || "Untitled task"}
+                  subtitle={record.owner_name || "Unassigned"}
+                  meta={`${record.fields.status} · ${record.fields.due_on ? displayDay(record.fields.due_on) : "No due date"}${mayWrite && quickEditable(record) ? "" : " · Read-only"}`}
+                  onPress={
+                    mayWrite && quickEditable(record)
+                      ? () =>
+                          openQuickWork(snapshot.matter, {
+                            kind: "task",
+                            id: record.id,
+                          })
+                      : undefined
+                  }
+                />
+              ))
+            ) : (
+              <Empty
+                title="No tasks returned"
+                message="No tasks were returned for this Matter."
+              />
+            )}
+            {mayWrite ? (
+              <NativeButton
+                testID="quick-task-add"
+                label="Add task"
+                onPress={() => openQuickWork(snapshot.matter, { kind: "task" })}
+              />
+            ) : null}
+            <Text accessibilityRole="header" style={styles.heading}>
+              Hearings
+            </Text>
+            {snapshot.hearings.length ? (
+              snapshot.hearings.slice(0, limit).map((record) => (
+                <View key={record.id} style={{ gap: 8 }}>
+                  <RecordRow
+                    key={record.id}
+                    testID={`hearing-${record.id}`}
+                    title={
+                      record.fields.purpose || "Hearing purpose not recorded"
+                    }
+                    subtitle={record.fields.forum_name || "Forum not recorded"}
+                    meta={`${displayDay(record.fields.hearing_on)} · ${record.fields.status}${mayWrite && quickEditable(record) ? "" : " · Read-only"}`}
+                    onPress={
+                      mayWrite && quickEditable(record)
+                        ? () =>
+                            openQuickWork(snapshot.matter, {
+                              kind: "hearing",
+                              id: record.id,
+                            })
+                        : undefined
+                    }
+                  />
+                  <NativeButton
+                    testID={`hearing-pack-open-${record.id}`}
+                    label={`Existing pack: ${displayDay(record.fields.hearing_on)}`}
+                    secondary
+                    onPress={() => openHearingPack(record.id)}
+                  />
+                </View>
+              ))
+            ) : (
+              <Empty
+                title="No hearings returned"
+                message="No hearings were returned for this Matter."
+              />
+            )}
+            {mayWrite ? (
+              <NativeButton
+                testID="quick-hearing-add"
+                label="Add hearing"
+                onPress={() =>
+                  openQuickWork(snapshot.matter, { kind: "hearing" })
+                }
+              />
+            ) : (
+              <Text style={styles.muted}>
+                Work is read-only for this account or Matter lifecycle.
+              </Text>
+            )}
+            {snapshot.tasks.length > limit ||
+            snapshot.hearings.length > limit ? (
+              <NativeButton
+                label="Show more work records"
+                testID="quick-work-more"
+                onPress={() => setLimit((value) => value + 50)}
+                secondary
+              />
+            ) : null}
+            <Text style={styles.muted}>
+              Retained lifecycle history and records without current version or
+              reminder-plan support are read-only. Reload before editing changed
+              work.
+            </Text>
+          </View>
+        );
+      }}
+    </ResourceView>
   );
 }
 

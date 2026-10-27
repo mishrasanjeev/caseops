@@ -11,6 +11,24 @@ entries; this preparation is not a waiver or a release verdict.
 
 ## Deliberate preparation boundary
 
+Camera development after Today `f5d95426` adds explicit one-image capture with
+Expo ImagePicker58.0.10/ImageLoader58.0.3 (MIT), an optional camera permission
+purpose and app-private SDK copies. Its encoded metadata can include capture
+location even though CaseOps requests no location permission; `exif:false` is
+not a byte-sanitization guarantee. Store privacy/Data safety drafts must cover
+the uploaded photo content/metadata and actual SDK processing, plus the owned
+cache lifecycle described in `NATIVE_DATA_INVENTORY_2026-10-27.md`. Reconcile
+actual release permissions, supplier manifests and physical camera behavior
+before submission. No new store acceptance or zero-location claim is made.
+
+Optional biometric screen lock uses the existing SecureStore 58.0.2 with a
+specific Face ID purpose string and device-only policy/protected marker. The
+app receives protected-storage authentication outcomes, not biometric templates.
+Server MFA/revalidation remains mandatory. Include the local linked identity
+metadata and OS handling in privacy review; physical enrollment, backup,
+uninstall, permissions and actual artifact acceptance remain pending. See
+`BIOMETRIC_SCREEN_LOCK_2026-10-27.md`; no compliance claim follows from this UI.
+
 `prepare-store-packaging.mjs` accepts only `--plan`. `--run` and unknown modes
 refuse before reading inputs. Output is always `preparedOnly:true`,
 `readyForBuild:false`, `executionEnabled:false`. It produces immutable public

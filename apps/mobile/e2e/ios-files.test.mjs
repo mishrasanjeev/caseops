@@ -7,6 +7,7 @@ import test from 'node:test';
 import { gatewayBaseline } from './traffic.mjs';
 import { collectIosFiles, expandIosSourceDetails, proveIosSelectedFile, iosFilesInventory, iosFilesScenarios, validateAsset, validateIosFilesContext,
   validatePickerAsset, validatePickerProvider, validatePrivacyReceipt, validateSourceAnchor, validateSourceSeed, textSegments, chooseIosFile,
+  awaitIosTextReady, readIosText,
   IOS_UPLOAD_PERSISTED_MESSAGE, proveIosReaderEntry, proveIosUploadPersisted, findIosUploadPersisted,
   assertIosUploadErrorsAbsent, assertIosViewerAbsent, findIosFileFact, validateIosUploadAcknowledgement, rapidActivateIosUpload } from './ios-files.mjs';
 
@@ -609,4 +610,117 @@ test('selected-file proof requires exact visible filename and enabled Upload wit
     measuredFileDriver(context,id=>id==='files-selection'?{x:20,y:150,width:362,height:options.outside?20:200}:id==='files-upload'?{x:140,y:250,width:122,height:51}:{x:20,y:160,width:300,height:25});return{context,asset};};
   const good=create({});await proveIosSelectedFile(good.context,good.asset);
   for(const options of[{duplicate:true},{wrongName:true},{outside:true}]){const c=create(options);await assert.rejects(proveIosSelectedFile(c.context,c.asset));}
+});
+
+// Full existing reader composition with public synthetic bytes and an offline
+// native/gateway double. The initial state matches the retained FILES04 facts.
+const originalTextReaderFetch = globalThis.fetch;
+function textReaderDouble(t, options = {}) {
+  const text = 'A'.repeat(9999) + '\n' + 'B'.repeat(10000) + 'C'.repeat(4000);
+  const anchor = { matterId: '11111111-1111-4111-8111-111111111111', attachmentId: '22222222-2222-4222-8222-222222222222', filename: 'synthetic-three-segments.txt', text, sizeBytes: Buffer.byteLength(text), sha256: createHash('sha256').update(text).digest('hex') };
+  const segments = textSegments(text), clicks = [], waits = [], events = [];
+  const ledger = { runId: 'offline-text-ready', requests: [], lastSequence: 0, overflow: false, markerRejected: 0, routeRejected: 0 };
+  let ui = 'files', ready = false, page = 1, zoom = 100, polls = 0;
+  t.after(() => { globalThis.fetch = originalTextReaderFetch; });
+  globalThis.fetch = async (url) => { assert.equal(url, 'https://127.0.0.1:8443/__caseops_e2e/status'); return Response.json(ledger); };
+  const rect = id => id === 'scroll' ? { x: 0, y: 125, width: 402, height: 638 }
+    : id.startsWith('files-row-') ? { x: 10, y: 140, width: 382, height: 200 }
+      : id.startsWith('files-') ? { x: 20, y: 150, width: 362, height: 44 }
+        : id === 'private-document-viewer' ? { x: 0, y: 62, width: 402, height: 778 }
+          : id === 'viewer-close' ? { x: 8, y: 70, width: 44, height: 44 }
+            : id === 'viewer-toolbar' ? { x: 0, y: 123, width: 402, height: 53 }
+              : { x: 60, y: 79, width: 334, height: 26 };
+  const type = id => id === 'scroll' ? 'XCUIElementTypeScrollView'
+    : ['private-document-viewer', 'viewer-toolbar', 'viewer-loading', 'viewer-blocked', 'viewer-unsupported', 'viewer-closed'].includes(id) || id.startsWith('files-row-') ? 'XCUIElementTypeOther'
+      : ['viewer-close', 'viewer-next', 'viewer-previous', 'viewer-zoom-in'].includes(id) || id.startsWith('files-source-') || id.startsWith('files-open-') ? 'XCUIElementTypeButton' : 'XCUIElementTypeStaticText';
+  const textFor = id => id.startsWith('files-name-') ? anchor.filename : id.startsWith('files-hash-') ? anchor.sha256
+    : id === 'viewer-filename' ? options.wrongFilename ? 'stale-source.txt' : anchor.filename
+      : id === 'viewer-position' ? options.position ?? (ready ? `Segment ${page} of 3` : 'No page displayed')
+        : id === 'viewer-text' ? options.wrongText ? 'Wrong source bytes' : segments[page - 1]
+          : id === 'viewer-zoom' ? `${zoom}%` : id === 'viewer-close' ? 'Return to Files' : id.startsWith('files-source-') ? 'Hide source details' : id;
+  const control = id => ({ elementId: id, isDisplayed: async () => true,
+    isEnabled: async () => id === 'viewer-previous' ? ready && page > 1 : id === 'viewer-next' ? ready && page < 3 : true,
+    getText: async () => { if (id === 'viewer-position' && options.transport) throw options.transport; if (id === 'viewer-text' && options.unreadable) throw options.unreadable; return textFor(id); },
+    getAttribute: async key => key === 'name' ? id : key === 'type' ? type(id) : key === 'label' ? textFor(id) : key === 'accessible' ? 'true' : null,
+  });
+  const context = { platform: 'ios', fixture: { gatewayUrl: 'https://127.0.0.1:8443', gatewayRunId: ledger.runId }, record: value => events.push(value), driver: {
+    async $$(query) {
+      if (query === '-ios predicate string:type == "XCUIElementTypeScrollView"') return [control('scroll')];
+      const id = query.startsWith('~') ? query.slice(1) : '';
+      if (id.startsWith('files-')) return ui === 'files' ? [control(id)] : [];
+      if (!id || ui !== 'viewer') return [];
+      if (['viewer-blocked', 'viewer-unsupported', 'viewer-closed'].includes(id)) return options.terminal === id ? [control(id)] : [];
+      if (id === 'viewer-idle' || id === 'viewer-renewing') return [];
+      if (id === 'viewer-loading') return !ready ? [control(id)] : [];
+      if (id === 'viewer-text' && !ready) return [];
+      return Array.from({length: options.duplicatePosition && id === 'viewer-position' ? 2 : 1}, () => control(id));
+    },
+    async waitUntil(check, args) {
+      waits.push(args);
+      if (args.timeoutMsg === 'IOS_FILES_INITIAL_TEXT_READY_REQUIRED') {
+        assert.ok(args.timeout > 0 && args.timeout <= 15000); assert.equal(args.interval, 200);
+        for (let attempt = 0; attempt < 4; attempt++) {
+          polls++;
+          if (!options.neverReady && attempt >= (options.readyAfter ?? 1)) ready = true;
+          const before = clicks.length;
+          const result = await check();
+          assert.equal(clicks.length, before, 'INITIAL_READINESS_POLL_MUST_NOT_DISPATCH');
+          if (result) return;
+        }
+        throw new Error(args.timeoutMsg);
+      }
+      if (!await check()) throw new Error(args.timeoutMsg);
+    },
+    async getWindowRect() { return { x: 0, y: 0, width: 402, height: 874 }; },
+    async getElementRect(id) { return rect(id); },
+    async elementClick(id) {
+      clicks.push(id);
+      if (id.startsWith('files-open-')) {
+        ui = 'viewer'; ready = options.readyAfter === 0;
+        for (const status of [206,200,206]) ledger.requests.push({ sequence: ++ledger.lastSequence, method: 'GET', route: `/api/matters/${anchor.matterId}/attachments/${anchor.attachmentId}/download`, status, nativeMarker: true });
+      } else if (id === 'viewer-zoom-in') { assert.equal(ready, true); zoom = 125; }
+      else if (id === 'viewer-next') { assert.equal(ready, true); page++; }
+      else if (id === 'viewer-previous') { assert.equal(ready, true); page--; }
+      else if (id === 'viewer-close') ui = 'files';
+      else assert.fail('UNEXPECTED_OFFLINE_NATIVE_DISPATCH');
+    },
+  } };
+  return { context, anchor, clicks, waits, events, ledger, polls: () => polls, startReader: () => { ui = 'viewer'; } };
+}
+
+test('initial TXT No page/loading may settle within the existing 15s budget before exact three-segment traversal', async t => {
+  for (const readyAfter of [0, 1]) {
+    const f = textReaderDouble(t, { readyAfter });
+    await readIosText(f.context, f.anchor);
+    assert.deepEqual(f.clicks, [`files-open-${f.anchor.attachmentId}`, 'viewer-zoom-in', 'viewer-next', 'viewer-next', 'viewer-previous', 'viewer-previous', 'viewer-close']);
+    assert.equal(f.events.filter(e => e.boundary === 'ios-private-text-segments-read').length, 1);
+    assert.ok(f.polls() >= 1); assert.equal(f.ledger.requests.filter(row => row.method === 'POST').length, 0);
+  }
+});
+
+test('initial TXT never-ready or stale segment count refuses before zoom/Next and never substitutes bytes', async t => {
+  for (const options of [{ neverReady: true }, { position: 'Segment 1 of 1' }, { position: 'Segment 2 of 3' }]) {
+    const f = textReaderDouble(t, options);
+    await assert.rejects(readIosText(f.context, f.anchor), /IOS_FILES_INITIAL_TEXT_READY_REQUIRED|IOS_FILES_TEXT_INITIAL_POSITION_MISMATCH/);
+    assert.deepEqual(f.clicks, [`files-open-${f.anchor.attachmentId}`]);
+    assert.equal(f.events.some(e => e.boundary === 'ios-private-text-segments-read'), false);
+  }
+});
+
+test('initial TXT error/closed/ambiguous/wrong-source and transport remain terminal without polling mutations', async t => {
+  const original = new Error('Synthetic stale element transport');
+  for (const options of [{terminal:'viewer-blocked'}, {terminal:'viewer-unsupported'}, {terminal:'viewer-closed'}, {duplicatePosition:true}, {wrongFilename:true}, {transport:original}]) {
+    const f = textReaderDouble(t, options); f.startReader();
+    await assert.rejects(awaitIosTextReady(f.context, f.anchor, 3), options.transport ? error => error === original : /IOS_FILES_READER_FAILURE_PRESENT|IOS_FILES_TEXT_FACT_NOT_UNIQUE|IOS_FILES_WRONG_READER_SOURCE/);
+    assert.deepEqual(f.clicks, []); assert.equal(f.polls(), 1);
+  }
+});
+
+test('TXT readiness does not excuse unreadable or wrong content once the native page is ready', async t => {
+  const original = new Error('Synthetic unreadable text');
+  for (const options of [{readyAfter:0,unreadable:original}, {readyAfter:0,wrongText:true}]) {
+    const f = textReaderDouble(t, options);
+    await assert.rejects(readIosText(f.context, f.anchor), options.unreadable ? error => error === original : /IOS_FILES_TEXT_BYTES_DISPLAY_MISMATCH/);
+    assert.deepEqual(f.clicks, [`files-open-${f.anchor.attachmentId}`]);
+  }
 });

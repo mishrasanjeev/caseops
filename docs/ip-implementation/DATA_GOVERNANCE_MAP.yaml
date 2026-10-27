@@ -5,8 +5,8 @@
   "policy_status": "pending_named_human_approval",
   "purpose": "Versioned repository inventory for DATA-GOV-01 and DATA-GOV-03. It snapshots SQL tables/columns/indexes and known non-SQL classes so unregistered data-bearing changes fail Definition of Ready.",
   "completion_boundary": "This inventory does not claim approved platform-wide retention bounds, legal-hold activation, tenant export, general purge/offboarding, backup recovery/restore, residency, or data-governance/recovery milestone completion. Most classes remain protected only by fail-closed Definition-of-Ready validation. IPLF-066A adds tenant-private index generations, private content projections and typed scopes, idempotent revocation/tombstone events, and content-free saved-output access manifests under fail-closed tenant policies. IPLF-066B adds one narrow IPLF-071-owned adapter for `private_index_projections`: it accepts only a separately approved execute row matching its immutable dry-run manifest, rechecks current active retention policy and legal-hold state under lock, tombstones and blanks private projection content, records a local receipt, and records an explicit provider deletion-delay exception when no per-request deletion receipt exists. The general data-governance API remains non-executable, the original IPLF-028A six-class admission boundary is unchanged, and no other SQL, object, backup, provider, export, restore, client-scope, or full-tenant disposition is authorized or claimed.",
-  "current_change_note": "The 2026-10-26 portfolio-export repair adds protocol state, an opaque ownership claim and its execution expiry to the existing tenant-restricted job, not new legal content. The separately inventoried Cloud Tasks envelope contains only an existing job UUID/version and short-lived exact-body proof; no CSV, source filters, client identity or raw signing secret is transmitted in it. The dedicated key stays in the existing project Secret Manager/runtime. New protocol1 workers use bounded claims, source/authority and byte-exact presentation revalidation, no database transaction over dispatch/storage, and duplicate/stale-finalizer recovery. Rolling protocol0 records are not silently adopted. Claim-unique unpublished artifacts remain private under the existing export namespace; uncertain publication does not authorize deleting a possibly committed artifact. No new general export, retention, purge or source-licence authority is introduced. The 2026-10-10 execution correction retains provider isolation in Boolean no_paid_providers columns on existing document_processing_jobs and matter_court_sync_jobs, with unknown legacy receipts defaulting to no-paid and explicit captured human FALSE preserved. Existing queue/recovery indexes build concurrently with interrupted-build recovery. The nullable matter_compliance_extraction_runs.persistence_protocol is immutable execution-state metadata, not a credential or new legal content; historical runs remain unstamped, and new persistence requires a transaction-local exact source/run/tenant/actor context. Application rollback preserves provider-isolation columns and the compliance fence; only an explicitly opted-in, locked empty compliance rehearsal may remove its marker. Independent exact-image workers execute existing durable queues with bounded claims and fresh Company-first authority; they add no data class, provider transmission, provider entitlement, approved retention period, export or disposition authority. The 2026-10-08 reviewed Gmail/Drive content-import correction preserves its existing Google-only read transmission and tenant-scoped storage classes. Provider read, bounded token refresh, scanner and storage execute without a database transaction; fresh current actor, connector, candidate, tenant controls, parent lifecycle and quota admission atomically publish the attachment, processing job, review status and audit. A concurrent revocation or changed source wins, rejected unique objects are compensated, and uncertain commits retain bytes. Drive binary reads additionally reconcile reviewed metadata and provider version before and after bounded streamed downloads, enforce actual byte limits and checksum agreement, and share one transport deadline across refresh/replay. Unsupported native Google documents and stale reviewed sources remain fail-closed. Matter, notice, Gmail and Drive upload boundaries reject caller-owned writes without rolling them back. No new provider transmission, retention duration or disposition authority is introduced. The 2026-10-08 private-authority and upload follow-up keeps inbound communications, attachments, processing jobs and audit metadata atomic in their existing tenant-scoped classes while releasing database transactions over scanner and object-storage I/O. Matter, standalone notice, IP version and outside-counsel uploads use unique transient objects and recheck current actor, tenant, capability, lifecycle, references and serialized quota before publication. Rejected pre-commit objects are compensated; unknown commit outcomes retain bytes for authoritative reconciliation instead of risking deletion of committed content. No orphan purge or new disposition authority is introduced. Quota now counts all retained IP document versions once, including historical and terminal records. Notice visibility treats nullable permission predicates as denied. Private projection source text, hashes and source versions use the same existing whitespace normalization as stored content; substantive changes, retired evidence, ACLs and tombstones remain fail-closed. No new SQL class, column, index, storage namespace, provider transmission, retention duration, export capability or unattended provider operation is added. The 2026-10-08 Calendar OAuth recovery requests openid and email in addition to the existing calendar.events permission because the existing callback reads Google account identity. It validates the explicit grant and bounded stable subject/email response; it adds no calendar-content transmission. Calendar/Outlook and Gmail/Drive callbacks retain only tenant-and-actor-scoped state/code SHA-256 consumption digests in existing api_idempotency_records, and short-lived claim markers inside encrypted existing connection payloads. Provider I/O owns no database transaction; fresh membership, capability, connection, expiry and connector-configuration checks fence credential publication. Owned failure cleanup cannot change a newer attempt or disconnect. Browser redirects use fixed server-owned work-area URLs and enumerated outcomes, never provider text, codes, state or credentials. No new SQL class, retention duration, disposition authority, export boundary or unattended sync is introduced; isolated test-only OAuth emulation is unavailable in production. The 2026-10-07 Google Workspace token-recovery correction retries Gmail and Drive reads once after an access-token 401 by sending the existing tenant OAuth refresh token to Google\u2019s token endpoint and persisting only the returned encrypted token payload in the existing connection rows. It does not transmit mailbox or Drive content to the token endpoint, add a data class, alter provider-content retention, disposition authority, export boundary, or enable unattended sync. Invalid/revoked grants require user reconnection; transient refresh failures remain retryable and do not permanently quarantine the connection. The 2026-09-30 production QA correction preserves the existing no-charge user-visible assurance on the eCourts exact-case pre-spend identity rejection. It changes only response copy before provider transport; no persisted class, provider request, transmitted identifier, credential flow, retention duration, disposition authority, or export boundary changes. The 2026-09-30 GBA case-tracking correction refuses unsearchable exact case-number requests before paid provider I/O and excludes such tracked cases from scheduled provider calls while preserving explicit blocked/backlog counts. Linking a reviewed provider result archives only matching system-created legacy placeholders for the same actor and transfers other members to that verified case under the locked Matter lifecycle, retaining audited history and bookmark identity. It adds no table, column, index, persisted class, provider transmission, credential flow, retention duration, disposition authority, or export boundary. The 2026-09-27 verified-fresh replay lets automated production verification observe a provider search without spending. The window-enforcing 18:00 IST case-tracking job refreshes each checked-in verification fixture (one CNR in the caseops-qa workspace) with the same CNR lookup a live search makes, at most once per Asia/Kolkata day including failures, after a budget reservation and a durable claim committed before transport; the answer is stored as integrity-hashed evidence in the existing tenant-scoped tracked_case_provider_operations and tracked_case_provider_snapshots classes (operation type verification_fixture) and is never published to the tracked case or retried. A search carrying both the no-paid marker and the X-CaseOps-Provider-Replay: verified-fresh opt-in is answered from that evidence only for the fixture's CNR in its own workspace, only when it was retrieved at most 24 hours earlier, verifies its hashes and was not superseded by a later not-found or unreadable answer; otherwise it is refused with a typed replay status. Replays and refreshes are audited. It adds no table, column, index, transmitted identifier, credential flow, retention duration, disposition authority, or export boundary; the one new automated provider request is the capped daily fixture lookup the owner approved on 2026-09-27. The 2026-09-27 case-identity readability correction makes manual search, resolve and link report the single reason a Matter cannot be matched to a court case (invalid CNR, missing identifiers, unreadable case number, or missing case type) on the same identity policy as refresh, returns that reason together with the Matter's own already-visible recorded case number and CNR in the resolve response, and widens the public case-number parser to the common single-identity spellings while rejecting compound entries that name two records. Automatic linking at Matter creation, the scheduled existing-Matter backfill and the refresh and polling of automatic links apply the same decision before any provider request, so a bare number/year no longer creates or refreshes an automatic link and no provider request is made for it. It adds no table, column, index, provider request, transmitted identifier, credential flow, retention duration, disposition authority, or export boundary. The 2026-09-26 case-tracking identity correction makes manual search, resolve and link use the same Matter/provider identity policy as refresh and polling, and adds read-only search context: for each provider result's CNR it lists the matter id, code, title and status of Matters already visible to the signed-in user under the existing visibility filter, and whether the scoped Matter already tracks the case. The signed link selection now also carries the provider's published matching identity. Cause list and invoice PDFs wrap text inside their columns and normalize characters the core PDF font cannot encode. No persisted class, provider request, credential flow, retention duration, disposition authority, or export boundary changes. The 2026-09-26 CodeQL remediation changes import paths and removes dead code only: services import redact_provider_error from core.redaction instead of through notification_delivery; the release-bound machine-readiness evidence verifier moves unchanged into the leaf machine_readiness_evidence module; patent application corrections move into ip_patent_application_corrections; the unreachable direct reminder worker and emergency-coverage branches are removed; the scheduler inventory summary reports its reviewed invoker identity; and the authority search mode is logged through a fixed label table. It changes no persisted class, provider request, transmitted identifier, credential flow, retention duration, disposition authority, or export boundary. The 2026-09-25 connector redirect-URI validation rejects malformed, insecure or wrong-path OAuth redirect URIs in the tenant Google Workspace, Outlook and Microsoft 365 configuration forms and treats a previously stored value that fails the same rule as missing on the read path, including connector health. It reads and validates existing tenant configuration columns only; it adds no table, column, index, provider transmission, credential flow, retention duration, disposition authority, or export boundary. The 2026-09-25 legacy-hearing release repair uses the existing tenant-scoped Matter, hearing, history and audit classes; it enumerates active company IDs without membership-based omission, preserves terminal hearing states, and bounds provider-free writes. No new class, external transmission, retention rule or disposition authority is introduced. The 2026-09-15 eCourtsIndia response-decoding correction strips Content-Encoding, Content-Length and Transfer-Encoding from an in-memory provider response after httpx has already decoded the bounded body, so compressed CDN replies are decoded once instead of failing as provider errors. It changes no provider request, transmitted identifier, parsed field, persisted class, credential flow, retention duration, disposition authority, or export boundary; the Docker acceptance emulator only compresses synthetic fixture payloads. The 2026-09-10 integrated candidate adds immutable, tenant-scoped legal-hold release proposals with independent authentication and five restricted patent work-product/proceeding tables with locked application sequences and exact source manifests. They remain on registry_fail_closed; no export, purge, retention duration or patent automation is activated. Provider attempts use expiring claims and conservative spend reservations; asynchronous summary requests reuse the existing outbox/model-run owners, release transactions during external work and revalidate access, source and lifecycle before publication. The official statute bundle retains source editions, text hashes, publishers, issuing bodies and provision links; incomplete coverage remains explicit. The 2026-09-04 non-billable provider-verification change reads Indian Kanoon spend only from existing tenant-scoped BillingUsageEvent rows and returns transient daily/monthly aggregate spend plus remaining configured budget to an authorized AuthoritySearcher. The authenticated company identifier is mandatory query scope; no row-level billing evidence, provider credential, provider body, or prepaid account balance is exposed. It adds no table, column, index, storage class, provider transmission, external balance probe, retention duration, disposition authority, or export boundary. The existing billing-provider-evidence policy and tenant filtering remain authoritative. The 2026-09-03 eCourtsIndia v4 exact-search correction maps an already-admitted Case Detail response to the provider's structured caseNumbers and courtCodes filters, prefers its public registration/filing number over the packed internal caseNumber, derives a search-ready court code from a valid CNR when legacy detail data exposes only a numeric suffix, and accepts the provider's documented enum-description envelope. It omits absent optional query parameters and does not introduce a new provider call, payload class, stored field, credential flow, retention duration, disposition authority, or export boundary. The existing connector-and-payment-provider-held-records safeguards remain unchanged. The 2026-09-03 paid-provider safety change blocks eCourtsIndia and Indian Kanoon network calls for automated requests and persistent QA/test tenants before transport or billing accounting, excludes those tenants from scheduled refresh, and makes release verification reuse stored hash-verified evidence only. The same request-local automated-test marker now diverts LLM completion and embedding construction to deterministic in-process fixtures before a paid provider SDK is constructed; configured model identity and tenant allow-list enforcement remain intact, but no prompt, document content, response, or derived vector is transmitted to an external provider for those requests. The request marker is not a new data class and is held only in request-local process context; the configured tenant deny-list is operational configuration without credentials or provider payloads. No new provider transmission, storage boundary, retention duration, disposition authority, or data export is introduced. The 2026-09-02 case-tracking hardening validates provider-shaped court identifiers before external I/O and classifies billing exhaustion separately from authentication, rate limits, malformed responses, timeouts, and availability. Safe client errors never persist or expose provider bodies, credentials, balances, or secrets; the existing connector-and-payment-provider-held-records boundary, provider transmission, retention, and fail-closed disposition rules are unchanged. IPLF-066B adds durable private-event retry metadata, tenant-leading due and global maintenance indexes, a content-minimized disposition checkpoint class, bounded five-minute maintenance scheduling, fail-closed lag alerting, and the narrow private-index disposition adapter described in the completion boundary. The adapter cannot authorize itself and does not expose a new execution route; IPLF-071 remains incomplete outside this private-index subsystem. IPLF-027B adds dedicated PostgreSQL migration connection budgets and Cloud Run migration-job configuration/read-back checks over already-registered SQL classes; UJ-67-EXC-01 estimate/preflight refusal remains planned. IPLF-039F strengthens database invariants on the registered ip_cost_items class and adds tenant-scoped append-only ip_cost_item_corrections evidence with active same-tenant actor enforcement, terminal nonbillable projections, parent-owned cascade disposition, and restore-forward downgrade refusal. The 2026-09-20 private-projection maintenance correction raises the existing Cloud Run job's bounded rebuild capacity to 4 GiB and 15 minutes after production evidence showed a 10,520-matter tenant could exhaust the former 1 GiB limit; it changes no persisted class, retention, disposition authority, provider transmission, or export boundary.",
-  "latest_change_note": "The 2026-10-17 IP/Calendar review retains server-owned opaque consent epochs, refresh tokens and bounded in-flight refresh claims only in the existing encrypted tenant/member Calendar connection payloads. Expired Google and Microsoft credentials are rotated at most once through their existing token endpoints, outside any database transaction; fresh actor, membership, capability, connector configuration, grant and claim checks fence encrypted publication. Revocation, newer credentials and unknown event-creation outcomes remain authoritative; a failed or uncertain POST is not blindly replayed. Cleanup may use the same bounded refresh boundary only to remove an already-authorized event, never to reactivate a grant. A fresh OAuth completion replaces the encrypted consent epoch; peer token rotation preserves it. Immutable credential receipts captured under the current authority lock prevent ORM reloads and open database transactions during provider validation. Same-account or same-timestamp replacement consent still makes an older probe stale. No additional provider content, new scope, unattended operation or secret logging is introduced. Existing in_app_notifications receipts gain recipient-owned unread/read/dismissed transitions under current IP capability, tenant/member, source, delivery-intent, parent lifecycle and ACL checks; existing read_at, audit and notification bodies are retained. Dismissal is not deletion, series cancellation or a retention policy. Tracker filters and signed tenant/member/query/policy-bound continuations are read-only request metadata and add no persisted class or export authority. Strict Calendar parsing now accepts the existing delete_pending status; truthful load errors do not change configuration or consent. Loopback-only Google/Microsoft acceptance is unavailable in production. No SQL schema, stored class, retention period, disposition, legal-source approval, billing entitlement or live consent is added. Prior review: The 2026-10-15 QA-coordination review adds bounded read-only observations of existing tenant document queues before the final QA private-index bootstrap, plus a tenant/capability-gated readiness Boolean from the actual serving API database. Metadata-only database-secret version and Cloud SQL checks bind the observer to the serving authority; secret values are never read. Minimized observer receipts and exact canonical browser discovery/results remain under existing operational-evidence owners. No new stored class, SQL schema, retention period, disposition or policy approval is introduced. Current tenant access, private activation/source/epoch, lifecycle and no-paid-provider fences remain unchanged. The 2026-10-15 reviewed runtime-configuration correction normalizes only exact protocol strings 0/1 and exact integers 0/1 for the existing document and court worker admission settings. Boolean, float, unknown and noncanonical values remain rejected; the existing protocol-1, disabled-admission, claim, tenant and no-paid-provider fences are unchanged. Real immutable-image console startup is checked offline before queue work, with disabled admission producing explicit zero-work receipts. This parsing-only change adds no stored value, SQL table/column/index, data class, storage namespace, legal-content processing purpose, provider transmission, credential flow, retention period, legal-hold rule, export boundary or disposition authority. The prior approved QA-grant review is retained unchanged: The 2026-10-14 owner-authorized test-legal manual-IP QA grant uses the existing billing_subscriptions.entitlement_overrides_json and append-only audit_events owners. It changes only ip_workspace plus the normal subscription update timestamp, preserving plan/status, other override keys, billing/provider fields, workspace configuration and GBA. Exact existing tenant/subscription identity, nonbillability, an inspected before-state hash and a retained operation UUID fence the atomic grant. An unchanged consumed operation is a no-op; revocation or state drift prevents regrant. Read-only inspection owns a bounded connection and restores SQLite query_only before that same connection is pooled. The optional guarded release control pins the exact API image and required secret versions, executes one non-recurring task with no automatic retries, and retains minimized identifiers/fingerprints and an execution-specific receipt. No legal content, contact details, credential values or provider payloads are emitted. No account/subscription creation, paid-plan upgrade, external provider request, retention change, disposition authority or default/scheduled grant is introduced. Earlier IP/Calendar, transport and notification boundary reviews remain in the canonical version history and unchanged registered owners.",
+  "current_change_note": "The 2026-10-26 portfolio-export repair adds protocol state, an opaque ownership claim and its execution expiry to the existing tenant-restricted job, not new legal content. The separately inventoried Cloud Tasks envelope contains only an existing job UUID/version and short-lived exact-body proof; no CSV, source filters, client identity or raw signing secret is transmitted in it. The dedicated key stays in the existing project Secret Manager/runtime. New protocol1 workers use bounded claims, source/authority and byte-exact presentation revalidation, no database transaction over dispatch/storage, and duplicate/stale-finalizer recovery. Rolling protocol0 records are not silently adopted. Claim-unique unpublished artifacts remain private under the existing export namespace; uncertain publication does not authorize deleting a possibly committed artifact. No new general export, retention, purge or source-licence authority is introduced. The 2026-10-10 execution correction retains provider isolation in Boolean no_paid_providers columns on existing document_processing_jobs and matter_court_sync_jobs, with unknown legacy receipts defaulting to no-paid and explicit captured human FALSE preserved. Existing queue/recovery indexes build concurrently with interrupted-build recovery. The nullable matter_compliance_extraction_runs.persistence_protocol is immutable execution-state metadata, not a credential or new legal content; historical runs remain unstamped, and new persistence requires a transaction-local exact source/run/tenant/actor context. Application rollback preserves provider-isolation columns and the compliance fence; only an explicitly opted-in, locked empty compliance rehearsal may remove its marker. Independent exact-image workers execute existing durable queues with bounded claims and fresh Company-first authority; they add no data class, provider transmission, provider entitlement, approved retention period, export or disposition authority. The 2026-10-08 reviewed Gmail/Drive content-import correction preserves its existing Google-only read transmission and tenant-scoped storage classes. Provider read, bounded token refresh, scanner and storage execute without a database transaction; fresh current actor, connector, candidate, tenant controls, parent lifecycle and quota admission atomically publish the attachment, processing job, review status and audit. A concurrent revocation or changed source wins, rejected unique objects are compensated, and uncertain commits retain bytes. Drive binary reads additionally reconcile reviewed metadata and provider version before and after bounded streamed downloads, enforce actual byte limits and checksum agreement, and share one transport deadline across refresh/replay. Unsupported native Google documents and stale reviewed sources remain fail-closed. Matter, notice, Gmail and Drive upload boundaries reject caller-owned writes without rolling them back. No new provider transmission, retention duration or disposition authority is introduced. The 2026-10-08 private-authority and upload follow-up keeps inbound communications, attachments, processing jobs and audit metadata atomic in their existing tenant-scoped classes while releasing database transactions over scanner and object-storage I/O. Matter, standalone notice, IP version and outside-counsel uploads use unique transient objects and recheck current actor, tenant, capability, lifecycle, references and serialized quota before publication. Rejected pre-commit objects are compensated; unknown commit outcomes retain bytes for authoritative reconciliation instead of risking deletion of committed content. No orphan purge or new disposition authority is introduced. Quota now counts all retained IP document versions once, including historical and terminal records. Notice visibility treats nullable permission predicates as denied. Private projection source text, hashes and source versions use the same existing whitespace normalization as stored content; substantive changes, retired evidence, ACLs and tombstones remain fail-closed. No new SQL class, column, index, storage namespace, provider transmission, retention duration, export capability or unattended provider operation is added. The 2026-10-08 Calendar OAuth recovery requests openid and email in addition to the existing calendar.events permission because the existing callback reads Google account identity. It validates the explicit grant and bounded stable subject/email response; it adds no calendar-content transmission. Calendar/Outlook and Gmail/Drive callbacks retain only tenant-and-actor-scoped state/code SHA-256 consumption digests in existing api_idempotency_records, and short-lived claim markers inside encrypted existing connection payloads. Provider I/O owns no database transaction; fresh membership, capability, connection, expiry and connector-configuration checks fence credential publication. Owned failure cleanup cannot change a newer attempt or disconnect. Browser redirects use fixed server-owned work-area URLs and enumerated outcomes, never provider text, codes, state or credentials. No new SQL class, retention duration, disposition authority, export boundary or unattended sync is introduced; isolated test-only OAuth emulation is unavailable in production. The 2026-10-07 Google Workspace token-recovery correction retries Gmail and Drive reads once after an access-token 401 by sending the existing tenant OAuth refresh token to Google\u2019s token endpoint and persisting only the returned encrypted token payload in the existing connection rows. It does not transmit mailbox or Drive content to the token endpoint, add a data class, alter provider-content retention, disposition authority, export boundary, or enable unattended sync. Invalid/revoked grants require user reconnection; transient refresh failures remain retryable and do not permanently quarantine the connection. The 2026-09-30 production QA correction preserves the existing no-charge user-visible assurance on the eCourts exact-case pre-spend identity rejection. It changes only response copy before provider transport; no persisted class, provider request, transmitted identifier, credential flow, retention duration, disposition authority, or export boundary changes. The 2026-09-30 GBA case-tracking correction refuses unsearchable exact case-number requests before paid provider I/O and excludes such tracked cases from scheduled provider calls while preserving explicit blocked/backlog counts. Linking a reviewed provider result archives only matching system-created legacy placeholders for the same actor and transfers other members to that verified case under the locked Matter lifecycle, retaining audited history and bookmark identity. It adds no table, column, index, persisted class, provider transmission, credential flow, retention duration, disposition authority, or export boundary. The 2026-09-27 verified-fresh replay lets automated production verification observe a provider search without spending. The window-enforcing 18:00 IST case-tracking job refreshes each checked-in verification fixture (one CNR in the caseops-qa workspace) with the same CNR lookup a live search makes, at most once per Asia/Kolkata day including failures, after a budget reservation and a durable claim committed before transport; the answer is stored as integrity-hashed evidence in the existing tenant-scoped tracked_case_provider_operations and tracked_case_provider_snapshots classes (operation type verification_fixture) and is never published to the tracked case or retried. A search carrying both the no-paid marker and the X-CaseOps-Provider-Replay: verified-fresh opt-in is answered from that evidence only for the fixture's CNR in its own workspace, only when it was retrieved at most 24 hours earlier, verifies its hashes and was not superseded by a later not-found or unreadable answer; otherwise it is refused with a typed replay status. Replays and refreshes are audited. It adds no table, column, index, transmitted identifier, credential flow, retention duration, disposition authority, or export boundary; the one new automated provider request is the capped daily fixture lookup the owner approved on 2026-09-27. The 2026-09-27 case-identity readability correction makes manual search, resolve and link report the single reason a Matter cannot be matched to a court case (invalid CNR, missing identifiers, unreadable case number, or missing case type) on the same identity policy as refresh, returns that reason together with the Matter's own already-visible recorded case number and CNR in the resolve response, and widens the public case-number parser to the common single-identity spellings while rejecting compound entries that name two records. Automatic linking at Matter creation, the scheduled existing-Matter backfill and the refresh and polling of automatic links apply the same decision before any provider request, so a bare number/year no longer creates or refreshes an automatic link and no provider request is made for it. It adds no table, column, index, provider request, transmitted identifier, credential flow, retention duration, disposition authority, or export boundary. The 2026-09-26 case-tracking identity correction makes manual search, resolve and link use the same Matter/provider identity policy as refresh and polling, and adds read-only search context: for each provider result's CNR it lists the matter id, code, title and status of Matters already visible to the signed-in user under the existing visibility filter, and whether the scoped Matter already tracks the case. The signed link selection now also carries the provider's published matching identity. Cause list and invoice PDFs wrap text inside their columns and normalize characters the core PDF font cannot encode. No persisted class, provider request, credential flow, retention duration, disposition authority, or export boundary changes. The 2026-09-26 CodeQL remediation changes import paths and removes dead code only: services import redact_provider_error from core.redaction instead of through notification_delivery; the release-bound machine-readiness evidence verifier moves unchanged into the leaf machine_readiness_evidence module; patent application corrections move into ip_patent_application_corrections; the unreachable direct reminder worker and emergency-coverage branches are removed; the scheduler inventory summary reports its reviewed invoker identity; and the authority search mode is logged through a fixed label table. It changes no persisted class, provider request, transmitted identifier, credential flow, retention duration, disposition authority, or export boundary. The 2026-09-25 connector redirect-URI validation rejects malformed, insecure or wrong-path OAuth redirect URIs in the tenant Google Workspace, Outlook and Microsoft 365 configuration forms and treats a previously stored value that fails the same rule as missing on the read path, including connector health. It reads and validates existing tenant configuration columns only; it adds no table, column, index, provider transmission, credential flow, retention duration, disposition authority, or export boundary. The 2026-09-25 legacy-hearing release repair uses the existing tenant-scoped Matter, hearing, history and audit classes; it enumerates active company IDs without membership-based omission, preserves terminal hearing states, and bounds provider-free writes. No new class, external transmission, retention rule or disposition authority is introduced. The 2026-09-15 eCourtsIndia response-decoding correction strips Content-Encoding, Content-Length and Transfer-Encoding from an in-memory provider response after httpx has already decoded the bounded body, so compressed CDN replies are decoded once instead of failing as provider errors. It changes no provider request, transmitted identifier, parsed field, persisted class, credential flow, retention duration, disposition authority, or export boundary; the Docker acceptance emulator only compresses synthetic fixture payloads. The 2026-09-10 integrated candidate adds immutable, tenant-scoped legal-hold release proposals with independent authentication and five restricted patent work-product/proceeding tables with locked application sequences and exact source manifests. They remain on registry_fail_closed; no export, purge, retention duration or patent automation is activated. Provider attempts use expiring claims and conservative spend reservations; asynchronous summary requests reuse the existing outbox/model-run owners, release transactions during external work and revalidate access, source and lifecycle before publication. The official statute bundle retains source editions, text hashes, publishers, issuing bodies and provision links; incomplete coverage remains explicit. The 2026-09-04 non-billable provider-verification change reads Indian Kanoon spend only from existing tenant-scoped BillingUsageEvent rows and returns transient daily/monthly aggregate spend plus remaining configured budget to an authorized AuthoritySearcher. The authenticated company identifier is mandatory query scope; no row-level billing evidence, provider credential, provider body, or prepaid account balance is exposed. It adds no table, column, index, storage class, provider transmission, external balance probe, retention duration, disposition authority, or export boundary. The existing billing-provider-evidence policy and tenant filtering remain authoritative. The 2026-09-03 eCourtsIndia v4 exact-search correction maps an already-admitted Case Detail response to the provider's structured caseNumbers and courtCodes filters, prefers its public registration/filing number over the packed internal caseNumber, derives a search-ready court code from a valid CNR when legacy detail data exposes only a numeric suffix, and accepts the provider's documented enum-description envelope. It omits absent optional query parameters and does not introduce a new provider call, payload class, stored field, credential flow, retention duration, disposition authority, or export boundary. The existing connector-and-payment-provider-held-records safeguards remain unchanged. The 2026-09-03 paid-provider safety change blocks eCourtsIndia and Indian Kanoon network calls for automated requests and persistent QA/test tenants before transport or billing accounting, excludes those tenants from scheduled refresh, and makes release verification reuse stored hash-verified evidence only. The same request-local automated-test marker now diverts LLM completion and embedding construction to deterministic in-process fixtures before a paid provider SDK is constructed; configured model identity and tenant allow-list enforcement remain intact, but no prompt, document content, response, or derived vector is transmitted to an external provider for those requests. The request marker is not a new data class and is held only in request-local process context; the configured tenant deny-list is operational configuration without credentials or provider payloads. No new provider transmission, storage boundary, retention duration, disposition authority, or data export is introduced. The 2026-09-02 case-tracking hardening validates provider-shaped court identifiers before external I/O and classifies billing exhaustion separately from authentication, rate limits, malformed responses, timeouts, and availability. Safe client errors never persist or expose provider bodies, credentials, balances, or secrets; the existing connector-and-payment-provider-held-records boundary, provider transmission, retention, and fail-closed disposition rules are unchanged. IPLF-066B adds durable private-event retry metadata, tenant-leading due and global maintenance indexes, a content-minimized disposition checkpoint class, bounded five-minute maintenance scheduling, fail-closed lag alerting, and the narrow private-index disposition adapter described in the completion boundary. The adapter cannot authorize itself and does not expose a new execution route; IPLF-071 remains incomplete outside this private-index subsystem. IPLF-027B adds dedicated PostgreSQL migration connection budgets and Cloud Run migration-job configuration/read-back checks over already-registered SQL classes; UJ-67-EXC-01 estimate/preflight refusal remains planned. IPLF-039F strengthens database invariants on the registered ip_cost_items class and adds tenant-scoped append-only ip_cost_item_corrections evidence with active same-tenant actor enforcement, terminal nonbillable projections, parent-owned cascade disposition, and restore-forward downgrade refusal. The 2026-09-20 private-projection maintenance correction raises the existing Cloud Run job's bounded rebuild capacity to 4 GiB and 15 minutes after production evidence showed a 10,520-matter tenant could exhaust the former 1 GiB limit; it changes no persisted class, retention, disposition authority, provider transmission, or export boundary. The 2026-10-27 self-account privacy intake adds minimized global-User request receipts with server-derived tenant routing/audit provenance, one open request per identity, fixed confirmation, duplicate-safe admission and received-only state. It does not add automatic deletion, provider transmission, email, a general data operation, approved retention period, operator fulfillment or store-policy completion.",
+  "latest_change_note": "The 2026-10-27 native read context adds four nonunique support indexes on existing registered classes: tenant/Matter/id counsel assignment and spend seeks, and tenant/recipient/created_at/id notification candidate seeks across all statuses, plus in_app_notification_id/id delivery-intent seeks that bound first/second link ambiguity checks per candidate. It adds no columns, legal content, provider transmission, retention duration, export, purge, or disposition authority. PostgreSQL creates the support indexes concurrently with exact shape/health checks and interrupted-build recovery; downgrade removes only these indexes under validated shape and transactional or exact-parent guards. The Matter counsel read projection reapplies existing tenant/team/wall/grant visibility on each bounded page, retains integer minor-unit values and separates currencies; totals explicitly describe only the returned pages. Native task/hearing observed lifecycle and child-state predicates add no persisted class or column; the keyed hearing content-state fingerprint is transient concurrency metadata, not a monotonic history counter. The 2026-10-17 IP/Calendar review retains server-owned opaque consent epochs, refresh tokens and bounded in-flight refresh claims only in the existing encrypted tenant/member Calendar connection payloads. Expired Google and Microsoft credentials are rotated at most once through their existing token endpoints, outside any database transaction; fresh actor, membership, capability, connector configuration, grant and claim checks fence encrypted publication. Revocation, newer credentials and unknown event-creation outcomes remain authoritative; a failed or uncertain POST is not blindly replayed. Cleanup may use the same bounded refresh boundary only to remove an already-authorized event, never to reactivate a grant. A fresh OAuth completion replaces the encrypted consent epoch; peer token rotation preserves it. Immutable credential receipts captured under the current authority lock prevent ORM reloads and open database transactions during provider validation. Same-account or same-timestamp replacement consent still makes an older probe stale. No additional provider content, new scope, unattended operation or secret logging is introduced. Existing in_app_notifications receipts gain recipient-owned unread/read/dismissed transitions under current IP capability, tenant/member, source, delivery-intent, parent lifecycle and ACL checks; existing read_at, audit and notification bodies are retained. Dismissal is not deletion, series cancellation or a retention policy. Tracker filters and signed tenant/member/query/policy-bound continuations are read-only request metadata and add no persisted class or export authority. Strict Calendar parsing now accepts the existing delete_pending status; truthful load errors do not change configuration or consent. Loopback-only Google/Microsoft acceptance is unavailable in production. No SQL schema, stored class, retention period, disposition, legal-source approval, billing entitlement or live consent is added. Prior review: The 2026-10-15 QA-coordination review adds bounded read-only observations of existing tenant document queues before the final QA private-index bootstrap, plus a tenant/capability-gated readiness Boolean from the actual serving API database. Metadata-only database-secret version and Cloud SQL checks bind the observer to the serving authority; secret values are never read. Minimized observer receipts and exact canonical browser discovery/results remain under existing operational-evidence owners. No new stored class, SQL schema, retention period, disposition or policy approval is introduced. Current tenant access, private activation/source/epoch, lifecycle and no-paid-provider fences remain unchanged. The 2026-10-15 reviewed runtime-configuration correction normalizes only exact protocol strings 0/1 and exact integers 0/1 for the existing document and court worker admission settings. Boolean, float, unknown and noncanonical values remain rejected; the existing protocol-1, disabled-admission, claim, tenant and no-paid-provider fences are unchanged. Real immutable-image console startup is checked offline before queue work, with disabled admission producing explicit zero-work receipts. This parsing-only change adds no stored value, SQL table/column/index, data class, storage namespace, legal-content processing purpose, provider transmission, credential flow, retention period, legal-hold rule, export boundary or disposition authority. The prior approved QA-grant review is retained unchanged: The 2026-10-14 owner-authorized test-legal manual-IP QA grant uses the existing billing_subscriptions.entitlement_overrides_json and append-only audit_events owners. It changes only ip_workspace plus the normal subscription update timestamp, preserving plan/status, other override keys, billing/provider fields, workspace configuration and GBA. Exact existing tenant/subscription identity, nonbillability, an inspected before-state hash and a retained operation UUID fence the atomic grant. An unchanged consumed operation is a no-op; revocation or state drift prevents regrant. Read-only inspection owns a bounded connection and restores SQLite query_only before that same connection is pooled. The optional guarded release control pins the exact API image and required secret versions, executes one non-recurring task with no automatic retries, and retains minimized identifiers/fingerprints and an execution-specific receipt. No legal content, contact details, credential values or provider payloads are emitted. No account/subscription creation, paid-plan upgrade, external provider request, retention change, disposition authority or default/scheduled grant is introduced. Earlier IP/Calendar, transport and notification boundary reviews remain in the canonical version history and unchanged registered owners. Contract obligations retain their canonical rows and existing tenant read policy; the new nonunique contract/id seek index supports bounded exact-contract pages without relationship fanout, added data categories or inferred dates. 2026-10-27: isolated counsel-page candidate adds synchronous derived source leaves, SQLite native key/rank members and a private current User-name directory; no ACL/retention/provider authority is added. Canonical generator/projection validation and cross-dialect acceptance remain required; the earlier8plan physical prototype is not this production candidate. The counsel candidate now accumulates private transaction scopes and refreshes derived rows at commit after existing source/audit/FK work, under a shared commit-only projection gate; a typed execution-time canonical own-write branch preserves read-before-commit semantics. Concurrency and complete work-plan acceptance remain pending. Source revision replaces the unverified global User-name range join with commit-gated current actor labels in parent leaves. It removes the unused name-directory relation and its md5 read-function addition; current User scope expansion under the same finalizer gate handles both new-parent commit orders without source/parent row locks. Queue0006 adds lossless dense Task pages and transaction-scoped deferred refresh after this actual parent-label counsel0005; runtime acceptance is separately pending.",
   "requirement_refs": [
     "DATA-GOV-01",
     "DATA-GOV-03"
@@ -146,26 +146,39 @@
     }
   },
   "table_policy_profile_overrides": {
-    "native_authorization_codes": "security_identity_control",
-    "native_device_sessions": "security_identity_control",
-    "native_refresh_tokens": "security_identity_control",
-    "ai_feedback_items": "tenant_operational_record",
-    "platform_report_admins": "security_identity_control",
-    "platform_console_sessions": "security_identity_control",
-    "platform_console_tokens": "security_identity_control",
-    "platform_console_deliveries": "security_identity_control",
     "platform_report_audit_events": "security_identity_control",
+    "private_projection_events": "security_identity_control",
+    "native_authorization_codes": "security_identity_control",
+    "ai_feedback_items": "tenant_operational_record",
+    "matter_task_queue_dirty": "tenant_operational_record",
+    "platform_console_deliveries": "security_identity_control",
+    "platform_console_sessions": "security_identity_control",
     "ip_cost_item_corrections": "tenant_restricted_legal_content",
-    "legal_hold_release_requests": "security_identity_control",
+    "matter_task_queue_groups": "tenant_operational_record",
+    "private_index_projection_scopes": "security_identity_control",
+    "native_device_sessions": "security_identity_control",
+    "platform_console_tokens": "security_identity_control",
+    "matter_task_queue_pages": "tenant_restricted_legal_content",
+    "platform_report_admins": "security_identity_control",
+    "counsel_read_page_dirty": "tenant_restricted_legal_content",
+    "account_deletion_requests": "security_identity_control",
     "private_index_generations": "security_identity_control",
     "private_index_projections": "tenant_restricted_legal_content",
-    "private_index_projection_scopes": "security_identity_control",
-    "private_projection_events": "security_identity_control",
+    "counsel_read_pages": "tenant_restricted_legal_content",
+    "tenant_data_disposition_checkpoints": "security_identity_control",
+    "native_refresh_tokens": "security_identity_control",
+    "legal_hold_release_requests": "security_identity_control",
     "private_saved_output_access": "tenant_restricted_legal_content",
-    "tenant_data_disposition_checkpoints": "security_identity_control"
+    "counsel_read_page_members": "tenant_restricted_legal_content"
   },
   "table_disposition_handler_overrides": {
-    "private_index_projections": "private_retrieval_disposition"
+    "matter_task_queue_groups": "registry_fail_closed",
+    "counsel_read_page_members": "registry_fail_closed",
+    "matter_task_queue_pages": "registry_fail_closed",
+    "private_index_projections": "private_retrieval_disposition",
+    "counsel_read_pages": "registry_fail_closed",
+    "counsel_read_page_dirty": "registry_fail_closed",
+    "matter_task_queue_dirty": "registry_fail_closed"
   },
   "column_category_overrides": {
     "user_mfa_step_ups": {
@@ -363,23 +376,75 @@
       "dispatch_protocol_version": "configuration_or_state_metadata",
       "worker_claim_token": "tenant_or_access_identifier",
       "worker_claim_expires_at": "temporal_or_version_metadata"
+    },
+    "counsel_read_pages": {
+      "note_00": "privileged_or_raw_content",
+      "note_01": "privileged_or_raw_content",
+      "note_02": "privileged_or_raw_content",
+      "note_03": "privileged_or_raw_content",
+      "note_04": "privileged_or_raw_content",
+      "note_05": "privileged_or_raw_content",
+      "note_06": "privileged_or_raw_content",
+      "note_07": "privileged_or_raw_content",
+      "note_08": "privileged_or_raw_content",
+      "note_09": "privileged_or_raw_content",
+      "note_10": "privileged_or_raw_content",
+      "note_11": "privileged_or_raw_content",
+      "note_12": "privileged_or_raw_content",
+      "note_13": "privileged_or_raw_content",
+      "note_14": "privileged_or_raw_content",
+      "note_15": "privileged_or_raw_content",
+      "note_16": "privileged_or_raw_content",
+      "note_17": "privileged_or_raw_content",
+      "note_18": "privileged_or_raw_content",
+      "note_19": "privileged_or_raw_content",
+      "note_20": "privileged_or_raw_content",
+      "note_21": "privileged_or_raw_content",
+      "note_22": "privileged_or_raw_content",
+      "note_23": "privileged_or_raw_content",
+      "note_24": "privileged_or_raw_content",
+      "payload": "privileged_or_raw_content",
+      "min_id": "tenant_or_access_identifier",
+      "max_id": "tenant_or_access_identifier",
+      "record_kind": "configuration_or_state_metadata",
+      "record_count": "configuration_or_state_metadata",
+      "page_number": "configuration_or_state_metadata"
+    },
+    "counsel_read_page_members": {
+      "source_id": "tenant_or_access_identifier",
+      "record_kind": "configuration_or_state_metadata",
+      "page_number": "configuration_or_state_metadata",
+      "slot_number": "configuration_or_state_metadata"
+    },
+    "counsel_read_page_dirty": {
+      "transaction_id": "lifecycle_or_audit_evidence",
+      "record_kind": "configuration_or_state_metadata",
+      "source_user_id": "tenant_or_access_identifier"
     }
   },
   "table_purpose_overrides": {
-    "user_mfa_step_ups": "Existing tenant/member MFA evidence additionally binds newly completed enrollment and step-up proofs to the authenticated source token issuance timestamp for native handoff. Historical proofs remain NULL and cannot satisfy native session-bound admission; there is no fabricated backfill. Browser MFA policy and separate platform factors are unchanged. No raw source token, MFA code or native credential is stored; this is authentication provenance, not new retention or disposition authority.",
+    "platform_report_audit_events": "Global security and operational report access evidence: report administrator and User identifiers, fixed action/result, bounded target identifier, timestamps and optional operator reason. It records delegation, authentication/MFA, link/delivery outcomes, revocation and report reads without copying tenant audit payloads, client documents, passwords or raw links. Free-text reasons are potentially sensitive and are not report content or a generic cross-tenant export. Existing registry_fail_closed retention/disposition restrictions remain; no automated purge or new legal hold activation is authorized.",
     "native_authorization_codes": "J20/M22 single-use browser-to-native PKCE S256 handoff receipts bound to one existing tenant membership, original browser issuance/cutoff, current MFA proof, client-reported Android/iOS platform and exact allowlisted redirect. Only a SHA-256 authorization-code digest is stored; the verifier and state are never persisted. Sixty-second default authentication expiry is not storage retention or deletion authority. The provisional caseops scheme is local-only; non-local grants require explicit native enablement, independent signing configuration and registered exact HTTPS redirects. No portal/platform grant, device attestation or production readiness is asserted.",
+    "user_mfa_step_ups": "Existing tenant/member MFA evidence additionally binds newly completed enrollment and step-up proofs to the authenticated source token issuance timestamp for native handoff. Historical proofs remain NULL and cannot satisfy native session-bound admission; there is no fabricated backfill. Browser MFA policy and separate platform factors are unchanged. No raw source token, MFA code or native credential is stored; this is authentication provenance, not new retention or disposition authority.",
+    "matter_task_queue_dirty": "Private transaction-scoped identifiers of affected company/Matter/owner groups collected for default-deferred queue refresh. Finalization deletes the same transaction dirty entries atomically, and rollback preserves source/projection consistency. This is maintenance state, not notification eligibility, client content, external transport or retention authorization.",
+    "platform_console_deliveries": "Durable, bounded pre-transport claims for report-console invitation/reset email. Only token receipt identity, claim digest/expiry, pending/accepted/failed/unknown outcome, sanitized error code and optional provider message identifier are stored. Sender inputs are captured before commit and transport owns no SQL transaction. Expired/uncertain claims are reconciled as unknown, never automatically resent. Provider acceptance is not mailbox delivery, link use or account activation. The raw one-use link is disclosed to SendGrid and the requested mailbox under the separately inventoried provider class, not persisted in this SQL class. No provider/mailbox deletion or approved retention period is added.",
+    "platform_console_sessions": "Reports-only session admission receipts: hashed random session and CSRF identities, credential/factor fingerprints, grant epoch, challenge/authenticated purpose, issue/expiry and revocation times. The independent audience/issuer and HttpOnly cookie cannot authorize tenant, portal or founder routes. Each request rechecks current grant, root, user and credential validity; MFA is required for cross-account reports. Session expiry limits authentication, not storage retention or deletion. No raw cookie, bearer token, password or MFA secret is stored here.",
+    "matter_task_queue_groups": "Derived tenant/Matter/owner group identities for the current open Matter-task queue. NULL owner is distinct from a retained empty key. No copied Matter labels, additional access grant, parent row lock, disposition or approved retention policy is introduced; current tenant, actor, Matter lifecycle/ACL and team policy are rechecked on each read.",
+    "contract_obligations": "Canonical recorded contractual obligations. Exact-contract read pages use the existing tenant read authority, preserve nullable dates and responsible people, and infer no legal due date or completion.",
     "native_device_sessions": "J20/M22 membership-owned native session families retain a random public session identifier, client-reported platform, original browser cutoff timestamp, captured MFA proof, creation/use/absolute expiry and durable revocation metadata. Every native tenant request rechecks this family plus current company, user, membership cutoff and MFA; refresh never slides the thirty-day default family expiry. Session-bound bearer authority is not a hardware-bound key or app/device attestation. Listing/revocation is caller-membership scoped and cannot grant portal/platform authority or mint browser cookies. Authentication expiry does not authorize deletion or approve a retention period.",
+    "platform_console_tokens": "Hash-only, expiring, single-use report-console invitation and password-reset receipts bound to current report grant epoch and credential fingerprint. Link consumption, revocation and issue/expiry metadata prevent stale or repeated acceptance. A pending new identity may initialize a password; an invitation to an existing identity must prove its existing credential, not silently overwrite it. Reset changes the authoritative User credential/session fence without granting tenant membership or bypassing report MFA. Link expiry is not a record deletion policy.",
+    "matter_task_queue_pages": "Lossless derived fixed 25-slot task read pages: source Task identity/title/status/priority/due date and UTC timestamps are retained without text truncation. Transactional source bridges rebuild affected groups; these private legal/operational fields inherit source restrictions and create no export, retention, purge, external-provider or budget-decision authority. Current Matter labels/lifecycle remain authoritative joins.",
+    "platform_report_admins": "Global operational reports grants linked to an existing or explicitly invited User, the configured founder provenance and, for viewers, the inviting report manager. MFA-complete managers additionally read the protected public-enquiry contact projection; report viewers receive no lead PII. Manager/viewer roles, pending/active/revoked status and credential epoch are not tenant membership, client-document access, founder billing authority or impersonation. The nullable removed_at timestamp is an access-lifecycle marker for hiding a revoked grant from the operational directory, not deletion of the User, tenant data or immutable audit history. Explicit same-issuer re-admission reuses that identity, preserves shared credentials and first-password initialization semantics, clears the directory marker and advances the grant epoch; prior links and sessions remain invalid. A separate versioned management read fences stale resend, revoke and remove commands while legacy read DTOs remain unchanged. This security class also owns encrypted realm-specific TOTP enrollment, accepted counter, hashed single-use recovery codes and bounded factor-failure lockout metadata. Passwords remain in the existing User credential class; ordinary tenant login and founder seeding do not create these grants. Named initial provisioning is a separately admitted post-release operational action, never startup seeding. No retention or disposition authority is added.",
+    "counsel_read_page_dirty": "Private transient current-transaction scope coordination for atomic counsel projection maintenance. Server-derived transaction and source scope identifiers are inserted by existing source/label triggers and removed only by the successful same-transaction deferred finalizer; rollback removes uncommitted markers. This is normal projection coordination, not retention disposition or authority to delete source/legal/audit rows. No endpoint, content payload, credentials, tenant export or independent access authority is added.",
+    "account_deletion_requests": "Minimized authenticated GLOBAL User self account-deletion-request receipts. Subject User is server-owned; originating company and membership are routing/audit provenance only, not a tenant deletion scope or authority. One received/open request per User across workspaces retains operation UUID, explicit confirmation version, authenticated tenant-web/native realm and UTC receipt time. No copied name/email, freeform request reason, legal content, password, token or provider payload is stored. Only the same authenticated User may read the receipt; tenant administrators, report-console/portal principals and other Users gain no access. Receipt intake creates one canonical audit event and no transport, queue, automatic erasure, deactivation, fulfillment, retention deadline or completion claim. Retained requests and identity/routing FKs require reviewed roll-forward disposition; the new migration refuses downgrade before DDL.",
+    "billing_subscriptions": "Existing subscription and entitlement state. The explicit test-legal-only nonbillable manual-IP operator updates the existing ip_workspace override and normal timestamp under tenant-first locking, preserving all other billing/provider/plan/status/override fields. Exact identifiers and before-state fingerprint fence one retained authorization; no default or scheduled grant, account creation or paid activation is introduced.",
+    "document_processing_jobs": "Existing tenant-scoped document execution receipts. Revision 20261010_0001 persists the no-paid request policy, conservatively true for unknown legacy jobs. Revision 20261010_0003 requires an explicit transaction-local execution identity for claim, stale recovery, finalization and lifecycle cancellation, with immutable provenance. Independent exact-image workers replace production after-response execution; this changes execution authority, not retention, export, source ownership or provider consent.",
+    "counsel_read_pages": "Synchronous PostgreSQL derived25record Matter counsel leaves. Bounded source/counsel metadata and independent native Text notes preserve source DTOs; canonical parent ACL/cursor/lifecycle remains the only read authority. No independent export, purge, permission or retention activation. Actor User names are resolved under the shared commit-only gate and stored in the same lossless canonical parent page; User dirty finalization expands current source scopes after that gate. No global identity directory is introduced.",
     "native_refresh_tokens": "J20/M22 SHA-256 digests of random rotating refresh secrets, bound to a native session family with creation, absolute expiry and single-use consumption receipts. Atomic identity/family/token locks serialize rotation; replay durably revokes the entire family before denial, including after independent identity disablement. Used digests are retained to detect replay; no raw refresh token or access token is stored. The ledger is capped at ten thousand rows per family, after which reauthentication is required. No automated purge, tenant export, external provider transmission, approved storage-retention duration or production native grant is authorized.",
     "billing_enrollments": "Existing commercial enrollments also retain durable public demo/pricing/enquiry admissions: submitted contact name/email/mobile, company, segment, selected plan, role/intent, notes, allowlisted public entry point, notice version and server admission time. The additive is_public_lead classification and created_at/id index expose proven retained enquiries, including converted historical admissions, through bounded signed pages to current MFA-complete isolated platform managers only; viewers and tenant credentials do not gain contact-data access or founder billing mutation authority. Historical classification never edits notification state. Only a fresh server admission under the enabled owner policy captures the new purpose/version/eligibility cohort in the existing demo_admission outbox; replay, migration, later activation and retry cannot upgrade legacy or disabled-period rows. Claims, lease/attempts, no-paid provenance and fixed accepted/failed/unknown outcomes remain content-free lifecycle metadata. Submitted fields stay in SQL and the protected dashboard, not notification mail. The90-day public-demo deletion proposal remains disabled and unapproved; existing commercial/account/notes/audit preservation rules are unchanged.",
-    "platform_report_admins": "Global operational reports grants linked to an existing or explicitly invited User, the configured founder provenance and, for viewers, the inviting report manager. MFA-complete managers additionally read the protected public-enquiry contact projection; report viewers receive no lead PII. Manager/viewer roles, pending/active/revoked status and credential epoch are not tenant membership, client-document access, founder billing authority or impersonation. The nullable removed_at timestamp is an access-lifecycle marker for hiding a revoked grant from the operational directory, not deletion of the User, tenant data or immutable audit history. Explicit same-issuer re-admission reuses that identity, preserves shared credentials and first-password initialization semantics, clears the directory marker and advances the grant epoch; prior links and sessions remain invalid. A separate versioned management read fences stale resend, revoke and remove commands while legacy read DTOs remain unchanged. This security class also owns encrypted realm-specific TOTP enrollment, accepted counter, hashed single-use recovery codes and bounded factor-failure lockout metadata. Passwords remain in the existing User credential class; ordinary tenant login and founder seeding do not create these grants. Named initial provisioning is a separately admitted post-release operational action, never startup seeding. No retention or disposition authority is added.",
-    "platform_console_sessions": "Reports-only session admission receipts: hashed random session and CSRF identities, credential/factor fingerprints, grant epoch, challenge/authenticated purpose, issue/expiry and revocation times. The independent audience/issuer and HttpOnly cookie cannot authorize tenant, portal or founder routes. Each request rechecks current grant, root, user and credential validity; MFA is required for cross-account reports. Session expiry limits authentication, not storage retention or deletion. No raw cookie, bearer token, password or MFA secret is stored here.",
-    "platform_console_tokens": "Hash-only, expiring, single-use report-console invitation and password-reset receipts bound to current report grant epoch and credential fingerprint. Link consumption, revocation and issue/expiry metadata prevent stale or repeated acceptance. A pending new identity may initialize a password; an invitation to an existing identity must prove its existing credential, not silently overwrite it. Reset changes the authoritative User credential/session fence without granting tenant membership or bypassing report MFA. Link expiry is not a record deletion policy.",
-    "platform_console_deliveries": "Durable, bounded pre-transport claims for report-console invitation/reset email. Only token receipt identity, claim digest/expiry, pending/accepted/failed/unknown outcome, sanitized error code and optional provider message identifier are stored. Sender inputs are captured before commit and transport owns no SQL transaction. Expired/uncertain claims are reconciled as unknown, never automatically resent. Provider acceptance is not mailbox delivery, link use or account activation. The raw one-use link is disclosed to SendGrid and the requested mailbox under the separately inventoried provider class, not persisted in this SQL class. No provider/mailbox deletion or approved retention period is added.",
-    "platform_report_audit_events": "Global security and operational report access evidence: report administrator and User identifiers, fixed action/result, bounded target identifier, timestamps and optional operator reason. It records delegation, authentication/MFA, link/delivery outcomes, revocation and report reads without copying tenant audit payloads, client documents, passwords or raw links. Free-text reasons are potentially sensitive and are not report content or a generic cross-tenant export. Existing registry_fail_closed retention/disposition restrictions remain; no automated purge or new legal hold activation is authorized.",
-    "billing_subscriptions": "Existing subscription and entitlement state. The explicit test-legal-only nonbillable manual-IP operator updates the existing ip_workspace override and normal timestamp under tenant-first locking, preserving all other billing/provider/plan/status/override fields. Exact identifiers and before-state fingerprint fence one retained authorization; no default or scheduled grant, account creation or paid activation is introduced.",
     "audit_events": "Existing audit evidence. The manual-IP QA operator inserts one deterministic, immutable receipt atomically with the existing subscription override. Minimal operation/tenant/subscription identifiers and request/before/after fingerprints preserve attribution without contact, legal or credential content. Consumed replay cannot regrant revoked access; existing retention, hold and disposition restrictions are unchanged.",
+    "counsel_read_page_members": "SQLite native-key dense25logical-page membership derived synchronously from counsel source rows. No copied names or wide notes; canonical SQLite source reader remains authoritative. No independent access or retention policy.",
     "matter_bulk_update_operations": "Tenant-scoped bulk-update operation history. Forward revision 20260925_0001 adds row_results_json to databases that applied 20260924_0001 before that column was introduced; historical rows receive an empty result list rather than invented row evidence.",
-    "document_processing_jobs": "Existing tenant-scoped document execution receipts. Revision 20261010_0001 persists the no-paid request policy, conservatively true for unknown legacy jobs. Revision 20261010_0003 requires an explicit transaction-local execution identity for claim, stale recovery, finalization and lifecycle cancellation, with immutable provenance. Independent exact-image workers replace production after-response execution; this changes execution authority, not retention, export, source ownership or provider consent.",
     "matter_court_sync_jobs": "Existing tenant-scoped official-court synchronization receipts. Revision 20261010_0002 persists the no-paid request policy, conservatively true for unknown legacy jobs. Bounded independent workers use atomic claims, expiry and fresh source, access and lifecycle revalidation; provider preparation owns no database transaction. No new court-source license, paid-provider activation, retention, disposition or export authority is introduced."
   },
   "change_controls": {
@@ -922,6 +987,60 @@
         "reviewer_user_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "account_deletion_requests",
+      "table_name": "account_deletion_requests",
+      "purpose": "Minimized authenticated GLOBAL User self account-deletion-request receipts. Subject User is server-owned; originating company and membership are routing/audit provenance only, not a tenant deletion scope or authority. One received/open request per User across workspaces retains operation UUID, explicit confirmation version, authenticated tenant-web/native realm and UTC receipt time. No copied name/email, freeform request reason, legal content, password, token or provider payload is stored. Only the same authenticated User may read the receipt; tenant administrators, report-console/portal principals and other Users gain no access. Receipt intake creates one canonical audit event and no transport, queue, automatic erasure, deactivation, fulfillment, retention deadline or completion claim. Retained requests and identity/routing FKs require reviewed roll-forward disposition; the new migration refuses downgrade before DDL.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "confirmation_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "operation_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "requested_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "subject_user_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "submitted_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "submitted_from_company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "submitted_realm": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(16)",
           "nullable": false
         }
       }
@@ -7748,7 +7867,7 @@
     {
       "id": "contract_obligations",
       "table_name": "contract_obligations",
-      "purpose": "Repository SQL persistence class `contract_obligations`; its exact column inventory is intentionally versioned below.",
+      "purpose": "Canonical recorded contractual obligations. Exact-contract read pages use the existing tenant read authority, preserve nullable dates and responsible people, and infer no legal due date or completion.",
       "policy_profile_id": "tenant_restricted_legal_content",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
@@ -8057,6 +8176,253 @@
         "updated_at": {
           "category_id": "temporal_or_version_metadata",
           "sql_type": "DATETIME",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "counsel_read_page_dirty",
+      "table_name": "counsel_read_page_dirty",
+      "purpose": "Private transient current-transaction scope coordination for atomic counsel projection maintenance. Server-derived transaction and source scope identifiers are inserted by existing source/label triggers and removed only by the successful same-transaction deferred finalizer; rollback removes uncommitted markers. This is normal projection coordination, not retention disposition or authority to delete source/legal/audit rows. No endpoint, content payload, credentials, tenant export or independent access authority is added.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "matter_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "record_kind": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "source_user_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "transaction_id": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "BIGINT",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "counsel_read_page_members",
+      "table_name": "counsel_read_page_members",
+      "purpose": "SQLite native-key dense25logical-page membership derived synchronously from counsel source rows. No copied names or wide notes; canonical SQLite source reader remains authoritative. No independent access or retention policy.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "matter_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "page_number": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "record_kind": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "slot_number": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "source_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "counsel_read_pages",
+      "table_name": "counsel_read_pages",
+      "purpose": "Synchronous PostgreSQL derived25record Matter counsel leaves. Bounded source/counsel metadata and independent native Text notes preserve source DTOs; canonical parent ACL/cursor/lifecycle remains the only read authority. No independent export, purge, permission or retention activation. Actor User names are resolved under the shared commit-only gate and stored in the same lossless canonical parent page; User dirty finalization expands current source scopes after that gate. No global identity directory is introduced.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "matter_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "max_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "min_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "note_00": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_01": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_02": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_03": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_04": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_05": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_06": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_07": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_08": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_09": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_10": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_11": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_12": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_13": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_14": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_15": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_16": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_17": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_18": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_19": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_20": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_21": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_22": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_23": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "note_24": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "page_number": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "payload": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "record_count": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "record_kind": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
           "nullable": false
         }
       }
@@ -23396,6 +23762,1013 @@
       }
     },
     {
+      "id": "matter_task_queue_dirty",
+      "table_name": "matter_task_queue_dirty",
+      "purpose": "Private transaction-scoped identifiers of affected company/Matter/owner groups collected for default-deferred queue refresh. Finalization deletes the same transaction dirty entries atomically, and rollback preserves source/projection consistency. This is maintenance state, not notification eligibility, client content, external transport or retention authorization.",
+      "policy_profile_id": "tenant_operational_record",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "matter_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "owner_is_null": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "owner_key": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "transaction_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "BIGINT",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "matter_task_queue_groups",
+      "table_name": "matter_task_queue_groups",
+      "purpose": "Derived tenant/Matter/owner group identities for the current open Matter-task queue. NULL owner is distinct from a retained empty key. No copied Matter labels, additional access grant, parent row lock, disposition or approved retention policy is introduced; current tenant, actor, Matter lifecycle/ACL and team policy are rechecked on each read.",
+      "policy_profile_id": "tenant_operational_record",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "BIGINT",
+          "nullable": false
+        },
+        "matter_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "owner_is_null": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "owner_key": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "matter_task_queue_pages",
+      "table_name": "matter_task_queue_pages",
+      "purpose": "Lossless derived fixed 25-slot task read pages: source Task identity/title/status/priority/due date and UTC timestamps are retained without text truncation. Transactional source bridges rebuild affected groups; these private legal/operational fields inherit source restrictions and create no export, retention, purge, external-provider or budget-decision authority. Current Matter labels/lifecycle remain authoritative joins.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "entry_count": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "group_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "BIGINT",
+          "nullable": false
+        },
+        "has_dated": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "has_undated": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "last_created": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "last_date": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": false
+        },
+        "last_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "last_null": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "max_dated": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "min_dated": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "page_no": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "s0_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s0_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s0_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s0_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s0_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s0_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s0_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s10_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s10_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s10_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s10_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s10_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s10_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s10_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s11_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s11_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s11_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s11_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s11_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s11_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s11_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s12_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s12_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s12_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s12_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s12_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s12_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s12_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s13_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s13_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s13_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s13_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s13_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s13_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s13_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s14_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s14_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s14_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s14_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s14_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s14_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s14_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s15_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s15_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s15_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s15_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s15_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s15_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s15_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s16_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s16_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s16_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s16_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s16_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s16_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s16_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s17_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s17_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s17_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s17_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s17_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s17_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s17_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s18_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s18_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s18_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s18_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s18_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s18_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s18_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s19_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s19_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s19_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s19_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s19_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s19_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s19_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s1_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s1_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s1_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s1_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s1_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s1_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s1_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s20_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s20_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s20_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s20_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s20_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s20_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s20_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s21_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s21_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s21_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s21_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s21_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s21_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s21_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s22_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s22_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s22_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s22_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s22_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s22_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s22_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s23_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s23_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s23_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s23_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s23_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s23_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s23_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s24_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s24_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s24_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s24_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s24_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s24_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s24_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s2_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s2_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s2_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s2_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s2_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s2_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s2_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s3_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s3_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s3_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s3_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s3_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s3_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s3_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s4_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s4_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s4_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s4_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s4_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s4_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s4_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s5_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s5_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s5_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s5_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s5_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s5_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s5_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s6_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s6_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s6_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s6_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s6_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s6_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s6_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s7_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s7_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s7_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s7_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s7_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s7_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s7_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s8_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s8_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s8_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s8_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s8_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s8_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s8_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s9_created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "s9_due_on": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "s9_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "s9_priority": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s9_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s9_title": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "s9_updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        }
+      }
+    },
+    {
       "id": "matter_tasks",
       "table_name": "matter_tasks",
       "purpose": "Repository SQL persistence class `matter_tasks`; its exact column inventory is intentionally versioned below.",
@@ -31277,12 +32650,12 @@
       }
     }
   ],
-  "schema_fingerprint": "5fd418df8fadd2d6ef436c8a43c568838e3fe595222048ae63f8163da725daac",
+  "schema_fingerprint": "0f53f3ee86ba799473f3c28e6092cb2ccd207723c4913a7f1a575c4e89a67f4d",
   "index_inventory": {
-    "orm_index_count": 1796,
-    "orm_index_fingerprint": "9ca894d82ed5f22c3aaa2ff7529a7dea06bbbfec95eabf677a0a9a7a1e58175f",
-    "migration_index_count": 1580,
-    "migration_index_fingerprint": "8301e2d8708e9c8ff7b004fa9a71e8c0eb77ebbb742aa1119aac2440ac1d93be",
+    "orm_index_count": 1810,
+    "orm_index_fingerprint": "8d2adc4d851597a0ea8599008f70eb4cd82e190deb9fecec132eef6be08d9690",
+    "migration_index_count": 1594,
+    "migration_index_fingerprint": "68ebe9159a0bf5e09b33e9c0108cec019aac7709abd4582fd1f3b48fc4e05fe8",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

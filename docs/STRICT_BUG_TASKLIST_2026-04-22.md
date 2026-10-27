@@ -1,5 +1,60 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 27 Export Release Projection Stop
+
+Dependabot65 separately reports GHSA-xcq7-p3pf-p88h in the optional
+OpenTelemetry API1.41.0 lock. The upstream first patch is1.45.1; align its SDK,
+exporter and instrumentation0.66b1 dependencies rather than upgrading only
+the incompatible API pin. Raise the optional manifest floors and regenerate
+only that dependency closure. Keep the unrelated package graph fixed. Regress
+manifest/lock floors and the actual patched parser's literal comma split with
+large space/tab inputs, plus valid context preservation. Default installs may
+honestly skip the optional parser; the all-extras CI run must execute it. No
+provider, telemetry activation or audit waiver is involved.
+
+CI40467206921/api7 failed one callback future-timestamp expectation after the
+request crossed a second: the header made at now+301 was valid at actual
+skew300. Complete native journal/JUnit and controlled two-clock reproduction
+are retained. The original test rejects at301 and reaches its worker sentinel
+at300; this is a test-clock race, not proof of authentication bypass. Freeze
+only the route clock in this test, preserve the production300-second rule and
+all seven unauthorized mutations, and cover exact inside/outside boundaries
+plus deterministic elapsed-second transitions. The complete callback module
+passes 42 cases; its one PostgreSQL case is explicitly skipped without the
+database URL and still requires the canonical Docker gate. Docker05 is
+incomplete before stack/product tests; its npm install subsequently completed
+naturally. CI's complete 35-job result has this sole failed test shard, its
+dependent aggregate failure and skipped downstream browser/staging jobs.
+
+Follow-up local frontend02 completed1906 cases:1905 passed/one failed, no skips.
+The intake invalid-code case was still showing the initial loading skeleton
+before its first button assertion. A separate controlled diagnostic reproduces
+that exact state with a successful query and one undelivered observer update;
+it is fixture-delivery evidence, not an established production intake defect.
+The unchanged seven-case intake module now explicitly delivers that boundary
+inside act, preserves its invalid-code/no-API-call assertions, clears its client
+and restores the scheduler in finally. No deadline or production code changed.
+Full replacement frontend coverage remains required with unmodified thresholds.
+Docker04 was deliberately interrupted before source editing; its retained
+incremental PG journal has no session completion and is NOT acceptance.
+
+PR565 merged as d1099288b7e61224aa06088437c7a4b207bb43b9 with accepted
+Docker tree db59d73f0a3a5875ded6e8055cd6b99186883c1e. Local acceptance is
+3425 PostgreSQL passes,1906 frontend passes and630 browser passes/10 skips.
+The canonical deploy stopped before routing at the new queue helper's runtime
+identity fence. Actual gcloud JSON projection omitted `spec.containers`
+because its repeated traversal lacked `[]`; the fake supplied absent fields.
+Cloud Tasks was still disabled and no dedicated worker secret existed in the
+read-only diagnosis. The old serving f49 remains uncertified after QA40323857026.
+
+Preserved RED: both pre-route and post-route constructor cases fail with the
+same runtime-identity error after making the fake honor repeated projection.
+Repair name/image/env traversal, retain all runtime/sidecar/ACL/main fences,
+audit adjacent projections and replay the full offline deployment rehearsal.
+Do not waive the guard or count the stopped attempt as production acceptance.
+Issue561 and independent564 remain open until complete replacement release
+evidence. The dated SEO log records today's incomplete GSC retry separately.
+
 ## October 26 Verification Marker #561
 
 Partially fixed at the local verification-client boundary; production closure

@@ -210,6 +210,35 @@ class OutsideCounselWorkspaceResponse(BaseModel):
     matter_summaries: list[OutsideCounselMatterSpendSummary]
 
 
+class MatterCounselPageCurrency(BaseModel):
+    currency: str
+    recorded_budget_minor: int
+    unpriced_assignment_count: int
+    amount_minor: int
+    approved_amount_minor: int
+    paid_amount_minor: int
+    pending_amount_minor: int
+
+
+class MatterCounselContextResponse(BaseModel):
+    """Two independent bounded pages; monetary totals describe only these pages."""
+
+    matter_id: str
+    matter_title: str
+    matter_code: str
+    matter_status: str
+    matter_is_active: bool
+    lifecycle_version: int
+    totals_scope: Literal["page"] = "page"
+    assignments: list[OutsideCounselAssignmentRecord]
+    spend_records: list[OutsideCounselSpendRecord]
+    assignment_limit: int
+    spend_limit: int
+    assignment_next_after: str | None
+    spend_next_after: str | None
+    currencies: list[MatterCounselPageCurrency]
+
+
 class OutsideCounselRecommendationRequest(BaseModel):
     matter_id: str
     limit: int = Field(default=5, ge=1, le=10)

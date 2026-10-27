@@ -2,6 +2,7 @@
 
 const LOCAL_REDIRECT = 'caseops://oauth/callback';
 const CALLBACK_PATH = '/native/oauth/callback';
+const RECORD_PATH_PREFIX = '/native/open/';
 const DISABLED_NATIVE_LINK_POLICY = Object.freeze({ mode: 'disabled' });
 const LOCAL_NATIVE_LINK_POLICY = Object.freeze({ mode: 'local', redirectUri: LOCAL_REDIRECT });
 function requireValue(ok, message) { if (!ok) throw new Error(message); }
@@ -68,12 +69,13 @@ function nativeLinkProjections(config, sha256) {
     policy,
     mobile: { ios: { bundleIdentifier: config.ios.bundleIdentifier, associatedDomains: [`applinks:${url.hostname}`] },
       android: { package: config.android.packageName, intentFilters: [{ action: 'VIEW', autoVerify: true,
-        category: ['BROWSABLE', 'DEFAULT'], data: [{ scheme: 'https', host: url.hostname, path: CALLBACK_PATH }] }] } },
+        category: ['BROWSABLE', 'DEFAULT'], data: [{ scheme: 'https', host: url.hostname, path: CALLBACK_PATH },
+          { scheme: 'https', host: url.hostname, pathPrefix: RECORD_PATH_PREFIX }] }] } },
     apiEnvironment: { CASEOPS_NATIVE_REDIRECT_URIS: JSON.stringify([config.redirectUri]) },
-    appleAppSiteAssociation: { applinks: { details: [{ appIDs: [appId], components: [{ '/': CALLBACK_PATH }] }] } },
+    appleAppSiteAssociation: { applinks: { details: [{ appIDs: [appId], components: [{ '/': CALLBACK_PATH }, { '/': `${RECORD_PATH_PREFIX}*` }] }] } },
     assetlinks: [{ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app',
       package_name: config.android.packageName, sha256_cert_fingerprints: config.android.signingCertificateSha256.map(hash => hash.toUpperCase().match(/../g).join(':')) } }],
   };
 }
-module.exports = { CALLBACK_PATH, DISABLED_NATIVE_LINK_POLICY, LOCAL_NATIVE_LINK_POLICY,
+module.exports = { CALLBACK_PATH, RECORD_PATH_PREFIX, DISABLED_NATIVE_LINK_POLICY, LOCAL_NATIVE_LINK_POLICY,
   validateNativeLinkConfig, nativeLinkPolicy, allowsNativeRedirect, nativeLinkProjections };

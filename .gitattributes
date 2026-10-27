@@ -11,3 +11,31 @@ apps/api/vendor/fastembed-0.8.0-1caseops1-py3-none-any.whl -text
 apps/api/tests/fixtures/fastembed/fastembed-0.8.0-py3-none-any.whl -text
 apps/mobile/src/viewer/generated/** text eol=lf
 apps/mobile/BUILD_TOOL_NOTICES.txt text eol=lf
+scripts/mobile/local-gateway.py text eol=lf
+scripts/mobile/local-v1-controls.py text eol=lf
+scripts/mobile/local-v1-inbox.py text eol=lf
+scripts/mobile/local-v1-inbox.test.py text eol=lf
+scripts/mobile/local-queue-privacy-controls.py text eol=lf
+scripts/mobile/local-queue-privacy-controls.test.py text eol=lf
+scripts/mobile/queue-privacy.test.py text eol=lf
+scripts/mobile/queue-privacy-controls.mjs text eol=lf
+scripts/mobile/prepare-queue-privacy-fixture.mjs text eol=lf
+scripts/mobile/run-queue-privacy.mjs text eol=lf
+apps/mobile/e2e/queue-privacy* text eol=lf
+
+apps/api/vendor/fpdf2-2.8.8/LICENSE text eol=lf
+apps/api/vendor/fpdf2-2.8.8/COPYING.GPLv3 text eol=lf
+apps/api/vendor/fpdf2-2.8.8/NOTICE.txt text eol=lf
+apps/api/vendor/fpdf2-2.8.8/provenance.json text eol=lf
+apps/api/vendor/fpdf2-2.8.8/verify.py text eol=lf
+apps/api/vendor/fpdf2-2.8.8/fpdf2-2.8.8.tar.gz -text
+
+apps/mobile/CAMERA_NOTICES.txt text eol=lf
+apps/mobile/vendor/camera-sdk58/*.txt text eol=lf
+apps/mobile/vendor/camera-sdk58/provenance.json text eol=lf
+
+# Immutable migration0006 source dependency; preserve exact SHA256 on Windows.
+apps/api/src/caseops_api/db/task_queue_page_schema_v1.py text eol=lf
+apps/api/vendor/dnspython-2.9.0/LICENSE text eol=lf
+apps/api/vendor/dnspython-2.9.0/NOTICE.txt text eol=lf
+apps/api/vendor/dnspython-2.9.0/provenance.json text eol=lf

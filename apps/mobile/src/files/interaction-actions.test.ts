@@ -135,7 +135,11 @@ function setup(
   const controller = createFilesController(api, staged, scope, [
     "documents:upload",
   ]);
-  const actions = createFilesInteractionActions(controller);
+  const actions = createFilesInteractionActions(controller, () => ({
+    picking: false,
+    revision: 0,
+    hasSelection: true,
+  }));
   const cleanup = () => {
     completions++;
     imports.cleanupPickedFile(selected.asset);
@@ -157,13 +161,13 @@ test("reentrant upload and stale clear/choose cannot delete the import during th
   const preflight = deferred<void>();
   const run = setup({ preflight: preflight.promise });
   await run.controller.activate();
-  const first = run.actions.upload(run.selected, run.cleanup);
+  const first = run.actions.upload(run.selected, run.cleanup, 0);
   assert.equal(run.controller.getSnapshot().upload.state, "preparing");
-  await run.actions.upload(run.selected, run.cleanup);
-  run.actions.clear(run.cleanup);
+  await run.actions.upload(run.selected, run.cleanup, 0);
+  run.actions.clear(run.cleanup, 0);
   run.actions.choose(() => {
     throw new Error("stale Choose must not run");
-  });
+  }, 0);
   assert.deepEqual(run.counts(), { reads: 2, posts: 0, completions: 0 });
   assert.equal(run.disk.has(run.uri), true);
   preflight.resolve();
@@ -189,14 +193,14 @@ test("the upload lease also covers acknowledged readback when its snapshot is no
       acknowledged.resolve();
   });
   await run.controller.activate();
-  const first = run.actions.upload(run.selected, run.cleanup);
+  const first = run.actions.upload(run.selected, run.cleanup, 0);
   await acknowledged.promise;
   assert.equal(run.controller.getSnapshot().view.state, "ready");
-  run.actions.clear(run.cleanup);
+  run.actions.clear(run.cleanup, 0);
   run.actions.choose(() => {
     throw new Error("pending readback must own the selection");
-  });
-  await run.actions.upload(run.selected, run.cleanup);
+  }, 0);
+  await run.actions.upload(run.selected, run.cleanup, 0);
   assert.equal(run.disk.has(run.uri), true);
   assert.equal(run.counts().completions, 0);
   readback.resolve();
@@ -209,11 +213,11 @@ test("live controller guards reject stale actions even without this helper's upl
   const run = setup({ preflight: preflight.promise });
   await run.controller.activate();
   const direct = run.controller.submit(run.selected);
-  run.actions.clear(run.cleanup);
+  run.actions.clear(run.cleanup, 0);
   run.actions.choose(() => {
     throw new Error("current preparing snapshot must block Choose");
-  });
-  await run.actions.upload(run.selected, run.cleanup);
+  }, 0);
+  await run.actions.upload(run.selected, run.cleanup, 0);
   assert.equal(run.counts().completions, 0);
   assert.equal(run.disk.has(run.uri), true);
   preflight.resolve();
@@ -225,9 +229,9 @@ test("cancel during preflight still aborts once and cleanup waits for its owned 
   const preflight = deferred<void>();
   const run = setup({ preflight: preflight.promise });
   await run.controller.activate();
-  const first = run.actions.upload(run.selected, run.cleanup);
+  const first = run.actions.upload(run.selected, run.cleanup, 0);
   run.controller.cancel();
-  run.actions.clear(run.cleanup);
+  run.actions.clear(run.cleanup, 0);
   assert.equal(run.disk.has(run.uri), true);
   preflight.resolve();
   await first;
@@ -237,7 +241,7 @@ test("cancel during preflight still aborts once and cleanup waits for its owned 
   let choices = 0;
   run.actions.choose(() => {
     choices++;
-  });
+  }, 0);
   assert.equal(choices, 1);
 });
 
@@ -245,15 +249,15 @@ test("disposal fences late completion and stale callbacks without clearing a new
   const preflight = deferred<void>();
   const run = setup({ preflight: preflight.promise });
   await run.controller.activate();
-  const first = run.actions.upload(run.selected, run.cleanup);
+  const first = run.actions.upload(run.selected, run.cleanup, 0);
   run.controller.dispose();
   preflight.resolve();
   await first;
-  run.actions.clear(run.cleanup);
+  run.actions.clear(run.cleanup, 0);
   run.actions.choose(() => {
     throw new Error("inactive Choose must not run");
-  });
-  await run.actions.upload(run.selected, run.cleanup);
+  }, 0);
+  await run.actions.upload(run.selected, run.cleanup, 0);
   assert.equal(run.controller.getSnapshot().view.state, "inactive");
   assert.deepEqual(run.counts(), { reads: 2, posts: 0, completions: 0 });
   assert.equal(run.disk.has(run.uri), true); // The root privacy owner performs its own purge.
@@ -268,7 +272,7 @@ test("an uncertain upload blocks choose and replay but permits explicit local se
       sending.resolve();
   });
   await run.controller.activate();
-  const first = run.actions.upload(run.selected, run.cleanup);
+  const first = run.actions.upload(run.selected, run.cleanup, 0);
   await sending.promise;
   run.controller.cancel();
   upload.reject(new Error("Synthetic transport outcome unknown"));
@@ -276,9 +280,9 @@ test("an uncertain upload blocks choose and replay but permits explicit local se
   assert.equal(run.controller.getSnapshot().upload.state, "unknown");
   run.actions.choose(() => {
     throw new Error("unknown upload must not select another file");
-  });
-  await run.actions.upload({ ...run.selected }, run.cleanup);
-  run.actions.clear(run.cleanup);
+  }, 0);
+  await run.actions.upload({ ...run.selected }, run.cleanup, 0);
+  run.actions.clear(run.cleanup, 0);
   assert.equal(run.counts().posts, 1);
   assert.equal(run.counts().completions, 2);
 });
@@ -286,13 +290,13 @@ test("an uncertain upload blocks choose and replay but permits explicit local se
 test("staged cleanup failure blocks choosing or uploading again without hiding the acknowledged source", async () => {
   const run = setup({ failStagedCleanup: true });
   await run.controller.activate();
-  await run.actions.upload(run.selected, run.cleanup);
+  await run.actions.upload(run.selected, run.cleanup, 0);
   assert.equal(run.controller.getSnapshot().cleanupFailed, true);
   assert.equal(run.controller.getSnapshot().upload.state, "persisted");
   run.actions.choose(() => {
     throw new Error("failed cleanup must block Choose");
-  });
-  await run.actions.upload({ ...run.selected }, run.cleanup);
+  }, 0);
+  await run.actions.upload({ ...run.selected }, run.cleanup, 0);
   assert.equal(run.counts().posts, 1);
   assert.equal(run.counts().completions, 1);
 });
@@ -301,15 +305,93 @@ test("a completion callback failure releases the lease without resubmitting its 
   const run = setup();
   await run.controller.activate();
   await assert.rejects(
-    run.actions.upload(run.selected, () => {
-      throw new Error("Synthetic root cleanup failure");
-    }),
+    run.actions.upload(
+      run.selected,
+      () => {
+        throw new Error("Synthetic root cleanup failure");
+      },
+      0,
+    ),
     /Synthetic root cleanup failure/,
   );
   let choices = 0;
   run.actions.choose(() => {
     choices++;
-  });
+  }, 0);
   assert.equal(choices, 1);
   assert.equal(run.counts().posts, 1);
+});
+
+test("clear and choose claim their synchronous lease before callbacks can reenter upload or navigation", async () => {
+  for (const method of ["clear", "choose"] as const) {
+    const run = setup();
+    await run.controller.activate();
+    let reentered = 0;
+    const uploads: Promise<void>[] = [];
+    run.actions[method](() => {
+      uploads.push(run.actions.upload(run.selected, run.cleanup, 0));
+      run.actions.clear(() => reentered++, 0);
+      run.actions.choose(() => reentered++, 0);
+      run.actions.leave(() => reentered++, 0);
+    }, 0);
+    await Promise.all(uploads);
+    assert.equal(run.counts().posts, 0);
+    assert.equal(run.counts().completions, 0);
+    assert.equal(reentered, 0);
+    assert.equal(run.disk.has(run.uri), true);
+  }
+});
+
+test("leave dispatch latches immediately so retained actions cannot run before the controller unmounts", async () => {
+  const run = setup();
+  await run.controller.activate();
+  let leaves = 0;
+  assert.equal(
+    run.actions.leave(() => leaves++, 0),
+    true,
+  );
+  assert.equal(
+    run.actions.leave(() => leaves++, 0),
+    false,
+  );
+  await run.actions.upload(run.selected, run.cleanup, 0);
+  run.actions.clear(() => {
+    throw new Error("Retained clear");
+  }, 0);
+  run.actions.choose(() => {
+    throw new Error("Retained choose");
+  }, 0);
+  assert.equal(leaves, 1);
+  assert.equal(run.counts().posts, 0);
+  assert.equal(run.disk.has(run.uri), true);
+});
+
+test("missing/malformed external selection state refuses every retained command without cleanup", async () => {
+  const run = setup();
+  await run.controller.activate();
+  for (const read of [
+    () => {
+      throw new Error("Unavailable");
+    },
+    () => ({ picking: false, revision: -1, hasSelection: false }),
+    () => ({ picking: "false", revision: 0, hasSelection: false }),
+  ]) {
+    const actions = createFilesInteractionActions(run.controller, read as any);
+    await actions.upload(run.selected, run.cleanup, 0);
+    actions.clear(() => {
+      throw new Error("Must not clear");
+    }, 0);
+    actions.choose(() => {
+      throw new Error("Must not choose");
+    }, 0);
+    assert.equal(
+      actions.leave(() => {
+        throw new Error("Must not leave");
+      }, 0),
+      false,
+    );
+  }
+  assert.equal(run.counts().posts, 0);
+  assert.equal(run.counts().completions, 0);
+  assert.equal(run.disk.has(run.uri), true);
 });

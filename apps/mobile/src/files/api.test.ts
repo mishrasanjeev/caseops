@@ -121,6 +121,7 @@ test("MOB-22 existing session JSON transport forwards multipart unchanged with n
     "http://127.0.0.1:8000",
     true,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url, init) => {
       count++;
       assert.equal(

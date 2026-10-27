@@ -1026,7 +1026,19 @@ def test_api_release_image_uses_frozen_dependencies_before_source_layers() -> No
     assert "uv export \\" in image
     assert "--frozen" in image
     assert "--no-emit-project" in image
-    assert "uv pip install --system --requirements /tmp/requirements.lock" in image
+    # Keep the frozen artifact URLs/hashes instead of resolving names again
+    # through large live Simple indexes. The local archive path is lock-relative.
+    dependencies = image[image.index("RUN uv export"):image.index("Tokenizer.from_pretrained")]
+    assert "--offline" in dependencies
+    assert "--format pylock.toml" in dependencies
+    assert "--no-hashes" not in dependencies
+    assert "--output-file /app/pylock.toml" in dependencies
+    assert "uv pip install --system --requirements /app/pylock.toml" in dependencies
+    assert "rm /app/pylock.toml" in dependencies
+    # The unchanged graph contains a source distribution whose build system
+    # still needs its normal isolated admission; do not invent binary-only closure.
+    assert "--no-index" not in dependencies
+    assert "--only-binary" not in dependencies
     assert "uv pip install --system --no-deps ." in image
     assert image.index("--frozen") < image.index("COPY src ./src")
     assert image.index("Tokenizer.from_pretrained") < image.index("COPY src ./src")

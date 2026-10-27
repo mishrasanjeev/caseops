@@ -163,7 +163,8 @@ export type Today = {
   streams: {
     key: (typeof streamKeys)[number];
     items: WorkItem[];
-    total: number | null;
+    // The API supplies the number returned after its cap, not a total count.
+    returnedCount: number | null;
     truncated: boolean | null;
   }[];
   ipActions: number;
@@ -209,7 +210,7 @@ export function decodeToday(value: unknown): Today {
       },
       100,
     );
-    const total =
+    const returnedCount =
       row.stream_counts === undefined
         ? null
         : integer(object(row.stream_counts)[key], `${key} count`);
@@ -219,9 +220,9 @@ export function decodeToday(value: unknown): Today {
         : object(row.stream_truncated)[key];
     if (flag !== null && typeof flag !== "boolean")
       throw new ContractError("stream continuation");
-    if (total !== null && total < items.length)
+    if (returnedCount !== null && returnedCount !== items.length)
       throw new ContractError("stream count");
-    return { key, items, total, truncated: flag as boolean | null };
+    return { key, items, returnedCount, truncated: flag as boolean | null };
   });
   return {
     today: dateOnly(row.today),

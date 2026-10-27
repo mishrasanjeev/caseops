@@ -7,7 +7,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { reconcileResults } from '../../apps/mobile/e2e/support.mjs';
-import { captureIosFilesCallFailure, filesCaseRecovery, knownFileSources } from './run-ios-files.mjs';
+import { captureIosFilesCallFailure, filesCaseRecovery, knownFileSources, validateIosFilesCache,
+  iosSourceAdmissionDiagnostic } from './run-ios-files.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const RUNNER = path.join(ROOT, 'scripts/mobile/run-ios-files.mjs');
@@ -23,6 +24,44 @@ function environment(t) {
   for (const key of Object.keys(env)) if (/^CASEOPS_MOBILE_.*(PASSWORD|EMAIL|TOTP_SECRET)$/.test(key)) delete env[key];
   return { reportRoot, env };
 }
+
+test('Files source admission requires the explicit cache and binds every public producer path before native work', (t) => {
+  const { reportRoot } = environment(t);
+  const manifestPath = path.join(reportRoot, 'manifest.json');
+  const manifest = { isolationReceipt: { path: path.join(reportRoot, 'original.json') },
+    baseSeed: { path: path.join(reportRoot, 'seed.json') } };
+  const fixture = { filesCache: reportRoot, isolationEvidence: { path: path.join(reportRoot, 'current.json') },
+    publicCa: { path: path.join(reportRoot, 'tls/ca.crt') }, files: {} };
+  const write = () => {
+    const bytes = Buffer.from(JSON.stringify(manifest)); writeFileSync(manifestPath, bytes);
+    fixture.files.manifestEvidence = { path: manifestPath, sha256: createHash('sha256').update(bytes).digest('hex') };
+  };
+  write(); assert.equal(validateIosFilesCache(fixture), reportRoot);
+  for (const filesCache of [undefined, null, '', 'undefined', '.', reportRoot + '/..']) {
+    assert.throws(() => validateIosFilesCache({ ...fixture, filesCache }), /IOS_FILES_EXPLICIT_ABSOLUTE_CACHE_REQUIRED/);
+  }
+  assert.throws(() => validateIosFilesCache({ ...fixture, filesCache: reportRoot + '/other' }), /IOS_FILES_RECEIPT_CACHE_MISMATCH/);
+  manifest.isolationReceipt.path = path.join(reportRoot, 'foreign/original.json'); write();
+  assert.throws(() => validateIosFilesCache(fixture), /IOS_FILES_MANIFEST_CACHE_MISMATCH/);
+  manifest.isolationReceipt.path = path.join(reportRoot, 'original.json');
+  manifest.baseSeed.path = path.join(reportRoot, 'foreign-seed.json'); write();
+  assert.throws(() => validateIosFilesCache(fixture), /IOS_FILES_SEED_CACHE_MISMATCH/);
+  manifest.baseSeed.path = path.join(reportRoot, 'seed.json'); write();
+  fixture.publicCa.path = path.join(reportRoot, 'foreign-ca.crt');
+  assert.throws(() => validateIosFilesCache(fixture), /IOS_FILES_CA_CACHE_MISMATCH/);
+});
+
+test('source helper diagnostics retain fixed failure facts without stderr, error messages or submitted values', () => {
+  assert.deepEqual(iosSourceAdmissionDiagnostic({ status: 1, stderr: JSON.stringify({
+    sourceRouteAdmitted: false, error: 'FileNotFoundError', reason: 'synthetic-secret' }) }),
+  { exitStatus: 1, timedOut: false, launchFailed: false, failureClass: 'FileNotFoundError' });
+  for (const stderr of ['synthetic-secret', '{', JSON.stringify({ sourceRouteAdmitted: false, error: 'synthetic-secret' })]) {
+    const value = iosSourceAdmissionDiagnostic({ status: null, error: { code: 'ETIMEDOUT', message: 'synthetic-secret' }, stderr });
+    assert.deepEqual(value, { exitStatus: null, timedOut: true, launchFailed: false, failureClass: 'unclassified' });
+    assert.equal(JSON.stringify(value).includes('synthetic-secret'), false);
+  }
+  assert.equal(iosSourceAdmissionDiagnostic({ status: null, error: { code: 'ENOENT' } }).launchFailed, true);
+});
 
 test('native Files failure evidence refuses credential/background/oversize surfaces before writing a protected hierarchy', async (t) => {
   const { reportRoot } = environment(t);

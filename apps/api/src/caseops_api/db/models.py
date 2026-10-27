@@ -2467,6 +2467,12 @@ class HearingReminder(Base):
 
     __tablename__ = "hearing_reminders"
     __table_args__ = (
+        Index(
+            "ix_hearing_reminder_company_hearing_generation",
+            "company_id",
+            "hearing_id",
+            "schedule_generation",
+        ),
         UniqueConstraint(
             "hearing_id",
             "recipient_membership_id",
@@ -4026,6 +4032,10 @@ class NotificationRule(Base):
 class InAppNotification(Base):
     __tablename__ = "in_app_notifications"
     __table_args__ = (
+        Index(
+            "ix_inapp_company_recipient_created_id",
+            "company_id", "recipient_membership_id", "created_at", "id",
+        ),
         UniqueConstraint(
             "recipient_membership_id",
             "event_type",
@@ -4078,6 +4088,7 @@ class InAppNotification(Base):
 class NotificationDeliveryIntent(Base):
     __tablename__ = "notification_delivery_intents"
     __table_args__ = (
+        Index("ix_notification_intent_inapp_id", "in_app_notification_id", "id"),
         UniqueConstraint(
             "company_id",
             "idempotency_key",
@@ -9619,6 +9630,7 @@ class OutsideCounsel(Base):
 class MatterOutsideCounselAssignment(Base):
     __tablename__ = "matter_outside_counsel_assignments"
     __table_args__ = (
+        Index("ix_oc_assignments_company_matter_id", "company_id", "matter_id", "id"),
         UniqueConstraint(
             "matter_id",
             "counsel_id",
@@ -9682,6 +9694,9 @@ class MatterOutsideCounselAssignment(Base):
 
 class OutsideCounselSpendRecord(Base):
     __tablename__ = "outside_counsel_spend_records"
+    __table_args__ = (
+        Index("ix_oc_spend_company_matter_id", "company_id", "matter_id", "id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -9878,6 +9893,9 @@ class ContractClause(Base):
 
 class ContractObligation(Base):
     __tablename__ = "contract_obligations"
+    __table_args__ = (
+        Index("ix_contract_obligations_contract_id_id", "contract_id", "id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     contract_id: Mapped[str] = mapped_column(
@@ -11270,6 +11288,12 @@ class Recommendation(Base):
             name="ck_recommendation_review_progress",
         ),
         Index(
+            "ix_recommendation_read_company_matter_created_id",
+            "company_id", "matter_id", "created_at", "id",
+            postgresql_where=text("type <> 'intelligent_review'"),
+            sqlite_where=text("type <> 'intelligent_review'"),
+        ),
+        Index(
             "ix_recommendations_company_review_state_created",
             "company_id",
             "review_state",
@@ -11401,6 +11425,12 @@ class Recommendation(Base):
 
 class RecommendationOption(Base):
     __tablename__ = "recommendation_options"
+    __table_args__ = (
+        Index(
+            "ix_recommendation_option_parent_rank_id",
+            "recommendation_id", "rank", "id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     recommendation_id: Mapped[str] = mapped_column(
@@ -11420,6 +11450,12 @@ class RecommendationOption(Base):
 
 class RecommendationDecision(Base):
     __tablename__ = "recommendation_decisions"
+    __table_args__ = (
+        Index(
+            "ix_recommendation_decision_parent_created_id",
+            "recommendation_id", "created_at", "id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     recommendation_id: Mapped[str] = mapped_column(
@@ -11533,6 +11569,12 @@ class HearingPack(Base):
     always review_required until a partner reviews it (PRD §17.4)."""
 
     __tablename__ = "hearing_packs"
+    __table_args__ = (
+        Index(
+            "ix_hearing_pack_matter_hearing_generated_id",
+            "matter_id", "hearing_id", "generated_at", "id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     matter_id: Mapped[str] = mapped_column(
@@ -11576,6 +11618,12 @@ class HearingPack(Base):
 
 class HearingPackItem(Base):
     __tablename__ = "hearing_pack_items"
+    __table_args__ = (
+        Index(
+            "ix_hearing_pack_item_parent_rank_id",
+            "pack_id", "rank", "id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     pack_id: Mapped[str] = mapped_column(
@@ -22528,6 +22576,13 @@ from caseops_api.db import native_auth_models  # noqa: E402
 NativeAuthorizationCode = native_auth_models.NativeAuthorizationCode
 NativeDeviceSession = native_auth_models.NativeDeviceSession
 NativeRefreshToken = native_auth_models.NativeRefreshToken
+from caseops_api.db import task_queue_page_schema_v1  # noqa: E402, F401
+from caseops_api.db.account_privacy_models import AccountDeletionRequest  # noqa: E402, F401
+from caseops_api.db.counsel_page_models import (  # noqa: E402, F401
+    CounselReadPage,
+    CounselReadPageDirty,
+    CounselReadPageMember,
+)
 from caseops_api.db.patent_proceeding_models import (  # noqa: E402, F401
     IpPatentProceedingDetail,
     IpPatentProceedingEvent,
@@ -22537,5 +22592,12 @@ from caseops_api.db.patent_prosecution_models import (  # noqa: E402, F401
     IpPatentEvidenceVersion,
     IpPatentProsecutionEvent,
 )
+from caseops_api.db.task_queue_page_models import (  # noqa: E402, F401
+    MatterTaskQueueDirty,
+    MatterTaskQueueGroup,
+    MatterTaskQueuePage,
+)
+
+event.listen(Base.metadata, "after_create", task_queue_page_schema_v1.install_model_schema)
 
 ensure_foreign_key_indexes(Base.metadata)

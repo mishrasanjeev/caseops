@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ContractError, displayDay } from "./contracts.ts";
@@ -9,6 +11,7 @@ import {
   decodeContractSource,
   decodeContractSourcePage,
   decodeIpAvailability,
+  decodeIpDocketSource,
   decodeIpPortfolioSource,
   decodeIpSourcePage,
   decodeSourceRef,
@@ -44,6 +47,23 @@ function contract(overrides: Record<string, unknown> = {}) {
     total_value_minor: 1,
     summary: null,
     created_at: stamp,
+    updated_at: stamp,
+    ...overrides,
+  };
+}
+function docket(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "synthetic-docket",
+    company_id: company,
+    matter_id: null,
+    record_type: "patent",
+    title: "Synthetic patent",
+    primary_identifier: null,
+    status: "draft",
+    is_active: true,
+    lifecycle_version: 3,
+    access_policy_version: 2,
+    current_version: 4,
     updated_at: stamp,
     ...overrides,
   };
@@ -519,26 +539,19 @@ test("IP availability follows the server's workspace_core capability/entitlement
     );
 });
 
-test("no invented contract module availability, role inference or side-effecting billing fallback", async () => {
+test("contract reads use CurrentContext rather than creator roles, billing or IP entitlement", async () => {
   const { repository, calls } = setup(
     () => assert.fail("No transport expected"),
-    ["contracts:create", "contracts:edit", "ip:write"],
+    [],
   );
   const availability = await repository.availability();
-  assert.deepEqual(availability.contract, SOURCE_GAPS.contractModule);
+  assert.deepEqual(availability.contract, { state: "available" });
   assert.equal(availability.ip_docket.state, "unavailable");
   assert.equal((await repository.ipPage()).state, "unavailable");
   assert.deepEqual(calls, []);
-  Object.assign(availability.contract, {
-    message: "Synthetic caller mutation",
-  });
-  assert.deepEqual(
-    (await repository.availability()).contract,
-    SOURCE_GAPS.contractModule,
-  );
 });
 
-test("canonical contract list/detail use one bounded GET-only page, tenant binding and opaque encoded continuation", async () => {
+test("contract list is one bounded page; exact-ID detail uses one encoded GET and same signal", async () => {
   const controller = new AbortController();
   const { repository, calls } = setup(
     (path) =>
@@ -548,7 +561,7 @@ test("canonical contract list/detail use one bounded GET-only page, tenant bindi
             contracts: [contract({ id: "contract/test" })],
             next_cursor: null,
           }
-        : assert.fail("Unbounded contract read is forbidden"),
+        : contract({ id: "contract/test" }),
     [],
   );
   await repository.contracts("a+b/c=", controller.signal);
@@ -563,7 +576,7 @@ test("canonical contract list/detail use one bounded GET-only page, tenant bindi
     calls.map((call) => call.path),
     [
       "/api/contracts/?limit=25&cursor=a%2Bb%2Fc%3D",
-      "/api/contracts/?limit=25&cursor=a%2Bb%2Fc%3D",
+      "/api/contracts/contract%2Ftest",
     ],
   );
   assert(
@@ -648,44 +661,58 @@ test("IP page and detail each refresh the real gate once, use one bounded page a
   );
 });
 
-test("bare IP deep link is explicitly unsupported, not a raw docket read, portfolio scan or fabricated Matter lookup", async () => {
-  const { repository, calls } = setup(() =>
-    assert.fail("No transport expected"),
+test("Calendar IP source rechecks readiness then reads one generic exact-ID summary without portfolio or Matter scans", async () => {
+  const controller = new AbortController();
+  const { repository, calls } = setup((path) =>
+    path === "/api/ip/readiness" ? readiness() : docket({ id: "docket/test" }),
   );
-  assert.deepEqual(await repository.detail(ipRef), SOURCE_GAPS.ipDetail);
-  assert.deepEqual(calls, []);
-});
-
-test("bare contract deep link is unsupported because the existing detail eagerly loads unbounded children", async () => {
-  const { repository, calls } = setup(() =>
-    assert.fail("No unbounded contract transport expected"),
+  const result = await repository.detail(
+    { kind: "ip_docket", id: "docket/test" },
+    undefined,
+    controller.signal,
   );
-  assert.deepEqual(
-    await repository.detail(contractRef),
-    SOURCE_GAPS.contractDetail,
-  );
-  assert.deepEqual(calls, []);
-});
-
-test("contract locator reloads the exact original page; moved sources stop without following continuation", async () => {
-  let moved = false;
-  const { repository, calls } = setup(() => ({
-    company_id: company,
-    contracts: [contract({ id: moved ? "other" : "synthetic-contract" })],
-    next_cursor: "next",
-  }));
-  assert.equal(
-    (await repository.detail(contractRef, contractLocator)).state,
-    "ready",
-  );
-  moved = true;
-  assert.deepEqual(
-    await repository.detail(contractRef, contractLocator),
-    SOURCE_GAPS.contractMoved,
-  );
+  assert.equal(result.state, "ready");
+  if (result.state === "ready") {
+    assert.ok("record_type" in result.record);
+    assert.equal(result.record.record_type, "patent");
+    assert.equal("source_renewal_due_on" in result.record, false);
+    assert.equal("application_id" in result.record, false);
+  }
   assert.deepEqual(
     calls.map((call) => call.path),
-    ["/api/contracts/?limit=25", "/api/contracts/?limit=25"],
+    ["/api/ip/readiness", "/api/ip/dockets/docket%2Ftest/summary"],
+  );
+  assert(
+    calls.every(
+      (call) =>
+        !call.init?.method &&
+        !call.init?.body &&
+        call.init?.signal === controller.signal,
+    ),
+  );
+});
+
+test("bare contract source reads and reloads current scalar DTO directly, independently of original page membership", async () => {
+  let title = "Before update";
+  const { repository, calls } = setup(() => contract({ title }));
+  const first = await repository.detail(contractRef);
+  title = "Current server title";
+  const second = await repository.detail(contractRef, contractLocator);
+  assert.equal(first.state, "ready");
+  assert.equal(second.state, "ready");
+  if (first.state === "ready" && second.state === "ready") {
+    assert.equal(
+      "title" in first.record && first.record.title,
+      "Before update",
+    );
+    assert.equal(
+      "title" in second.record && second.record.title,
+      "Current server title",
+    );
+  }
+  assert.deepEqual(
+    calls.map((call) => call.path),
+    ["/api/contracts/synthetic-contract", "/api/contracts/synthetic-contract"],
   );
 });
 
@@ -756,11 +783,7 @@ test("restricted, offline and invalid-contract outcomes remain distinct and neve
     (error) => readFailure(error).kind === "offline",
   );
   assert.equal(calls.length, 1);
-  const wrong = setup(() => ({
-    company_id: "other-tenant",
-    contracts: [contract()],
-    next_cursor: null,
-  }));
+  const wrong = setup(() => contract({ company_id: "other-tenant" }));
   await assert.rejects(
     wrong.repository.detail(contractRef, contractLocator),
     (error) => readFailure(error).kind === "contract",
@@ -769,5 +792,170 @@ test("restricted, offline and invalid-contract outcomes remain distinct and neve
   await assert.rejects(
     crossType.repository.detail(contractRef, contractLocator),
     ContractError,
+  );
+});
+
+test("generic IP summary preserves recorded type and rejects tenant/identity/inactive/type drift", () => {
+  for (const record_type of ["trademark", "patent", "design"]) {
+    const value = decodeIpDocketSource(
+      docket({ record_type }),
+      company,
+      "synthetic-docket",
+    );
+    assert.deepEqual(value, { kind: "ip_docket", ...docket({ record_type }) });
+  }
+  for (const changed of [
+    { id: "wrong" },
+    { company_id: "foreign" },
+    { is_active: false },
+    { is_active: "true" },
+    { lifecycle_version: -1 },
+    { access_policy_version: 0.5 },
+    { current_version: 0 },
+    { record_type: "" },
+    { matter_id: 42 },
+    { updated_at: "yesterday" },
+    { updated_at: "2026-10-27T01:02:03" },
+  ])
+    assert.throws(
+      () => decodeIpDocketSource(docket(changed), company, "synthetic-docket"),
+      ContractError,
+    );
+  for (const field of Object.keys(docket())) {
+    assert.throws(
+      () =>
+        decodeIpDocketSource(
+          { ...docket(), [field]: undefined },
+          company,
+          "synthetic-docket",
+        ),
+      ContractError,
+    );
+  }
+});
+
+test("generic IP deep link refuses a changed gate before summary and propagates exact transport/schema failure without retry", async () => {
+  let available = true;
+  const { repository, calls } = setup((path) =>
+    path === "/api/ip/readiness"
+      ? readiness(
+          available
+            ? {}
+            : {
+                workspace_available: false,
+                features: [
+                  feature({
+                    available: false,
+                    entitled: false,
+                    reason: "missing_entitlement",
+                  }),
+                ],
+              },
+        )
+      : docket(),
+  );
+  assert.equal((await repository.detail(ipRef)).state, "ready");
+  available = false;
+  assert.equal((await repository.detail(ipRef)).state, "unavailable");
+  assert.deepEqual(
+    calls.map((call) => call.path),
+    [
+      "/api/ip/readiness",
+      "/api/ip/dockets/synthetic-docket/summary",
+      "/api/ip/readiness",
+    ],
+  );
+  for (const value of [
+    docket({ id: "wrong" }),
+    docket({ company_id: "foreign" }),
+    docket({ is_active: false }),
+  ]) {
+    const invalid = setup((path) =>
+      path === "/api/ip/readiness" ? readiness() : value,
+    );
+    await assert.rejects(invalid.repository.detail(ipRef), ContractError);
+    assert.equal(invalid.calls.length, 2);
+  }
+  const original = new TypeError("Synthetic summary transport failure");
+  const failed = setup((path) => {
+    if (path === "/api/ip/readiness") return readiness();
+    throw original;
+  });
+  await assert.rejects(
+    failed.repository.detail(ipRef),
+    (error) => error === original,
+  );
+  assert.equal(failed.calls.length, 2);
+});
+
+// Source composition contracts; actual scroll/back/device rendering remain in
+// the separately expanded native plan, not in these source tests.
+test("Calendar source callback composes into the originating tab stack and generic IP view without fabricated application IDs", () => {
+  const file = ts.createSourceFile(
+    "MobileApplication.tsx",
+    readFileSync(
+      new URL("../application/MobileApplication.tsx", import.meta.url),
+      "utf8",
+    ),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  let calendar: ts.JsxSelfClosingElement | undefined;
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isJsxSelfClosingElement(node) &&
+      node.tagName.getText(file) === "CalendarScreen"
+    )
+      calendar = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.ok(calendar);
+  const attribute = calendar.attributes.properties.find(
+    (value) =>
+      ts.isJsxAttribute(value) && value.name.getText(file) === "openSource",
+  );
+  assert.ok(
+    attribute &&
+      ts.isJsxAttribute(attribute) &&
+      attribute.initializer &&
+      ts.isJsxExpression(attribute.initializer),
+  );
+  assert.equal(
+    attribute.initializer.expression?.getText(file),
+    '(source) => push({ type: "source", source })',
+  );
+  let list: ts.JsxSelfClosingElement | undefined;
+  const findList = (node: ts.Node) => {
+    if (
+      ts.isJsxSelfClosingElement(node) &&
+      node.tagName.getText(file) === "SourceRecordsScreen"
+    )
+      list = node;
+    ts.forEachChild(node, findList);
+  };
+  findList(file);
+  assert.ok(list);
+  const attrs = Object.fromEntries(
+    list.attributes.properties
+      .filter(ts.isJsxAttribute)
+      .map((node) => [
+        node.name.getText(file),
+        node.initializer?.getText(file),
+      ]),
+  );
+  assert.equal(attrs.kind, "{sourceKind}");
+  assert.equal(attrs.onKindChange, "{setSourceKind}");
+  const screen = readFileSync(
+    new URL("../application/screens/SourceRecordsScreen.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(screen, /repository\.contracts\(cursor, signal\)/);
+  assert.match(screen, /"record_type" in result\.record/);
+  assert.match(screen, /<IpDocketDetail record=\{result\.record\}/);
+  assert.match(
+    screen.replace(/\s+/g, " "),
+    /no dates are inferred from the Calendar event/,
   );
 });

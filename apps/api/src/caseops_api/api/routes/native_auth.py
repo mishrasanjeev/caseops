@@ -1,13 +1,16 @@
 """Native handoff uses browser authority once; token endpoints never do."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from pydantic import AfterValidator
 
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.core.console_auth import CONSOLE_SESSION_COOKIE
 from caseops_api.core.cookies import PORTAL_SESSION_COOKIE, SESSION_COOKIE
+from caseops_api.core.native_client_versions import validated_version
 from caseops_api.core.rate_limit import limiter, login_rate_limit
+from caseops_api.core.settings import get_settings
 from caseops_api.schemas.native_auth import (
     NativeAuthorizeRequest,
     NativeAuthorizeResponse,
@@ -16,11 +19,23 @@ from caseops_api.schemas.native_auth import (
     NativeTokenRequest,
     NativeTokenResponse,
 )
+from caseops_api.schemas.native_client_compatibility import NativeClientCompatibility
 from caseops_api.services import native_auth
+from caseops_api.services.native_client_compatibility import compatibility
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+
+
+@router.get("/compatibility", response_model=NativeClientCompatibility)
+def client_compatibility(
+    platform: Literal["android", "ios"],
+    client_version: Annotated[
+        str, Query(min_length=5, max_length=29), AfterValidator(validated_version),
+    ],
+) -> NativeClientCompatibility:
+    return compatibility(get_settings(), platform, client_version)
 
 
 def _token_only(request: Request) -> None:

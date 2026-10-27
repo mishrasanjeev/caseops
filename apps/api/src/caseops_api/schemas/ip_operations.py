@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from caseops_api.schemas.ip_domains import IpDomainCapability
 from caseops_api.schemas.ip_records import (
@@ -708,6 +708,23 @@ class IpCostReconciliationReport(BaseModel):
     voided_count: int = 0
     superseded_count: int = 0
     checksum_sha256: str
+
+
+class IpDocketSummaryResponse(BaseModel):
+    """Current scalar source facts, independent of IP type and child volume."""
+
+    id: str
+    company_id: str
+    matter_id: str | None
+    record_type: str
+    title: str
+    primary_identifier: str | None
+    status: str
+    is_active: bool
+    lifecycle_version: int
+    access_policy_version: int
+    current_version: int
+    updated_at: AwareDatetime
 
 
 class IpDocketRecordResponse(BaseModel):

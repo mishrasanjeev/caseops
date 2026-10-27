@@ -101,7 +101,9 @@ export function RecordRow({
       {content}
     </Pressable>
   ) : (
-    <View style={rowStyle}>{content}</View>
+    <View testID={testID} style={rowStyle}>
+      {content}
+    </View>
   );
 }
 export function Empty({ title, message }: { title: string; message: string }) {

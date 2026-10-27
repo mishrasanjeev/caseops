@@ -125,6 +125,9 @@ class Settings(BaseSettings):
     native_access_ttl_seconds: int = Field(default=300, ge=30, le=600)
     native_code_ttl_seconds: int = Field(default=60, ge=15, le=120)
     native_session_ttl_days: int = Field(default=30, ge=1, le=30)
+    # Unset defaults preserve clients deployed before the compatibility protocol.
+    native_minimum_android_version: str | None = Field(default=None, max_length=29)
+    native_minimum_ios_version: str | None = Field(default=None, max_length=29)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     # EG-002 (2026-04-23): default still True for local/dev so the
     # docker-compose stack and pytest fixtures keep their current
@@ -578,6 +581,17 @@ class Settings(BaseSettings):
         if self.api_docs_enabled is not None:
             return bool(self.api_docs_enabled)
         return not is_non_local_env(self.env)
+
+    @field_validator("native_minimum_android_version", "native_minimum_ios_version", mode="before")
+    @classmethod
+    def _validate_native_client_floor(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        from caseops_api.core.native_client_versions import version_parts
+        if type(value) is not str:
+            raise ValueError("Client version must contain three numeric components.")
+        version_parts(value)
+        return value
 
     @field_validator("activity_report_recipient_email")
     @classmethod

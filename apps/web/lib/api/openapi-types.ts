@@ -107,6 +107,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/account/deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current */
+        get: operations["current_api_account_deletion_requests_get"];
+        put?: never;
+        /** Submit */
+        post: operations["submit_api_account_deletion_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/account/deletion-requests/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read */
+        get: operations["read_api_account_deletion_requests__request_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/ai-feedback": {
         parameters: {
             query?: never;
@@ -1559,6 +1594,23 @@ export interface paths {
         put?: never;
         /** Authorize */
         post: operations["authorize_api_auth_native_authorize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/native/compatibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Client Compatibility */
+        get: operations["client_compatibility_api_auth_native_compatibility_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3856,7 +3908,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Read a bounded page of recorded contract obligations */
+        get: operations["current_contract_obligations_api_contracts__contract_id__obligations_get"];
         put?: never;
         /** Add an obligation to a contract */
         post: operations["post_current_company_contract_obligation_api_contracts__contract_id__obligations_post"];
@@ -6582,6 +6635,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Docket Summary Record */
+        get: operations["get_ip_docket_summary_record_api_ip_dockets__docket_id__summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/title-interests": {
         parameters: {
             query?: never;
@@ -9276,6 +9346,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matter-readthrough/{matter_id}/hearing-packs/{pack_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pack */
+        get: operations["pack_api_matter_readthrough__matter_id__hearing_packs__pack_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/hearing-packs/{pack_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pack Items */
+        get: operations["pack_items_api_matter_readthrough__matter_id__hearing_packs__pack_id__items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/hearings/{hearing_id}/pack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest Pack */
+        get: operations["latest_pack_api_matter_readthrough__matter_id__hearings__hearing_id__pack_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recommendations */
+        get: operations["recommendations_api_matter_readthrough__matter_id__recommendations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recommendation */
+        get: operations["recommendation_api_matter_readthrough__matter_id__recommendations__recommendation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Decisions */
+        get: operations["decisions_api_matter_readthrough__matter_id__recommendations__recommendation_id__decisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Options */
+        get: operations["options_api_matter_readthrough__matter_id__recommendations__recommendation_id__options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matter-tags/": {
         parameters: {
             query?: never;
@@ -9310,6 +9499,23 @@ export interface paths {
         head?: never;
         /** Update a matter tag */
         patch: operations["patch_current_company_matter_tag_api_matter_tags__tag_id__patch"];
+        trace?: never;
+    };
+    "/api/matter-work-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Queue */
+        get: operations["queue_api_matter_work_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/matters/": {
@@ -11666,6 +11872,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/outside-counsel/matters/{matter_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read bounded outside counsel and spend pages for one visible Matter */
+        get: operations["get_current_matter_counsel_context_api_outside_counsel_matters__matter_id__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/outside-counsel/profiles": {
         parameters: {
             query?: never;
@@ -13462,6 +13685,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/recipient-inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inbox */
+        get: operations["inbox_api_recipient_inbox_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/recipient-inbox/{notification_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change Inbox Status */
+        patch: operations["change_inbox_status_api_recipient_inbox__notification_id__patch"];
+        trace?: never;
+    };
     "/api/recommendations/{recommendation_id}/decisions": {
         parameters: {
             query?: never;
@@ -14411,6 +14668,50 @@ export interface components {
             status: string;
             /** Title */
             title: string;
+        };
+        /** AccountDeletionRequestCreate */
+        AccountDeletionRequestCreate: {
+            /**
+             * Confirmation
+             * @constant
+             */
+            confirmation: "request_account_deletion";
+            /** Operation Id */
+            operation_id: string;
+        };
+        /** AccountDeletionRequestCurrent */
+        AccountDeletionRequestCurrent: {
+            request: components["schemas"]["AccountDeletionRequestReceipt"] | null;
+        };
+        /** AccountDeletionRequestReceipt */
+        AccountDeletionRequestReceipt: {
+            /**
+             * Deletion Completed
+             * @default false
+             * @constant
+             */
+            deletion_completed: false;
+            /** Id */
+            id: string;
+            /** Operation Id */
+            operation_id: string;
+            /**
+             * Request Type
+             * @default account_deletion
+             * @constant
+             */
+            request_type: "account_deletion";
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /**
+             * Status
+             * @default received
+             * @constant
+             */
+            status: "received";
         };
         /** AccountSetupCompleteRequest */
         AccountSetupCompleteRequest: {
@@ -20831,6 +21132,54 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** ContractObligationContextPage */
+        ContractObligationContextPage: {
+            /** Company Id */
+            company_id: string;
+            /** Contract Id */
+            contract_id: string;
+            /** Limit */
+            limit: number;
+            /** Next After */
+            next_after: string | null;
+            /** Obligations */
+            obligations: components["schemas"]["ContractObligationContextRecord"][];
+            /**
+             * Ordering
+             * @default id_ascending
+             */
+            ordering: string;
+        };
+        /** ContractObligationContextRecord */
+        ContractObligationContextRecord: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Contract Id */
+            contract_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Description Truncated */
+            description_truncated: boolean;
+            /** Due On */
+            due_on: string | null;
+            /** Id */
+            id: string;
+            /** Owner Membership Id */
+            owner_membership_id: string | null;
+            /** Owner Name */
+            owner_name: string | null;
+            /** Priority */
+            priority: string;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+        };
         /** ContractObligationCreateRequest */
         ContractObligationCreateRequest: {
             /** Description */
@@ -24113,6 +24462,21 @@ export interface components {
              */
             status: "consent_required" | "no_mock_hearing_responses";
         };
+        /** HearingPackContent */
+        HearingPackContent: {
+            /** Generated By Membership Id */
+            generated_by_membership_id: string | null;
+            /** Model Run Id */
+            model_run_id: string | null;
+            /** Review Required */
+            review_required: boolean;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id: string | null;
+            /** Status */
+            status: string;
+            /** Summary */
+            summary: string;
+        };
         /**
          * HearingPackGenerateRequest
          * @description Body is empty for now — kept as a placeholder for future options
@@ -24121,6 +24485,59 @@ export interface components {
         HearingPackGenerateRequest: {
             /** Focus Note */
             focus_note?: string | null;
+        };
+        /** HearingPackItemContent */
+        HearingPackItemContent: {
+            /** Body */
+            body: string;
+            /** Item Type */
+            item_type: string;
+            /** Source Ref */
+            source_ref: string | null;
+            /** Title */
+            title: string;
+        };
+        /** HearingPackItemPage */
+        HearingPackItemPage: {
+            /** Items */
+            items: components["schemas"]["HearingPackItemRead"][];
+            /**
+             * Kind
+             * @default hearing_pack_items
+             * @constant
+             */
+            kind: "hearing_pack_items";
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Order
+             * @default rank_asc_id_asc
+             * @constant
+             */
+            order: "rank_asc_id_asc";
+            /** Parent Id */
+            parent_id: string | null;
+            scope: components["schemas"]["MatterReadScope"];
+        };
+        /** HearingPackItemRead */
+        HearingPackItemRead: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Rank */
+            rank: number;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["HearingPackItemContent"] | null;
         };
         /** HearingPackItemRecord */
         HearingPackItemRecord: {
@@ -24144,6 +24561,27 @@ export interface components {
             source_ref: string | null;
             /** Title */
             title: string;
+        };
+        /** HearingPackRead */
+        HearingPackRead: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Hearing Id */
+            hearing_id: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["HearingPackContent"] | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            scope: components["schemas"]["MatterReadScope"];
         };
         /** HearingPackRecord */
         HearingPackRecord: {
@@ -24711,6 +25149,55 @@ export interface components {
             event_id?: string | null;
             /** Status */
             status: ("new" | "linked_metadata" | "content_import_requested" | "content_imported" | "ignored" | "rejected" | "failed") | "rejected";
+        };
+        /** InboxPage */
+        InboxPage: {
+            /** History Exhausted */
+            history_exhausted: boolean;
+            /** Items */
+            items?: components["schemas"]["InboxRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Scope
+             * @default delivered_hearing_and_ip_renewal
+             * @constant
+             */
+            scope: "delivered_hearing_and_ip_renewal";
+        };
+        /** InboxRecord */
+        InboxRecord: {
+            /** Body */
+            body: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Read At */
+            read_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "unread" | "read" | "dismissed";
+            target: components["schemas"]["InboxTarget"];
+            /** Target Label */
+            target_label: string | null;
+            /** Title */
+            title: string;
+        };
+        /** InboxTarget */
+        InboxTarget: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "matter" | "ip_docket";
         };
         /** IndianKanoonAttribution */
         IndianKanoonAttribution: {
@@ -28132,6 +28619,39 @@ export interface components {
             title: string;
             /** Title Interests */
             title_interests?: components["schemas"]["IpTitleInterestRecord"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * IpDocketSummaryResponse
+         * @description Current scalar source facts, independent of IP type and child volume.
+         */
+        IpDocketSummaryResponse: {
+            /** Access Policy Version */
+            access_policy_version: number;
+            /** Company Id */
+            company_id: string;
+            /** Current Version */
+            current_version: number;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Primary Identifier */
+            primary_identifier: string | null;
+            /** Record Type */
+            record_type: string;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
             /**
              * Updated At
              * Format: date-time
@@ -38095,6 +38615,61 @@ export interface components {
             /** Submitted At */
             submitted_at?: string | null;
         };
+        /**
+         * MatterCounselContextResponse
+         * @description Two independent bounded pages; monetary totals describe only these pages.
+         */
+        MatterCounselContextResponse: {
+            /** Assignment Limit */
+            assignment_limit: number;
+            /** Assignment Next After */
+            assignment_next_after: string | null;
+            /** Assignments */
+            assignments: components["schemas"]["OutsideCounselAssignmentRecord"][];
+            /** Currencies */
+            currencies: components["schemas"]["MatterCounselPageCurrency"][];
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Is Active */
+            matter_is_active: boolean;
+            /** Matter Status */
+            matter_status: string;
+            /** Matter Title */
+            matter_title: string;
+            /** Spend Limit */
+            spend_limit: number;
+            /** Spend Next After */
+            spend_next_after: string | null;
+            /** Spend Records */
+            spend_records: components["schemas"]["OutsideCounselSpendRecord"][];
+            /**
+             * Totals Scope
+             * @default page
+             * @constant
+             */
+            totals_scope: "page";
+        };
+        /** MatterCounselPageCurrency */
+        MatterCounselPageCurrency: {
+            /** Amount Minor */
+            amount_minor: number;
+            /** Approved Amount Minor */
+            approved_amount_minor: number;
+            /** Currency */
+            currency: string;
+            /** Paid Amount Minor */
+            paid_amount_minor: number;
+            /** Pending Amount Minor */
+            pending_amount_minor: number;
+            /** Recorded Budget Minor */
+            recorded_budget_minor: number;
+            /** Unpriced Assignment Count */
+            unpriced_assignment_count: number;
+        };
         /** MatterCourtOrderCreateRequest */
         MatterCourtOrderCreateRequest: {
             /** Bench Name */
@@ -38870,6 +39445,8 @@ export interface components {
         MatterHearingCreateRequest: {
             /** Escalation Membership Id */
             escalation_membership_id?: string | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version?: number | null;
             /** Forum Name */
             forum_name: string;
             /**
@@ -38969,6 +39546,11 @@ export interface components {
             hearing_time: string | null;
             /** Id */
             id: string;
+            /**
+             * Immutable Lifecycle History
+             * @default false
+             */
+            immutable_lifecycle_history: boolean;
             /** Judge Name */
             judge_name: string | null;
             /** Matter Id */
@@ -38977,6 +39559,8 @@ export interface components {
             outcome_note: string | null;
             /** Purpose */
             purpose: string;
+            /** Record Version */
+            record_version?: string | null;
             /** Reminder Policy */
             reminder_policy: {
                 [key: string]: unknown;
@@ -39000,6 +39584,10 @@ export interface components {
         MatterHearingUpdateRequest: {
             /** Create Follow Up */
             create_follow_up?: boolean | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version?: number | null;
+            /** Expected Record Version */
+            expected_record_version?: string | null;
             /** Hearing On */
             hearing_on?: string | null;
             /** Hearing Time */
@@ -39270,6 +39858,19 @@ export interface components {
             id: string;
             /** Matter Id */
             matter_id: string;
+        };
+        /** MatterReadScope */
+        MatterReadScope: {
+            /** Company Id */
+            company_id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Is Active */
+            matter_is_active: boolean;
+            /** Matter Lifecycle Version */
+            matter_lifecycle_version: number;
+            /** Matter Status */
+            matter_status: string;
         };
         /**
          * MatterRecord
@@ -39710,6 +40311,8 @@ export interface components {
             description?: string | null;
             /** Due On */
             due_on?: string | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version?: number | null;
             /** Owner Membership Id */
             owner_membership_id?: string | null;
             /**
@@ -39758,6 +40361,11 @@ export interface components {
             due_on: string | null;
             /** Id */
             id: string;
+            /**
+             * Immutable Lifecycle History
+             * @default false
+             */
+            immutable_lifecycle_history: boolean;
             /** Matter Id */
             matter_id: string;
             /** Owner Membership Id */
@@ -39798,6 +40406,10 @@ export interface components {
             description?: string | null;
             /** Due On */
             due_on?: string | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version?: number | null;
+            /** Expected Updated At */
+            expected_updated_at?: string | null;
             /** Owner Membership Id */
             owner_membership_id?: string | null;
             /** Priority */
@@ -39958,6 +40570,41 @@ export interface components {
             temporary_e_case_number?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /** MatterWorkQueuePage */
+        MatterWorkQueuePage: {
+            /**
+             * Dates
+             * @enum {string}
+             */
+            dates: "all" | "dated" | "undated";
+            /** Due From */
+            due_from: string | null;
+            /** Due To */
+            due_to: string | null;
+            /** Items */
+            items: components["schemas"]["WorkQueueTask"][];
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Ownership
+             * @enum {string}
+             */
+            ownership: "mine" | "team" | "unassigned";
+            /**
+             * Scope
+             * @default matter_tasks
+             * @constant
+             */
+            scope: "matter_tasks";
+            /**
+             * Sort
+             * @default due_on_created_at_id
+             * @constant
+             */
+            sort: "due_on_created_at_id";
         };
         /** MatterWorkspaceMembership */
         MatterWorkspaceMembership: {
@@ -40545,6 +41192,29 @@ export interface components {
             redirect_uri: string;
             /** State */
             state: string;
+        };
+        /** NativeClientCompatibility */
+        NativeClientCompatibility: {
+            /** Client Version */
+            client_version: string;
+            /** Minimum Supported Version */
+            minimum_supported_version: string | null;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "android" | "ios";
+            /**
+             * Protocol Version
+             * @default 1
+             * @constant
+             */
+            protocol_version: 1;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "supported" | "update_required";
         };
         /** NativeRefreshRequest */
         NativeRefreshRequest: {
@@ -45419,6 +46089,84 @@ export interface components {
             /** Suggested Actions */
             suggested_actions?: string[];
         };
+        /** RecommendationContent */
+        RecommendationContent: {
+            analysis: components["schemas"]["RecommendationAnalysisRecord"] | null;
+            /** Assumptions */
+            assumptions: string[];
+            /** Confidence */
+            confidence: string;
+            /** Missing Facts */
+            missing_facts: string[];
+            /** Next Action */
+            next_action: string | null;
+            /** Primary Option Index */
+            primary_option_index: number;
+            /** Rationale */
+            rationale: string;
+            /** Retrieved Authorities */
+            retrieved_authorities: string[];
+            /** Review Required */
+            review_required: boolean;
+            /** Status */
+            status: string;
+            strategy_payload: components["schemas"]["LitigationStrategyPayload"] | null;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+        };
+        /** RecommendationDecisionContent */
+        RecommendationDecisionContent: {
+            /** Actor Membership Id */
+            actor_membership_id: string | null;
+            /** Decision */
+            decision: string;
+            /** Notes */
+            notes: string | null;
+            /** Selected Option Index */
+            selected_option_index: number | null;
+        };
+        /** RecommendationDecisionPage */
+        RecommendationDecisionPage: {
+            /** Items */
+            items: components["schemas"]["RecommendationDecisionRead"][];
+            /**
+             * Kind
+             * @default recommendation_decisions
+             * @constant
+             */
+            kind: "recommendation_decisions";
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Order
+             * @default created_at_desc_id_desc
+             * @constant
+             */
+            order: "created_at_desc_id_desc";
+            /** Parent Id */
+            parent_id: string | null;
+            scope: components["schemas"]["MatterReadScope"];
+        };
+        /** RecommendationDecisionRead */
+        RecommendationDecisionRead: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["RecommendationDecisionContent"] | null;
+        };
         /** RecommendationDecisionRecord */
         RecommendationDecisionRecord: {
             /** Actor Membership Id */
@@ -45452,6 +46200,28 @@ export interface components {
             /** Selected Option Index */
             selected_option_index?: number | null;
         };
+        /** RecommendationDetail */
+        RecommendationDetail: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["RecommendationContent"] | null;
+            scope: components["schemas"]["MatterReadScope"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** RecommendationGenerateRequest */
         RecommendationGenerateRequest: {
             /** Custom Goal */
@@ -45474,6 +46244,69 @@ export interface components {
             /** Recommendations */
             recommendations: components["schemas"]["RecommendationRecord"][];
         };
+        /** RecommendationMetadata */
+        RecommendationMetadata: {
+            /** Confidence */
+            confidence: string;
+            /** Review Required */
+            review_required: boolean;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+        };
+        /** RecommendationOptionContent */
+        RecommendationOptionContent: {
+            /** Confidence */
+            confidence: string;
+            /** Label */
+            label: string;
+            /** Rationale */
+            rationale: string;
+            /** Risk Notes */
+            risk_notes: string | null;
+            /** Supporting Citations */
+            supporting_citations: string[];
+        };
+        /** RecommendationOptionPage */
+        RecommendationOptionPage: {
+            /** Items */
+            items: components["schemas"]["RecommendationOptionRead"][];
+            /**
+             * Kind
+             * @default recommendation_options
+             * @constant
+             */
+            kind: "recommendation_options";
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Order
+             * @default rank_asc_id_asc
+             * @constant
+             */
+            order: "rank_asc_id_asc";
+            /** Parent Id */
+            parent_id: string | null;
+            scope: components["schemas"]["MatterReadScope"];
+        };
+        /** RecommendationOptionRead */
+        RecommendationOptionRead: {
+            /** Id */
+            id: string;
+            /** Rank */
+            rank: number;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["RecommendationOptionContent"] | null;
+        };
         /** RecommendationOptionRecord */
         RecommendationOptionRecord: {
             /**
@@ -45493,6 +46326,30 @@ export interface components {
             risk_notes: string | null;
             /** Supporting Citations */
             supporting_citations: string[];
+        };
+        /** RecommendationPage */
+        RecommendationPage: {
+            /** Items */
+            items: components["schemas"]["RecommendationSummary"][];
+            /**
+             * Kind
+             * @default recommendations
+             * @constant
+             */
+            kind: "recommendations";
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Order
+             * @default created_at_desc_id_desc
+             * @constant
+             */
+            order: "created_at_desc_id_desc";
+            /** Parent Id */
+            parent_id: string | null;
+            scope: components["schemas"]["MatterReadScope"];
         };
         /** RecommendationRecord */
         RecommendationRecord: {
@@ -45542,6 +46399,27 @@ export interface components {
              * @enum {string}
              */
             type: "forum" | "authority" | "remedy" | "next_best_action" | "litigation_strategy";
+        };
+        /** RecommendationSummary */
+        RecommendationSummary: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["RecommendationMetadata"] | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * RecommendedDraft
@@ -48967,6 +49845,59 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** WorkQueueMatter */
+        WorkQueueMatter: {
+            /** Id */
+            id: string;
+            /**
+             * Is Active
+             * @constant
+             */
+            is_active: true;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Matter Code */
+            matter_code: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "intake" | "active" | "on_hold";
+            /** Title */
+            title: string;
+        };
+        /** WorkQueueTask */
+        WorkQueueTask: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Due On */
+            due_on: string | null;
+            /** Id */
+            id: string;
+            matter: components["schemas"]["WorkQueueMatter"];
+            /** Owner Membership Id */
+            owner_membership_id: string | null;
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "low" | "medium" | "high" | "urgent";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "todo" | "in_progress" | "blocked";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** WorkspaceAssistantFeedbackCreateRequest */
         WorkspaceAssistantFeedbackCreateRequest: {
             /** Category */
@@ -49213,6 +50144,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TargetPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_api_account_deletion_requests_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountDeletionRequestCurrent"];
+                };
+            };
+        };
+    };
+    submit_api_account_deletion_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountDeletionRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountDeletionRequestReceipt"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_api_account_deletion_requests__request_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountDeletionRequestReceipt"];
                 };
             };
             /** @description Validation Error */
@@ -52170,6 +53185,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NativeAuthorizeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_compatibility_api_auth_native_compatibility_get: {
+        parameters: {
+            query: {
+                client_version: string;
+                platform: "android" | "ios";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeClientCompatibility"];
                 };
             };
             /** @description Validation Error */
@@ -56667,6 +57714,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContractRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_contract_obligations_api_contracts__contract_id__obligations_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractObligationContextPage"];
                 };
             };
             /** @description Validation Error */
@@ -62361,6 +63442,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpRenewalTermRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_docket_summary_record_api_ip_dockets__docket_id__summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketSummaryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -68324,6 +69436,241 @@ export interface operations {
             };
         };
     };
+    pack_api_matter_readthrough__matter_id__hearing_packs__pack_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                pack_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HearingPackRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pack_items_api_matter_readthrough__matter_id__hearing_packs__pack_id__items_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+                pack_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HearingPackItemPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_pack_api_matter_readthrough__matter_id__hearings__hearing_id__pack_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hearing_id: string;
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HearingPackRead"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recommendations_api_matter_readthrough__matter_id__recommendations_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recommendation_api_matter_readthrough__matter_id__recommendations__recommendation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                recommendation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decisions_api_matter_readthrough__matter_id__recommendations__recommendation_id__decisions_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+                recommendation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationDecisionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    options_api_matter_readthrough__matter_id__recommendations__recommendation_id__options_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+                recommendation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationOptionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_current_company_matter_tags_api_matter_tags__get: {
         parameters: {
             query?: never;
@@ -68428,6 +69775,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatterTagRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    queue_api_matter_work_queue_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                dates?: "all" | "dated" | "undated";
+                due_from?: string | null;
+                due_to?: string | null;
+                limit?: number;
+                ownership?: "mine" | "team" | "unassigned";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterWorkQueuePage"];
                 };
             };
             /** @description Validation Error */
@@ -73461,6 +74844,42 @@ export interface operations {
             };
         };
     };
+    get_current_matter_counsel_context_api_outside_counsel_matters__matter_id__context_get: {
+        parameters: {
+            query?: {
+                assignment_after?: string | null;
+                assignment_limit?: number;
+                spend_after?: string | null;
+                spend_limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterCounselContextResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_current_company_outside_counsel_profile_api_outside_counsel_profiles_post: {
         parameters: {
             query?: never;
@@ -76784,6 +78203,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductGuideSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inbox_api_recipient_inbox_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+                view?: "active" | "dismissed";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_inbox_status_api_recipient_inbox__notification_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InAppNotificationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxRecord"];
                 };
             };
             /** @description Validation Error */

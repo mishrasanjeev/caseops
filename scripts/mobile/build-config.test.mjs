@@ -93,7 +93,8 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs',
     'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
     'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/forge-security.test.mjs',
-    'scripts/mobile/prepare-source-exports.test.mjs'];
+    'scripts/mobile/prepare-source-exports.test.mjs', 'apps/mobile/e2e/v1-workflows.test.mjs',
+    'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
@@ -102,6 +103,11 @@ test('mobile CI selects every tooling module and audits before either platform e
   const fixturePreparation = steps.find(step => step.name === 'Verify isolated fixture preparation and gateway');
   assert.equal(fixturePreparation?.run, 'python3 scripts/mobile/local-fixture.test.py');
   const filesFixtureCommands = [
+    ['Verify disabled-by-default synthetic V1 controls', 'python3 scripts/mobile/local-v1-controls.test.py'],
+    ['Verify separate queue and account-request controls', 'python3 scripts/mobile/local-queue-privacy-controls.test.py'],
+    ['Verify independent queue and account-request inventory', 'python3 scripts/mobile/queue-privacy.test.py'],
+    ['Verify the scoped canonical in-app Inbox fixture worker', 'python3 scripts/mobile/local-v1-inbox.test.py'],
+    ['Verify the independent complete V1 source inventory', 'python3 scripts/mobile/v1-workflows.test.py'],
     ['Verify synthetic iOS Files picker inputs', 'python3 scripts/mobile/prepare-ios-files-fixture.test.py'],
     ['Verify acknowledged iOS Files source admission', 'python3 scripts/mobile/admit-ios-file-source.test.py'],
     ['Verify synthetic Android Files picker inputs', 'python3 scripts/mobile/prepare-android-files-fixture.test.py'],
@@ -126,6 +132,20 @@ test('mobile CI selects every tooling module and audits before either platform e
   for (const command of ['npm run export:android', 'npm run export:ios']) {
     const exporting = steps.findIndex(step => step.run === command);
     assert.ok(exporting > audit, 'DEPENDENCY_AUDIT_MUST_PRECEDE_PLATFORM_EXPORT');
+  }
+});
+
+test('hash-bound local gateway inputs retain canonical LF checkout and stored Git bytes', () => {
+  for (const relative of ['scripts/mobile/local-gateway.py', 'scripts/mobile/local-v1-controls.py', 'scripts/mobile/local-v1-inbox.py', 'scripts/mobile/local-v1-inbox.test.py',
+    'scripts/mobile/local-queue-privacy-controls.py', 'scripts/mobile/local-queue-privacy-controls.test.py', 'scripts/mobile/queue-privacy.test.py']) {
+    const attributes = execFileSync('git', ['check-attr', 'text', 'eol', '--', relative], { cwd: repo, encoding: 'utf8' });
+    assert.equal(attributes, `${relative}: text: set\n${relative}: eol: lf\n`);
+    const stored = execFileSync('git', ['show', `:${relative}`], { cwd: repo });
+    const current = readFileSync(path.join(repo, relative));
+    assert.equal(stored.includes(13), false, 'STORED_GATEWAY_CR_FORBIDDEN');
+    assert.equal(current.includes(13), false, 'CHECKOUT_GATEWAY_CR_FORBIDDEN');
+    assert.equal(stored.length > 0 && current.length > 0, true);
+    assert.equal(digest(stored), digest(current), 'EXACT_STORED_GATEWAY_BYTES_REQUIRED');
   }
 });
 
@@ -384,6 +404,11 @@ test('complete immutable structural config projects exactly matching mobile, web
   assert.deepEqual(JSON.parse(p.apiEnvironment.CASEOPS_NATIVE_REDIRECT_URIS), [config.extra.nativeLinkPolicy.redirectUri]);
   assert.deepEqual(Object.keys(p.apiEnvironment), ['CASEOPS_NATIVE_REDIRECT_URIS']);
   assert.deepEqual(p.appleAppSiteAssociation.applinks.details[0].appIDs, ['X9Y8Z7W6V5.ai.caseops.mobile']);
+  assert.deepEqual(p.appleAppSiteAssociation.applinks.details[0].components,
+    [{ '/': '/native/oauth/callback' }, { '/': '/native/open/*' }]);
+  assert.deepEqual(config.android.intentFilters[0].data,
+    [{ scheme: 'https', host: 'native.caseops.ai', path: '/native/oauth/callback' },
+      { scheme: 'https', host: 'native.caseops.ai', pathPrefix: '/native/open/' }]);
   assert.equal(p.assetlinks[0].target.package_name, config.android.package);
   assert.deepEqual(p.assetlinks[0].target.sha256_cert_fingerprints, [f.config.android.signingCertificateSha256[0].toUpperCase().match(/../g).join(':')]);
   assert.equal(config.extra.nativeLinkPolicy.configSha256, digest(f.bytes));
@@ -501,12 +526,13 @@ test('iOS simulator acceptance has a distinct ID, HTTPS, marker and no Android C
   assert.equal(config.android.package, 'ai.caseops.mobile.dev');
 });
 
-test('actual Expo native manifest projection blocks only unused inherited permissions and omits an unused camera claim', t => {
+test('actual Expo native manifest projection allows explicit camera capture and blocks microphone and inherited media storage permissions', t => {
   const android = fixture(t), production = publicLinkFixture(t, false);
   const ios = { CASEOPS_MOBILE_BUILD_PROFILE: plugin.IOS_PROFILE, CASEOPS_MOBILE_AUTOMATED_TEST: '1',
     CASEOPS_MOBILE_RELEASE_SHA: sha, EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443' };
   const blocked = ['android.permission.SYSTEM_ALERT_WINDOW', 'android.permission.READ_MEDIA_IMAGES',
-    'android.permission.READ_EXTERNAL_STORAGE', 'android.permission.WRITE_EXTERNAL_STORAGE'];
+    'android.permission.READ_EXTERNAL_STORAGE', 'android.permission.WRITE_EXTERNAL_STORAGE',
+    'android.permission.RECORD_AUDIO'];
   for (const env of [android.env, ios, { ...production.env, NODE_ENV: 'production' }]) {
     const config = expoConfig(env, 'introspect');
     assert.deepEqual(config.android.blockedPermissions, blocked);
@@ -517,8 +543,13 @@ test('actual Expo native manifest projection blocks only unused inherited permis
       assert.equal(permissions.find(row => row.$['android:name'] === name).$['tools:node'], 'remove');
     }
     assert.ok(permissions.some(row => row.$['android:name'] === 'android.permission.INTERNET' && row.$['tools:node'] !== 'remove'));
-    assert.equal(config._internal.modResults.ios.infoPlist.NSCameraUsageDescription, undefined);
-    assert.equal(config.ios.infoPlist.NSCameraUsageDescription, undefined);
+    assert.ok(permissions.some(row => row.$['android:name'] === 'android.permission.CAMERA' && row.$['tools:node'] !== 'remove'));
+    assert.equal(config._internal.modResults.ios.infoPlist.NSCameraUsageDescription,
+      'Allow CaseOps to take a photo you choose to attach to a matter.');
+    assert.equal(config._internal.modResults.ios.infoPlist.NSPhotoLibraryUsageDescription, undefined);
+    assert.equal(config._internal.modResults.ios.infoPlist.NSMicrophoneUsageDescription, undefined);
+    assert.equal(config._internal.modResults.ios.infoPlist.NSFaceIDUsageDescription,
+      'Use Face ID to unlock CaseOps when you enable biometric screen lock.');
   }
 });
 

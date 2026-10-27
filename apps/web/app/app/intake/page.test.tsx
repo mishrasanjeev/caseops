@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { defaultScheduler, notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -146,21 +146,47 @@ describe("IntakePage", () => {
       ],
     });
 
-    render(withClient(<IntakePage />));
-    await user.click(await screen.findByRole("button", { name: /Cheque bounce request/i }));
-    await user.click(await screen.findByRole("button", { name: /Promote to matter/i }));
-    // Enter the invalid code in one input event: typed keystroke by keystroke,
-    // "BAD" is a valid prefix whose availability check is legitimate if the
-    // debounce elapses mid-typing, which made this assertion timing-dependent.
-    await user.click(screen.getByTestId("intake-promote-code"));
-    await user.paste("BAD CODE/1");
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const notifications: Array<() => void> = [];
+    notifyManager.setScheduler(callback => {
+      expect(notifications.length).toBeLessThan(8);
+      notifications.push(callback);
+    });
+    let view: Pick<ReturnType<typeof render>, "unmount"> | undefined;
+    try {
+      expect(vi.isFakeTimers()).toBe(false);
+      view = render(<QueryClientProvider client={client}><IntakePage /></QueryClientProvider>);
+      expect(listIntakeMock).toHaveBeenCalledTimes(1);
+      await act(async () => { await listIntakeMock.mock.results[0].value; });
+      expect(client.getQueryState(["intake", "requests", "all"])?.status).toBe("success");
+      expect(screen.queryByRole("button", { name: /Cheque bounce request/i })).toBeNull();
+      expect(notifications).toHaveLength(1);
+      // Settling the fixture does not deliver the query observer's update.
+      await act(async () => { notifications.splice(0).forEach(callback => callback()); });
+      expect(notifications).toHaveLength(0);
+      await user.click(screen.getByRole("button", { name: /Cheque bounce request/i }));
+      await user.click(await screen.findByRole("button", { name: /Promote to matter/i }));
+      // One event avoids a legitimate check for the valid intermediate "BAD".
+      await user.click(screen.getByTestId("intake-promote-code"));
+      await user.paste("BAD CODE/1");
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      /letters, numbers, and hyphens only/i,
-    );
-    expect(screen.getByTestId("intake-promote-confirm")).toBeDisabled();
-    expect(checkMatterCodeAvailableMock).not.toHaveBeenCalled();
-    expect(promoteIntakeMock).not.toHaveBeenCalled();
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        /letters, numbers, and hyphens only/i,
+      );
+      expect(screen.getByTestId("intake-promote-confirm")).toBeDisabled();
+      expect(checkMatterCodeAvailableMock).not.toHaveBeenCalled();
+      expect(promoteIntakeMock).not.toHaveBeenCalled();
+    } finally {
+      try { view?.unmount(); } finally {
+        try { client.clear(); } finally {
+          notifications.length = 0;
+          notifyManager.setScheduler(defaultScheduler);
+        }
+      }
+    }
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
   });
 });
 

@@ -2,6 +2,8 @@
 
 import http.client
 import hashlib
+import stat
+from types import ModuleType
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -26,6 +28,91 @@ BROWSER_ROUTES = {
 HOP = {"connection", "keep-alive", "transfer-encoding", "upgrade", "proxy-authorization", "proxy-authenticate"}
 
 
+_SOURCE_METADATA = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+
+
+def source_named_identity_equal(descriptor, named, platform_name=os.name):
+    # Windows may expose a different device ID through lstat and fstat. This
+    # exception is only cross-API: both full descriptor observations and both
+    # full named observations must still remain identical in runtime_source_bytes.
+    keys = tuple(key for key in _SOURCE_METADATA if platform_name != "nt" or key != "st_dev")
+    return all(getattr(descriptor, key) == getattr(named, key) for key in keys)
+
+
+def runtime_source_bytes(path, expected=None):
+    """Hash and consume exactly one held, bounded, canonical source descriptor."""
+    path = Path(path)
+    assert path.is_absolute() and path.resolve() == path, "V1_RUNTIME_CANONICAL_SOURCE_REQUIRED"
+    metadata = lambda value: tuple(getattr(value, key) for key in _SOURCE_METADATA)
+    def ancestors():
+        result = []
+        for parent in reversed(path.parents):
+            value = parent.lstat()
+            assert stat.S_ISDIR(value.st_mode) and not stat.S_ISLNK(value.st_mode)
+            result.append((str(parent), metadata(value)))
+        return result
+    namespace = ancestors()
+    named = path.lstat()
+    assert stat.S_ISREG(named.st_mode) and not stat.S_ISLNK(named.st_mode)
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    try:
+        before = os.fstat(descriptor)
+        assert stat.S_ISREG(before.st_mode) and not stat.S_ISLNK(named.st_mode)
+        assert before.st_nlink == 1 and 0 < before.st_size <= 262144
+        assert source_named_identity_equal(before, named)
+        chunks, size = [], 0
+        while size <= before.st_size:
+            block = os.read(descriptor, min(65536, before.st_size + 1 - size))
+            if not block:
+                break
+            chunks.append(block)
+            size += len(block)
+        after, final = os.fstat(descriptor), path.lstat()
+        assert size == before.st_size and metadata(before) == metadata(after)
+        assert metadata(named) == metadata(final) and not stat.S_ISLNK(final.st_mode)
+        assert source_named_identity_equal(after, final)
+        assert path.resolve() == path and ancestors() == namespace, "V1_RUNTIME_NAMESPACE_CHANGED"
+        body = b"".join(chunks)
+        if expected is not None:
+            assert re.fullmatch(r"[a-f0-9]{64}", expected) and hashlib.sha256(body).hexdigest() == expected, "V1_RUNTIME_SOURCE_HASH_REQUIRED"
+        return body
+    finally:
+        os.close(descriptor)
+
+
+def verified_v1_controls(root, run_id, environment=None):
+    env = dict(os.environ if environment is None else environment)
+    enabled = env.get("CASEOPS_MOBILE_V1_CONTROLS", "0")
+    if enabled == "0":
+        return None, None
+    assert enabled == "1" and env.get("CASEOPS_ENV") == "local", "V1_EXPLICIT_LOCAL_ENABLE_REQUIRED"
+    assert not any(env.get(key) for key in ("K_SERVICE", "K_REVISION", "CLOUD_RUN_JOB", "GAE_ENV", "FUNCTION_TARGET"))
+    expected = env.get("CASEOPS_MOBILE_V1_IMPLEMENTATION_SHA256", "")
+    assert re.fullmatch(r"[a-f0-9]{64}", expected), "V1_RUNTIME_SOURCE_PIN_REQUIRED"
+    profile = env.get("CASEOPS_MOBILE_V1_PROFILE", "source-work-v3")
+    assert profile in ("source-work-v3", "queue-privacy-v1"), "EXACT_LITERAL_CONTROL_PROFILE_REQUIRED"
+    implementation = Path(__file__).resolve().with_name("local-v1-controls.py" if profile == "source-work-v3" else "local-queue-privacy-controls.py")
+    held = runtime_source_bytes(implementation, expected)
+    registration_path = Path(env["CASEOPS_MOBILE_V1_REGISTRATION"])
+    assert Path(root).resolve() in registration_path.parents, "V1_RUNTIME_REGISTRATION_ROOT_REQUIRED"
+    registration_bytes = runtime_source_bytes(registration_path, env["CASEOPS_MOBILE_V1_REGISTRATION_SHA256"])
+    registration = json.loads(registration_bytes.decode("utf-8", "strict"))
+    assert isinstance(registration, dict) and registration.get("implementationSha256") == expected, "V1_RUNTIME_REGISTRATION_PIN_REQUIRED"
+    module = ModuleType("caseops_local_v1_controls")
+    module.__file__ = str(implementation)
+    exec(compile(held, str(implementation), "exec"), module.__dict__)
+    extra = {}
+    if profile == "queue-privacy-v1":
+        base_path = Path(__file__).resolve().with_name("local-v1-controls.py")
+        base_bytes = runtime_source_bytes(base_path, "e762d80f89ead187e4255402f2320582f390a63dff629a07b0ef235db6fcdad2")
+        base = ModuleType("caseops_queue_privacy_verified_helpers")
+        base.__file__ = str(base_path)
+        exec(compile(base_bytes, str(base_path), "exec"), base.__dict__)
+        extra["base_module"] = base
+    return module.from_environment(root, run_id, environment=env, verified_implementation_sha256=expected,
+                                   verified_registration_bytes=registration_bytes, **extra), expected
+
+
 class Gateway:
     def __init__(self, root=ROOT):
         self.root = root
@@ -33,14 +120,25 @@ class Gateway:
         self.state = {"runId": os.environ.get("CASEOPS_MOBILE_RUN_ID", "local-test"),
                       "accepted": 0, "markerRejected": 0, "routeRejected": 0,
                       "lastSequence": 0, "overflow": False, "requests": [],
-                      "implementationSha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+                      "implementationSha256": hashlib.sha256(runtime_source_bytes(Path(__file__).resolve())).hexdigest()}
         self.journal = (root / f"gateway-events-{time.time_ns()}-{secrets.token_hex(3)}.jsonl").open("x", encoding="utf-8")
         self.session_delete_route = None
         self.state["sessionDeleteAdmissions"] = []
+        try:
+            self.v1, implementation_sha = verified_v1_controls(root, self.state["runId"])
+        except BaseException:
+            self.journal.close()
+            raise
+        self.state["v1ControlsEnabled"] = self.v1 is not None
+        if self.v1:
+            self.state["v1ControlsImplementationSha256"] = implementation_sha
+            self.state["v1RegistrationSha256"] = self.v1.registration_sha
+            if self.v1.registration.get("profile") == "queue-privacy-v1":
+                self.state["v1ControlProfile"] = "queue-privacy-v1"
 
     def allowed(self):
         config = json.loads((self.root / "gateway-routes.json").read_text())
-        return set(config["routes"])
+        return set(config["routes"]) | (set(self.v1.registration["exactRoutes"]) if self.v1 and not self.v1.closed else set())
 
     def admit_current_session(self, data, request_id):
         try:
@@ -91,10 +189,25 @@ class Gateway:
                 if self.path.startswith("//") or path.startswith("//"):
                     return self.reply(400, {"code": "ORIGIN_FORM_REQUIRED"})
                 marked = self.headers.get(MARKER_HEADER) == MARKER
+                if not web and path == "/__caseops_e2e/v1-control":
+                    if not marked or self.command != "POST" or not gateway.v1 or self.path != path:
+                        return self.reply(403, {"code": "V1_CONTROLS_NOT_ADMITTED"})
+                    try:
+                        size = int(self.headers.get("Content-Length", "0"))
+                        assert 0 < size <= 16384 and not self.headers.get("Transfer-Encoding")
+                        self.connection.settimeout(5)
+                        raw = self.rfile.read(size)
+                        assert len(raw) == size
+                        result = gateway.v1.handle(raw, marker=self.headers.get(MARKER_HEADER), authority=self.headers.get("X-CaseOps-V1-Control"))
+                    except Exception:
+                        return self.reply(409, {"code": "V1_CONTROL_REFUSED_OR_UNKNOWN_NO_REPLAY"})
+                    return self.reply(200, result)
                 if not web and path == "/__caseops_e2e/status":
                     if not marked:
                         return self.reply(403, {"code": "AUTOMATED_MARKER_REQUIRED"})
                     with gateway.lock:
+                        gateway.state["v1ControlsEnabled"] = bool(gateway.v1 and not gateway.v1.closed)
+                        gateway.state["v1ControlRunClosed"] = bool(gateway.v1 and gateway.v1.closed)
                         return self.reply(200, gateway.state)
                 route = f"{self.command} {path}"
                 request_id = secrets.token_hex(8)
@@ -151,7 +264,52 @@ class Gateway:
                 upstream = http.client.HTTPConnection("web" if web else "api", 3000 if web else 8000, timeout=15)
                 status = 502
                 response_started = False
+                intercept = None
+                data = b""
+                recorded = False
+
+                def record_request():
+                    nonlocal recorded
+                    if web or recorded:
+                        return
+                    with gateway.lock:
+                        gateway.state["lastSequence"] += 1
+                        record = {"sequence": gateway.state["lastSequence"], "method": self.command,
+                                  "route": path, "status": status, "browserHandoff": browser,
+                                  "requestId": request_id,
+                                  "trafficClass": "browser-preflight" if preflight else "public-identity" if route == "GET /api/build" else "api"}
+                        if gateway.v1:
+                            try:
+                                gateway.v1.after_native(self.command, path, native=native_bearer,
+                                    request_id=request_id, sequence=record["sequence"], body=body,
+                                    query=urlsplit(self.path).query, status=status, data=data, intercept=intercept)
+                            except Exception:
+                                gateway.state["overflow"] = True
+                        if not preflight and (marked or route != "GET /api/build"):
+                            record["nativeMarker"] = marked
+                        gateway.state["requests"].append(record)
+                        gateway.state["accepted"] += 1
+                        gateway.journal.write(json.dumps(record) + "\n")
+                        gateway.journal.flush()
+                        os.fsync(gateway.journal.fileno())
+                        recorded = True
                 try:
+                    if gateway.v1:
+                        if hasattr(gateway.v1, "validate_native_request"):
+                            gateway.v1.validate_native_request(self.command, path, native=native_bearer, body=body,
+                                query=urlsplit(self.path).query, authorization=self.headers.get("Authorization"),
+                                cookie_present=self.headers.get("Cookie") is not None)
+                        intercept = gateway.v1.before_native(self.command, path, native=native_bearer, request_id=request_id)
+                        if intercept and intercept.get("fault"):
+                            fault = intercept["fault"]
+                            response_started = True
+                            if fault == "offline":
+                                self.close_connection = True
+                                return
+                            status = 404 if fault == "missing" else 200
+                            data = b'{}'
+                            record_request()
+                            return self.reply(status, {})
                     upstream.request(self.command, self.path, body=body, headers=headers)
                     response = upstream.getresponse()
                     status = response.status
@@ -163,6 +321,14 @@ class Gateway:
                         raise ValueError("Response bound exceeded")
                     if route == "GET /api/auth/native/sessions" and native_bearer and status == 200:
                         gateway.admit_current_session(data, request_id)
+                    if gateway.v1:
+                        # Make the actual ACK/body facts durable before the app
+                        # can render a positive outcome or observe response loss.
+                        record_request()
+                    if gateway.v1 and gateway.v1.should_withhold(intercept, status):
+                        response_started = True
+                        self.close_connection = True
+                        return
                     response_started = True
                     self.send_response(status)
                     for key, value in response.getheaders():
@@ -173,27 +339,14 @@ class Gateway:
                     self.end_headers()
                     self.wfile.write(data)
                     self.close_connection = True
-                except (OSError, http.client.HTTPException, ValueError):
+                except (OSError, http.client.HTTPException, ValueError, AssertionError):
                     status = 502
                     if not response_started:
                         self.reply(502, {"code": "UPSTREAM_TRANSPORT_FAILED"})
                     self.close_connection = True
                 finally:
                     upstream.close()
-                    if not web:
-                        with gateway.lock:
-                            gateway.state["lastSequence"] += 1
-                            record = {"sequence": gateway.state["lastSequence"], "method": self.command,
-                                      "route": path, "status": status, "browserHandoff": browser,
-                                      "requestId": request_id,
-                                      "trafficClass": "browser-preflight" if preflight else "public-identity" if route == "GET /api/build" else "api"}
-                            if not preflight and (marked or route != "GET /api/build"):
-                                record["nativeMarker"] = marked
-                            gateway.state["requests"].append(record)
-                            gateway.state["accepted"] += 1
-                            gateway.journal.write(json.dumps(record) + "\n")
-                            gateway.journal.flush()
-                            os.fsync(gateway.journal.fileno())
+                    record_request()
 
             do_GET = handle_request
             do_POST = handle_request
@@ -221,7 +374,11 @@ def main():
     finally:
         for server in servers:
             server.shutdown()
-        gateway.journal.close()
+        try:
+            if gateway.v1:
+                gateway.v1.close()
+        finally:
+            gateway.journal.close()
 
 
 if __name__ == "__main__":

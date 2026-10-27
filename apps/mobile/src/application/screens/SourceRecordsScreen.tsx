@@ -2,8 +2,13 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { Fact, RecordRow } from "../../components/Content";
-import { NativeButton, NativeProgress } from "../../components/NativeControls";
+import {
+  NativeButton,
+  NativeProgress,
+  NativeSegments,
+} from "../../components/NativeControls";
 import { styles } from "../../components/theme";
+import { ContractObligations } from "../../components/ContractObligations";
 import { displayDay } from "../../domain/contracts";
 import { readFailure } from "../../domain/repository";
 import {
@@ -15,6 +20,7 @@ import {
 import type {
   ContractSource,
   IpPortfolioSource,
+  IpDocketSource,
   SourceLocator,
   SourceDateState,
   SourceKind,
@@ -28,25 +34,138 @@ import type { Resource } from "../useResource";
 export type SourceRecordsScreenProps = {
   repository: SourceRecordsRepository;
   kind: SourceKind;
+  onKindChange: (kind: SourceKind) => void;
   active: boolean;
   openSource: (source: SourceRef, locator?: SourceLocator) => void;
 };
 
-// The parent owns the entitled type selector and navigation. Contract reads
-// exist, but there is no safe contract module-availability contract to enable it.
+// Type selection does not grant authority: both lists use their normal
+// authenticated readers, and IP additionally checks current workspace readiness.
 export function SourceRecordsScreen(props: SourceRecordsScreenProps) {
+  const { kind } = props;
   if (!props.active) return null;
-  if (props.kind === "contract")
-    return (
-      <ScrollView
-        testID="screen-source-records"
-        contentContainerStyle={styles.content}
+  return (
+    <View style={styles.fill}>
+      <NativeSegments
+        label="Source type"
+        value={kind}
+        options={[
+          { value: "ip_docket", label: "Trademarks" },
+          { value: "contract", label: "Contracts" },
+        ]}
+        onChange={(value) => {
+          if (value === "contract" || value === "ip_docket")
+            props.onKindChange(value);
+        }}
+      />
+      {kind === "contract" ? (
+        <ContractRecords
+          key={`contracts:${props.repository.companyId}`}
+          {...props}
+        />
+      ) : (
+        <IpRecords key={`ip:${props.repository.companyId}`} {...props} />
+      )}
+    </View>
+  );
+}
+
+function ContractRecords({
+  repository,
+  active,
+  openSource,
+}: SourceRecordsScreenProps) {
+  const [history, setHistory] = useState<(string | null)[]>([null]);
+  const [pageError, setPageError] = useState<ReturnType<
+    typeof readFailure
+  > | null>(null);
+  const cursor = history[history.length - 1];
+  const data = useResource(
+    JSON.stringify(["contract-source-page", repository.companyId, cursor]),
+    (signal) => repository.contracts(cursor, signal),
+    active,
+  );
+  const reload = () => {
+    setPageError(null);
+    data.reload();
+  };
+  return (
+    <ScrollView
+      testID="screen-source-records"
+      contentContainerStyle={styles.content}
+    >
+      <Heading>Contracts</Heading>
+      <Text testID="source-scope" style={styles.muted}>
+        Contract metadata visible to this workspace account
+      </Text>
+      <SourceRead
+        resource={
+          pageError ? { state: "error", error: pageError } : data.resource
+        }
+        reload={reload}
       >
-        <Heading>Contracts</Heading>
-        <Unavailable value={SOURCE_GAPS.contractModule} />
-      </ScrollView>
-    );
-  return <IpRecords key={props.repository.companyId} {...props} />;
+        {(page) => (
+          <>
+            {page.contracts.length ? (
+              page.contracts.map((record) => (
+                <RecordRow
+                  key={record.id}
+                  testID={`source-row-contract-${record.id}`}
+                  title={record.title}
+                  subtitle={record.contract_code}
+                  meta={`${record.status} · ${record.counterparty_name || "Counterparty not recorded"}`}
+                  onPress={() =>
+                    openSource({ kind: "contract", id: record.id })
+                  }
+                />
+              ))
+            ) : (
+              <View testID="source-empty" style={{ gap: 8 }}>
+                <Text style={styles.heading}>No contracts returned</Text>
+                <Text style={styles.muted}>
+                  The server returned no visible contracts for this page.
+                </Text>
+              </View>
+            )}
+            <Text testID="source-page" style={styles.label}>
+              Page {history.length}
+            </Text>
+            {page.next_cursor !== null ? (
+              <NativeButton
+                label="Next page"
+                testID="source-next-page"
+                onPress={() => {
+                  try {
+                    setHistory(advanceSourcePage(history, page.next_cursor!));
+                  } catch (error) {
+                    setPageError(readFailure(error));
+                  }
+                }}
+              />
+            ) : null}
+          </>
+        )}
+      </SourceRead>
+      {history.length > 1 ? (
+        <NativeButton
+          label="First page"
+          testID="source-first-page"
+          onPress={() => {
+            setPageError(null);
+            setHistory([null]);
+            data.reload();
+          }}
+          secondary
+        />
+      ) : null}
+      <NativeButton
+        label="Reload sources"
+        testID="source-reload"
+        onPress={reload}
+        secondary
+      />
+    </ScrollView>
+  );
 }
 
 function IpRecords({
@@ -211,7 +330,12 @@ function SourceDetailContent({
           ) : (
             <>
               {result.record.kind === "contract" ? (
-                <ContractDetail record={result.record} />
+                <ContractDetail
+                  record={result.record}
+                  repository={repository}
+                />
+              ) : "record_type" in result.record ? (
+                <IpDocketDetail record={result.record} />
               ) : (
                 <IpDetail record={result.record} />
               )}
@@ -235,7 +359,13 @@ function SourceDetailContent({
   );
 }
 
-function ContractDetail({ record }: { record: ContractSource }) {
+function ContractDetail({
+  record,
+  repository,
+}: {
+  record: ContractSource;
+  repository: SourceRecordsRepository;
+}) {
   return (
     <>
       <Text testID="source-kind" style={styles.label}>
@@ -303,8 +433,38 @@ function ContractDetail({ record }: { record: ContractSource }) {
         Recorded contract metadata; source verification and check time not
         supplied.
       </Text>
-      <Text testID="source-obligations-unavailable" style={styles.muted}>
-        {SOURCE_GAPS.contractObligations}
+      <ContractObligations repository={repository} contractId={record.id} />
+    </>
+  );
+}
+
+function IpDocketDetail({ record }: { record: IpDocketSource }) {
+  return (
+    <>
+      <Text testID="source-kind" style={styles.label}>
+        IP docket · {record.record_type}
+      </Text>
+      <Heading>{record.title}</Heading>
+      <Text testID="source-status" style={styles.status}>
+        {record.status}
+      </Text>
+      <Fact label="Source docket ID" value={record.id} testID="source-id" />
+      <Fact label="Recorded identifier" value={record.primary_identifier} />
+      <Fact label="Linked Matter ID" value={record.matter_id} />
+      <Fact
+        label="Lifecycle version"
+        value={String(record.lifecycle_version)}
+      />
+      <Fact label="Record version" value={String(record.current_version)} />
+      <Fact
+        label="Source record updated"
+        value={record.updated_at}
+        testID="source-updated"
+      />
+      <Text testID="source-provenance" style={styles.muted}>
+        Current docket metadata. This summary does not supply application,
+        renewal or verification dates; no dates are inferred from the Calendar
+        event.
       </Text>
     </>
   );

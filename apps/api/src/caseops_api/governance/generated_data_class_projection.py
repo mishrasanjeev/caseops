@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "e4fd6af06f50197b4978b6c5017b10a0a2c3d6d9e7954c1873368a3119afd350"
-MAP_SCHEMA_FINGERPRINT = "5fd418df8fadd2d6ef436c8a43c568838e3fe595222048ae63f8163da725daac"
+MAP_DOCUMENT_FINGERPRINT = "83678c604b96a442be6cf81f445e50c2bcf1b88ed9b2ff0b6ac3e0b1780f996a"
+MAP_SCHEMA_FINGERPRINT = "0f53f3ee86ba799473f3c28e6092cb2ccd207723c4913a7f1a575c4e89a67f4d"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "b60eeeda89317bd70a8a203936749fb911604e93fb725de9e8020d0ded616cf1"
+ORM_SCHEMA_FINGERPRINT = "b4c2fda9eb5e7426cee9ff50a775cdf6b7ddf14220a68b26062b9222e8e7f060"
 
-PROJECTION_ID = "1da0d2fdc266410ebe1916b9c664b8a5b760e0834730467f49a6b9505ad58ed2"
+PROJECTION_ID = "d70c91a60dd5d2db7e864871bf36afcaa2fc32bae0d51a015673be2925dcb565"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -42,6 +42,7 @@ INVENTORIED_SQL_TABLES = frozenset(
     {
         "access_review_campaigns",
         "access_review_decisions",
+        "account_deletion_requests",
         "account_setup_tokens",
         "affidavit_intelligence_runs",
         "affidavit_questions",
@@ -127,6 +128,9 @@ INVENTORIED_SQL_TABLES = frozenset(
         "contract_playbook_rules",
         "contract_term_suggestions",
         "contracts",
+        "counsel_read_page_dirty",
+        "counsel_read_page_members",
+        "counsel_read_pages",
         "courts",
         "custom_roles",
         "data_retention_policies",
@@ -298,6 +302,9 @@ INVENTORIED_SQL_TABLES = frozenset(
         "matter_strategy_entries",
         "matter_tag_assignments",
         "matter_tags",
+        "matter_task_queue_dirty",
+        "matter_task_queue_groups",
+        "matter_task_queue_pages",
         "matter_tasks",
         "matter_time_entries",
         "matters",

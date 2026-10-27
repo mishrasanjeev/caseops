@@ -76,6 +76,47 @@ function observedDevice(observation, request, build, buildRef) {
   return observation;
 }
 
+// A logged-out browser can retain non-secret workspace context and make one
+// rejected refresh attempt after /auth/me. This is a rejected browser probe,
+// separate from the exact successful login/MFA/native grant/token/logout spine.
+export function validateObservedAndroidAuthTraffic(requests, auth) {
+  assert.ok(Array.isArray(requests) && requests.length <= 500, 'BOUNDED_AUTH_OBSERVATION_REQUIRED');
+  validateAuthorizationTraffic(requests, auth, { single: true });
+  for (const [route, statuses] of [['/api/auth/login', [200]], ['/api/auth/mfa/step-up', [200]], ['/api/auth/native/logout', [200, 204]]]) {
+    const attempts = requests.filter((row) => row.method === 'POST' && row.route === route);
+    assert.ok(attempts.length === 1 && statuses.includes(attempts[0].status), 'OBSERVED_AUTH_MUTATION_NOT_ONCE_ACKNOWLEDGED');
+  }
+  const loginIndex = requests.findIndex(({ method, route }) => method === 'POST' && route === '/api/auth/login');
+  const refreshes = requests.filter(({ method, route }) => method === 'POST' && route === '/api/auth/refresh');
+  assert.ok(refreshes.length <= 1, 'SINGLE_REJECTED_PRELOGIN_BROWSER_REFRESH_REQUIRED');
+  const unauthorizedIdentity = requests.filter((row, index) => index < loginIndex && row.method === 'GET'
+    && row.route === '/api/auth/me' && row.status === 401);
+  assert.ok(unauthorizedIdentity.length <= 2, 'BOUNDED_LOGGED_OUT_BROWSER_IDENTITY_PROBES_REQUIRED');
+  for (const row of requests.filter(({ status }) => status === 401)) {
+    assert.ok(requests.indexOf(row) < loginIndex && row.browserHandoff === true && row.nativeMarker === true
+      && ((row.method === 'GET' && row.route === '/api/auth/me') || refreshes.includes(row)),
+    'UNEXPECTED_AUTH_OBSERVATION_401');
+  }
+  for (const row of refreshes) {
+    const index = requests.indexOf(row), preceding = requests.slice(0, index);
+    assert.ok(index < loginIndex && row.status === 401 && row.browserHandoff === true && row.nativeMarker === true,
+      'REJECTED_PRELOGIN_BROWSER_REFRESH_REQUIRED');
+    assert.ok(preceding.some((item) => unauthorizedIdentity.includes(item)), 'PRECEDING_LOGGED_OUT_BROWSER_IDENTITY_REQUIRED');
+    assert.ok(!preceding.some(({ method, route, status }) => method !== 'OPTIONS' && route.startsWith('/api/auth/')
+      && status >= 200 && status < 400), 'NO_AUTH_SUCCESS_BEFORE_REJECTED_REFRESH');
+  }
+  const mutations = new Set(['/api/auth/login', '/api/auth/mfa/step-up', '/api/auth/native/authorize', '/api/auth/native/token', '/api/auth/native/logout']);
+  assert.ok(requests.every((row) => ['GET', 'HEAD', 'OPTIONS'].includes(row.method)
+    || (row.method === 'POST' && (mutations.has(row.route) || refreshes.includes(row)))), 'UNEXPECTED_AUTH_OBSERVATION_MUTATION');
+  const spine = requests.filter((row) => row.method === 'POST' && !refreshes.includes(row)).map(({ route, status }) => ({ route, status }));
+  assert.deepEqual(spine, [{ route: '/api/auth/login', status: 200 },
+    ...(auth.mfaStage === 'consent' ? [{ route: '/api/auth/native/authorize', status: 403 }] : []),
+    { route: '/api/auth/mfa/step-up', status: 200 }, { route: '/api/auth/native/authorize', status: 200 },
+    { route: '/api/auth/native/token', status: 200 }, { route: '/api/auth/native/logout', status: spine.at(-1)?.status }],
+  'ORDERED_NORMAL_AUTH_OBSERVATION_REQUIRED');
+  return { rejectedPreLoginBrowserRefreshes: refreshes.length, loggedOutBrowserIdentityReads: unauthorizedIdentity.length };
+}
+
 function observedAuth(observation, refs, receipt, extension, device, recipe) {
   identity(observation, { schemaVersion: 1, observed: true, platform: 'android', udid: device.udid,
     mode: 'native-firefox', appId: QA_ID, webOrigin: receipt.webOrigin },
@@ -100,20 +141,7 @@ function observedAuth(observation, refs, receipt, extension, device, recipe) {
   assert.deepEqual(after.requests.slice(0, before.requests.length), before.requests, 'AUTH_OBSERVATION_HISTORY_CHANGED');
   const requests = after.requests.slice(before.lastSequence);
   assert.ok(requests.every(({ status }) => Number.isInteger(status)), 'SETTLED_AUTH_OBSERVATION_REQUIRED');
-  validateAuthorizationTraffic(requests, auth, { single: true });
-  for (const [route, statuses] of [['/api/auth/login', [200]], ['/api/auth/mfa/step-up', [200]], ['/api/auth/native/logout', [200, 204]]]) {
-    const attempts = requests.filter((row) => row.method === 'POST' && row.route === route);
-    assert.ok(attempts.length === 1 && statuses.includes(attempts[0].status), 'OBSERVED_AUTH_MUTATION_NOT_ONCE_ACKNOWLEDGED');
-  }
-  const mutations = new Set(['/api/auth/login', '/api/auth/mfa/step-up', '/api/auth/native/authorize', '/api/auth/native/token', '/api/auth/native/logout']);
-  assert.ok(requests.every(({ method, route }) => ['GET', 'HEAD', 'OPTIONS'].includes(method)
-    || (method === 'POST' && mutations.has(route))), 'UNEXPECTED_AUTH_OBSERVATION_MUTATION');
-  const spine = requests.filter(({ method }) => method === 'POST').map(({ route, status }) => ({ route, status }));
-  assert.deepEqual(spine, [{ route: '/api/auth/login', status: 200 },
-    ...(observation.mfaStage === 'consent' ? [{ route: '/api/auth/native/authorize', status: 403 }] : []),
-    { route: '/api/auth/mfa/step-up', status: 200 }, { route: '/api/auth/native/authorize', status: 200 },
-    { route: '/api/auth/native/token', status: 200 }, { route: '/api/auth/native/logout', status: spine.at(-1)?.status }],
-  'ORDERED_NORMAL_AUTH_OBSERVATION_REQUIRED');
+  validateObservedAndroidAuthTraffic(requests, auth);
   return auth;
 }
 

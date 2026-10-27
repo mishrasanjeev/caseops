@@ -499,7 +499,7 @@ def get_latest_hearing_pack(
         select(HearingPack)
         .where(HearingPack.matter_id == matter.id)
         .options(selectinload(HearingPack.items))
-        .order_by(HearingPack.generated_at.desc())
+        .order_by(HearingPack.generated_at.desc(), HearingPack.id.desc())
         .limit(1)
     )
     if hearing_id is not None:

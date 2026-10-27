@@ -9,12 +9,14 @@ import type {
   CredentialStore,
   SessionIdentity,
   StoredCredential,
+  LocalSessionBinding,
 } from "./types.ts";
 
 let sessionSequence = 0;
 export class NativeSession {
   private grant: (SessionIdentity & { access_token: string }) | null = null;
   private expiresAt = 0;
+  private serverSessionId: string | null = null;
   private refreshInFlight: Promise<SessionIdentity> | null = null;
   private generation = 0;
   private readonly keyPrefix = `native-session-${++sessionSequence}`;
@@ -24,6 +26,11 @@ export class NativeSession {
     private readonly store: CredentialStore,
     private readonly now: () => number = Date.now,
     private readonly onInvalidated: () => void = () => {},
+    private readonly admit: (
+      path: string,
+      method: string,
+      purpose: "business" | "revalidation",
+    ) => void = () => {},
   ) {}
 
   get sessionKey(): string {
@@ -39,6 +46,7 @@ export class NativeSession {
   private endLocalAuthority(): boolean {
     this.advanceGeneration();
     this.grant = null;
+    this.serverSessionId = null;
     this.expiresAt = 0;
     try {
       this.onInvalidated();
@@ -80,6 +88,19 @@ export class NativeSession {
     };
   }
 
+  // Parsed native token/refresh response identity, never a decoded JWT or a
+  // rotating-token digest. Local UI gates cannot grant server authority.
+  get localBinding(): LocalSessionBinding | null {
+    if (!this.grant || !this.serverSessionId) return null;
+    return {
+      userId: this.grant.user.id,
+      companyId: this.grant.company.id,
+      membershipId: this.grant.membership.id,
+      sessionId: this.serverSessionId,
+      sessionKey: this.sessionKey,
+    };
+  }
+
   private async adopt(
     input: unknown,
     generation: number,
@@ -103,6 +124,7 @@ export class NativeSession {
         sessionId: grant.session_id,
       });
       this.grant = null;
+      this.serverSessionId = null;
       this.expiresAt = 0;
       await this.store.clear();
       this.onInvalidated();
@@ -125,6 +147,7 @@ export class NativeSession {
       capabilities: [...grant.capabilities],
       access_token: grant.access_token,
     };
+    this.serverSessionId = grant.session_id;
     this.expiresAt = this.now() + grant.expires_in * 1000;
     return this.identity!;
   }
@@ -172,6 +195,10 @@ export class NativeSession {
         );
         return await this.adopt(response, generation);
       } catch (error) {
+        // An explicit compatibility rejection did not rotate the credential.
+        // Keep it for an explicit policy recheck or sign-out; never replay here.
+        if (error instanceof MobileApiError && error.status === 426)
+          throw error;
         if (generation === this.generation) {
           // A lost refresh acknowledgement cannot safely replay a rotating token.
           try {
@@ -191,7 +218,11 @@ export class NativeSession {
   }
 
   async revalidate(): Promise<SessionIdentity> {
-    const raw = await this.request<unknown>("/api/auth/me");
+    const raw = await this.requestAdmitted<unknown>(
+      "/api/auth/me",
+      {},
+      "revalidation",
+    );
     let identity: SessionIdentity;
     try {
       identity = parseIdentity(raw);
@@ -219,8 +250,19 @@ export class NativeSession {
   }
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    return this.requestAdmitted<T>(path, init, "business");
+  }
+
+  private async requestAdmitted<T>(
+    path: string,
+    init: RequestInit,
+    purpose: "business" | "revalidation",
+  ): Promise<T> {
+    const method = (init.method || "GET").toUpperCase();
+    this.admit(path, method, purpose);
     if (!this.grant || this.now() >= this.expiresAt - 30_000)
       await this.refresh();
+    this.admit(path, method, purpose);
     const generation = this.generation;
     const grant = this.grant;
     if (!grant)
@@ -235,6 +277,21 @@ export class NativeSession {
         init,
         grant.access_token,
       );
+      try {
+        this.admit(path, method, purpose);
+      } catch (error) {
+        if (
+          !["GET", "HEAD", "OPTIONS"].includes(method) &&
+          error instanceof MobileApiError
+        )
+          throw new MobileApiError(
+            error.message,
+            error.status,
+            error.code,
+            "unknown",
+          );
+        throw error;
+      }
       if (generation !== this.generation)
         throw new MobileApiError(
           "This session has ended.",
@@ -255,6 +312,7 @@ export class NativeSession {
     options: BytesRequestOptions,
   ): Promise<BytesResponse> {
     checkedBytesRequest(path, options);
+    this.admit(path, "GET", "business");
     options = {
       maxBytes: options.maxBytes,
       rangeProbe: options.rangeProbe,
@@ -302,12 +360,14 @@ export class NativeSession {
           "native_session_ended",
         );
       const grant = this.grant;
+      this.admit(path, "GET", "business");
       const expiresAt = this.expiresAt;
       result = await this.transport.requestBytes(
         path,
         { ...options, signal: controller.signal },
         grant.access_token,
       );
+      this.admit(path, "GET", "business");
       if (
         generation !== this.generation ||
         !this.grant ||

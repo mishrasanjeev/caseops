@@ -428,7 +428,10 @@ def rotate(session: Session, refresh_token: str) -> NativeTokenResponse:
     return result
 
 
-def native_context(session: Session, claims: dict) -> SessionContext:
+def native_context(
+    session: Session, claims: dict, *, client_version: str | None = None,
+    enforce_client_compatibility: bool = False,
+) -> SessionContext:
     device = session.get(NativeDeviceSession, claims["sid"])
     if (
         device is None
@@ -445,6 +448,9 @@ def native_context(session: Session, claims: dict) -> SessionContext:
     if context.company.id != claims["company_id"] or context.user.id != claims["sub"]:
         _invalid()
     _check_mfa(session, context, device)
+    if enforce_client_compatibility:
+        from caseops_api.services.native_client_compatibility import enforce_minimum
+        enforce_minimum(get_settings(), platform=device.platform, client_version=client_version)
     context.native_session_id = device.id
     return context
 

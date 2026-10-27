@@ -570,10 +570,59 @@ export function textSegments(text) {
   assert.ok(typeof text === 'string' && text.length > 0 && text.length <= 500000, 'IOS_FILES_BOUNDED_TEXT_ORACLE_REQUIRED');
   return Array.from({ length: Math.ceil(text.length / 10000) }, (_, index) => text.slice(index * 10000, (index + 1) * 10000));
 }
+export async function awaitIosTextReady(context, anchor, segmentCount) {
+  assert.ok(Number.isSafeInteger(segmentCount) && segmentCount >= 1 && segmentCount <= 50, 'IOS_FILES_BOUNDED_TEXT_ORACLE_REQUIRED');
+  const deadline = Date.now() + 15000;
+  let terminal;
+  const fact = async (id, type) => {
+    const matches = await context.driver.$$(selector('ios', 'id', id));
+    assert.ok(matches.length <= 1, 'IOS_FILES_TEXT_FACT_NOT_UNIQUE');
+    if (!matches.length) return undefined;
+    const control = matches[0];
+    assert.equal(await control.getAttribute('name'), id, 'IOS_FILES_TEXT_FACT_ID_MISMATCH');
+    assert.equal(await control.getAttribute('type'), type, 'IOS_FILES_TEXT_FACT_TYPE_MISMATCH');
+    return await control.isDisplayed() ? control : undefined;
+  };
+  await context.driver.waitUntil(async () => {
+    try {
+      assert.ok(Date.now() <= deadline, 'IOS_FILES_INITIAL_TEXT_READY_REQUIRED');
+      await marker(context, 'private-document-viewer');
+      for (const id of ['viewer-blocked', 'viewer-unsupported', 'viewer-closed'])
+        assert.equal(await marker(context, id, { required: false }), undefined, 'IOS_FILES_READER_FAILURE_PRESENT');
+      const filename = await fact('viewer-filename', 'XCUIElementTypeStaticText');
+      if (!filename) return false;
+      assert.equal(await filename.getText(), anchor.filename, 'IOS_FILES_WRONG_READER_SOURCE');
+      assert.equal(await filename.getAttribute('label'), anchor.filename, 'IOS_FILES_WRONG_READER_SOURCE');
+      const position = await fact('viewer-position', 'XCUIElementTypeStaticText');
+      if (!position) return false;
+      const value = await position.getText(), expected = `Segment 1 of ${segmentCount}`;
+      assert.ok(['No page displayed', 'Opening document', expected].includes(value), 'IOS_FILES_TEXT_INITIAL_POSITION_MISMATCH');
+      if (value !== expected) return false;
+      for (const id of ['viewer-idle', 'viewer-loading', 'viewer-renewing'])
+        if (await marker(context, id, { required: false })) return false;
+      const text = await fact('viewer-text', 'XCUIElementTypeStaticText');
+      const previous = await fact('viewer-previous', 'XCUIElementTypeButton');
+      const next = await fact('viewer-next', 'XCUIElementTypeButton');
+      const zoom = await fact('viewer-zoom', 'XCUIElementTypeStaticText');
+      if (!text || !previous || !next || !zoom) return false;
+      assert.equal(await zoom.getText(), '100%', 'IOS_FILES_TEXT_INITIAL_ZOOM_MISMATCH');
+      const ready = await previous.isEnabled() === false && await next.isEnabled() === (segmentCount > 1);
+      assert.ok(Date.now() <= deadline, 'IOS_FILES_INITIAL_TEXT_READY_REQUIRED');
+      return ready;
+    } catch (error) {
+      // WDIO waitUntil retries rejected callbacks. Preserve terminal source,
+      // ambiguity and transport errors instead of polling past them.
+      terminal = error; return true;
+    }
+  }, { timeout: Math.max(1, deadline - Date.now()), interval: 200, timeoutMsg: 'IOS_FILES_INITIAL_TEXT_READY_REQUIRED' });
+  if (terminal) throw terminal;
+  assert.ok(Date.now() <= deadline, 'IOS_FILES_INITIAL_TEXT_READY_REQUIRED');
+}
 async function readText(context, anchor) {
   assert.equal(typeof anchor.text, 'string', 'IOS_FILES_EXACT_TEXT_ORACLE_REQUIRED');
   const before = await openReader(context, anchor);
   const segments = textSegments(anchor.text);
+  await awaitIosTextReady(context, anchor, segments.length);
   const check = async (page) => {
     assert.equal(await read(context, 'id', 'viewer-position'), `Segment ${page} of ${segments.length}`, 'IOS_FILES_TEXT_SEGMENT_MISMATCH');
     assert.equal((await read(context, 'id', 'viewer-text')).trimEnd(), segments[page - 1].trimEnd(), 'IOS_FILES_TEXT_BYTES_DISPLAY_MISMATCH');
@@ -601,6 +650,7 @@ async function readText(context, anchor) {
   event(context, 'ios-private-text-segments-read', { attachmentId: anchor.attachmentId, sha256: anchor.sha256,
     segments: segments.length, traversedBothDirections: segments.length > 1, zoomAcknowledged: segments.length > 1 ? 125 : 100 });
 }
+export { readText as readIosText };
 export function validatePrivacyReceipt(context, boundary, receipt) {
   assert.equal(receipt.schemaVersion, 1, 'IOS_FILES_PRIVACY_SCHEMA_REQUIRED');
   assert.equal(receipt.observed, true, 'IOS_FILES_ACTUAL_PRIVACY_OBSERVATION_REQUIRED');

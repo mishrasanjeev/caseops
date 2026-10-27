@@ -42,22 +42,31 @@ FROM runtime-base AS api
 COPY pyproject.toml uv.lock README.md ./
 COPY vendor/fastembed-0.8.0-1caseops1-py3-none-any.whl ./vendor/
 COPY vendor/fastembed-0.8.0-1caseops1.json ./vendor/
+# API-only LGPL notices and the exact unmodified corresponding source archive.
+# The web/mobile JavaScript notice and exception inventories are separate.
+COPY vendor/fpdf2-2.8.8 /usr/share/doc/caseops-api/third-party/fpdf2-2.8.8
+# The official dnspython 2.9.0 archives omit their tagged ISC notice.
+COPY vendor/dnspython-2.9.0 /usr/share/doc/caseops-api/third-party/dnspython-2.9.0
 
 # Install the package with the [ocr] extra so rapidocr + pytesseract
 # ship to Cloud Run by default. Without these, the prod image silently
 # skips OCR fallback when pdfminer returns sparse text — and scanned
 # matter attachments + older judgment PDFs then miss chunking / embed.
 # Add `[observability]` here if/when we wire OTel in prod.
+# Preserve the lock's exact artifact URLs and hashes. Name-only requirements
+# otherwise re-fetch large live package indexes during an immutable install.
 RUN uv export \
+      --offline \
       --frozen \
+      --format pylock.toml \
       --no-dev \
       --extra ocr \
       --no-emit-project \
       --no-header \
-      --no-hashes \
-      --output-file /tmp/requirements.lock \
-  && uv pip install --system --requirements /tmp/requirements.lock \
-  && rm /tmp/requirements.lock \
+      --output-file /app/pylock.toml \
+  && uv pip install --system --requirements /app/pylock.toml \
+  && rm /app/pylock.toml \
+  && python /usr/share/doc/caseops-api/third-party/fpdf2-2.8.8/verify.py --installed \
   && python -m compileall -q --invalidation-mode checked-hash /usr/local/lib/python3.13/site-packages
 
 # Voyage token counting uses Hugging Face's tokenizer cache before every

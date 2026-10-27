@@ -1,6 +1,7 @@
 """Gateway/bootstrap unit proof only; real Docker receipts are separate."""
 
 import http.client
+import hashlib
 import argparse
 from contextlib import closing, nullcontext, redirect_stderr, redirect_stdout
 import importlib.util
@@ -848,6 +849,128 @@ class GatewayTests(unittest.TestCase):
             client.request(method, path, body=body, headers=headers or {})
             response = client.getresponse()
             return response.status, response.read()
+
+    def test_disabled_v1_manager_is_neither_opened_nor_executed(self):
+        with patch.object(gateway_module, "runtime_source_bytes") as source, patch.object(gateway_module, "ModuleType") as execute:
+            self.assertEqual(gateway_module.verified_v1_controls(self.root, "unused", environment={}), (None, None))
+            source.assert_not_called()
+            execute.assert_not_called()
+
+    def test_runtime_named_device_exception_never_weakens_descriptor_identity(self):
+        values = {key: 7 for key in gateway_module._SOURCE_METADATA}
+        descriptor = SimpleNamespace(**values)
+        named = SimpleNamespace(**{**values, "st_dev": 0})
+        self.assertTrue(gateway_module.source_named_identity_equal(descriptor, named, "nt"))
+        self.assertFalse(gateway_module.source_named_identity_equal(descriptor, named, "posix"))
+        self.assertFalse(gateway_module.source_named_identity_equal(descriptor, SimpleNamespace(**{**vars(named), "st_ino": 8}), "nt"))
+        source = self.root.resolve() / "descriptor.py"
+        source.write_bytes(b"# synthetic public source\n")
+        original = gateway_module.os.fstat
+        calls = []
+        def changed_device(fd):
+            current = original(fd)
+            calls.append(fd)
+            if len(calls) == 1:
+                return current
+            return SimpleNamespace(**{key: getattr(current, key) + (1 if key == "st_dev" else 0) for key in gateway_module._SOURCE_METADATA})
+        with patch.object(gateway_module.os, "fstat", changed_device), self.assertRaises(AssertionError):
+            gateway_module.runtime_source_bytes(source)
+        self.assertEqual(len(calls), 2)
+        # This is a metadata negative control, never actual Windows acceptance.
+
+    def test_missing_or_invalid_v1_source_pin_refuses_before_source_open(self):
+        env = {"CASEOPS_MOBILE_V1_CONTROLS": "1", "CASEOPS_ENV": "local"}
+        with patch.object(gateway_module, "runtime_source_bytes") as source:
+            for value in (None, "not-a-digest", "A" * 64):
+                candidate = dict(env)
+                if value is not None:
+                    candidate["CASEOPS_MOBILE_V1_IMPLEMENTATION_SHA256"] = value
+                with self.assertRaisesRegex(AssertionError, "SOURCE_PIN"):
+                    gateway_module.verified_v1_controls(self.root, "unused", environment=candidate)
+            source.assert_not_called()
+
+    def test_wrong_v1_hash_never_executes_the_named_module(self):
+        folder = self.root.resolve() / "source-pin"
+        folder.mkdir()
+        entry = folder / "local-gateway.py"
+        entry.write_text("# synthetic public gateway source\n")
+        witness = folder / "executed.txt"
+        manager = folder / "local-v1-controls.py"
+        manager.write_text("from pathlib import Path\nPath(" + repr(str(witness)) + ").write_text('UNVERIFIED')\n")
+        env = {"CASEOPS_MOBILE_V1_CONTROLS": "1", "CASEOPS_ENV": "local", "CASEOPS_MOBILE_V1_IMPLEMENTATION_SHA256": "0" * 64}
+        with patch.object(gateway_module, "__file__", str(entry)), self.assertRaisesRegex(AssertionError, "SOURCE_HASH"):
+            gateway_module.verified_v1_controls(self.root, "unused", environment=env)
+        self.assertFalse(witness.exists())
+
+    def test_v1_executes_the_verified_buffer_even_if_path_replaced_after_read(self):
+        folder = self.root.resolve() / "verified-buffer"
+        folder.mkdir()
+        entry = folder / "local-gateway.py"
+        entry.write_text("# synthetic public gateway source\n")
+        witness = folder / "executed.txt"
+        manager = folder / "local-v1-controls.py"
+        body = ("from pathlib import Path\nPath(" + repr(str(witness)) + ").write_text('VERIFIED')\n"
+                "def from_environment(root, run_id, **kwargs):\n return kwargs['verified_implementation_sha256']\n").encode()
+        manager.write_bytes(body)
+        digest = hashlib.sha256(body).hexdigest()
+        registration = self.root.resolve() / "registration.json"
+        registration_body = json.dumps({"implementationSha256": digest}).encode()
+        registration.write_bytes(registration_body)
+        original = gateway_module.runtime_source_bytes
+        def replace_after_read(path, expected=None):
+            held = original(path, expected)
+            if Path(path) != manager:
+                return held
+            replacement = folder / "replacement.py"
+            replacement.write_text("from pathlib import Path\nPath(" + repr(str(witness)) + ").write_text('REPLACEMENT')\n")
+            replacement.replace(manager)
+            return held
+        env = {"CASEOPS_MOBILE_V1_CONTROLS": "1", "CASEOPS_ENV": "local", "CASEOPS_MOBILE_V1_IMPLEMENTATION_SHA256": digest,
+               "CASEOPS_MOBILE_V1_REGISTRATION": str(registration), "CASEOPS_MOBILE_V1_REGISTRATION_SHA256": hashlib.sha256(registration_body).hexdigest()}
+        with patch.object(gateway_module, "__file__", str(entry)), patch.object(gateway_module, "runtime_source_bytes", replace_after_read):
+            self.assertEqual(gateway_module.verified_v1_controls(self.root, "unused", environment=env), (digest, digest))
+        self.assertEqual(witness.read_text(), "VERIFIED")
+
+    def test_v1_registration_pin_is_verified_before_manager_execution(self):
+        folder = self.root.resolve() / "registration-pin"
+        folder.mkdir()
+        entry = folder / "local-gateway.py"
+        entry.write_text("# synthetic public gateway source\n")
+        witness = folder / "executed.txt"
+        manager = folder / "local-v1-controls.py"
+        body = ("from pathlib import Path\nPath(" + repr(str(witness)) + ").write_text('SHOULD_NOT_EXECUTE')\n").encode()
+        manager.write_bytes(body)
+        registration = self.root.resolve() / "mismatched-registration.json"
+        registration_body = json.dumps({"implementationSha256": "f" * 64}).encode()
+        registration.write_bytes(registration_body)
+        env = {"CASEOPS_MOBILE_V1_CONTROLS": "1", "CASEOPS_ENV": "local", "CASEOPS_MOBILE_V1_IMPLEMENTATION_SHA256": hashlib.sha256(body).hexdigest(),
+               "CASEOPS_MOBILE_V1_REGISTRATION": str(registration), "CASEOPS_MOBILE_V1_REGISTRATION_SHA256": hashlib.sha256(registration_body).hexdigest()}
+        with patch.object(gateway_module, "__file__", str(entry)), self.assertRaisesRegex(AssertionError, "REGISTRATION_PIN"):
+            gateway_module.verified_v1_controls(self.root, "unused", environment=env)
+        self.assertFalse(witness.exists())
+
+    def test_v1_runtime_parent_replacement_refuses_and_closes_held_descriptor(self):
+        parent = self.root.resolve() / "namespace"
+        parent.mkdir()
+        source = parent / "runtime.py"
+        source.write_bytes(b"# synthetic public source\n")
+        digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        original_read, original_close = os.read, os.close
+        changed, closed = [], []
+        def replace_parent(descriptor, extent):
+            value = original_read(descriptor, extent)
+            if not changed:
+                changed.append(True)
+                moved = self.root.resolve() / "moved-namespace"
+                parent.rename(moved)
+                parent.symlink_to(moved, target_is_directory=True)
+            return value
+        def close(descriptor):
+            closed.append(descriptor)
+            return original_close(descriptor)
+        with patch.object(gateway_module.os, "read", replace_parent), patch.object(gateway_module.os, "close", close), self.assertRaisesRegex(AssertionError, "NAMESPACE"):
+            gateway_module.runtime_source_bytes(source, digest)
+        self.assertEqual(len(closed), 1)
 
     def test_native_missing_marker_denied_before_transport(self):
         with patch.object(gateway_module.http.client, "HTTPConnection") as transport:

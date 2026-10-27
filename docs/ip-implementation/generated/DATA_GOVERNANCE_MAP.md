@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `e4fd6af06f50197b4978b6c5017b10a0a2c3d6d9e7954c1873368a3119afd350`
-- SQL tables: `347`
-- SQL columns: `5472`
-- ORM indexes: `1796`
-- Alembic/raw index declarations: `1580`
+- Canonical map SHA-256: `83678c604b96a442be6cf81f445e50c2bcf1b88ed9b2ff0b6ac3e0b1780f996a`
+- SQL tables: `354`
+- SQL columns: `5721`
+- ORM indexes: `1810`
+- Alembic/raw index declarations: `1594`
 - Non-SQL data classes: `16`
 
 ## Boundary
@@ -23,6 +23,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | --- | --- | ---: | --- |
 | `access_review_campaigns` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `access_review_decisions` | `tenant_operational_record` | 9 | `registry_fail_closed` |
+| `account_deletion_requests` | `security_identity_control` | 9 | `registry_fail_closed` |
 | `account_setup_tokens` | `security_identity_control` | 10 | `registry_fail_closed` |
 | `affidavit_intelligence_runs` | `tenant_operational_record` | 15 | `registry_fail_closed` |
 | `affidavit_questions` | `tenant_operational_record` | 19 | `registry_fail_closed` |
@@ -108,6 +109,9 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `contract_playbook_rules` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `contract_term_suggestions` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `contracts` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
+| `counsel_read_page_dirty` | `tenant_restricted_legal_content` | 5 | `registry_fail_closed` |
+| `counsel_read_page_members` | `tenant_restricted_legal_content` | 6 | `registry_fail_closed` |
+| `counsel_read_pages` | `tenant_restricted_legal_content` | 33 | `registry_fail_closed` |
 | `courts` | `public_or_licensed_legal_reference` | 10 | `registry_fail_closed` |
 | `custom_roles` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `data_retention_policies` | `tenant_operational_record` | 9 | `registry_fail_closed` |
@@ -279,6 +283,9 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_strategy_entries` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
 | `matter_tag_assignments` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
 | `matter_tags` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
+| `matter_task_queue_dirty` | `tenant_operational_record` | 5 | `registry_fail_closed` |
+| `matter_task_queue_groups` | `tenant_operational_record` | 5 | `registry_fail_closed` |
+| `matter_task_queue_pages` | `tenant_restricted_legal_content` | 186 | `registry_fail_closed` |
 | `matter_tasks` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `matter_time_entries` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `matters` | `tenant_restricted_legal_content` | 53 | `registry_fail_closed` |

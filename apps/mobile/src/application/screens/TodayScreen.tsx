@@ -59,14 +59,20 @@ export function TodayScreen({
                     No items returned in this stream.
                   </Text>
                 )}
-                {stream.truncated ||
-                (stream.total !== null &&
-                  stream.total > stream.items.length) ? (
-                  <Text style={[styles.body, { color: colors.warning }]}>
-                    Showing {stream.items.length} of {stream.total ?? "more"}{" "}
-                    items. This feed has no continuation; use the matter
-                    workspace for full context.
-                  </Text>
+                {stream.truncated === true ? (
+                  <View style={{ gap: 8 }}>
+                    <Text style={[styles.body, { color: colors.warning }]}>
+                      Showing {stream.items.length} returned items. More items
+                      exist in this stream. This feed has no continuation;
+                      open a returned item or search for its matter for full
+                      context.
+                    </Text>
+                    <NativeButton
+                      label={`Search matters for ${streamLabels[stream.key].toLowerCase()}`}
+                      onPress={search}
+                      secondary
+                    />
+                  </View>
                 ) : stream.truncated === null ? (
                   <Text style={styles.label}>
                     Stream completeness was not supplied by the server.

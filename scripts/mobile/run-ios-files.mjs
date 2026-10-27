@@ -22,6 +22,29 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const readRef = (reference) => JSON.parse(verifiedFile(reference?.path, reference?.sha256));
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const ref = (file) => ({ path: file, sha256: digest(readFileSync(file)) });
+export function validateIosFilesCache(fixture) {
+  const cache = fixture.filesCache;
+  assert.ok(typeof cache === 'string' && path.isAbsolute(cache) && path.normalize(cache) === cache,
+    'IOS_FILES_EXPLICIT_ABSOLUTE_CACHE_REQUIRED');
+  const manifest = readRef(fixture.files?.manifestEvidence);
+  assert.equal(path.dirname(fixture.isolationEvidence.path), cache, 'IOS_FILES_RECEIPT_CACHE_MISMATCH');
+  assert.equal(path.dirname(manifest.isolationReceipt.path), cache, 'IOS_FILES_MANIFEST_CACHE_MISMATCH');
+  assert.equal(manifest.baseSeed.path, path.join(cache, 'seed.json'), 'IOS_FILES_SEED_CACHE_MISMATCH');
+  assert.equal(fixture.publicCa.path, path.join(cache, 'tls/ca.crt'), 'IOS_FILES_CA_CACHE_MISMATCH');
+  return cache;
+}
+export function iosSourceAdmissionDiagnostic(result) {
+  const knownClasses = new Set(['AssertionError', 'ValueError', 'TimeoutError', 'FileExistsError',
+    'FileNotFoundError', 'PermissionError', 'RuntimeError', 'JSONDecodeError']);
+  let failureClass = 'unclassified';
+  try {
+    const value = JSON.parse(result.stderr || '');
+    if (value.sourceRouteAdmitted === false && knownClasses.has(value.error)) failureClass = value.error;
+  } catch { /* Argparse and transport output remain unclassified; never retain their text. */ }
+  return { exitStatus: Number.isInteger(result.status) ? result.status : null,
+    timedOut: result.error?.code === 'ETIMEDOUT',
+    launchFailed: !!result.error && result.error.code !== 'ETIMEDOUT', failureClass };
+}
 export function knownFileSources(assets) {
   const previous = assets.priorManifestEvidence || [];
   assert.ok(Array.isArray(previous) && previous.length <= 6, 'BOUNDED_PRIOR_FILES_COHORTS_REQUIRED');
@@ -124,6 +147,7 @@ export async function runIosFiles() {
     assert.equal(fixture.syntheticDataOnly, true, 'SYNTHETIC_FIXTURE_REQUIRED');
     assert.equal(fixture.filesInventory, inventory.inventoryId, 'EXACT_FILES_INVENTORY_REQUIRED');
     assets = fixture.files;
+    validateIosFilesCache(fixture);
     readRef(assets.manifestEvidence); readRef(assets.pickerEvidence);
     validateSourceSeed(fixture, assets.source);
     const fileInputs = { fixture, assets, source: assets.source, provider: assets.provider };
@@ -220,13 +244,14 @@ export async function runIosFiles() {
           const matches = manifest.assets.filter(asset => asset.sha256 === anchor.sha256 && asset.filename === anchor.filename && asset.sizeBytes === anchor.sizeBytes);
           assert.equal(matches.length, 1, 'EXACT_ACKNOWLEDGED_ASSET_REQUIRED');
           const output = path.join(report, `${scenario.id}-source-admission-${randomUUID().slice(0, 8)}.json`);
-          const result = spawnSync('python3', [path.join(root, 'scripts/mobile/admit-ios-file-source.py'),
+          const result = spawnSync(process.env.PYTHON || 'python3', [path.join(root, 'scripts/mobile/admit-ios-file-source.py'),
             '--cache', fixture.filesCache, '--receipt', fixture.isolationEvidence.path, '--manifest', assets.manifestEvidence.path,
             '--manifest-sha256', assets.manifestEvidence.sha256, '--asset-id', matches[0].id,
             '--attachment-id', anchor.attachmentId, '--sha256', anchor.sha256, '--size-bytes', String(anchor.sizeBytes),
             // Two ten-second container inspections plus the helper's bounded
             // 55-second proof. This does not extend the 30-second upload wait.
             '--filename', anchor.filename, '--ack-request-id', ack.requestId, '--output', output], { cwd: root, encoding: 'utf8', timeout: 80000, maxBuffer: 65536 });
+          journal.write({ type: 'source_admission_process', id, ...iosSourceAdmissionDiagnostic(result), automaticRetry: false });
           assert.equal(result.status, 0, 'EXACT_UPLOADED_SOURCE_ADMISSION_FAILED');
           const admission = JSON.parse(result.stdout.trim());
           journal.write({ type: 'source_admission', id, ...admission });

@@ -34,7 +34,9 @@ from caseops_api.services.ip_renewal_tracker_source import source_stop_reason_ex
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 
 
-def _current_receipts(session, *, context, docket_id):
+def _eligible_receipt_links(
+    session, *, context, docket_id=None, candidate_ids=None, intent_ids=None
+):
     due = date_expression("renewal_due_date")
     occurrence = (
         select(IpPortfolioRenewalOccurrence.id)
@@ -129,6 +131,8 @@ def _current_receipts(session, *, context, docket_id):
     eligible = (
         select(
             InAppNotification.id.label("id"),
+            IpDocketRecord.id.label("docket_id"),
+            IpDocketRecord.title.label("target_label"),
             func.count().over(partition_by=InAppNotification.id).label("links"),
         )
         .join(
@@ -178,7 +182,6 @@ def _current_receipts(session, *, context, docket_id):
             CompanyMembership.is_active.is_(True),
             User.id == context.user.id,
             User.is_active.is_(True),
-            IpDocketRecord.id == docket_id,
             IpDocketRecord.is_active.is_(True),
             IpDocketRecord.archived_by_matter_disposal.is_(False),
             IpDocketRecord.status.not_in(_TERMINAL_DOCKET_STATUSES),
@@ -204,8 +207,22 @@ def _current_receipts(session, *, context, docket_id):
                 and_(or_(occurrence, legacy), source_stop_reason_expression(due).is_(None)), hearing
             ),
         )
-        .subquery()
     )
+    if docket_id is not None:
+        eligible = eligible.where(IpDocketRecord.id == docket_id)
+    if candidate_ids is not None:
+        if not candidate_ids or len(candidate_ids) > 50:
+            raise ValueError("A bounded nonempty receipt candidate set is required.")
+        eligible = eligible.where(InAppNotification.id.in_(candidate_ids))
+    if intent_ids is not None:
+        if not intent_ids or len(intent_ids) > 50:
+            raise ValueError("A bounded nonempty intent set is required.")
+        eligible = eligible.where(NotificationDeliveryIntent.id.in_(intent_ids))
+    return eligible.subquery()
+
+
+def _current_receipts(session, *, context, docket_id):
+    eligible = _eligible_receipt_links(session, context=context, docket_id=docket_id)
     return (
         select(InAppNotification)
         .join(eligible, eligible.c.id == InAppNotification.id)
@@ -215,15 +232,30 @@ def _current_receipts(session, *, context, docket_id):
     )
 
 
+def current_receipt_targets(session, *, context, candidate_ids, intent_ids):
+    """Current IP receipt targets for an already bounded recipient-owned page."""
+    eligible = _eligible_receipt_links(
+        session, context=context, candidate_ids=candidate_ids, intent_ids=intent_ids
+    )
+    return select(eligible.c.id, eligible.c.docket_id, eligible.c.target_label).where(
+        eligible.c.links == 1
+    )
+
+
 def _record(note, docket_id):
+    def utc(value):
+        if value is None:
+            return None
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
     return RecipientNotificationRecord(
         id=note.id,
         docket_id=docket_id,
         title=note.title,
         body=note.body,
         status=note.status,
-        created_at=note.created_at,
-        read_at=note.read_at,
+        created_at=utc(note.created_at),
+        read_at=utc(note.read_at),
     )
 
 

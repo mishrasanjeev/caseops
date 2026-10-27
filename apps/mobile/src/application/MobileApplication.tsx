@@ -16,10 +16,19 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { colors, styles, target } from "../components/theme";
+import { NativeButton } from "../components/NativeControls";
+import {
+  navigateRecordLink,
+  type RecordLinkInbox,
+} from "../domain/record-links";
 import type { Matter, MatterRef, WorkItem } from "../domain/contracts";
 import { createRepository } from "../domain/repository";
 import { createSourceRecordsRepository } from "../domain/source-records";
-import type { SourceLocator, SourceRef } from "../domain/source-records";
+import type {
+  SourceKind,
+  SourceLocator,
+  SourceRef,
+} from "../domain/source-records";
 import { createMatterFilesApi } from "../files/api";
 import { attachmentViewerSource } from "../viewer/contracts";
 import type { ViewerSource, ViewerPorts } from "../viewer/contracts";
@@ -43,10 +52,18 @@ import { WorkScreen } from "./screens/WorkScreen";
 import { MatterScreen } from "./screens/MatterScreen";
 
 import { NoteEditor } from "./screens/NoteEditor";
+import { QuickWorkEditor } from "./screens/QuickWorkEditor";
+import type { QuickTarget } from "../domain/quick-work";
 
 import { DraftScreen } from "./screens/DraftScreen";
 
 import { AccountScreen } from "./screens/AccountScreen";
+import { InboxScreen } from "./screens/InboxScreen";
+import { CounselScreen } from "./screens/CounselScreen";
+import {
+  ReadthroughScreen,
+  type ReadthroughTarget,
+} from "./screens/ReadthroughScreen";
 import {
   SourceRecordsScreen,
   SourceRecordDetailScreen,
@@ -60,10 +77,14 @@ type Route =
   | { type: "home" }
   | { type: "matter"; matterId: string; section: MatterSection }
   | { type: "note"; matter: Matter }
+  | { type: "quick-work"; matter: Matter; target: QuickTarget }
   | { type: "draft"; matterId: string; draftId: string }
   | { type: "source-list" }
   | { type: "viewer"; source: ViewerSource }
   | { type: "source"; source: SourceRef; locator?: SourceLocator }
+  | { type: "inbox" }
+  | { type: "counsel"; matterId: string }
+  | { type: "readthrough"; matterId: string; target: ReadthroughTarget }
   | { type: "account" };
 
 const tabs: {
@@ -80,7 +101,14 @@ const tabs: {
 export function MobileApplication(props: MobileApplicationProps) {
   return (
     <ApplicationContent
-      key={`${props.identity.company.id}:${props.identity.user.id}`}
+      key={JSON.stringify([
+        props.identity.company.id,
+        props.identity.user.id,
+        props.identity.membership.id,
+        props.identity.membership.role,
+        props.sessionKey,
+        [...props.identity.capabilities].sort(),
+      ])}
       {...props}
     />
   );
@@ -93,8 +121,14 @@ function ApplicationContent({
   identity,
   sessionKey,
   initialFilesMatterId,
+  recordLinks,
   selectedFile,
   onChooseFile,
+  onCapturePhoto,
+  selectingFile,
+  selectionRevision,
+  readFileSelection,
+  localUnlock,
   onClearSelectedFile,
   viewer,
   onSignOut,
@@ -139,6 +173,7 @@ function ApplicationContent({
     [viewer, request, identity.company.id, identity.user.id, sessionKey],
   );
   const [tab, setTab] = useState<Tab>("today");
+  const [sourceKind, setSourceKind] = useState<SourceKind>("ip_docket");
   const [stacks, setStacks] = useState<Record<Tab, Route[]>>({
     today: initialFilesMatterId
       ? [
@@ -159,9 +194,27 @@ function ApplicationContent({
     )
       onClearSelectedFile();
   }, [route, selectedFile, onClearSelectedFile]);
+  const workAvailable = useRef(false);
+  const suspendWork = useRef<(() => void) | null>(null);
+  workAvailable.current = route.type === "home" && tab === "work";
+  const workSubject = JSON.stringify([
+    identity.company.id,
+    identity.user.id,
+    identity.membership.id,
+    identity.membership.role,
+    sessionKey,
+    [...identity.capabilities].sort(),
+  ]);
   const leaveGuard = useRef<LeaveGuard | null>(null);
-  const guarded = (action: () => void) =>
-    leaveGuard.current ? leaveGuard.current(action) : action();
+  const guarded = (action: () => void) => {
+    const leave = () => {
+      // Invalidate retained Work callbacks before React commits navigation.
+      workAvailable.current = false;
+      suspendWork.current?.();
+      action();
+    };
+    return leaveGuard.current ? leaveGuard.current(leave) : leave();
+  };
   const push = (next: Route) =>
     guarded(() =>
       setStacks((previous) => ({
@@ -169,6 +222,39 @@ function ApplicationContent({
         [tab]: [...previous[tab], next],
       })),
     );
+  const linkState = recordLinks?.inbox.snapshot;
+  const attemptedLink = useRef<{ inbox: RecordLinkInbox; id: number } | null>(
+    null,
+  );
+  const openRecordLink = () => {
+    if (!recordLinks) return;
+    const { inbox, binding } = recordLinks;
+    navigateRecordLink(
+      inbox,
+      binding,
+      identity,
+      sessionKey,
+      guarded,
+      (target) => {
+        setStacks((previous) => ({
+          ...previous,
+          [tab]: [...previous[tab], target],
+        }));
+      },
+    );
+  };
+  useEffect(() => {
+    const pending = linkState?.pending;
+    if (
+      !recordLinks ||
+      !pending ||
+      (attemptedLink.current?.inbox === recordLinks.inbox &&
+        attemptedLink.current.id === pending.id)
+    )
+      return;
+    attemptedLink.current = { inbox: recordLinks.inbox, id: pending.id };
+    openRecordLink();
+  }, [recordLinks?.inbox, linkState?.pending?.id]);
   const pop = useCallback(() => {
     if (stack.length > 1)
       guarded(() =>
@@ -233,12 +319,38 @@ function ApplicationContent({
         ),
     }));
   };
+  const completeQuickWork = () => {
+    leaveGuard.current = null;
+    setRevision((value) => value + 1);
+    setStacks((previous) => ({
+      ...previous,
+      [tab]: previous[tab]
+        .slice(0, -1)
+        .map((item) =>
+          item.type === "matter" ? { ...item, section: "Work" } : item,
+        ),
+    }));
+  };
   return (
     <SafeAreaView
       style={styles.fill}
       edges={["top", "left", "right", "bottom"]}
     >
       <View style={styles.fill} {...swipe.panHandlers}>
+        {linkState?.pending || linkState?.message ? (
+          <View style={{ padding: 12, gap: 8 }}>
+            <Text accessibilityLiveRegion="polite" style={styles.body}>
+              {linkState.message || "A record link is ready to open."}
+            </Text>
+            {linkState.pending ? (
+              <NativeButton
+                label="Open record link"
+                testID="record-link-open"
+                onPress={openRecordLink}
+              />
+            ) : null}
+          </View>
+        ) : null}
         {route.type !== "viewer" ? (
           <View
             style={[
@@ -274,6 +386,30 @@ function ApplicationContent({
               </Text>
               <Text style={styles.label}>{identity.company.name}</Text>
             </View>
+            {route.type === "home" && tab === "today" ? (
+              <Pressable
+                testID="notifications-open"
+                onPress={() => push({ type: "inbox" })}
+                accessibilityRole="button"
+                accessibilityLabel="Notifications"
+                style={{
+                  minWidth: target,
+                  minHeight: target,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 2,
+                }}
+              >
+                <Ionicons
+                  name="notifications-outline"
+                  size={24}
+                  color={colors.brand}
+                />
+                <Text style={[styles.label, { color: colors.brand }]}>
+                  Alerts
+                </Text>
+              </Pressable>
+            ) : null}
             {route.type !== "account" ? (
               <Pressable
                 testID="account-open"
@@ -340,6 +476,7 @@ function ApplicationContent({
               repository={repository}
               active={tab === "calendar" && route.type === "home"}
               openMatter={openMatter}
+              openSource={(source) => push({ type: "source", source })}
             />
           </View>
           <View
@@ -352,9 +489,25 @@ function ApplicationContent({
               resource={today.resource}
               reload={today.reload}
               openWork={openWork}
+              openMatter={(matter) => openMatter(matter, "Work")}
+              request={request}
+              memberId={identity.membership.id}
+              subjectKey={workSubject}
+              active={tab === "work" && route.type === "home"}
+              available={() => workAvailable.current}
+              deactivate={suspendWork}
             />
           </View>
-          {route.type === "note" ? (
+          {route.type === "quick-work" ? (
+            <QuickWorkEditor
+              repository={repository}
+              matter={route.matter}
+              target={route.target}
+              capabilities={identity.capabilities}
+              guard={leaveGuard}
+              onClose={completeQuickWork}
+            />
+          ) : route.type === "note" ? (
             <NoteEditor
               repository={repository}
               matter={route.matter}
@@ -389,20 +542,84 @@ function ApplicationContent({
                 selectedFile,
                 onChooseFile: (version) =>
                   onChooseFile(route.matterId, version),
+                onCapturePhoto: (version) =>
+                  onCapturePhoto(route.matterId, version),
+                selectingFile,
+                selectionRevision,
+                readFileSelection,
                 onClearSelectedFile,
                 onOpenFile: (source) => push({ type: "viewer", source }),
                 guard: leaveGuard,
               }}
               addNote={(matter) => push({ type: "note", matter })}
+              openQuickWork={(matter, target) =>
+                push({ type: "quick-work", matter, target })
+              }
               openDraft={(draftId) =>
                 push({ type: "draft", matterId: route.matterId, draftId })
               }
+              openCounsel={() =>
+                push({ type: "counsel", matterId: route.matterId })
+              }
+              openRecommendations={() =>
+                push({
+                  type: "readthrough",
+                  matterId: route.matterId,
+                  target: { kind: "recommendations" },
+                })
+              }
+              openHearingPack={(hearingId) =>
+                push({
+                  type: "readthrough",
+                  matterId: route.matterId,
+                  target: { kind: "pack", hearingId },
+                })
+              }
+            />
+          ) : route.type === "counsel" ? (
+            <CounselScreen
+              key={`${identity.company.id}:${sessionKey}:${route.matterId}`}
+              request={request}
+              companyId={identity.company.id}
+              matterId={route.matterId}
+              guard={leaveGuard}
+            />
+          ) : route.type === "readthrough" ? (
+            <ReadthroughScreen
+              key={JSON.stringify([
+                identity.company.id,
+                sessionKey,
+                route.matterId,
+                route.target,
+              ])}
+              request={request}
+              companyId={identity.company.id}
+              matterId={route.matterId}
+              target={route.target}
+              guard={leaveGuard}
             />
           ) : route.type === "draft" ? (
             <DraftScreen
               repository={repository}
               matterId={route.matterId}
               draftId={route.draftId}
+            />
+          ) : route.type === "inbox" ? (
+            <InboxScreen
+              request={request}
+              guard={leaveGuard}
+              openTarget={(target) =>
+                target.kind === "matter"
+                  ? push({
+                      type: "matter",
+                      matterId: target.id,
+                      section: "Summary",
+                    })
+                  : push({
+                      type: "source",
+                      source: { kind: "ip_docket", id: target.id },
+                    })
+              }
             />
           ) : route.type === "account" ? (
             <View style={styles.fill}>
@@ -413,12 +630,14 @@ function ApplicationContent({
                 identity={identity}
                 request={request}
                 onSignOut={onSignOut}
+                localUnlock={localUnlock}
               />
             </View>
           ) : route.type === "source-list" ? (
             <SourceRecordsScreen
               repository={sources}
-              kind="ip_docket"
+              kind={sourceKind}
+              onKindChange={setSourceKind}
               active
               openSource={(source, locator) =>
                 push({ type: "source", source, locator })
@@ -438,7 +657,9 @@ function ApplicationContent({
             />
           ) : null}
         </View>
-        {route.type !== "note" && route.type !== "viewer" ? (
+        {route.type !== "note" &&
+        route.type !== "quick-work" &&
+        route.type !== "viewer" ? (
           <View
             style={{
               flexDirection: "row",
@@ -509,7 +730,7 @@ function NativeSourcesButton({ onPress }: { onPress: () => void }) {
     <Pressable
       testID="account-ip-records"
       accessibilityRole="button"
-      accessibilityLabel="Trademark portfolio"
+      accessibilityLabel="Source records"
       onPress={onPress}
       style={{
         minHeight: target,
@@ -524,7 +745,7 @@ function NativeSourcesButton({ onPress }: { onPress: () => void }) {
         color={colors.brand}
         size={22}
       />
-      <Text style={styles.body}>Trademark portfolio</Text>
+      <Text style={styles.body}>Source records</Text>
       <Ionicons name="chevron-forward" color={colors.brand} size={18} />
     </Pressable>
   );

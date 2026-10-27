@@ -4,6 +4,7 @@ import type {
   MatterFileSelection,
 } from "../files/contracts.ts";
 import { TempCleanupError } from "../files/staging.ts";
+import { CameraCaptureError } from "../files/camera.ts";
 
 export type PickerIntent = Readonly<{
   companyId: string;
@@ -13,8 +14,13 @@ export type PickerIntent = Readonly<{
   matterId: string;
   expectedLifecycleVersion: number;
 }>;
+export type FileSelectionState = Readonly<{
+  picking: boolean;
+  revision: number;
+  hasSelection: boolean;
+}>;
 
-function belongs(
+export function pickerIdentityMatches(
   intent: PickerIntent,
   identity: SessionIdentity,
   sessionKey: string,
@@ -32,6 +38,7 @@ export function createFilePickerCoordinator(
   pick: () => Promise<MatterFileAsset | null>,
   cleanup: (asset: MatterFileAsset) => void,
   changed: () => void,
+  capture?: (current: () => boolean) => Promise<MatterFileAsset | null>,
 ) {
   let epoch = 0;
   let picking = false;
@@ -52,6 +59,9 @@ export function createFilePickerCoordinator(
     get picking() {
       return picking;
     },
+    get selectionState(): FileSelectionState {
+      return { picking, revision: epoch, hasSelection: asset !== null };
+    },
     clear,
     snapshot(
       identity: SessionIdentity,
@@ -59,10 +69,13 @@ export function createFilePickerCoordinator(
     ): {
       intent: PickerIntent;
       selection: MatterFileSelection | null;
+      revision: number;
     } | null {
-      if (!intent || !belongs(intent, identity, sessionKey)) return null;
+      if (!intent || !pickerIdentityMatches(intent, identity, sessionKey))
+        return null;
       return {
         intent: { ...intent },
+        revision: epoch,
         selection: asset
           ? {
               companyId: intent.companyId,
@@ -75,8 +88,13 @@ export function createFilePickerCoordinator(
           : null,
       };
     },
-    async choose(next: PickerIntent): Promise<void> {
+    async choose(
+      next: PickerIntent,
+      source: "file" | "camera" = "file",
+    ): Promise<void> {
       if (picking) throw new Error("Finish the current file selection first.");
+      if (source !== "file" && source !== "camera")
+        throw new Error("Choose an available file source.");
       if (
         !Object.values(next).every((value) =>
           typeof value === "string"
@@ -86,13 +104,22 @@ export function createFilePickerCoordinator(
       ) {
         throw new Error("Reload the Matter before selecting a file.");
       }
-      clear();
-      const owner = epoch;
-      intent = { ...next };
+      // Claim before cleanup/publish can synchronously reenter a retained UI
+      // callback. A privacy clear during that publish must not be reacquired.
       picking = true;
-      changed();
+      const owner = epoch + 1;
       try {
-        const result = await pick();
+        clear();
+        if (owner !== epoch) return;
+        intent = { ...next };
+        changed();
+        if (owner !== epoch) return;
+        const result =
+          source === "camera"
+            ? await (capture
+                ? capture(() => owner === epoch)
+                : Promise.reject(new CameraCaptureError("unavailable")))
+            : await pick();
         if (owner !== epoch) {
           if (result) cleanup(result);
           return;
@@ -109,6 +136,7 @@ export function createFilePickerCoordinator(
         if (cause instanceof TempCleanupError) throw cause;
         if (owner !== epoch) return;
         clear();
+        if (cause instanceof CameraCaptureError) throw cause;
         throw new Error(
           "The file could not be selected. Choose it again when ready.",
         );

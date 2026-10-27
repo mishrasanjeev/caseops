@@ -104,9 +104,19 @@ jobs:
         working-directory: apps/mobile
         run: npm test
       - name: Verify the native evidence harness
-        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs apps/mobile/e2e/ios-files.test.mjs apps/mobile/e2e/android-files.test.mjs scripts/mobile/ios-browser-context.test.mjs scripts/mobile/ios-native-locators.test.mjs scripts/mobile/ios-simulator-signing.test.mjs scripts/mobile/prepare-gateway-routes.test.mjs scripts/mobile/prepare-ios-local-run.test.mjs scripts/mobile/ios-files-privacy.test.mjs scripts/mobile/run-ios-files.test.mjs scripts/mobile/filesystem-security.test.mjs scripts/mobile/build-android-local-acceptance.test.mjs scripts/mobile/android-native-proof.test.mjs scripts/mobile/prepare-android-local-run.test.mjs scripts/mobile/android-files-privacy.test.mjs scripts/mobile/run-android-files.test.mjs scripts/mobile/store-packaging.test.mjs scripts/mobile/forge-security.test.mjs scripts/mobile/prepare-source-exports.test.mjs
+        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs apps/mobile/e2e/ios-files.test.mjs apps/mobile/e2e/android-files.test.mjs scripts/mobile/ios-browser-context.test.mjs scripts/mobile/ios-native-locators.test.mjs scripts/mobile/ios-simulator-signing.test.mjs scripts/mobile/prepare-gateway-routes.test.mjs scripts/mobile/prepare-ios-local-run.test.mjs scripts/mobile/ios-files-privacy.test.mjs scripts/mobile/run-ios-files.test.mjs scripts/mobile/filesystem-security.test.mjs scripts/mobile/build-android-local-acceptance.test.mjs scripts/mobile/android-native-proof.test.mjs scripts/mobile/prepare-android-local-run.test.mjs scripts/mobile/android-files-privacy.test.mjs scripts/mobile/run-android-files.test.mjs scripts/mobile/store-packaging.test.mjs scripts/mobile/forge-security.test.mjs scripts/mobile/prepare-source-exports.test.mjs apps/mobile/e2e/v1-workflows.test.mjs scripts/mobile/v1-workflows-credentials.test.mjs apps/mobile/e2e/queue-privacy.test.mjs
       - name: Verify isolated fixture preparation and gateway
         run: python3 scripts/mobile/local-fixture.test.py
+      - name: Verify disabled-by-default synthetic V1 controls
+        run: python3 scripts/mobile/local-v1-controls.test.py
+      - name: Verify separate queue and account-request controls
+        run: python3 scripts/mobile/local-queue-privacy-controls.test.py
+      - name: Verify independent queue and account-request inventory
+        run: python3 scripts/mobile/queue-privacy.test.py
+      - name: Verify the scoped canonical in-app Inbox fixture worker
+        run: python3 scripts/mobile/local-v1-inbox.test.py
+      - name: Verify the independent complete V1 source inventory
+        run: python3 scripts/mobile/v1-workflows.test.py
       - name: Verify synthetic iOS Files picker inputs
         run: python3 scripts/mobile/prepare-ios-files-fixture.test.py
       - name: Verify acknowledged iOS Files source admission

@@ -105,6 +105,7 @@ test("request owns auth, omits cookies, refuses redirects and carries automated 
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url, init) => {
       calls++;
       assert.equal(url, "https://caseops.ai/api/auth/me");
@@ -143,6 +144,7 @@ test("human mode does not automatically assert an automated request", async () =
     "https://caseops.ai",
     false,
     false,
+    { platform: "ios", version: "0.1.0" },
     async (_url, init) => {
       assert.equal(
         new Headers(init.headers).has("X-CaseOps-Automated-Test"),
@@ -160,6 +162,7 @@ test("lost mutation acknowledgement is unknown with no retry", async () => {
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () => {
       calls++;
       throw new Error("socket closed");
@@ -181,6 +184,7 @@ test("malformed successful mutation response is unknown, not saved", async () =>
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () => new Response("not json", { status: 200 }),
   );
   await assert.rejects(
@@ -200,6 +204,7 @@ test("server denial is a rejection, not an unknown save", async () => {
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () =>
       Response.json({ detail: "Matter is disposed." }, { status: 409 }),
   );
@@ -221,6 +226,7 @@ test("pending reads abort under the transport deadline", async () => {
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (_url, init) =>
       new Promise((_resolve, reject) => {
         init.signal?.addEventListener(
@@ -244,6 +250,7 @@ test("deadline remains active after headers during response body consumption", a
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (_url, init) => {
       const stream = new ReadableStream({
         start(controller) {
@@ -308,6 +315,7 @@ test("private bytes use injected GET-only native fetch, owned auth, no cookies/r
       "https://caseops.ai",
       false,
       automated,
+      { platform: "ios", version: "0.1.0" },
       async (url, init) => {
         assert.equal(url, `https://caseops.ai${privatePath}?inline=true`);
         assert.equal(init.method, "GET");
@@ -351,6 +359,7 @@ test("private byte allowlist rejects non-UUID, escaped, cross-realm and altered 
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () => {
       calls++;
       return byteResponse();
@@ -386,6 +395,7 @@ test("private byte options reject caller headers/method/URL and invalid caps bef
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () => {
       calls++;
       return byteResponse([]);
@@ -429,6 +439,7 @@ test("private stream counts each chunk before copying, rejects dishonest length/
       "https://caseops.ai",
       false,
       true,
+      { platform: "ios", version: "0.1.0" },
       async (_url, init) => {
         signal = init.signal;
         const headers = new Headers({ "Content-Type": "application/pdf" });
@@ -464,6 +475,7 @@ test("oversized/invalid declared lengths cancel before reading or allocating a p
       "https://caseops.ai",
       false,
       true,
+      { platform: "ios", version: "0.1.0" },
       async () =>
         new Response(
           new ReadableStream(
@@ -495,6 +507,7 @@ test("oversized/invalid declared lengths cancel before reading or allocating a p
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () =>
       byteResponse([new Uint8Array([1])], {
         headers: { "Content-Length": "2" },
@@ -511,6 +524,7 @@ test("one-byte range probe requires exact 206, bytes 0-0/positive-total and exac
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (_url, init) => {
       assert.equal(new Headers(init.headers).get("Range"), "bytes=0-0");
       return byteResponse([new Uint8Array([9])], {
@@ -540,6 +554,7 @@ test("one-byte range probe requires exact 206, bytes 0-0/positive-total and exac
       "https://caseops.ai",
       false,
       true,
+      { platform: "ios", version: "0.1.0" },
       async () =>
         byteResponse([new Uint8Array([1])], {
           status: 206,
@@ -560,6 +575,7 @@ test("one-byte range probe requires exact 206, bytes 0-0/positive-total and exac
       "https://caseops.ai",
       false,
       true,
+      { platform: "ios", version: "0.1.0" },
       async () =>
         byteResponse(values, {
           status: 206,
@@ -578,6 +594,7 @@ test("one-byte range probe requires exact 206, bytes 0-0/positive-total and exac
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () => byteResponse(),
   );
   await assert.rejects(
@@ -597,6 +614,7 @@ test("redirect status, redirected flag and changed same-origin source identity a
       "https://caseops.ai",
       false,
       true,
+      { platform: "ios", version: "0.1.0" },
       async (_url, init) => {
         assert.equal(init.redirect, "error");
         const response = new Response(
@@ -639,6 +657,7 @@ test("HTTP refusals never parse JSON/text/arrayBuffer error bodies or expose the
       "https://caseops.ai",
       false,
       true,
+      { platform: "ios", version: "0.1.0" },
       async () => {
         const response = new Response(
           new ReadableStream({
@@ -682,6 +701,7 @@ test("private deadline includes body; cancelling a stalled reader cancels its st
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () =>
       new Response(
         new ReadableStream({
@@ -712,6 +732,7 @@ test("caller abort is bounded even for a fetcher ignoring its signal; late respo
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () =>
       new Promise<Response>((resolve) => {
         release = resolve;
@@ -749,6 +770,7 @@ test("private pre-aborted requests never fetch and successful metadata remains l
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () => {
       calls++;
       return new Response(new Uint8Array([1]), {
@@ -781,6 +803,7 @@ test("private cap and range mode are snapshotted before asynchronous fetch retur
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () =>
       new Promise<Response>((resolve) => {
         release = resolve;
@@ -802,6 +825,7 @@ test("tiny/empty stream chunks do not create an unbounded retained chunk invento
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () =>
       new Response(
         new ReadableStream({
@@ -840,6 +864,7 @@ test("missing body/type and unexpected partial responses fail closed without fal
       "https://caseops.ai",
       false,
       true,
+      { platform: "ios", version: "0.1.0" },
       async () => response,
     );
     await assert.rejects(

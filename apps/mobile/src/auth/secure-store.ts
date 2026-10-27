@@ -1,5 +1,7 @@
 import * as SecureStore from "expo-secure-store";
-import { File, Paths } from "expo-file-system";
+import { File, FileMode, Paths } from "expo-file-system";
+import { randomUUID } from "expo-crypto";
+import { clearRetainedBiometricInstallation } from "./biometric-store";
 import type { CredentialStore, StoredCredential } from "./types";
 
 const KEY = "caseops.native.refresh.v1";
@@ -8,14 +10,55 @@ const options: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
 
-export async function initializeDeviceStore(): Promise<void> {
+let initialization: Promise<string> | null = null;
+export function initializeDeviceStore(): Promise<string> {
+  initialization ??= initializeInstallation();
+  return initialization;
+}
+async function initializeInstallation(): Promise<string> {
+  try {
+    return await initializeInstallationInternal();
+  } catch {
+    throw new Error("Local device binding is unavailable.");
+  }
+}
+async function initializeInstallationInternal(): Promise<string> {
   const installation = new File(Paths.cache, "caseops-native-install-v1");
   // Keychain may survive reinstall. A missing app-owned marker invalidates it.
   if (!installation.exists) {
     await SecureStore.deleteItemAsync(KEY, options);
+    await clearRetainedBiometricInstallation();
     installation.create({ overwrite: false });
-    installation.write("1");
+    const id = randomUUID();
+    installation.write(`2:${id}`);
+    return id;
   }
+  const handle = installation.open(FileMode.ReadOnly);
+  let bytes: Uint8Array;
+  try {
+    bytes = await handle.readBytes(65);
+  } finally {
+    handle.close();
+  }
+  if (bytes.length > 64)
+    throw new Error("Local device binding is unavailable.");
+  let marker: string;
+  try {
+    marker = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error("Local device binding is unavailable.");
+  }
+  if (marker === "1") {
+    const id = randomUUID();
+    installation.write(`2:${id}`);
+    return id;
+  }
+  if (
+    marker.length !== 38 ||
+    !/^2:[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(marker)
+  )
+    throw new Error("Local device binding is unavailable.");
+  return marker.slice(2);
 }
 
 export const credentialStore: CredentialStore = {
