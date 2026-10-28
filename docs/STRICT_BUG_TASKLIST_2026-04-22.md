@@ -1,5 +1,23 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 29 Invitation Race: Inconclusive
+
+PRA-10..12 / J14/M14: Docker16 on `36a56e77` has one preserved accept-first
+invitation/removal rendezvous failure. Six complete native groups contain
+2,612 passes and one failure; the remaining groups and browser inventory did
+not run. Both original orderings later passed a passive, independently migrated
+PostgreSQL diagnostic. That does not establish the historical cause or a fix.
+
+The replacement retains joined actor outcomes in both phase sections and
+JUnit, with bounded timing of the unchanged real stages. It also covers the
+adjacent first-invite, reinvite and revocation-reader races. No hash cache,
+deadline extension, barrier relocation, service change or assertion waiver is
+introduced. The 31 support cases and both affected native files (27 cases)
+pass, including nine identical actual call-section/JUnit payloads. Complete
+replacement acceptance and fresh hosted checks remain required.
+Issues #561/#564 and IP15-018 remain open pending exact-release production
+verification, including the original 15-second, 51-row export outcome.
+
 ## October 28 Fresh-Statistics Export And Plan Evidence
 
 Still open. PR567/6cc CI40578349238 has one actual failure among3443 PG

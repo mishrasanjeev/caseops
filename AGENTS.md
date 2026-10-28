@@ -3477,3 +3477,9 @@ requirements when using the fallback.
   disjoint shard plan; retain the original deadline, concurrency and exact-once
   aggregate. A cancelled CI or interrupted Docker wrapper remains incomplete
   even if its tests, cleanup, or outer shell return zero.
+- A PostgreSQL race's missed rendezvous does not reveal the first worker's
+  eventual result. Retain both joined actor outcomes and bounded real-stage
+  timings in the incremental phase report as well as JUnit, including on a body
+  assertion failure. Never infer KDF, database or scheduling causality from the
+  whole call duration or a later passing replay. Keep actual lock-edge checks,
+  real hashing, original deadlines and the original failure authoritative.

@@ -6,6 +6,29 @@ mark unavailable or processing fields rather than treating them as zero.
 Do not count an indexing request, directory prospect, or owned link as organic
 traffic, a backlink, or a conversion.
 
+## 2026-10-28 20:52 UTC - Release Deferral And Automation Restored
+
+The existing daily 07:30 heartbeat is ACTIVE again with the same account,
+property, privacy rules and quiet notification intent. Its updated release
+guard prohibits interruption or competing execution while #561/#564 acceptance
+is active. This is an automation-state change, not a completed GSC audit.
+
+Read-only Cloud Run evidence still identifies API/web `f49b274e` at 100% traffic
+and canonical main `b9946c71`. Hosted checks for `36a56e77` are green, including
+zero independent CodeQL annotations, but local Docker16 has an unresolved
+administrator invitation-race failure. The two later original-source diagnostic
+passes are component evidence, not a new deployment or production acceptance.
+
+The October 27 browser URL-safety stop remains authoritative. No alternate
+browser, connector or API bypass, fresh Google report, ranking, conversion,
+backlink, lead submission, paid probe or sitemap resubmission is claimed.
+Preferred GSC identity remains `sanjeev@orchestrum.in`. Native #558, MacBook,
+readthrough0008, owner MFA, legal evidence and external calendar consent stay
+separate. Next action: finish the human-requested release, then perform a safe
+daily audit if direct access is available. Evidence: the October 28 20:52:41 UTC
+`live-main.json` observation and `platform-invite-race-20261028` sidecars under
+the primary workspace's `outputs/fix-561-20261026/portfolio-export-worker`.
+
 ## 2026-10-28 13:14 UTC - Release Gate, Not A Search Audit
 
 17:08 UTC engineering update: A729 Security40729502028 failed one real scanner

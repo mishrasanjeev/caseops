@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 29 Hosted Green Is Not Local Acceptance
+
+**NO-GO.** The historical `36a56e77` hosted CI, Security and independent
+CodeQL results are green, but Docker16 retains an unresolved invitation-race
+failure and an incomplete full inventory. The original failure is not erased
+by the later two-case diagnostic pass. Test-only joined-worker diagnostics now
+cover the affected administrator races without changing their security or
+deadline oracles. Focused support31/native27 pass with complete phase/JUnit
+evidence; these are not whole-release acceptance. Fresh current-source CI/results and complete canonical Docker
+remain required before merge and guarded production deployment. Read-only
+Cloud Run metadata at October 28 20:52 UTC still identifies API/web `f49b274e`.
+
 ## October 28 Unsettled Scanner Creation Is Not Proven Cleanup
 
 **NO-GO pending joined-source gates.** Security40729502028 fails the real

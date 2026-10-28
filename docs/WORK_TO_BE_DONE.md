@@ -1,5 +1,40 @@
 # CaseOps  - Work To Be Done
 
+## October 29 Local Invitation Race Evidence Hold
+
+Historical source `36a56e77` has green CI40733874352 (42 passed jobs and one
+intentional staging skip), Security40733874351 (8 passed), Advanced
+CodeQL40733874380 (3 passed) and independent results122977389785 (zero
+annotations). Docker16 nevertheless failed the accept-first administrator
+invitation/removal race at its unchanged 3-second rendezvous. Six complete
+native groups contain 2,612 passes, one failure and 7,839 phases. The first
+future was joined but not inspected on that failure path; its historical cause
+remains Inconclusive. The red run was deliberately interrupted after retaining
+the full failing group. Groups 7/8 and 640 browser cases did not run. The outer
+wrapper's exit0 is not acceptance.
+
+An isolated original-source passive diagnostic passed both orderings and six
+phases, with real hashing and unchanged locks/waits. It did not reproduce or
+explain the failure. The replacement adds test-only joined-actor sections and
+JUnit properties, bounded real-stage timing and 31 pure support regressions.
+All 31 pass with 93 reconciled phases. Both complete affected PostgreSQL files
+also pass: 27 cases, 81 phases, zero skips. All nine changed race identities
+have identical actual call-section and JUnit payloads. Accept/remove, reinvite,
+first-invite and reader/revocation-writer assertions remain authoritative under
+J14/M14/PRA-10..12. No product, KDF, deadline or lock change is introduced.
+Full replacement Docker, current-head hosted checks, protected main merge and
+exact-serving production replay remain required.
+
+Read-only Cloud Run evidence at October 28 20:52:41 UTC confirms main `b9946c71`
+and API/web `f49b274e` at 100% traffic. Both original workbooks were actually
+published and read back as INTERIM06/NO-GO at 21:11 UTC, with seven formulas and
+all 44 tracked verdicts preserved. No new release is claimed. The daily 07:30
+SEO heartbeat is ACTIVE with a non-interruption guard. The October 27 browser
+URL-safety stop remains; no fresh Google audit is claimed. Native #558,
+MacBook/readthrough0008, legal review, old-calendar consent and owner MFA remain
+separate. Evidence is under the primary workspace's
+`outputs/fix-561-20261026/portfolio-export-worker/platform-invite-race-20261028`.
+
 ## October 28 Scanner Creation Race Replacement
 
 A729 Security40729502028 failed one of67 offline scanner tests: its cleanup

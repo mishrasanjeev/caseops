@@ -1,5 +1,18 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 29 Administrator Race Evidence
+
+J14/M14/US-040/042/FT-060/061/PRA-10..12 retain the original native lock-edge,
+credential and lifecycle assertions. Post-join actor evidence now survives a
+body failure in accept/remove, reinvite, concurrent first-invite and reader/
+revocation-writer tests. Completed real hash/consume/issue spans are bounded
+diagnostics, never fake hashing or permission to extend a deadline. All 31
+pure evidence cases pass (93 phases), alongside both complete affected native
+files: 27 passes, 81 phases and nine matching call-section/JUnit payloads.
+Docker16's 2,612P/1F and two later original-source diagnostic passes do not
+establish a product cause or complete replacement acceptance. J19/M21/US-063
+records restored daily automation with release deferral, not a new GSC audit.
+
 ## October 28 Security Evidence Replacement
 
 ARCH-OPS-23/QG-SEC-004/SEC-031 require independent exact-head CodeQL results,
