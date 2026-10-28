@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import fs from 'node:fs';
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +11,45 @@ import { gatewayEvidenceReference, prepareGatewayRoutes, REVIEWED_GATEWAY_IMPLEM
 import { validateSessionDeletePolicy } from '../../apps/mobile/e2e/session-admission.mjs';
 
 const source = fileURLToPath(new URL('./local-gateway.py', import.meta.url));
+
+test('gateway evidence Windows dev-zero portability preserves pre-read identity and both final metadata frames', (t) => {
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-gateway-portability-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'public.json'); writeFileSync(file, '{"public":true}');
+  const original = Object.fromEntries(['openSync', 'closeSync', 'fstatSync', 'lstatSync', 'readSync'].map(key => [key, fs[key]]));
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  for (const change of ['zero', 'same', 'nonzero', 'inode', 'owner', 'directory', 'symlink', 'fd-drift', 'named-drift', 'darwin']) {
+    let fd, reads = 0;
+    Object.defineProperty(process, 'platform', { ...platform, value: change === 'darwin' ? 'darwin' : 'win32' });
+    fs.openSync = (...args) => { fd = original.openSync(...args); return fd; };
+    fs.fstatSync = (...args) => {
+      const value = original.fstatSync(...args); return change === 'fd-drift' && reads > 0
+        ? new Proxy(value, { get: (target, key) => key === 'dev' ? value.dev + 1n : Reflect.get(target, key) }) : value;
+    };
+    fs.lstatSync = (name, options) => {
+      const value = original.lstatSync(name, options); if (name !== file) return value;
+      const device = change === 'same' || change === 'named-drift' && reads > 0 ? value.dev : change === 'nonzero' ? value.dev + 1n : 0n;
+      return new Proxy(value, { get(target, key) {
+        if (key === 'dev') return device;
+        if (key === 'ino' && change === 'inode') return value.ino + 1n;
+        if (key === 'uid' && change === 'owner') return value.uid + 1n;
+        if (key === 'isFile' && change === 'directory') return () => false;
+        if (key === 'isSymbolicLink' && change === 'symlink') return () => true;
+        return Reflect.get(target, key);
+      } });
+    };
+    fs.readSync = (...args) => { reads++; return original.readSync(...args); };
+    syncBuiltinESMExports();
+    try {
+      if (['zero', 'same'].includes(change)) assert.match(gatewayEvidenceReference(file).sha256, /^[a-f0-9]{64}$/);
+      else assert.throws(() => gatewayEvidenceReference(file), /FIXTURE_EVIDENCE/, change);
+      if (!['zero', 'same', 'fd-drift', 'named-drift'].includes(change)) assert.equal(reads, 0, `${change}: refuse before payload`);
+      assert.throws(() => original.fstatSync(fd), { code: 'EBADF' });
+    } finally {
+      Object.assign(fs, original); syncBuiltinESMExports(); Object.defineProperty(process, 'platform', platform);
+    }
+  }
+});
 function input(t, { receiptPatch = {}, statusPatch = {}, routes = ['GET /api/build', 'GET /api/auth/native/sessions'] } = {}) {
   const cache = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-gateway-export-')));
   t.after(() => rmSync(cache, { recursive: true, force: true }));

@@ -35,15 +35,15 @@ def read_bound(path, expected_hash=None, limit=MAX_TOTAL_BYTES):
     descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(descriptor, "rb") as source:
         opened = os.fstat(source.fileno())
-        require(stat.S_ISREG(opened.st_mode) and named.st_ino == opened.st_ino and
-                (sys.platform == "win32" or named.st_dev == opened.st_dev), "Evidence identity changed")
+        fields = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+        def same(left, right, cross_api=False):
+            return all((cross_api and key == "st_dev" and sys.platform == "win32" and right.st_dev == 0)
+                       or getattr(left, key) == getattr(right, key) for key in fields)
+        require(stat.S_ISREG(opened.st_mode) and same(opened, named, True), "Evidence identity changed")
         require(0 < opened.st_size <= limit, "Bounded regular evidence required")
         data = source.read(limit + 1)
         after, current = os.fstat(source.fileno()), path.lstat()
-        def identity(info):
-            return info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
-        require(identity(opened) == identity(after) == identity(current) and stat.S_ISREG(current.st_mode) and
-                (sys.platform == "win32" or opened.st_dev == after.st_dev == current.st_dev) and
+        require(same(opened, after) and same(named, current) and stat.S_ISREG(current.st_mode) and
                 len(data) == opened.st_size, "Evidence changed while reading")
     digest = hashlib.sha256(data).hexdigest()
     require(expected_hash is None or digest == expected_hash, "Evidence hash mismatch")

@@ -9,6 +9,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import subprocess
 import ssl
@@ -18,6 +19,7 @@ import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import call, patch
+from urllib.error import HTTPError
 
 
 def load(name, file):
@@ -33,7 +35,145 @@ extend_module = load("local_extend", "local-extend.py")
 fixture_module = load("local_fixture_files", "local-fixture.py")
 
 
+class VerificationMarkerTests(unittest.TestCase):
+    def compose_health_program(self, service):
+        target = Path(__file__).resolve().parents[2] / "compose.mobile-local.yml"
+        fd = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                     | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
+        fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+        frame = lambda value: tuple(getattr(value, key) for key in fields)
+        def namespace():
+            rows = {}
+            for parent in target.parents:
+                self.assertLess(len(rows), 128)
+                value = parent.lstat()
+                self.assertTrue(stat.S_ISDIR(value.st_mode))
+                self.assertFalse(stat.S_ISLNK(value.st_mode))
+                self.assertEqual(parent.resolve(), parent)
+                rows[parent] = tuple(getattr(value, key) for key in fields[:5])
+            return rows
+        try:
+            before = os.fstat(fd)
+            named = target.lstat()
+            parents = namespace()
+            self.assertTrue(stat.S_ISREG(before.st_mode))
+            self.assertTrue(stat.S_ISREG(named.st_mode))
+            self.assertFalse(stat.S_ISLNK(named.st_mode))
+            if hasattr(os, "getuid"):
+                self.assertEqual(before.st_uid, os.getuid())
+            self.assertEqual(before.st_nlink, 1)
+            self.assertLessEqual(before.st_size, 32768)
+            for field in fields:
+                if os.name == "nt" and field == "st_dev" and named.st_dev == 0:
+                    continue
+                self.assertEqual(getattr(before, field), getattr(named, field))
+            self.assertEqual(target.resolve(), target)
+            raw = os.read(fd, before.st_size + 1)
+            self.assertEqual(len(raw), before.st_size)
+            self.assertEqual(frame(before), frame(os.fstat(fd)))
+            self.assertEqual(frame(named), frame(target.lstat()))
+            self.assertEqual(parents, namespace())
+        finally:
+            os.close(fd)
+        current, programs = None, []
+        for line in raw.decode("utf-8").splitlines():
+            heading = re.fullmatch(r"  ([a-z][a-z0-9-]*):", line)
+            if heading:
+                current = heading[1]
+            command = re.fullmatch(r'      test: \[CMD, (python|node), (-c|-e), (".*")\]', line)
+            if command and current == service:
+                programs.append((command[1], command[2], json.loads(command[3])))
+        self.assertEqual(len(programs), 1)
+        return programs[0]
+
+    def test_compose_api_readiness_constructor_owns_marker_on_success_and_failure(self):
+        executable, option, program = self.compose_health_program("api")
+        self.assertEqual((executable, option), ("python", "-c"))
+        for failure in (False, True):
+            with self.subTest(failure=failure):
+                observed = []
+                def transport(request, *, timeout):
+                    self.assertEqual(request.full_url, "http://127.0.0.1:8000/api/health")
+                    self.assertEqual(request.get_method(), "GET")
+                    self.assertEqual(dict((k.lower(), v) for k, v in request.header_items()),
+                                     {"x-caseops-automated-test": "no-paid-providers"})
+                    self.assertEqual(timeout, 3)
+                    observed.append(request.full_url)
+                    if failure:
+                        raise HTTPError(request.full_url, 503, "synthetic unavailable", {}, None)
+                    return io.BytesIO(b"{}")
+                with patch("urllib.request.urlopen", side_effect=transport):
+                    if failure:
+                        with self.assertRaises(HTTPError):
+                            exec(compile(program, "<canonical-api-readiness>", "exec"), {})
+                    else:
+                        exec(compile(program, "<canonical-api-readiness>", "exec"), {})
+                self.assertEqual(observed, ["http://127.0.0.1:8000/api/health"])
+
+    def test_compose_web_readiness_constructor_owns_marker_for_every_outcome(self):
+        executable, option, program = self.compose_health_program("web")
+        self.assertEqual((executable, option), ("node", "-e"))
+        for mode, code in (("ok", 0), ("status", 1), ("transport", 1)):
+            with self.subTest(mode=mode):
+                prelude = "globalThis.fetch=(...args)=>{console.log(JSON.stringify(args));"
+                prelude += "return Promise.reject(Error('synthetic unavailable'));};" if mode == "transport" else (
+                    "return Promise.resolve({ok:" + ("true" if mode == "ok" else "false") + "});};")
+                result = subprocess.run([executable, option, prelude + "\n" + program],
+                                        capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, code)
+                self.assertEqual(result.stderr, "")
+                self.assertEqual(json.loads(result.stdout), ["http://127.0.0.1:3000/api/release-identity",
+                    {"headers": {"X-CaseOps-Automated-Test": "no-paid-providers"}}])
+
+    def test_https_identity_constructor_owns_marker_and_preserves_tls_and_failure(self):
+        for failure in (False, True):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                requests = []
+                def transport(request, *, context: object, timeout):
+                    self.assertEqual(request.full_url, "https://127.0.0.1:4443/api/release-identity")
+                    self.assertEqual(dict((k.lower(), v) for k, v in request.header_items()),
+                                     {"x-caseops-automated-test": "no-paid-providers"})
+                    self.assertEqual(context.minimum_version, ssl.TLSVersion.TLSv1_2)
+                    self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+                    self.assertTrue(context.check_hostname)
+                    self.assertEqual(timeout, 15)
+                    requests.append(request.full_url)
+                    if failure:
+                        raise HTTPError(request.full_url, 503, "synthetic unavailable", {}, None)
+                    return io.BytesIO(b'{"ok":true}')
+                with patch.object(bootstrap_module.ssl, "create_default_context", return_value=context), patch.object(
+                        bootstrap_module, "urlopen", side_effect=transport):
+                    if failure:
+                        with self.assertRaises(HTTPError):
+                            bootstrap_module.https_json("https://127.0.0.1:4443/api/release-identity", Path(directory))
+                    else:
+                        self.assertEqual(bootstrap_module.https_json("https://127.0.0.1:4443/api/release-identity", Path(directory)), {"ok": True})
+                self.assertEqual(len(requests), 1)
+
+    def test_https_identity_cannot_opt_out_of_its_constructor_marker(self):
+        with patch.object(bootstrap_module.ssl, "create_default_context") as context, patch.object(
+                bootstrap_module, "urlopen", return_value=io.BytesIO(b'{"ok":true}')) as transport:
+            with self.assertRaises(TypeError):
+                bootstrap_module.https_json("https://127.0.0.1:4443/api/release-identity", Path("/synthetic"), False)
+            context.assert_not_called()
+            transport.assert_not_called()
+
+
 class PrivateMetadataContractTests(unittest.TestCase):
+    def test_nonzero_named_device_mismatch_is_not_a_windows_portability_exception(self):
+        fields = {"st_dev": 31, "st_ino": 42, "st_uid": 501, "st_gid": 20,
+                  "st_mode": stat.S_IFREG | 0o600, "st_nlink": 1, "st_size": 73,
+                  "st_mtime_ns": 101, "st_ctime_ns": 102}
+        opened = SimpleNamespace(**fields)
+        for module in (fixture_module, bootstrap_module):
+            with self.subTest(module=module.__name__):
+                self.assertFalse(module.private_metadata_equal(opened,
+                    SimpleNamespace(**{**fields, "st_dev": 32}), windows=True, named_path=True))
+                self.assertTrue(module.private_metadata_equal(opened, opened, windows=True, named_path=True))
+                self.assertFalse(module.private_metadata_equal(opened,
+                    SimpleNamespace(**{**fields, "st_dev": 0}), windows=True, named_path=False))
+
     def test_simulated_windows_named_device_exception_preserves_every_other_metadata_field(self):
         # Pure synthetic metadata contract only; this is not Windows filesystem
         # or ACL acceptance and does not patch process-global os.name/pathlib.
@@ -793,8 +933,25 @@ class PortabilityTests(unittest.TestCase):
                         return "unit-api\nunit-web\nunit-postgres"
                     return "synthetic offline command result"
 
+                received = []
+                responses = [OSError("synthetic readiness pending"), build, status, web]
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                def transport(request, *, context: object, timeout):
+                    self.assertEqual(dict((k.lower(), v) for k, v in request.header_items()),
+                                     {"x-caseops-automated-test": "no-paid-providers"})
+                    self.assertEqual(context.minimum_version, ssl.TLSVersion.TLSv1_2)
+                    self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+                    self.assertTrue(context.check_hostname)
+                    self.assertEqual(timeout, 15)
+                    received.append(request.full_url)
+                    response = responses.pop(0)
+                    if isinstance(response, OSError):
+                        raise response
+                    return io.BytesIO(json.dumps(response).encode())
                 with patch.object(bootstrap_module, "run", side_effect=command), patch.object(bootstrap_module, "https_json",
-                        side_effect=[build, status, web]) as https, patch.object(bootstrap_module, "tls_probe", return_value={"unitOnly": True}) as tls, redirect_stdout(io.StringIO()):
+                        wraps=bootstrap_module.https_json) as https, patch.object(bootstrap_module.ssl, "create_default_context",
+                        return_value=context), patch.object(bootstrap_module, "urlopen", side_effect=transport), patch.object(
+                        bootstrap_module.time, "sleep") as sleep, patch.object(bootstrap_module, "tls_probe", return_value={"unitOnly": True}) as tls, redirect_stdout(io.StringIO()):
                     bootstrap_module.finish(root, config, source, argparse.Namespace(mfa=True))
                 receipt = json.loads((root / "receipt.json").read_text())
                 self.assertEqual(receipt["platform"], platform)
@@ -820,8 +977,14 @@ class PortabilityTests(unittest.TestCase):
                 self.assertFalse(receipt["productionAccessed"] or receipt["metroLaunched"])
                 self.assertEqual(https.call_args_list, [
                     call("https://127.0.0.1:8443/api/build", root),
+                    call("https://127.0.0.1:8443/api/build", root),
                     call("https://127.0.0.1:8443/__caseops_e2e/status", root),
-                    call("https://127.0.0.1:3443/api/release-identity", root, False)])
+                    call("https://127.0.0.1:3443/api/release-identity", root)])
+                self.assertEqual(received, [
+                    "https://127.0.0.1:8443/api/build", "https://127.0.0.1:8443/api/build",
+                    "https://127.0.0.1:8443/__caseops_e2e/status", "https://127.0.0.1:3443/api/release-identity"])
+                self.assertEqual(responses, [])
+                sleep.assert_called_once_with(1)
                 tls.assert_called_once_with(root, config, negative_controls=True)
 
 

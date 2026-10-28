@@ -7,7 +7,7 @@ import { clientExtensionInventory } from '../../apps/mobile/e2e/client-extension
 import { validateClientExtensionFixture, version } from '../../apps/mobile/e2e/client-extensions-contract.mjs';
 import { CX_PROTOCOL, CX_REMOTE_CAPABILITIES } from './client-extension-controls.mjs';
 import { readClientPublicInput, writeClientProjection } from './client-extension-public-input.mjs';
-import { captureClientFile, clientHarnessFingerprint } from './client-extension-runtime.mjs';
+import { captureClientFile, clientHarnessFingerprint, captureClientTreeInventory, captureClientTreeInventoryAsync, assertClientRuntimeInventory } from './client-extension-runtime.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 
 const ROOT=path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
@@ -19,13 +19,53 @@ export function pendingClientExtensionRequest(platform){return{
  expectedSourceSha:null,expectedSourceFingerprint:null,expectedInputFileCount:null,expectedBinaryHash:null,expectedHarnessFingerprint:null,
  fixtureEvidence:null,producerEvidence:null,retainedRowsEvidence:null,artifactVersionEvidence:null,
  buildReceipt:null,dockerReceipt:null,deviceEvidence:null,installedEvidence:null,codeClosure:null,controlsEvidence:null,
- appiumServerEvidence:null,appiumInventoryEvidence:null,acceptedToolEvidence:null,appiumUrl:null,wdaPort:null,
+ appiumServerEvidence:null,appiumInventoryEvidence:null,acceptedToolEvidence:null,clientRuntimeInventoryEvidence:null,appiumUrl:null,wdaPort:null,
  members:[],claimRoot:null,report:null,leaseDeadlineMs:null,
  physicalHardwareAcceptance:'unverified',verifiedDomainAssociation:'unverified'};}
 
 export function pendingClientExtensionProducers(platform) {
  assert.ok(['ios','android'].includes(platform));const common={schemaVersion:1,readyForLive:false,preparedOnly:true,platform,noPaidMarker:'no-paid-providers',productionAccessed:false,automaticRetry:false,sourceSha:null,backendRevision:null,webRevision:null,expiresAt:null,companyId:null,companySlug:null,membershipId:null,userId:null,credentialEvidence:null};
  return{normal:{...common,kind:'native-client-normal-api-producer',datasetId:null,cameraMatterId:null,byteSourceId:null,byteSourceSha256:null,byteSourceText:null,hearingDate:null,actualBinaryVersion:null,floorVersion:null,workflowDomain:null,secondMatterEvidence:null,scannerConfigurationEvidence:null,retainedRows:[{id:null,kind:'oversize'},{id:null,kind:'legacy-json'}]},retained:{...common,kind:'native-client-retained-row-producer',matterId:null,validSiblingId:null,validSiblingEvidence:null,expectedLifecycleVersion:null,databaseIdentity:null,rows:[{id:null,kind:'oversize'},{id:null,kind:'legacy-json'}]}};
+}
+
+/** Filesystem evidence only. The full v2 manifest is audit-only; neither it nor
+ * this public producer acknowledges a native server, device or private actor. */
+export function prepareClientRuntimeInventory(q,dependencies={}) {
+ const io={snapshot:sourceSnapshot,capture:captureClientTreeInventory,...dependencies};
+ assert.equal(q.kind,'prepare-native-client-runtime-inventory');assert.equal(q.preparedOnly,true);
+ assert.ok(['webdriver','appium'].includes(q.purpose)&&['ios','android'].includes(q.platform));
+ assert.ok(path.isAbsolute(q.root)&&path.resolve(q.root)===q.root);
+ for(const file of [q.output,q.manifestOutput]) {
+  assert.ok(path.isAbsolute(file)&&path.resolve(file)===file);
+  assert.ok(file!==ROOT&&!file.startsWith(ROOT+path.sep),'CX_RUNTIME_OUTPUT_OUTSIDE_SOURCE_REQUIRED');
+  assert.ok(file!==q.root&&!file.startsWith(q.root+path.sep),'CX_AUDIT_OUTPUT_OUTSIDE_RUNTIME_REQUIRED');
+ }
+ assert.notEqual(q.output,q.manifestOutput);
+ if(q.purpose==='appium')assert.ok(path.isAbsolute(q.appiumEntry)&&path.resolve(q.appiumEntry)===q.appiumEntry&&q.appiumEntry.startsWith(q.root+path.sep),'CX_CANONICAL_CAPTURED_RUNTIME_FILE_REQUIRED');
+ const source=io.snapshot(ROOT);assert.equal(source.sourceDirty,false);
+ const captured=io.capture(q.root,q.manifestOutput,undefined,q.purpose==='appium'?q.appiumEntry:undefined);
+ const inventory={schemaVersion:2,kind:'native-client-'+q.purpose+'-inventory',complete:true,platform:q.platform,...captured,...(q.purpose==='appium'?{appiumEntry:q.appiumEntry}:{})};
+ assertClientRuntimeInventory(inventory,q.purpose,q.platform);assert.deepEqual(io.snapshot(ROOT),source);
+ return {inventory,source,preparedOnly:true,publicProjectionOnly:true,nativeActions:0,privateReads:0,actualNativeAcceptance:false};
+}
+
+export async function prepareClientRuntimeInventoryAsync(q,dependencies={}) {
+ const io={snapshot:sourceSnapshot,capture:captureClientTreeInventoryAsync,...dependencies};
+ assert.equal(q.kind,'prepare-native-client-runtime-inventory');assert.equal(q.preparedOnly,true);
+ assert.ok(['webdriver','appium'].includes(q.purpose)&&['ios','android'].includes(q.platform));
+ assert.ok(path.isAbsolute(q.root)&&path.resolve(q.root)===q.root);
+ for(const file of [q.output,q.manifestOutput]) {
+  assert.ok(path.isAbsolute(file)&&path.resolve(file)===file);
+  assert.ok(file!==ROOT&&!file.startsWith(ROOT+path.sep),'CX_RUNTIME_OUTPUT_OUTSIDE_SOURCE_REQUIRED');
+  assert.ok(file!==q.root&&!file.startsWith(q.root+path.sep),'CX_AUDIT_OUTPUT_OUTSIDE_RUNTIME_REQUIRED');
+ }
+ assert.notEqual(q.output,q.manifestOutput);
+ if(q.purpose==='appium')assert.ok(path.isAbsolute(q.appiumEntry)&&path.resolve(q.appiumEntry)===q.appiumEntry&&q.appiumEntry.startsWith(q.root+path.sep),'CX_CANONICAL_CAPTURED_RUNTIME_FILE_REQUIRED');
+ const source=io.snapshot(ROOT);assert.equal(source.sourceDirty,false);
+ const captured=await io.capture(q.root,q.manifestOutput,undefined,q.purpose==='appium'?q.appiumEntry:undefined);
+ const inventory={schemaVersion:2,kind:'native-client-'+q.purpose+'-inventory',complete:true,platform:q.platform,...captured,...(q.purpose==='appium'?{appiumEntry:q.appiumEntry}:{})};
+ assertClientRuntimeInventory(inventory,q.purpose,q.platform);assert.deepEqual(io.snapshot(ROOT),source);
+ return {inventory,source,preparedOnly:true,publicProjectionOnly:true,nativeActions:0,privateReads:0,actualNativeAcceptance:false};
 }
 
 /** Public-only composition; the separate writer/normal HTTP receipts stay distinct. */
@@ -127,6 +167,11 @@ export function clientExtensionCodeClosure(root=ROOT){
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))try{
  const[mode,arg,digest]=process.argv.slice(2);
  if(mode==='--pending'){assert.equal(process.argv.length,4);console.log(JSON.stringify({request:pendingClientExtensionRequest(arg),producers:pendingClientExtensionProducers(arg)},null,2));}
+ else if(mode==='--runtime-inventory'){
+  assert.equal(process.argv.length,5);const q=readClientPublicInput(arg,{maxBytes:16384,expectedSha256:digest}).value,result=await prepareClientRuntimeInventoryAsync(q);
+  const bytes=Buffer.from(JSON.stringify(result.inventory,null,2)+'\n');writeClientProjection(q.output,bytes);
+  console.log(JSON.stringify({inventoryEvidence:{path:q.output,sha256:sha(bytes)},auditManifest:result.inventory.auditManifest,preparedOnly:true,actualNativeAcceptance:false,publicProjectionOnly:true,nativeActions:0,privateReads:0}));
+ }
  else if(mode==='--policy-plan'){
   assert.equal(process.argv.length,5);const q=readClientPublicInput(arg,{maxBytes:16384,expectedSha256:digest}).value,result=prepareClientPolicyTransition(q);
   const outputs=[[q.configurationOutput,result.configuration],[q.overrideOutput,result.override]].map(([file,value])=>({path:file,bytes:Buffer.from(JSON.stringify(value,null,2)+'\n')}));

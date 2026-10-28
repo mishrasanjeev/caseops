@@ -92,13 +92,14 @@ Inspect `xcodebuild -version`, `xcode-select -p` and
 requires owner action; no cloud service or new external account is required for
 an unsigned local simulator build. With the same supported Node/npm versions:
 
-```sh
-export CASEOPS_MOBILE_TOOLING_HOME="$HOME/.cache/caseops-mobile/tooling"
-export APPIUM_HOME="$HOME/.cache/caseops-mobile/appium"
-npm install --prefix "$CASEOPS_MOBILE_TOOLING_HOME" --save-exact --no-audit --no-fund appium@3.8.0 webdriverio@10.1.0
-node "$CASEOPS_MOBILE_TOOLING_HOME/node_modules/appium/index.js" driver install xcuitest@12.20.0
-node "$CASEOPS_MOBILE_TOOLING_HOME/node_modules/appium/index.js" driver doctor xcuitest
-```
+The previous bare npm/Appium recipe is superseded by
+[scoped host tooling preparation](../../docs/mobile/HOST_TOOLING_SECURITY_2026-10-28.md).
+Use exact Node24.15.0/npm11.12.1 and a new per-platform `{core,home}` root,
+Appium3.9.0/WebdriverIO10.1.0 and XCUITest12.22.2. Derive the exact child
+trust recipe from held reviewed source before npm or an Appium entry starts;
+never overwrite the retained3.8 cache or reuse a logged bootstrap URI blindly.
+Driver doctor/server commands are held until fresh complete installed/locked
+advisories, notices, scoped TLS and full runtime inventory are admitted.
 
 Only after parent confirms SDK58/RN0.88 pins, native dependencies and scaffold:
 set `CASEOPS_MOBILE_AUTOMATED_TEST=1`, `EXPO_PUBLIC_API_ORIGIN` to the local

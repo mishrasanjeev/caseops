@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, chooseAndroidFile,
-  collectAndroidFiles, rapidActivateAndroidUpload, validateAndroidFileAsset, validateAndroidFilesContext,
+  collectAndroidFiles, rapidActivateAndroidUpload, repeatAndroidFileSelection, validateAndroidFileAsset, validateAndroidFilesContext,
   validateAndroidPicker, validateAndroidPrivacyReceipt, validateAndroidSourceSeed,
   validateAndroidUploadAcknowledgement } from './android-files.mjs';
 import { selector } from './native-ui.mjs';
@@ -31,19 +31,20 @@ function fixture(t, packageName = 'com.android.documentsui') {
   const buildReceipt = evidence('build', { kind: 'explicit-unit-fixture-not-native-execution' });
   const manifestEvidence = evidence('manifest', { schemaVersion: 1, kind: 'android-files-synthetic-fixtures', platform: 'android', syntheticDataOnly: true, assets: Object.values(uploads) });
   const folderName = 'CaseOpsFiles-unit-files-run';
-  const picker = { schemaVersion: 1, observed: true, platform: 'android', udid: 'emulator-5584', appId: APP, packageName,
+  const providerEvidence = evidence('provider-staging', { kind: 'explicit-synthetic-v2-provider-stage' });
+  const picker = { schemaVersion: 2, providerOriginalsRead: false, stagingEvidence: providerEvidence, observed: true, platform: 'android', udid: 'emulator-5584', appId: APP, packageName,
     folderName, buildReceipt, manifestEvidence, controls: { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: `${packageName}:id/roots_list` },
       downloads: { kind: 'text', value: 'Downloads' }, folder: { kind: 'text', value: folderName }, fileTitleId: 'android:id/title', cancel: 'android-back' },
-    assets: Object.values(uploads).map(asset => ({ filename: asset.filename, sha256: asset.sha256, sizeBytes: asset.sizeBytes, observedProviderHash: asset.sha256, pickerName: asset.filename })) };
+    assets: Object.values(uploads).map(asset => ({ filename: asset.filename, sha256: asset.sha256, sizeBytes: asset.sizeBytes, transferSha256: asset.sha256, pickerName: asset.filename })) };
   const context = { platform: 'android', source, filesState: { uploads: {} }, gatewayBaseline: { runId: 'unit-run' },
-    assets: { uploads, manifestEvidence }, provider: { folderName, evidence: evidence('picker', picker) },
+    assets: { uploads, manifestEvidence, providerEvidence }, provider: { folderName, evidence: evidence('picker', picker) },
     driver: { $$: async () => [], elementClick: async () => assert.fail('NO_ACTUAL_NATIVE_DEVICE_IN_UNIT') },
     fixture: { appId: APP, udid: 'emulator-5584', environment: 'docker-integration', syntheticDataOnly: true, coreInventory: 'native-core-2026-10-25',
       backendSha: 'a'.repeat(40), webSha: 'a'.repeat(40), binarySourceSha: 'a'.repeat(40), apiOrigin: 'https://10.0.2.2:8453',
       gatewayUrl: 'https://127.0.0.1:8453', gatewayRunId: 'unit-run', companyId: seed.companyId, membershipId: seed.membershipId,
       matter: { id: matterId }, seedEvidence: evidence('seed', seed), buildReceipt } };
-  const rawPrivacy = delta => evidence('raw-privacy', { schemaVersion: 1, kind: 'android-files-privacy-snapshot', observed: true,
-    platform: 'android', udid: context.fixture.udid, appId: APP, ownedAppScopeOnly: true, complete: true, providerOriginalsPreserved: true,
+  const rawPrivacy = delta => evidence('raw-privacy', { schemaVersion: 2, kind: 'android-files-privacy-snapshot', observed: true,
+    platform: 'android', udid: context.fixture.udid, appId: APP, ownedAppScopeOnly: true, complete: true, providerOriginalsPreserved: null, providerMetadataPreserved: true, providerOriginalsRead: false, providerByteVerification: 'deferred-until-postflight',
     counts: { ownedStagingFiles: 0, privateAssetMatchCount: 0 }, ...delta });
   return { context, source, seed, uploads, picker, evidence, rawPrivacy };
 }
@@ -121,6 +122,7 @@ function pickerDouble(context, asset, cancel = false) {
     waitUntil: async (predicate, options) => { if (!await predicate()) throw new Error(options.timeoutMsg); },
     $$: async query => {
       if (query === 'id=files-choose') return [element('choose', '', 'picker')];
+      if (query === 'id=files-selection-clear' && state === 'selected') return [element('clear-selection', '', 'app')];
       if (query === '~Show roots' && state === 'picker') return [element('roots', '', 'roots')];
       if (query === `id=${packageName}:id/roots_list` && state === 'roots') return [{ isDisplayed: async () => true,
         $$: async value => { assert.equal(value, selector('android', 'text', 'Downloads')); return [element('downloads', '', 'downloads')]; } }];
@@ -131,6 +133,33 @@ function pickerDouble(context, asset, cancel = false) {
     } };
   context.driver = driver; return { driver, commands, state: () => state };
 }
+function repeatSelectionFixture(t) {
+  const f = fixture(t), fake = pickerDouble(f.context, f.uploads.txt);
+  const before = { runId: f.context.fixture.gatewayRunId, lastSequence: 0, requests: [] };
+  const ledger = { ...before, lastSequence: 1, markerRejected: 0, routeRejected: 0, overflow: false,
+    requests: [{ sequence: 1, method: 'GET', route: `/api/matters/${matterId}/workspace`, status: 200, nativeMarker: true }] };
+  f.context.gatewayBaseline = gatewayBaseline({ ...ledger, lastSequence: 0, requests: [] }, { gatewayRunId: ledger.runId });
+  const fetch = globalThis.fetch; t.after(() => { globalThis.fetch = fetch; });
+  globalThis.fetch = async () => new Response(JSON.stringify(ledger), { status: 200 });
+  const boundaries = [];
+  f.context.observeFilesystem = async boundary => { boundaries.push({ boundary, commands: [...fake.commands] }); return f.evidence('repeat-privacy', {
+    schemaVersion: 2, observed: true, platform: 'android', udid: f.context.fixture.udid, appId: APP,
+    boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: null, providerMetadataUnchanged: true, providerOriginalsRead: false,
+    providerByteVerification: 'deferred-until-postflight', stagedFileCount: 0, privateByteMatchCount: 0, rawEvidence: f.rawPrivacy() }); };
+  return { ...f, fake, before, ledger, boundaries };
+}
+test('repeat selection composes two real picker command paths and clears each owned selection before returning', async t => {
+  const f = repeatSelectionFixture(t); await repeatAndroidFileSelection(f.context, f.before);
+  assert.deepEqual(f.fake.commands, ['choose','roots','downloads','folder','chosen-file','clear-selection','choose','roots','downloads','folder','chosen-file','clear-selection']);
+  assert.equal(f.fake.state(), 'app'); assert.deepEqual(f.boundaries.map(row => row.boundary), ['selection-clear-first','selection-clear']);
+  assert.equal(f.boundaries[0].commands.filter(value => value === 'choose').length, 1); assert.ok(f.ledger.requests.every(row => row.method === 'GET'));
+});
+test('lost first Android clear acknowledgement is retained without a second choose clear or cleanup claim', async t => {
+  const f = repeatSelectionFixture(t), click = f.context.driver.elementClick, lost = Error('SYNTHETIC_CLEAR_ACK_UNKNOWN'); let clears = 0;
+  f.context.driver.elementClick = async id => { await click(id); if (id === 'clear-selection') { clears++; throw lost; } };
+  await assert.rejects(repeatAndroidFileSelection(f.context, f.before), error => error === lost);
+  assert.equal(clears, 1); assert.equal(f.fake.commands.filter(value => value === 'choose').length, 1); assert.deepEqual(f.boundaries, []);
+});
 test('actual Android picker wrapper uses only observed Downloads/folder/file controls or one explicit Back cancellation', async t => {
   for (const packageName of ['com.android.documentsui', 'com.google.android.documentsui']) for (const cancel of [false, true]) {
     const f = fixture(t, packageName), fake = pickerDouble(f.context, f.uploads.txt, cancel);
@@ -205,8 +234,8 @@ test('rapid TXT activation is one measured native protocol dispatch with two tap
 
 test('normalized privacy facts must equal complete raw evidence and cannot hide one retained byte or staging file', t => {
   const f = fixture(t), boundary = 'selection-clear';
-  const receipt = { schemaVersion: 1, observed: true, platform: 'android', udid: f.context.fixture.udid, appId: APP, boundary,
-    ownedAppScopeOnly: true, providerOriginalsUnchanged: true, stagedFileCount: 0, privateByteMatchCount: 0, rawEvidence: f.rawPrivacy() };
+  const receipt = { schemaVersion: 2, observed: true, platform: 'android', udid: f.context.fixture.udid, appId: APP, boundary,
+    ownedAppScopeOnly: true, providerOriginalsUnchanged: null, providerMetadataUnchanged: true, providerOriginalsRead: false, providerByteVerification: 'deferred-until-postflight', stagedFileCount: 0, privateByteMatchCount: 0, rawEvidence: f.rawPrivacy() };
   validateAndroidPrivacyReceipt(f.context, boundary, receipt);
   for (const patch of [{ udid: 'other' }, { boundary: 'other' }, { stagedFileCount: 1 }, { privateByteMatchCount: 1 },
     { rawEvidence: f.rawPrivacy({ complete: false }) }, { rawEvidence: f.rawPrivacy({ counts: { ownedStagingFiles: 0, privateAssetMatchCount: 1 } }) }])
@@ -226,8 +255,8 @@ test('signed-out final case requires earlier logout, restarts only the app and p
     terminateApp: async id => { assert.equal(id, APP); calls.push('terminate'); }, activateApp: async id => { assert.equal(id, APP); calls.push('activate'); },
     switchContext: async value => assert.equal(value, 'NATIVE_APP'), waitUntil: async predicate => assert.ok(await predicate()),
     $$: async query => ['id=signed-out', 'id=sign-in'].includes(query) ? [{ isDisplayed: async () => true }] : [] };
-  f.context.observeFilesystem = async boundary => f.evidence('privacy', { schemaVersion: 1, observed: true, platform: 'android', udid: f.context.fixture.udid,
-    appId: APP, boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: true, stagedFileCount: 0, privateByteMatchCount: 0, rawEvidence: f.rawPrivacy() });
+  f.context.observeFilesystem = async boundary => f.evidence('privacy', { schemaVersion: 2, observed: true, platform: 'android', udid: f.context.fixture.udid,
+    appId: APP, boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: null, providerMetadataUnchanged: true, providerOriginalsRead: false, providerByteVerification: 'deferred-until-postflight', stagedFileCount: 0, privateByteMatchCount: 0, rawEvidence: f.rawPrivacy() });
   await androidFilesScenarios.at(-1).run(f.context); assert.deepEqual(calls, ['terminate', 'activate']); assert.deepEqual(ledger.requests, []);
   f.context.filesState.logoutAcknowledged = false;
   await assert.rejects(androidFilesScenarios.at(-1).run(f.context), /ANDROID_FILES_PRIOR_LOGOUT_REQUIRED/);

@@ -36,7 +36,10 @@ RUN python /tmp/caseops-remove-compromised-ca.py \
 # Verification stays enabled against this explicitly selected patched OS bundle.
 ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt \
     PIP_USE_DEPRECATED=legacy-certs
-RUN pip install --no-cache-dir uv==0.13.4
+# uv0.13.5 keeps the clean120 Mozilla roots and fixes the separate verifier advisory.
+# Retain both exact upstream base-policy notices with this API-only installer.
+COPY vendor/uv-0.13.5 /usr/share/doc/caseops-api/third-party/uv-0.13.5
+RUN pip install --no-cache-dir uv==0.13.5
 
 FROM runtime-base AS api
 

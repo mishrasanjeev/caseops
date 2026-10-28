@@ -8,7 +8,7 @@ import { sourceSnapshot } from './source-snapshot.mjs';
 import { observeInstalled } from './run-v1-workflows.mjs';
 import { createClientExtensionControls } from './client-extension-controls.mjs';
 import { readClientPublicInput } from './client-extension-public-input.mjs';
-import { admitClientServer, clientHarnessFingerprint, captureClientFile, captureClientTree, selectedClientExecutable } from './client-extension-runtime.mjs';
+import { admitClientServerAsync, clientHarnessFingerprint, captureClientFile, captureClientTreeCommitmentAsync, assertClientRuntimeInventory, selectedClientExecutable } from './client-extension-runtime.mjs';
 import { clientExtensionCodeClosure } from './prepare-client-extensions.mjs';
 import { CX_BUDGETS } from '../../apps/mobile/e2e/client-extensions-inventory.mjs';
 import { collectNativeClientExtensions, clientExtensionScenarios } from '../../apps/mobile/e2e/client-extensions-20261028.mjs';
@@ -35,8 +35,8 @@ export const clientFailure=(error,fallback)=>PUBLIC_FAILURES.has(error?.message)
 export async function admitClientExtensions(q,dependencies={}) {
   requireClientExtensionRequest(q);
   const io={read,bytes:ref=>readClientPublicInput(ref.path,{expectedSha256:ref.sha256,json:false}).bytes,snapshot:sourceSnapshot,harness:clientHarnessFingerprint,installed:observeInstalled,
-    artifactHash:binaryHash,getJson:localJson,server:admitClientServer,tool:captureClientFile,selectedExecutable:selectedClientExecutable,reader:readV1Member,
-    buildCheck:validateBuildReceipt,coreCheck:validateCoreFixture,closure:clientExtensionCodeClosure,tree:captureClientTree,environment:process.env,now:Date.now,...dependencies};
+    artifactHash:binaryHash,getJson:localJson,server:admitClientServerAsync,tool:captureClientFile,selectedExecutable:selectedClientExecutable,reader:readV1Member,
+    buildCheck:validateBuildReceipt,coreCheck:validateCoreFixture,closure:clientExtensionCodeClosure,tree:captureClientTreeCommitmentAsync,environment:process.env,now:Date.now,...dependencies};
   assert.equal(q.repoRoot,ROOT);assert.equal(q.automaticRetry,false);assert.equal(q.nativeWindowOwned,true);
   assert.equal(io.environment.CASEOPS_NATIVE_CLIENT_EXTENSIONS_GO,'EXPLICIT_OWNED_NATIVE_WINDOW');
   assert.ok(Number.isSafeInteger(q.leaseDeadlineMs)&&q.leaseDeadlineMs-io.now()>=CX_BUDGETS.serialMs+120000,'CX_FULL_INVENTORY_LEASE_REQUIRED');
@@ -80,9 +80,9 @@ export async function admitClientExtensions(q,dependencies={}) {
   const installed=io.installed(fixture,q.platform,q.expectedBinaryHash,io.environment);assert.equal(installed.udid,fixture.udid);assert.equal(installed.appId,fixture.appId);assert.equal(installed.binaryHash,q.expectedBinaryHash);
   assert.equal(expectedInstalled.binaryHash??expectedInstalled.installedApkSha256,q.expectedBinaryHash);assert.equal(expectedInstalled.udid,fixture.udid);
   if(q.platform==='android'){assert.equal(installed.bootId,device.bootId);assert.equal(device.pageSizeBytes,16384);}else{assert.equal(installed.deviceTypeIdentifier,device.deviceTypeIdentifier);assert.equal(installed.runtime,device.runtime);}
-  const server=io.server(q);assert.deepEqual(fixture.cx.osRecipes.appiumInventoryEvidence,q.appiumInventoryEvidence);
-  const clientRuntime=io.read(q.clientRuntimeInventoryEvidence);assert.equal(clientRuntime.complete,true);assert.equal(clientRuntime.root,io.environment.CASEOPS_MOBILE_TOOLING_HOME);
-  assert.deepEqual(io.tree(clientRuntime.root),clientRuntime.tree,'CX_COMPLETE_WEBDRIVER_RUNTIME_CHANGED');
+  const server=await io.server(q);assert.deepEqual(fixture.cx.osRecipes.appiumInventoryEvidence,q.appiumInventoryEvidence);
+  const clientRuntime=io.read(q.clientRuntimeInventoryEvidence);assertClientRuntimeInventory(clientRuntime,'webdriver',q.platform);assert.equal(clientRuntime.root,io.environment.CASEOPS_MOBILE_TOOLING_HOME);
+  assert.deepEqual(await io.tree(clientRuntime.root),clientRuntime.tree,'CX_COMPLETE_WEBDRIVER_RUNTIME_CHANGED');
   assert.notEqual(io.environment.NODE_TLS_REJECT_UNAUTHORIZED,'0');assert.equal(io.environment.NODE_EXTRA_CA_CERTS,isolation.publicCA);assert.equal(fixture.publicCa.path,isolation.publicCA);io.bytes(fixture.publicCa);
   for(const [origin,route,revision]of [[isolation.gatewayUrl,'/api/build',isolation.backendRevision],[isolation.webGatewayUrl,'/api/release-identity',isolation.webRevision]]){
     const value=await io.getJson(origin+route);assert.equal(value.release_sha,source.sourceSha);assert.equal(value.revision,revision);
@@ -104,7 +104,7 @@ export async function admitClientExtensions(q,dependencies={}) {
   assert.equal(publicMembers.length,2);assert.equal(publicMembers[0].fixture.membershipId,fixture.membershipId);assert.notEqual(publicMembers[0].fixture.companyId,publicMembers[1].fixture.companyId);
   // Every public and current-runtime check above precedes either protected reader.
   const currentGuard=async()=>{
-    assert.deepEqual(io.snapshot(ROOT),source);assert.deepEqual(io.installed(fixture,q.platform,q.expectedBinaryHash,io.environment),installed);io.server(q);
+    assert.deepEqual(io.snapshot(ROOT),source);assert.deepEqual(io.installed(fixture,q.platform,q.expectedBinaryHash,io.environment),installed);await io.server(q);
     const api=await io.getJson(isolation.gatewayUrl+'/api/build'),web=await io.getJson(isolation.webGatewayUrl+'/api/release-identity');
     assert.equal(api.release_sha,source.sourceSha);assert.equal(api.revision,isolation.backendRevision);assert.equal(web.release_sha,source.sourceSha);assert.equal(web.revision,isolation.webRevision);
     const status=await io.getJson(isolation.gatewayUrl+'/__caseops_e2e/status');assert.equal(status.runId,isolation.gatewayRunId);assert.equal(status.implementationSha256,gatewayCode.sha256);assert.equal(status.v1RegistrationSha256,controls.registrationEvidence.sha256);
@@ -147,7 +147,7 @@ export function admitClientOutputRoot(q) {
 }
 
 export async function runClientExtensions(q,dependencies={}) {
-  const io={admit:admitClientExtensions,controls:createClientExtensionControls,server:admitClientServer,snapshot:sourceSnapshot,harness:clientHarnessFingerprint,installed:observeInstalled,now:Date.now,mkdir:(file,options)=>fs.mkdirSync(file,options),journal:file=>new Journal(file),...dependencies};
+  const io={admit:admitClientExtensions,controls:createClientExtensionControls,server:admitClientServerAsync,snapshot:sourceSnapshot,harness:clientHarnessFingerprint,installed:observeInstalled,now:Date.now,mkdir:(file,options)=>fs.mkdirSync(file,options),journal:file=>new Journal(file),...dependencies};
   admitClientOutputRoot(q);const admitted=await io.admit(q);
   // Private admission has completed. Every later public/output/journal failure
   // must still clear both retained members; test-only dependencies are code,
@@ -157,15 +157,19 @@ export async function runClientExtensions(q,dependencies={}) {
   try{
   const collection=collectNativeClientExtensions(q.platform);
   admitClientOutputRoot(q);io.mkdir(q.report,{mode:0o700});journal=io.journal(path.join(q.report,'events.jsonl'));
-  const write=event=>journal.write(event),state={mutationUncertain:false};let controls,preflightPassed=false,finalPassed=false,active,sessionUnknown=false;const sessions=[];
+  const write=event=>journal.write(event),state={mutationUncertain:false};let controls,preflightPassed=false,finalPassed=false,active,sessionUnknown=false,runtimeRefusal;const sessions=[];
   write({type:'run_started',...collection,harnessFingerprint:q.expectedHarnessFingerprint,source:admitted.source,binaryHash:q.expectedBinaryHash,physicalHardwareAcceptance:'unverified'});
-  const live=()=>{assert.ok(io.now()<q.leaseDeadlineMs-120000);assert.equal(io.harness(ROOT),q.expectedHarnessFingerprint);assert.deepEqual(io.snapshot(ROOT),admitted.source);assert.deepEqual(io.installed(admitted.fixture,q.platform,q.expectedBinaryHash,process.env),admitted.installed);io.server(q);};
+  const live=async()=>{
+    if(runtimeRefusal)throw runtimeRefusal;
+    try{assert.ok(io.now()<q.leaseDeadlineMs-120000);assert.equal(io.harness(ROOT),q.expectedHarnessFingerprint);assert.deepEqual(io.snapshot(ROOT),admitted.source);assert.deepEqual(io.installed(admitted.fixture,q.platform,q.expectedBinaryHash,process.env),admitted.installed);await io.server(q);}
+    catch(error){if(error.captureRequiresProcessExit)runtimeRefusal=error;throw error;}
+  };
   try{
     await admitted.currentGuard();controls=await io.controls({fixture:admitted.fixture,descriptor:admitted.controls,admission:admitted,report:q.report});
     write({type:'preflight_result',status:'passed'});preflightPassed=true;
     const remote=dependencies.remote||createRequire(path.join(process.env.CASEOPS_MOBILE_TOOLING_HOME||path.join(os.homedir(),'.cache/caseops-mobile/tooling'),'package.json'))('webdriverio').remote;
     await executeClientExtensionInventory({platform:q.platform,now:io.now,write,setup:async scenario=>{
-      live();const f=admitted.fixture,transport=androidSessionTransport(f,q.platform),url=new URL(q.appiumUrl);
+      await live();const f=admitted.fixture,transport=androidSessionTransport(f,q.platform),url=new URL(q.appiumUrl);
       if(q.platform==='android')assert.equal(url.href,transport.appiumUrl.href,'CX_ANDROID_TRANSPORT_BINDING_REQUIRED');
       const capabilities={platformName:q.platform==='ios'?'iOS':'Android','appium:automationName':q.platform==='ios'?'XCUITest':'UiAutomator2','appium:udid':f.udid,'appium:deviceName':f.deviceName,'appium:platformVersion':f.platformVersion,'appium:noReset':true,'appium:autoLaunch':false,'appium:newCommandTimeout':60,...transport.capabilities,
         ...(q.platform==='ios'?{'appium:bundleId':f.appId,'appium:wdaLocalPort':q.wdaPort,'appium:includeSafariInWebviews':true,'appium:webviewConnectTimeout':20000}:{'appium:appPackage':f.appId,'appium:dontStopAppOnReset':true,'appium:ensureWebviewsHavePages':true,'appium:enableWebviewDetailsCollection':true})};
@@ -190,8 +194,8 @@ export async function runClientExtensions(q,dependencies={}) {
       if(active){const driver=active;active=undefined;try{const id=driver.sessionId;await driver.deleteSession();write({...appiumSessionEvent(id,'deleted'),id:q.platform+':'+scenario.id});}catch{failures.push('session');}}
       assert.equal(sessionUnknown,false,'CX_OPERATOR_OUTCOME_UNVERIFIED_NO_REPLAY','CX_OPERATOR_COMPLETION_DEADLINE','CX_SESSION_CREATE_OUTCOME_UNKNOWN');assert.equal(failures.length,0,'CX_INDEPENDENT_CLEANUP_UNVERIFIED');
     }});
-    live();assert.equal(state.mutationUncertain,false);assert.equal(state.finalSignedOut,true);assert.equal(sessions.length,24);finalPassed=true;
-  }catch(error){write({type:'extension_boundary_failed',reason:clientFailure(error,'CX_RUN_INCOMPLETE')});if(!preflightPassed){write({type:'preflight_result',status:'failed'});for(const id of collection.intended)for(const phase of ['setup','call','teardown']){write({type:'phase_started',id,phase});write({type:'phase_result',id,phase,status:phase==='setup'?'blocked':phase==='call'?'not-run':'passed',reason:'CX_NO_NATIVE_SESSION_PREFLIGHT_REQUIRED'});}}}
+    await live();assert.equal(state.mutationUncertain,false);assert.equal(state.finalSignedOut,true);assert.equal(sessions.length,24);finalPassed=true;
+  }catch(error){if(error.captureRequiresProcessExit)runtimeRefusal=error;write({type:'extension_boundary_failed',reason:clientFailure(error,'CX_RUN_INCOMPLETE')});if(!preflightPassed){write({type:'preflight_result',status:'failed'});for(const id of collection.intended)for(const phase of ['setup','call','teardown']){write({type:'phase_started',id,phase});write({type:'phase_result',id,phase,status:phase==='setup'?'blocked':phase==='call'?'not-run':'passed',reason:'CX_NO_NATIVE_SESSION_PREFLIGHT_REQUIRED'});}}}
   finally{
     const failures=[];
     if(active)try{const id=active.sessionId;await active.deleteSession();write(appiumSessionEvent(id,'deleted'));}catch{failures.push('session');}
@@ -200,7 +204,7 @@ export async function runClientExtensions(q,dependencies={}) {
   }
   if(preflightPassed)write({type:'postflight_result',status:finalPassed?'passed':'failed'});write({type:'run_completed',platform:q.platform,intendedCount:24});
   const result=reconcileResults(journal.events,collection.intended);closeJournal();
-  const summary={...collection,...result,report:q.report,actualNativeExecution:sessions.length>0,nativeExecution:sessions.length?'observed':'not-run',physicalHardwareAcceptance:'unverified',core23Claimed:false,files17Claimed:false,v1Claimed:false};
+  const summary={...collection,...result,report:q.report,actualNativeExecution:sessions.length>0,nativeExecution:sessions.length?'observed':'not-run',physicalHardwareAcceptance:'unverified',core23Claimed:false,files17Claimed:false,v1Claimed:false,...(runtimeRefusal?{captureCleanupUncertain:true,captureRequiresProcessExit:true}:{})};
   fs.writeFileSync(path.join(q.report,'summary.json'),JSON.stringify(summary,null,2)+'\n',{flag:'wx',mode:0o600});return summary;
   }catch(error){originalError=error;throw error;}
   finally{

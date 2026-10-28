@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, opendirSync, readSync, realpathSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, opendirSync, readSync, realpathSync, writeFileSync, writeSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,7 +22,7 @@ const ref = (file, bytes) => ({ path: file, sha256: sha(bytes) });
 const inside = (root, file) => { const relative = path.relative(root, file); return relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); };
 const jsonRef = (value) => JSON.parse(verifiedFile(value?.path, value?.sha256));
 
-function bytes(file, limit, expected) {
+function bytes(file, limit, expected, budget) {
   const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
   const identity = value => fields.map(key => String(value[key]));
   const namespace = () => {
@@ -44,13 +44,16 @@ function bytes(file, limit, expected) {
     const opened = fstatSync(fd, { bigint: true });
     const ancestors = namespace(), before = lstatSync(file, { bigint: true });
     assert.ok(before.isFile() && !before.isSymbolicLink(), 'REGULAR_FILES_EVIDENCE_REQUIRED');
-    assert.ok(opened.isFile() && opened.size >= 0n && opened.size <= BigInt(limit), 'FILES_EVIDENCE_BYTE_BOUND');
+    assert.ok(opened.isFile() && opened.nlink === 1n && opened.uid === BigInt(process.getuid())
+      && opened.size >= 0n && opened.size <= BigInt(limit), 'FILES_EVIDENCE_BYTE_BOUND');
+    if (budget) assert.ok(opened.size <= BigInt(budget.limit - budget.bytes), 'FILES_EVIDENCE_TOTAL_BOUND');
     assert.deepEqual(identity(before), identity(opened), 'FILES_EVIDENCE_REPLACED');
-    const buffer = Buffer.alloc(limit + 1); let length = 0;
+    const buffer = Buffer.alloc(Math.min(limit + 1, budget ? budget.limit - budget.bytes + 1 : limit + 1)); let length = 0;
     while (length < buffer.length) {
       const count = readSync(fd, buffer, length, buffer.length - length, null);
       if (!count) break;
       length += count;
+      if (budget) { budget.bytes += count; assert.ok(budget.bytes <= budget.limit, 'FILES_EVIDENCE_TOTAL_BOUND'); }
     }
     assert.ok(length <= limit && BigInt(length) === opened.size, 'FILES_EVIDENCE_BYTE_BOUND');
     const data = buffer.subarray(0, length);
@@ -165,36 +168,86 @@ function manifestAssets(evidence) {
   return manifest.assets;
 }
 
+const PROVIDER_FIELDS = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
+function providerMetadata(file) {
+  const value = lstatSync(file, { bigint: true });
+  assert.ok(value.isFile() && !value.isSymbolicLink() && value.uid === BigInt(process.getuid()) && value.nlink === 1n
+    && (value.mode & 0o7777n) === 0o600n && realpathSync(file) === file, 'PROVIDER_ORIGINAL_METADATA_REQUIRED');
+  return Object.fromEntries(PROVIDER_FIELDS.map(key => [key, String(value[key])]));
+}
+function writeProviderAsset(file, data, deadline) {
+  const frame = value => PROVIDER_FIELDS.map(key => String(value[key]));
+  const parents = () => {
+    assert.equal(realpathSync(path.dirname(file)), path.dirname(file), 'PROVIDER_WRITE_NAMESPACE_CHANGED');
+    const result = [];
+    for (let p = path.dirname(file); ; p = path.dirname(p)) {
+      assert.ok(Date.now() < deadline, 'PROVIDER_STAGING_DEADLINE');
+      const value = lstatSync(p, { bigint: true }); assert.ok(value.isDirectory() && !value.isSymbolicLink());
+      result.push([p, ...['dev','ino','mode','uid','gid'].map(key => String(value[key]))]);
+      if (path.dirname(p) === p) return result;
+    }
+  };
+  const before = parents();
+  const fd = openSync(file, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
+  try {
+    const opened = fstatSync(fd, { bigint: true });
+    assert.ok(opened.isFile() && opened.nlink === 1n && opened.uid === BigInt(process.getuid()) && opened.size === 0n
+      && (opened.mode & 0o7777n) === 0o600n, 'PROVIDER_WRITE_IDENTITY_REQUIRED');
+    assert.deepEqual(frame(opened), frame(lstatSync(file, { bigint: true })));
+    let offset = 0;
+    while (offset < data.length) {
+      assert.ok(Date.now() < deadline, 'PROVIDER_STAGING_DEADLINE');
+      const count = writeSync(fd, data, offset, Math.min(65536, data.length - offset));
+      assert.ok(Number.isSafeInteger(count) && count > 0 && count <= Math.min(65536, data.length - offset), 'PROVIDER_WRITE_NO_PROGRESS'); offset += count;
+    }
+    fsyncSync(fd); assert.ok(Date.now() < deadline, 'PROVIDER_STAGING_DEADLINE');
+    const finished = fstatSync(fd, { bigint: true });
+    assert.deepEqual(frame(finished).slice(0, 6), frame(opened).slice(0, 6)); assert.equal(finished.size, BigInt(data.length));
+    assert.deepEqual(frame(finished), frame(lstatSync(file, { bigint: true })));
+    assert.deepEqual(parents(), before); assert.equal(realpathSync(file), file);
+    assert.deepEqual(frame(fstatSync(fd, { bigint: true })), frame(finished));
+    assert.deepEqual(frame(lstatSync(file, { bigint: true })), frame(finished));
+    return Object.fromEntries(PROVIDER_FIELDS.map(key => [key, String(finished[key])]));
+  } finally { closeSync(fd); }
+}
+
 export function stageIosFilesAssets({ containers, manifestEvidence, runId, output }) {
+  const deadline = Date.now() + 30000;
   validateContainers(containers); outputPath(output, containers);
   assert.match(runId || '', /^[a-zA-Z0-9][a-zA-Z0-9-]{5,63}$/, 'UNIQUE_FILES_RUN_ID_REQUIRED');
   const assets = manifestAssets(manifestEvidence);
   const prepared = assets.map((asset) => {
+    assert.ok(asset.path !== containers.deviceDataPath && !inside(containers.deviceDataPath, asset.path), 'HOST_FIXTURE_MUST_NOT_READ_DEVICE_PROVIDER');
     const data = bytes(asset.path, 262144, asset.sha256); assert.equal(data.length, asset.sizeBytes, 'FILES_ASSET_SIZE_MISMATCH'); return { asset, data };
   });
   const folderName = `CaseOpsFiles-${runId}`, folderPath = path.join(containers.provider.storagePath, folderName);
   mkdirSync(folderPath, { recursive: false, mode: 0o700 });
   const staged = prepared.map(({ asset, data }) => {
-    const file = path.join(folderPath, asset.filename); writeFileSync(file, data, { flag: 'wx', mode: 0o600 });
-    const observed = bytes(file, 262144, asset.sha256); assert.equal(observed.length, asset.sizeBytes, 'PROVIDER_STAGING_READBACK_MISMATCH');
-    return { id: asset.id, filename: asset.filename, path: file, sha256: asset.sha256, sizeBytes: asset.sizeBytes };
+    const file = path.join(folderPath, asset.filename), metadata = writeProviderAsset(file, data, deadline);
+    return { id: asset.id, filename: asset.filename, path: file, sha256: asset.sha256, sizeBytes: asset.sizeBytes,
+      transferSha256: sha(data), transferMethod: 'verified-buffer-exclusive-descriptor-write', providerMetadata: metadata };
   });
-  const receipt = { schemaVersion: 1, kind: 'ios-files-provider-assets', udid: containers.udid, appId: containers.appId,
+  const receipt = { schemaVersion: 2, kind: 'ios-files-provider-assets', udid: containers.udid, appId: containers.appId,
     syntheticDataOnly: true, manifestEvidence, containers, folderName, folderPath, assets: staged,
     ownedStagingRoot: path.join(containers.appData.path, 'Library/Caches/caseops-matter-files-v1'),
     appPrivateImportRoots: ['Documents/Inbox', 'tmp', 'Library/Caches/DocumentPicker'].map((relativePath) => ({
       relativePath, path: path.join(containers.appData.path, relativePath), existsAtStaging: existsSync(path.join(containers.appData.path, relativePath)) })),
-    providerOriginalsPreserved: true, nativeUiExecuted: false, appSharingFlagsChanged: false };
+    providerOriginalsRead: false, providerOriginalsPreserved: null, originalByteVerification: 'deferred-until-postflight',
+    nativeUiExecuted: false, appSharingFlagsChanged: false };
   return { stagingEvidence: writeReceipt(output, receipt), staging: receipt };
 }
 
 const DEFAULT_LIMITS = { files: 4096, entries: 8192, depth: 16, fileBytes: 8388608, totalBytes: 67108864 };
-export function snapshotIosFilesPrivacy({ containers, stagingEvidence, output, knownSources = [], limits = {} }) {
+export function snapshotIosFilesPrivacy({ containers, stagingEvidence, output, knownSources = [], limits = {}, verifyProviderBytes = false }) {
+  assert.equal(typeof verifyProviderBytes, 'boolean', 'EXPLICIT_PROVIDER_VERIFICATION_REQUIRED');
   validateContainers(containers); outputPath(output, containers);
   const bounds = { ...DEFAULT_LIMITS, ...limits };
   for (const [key, value] of Object.entries(bounds)) assert.ok(Object.hasOwn(DEFAULT_LIMITS, key) && Number.isSafeInteger(value)
     && value > 0 && value <= DEFAULT_LIMITS[key], 'PRIVACY_SCAN_BOUND_CANNOT_BE_RAISED');
+  const byteBudget = { bytes: 0, limit: bounds.totalBytes };
   const staging = jsonRef(stagingEvidence);
+  assert.equal(staging.schemaVersion, 2, 'COLD_PROVIDER_STAGING_PROVENANCE_REQUIRED');
+  assert.equal(staging.providerOriginalsRead, false, 'COLD_PROVIDER_STAGING_PROVENANCE_REQUIRED');
   assert.equal(staging.kind, 'ios-files-provider-assets', 'STAGED_FILES_RECEIPT_REQUIRED');
   assert.equal(staging.udid, containers.udid, 'FILES_DEVICE_MISMATCH'); assert.equal(staging.appId, containers.appId, 'FILES_APP_MISMATCH');
   assert.equal(staging.containers.provider.groupPath, containers.provider.groupPath, 'FILES_PROVIDER_CONTAINER_CHANGED');
@@ -206,35 +259,79 @@ export function snapshotIosFilesPrivacy({ containers, stagingEvidence, output, k
   assert.equal(new Set(scannedSources.map(({ id }) => id)).size, scannedSources.length, 'DUPLICATE_KNOWN_SOURCE_ID');
   assert.deepEqual(staging.assets.map(({ id, filename, sha256, sizeBytes }) => ({ id, filename, sha256, sizeBytes })),
     assets.map(({ id, filename, sha256, sizeBytes }) => ({ id, filename, sha256, sizeBytes })), 'STAGED_ASSET_MANIFEST_MISMATCH');
+  let providerBytesRead = 0;
   const providerOriginals = staging.assets.map((asset) => {
     assert.equal(asset.path, path.join(staging.folderPath, asset.filename), 'PROVIDER_ORIGINAL_SCOPE_MISMATCH');
-    try { const data = bytes(asset.path, 262144, asset.sha256); return { id: asset.id, preserved: data.length === asset.sizeBytes, sha256: sha(data), sizeBytes: data.length }; }
-    catch { return { id: asset.id, preserved: false }; }
+    assert.equal(asset.transferSha256, asset.sha256, 'VERIFIED_PROVIDER_TRANSFER_REQUIRED');
+    assert.equal(asset.transferMethod, 'verified-buffer-exclusive-descriptor-write', 'VERIFIED_PROVIDER_TRANSFER_REQUIRED');
+    assert.deepEqual(Object.keys(asset.providerMetadata || {}).sort(), [...PROVIDER_FIELDS].sort(), 'PROVIDER_STAGING_METADATA_REQUIRED');
+    try {
+      const current = providerMetadata(asset.path); assert.deepEqual(current, asset.providerMetadata, 'PROVIDER_ORIGINAL_METADATA_CHANGED');
+      if (!verifyProviderBytes) return { id: asset.id, metadataPreserved: true, preserved: null, byteVerification: 'deferred-until-postflight' };
+      assert.ok(providerBytesRead + asset.sizeBytes <= bounds.totalBytes, 'PROVIDER_FINAL_BYTE_BOUND');
+      const beforeRead = byteBudget.bytes; let data;
+      try { data = bytes(asset.path, asset.sizeBytes, asset.sha256, byteBudget); }
+      finally { providerBytesRead += byteBudget.bytes - beforeRead; }
+      assert.deepEqual(providerMetadata(asset.path), asset.providerMetadata, 'PROVIDER_ORIGINAL_METADATA_CHANGED');
+      return { id: asset.id, metadataPreserved: true, preserved: data.length === asset.sizeBytes, sha256: sha(data), sizeBytes: data.length };
+    } catch { return { id: asset.id, metadataPreserved: false, preserved: verifyProviderBytes ? false : null }; }
   });
-  const findings = [], issues = []; let files = 0, entries = 0, totalBytes = 0, ownedStagingFiles = 0;
+  const findings = [], issues = providerOriginals.filter(row => !row.metadataPreserved || verifyProviderBytes && !row.preserved)
+    .map(row => ({ reason: 'provider-original-changed', relativePath: row.id }));
+  let files = 0, entries = 0, ownedStagingFiles = 0;
+  const scanDeadline = Date.now() + 30000;
+  const frame = value => PROVIDER_FIELDS.map(key => String(value[key]));
+  let inventoryAttempts = 0;
+  const inventory = () => {
+    inventoryAttempts++;
+    const rows = new Map(), todo = [{ file: containers.appData.path, depth: 0 }], scheduled = new Set([containers.appData.path]);
+    assert.ok(++entries <= bounds.entries, 'FILES_PRIVATE_ENTRY_BOUND');
+    while (todo.length) {
+      assert.ok(Date.now() < scanDeadline, 'FILES_PRIVATE_SCAN_DEADLINE');
+      const { file, depth } = todo.pop(); assert.ok(depth <= bounds.depth, 'FILES_PRIVATE_DEPTH_BOUND');
+      const stat = lstatSync(file, { bigint: true });
+      if (!stat.isSymbolicLink()) assert.equal(realpathSync(file), file, 'FILES_PRIVATE_NAMESPACE_CHANGED');
+      const row = { metadata: frame(stat), kind: stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other' }; rows.set(file, row);
+      if (stat.isDirectory()) {
+        const names = new Set(); const directory = opendirSync(file, { bufferSize: 1 });
+        try {
+          for (;;) {
+            assert.ok(Date.now() < scanDeadline, 'FILES_PRIVATE_SCAN_DEADLINE');
+            const entry = directory.readSync(); if (!entry) break;
+            assert.ok(++entries <= bounds.entries, 'FILES_PRIVATE_ENTRY_BOUND');
+            assert.ok(entry.name !== '.' && entry.name !== '..' && !names.has(entry.name), 'FILES_PRIVATE_DUPLICATE_ENTRY'); names.add(entry.name);
+            const child = path.join(file, entry.name); assert.ok(!scheduled.has(child), 'FILES_PRIVATE_DUPLICATE_ENTRY');
+            scheduled.add(child); todo.push({ file: child, depth: depth + 1 });
+          }
+        } finally { directory.closeSync(); }
+        assert.deepEqual(frame(lstatSync(file, { bigint: true })), row.metadata, 'FILES_PRIVATE_DIRECTORY_CHANGED');
+      }
+    }
+    assert.ok(rows.has(containers.appData.path), 'FILES_PRIVATE_ROOT_REQUIRED'); return rows;
+  };
+  let initialInventory, finalInventory;
+  try { initialInventory = inventory(); }
+  catch { issues.push({ reason: 'incomplete-initial-directory-inventory', relativePath: '.' }); }
   const originalAppData = staging.containers.appData.path;
   const priorAppData = { path: originalAppData, status: originalAppData === containers.appData.path ? 'same-container'
     : existsSync(originalAppData) ? 'retained-after-container-change' : 'absent-after-container-change' };
   if (priorAppData.status === 'retained-after-container-change') issues.push({ reason: 'prior-app-data-container-remains', relativePath: '[prior-container]' });
-  const visit = (directoryPath, depth) => {
-    if (depth > bounds.depth) { issues.push({ reason: 'depth-bound', relativePath: path.relative(containers.appData.path, directoryPath) }); return; }
-    let handle;
-    try { handle = opendirSync(directoryPath); } catch { issues.push({ reason: 'directory-unreadable', relativePath: path.relative(containers.appData.path, directoryPath) }); return; }
-    try { for (let entry; (entry = handle.readSync()) !== null;) {
-      const name = entry.name;
-      const file = path.join(directoryPath, name), relativePath = path.relative(containers.appData.path, file);
-      if (++entries > bounds.entries) { issues.push({ reason: 'entry-bound', relativePath }); return; }
+  for (const [file, expected] of initialInventory ?? []) {
+      if (file === containers.appData.path) continue;
+      const name = path.basename(file), relativePath = path.relative(containers.appData.path, file);
+      if (Date.now() >= scanDeadline) { issues.push({ reason: 'time-bound', relativePath }); break; }
       let stat;
-      try { stat = lstatSync(file); } catch { issues.push({ reason: 'entry-changed-or-unreadable', relativePath }); continue; }
+      try { assert.deepEqual(frame(lstatSync(file, { bigint: true })), expected.metadata, 'FILES_PRIVATE_DISCOVERY_TO_READ_CHANGED'); stat = lstatSync(file); }
+      catch { issues.push({ reason: 'entry-changed-or-unreadable', relativePath }); continue; }
       if (stat.isSymbolicLink()) { issues.push({ reason: 'unfollowed-symlink', relativePath }); continue; }
-      if (stat.isDirectory()) { visit(file, depth + 1); continue; }
+      if (stat.isDirectory()) continue;
       if (!stat.isFile()) { issues.push({ reason: 'non-regular-file', relativePath }); continue; }
       const owned = relativePath.split(path.sep).slice(0, 3).join('/') === 'Library/Caches/caseops-matter-files-v1';
       if (owned) ownedStagingFiles++;
-      if (++files > bounds.files || stat.size > bounds.fileBytes || totalBytes + stat.size > bounds.totalBytes) { issues.push({ reason: 'byte-or-file-bound', relativePath }); continue; }
+      if (++files > bounds.files || stat.size > bounds.fileBytes || byteBudget.bytes + stat.size > bounds.totalBytes) { issues.push({ reason: 'byte-or-file-bound', relativePath }); continue; }
       let data;
-      try { data = bytes(file, bounds.fileBytes); } catch { issues.push({ reason: 'file-changed-or-unreadable', relativePath }); continue; }
-      totalBytes += data.length; const digest = sha(data);
+      try { data = bytes(file, bounds.fileBytes, undefined, byteBudget); } catch { issues.push({ reason: 'file-changed-or-unreadable', relativePath }); continue; }
+      const digest = sha(data);
       const matches = scannedSources.flatMap((asset) => {
         const reasons = [];
         if (digest === asset.sha256) reasons.push('exact-asset-hash');
@@ -250,20 +347,56 @@ export function snapshotIosFilesPrivacy({ containers, stagingEvidence, output, k
           ? 'os-private-import-copy' : 'other-private-asset-copy';
         findings.push({ relativePath: normalized, sha256: digest, sizeBytes: data.length, classification, matches });
       }
-    } } finally { handle.closeSync(); }
-  };
-  visit(containers.appData.path, 0);
+  }
+  try {
+    assert.ok(initialInventory, 'FILES_PRIVATE_INITIAL_INVENTORY_REQUIRED');
+    finalInventory = inventory();
+    const serialize = rows => [...rows].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+    assert.deepEqual(serialize(finalInventory), serialize(initialInventory), 'FILES_PRIVATE_COMPLETE_INVENTORY_CHANGED');
+    for (const [file, row] of finalInventory) {
+      assert.ok(Date.now() < scanDeadline, 'FILES_PRIVATE_SCAN_DEADLINE');
+      assert.deepEqual(frame(lstatSync(file, { bigint: true })), row.metadata, 'FILES_PRIVATE_FINAL_PATH_CHANGED');
+      if (row.kind !== 'other') assert.equal(realpathSync(file), file, 'FILES_PRIVATE_NAMESPACE_CHANGED');
+    }
+  } catch { issues.push({ reason: 'incomplete-or-changed-final-directory-inventory', relativePath: '.' }); }
+  // Do not accept an original changed while the private-container scan ran.
+  // This final fence consumes metadata only, including for a cold checkpoint.
+  for (const [index, asset] of staging.assets.entries()) {
+    try { assert.deepEqual(providerMetadata(asset.path), asset.providerMetadata, 'PROVIDER_ORIGINAL_METADATA_CHANGED'); }
+    catch {
+      providerOriginals[index].metadataPreserved = false;
+      if (verifyProviderBytes) providerOriginals[index].preserved = false;
+      issues.push({ reason: 'provider-original-final-metadata-changed', relativePath: asset.id });
+    }
+  }
+  // Leaf and provider reconciliation can run after a directory's first final
+  // check. Recheck every unique directory, children first and root last, so a
+  // late private copy cannot leave an apparently complete empty finding set.
+  if (finalInventory) try {
+    for (const [file, row] of [...finalInventory].reverse()) if (row.kind === 'directory') {
+      assert.ok(Date.now() < scanDeadline, 'FILES_PRIVATE_SCAN_DEADLINE');
+      assert.deepEqual(frame(lstatSync(file, { bigint: true })), row.metadata, 'FILES_PRIVATE_FINAL_DIRECTORY_CHANGED');
+      assert.equal(realpathSync(file), file, 'FILES_PRIVATE_NAMESPACE_CHANGED');
+    }
+    assert.ok(Date.now() < scanDeadline, 'FILES_PRIVATE_SCAN_DEADLINE');
+  } catch { issues.push({ reason: 'incomplete-or-changed-final-directory-inventory', relativePath: '.' }); }
   findings.sort((a, b) => a.relativePath.localeCompare(b.relativePath)); issues.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
-  const snapshot = { schemaVersion: 1, kind: 'ios-files-privacy-snapshot', observed: true, platform: 'ios',
+  const snapshot = { schemaVersion: 2, kind: 'ios-files-privacy-snapshot', observed: true, platform: 'ios',
     udid: containers.udid, appId: containers.appId, bundleId: containers.appId, ownedAppScopeOnly: true,
     appDataPath: containers.appData.path, priorAppData, containers, stagingEvidence, complete: issues.length === 0,
-    counts: { files, entries, bytesRead: totalBytes, ownedStagingFiles,
+    counts: { files, entries, bytesRead: byteBudget.bytes, ownedStagingFiles,
       privateAssetMatchCount: findings.filter(({ matches }) => matches.length > 0).length,
       osPrivateImportCopies: findings.filter(({ classification }) => classification === 'os-private-import-copy').length }, limits: bounds,
+    privateInventory: { rootPresent: Boolean(initialInventory?.has(containers.appData.path) && finalInventory?.has(containers.appData.path)),
+      intendedObservations: 2, attemptedObservations: inventoryAttempts, observations: Number(Boolean(initialInventory)) + Number(Boolean(finalInventory)),
+      initialCount: initialInventory?.size ?? null, finalCount: finalInventory?.size ?? null },
     searchMethods: ['exact-file-sha256', 'known-basename', 'literal-public-filename', 'literal-public-sha256', 'literal-public-marker'],
     knownSources: knownSources.map(({ id, filename, sha256, sizeBytes, ...asset }) => ({ id, filename, sha256, sizeBytes,
       markerSha256: markers(asset).map((marker) => sha(Buffer.from(marker))) })),
-    findings, issues, providerOriginals, providerOriginalsPreserved: providerOriginals.every(({ preserved }) => preserved),
+    findings, issues, providerOriginals, providerMetadataPreserved: providerOriginals.every(row => row.metadataPreserved),
+    providerOriginalsRead: providerBytesRead > 0, providerBytesRead,
+    providerByteVerification: verifyProviderBytes ? 'postflight' : 'deferred-until-postflight',
+    providerOriginalsPreserved: verifyProviderBytes ? providerOriginals.every(({ preserved }) => preserved) : null,
     fileContentsRecorded: false, credentialValuesRecorded: false, nativeUiExecuted: false };
   return { snapshotEvidence: writeReceipt(output, snapshot), snapshot };
 }
@@ -272,11 +405,13 @@ export function assertIosFilesPrivacy(snapshot, { boundary } = {}) {
   if (snapshot?.path) snapshot = jsonRef(snapshot);
   assert.match(boundary || '', /^(clear|upload|background|logout|restart|reinstall)$/);
   assert.equal(snapshot.kind, 'ios-files-privacy-snapshot', 'FILES_PRIVACY_SNAPSHOT_REQUIRED');
+  assert.equal(snapshot.providerMetadataPreserved, true, 'PROVIDER_ORIGINALS_MUST_BE_PRESERVED');
+  assert.equal(snapshot.providerOriginalsPreserved, snapshot.providerByteVerification === 'postflight' ? true : null, 'PROVIDER_ORIGINALS_MUST_BE_PRESERVED');
   assert.equal(snapshot.complete, true, 'COMPLETE_FILES_PRIVACY_SCAN_REQUIRED');
-  assert.equal(snapshot.providerOriginalsPreserved, true, 'PROVIDER_ORIGINALS_MUST_BE_PRESERVED');
   assert.equal(snapshot.counts.ownedStagingFiles, 0, 'OWNED_UPLOAD_STAGING_REMAINS');
   assert.equal(snapshot.findings.filter(({ classification }) => classification !== 'owned-upload-staging').length, 0, 'PRIVATE_PICKED_ASSET_COPY_REMAINS');
-  return { boundary, status: 'passed', providerOriginalsPreserved: true, nativeUiExecuted: false };
+  return { boundary, status: 'passed', providerOriginalsPreserved: snapshot.providerOriginalsPreserved,
+    providerOriginalsRead: snapshot.providerOriginalsRead, providerByteVerification: snapshot.providerByteVerification, nativeUiExecuted: false };
 }
 
 // Separate scope: old Files snapshots/findings do not establish that arbitrary

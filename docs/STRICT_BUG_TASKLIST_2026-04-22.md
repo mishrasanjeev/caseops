@@ -305,7 +305,7 @@ exact-serving production checks. Current verdict: Inconclusive, not deployed.
 
 C24's required Security39506605978 fails nine Pillow12.3.0 findings; its
 Docker15/CI results remain incomplete and cannot certify a replacement.
-Pillow13, the labelled FastEmbed compatibility rebuild and shipped uv0.13.4
+Pillow13, the labelled FastEmbed compatibility rebuild and shipped uv0.13.5
 need complete fresh audits and actual image/inference regressions. No
 workbook item is upgraded from source changes or a resolver-only success.
 
@@ -3548,3 +3548,7 @@ remains Inconclusive; no backend legal-safety predicate is weakened.
   fresh Docker/CI, the real production builder and exact-serving Playwright.
   Full R22 evidence remains retained, not reassigned to the corrected revision.
   See `docs/bugfix-renewal-cte-identity-2026-10-21.md` for the failed release.
+
+October28 installer follow-up: uv0.13.4 already has clean120 roots, but its
+separate0.103.14 verifier is affected. The current uv0.13.5 pin uses0.103.16
+without replacing Requests/HTTPX roots; Linux image acceptance stays pending.

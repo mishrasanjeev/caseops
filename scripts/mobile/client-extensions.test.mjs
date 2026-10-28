@@ -8,8 +8,8 @@ import {collectNativeClientExtensions,clientExtensionScenarios} from '../../apps
 import {collectClientExtensions} from '../../apps/mobile/e2e/client-extensions-inventory.mjs';
 import {parseClientCompatibility,requireClientExtensionRequest,decodeReadPage,decodeRecommendation} from '../../apps/mobile/e2e/client-extensions-contract.mjs';
 import {ClientExtensionUnavailable} from '../../apps/mobile/e2e/client-extensions-ui.mjs';
-import {readClientPublicInput} from './client-extension-public-input.mjs';
-import {captureClientTree,captureClientFile,admitClientServer} from './client-extension-runtime.mjs';
+import {readClientPublicInput,writeClientProjection} from './client-extension-public-input.mjs';
+import {captureClientTree,captureClientTreeAsync,captureClientTreeCommitmentAsync,captureClientTreeInventoryAsync,captureClientFile,admitClientServer,admitClientServerAsync,captureClientTreeCommitment,captureClientTreeInventory,clientTreeManifest,assertClientTreeCommitment,assertClientRuntimeInventory,writeClientTreeAuditManifest,CLIENT_TREE_AUDIT_MAX_BYTES} from './client-extension-runtime.mjs';
 import {admitClientExtensions,executeClientExtensionInventory,runClientExtensions} from './run-client-extensions.mjs';
 import {waitForClientOperator} from './client-extension-controls.mjs';
 import {fileURLToPath} from 'node:url';
@@ -18,6 +18,21 @@ import {Journal} from '../../apps/mobile/e2e/support.mjs';
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const temp=()=>fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'caseops-client-extension-'));
 const ids=clientExtensionScenarios.map(x=>x.id);
+// A unit fixture does not own unrelated entries in the system temporary root.
+// Stabilize only those external ancestors' volatile directory counters/times;
+// continue reading their real identity/type and every full field inside root.
+// Production readClientPublicInput remains unchanged and strict at every level.
+function isolatedFixtureAncestors(root,operation){
+ const original=fs.lstatSync,parents=new Map();
+ for(let p=path.dirname(root);;p=path.dirname(p)){parents.set(p,original(p,{bigint:true}));if(path.dirname(p)===p)break;}
+ fs.lstatSync=(file,...args)=>{
+  const actual=original(file,...args),saved=parents.get(file);if(!saved||args[0]?.bigint!==true)return actual;
+  for(const key of ['dev','ino','uid','gid','mode'])assert.equal(actual[key],saved[key],'UNIT_EXTERNAL_PARENT_IDENTITY_CHANGED');
+  assert.ok(actual.isDirectory()&&!actual.isSymbolicLink());
+  return new Proxy(actual,{get(target,key){return ['nlink','size','mtimeNs','ctimeNs'].includes(key)?saved[key]:Reflect.get(target,key);}});
+ };
+ try{return operation();}finally{fs.lstatSync=original;}
+}
 
 for(const platform of ['ios','android'])test(`${platform} independent executable collection has24 cases/72 phases and no inherited acceptance`,()=>{
  const c=collectNativeClientExtensions(platform);assert.equal(c.expectedCases,24);assert.equal(c.expectedPhases,72);assert.equal(c.expectedSessions,24);
@@ -49,10 +64,19 @@ test('readthrough oracle rejects company/parent/cursor mismatch and arrays masqu
 });
 test('held public FD returns exact bytes and closes on hash refusal',()=>{
  const root=temp(),file=path.join(root,'input.json'),data=Buffer.from('{"synthetic":true}');fs.writeFileSync(file,data,{mode:0o600});let descriptor;
- try{assert.equal(readClientPublicInput(file,{expectedSha256:sha(data)}).value.synthetic,true);
+ try{isolatedFixtureAncestors(root,()=>{assert.equal(readClientPublicInput(file,{expectedSha256:sha(data)}).value.synthetic,true);
   assert.throws(()=>readClientPublicInput(file,{expectedSha256:'0'.repeat(64),afterOpen:fd=>{descriptor=fd;}}));
   assert.throws(()=>fs.fstatSync(descriptor),{code:'EBADF'});
+ });
  }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('unit external namespace isolation preserves the real owned-parent drift refusal and FD closure',()=>{
+ const root=temp(),file=path.join(root,'input.json'),unrelated=root+'-unrelated';fs.writeFileSync(file,'{}',{mode:0o600});let descriptor;
+ try{isolatedFixtureAncestors(root,()=>{
+  const publicValue=readClientPublicInput(file,{afterOpen:()=>fs.mkdirSync(unrelated)});assert.deepEqual(publicValue.value,{});
+  assert.throws(()=>readClientPublicInput(file,{afterOpen:fd=>{descriptor=fd;fs.mkdirSync(path.join(root,'actual-new-child'));}}));
+  assert.throws(()=>fs.fstatSync(descriptor),{code:'EBADF'});
+ });}finally{fs.rmSync(root,{recursive:true,force:true});fs.rmSync(unrelated,{recursive:true,force:true});}
 });
 test('actual growing public file reads at most maximum+1 and closes its FD',()=>{
  const root=temp(),file=path.join(root,'input.json');fs.writeFileSync(file,'{}');let fd;
@@ -161,9 +185,11 @@ function clientAdmissionPacket(){
   for(const [i,name]of['member','second-company'].entries()){const f=i?second:fixture,m=q.members[i],runtime={...m.credentialEvidence,path:'/fixture-state/credential-'+i+'.json',uid:0};registration.actors[name]={companyId:f.companyId,membershipId:f.membershipId,credentialEvidence:runtime};controls.actorCredentialMappings[name]={hostEvidence:m.credentialEvidence,runtimeEvidence:runtime};mount.files.push({hostEvidence:m.credentialEvidence,containerUid:0});}
   const installed={udid:fixture.udid,appId:fixture.appId,binaryHash:H,deviceTypeIdentifier:'iPhone17',runtime:'iOS26.5'},receipt={backendSha:S,webSha:S,productionAccessed:false,noPaidProviderKeysInAPIOrWeb:true,apiWebPostgresScannerNetworkInternal:true,tlsProof:{strictDefaultTLS:true,verificationDisabled:false},publicCA:fixture.publicCa.path,gatewayUrl:'https://127.0.0.1:9443',webGatewayUrl:'https://127.0.0.1:4443',backendRevision:'api',webRevision:'web',gatewayRunId:'epoch',project:'owned',gatewayImplementationSha256:H};
   const tools={observed:true,platform:'ios',developerDir:'/synthetic/Xcode',executables:[{role:'node',file:{path:process.execPath}},{role:'git',file:{path:'/synthetic/git'}}]},producer={kind:'actual-normal-api-native-client-extension-fixture',observed:true,sourceSha:S,noPaidMarker:'no-paid-providers',directDatabaseWrites:false,automaticRetry:false,mutationUncertain:false,companyId:fixture.companyId,membershipId:fixture.membershipId};
-  const values=new Map([[q.fixtureEvidence.path,fixture],[q.buildReceipt.path,{...source,artifact:'/synthetic/app',binaryHash:H}],[q.dockerReceipt.path,receipt],[q.deviceEvidence.path,{...installed,observed:true,platform:'ios',buildReceipt:q.buildReceipt}],[q.installedEvidence.path,installed],[q.artifactVersionEvidence.path,{kind:'actual-native-artifact-version',observed:true,buildReceipt:q.buildReceipt,binaryHash:H,platform:'ios',version:'1.0.0',reader:'PlistBuddy-CFBundleShortVersionString'}],[q.codeClosure.path,closure],[q.producerEvidence.path,producer],[q.retainedRowsEvidence.path,{complete:true,normalApiReadback:true,companyId:fixture.companyId,sourceSha:S}],[q.controlsEvidence.path,controls],[controls.registrationEvidence.path,registration],[controls.credentialMountEvidence.path,mount],[q.acceptedToolEvidence.path,tools],[q.clientRuntimeInventoryEvidence.path,{complete:true,root:'/synthetic/runtime',tree:{}}]]);
+  const runtimeTree={schemaVersion:3,kind:'caseops-client-tree-commitment',captureSchemaVersion:2,observations:2,complete:true,root:'/synthetic/runtime',entryCount:1,bytes:0,chargedEntries:2,chargedBytes:0,manifest:{encoding:'caseops-client-tree-v2-json-lf',sha256:H,extent:256}};
+  const runtimeInventory={schemaVersion:2,kind:'native-client-webdriver-inventory',complete:true,platform:'ios',root:runtimeTree.root,tree:structuredClone(runtimeTree),auditManifest:{path:'/synthetic/cache/runtime-tree.json',sha256:H,extent:256,metadata:{dev:'0',ino:'1',uid:'501',gid:'20',mode:'33152',nlink:'1',size:'256',mtimeNs:'0',ctimeNs:'0'}}};
+  const values=new Map([[q.fixtureEvidence.path,fixture],[q.buildReceipt.path,{...source,artifact:'/synthetic/app',binaryHash:H}],[q.dockerReceipt.path,receipt],[q.deviceEvidence.path,{...installed,observed:true,platform:'ios',buildReceipt:q.buildReceipt}],[q.installedEvidence.path,installed],[q.artifactVersionEvidence.path,{kind:'actual-native-artifact-version',observed:true,buildReceipt:q.buildReceipt,binaryHash:H,platform:'ios',version:'1.0.0',reader:'PlistBuddy-CFBundleShortVersionString'}],[q.codeClosure.path,closure],[q.producerEvidence.path,producer],[q.retainedRowsEvidence.path,{complete:true,normalApiReadback:true,companyId:fixture.companyId,sourceSha:S}],[q.controlsEvidence.path,controls],[controls.registrationEvidence.path,registration],[controls.credentialMountEvidence.path,mount],[q.acceptedToolEvidence.path,tools],[q.clientRuntimeInventoryEvidence.path,runtimeInventory]]);
   q.members.forEach((m,i)=>{const f=i?second:fixture;values.set(m.fixtureEvidence.path,f);values.set(m.authObservation.path,{observed:true,udid:f.udid,appId:f.appId,membershipId:f.membershipId,binaryHash:H,nativePrincipalVerified:true,nativeWorkspaceVerified:true,pkceUnchanged:true,logoutAcknowledged:true,sessionCleanup:'passed',importedSource:source,buildReceipt:q.buildReceipt,dockerReceipt:q.dockerReceipt,mfaStage:f.auth.mfaStage,iosConsent:f.auth.iosConsent});});
-  const io={read:r=>values.get(r.path),bytes:()=>Buffer.from('synthetic public'),snapshot:()=>source,harness:()=>HF,installed:()=>installed,artifactHash:()=>H,buildCheck:()=>{},coreCheck:()=>{},closure:()=>closure,tree:()=>({}),server:()=>({}),tool:file=>tools.executables.find(x=>x.file.path===file).file,selectedExecutable:()=>'/synthetic/git',now:()=>0,environment:{CASEOPS_NATIVE_CLIENT_EXTENSIONS_GO:'EXPLICIT_OWNED_NATIVE_WINDOW',CASEOPS_MOBILE_TOOLING_HOME:'/synthetic/runtime',DEVELOPER_DIR:tools.developerDir,NODE_EXTRA_CA_CERTS:receipt.publicCA},getJson:async url=>url.endsWith('/api/build')?{release_sha:S,revision:'api'}:url.endsWith('/api/release-identity')?{release_sha:S,revision:'web'}:{runId:'epoch',implementationSha256:H,overflow:false,v1ControlProfile:controls.profile,v1ControlsEnabled:true,v1RegistrationSha256:controls.registrationEvidence.sha256,v1ControlsImplementationSha256:H},reader:file=>{secretReads++;const i=q.members.findIndex(m=>m.credentialEvidence.path===file),f=i?second:fixture,value={full_name:f.principalLabel,company_slug:f.auth.companySlug,email:'synthetic@example.invalid',password:'not-a-live-credential',totp_secret:'synthetic-no-live-factor'};loadedValues.push(value);return{sha256:q.members[i].credentialEvidence.sha256,uid:501,value,bytes:Buffer.alloc(16)};}};
+  const io={read:r=>values.get(r.path),bytes:()=>Buffer.from('synthetic public'),snapshot:()=>source,harness:()=>HF,installed:()=>installed,artifactHash:()=>H,buildCheck:()=>{},coreCheck:()=>{},closure:()=>closure,tree:()=>structuredClone(runtimeTree),server:()=>({}),tool:file=>tools.executables.find(x=>x.file.path===file).file,selectedExecutable:()=>'/synthetic/git',now:()=>0,environment:{CASEOPS_NATIVE_CLIENT_EXTENSIONS_GO:'EXPLICIT_OWNED_NATIVE_WINDOW',CASEOPS_MOBILE_TOOLING_HOME:'/synthetic/runtime',DEVELOPER_DIR:tools.developerDir,NODE_EXTRA_CA_CERTS:receipt.publicCA},getJson:async url=>url.endsWith('/api/build')?{release_sha:S,revision:'api'}:url.endsWith('/api/release-identity')?{release_sha:S,revision:'web'}:{runId:'epoch',implementationSha256:H,overflow:false,v1ControlProfile:controls.profile,v1ControlsEnabled:true,v1RegistrationSha256:controls.registrationEvidence.sha256,v1ControlsImplementationSha256:H},reader:file=>{secretReads++;const i=q.members.findIndex(m=>m.credentialEvidence.path===file),f=i?second:fixture,value={full_name:f.principalLabel,company_slug:f.auth.companySlug,email:'synthetic@example.invalid',password:'not-a-live-credential',totp_secret:'synthetic-no-live-factor'};loadedValues.push(value);return{sha256:q.members[i].credentialEvidence.sha256,uid:501,value,bytes:Buffer.alloc(16)};}};
   return{q,io,values,reads:()=>secretReads,loadedValues};
  }
  return packet();
@@ -171,7 +197,7 @@ function clientAdmissionPacket(){
 test('actual admission composition proves every public/current fence before either protected member reader',async()=>{
  const packet=clientAdmissionPacket;
  const positive=packet(),result=await admitClientExtensions(positive.q,positive.io);assert.equal(result.beforeMemberRead,true);assert.equal(positive.reads(),2);assert.ok(result.members.every((m,i)=>m.value===positive.loadedValues[i]&&typeof m.value.password==='string'));
- for(const alter of [x=>{x.io.snapshot=()=>({sourceSha:'f'.repeat(40)});},x=>{x.io.installed=()=>({binaryHash:'foreign'});},x=>{x.io.server=()=>{throw Error('changed owned server');};},x=>{x.io.getJson=async()=>({release_sha:'foreign'});},x=>{x.q.readyForLive=false;},x=>{x.values.get(x.q.fixtureEvidence.path).cx.osRecipes.binaryHash='f'.repeat(64);},x=>{x.values.get(x.q.fixtureEvidence.path).cx.nativeSelectors.udid='old-device';}]){const x=packet();alter(x);await assert.rejects(admitClientExtensions(x.q,x.io));assert.equal(x.reads(),0);}
+ for(const alter of [x=>{x.io.snapshot=()=>({sourceSha:'f'.repeat(40)});},x=>{x.io.installed=()=>({binaryHash:'foreign'});},x=>{x.io.server=()=>{throw Error('changed owned server');};},x=>{x.io.getJson=async()=>({release_sha:'foreign'});},x=>{x.q.readyForLive=false;},x=>{x.values.get(x.q.clientRuntimeInventoryEvidence.path).tree.observations=1;},x=>{x.values.get(x.q.clientRuntimeInventoryEvidence.path).tree.manifest.sha256='f'.repeat(64);x.values.get(x.q.clientRuntimeInventoryEvidence.path).auditManifest.sha256='f'.repeat(64);},x=>{x.values.get(x.q.fixtureEvidence.path).cx.osRecipes.binaryHash='f'.repeat(64);},x=>{x.values.get(x.q.fixtureEvidence.path).cx.nativeSelectors.udid='old-device';}]){const x=packet();alter(x);await assert.rejects(admitClientExtensions(x.q,x.io));assert.equal(x.reads(),0);}
  const between=packet(),read=between.io.getJson;between.io.getJson=async url=>between.reads()===1&&url.endsWith('/api/release-identity')?{release_sha:'foreign',revision:'web'}:read(url);await assert.rejects(admitClientExtensions(between.q,between.io));assert.equal(between.reads(),1);assert.ok(Object.values(between.loadedValues[0]).every(v=>v===undefined));
 });
 
@@ -367,3 +393,452 @@ test('internal late alias fallback consumes metadata only at the exact two-obser
  let tree,error;try{tree=captureClientTree(root,{maxEntries:6,maxBytes:6});}catch(value){error=value;}finally{fs.openSync=oldOpen;fs.readSync=oldRead;fs.closeSync=oldClose;}
  try{assert.ifError(error);assert.equal(tree.bytes,3);assert.equal(tree.chargedBytes,6);assert.equal(tree.chargedEntries,6);assert.equal(tree.entries.find(row=>row.path==='z-alias').kind,'symlink');assert.equal(aliasOpens,2);assert.equal(aliasReads,0);assert.equal(aliases.size,0);}finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('tree external ancestor checks are shared while every file remains in both complete observations',()=>{
+ const root=temp();for(let i=0;i<40;i++){const folder=path.join(root,'dir-'+i);fs.mkdirSync(folder);fs.writeFileSync(path.join(folder,'file'),'x');}
+ const original=fs.lstatSync,parent=path.dirname(root);let externalReads=0;
+ fs.lstatSync=(file,...args)=>{if(file===parent)externalReads++;return original(file,...args);};
+ let tree;try{tree=captureClientTree(root);}finally{fs.lstatSync=original;}
+ try{assert.equal(tree.entries.length,81);assert.equal(tree.chargedEntries,162);assert.equal(tree.bytes,40);assert.equal(tree.chargedBytes,80);assert.ok(externalReads>=4&&externalReads<=8,'external ancestors must not be walked per payload');}
+ finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('tree external identity drift during a body or after second file close refuses the final namespace',()=>{
+ for(const point of ['body','second-close']){
+  const envelope=temp(),retained=envelope+'-retained',root=path.join(envelope,'root'),file=path.join(root,'file');fs.mkdirSync(root);fs.writeFileSync(file,'x');
+  const oldOpen=fs.openSync,oldRead=fs.readSync,oldClose=fs.closeSync,selected=new Set();let closes=0,changed=false;
+  const change=()=>{if(!changed){fs.renameSync(envelope,retained);fs.mkdirSync(envelope);fs.renameSync(path.join(retained,'root'),root);changed=true;}};
+  fs.openSync=(name,...args)=>{const fd=oldOpen(name,...args);if(name===file)selected.add(fd);return fd;};
+  fs.readSync=(fd,...args)=>{if(point==='body'&&selected.has(fd))change();return oldRead(fd,...args);};
+  fs.closeSync=fd=>{const chosen=selected.delete(fd),result=oldClose(fd);if(point==='second-close'&&chosen&&++closes===2)change();return result;};
+  let error;try{captureClientTree(root);}catch(value){error=value;}finally{fs.openSync=oldOpen;fs.readSync=oldRead;fs.closeSync=oldClose;}
+  try{assert.ok(changed);assert.match(error?.message??'',/CX_COMPLETE_TREE_ROOT_NAMESPACE_CHANGED/);assert.equal(selected.size,0);}
+  finally{fs.rmSync(envelope,{recursive:true,force:true});fs.rmSync(retained,{recursive:true,force:true});}
+ }
+});
+test('tree held-file parent replacement with a same-inode symlink refuses before body and closes every FD',()=>{
+ const root=temp(),parent=path.join(root,'parent'),moved=path.join(root,'retained'),file=path.join(parent,'file');fs.mkdirSync(parent);fs.writeFileSync(file,'x');
+ const oldOpen=fs.openSync,oldStat=fs.fstatSync,oldRead=fs.readSync;let fd,changed=false,reads=0;
+ fs.openSync=(name,...args)=>{const result=oldOpen(name,...args);if(name===file)fd=result;return result;};
+ fs.fstatSync=(value,...args)=>{const result=oldStat(value,...args);if(value===fd&&!changed){changed=true;fs.renameSync(parent,moved);fs.symlinkSync(moved,parent);}return result;};
+ fs.readSync=(value,...args)=>{if(value===fd)reads++;return oldRead(value,...args);};
+ let error;try{captureClientTree(root);}catch(value){error=value;}finally{fs.openSync=oldOpen;fs.fstatSync=oldStat;fs.readSync=oldRead;}
+ try{assert.ok(changed);assert.match(error?.message??'',/CX_CANONICAL_RUNTIME_NAMESPACE_REQUIRED/);assert.equal(reads,0);assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});}
+ finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('native canonical resolver and supported fallback retain the identical version2 tree receipt',()=>{
+ const root=temp();fs.writeFileSync(path.join(root,'file'),'x');const original=fs.realpathSync;
+ try{const native=captureClientTree(root);fs.realpathSync=(...args)=>original(...args);assert.equal(fs.realpathSync.native,undefined);assert.deepEqual(captureClientTree(root),native);}
+ finally{fs.realpathSync=original;fs.rmSync(root,{recursive:true,force:true});}
+});
+test('late entry after the last leaf namespace check is caught by final unique-directory reconciliation',()=>{
+ const root=temp(),file=path.join(root,'file');fs.writeFileSync(file,'x');const original=fs.realpathSync;let reads=0,inserted=false;
+ const resolve=(name,...args)=>{const value=(original.native??original)(name,...args);if(name===file&&++reads===5){inserted=true;fs.writeFileSync(path.join(root,'late'),'late');}return value;};
+ fs.realpathSync=(...args)=>resolve(...args);if(original.native)fs.realpathSync.native=resolve;
+ let error;try{captureClientTree(root);}catch(value){error=value;}finally{fs.realpathSync=original;}
+ try{assert.ok(inserted);assert.match(error?.message??'',/CX_COMPLETE_TREE_FINAL_PATH_CHANGED/);}finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('small complete reads include the growth sentinel without a redundant EOF syscall',()=>{
+ for(const size of [0,7,65535]) {
+  const root=temp(),file=path.join(root,'file');fs.writeFileSync(file,Buffer.alloc(size,0x61));
+  const open=fs.openSync,read=fs.readSync,close=fs.closeSync,selected=new Set(),calls=[];let result;
+  fs.openSync=(name,...args)=>{const fd=open(name,...args);if(name===file)selected.add(fd);return fd;};
+  fs.readSync=(fd,buffer,offset,length,position)=>{const n=read(fd,buffer,offset,length,position);if(selected.has(fd))calls.push({length,n});return n;};
+  fs.closeSync=fd=>{selected.delete(fd);return close(fd);};
+  try{result=captureClientTree(root,{maxBytes:Math.max(1,size*2)});}finally{fs.openSync=open;fs.readSync=read;fs.closeSync=close;}
+  try{assert.equal(result.bytes,size);assert.equal(result.chargedBytes,size*2);assert.equal(result.chargedEntries,4);assert.equal(calls.length,2);assert.ok(calls.every(x=>x.length>size&&x.n===size));assert.equal(selected.size,0);}
+  finally{fs.rmSync(root,{recursive:true,force:true});}
+ }
+});
+test('exact buffer boundaries keep the explicit growth and EOF probe in both observations',()=>{
+ const root=temp(),file=path.join(root,'file');fs.writeFileSync(file,Buffer.alloc(65536,0x61));
+ const open=fs.openSync,read=fs.readSync,selected=new Set(),calls=[];let result;
+ fs.openSync=(name,...args)=>{const fd=open(name,...args);if(name===file)selected.add(fd);return fd;};
+ fs.readSync=(fd,...args)=>{const n=read(fd,...args);if(selected.has(fd))calls.push({requested:args[2],n});return n;};
+ try{result=captureClientTree(root);}finally{fs.openSync=open;fs.readSync=read;}
+ try{assert.equal(result.bytes,65536);assert.equal(result.chargedBytes,131072);assert.deepEqual(calls.map(x=>x.n),[65536,0,65536,0]);assert.ok(calls.every(x=>x.requested>=1));for(const fd of selected)assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});}
+ finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('partial regular-file reads continue until the complete admitted payload is hashed twice',()=>{
+ const root=temp(),file=path.join(root,'file'),contents=Buffer.from('partial-read-payload');fs.writeFileSync(file,contents);
+ const open=fs.openSync,read=fs.readSync,close=fs.closeSync,selected=new Set();let calls=0,result;
+ fs.openSync=(name,...args)=>{const fd=open(name,...args);if(name===file)selected.add(fd);return fd;};
+ fs.readSync=(fd,buffer,offset,length,position)=>{if(selected.has(fd)){calls++;return read(fd,buffer,offset,Math.min(length,3),position);}return read(fd,buffer,offset,length,position);};
+ fs.closeSync=fd=>{selected.delete(fd);return close(fd);};
+ try{result=captureClientTree(root);}finally{fs.openSync=open;fs.readSync=read;fs.closeSync=close;}
+ try{assert.equal(result.bytes,contents.length);assert.equal(result.chargedBytes,contents.length*2);assert.equal(result.entries.find(x=>x.path==='file').sha256,sha(contents));assert.ok(calls>=Math.ceil(contents.length/3)*2);assert.equal(selected.size,0);}
+ finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('initial FD and named primitive frames remain independent of mutable Stat objects',()=>{
+ const root=temp(),file=path.join(root,'file');fs.writeFileSync(file,'before');
+ const open=fs.openSync,stat=fs.fstatSync,named=fs.lstatSync,read=fs.readSync,frames=[];let fd,changed=false,error;
+ fs.openSync=(name,...args)=>{const value=open(name,...args);if(name===file&&fd===undefined)fd=value;return value;};
+ fs.fstatSync=(value,...args)=>{const s=stat(value,...args);if(value===fd&&!changed)frames.push(s);return s;};
+ fs.lstatSync=(name,...args)=>{const s=named(name,...args);if(name===file&&!changed)frames.push(s);return s;};
+ fs.readSync=(value,...args)=>{
+  const n=read(value,...args);
+  if(value===fd&&n>0&&!changed){changed=true;const writer=open(file,'r+');try{fs.writeSync(writer,Buffer.from('after!'));fs.futimesSync(writer,1700000000,1700000001);}finally{fs.closeSync(writer);}const current=stat(fd,{bigint:true});
+   for(const frame of frames)for(const key of ['dev','ino','uid','gid','mode','nlink','size','mtimeNs','ctimeNs'])frame[key]=current[key];
+  }return n;
+ };
+ try{captureClientFile(file);}catch(value){error=value;}finally{fs.openSync=open;fs.fstatSync=stat;fs.lstatSync=named;fs.readSync=read;}
+ try{assert.ok(changed&&frames.length>=2);assert.ok(error,'rewriting interface objects must not rewrite admitted primitive facts');assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});}
+ finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('each independent final FD and named metadata field remains checked after payload consumption',()=>{
+ const fields=['dev','ino','uid','gid','mode','nlink','size','mtimeNs','ctimeNs'];
+ for(const side of ['fd','named'])for(const field of fields) {
+  const root=temp(),file=path.join(root,'file');fs.writeFileSync(file,'payload');
+  const open=fs.openSync,stat=fs.fstatSync,named=fs.lstatSync,read=fs.readSync;let fd,consumed=false,error;
+  const changed=s=>new Proxy(s,{get(target,key){return key===field?Reflect.get(target,key)+1n:Reflect.get(target,key);}});
+  fs.openSync=(name,...args)=>{const value=open(name,...args);if(name===file)fd=value;return value;};
+  fs.fstatSync=(value,...args)=>{const s=stat(value,...args);return consumed&&side==='fd'&&value===fd?changed(s):s;};
+  fs.lstatSync=(name,...args)=>{const s=named(name,...args);return consumed&&side==='named'&&name===file?changed(s):s;};
+  fs.readSync=(value,...args)=>{const n=read(value,...args);if(value===fd&&n>0)consumed=true;return n;};
+  try{captureClientTree(root);}catch(value){error=value;}finally{fs.openSync=open;fs.fstatSync=stat;fs.lstatSync=named;fs.readSync=read;}
+  try{assert.ok(consumed&&error,side+':'+field);assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});}
+  finally{fs.rmSync(root,{recursive:true,force:true});}
+ }
+});
+test('post-read internal and external parent aliases retaining the same leaf inode cannot be certified',()=>{
+ for(const point of ['internal','external']) {
+  const home=temp(),parent=point==='internal'?path.join(home,'root','nested'):home,root=path.join(home,'root'),retained=home+'-retained';
+  fs.mkdirSync(root);if(point==='internal')fs.mkdirSync(parent);const file=path.join(point==='internal'?parent:root,'file');fs.writeFileSync(file,'payload');
+  const originalInode=fs.statSync(file,{bigint:true}).ino,open=fs.openSync,read=fs.readSync;let fd,changed=false,error;
+  fs.openSync=(name,...args)=>{const value=open(name,...args);if(name===file)fd=value;return value;};
+  fs.readSync=(value,...args)=>{const n=read(value,...args);if(value===fd&&n>0&&!changed){changed=true;const moved=point==='internal'?path.join(home,'retained'):retained;fs.renameSync(parent,moved);fs.symlinkSync(moved,parent);}return n;};
+  try{captureClientTree(root);}catch(value){error=value;}finally{fs.openSync=open;fs.readSync=read;}
+  try{assert.ok(changed&&error);assert.equal(fs.statSync(file,{bigint:true}).ino,originalInode);assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});}
+  finally{fs.rmSync(home,{recursive:true,force:true});fs.rmSync(retained,{recursive:true,force:true});}
+ }
+});
+test('final root frame follows the last nested canonical directory observation',t=>{
+ const root=temp(),nested=path.join(root,'nested'),file=path.join(nested,'file');fs.mkdirSync(nested);fs.writeFileSync(file,'payload');
+ const open=fs.openSync,close=fs.closeSync,named=fs.lstatSync,real=fs.realpathSync,selected=new Set();let closed=0,rootChecks=0,nestedChecks=0,rootChecksAtInsert,inserted=false,error,result;
+ fs.openSync=(name,...args)=>{const fd=open(name,...args);if(name===file)selected.add(fd);return fd;};
+ fs.closeSync=fd=>{const chosen=selected.delete(fd),value=close(fd);if(chosen)closed++;return value;};
+ fs.lstatSync=(name,...args)=>{const value=named(name,...args);if(name===root&&closed===2)rootChecks++;return value;};
+ const resolve=(name,...args)=>{const value=(real.native??real)(name,...args);if(name===nested&&closed===2&&++nestedChecks===2){rootChecksAtInsert=rootChecks;fs.writeFileSync(path.join(root,'late'),'late');inserted=true;}return value;};
+ fs.realpathSync=(...args)=>resolve(...args);if(real.native)fs.realpathSync.native=resolve;
+ try{result=captureClientTree(root);}catch(value){error=value;}finally{fs.openSync=open;fs.closeSync=close;fs.lstatSync=named;fs.realpathSync=real;}
+ try{t.diagnostic(JSON.stringify({inserted,closed,rootChecksAtInsert,rootChecks,returnedComplete:result?.complete??false,retainedRootNames:result?.entries.find(x=>x.path==='')?.names??null,actualLatePresent:fs.existsSync(path.join(root,'late'))}));assert.ok(inserted,'last nested final canonical boundary was reached');assert.equal(closed,2);assert.equal(selected.size,0);assert.match(error?.message??'',/CX_COMPLETE_TREE_FINAL_PATH_CHANGED/);assert.ok(rootChecks>rootChecksAtInsert,'root must be reconciled after the nested canonical boundary');}
+ finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+function runtimeFixture(operation){
+ const home=temp(),root=path.join(home,'sdk'),audit=path.join(home,'manifest.json');fs.mkdirSync(root);fs.writeFileSync(path.join(root,'entry.mjs'),'synthetic');
+ try{return operation({home,root,audit});}finally{fs.rmSync(home,{recursive:true,force:true});}
+}
+function runtimeEnvelope(captured,purpose='webdriver',platform='ios'){
+ return {schemaVersion:2,kind:'native-client-'+purpose+'-inventory',complete:true,platform,...captured,...(purpose==='appium'?{appiumEntry:path.join(captured.root,'entry.mjs')}:{})};
+}
+test('canonical full manifest encoding binds every v2 field in a fixed byte order',()=>runtimeFixture(({root})=>{
+ const tree=captureClientTree(root),material=clientTreeManifest(tree);assert.deepEqual(material.bytes,Buffer.from(JSON.stringify(tree)+'\n'));
+ const reverse=Object.fromEntries(Object.entries(tree).reverse());reverse.entries=tree.entries.map(row=>({...row,metadata:Object.fromEntries(Object.entries(row.metadata).reverse())}));
+ assert.deepEqual(clientTreeManifest(reverse),material);assert.equal(material.commitment.manifest.sha256,sha(material.bytes));assert.equal(material.commitment.manifest.extent,material.bytes.length);
+ assert.equal(material.commitment.entryCount,tree.entries.length);assert.equal(material.commitment.chargedEntries,2*tree.entries.length);assert.equal(material.commitment.chargedBytes,2*tree.bytes);
+ for(const change of [{extra:true},{observations:1},{complete:false},{entries:tree.entries.slice(1)},{bytes:tree.bytes+1},{chargedEntries:tree.chargedEntries+1}])assert.throws(()=>clientTreeManifest({...tree,...change}));
+}));
+test('compact commitment strictly rejects stale versions, shape, roots and incoherent numeric counts',()=>runtimeFixture(({root})=>{
+ const c=captureClientTreeCommitment(root);assert.equal(assertClientTreeCommitment(c,root),c);
+ for(const mutate of [v=>v.schemaVersion=2,v=>v.captureSchemaVersion=1,v=>v.observations=1,v=>v.complete=false,v=>v.extra=true,v=>v.root='relative',v=>v.entryCount=true,v=>v.entryCount=1.5,v=>v.entryCount=0,v=>v.entryCount=25001,v=>v.bytes=-1,v=>v.bytes=Number.MAX_SAFE_INTEGER,v=>v.chargedEntries++,v=>v.chargedBytes++,v=>v.manifest.sha256='A'.repeat(64),v=>v.manifest.extent=0,v=>v.manifest.extent=CLIENT_TREE_AUDIT_MAX_BYTES+1,v=>v.manifest.encoding='unknown',v=>v.manifest.extra=true]){const bad=structuredClone(c);mutate(bad);assert.throws(()=>assertClientTreeCommitment(bad,root));}
+ assert.throws(()=>assertClientTreeCommitment(c,root+'-other'));assert.throws(()=>assertClientTreeCommitment(captureClientTree(root)));
+}));
+test('fresh compact capture still charges both complete observations to entry and byte caps',()=>runtimeFixture(({root})=>{
+ assert.throws(()=>captureClientTreeCommitment(root,{maxEntries:3}),/CX_COMPLETE_TREE_ENTRY_BOUND/);assert.throws(()=>captureClientTreeCommitment(root,{maxBytes:17}),/CX_COMPLETE_TREE_BYTE_BOUND/);
+ const c=captureClientTreeCommitment(root,{maxEntries:4,maxBytes:18});assert.equal(c.entryCount,2);assert.equal(c.bytes,9);assert.equal(c.chargedEntries,4);assert.equal(c.chargedBytes,18);
+}));
+test('commitment encoding shares the capture deadline instead of resetting a second budget',()=>runtimeFixture(({root})=>{
+ const originalNow=globalThis.performance,open=fs.openSync,close=fs.closeSync,byteLength=Buffer.byteLength,selected=new Set();let now=0,closes=0,encoded=false;globalThis.performance={now:()=>now};
+ fs.openSync=(file,...args)=>{const fd=open(file,...args);if(file===path.join(root,'entry.mjs'))selected.add(fd);return fd;};
+ fs.closeSync=fd=>{const chosen=selected.delete(fd),result=close(fd);if(chosen&&++closes===2)now=4000;return result;};
+ Buffer.byteLength=(...args)=>{const n=byteLength(...args);if(closes===2){encoded=true;now=5001;}return n;};
+ try{assert.throws(()=>captureClientTreeCommitment(root),/CX_COMPLETE_TREE_DEADLINE/);assert.equal(closes,2);assert.equal(encoded,true);assert.equal(selected.size,0);}finally{globalThis.performance=originalNow;fs.openSync=open;fs.closeSync=close;Buffer.byteLength=byteLength;}
+}));
+test('fresh public runtime inventory retains a full external audit and fits unchanged public transport',()=>runtimeFixture(({home,root,audit})=>{
+ const captured=captureClientTreeInventory(root,audit),inventory=runtimeEnvelope(captured),full=fs.readFileSync(audit),file=path.join(home,'inventory.json');
+ assert.equal(assertClientRuntimeInventory(inventory,'webdriver','ios'),inventory);assert.deepEqual(full,clientTreeManifest(captureClientTree(root)).bytes);assert.equal(sha(full),inventory.tree.manifest.sha256);
+ if(process.getuid)assert.equal(fs.statSync(audit).mode&0o777,0o600); // POSIX bits; actual Windows ACL acceptance is separate.
+ const bytes=Buffer.from(JSON.stringify(inventory)+'\n');assert.ok(bytes.length<1048576);const ref=writeClientProjection(file,bytes);
+ isolatedFixtureAncestors(home,()=>assert.deepEqual(readClientPublicInput(file,{expectedSha256:ref.sha256}).value,inventory));
+ assert.throws(()=>captureClientTreeInventory(root,audit),{code:'EEXIST'});assert.throws(()=>writeClientProjection(path.join(home,'large.json'),Buffer.alloc(1048577)));
+}));
+test('purpose-specific runtime inventories reject mismatched roots, audit identities and inline legacy shapes',()=>runtimeFixture(({root,audit})=>{
+ const good=runtimeEnvelope(captureClientTreeInventory(root,audit));
+ for(const mutate of [v=>v.schemaVersion=1,v=>v.kind='native-client-appium-inventory',v=>v.platform='android',v=>v.complete=false,v=>v.root+='/other',v=>v.extra=true,v=>v.tree=captureClientTree(root),v=>v.auditManifest.sha256='f'.repeat(64),v=>v.auditManifest.extent++,v=>v.auditManifest.path=path.join(root,'inside'),v=>v.auditManifest.metadata.nlink='2',v=>v.auditManifest.metadata.size='0']){const bad=structuredClone(good);mutate(bad);assert.throws(()=>assertClientRuntimeInventory(bad,'webdriver','ios'));}
+ const appium={...good,kind:'native-client-appium-inventory',appiumEntry:path.join(root,'entry.mjs')};assertClientRuntimeInventory(appium,'appium','ios');assert.throws(()=>assertClientRuntimeInventory({...appium,appiumEntry:'/foreign/entry'},'appium','ios'));
+}));
+test('Appium admission freshly captures actual runtime and never uses its audit file as authority',()=>runtimeFixture(({root,audit})=>{
+ const inventory=runtimeEnvelope(captureClientTreeInventory(root,audit),'appium'),ref={path:'/synthetic',sha256:'a'.repeat(64)},q={platform:'ios',appiumUrl:'http://127.0.0.1:4727',appiumServerEvidence:ref,appiumInventoryEvidence:ref},observed='synthetic-start '+inventory.appiumEntry;
+ const server={observed:true,owned:true,platform:'ios',pid:10,inventoryEvidence:ref,appiumUrl:q.appiumUrl,uid:process.getuid(),utcStartAndCommandSha256:sha(observed)};let reads=0,commands=0;fs.unlinkSync(audit);
+ const command=(_file,args)=>{commands++;return args.includes('uid=')?String(process.getuid()):args.includes('-Fpfn')?'p10\nf1\nn127.0.0.1:4727\n':observed;};
+ assert.equal(admitClientServer(q,{read:()=>++reads===1?server:inventory,command}).inventory,inventory);assert.equal(commands,3);
+ fs.writeFileSync(path.join(root,'.late'),'x');reads=0;commands=0;assert.throws(()=>admitClientServer(q,{read:()=>++reads===1?server:inventory,command}),/CX_COMPLETE_APPIUM_INVENTORY_CHANGED/);assert.equal(commands,0);
+}));
+test('Appium hash-only or legacy inline receipts refuse before any server command',()=>runtimeFixture(({root,audit})=>{
+ const good=runtimeEnvelope(captureClientTreeInventory(root,audit),'appium'),ref={path:'/synthetic',sha256:'a'.repeat(64)},q={platform:'ios',appiumUrl:'http://127.0.0.1:4727',appiumServerEvidence:ref,appiumInventoryEvidence:ref},server={observed:true,owned:true,platform:'ios',pid:10,inventoryEvidence:ref,appiumUrl:q.appiumUrl};
+ for(const tree of [captureClientTree(root),{sha256:good.tree.manifest.sha256},{...good.tree,observations:1},{...good.tree,manifest:{...good.tree.manifest,sha256:'f'.repeat(64)}}]){let reads=0,commands=0;assert.throws(()=>admitClientServer(q,{read:()=>++reads===1?server:{...good,tree,auditManifest:{...good.auditManifest,sha256:tree.manifest?.sha256??good.auditManifest.sha256}},command:()=>{commands++;throw Error('MUST_NOT_DISPATCH');}}));assert.equal(commands,0);}
+}));
+test('full audit writer rejects oversize, mismatched buffer, runtime-local outputs and overwrite',()=>runtimeFixture(({home,root,audit})=>{
+ const material=clientTreeManifest(captureClientTree(root));let opened=0;const original=fs.openSync;fs.openSync=(...args)=>{opened++;return original(...args);};
+ try{assert.throws(()=>writeClientTreeAuditManifest(audit,{...material,bytes:Buffer.alloc(CLIENT_TREE_AUDIT_MAX_BYTES+1)}),/CX_TREE_MANIFEST_OUTPUT_BOUND/);assert.equal(opened,0);assert.throws(()=>writeClientTreeAuditManifest(audit,{...material,bytes:Buffer.from('changed')}));assert.equal(opened,0);}finally{fs.openSync=original;}
+ assert.throws(()=>writeClientTreeAuditManifest(path.join(root,'inside'),material),/CX_AUDIT_OUTPUT_OUTSIDE_RUNTIME_REQUIRED/);const result=writeClientTreeAuditManifest(audit,material);assert.equal(result.extent,material.bytes.length);assert.throws(()=>writeClientTreeAuditManifest(audit,material),{code:'EEXIST'});assert.equal(fs.existsSync(path.join(home,'large.json')),false);
+}));
+test('audit writer binds opened descriptor to named leaf before any bytes and closes on replacement',()=>runtimeFixture(({audit,root})=>{
+ const material=clientTreeManifest(captureClientTree(root)),open=fs.openSync,fstat=fs.fstatSync,write=fs.writeSync;let fd,replaced=false,writes=0;
+ fs.openSync=(file,...args)=>{const value=open(file,...args);if(file===audit)fd=value;return value;};fs.fstatSync=(value,...args)=>{const s=fstat(value,...args);if(value===fd&&!replaced){fs.renameSync(audit,audit+'.retained');fs.writeFileSync(audit,'replacement');replaced=true;}return s;};fs.writeSync=(value,...args)=>{if(value===fd)writes++;return write(value,...args);};
+ try{assert.throws(()=>writeClientTreeAuditManifest(audit,material),/CX_NAMED_DESCRIPTOR_IDENTITY_CHANGED/);assert.ok(replaced);assert.equal(writes,0);}finally{fs.openSync=open;fs.fstatSync=fstat;fs.writeSync=write;}assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});
+}));
+test('failed full audit writes retain partial output, close the FD and never return a reference',()=>runtimeFixture(({audit,root})=>{
+ const material=clientTreeManifest(captureClientTree(root)),open=fs.openSync,write=fs.writeSync;let fd,calls=0;
+ fs.openSync=(file,...args)=>{const value=open(file,...args);if(file===audit)fd=value;return value;};fs.writeSync=(value,buffer,offset,length)=>{if(value!==fd)return write(value,buffer,offset,length);if(++calls>1)throw Error('OWNED_WRITE_FAILURE');return write(value,buffer,offset,Math.min(8,length));};
+ try{assert.throws(()=>writeClientTreeAuditManifest(audit,material),/OWNED_WRITE_FAILURE/);}finally{fs.openSync=open;fs.writeSync=write;}assert.equal(fs.statSync(audit).size,8);assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});
+}));
+test('audit writer checks the original deadline after fsync and closes without success',()=>runtimeFixture(({audit,root})=>{
+ const material=clientTreeManifest(captureClientTree(root)),original=globalThis.performance,sync=fs.fsyncSync,open=fs.openSync;let fd,now=0;globalThis.performance={now:()=>now};fs.openSync=(file,...args)=>{const value=open(file,...args);if(file===audit)fd=value;return value;};fs.fsyncSync=value=>{sync(value);if(value===fd)now=5000;};
+ try{assert.throws(()=>writeClientTreeAuditManifest(audit,material),/CX_COMPLETE_TREE_DEADLINE/);}finally{globalThis.performance=original;fs.fsyncSync=sync;fs.openSync=open;}assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});
+}));
+test('public runtime producer executes the real fresh capture while leaving native and private actions unacknowledged',async()=>{
+ const {prepareClientRuntimeInventory}=await import('./prepare-client-extensions.mjs');runtimeFixture(({home,root,audit})=>{
+  const q={kind:'prepare-native-client-runtime-inventory',preparedOnly:true,purpose:'webdriver',platform:'ios',root,output:path.join(home,'public.json'),manifestOutput:audit},source={sourceDirty:false,sourceSha:'a'.repeat(40)};let snapshots=0;
+  const result=prepareClientRuntimeInventory(q,{snapshot:()=>{snapshots++;return source;}});assert.equal(snapshots,2);assert.equal(result.inventory.tree.observations,2);assert.equal(result.nativeActions,0);assert.equal(result.privateReads,0);assert.equal(result.actualNativeAcceptance,false);assert.equal(fs.existsSync(audit),true);
+ });
+});
+test('public runtime producer rejects invalid domains and output locations before capture',async()=>{
+ const {prepareClientRuntimeInventory}=await import('./prepare-client-extensions.mjs');runtimeFixture(({home,root,audit})=>{
+  const q={kind:'prepare-native-client-runtime-inventory',preparedOnly:true,purpose:'webdriver',platform:'ios',root,output:path.join(home,'public.json'),manifestOutput:audit};let effects=0;const io={snapshot:()=>{effects++;throw Error('NO_EFFECT');},capture:()=>{effects++;throw Error('NO_EFFECT');}};
+  for(const change of [{preparedOnly:false},{purpose:'unknown'},{platform:'web'},{root:'relative'},{output:path.join(root,'inside')},{manifestOutput:path.join(root,'inside')},{manifestOutput:q.output},{purpose:'appium',appiumEntry:'/foreign/entry'}]){assert.throws(()=>prepareClientRuntimeInventory({...q,...change},io));assert.equal(effects,0);}
+ });
+});
+
+test('runtime parser refuses nonnormalized root entry and audit paths before any authority',()=>runtimeFixture(({root,audit})=>{
+ const good=runtimeEnvelope(captureClientTreeInventory(root,audit),'appium');
+ for(const mutate of [v=>v.root+='/../sdk',v=>v.tree.root+='/../sdk',v=>v.appiumEntry=root+'/../outside/entry.mjs',v=>v.appiumEntry=root+'/./entry.mjs',v=>v.auditManifest.path=path.dirname(audit)+'/sdk/../manifest.json']){const bad=structuredClone(good);mutate(bad);assert.throws(()=>assertClientRuntimeInventory(bad,'appium','ios'));}
+}));
+test('Appium public producer binds its canonical regular entry to the actual complete captured tree',async()=>{
+ const {prepareClientRuntimeInventory}=await import('./prepare-client-extensions.mjs');
+ for(const kind of ['regular','missing','directory','alias'])runtimeFixture(({home,root,audit})=>{
+  let entry=path.join(root,'entry.mjs');if(kind==='missing')entry=path.join(root,'missing');if(kind==='directory')entry=root;if(kind==='alias'){entry=path.join(root,'alias.mjs');fs.symlinkSync('entry.mjs',entry);}
+  const q={kind:'prepare-native-client-runtime-inventory',preparedOnly:true,purpose:'appium',platform:'ios',root,appiumEntry:entry,output:path.join(home,'public.json'),manifestOutput:audit},io={snapshot:()=>({sourceDirty:false})};
+  if(kind==='regular'){const value=prepareClientRuntimeInventory(q,io);assert.equal(value.inventory.appiumEntry,entry);assert.equal(value.nativeActions,0);}else{assert.throws(()=>prepareClientRuntimeInventory(q,io));assert.equal(fs.existsSync(audit),false);}
+ });
+});
+test('Appium admission refuses uncaptured entry targets and traversal before server commands',()=>{
+ for(const kind of ['missing','directory','alias','traversal'])runtimeFixture(({root,audit})=>{
+  const entry=path.join(root,'entry.mjs');let target;if(kind==='alias'){target=path.join(root,'alias');fs.symlinkSync('entry.mjs',target);}else target=kind==='missing'?path.join(root,'missing'):kind==='directory'?root:root+'/../outside/entry.mjs';
+  const inventory={...runtimeEnvelope(captureClientTreeInventory(root,audit),'appium'),appiumEntry:target},ref={path:'/synthetic',sha256:'a'.repeat(64)},q={platform:'ios',appiumUrl:'http://127.0.0.1:4727',appiumServerEvidence:ref,appiumInventoryEvidence:ref},server={observed:true,owned:true,platform:'ios',pid:10,inventoryEvidence:ref,appiumUrl:q.appiumUrl};let reads=0,commands=0;
+  assert.throws(()=>admitClientServer(q,{read:()=>++reads===1?server:inventory,command:()=>{commands++;return 'synthetic process '+entry;}}));assert.equal(commands,0);
+ });
+});
+
+const immediate=()=>new Promise(resolve=>setImmediate(resolve));
+function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return{promise,resolve,reject};}
+async function asyncReadFixture(files,operation){
+ const root=temp();for(const[name,bytes]of Object.entries(files)){fs.mkdirSync(path.dirname(path.join(root,name)),{recursive:true});fs.writeFileSync(path.join(root,name),bytes);}
+ const original={open:fs.openSync,close:fs.closeSync,read:fs.read,dir:fs.opendirSync,stat:fs.fstatSync};
+ const state={root,records:[],live:new Map(),buffers:new Set(),pending:[],promises:[],outcomes:new Map(),reads:[],actualBytes:0,activeDirs:0,peakOwned:0,hold:false};
+ const inside=file=>typeof file==='string'&&(file===root||file.startsWith(root+path.sep));
+ const peak=()=>{state.peakOwned=Math.max(state.peakOwned,state.live.size+state.activeDirs);};
+ state.track=promise=>{state.promises.push(promise);const value={settled:false};state.outcomes.set(promise,value);promise.then(result=>{value.settled=true;value.result=result;},error=>{value.settled=true;value.error=error;});return promise;};
+ state.reached=async(predicate,promise)=>{const end=performance.now()+1000;for(let n=0;n<256&&performance.now()<end;n++){if(predicate())return;const outcome=state.outcomes.get(promise);if(outcome?.settled)throw outcome.error??Error('ASYNC_CONTROL_COMPLETED_BEFORE_BARRIER');await immediate();}throw Error('ASYNC_CONTROL_BARRIER_NOT_REACHED');};
+ state.releaseAll=()=>{state.hold=false;for(const entry of state.pending)if(!entry.delivered)entry.deliver();};
+ fs.openSync=(file,...args)=>{const fd=original.open(file,...args);if(inside(file)){assert.equal(state.live.has(fd),false);const record={fd,file,closed:false};state.records.push(record);state.live.set(fd,record);peak();}return fd;};
+ fs.closeSync=fd=>{const record=state.live.get(fd);try{return original.close(fd);}finally{if(record){record.closed=true;state.live.delete(fd);}}};
+ fs.opendirSync=(file,...args)=>{const dir=original.dir(file,...args);if(!inside(file))return dir;state.activeDirs++;peak();let closed=false;return{readSync:()=>dir.readSync(),closeSync:()=>{assert.equal(closed,false);closed=true;try{return dir.closeSync();}finally{state.activeDirs--;}}};};
+ fs.read=(fd,buffer,offset,width,position,callback)=>{
+  const record=state.live.get(fd);if(!record)return original.read(fd,buffer,offset,width,position,callback);
+  state.buffers.add(buffer);const selected=state.beforeRead?.({fd,file:record.file,buffer,width})??width;
+  return original.read(fd,buffer,offset,selected,position,(error,n,result)=>{
+   if(Number.isInteger(n))state.actualBytes+=n;state.reads.push({file:record.file,requested:width,actualRequested:selected,n});state.afterRead?.({fd,file:record.file,buffer,width,error,n});
+   const entry={fd,file:record.file,delivered:false,deliver:(override=error)=>{assert.equal(entry.delivered,false);entry.delivered=true;callback(override,n,result);}};
+   if(state.hold)state.pending.push(entry);else entry.deliver();
+  });
+ };
+ let value,primary;const cleanup=[];
+ try{value=await operation(state);}catch(error){primary=error;}
+ finally{
+  state.releaseAll();await Promise.allSettled(state.promises);
+  Object.assign(fs,{openSync:original.open,closeSync:original.close,read:original.read,opendirSync:original.dir});
+  try{assert.equal(state.activeDirs,0);assert.equal(state.live.size,0);for(const record of state.records)assert.throws(()=>original.stat(record.fd),{code:'EBADF'});}catch(error){cleanup.push(error);}
+  fs.rmSync(root,{recursive:true,force:true});
+ }
+ if(primary)throw cleanup.length?new AggregateError([primary,...cleanup],primary.message,{cause:primary}):primary;
+ if(cleanup.length)throw cleanup[0];return value;
+}
+
+test('async complete capture preserves exact sync rows and canonical manifest bytes',async()=>asyncReadFixture({'empty':'','nested/Unicode-λ.txt':'synthetic λ','boundary.bin':Buffer.alloc(65536,7)},async state=>{
+ fs.symlinkSync('nested/Unicode-λ.txt',path.join(state.root,'internal'));const expected=captureClientTree(state.root);
+ const actual=await state.track(captureClientTreeAsync(state.root));assert.deepEqual(actual,expected);assert.deepEqual(clientTreeManifest(actual).bytes,clientTreeManifest(expected).bytes);
+ assert.equal(actual.observations,2);assert.equal(actual.chargedBytes,actual.bytes*2);assert.ok(state.buffers.size<=4);
+}));
+test('async capture owns at most four buffers and descriptors including directory iterators',async()=>asyncReadFixture(Object.fromEntries(Array.from({length:8},(_,i)=>['file-'+i,'synthetic-'+i]).concat([['nested/last','last']])),async state=>{
+ state.hold=true;const capture=state.track(captureClientTreeAsync(state.root));await state.reached(()=>state.pending.length===4,capture);
+ assert.equal(state.live.size,4);assert.equal(state.records.filter(x=>!x.closed).length,4);assert.equal(state.buffers.size,4);assert.ok(state.peakOwned<=4);assert.equal(state.records.filter(x=>x.file.endsWith('file-4')).length,0);
+ state.releaseAll();const tree=await capture;assert.equal(tree.complete,true);assert.ok(state.peakOwned<=4);assert.equal(state.buffers.size,4);assert.ok([...state.buffers].every(b=>b.length===65536));
+}));
+test('async exact shared byte credit completes zero-byte files and required EOF probes without deadlock',async()=>asyncReadFixture({'a-empty':'','b-empty':'','c-byte':'x','d-empty':''},async state=>{
+ const tree=await state.track(captureClientTreeAsync(state.root,{maxBytes:2,maxEntries:10}));assert.equal(tree.bytes,1);assert.equal(tree.chargedBytes,2);assert.equal(tree.chargedEntries,10);assert.equal(state.actualBytes,2);assert.ok(state.reads.some(x=>x.n===0));assert.ok(state.peakOwned<=4);
+}));
+test('async small sentinel, buffer boundary and partial reads retain exact complete hashes',async()=>{
+ for(const[size,partial,expectedReads]of[[7,false,2],[65536,false,4],[7,true,8],[0,false,2]])await asyncReadFixture({'payload':Buffer.alloc(size,3)},async state=>{
+  if(partial)state.beforeRead=({width})=>Math.min(width,2);
+  const value=await state.track(captureClientTreeAsync(state.root));assert.equal(state.reads.length,expectedReads);assert.equal(state.actualBytes,size*2);assert.equal(value.entries.find(x=>x.kind==='file').sha256,sha(Buffer.alloc(size,3)));
+ });
+});
+test('async growing payload consumes only the one shared overflow credit and drains every job',async()=>asyncReadFixture({'a':'abc','b-empty':'','c-empty':'','d-empty':''},async state=>{
+ let grew=false;state.beforeRead=({file,width})=>{if(file.endsWith('/a')&&!grew){grew=true;fs.appendFileSync(file,'synthetic-growth');}return width;};
+ const capture=state.track(captureClientTreeAsync(state.root,{maxBytes:8}));await assert.rejects(capture,/CX_COMPLETE_TREE_BYTE_BOUND/);assert.equal(grew,true);assert.equal(state.actualBytes,9);assert.equal(state.live.size,0);assert.ok(state.peakOwned<=4);
+}));
+test('async bounded directory discovery charges before retaining excess paths and closes the iterator',async()=>asyncReadFixture(Object.fromEntries(Array.from({length:20},(_,i)=>['file-'+i,'x'])),async state=>{
+ const capture=state.track(captureClientTreeAsync(state.root,{maxEntries:3}));await assert.rejects(capture,/CX_COMPLETE_TREE_ENTRY_BOUND/);assert.equal(state.reads.length,0);assert.equal(state.records.length,1);assert.equal(state.activeDirs,0);
+}));
+test('async named replacement after descriptor admission consumes zero bytes and closes its FD',async()=>asyncReadFixture({'leaf':'original'},async state=>{
+ const original=fs.fstatSync;let replaced=false;
+ fs.fstatSync=(fd,...args)=>{const value=original(fd,...args),record=state.live.get(fd);if(record?.file.endsWith('/leaf')&&!replaced){replaced=true;fs.renameSync(record.file,record.file+'-retained');fs.writeFileSync(record.file,'replacement');}return value;};
+ try{await assert.rejects(state.track(captureClientTreeAsync(state.root)));assert.equal(replaced,true);assert.equal(state.reads.length,0);assert.equal(state.live.size,0);}finally{fs.fstatSync=original;}
+}));
+test('async independent FD and named primitive frames reject every one of their nine field drifts',async()=>{
+ for(const boundary of['fd','named'])for(const field of['dev','ino','uid','gid','mode','nlink','size','mtimeNs','ctimeNs'])await asyncReadFixture({'leaf':'synthetic'},async state=>{
+  const stat=fs.fstatSync,named=fs.lstatSync;let read=false,changed=false;state.afterRead=()=>{read=true;};
+  const alter=value=>new Proxy(value,{get(target,key){return key===field?Reflect.get(target,key)+1n:Reflect.get(target,key);}});
+  fs.fstatSync=(fd,...args)=>{const value=stat(fd,...args);if(boundary==='fd'&&read&&state.live.get(fd)?.file.endsWith('/leaf')&&!changed){changed=true;return alter(value);}return value;};
+  fs.lstatSync=(file,...args)=>{const value=named(file,...args);if(boundary==='named'&&read&&file===path.join(state.root,'leaf')&&args[0]?.bigint&&!changed){changed=true;return alter(value);}return value;};
+  try{await assert.rejects(state.track(captureClientTreeAsync(state.root)));assert.equal(changed,true);assert.equal(state.live.size,0);}finally{fs.fstatSync=stat;fs.lstatSync=named;}
+ });
+});
+test('async parent rename and same-inode internal or external alias still refuse after held reads',async()=>{
+ for(const kind of['internal','external'])await asyncReadFixture({'nested/leaf':'synthetic'},async state=>{
+  const nested=path.join(state.root,'nested'),moved=kind==='internal'?path.join(state.root,'moved'):state.root+'-moved';let changed=false;
+  state.afterRead=()=>{if(!changed){changed=true;fs.renameSync(nested,moved);fs.symlinkSync(moved,nested);}};
+  try{await assert.rejects(state.track(captureClientTreeAsync(state.root)));assert.equal(changed,true);assert.equal(state.live.size,0);}finally{if(kind==='external')fs.rmSync(moved,{recursive:true,force:true});}
+ });
+});
+test('async first complete inventory closes before the second begins and rejects between-observation mutation',async()=>asyncReadFixture({'leaf':'synthetic'},async state=>{
+ const original=fs.openSync;let rootOpens=0,mutated=false;
+ fs.openSync=(file,...args)=>{if(file===state.root&&++rootOpens===2){assert.equal(state.live.size,0);mutated=true;fs.writeFileSync(path.join(state.root,'leaf'),'changed');}return original(file,...args);};
+ try{await assert.rejects(state.track(captureClientTreeAsync(state.root)),/CX_COMPLETE_TREE_INVENTORY_CHANGED/);assert.equal(mutated,true);assert.equal(rootOpens,2);}finally{fs.openSync=original;}
+}));
+test('async read failure stops new scheduling and refuses only after all held callbacks and FDs drain',async()=>asyncReadFixture(Object.fromEntries(Array.from({length:8},(_,i)=>['file-'+i,'synthetic'])),async state=>{
+ state.hold=true;const capture=state.track(captureClientTreeAsync(state.root));await state.reached(()=>state.pending.length===4,capture);const opened=state.records.length;
+ const failure=Object.assign(new Error('SYNTHETIC_READ_REFUSAL'),{code:'EIO'});state.pending[0].deliver(failure);await immediate();await immediate();assert.equal(state.outcomes.get(capture).settled,false);assert.equal(state.records.length,opened);assert.equal(state.live.size,3);
+ state.releaseAll();await assert.rejects(capture,error=>error===failure);assert.equal(state.live.size,0);assert.equal(state.records.length,opened);
+}));
+test('async synchronous read refusal releases its reserved credit and closes before returning',async()=>asyncReadFixture({'leaf':'synthetic'},async state=>{
+ const failure=Error('SYNTHETIC_SYNCHRONOUS_READ');state.beforeRead=()=>{throw failure;};await assert.rejects(state.track(captureClientTreeAsync(state.root)),error=>error===failure);assert.equal(state.actualBytes,0);assert.equal(state.live.size,0);
+}));
+test('async close refusal preserves the original read error while closing independent pending jobs',async()=>asyncReadFixture({'a':'a','b':'b','c':'c','d':'d'},async state=>{
+ state.hold=true;const capture=state.track(captureClientTreeAsync(state.root));await state.reached(()=>state.pending.length===4,capture);const original=fs.closeSync,readError=Error('SYNTHETIC_PRIMARY_READ'),closeError=Error('SYNTHETIC_CLOSE');let injected=false;
+ fs.closeSync=fd=>{const result=original(fd);if(!injected){injected=true;throw closeError;}return result;};
+ try{state.pending[0].deliver(readError);await immediate();state.releaseAll();await assert.rejects(capture,error=>error instanceof AggregateError&&error.cause===readError&&error.errors.includes(closeError));assert.equal(state.live.size,0);assert.equal(injected,true);}finally{fs.closeSync=original;}
+}));
+test('async close failure is never retried and declares process cleanup uncertainty',async()=>asyncReadFixture({'a':'a','b':'b','c':'c','d':'d'},async state=>{
+ state.hold=true;const capture=state.track(captureClientTreeAsync(state.root));await state.reached(()=>state.pending.length===4,capture);const original=fs.closeSync,readError=Error('SYNTHETIC_PRIMARY_READ'),closeError=Error('SYNTHETIC_BEFORE_CLOSE');let selected,attempts=0;
+ fs.closeSync=fd=>{if(selected===undefined){selected=fd;attempts++;throw closeError;}if(fd===selected)attempts++;return original(fd);};
+ try{state.pending[0].deliver(readError);await immediate();state.releaseAll();await assert.rejects(capture,error=>error instanceof AggregateError&&error.cause===readError&&error.errors.includes(closeError)&&error.captureCleanupUncertain&&error.captureRequiresProcessExit);assert.equal(attempts,1);assert.equal(state.live.size,1);assert.doesNotThrow(()=>fs.fstatSync(selected));}
+ finally{fs.closeSync=original;if(selected!==undefined&&state.live.has(selected))original(selected);}
+ // Only this fault fixture knows that its intercepted close did not run.
+ // Production cannot infer that lease and requires isolated process cleanup.
+ assert.equal(state.live.size,0);
+}));
+test('async ambiguous close preserves a caller reopening the same file into the same descriptor number',async t=>asyncReadFixture({'a':'a','b':'b','c':'c','d':'d'},async state=>{
+ state.hold=true;const capture=state.track(captureClientTreeAsync(state.root));await state.reached(()=>state.pending.length===4,capture);const original=fs.closeSync,closeError=Object.assign(Error('SYNTHETIC_AFTER_CLOSE_REOPEN'),{code:'EIO'});let caller,callerFile,originalNumber,originalFrame,callerFrame,attempts=0;
+ const frame=s=>['dev','ino','uid','gid','mode','nlink','size','mtimeNs','ctimeNs'].map(key=>s[key]);
+ fs.closeSync=fd=>{if(caller===undefined){const file=state.live.get(fd).file;callerFile=file;originalNumber=fd;originalFrame=frame(fs.fstatSync(fd,{bigint:true}));original(fd);caller=fs.openSync(file,fs.constants.O_RDONLY);callerFrame=frame(fs.fstatSync(caller,{bigint:true}));attempts++;assert.equal(caller,originalNumber);assert.deepEqual(callerFrame,originalFrame);throw closeError;}if(fd===caller)attempts++;return original(fd);};
+ try{state.releaseAll();await assert.rejects(capture,error=>error instanceof AggregateError&&error.cause===closeError&&error.captureCleanupUncertain&&error.captureRequiresProcessExit);assert.equal(attempts,1);assert.equal(state.live.size,1);assert.doesNotThrow(()=>fs.fstatSync(caller));const byte=Buffer.alloc(1);assert.equal(fs.readSync(caller,byte),1);assert.equal(byte.toString(),({a:'a',b:'b',c:'c',d:'d'})[path.basename(callerFile)]);t.diagnostic(JSON.stringify({sameDescriptorNumber:caller===originalNumber,sameFullMetadata:true,callerDescriptorStillOpen:true,closeCalls:attempts,processCleanupRequired:true}));}
+ finally{fs.closeSync=original;if(caller!==undefined&&state.live.has(caller))original(caller);}
+}));
+test('async directory iterator close uncertainty drains other leases without a retry',async()=>asyncReadFixture({'nested/leaf':'synthetic'},async state=>{
+ const original=fs.opendirSync,error=Error('SYNTHETIC_DIRECTORY_CLOSE');let injected=false;
+ fs.opendirSync=(file,...args)=>{const dir=original(file,...args);return{readSync:()=>dir.readSync(),closeSync:()=>{dir.closeSync();if(!injected){injected=true;throw error;}}};};
+ try{await assert.rejects(state.track(captureClientTreeAsync(state.root)),value=>value instanceof AggregateError&&value.cause===error&&value.captureCleanupUncertain&&value.captureRequiresProcessExit);assert.equal(injected,true);assert.equal(state.live.size,0);assert.equal(state.activeDirs,0);}finally{fs.opendirSync=original;}
+}));
+test('async deadline stops queued work but does not return while an existing read callback is held',async()=>asyncReadFixture({'a':'a','b':'b','c':'c','d':'d','e':'e'},async state=>{
+ const original=globalThis.performance;let clock=0;globalThis.performance={now:()=>clock};state.hold=true;const capture=state.track(captureClientTreeAsync(state.root));
+ try{await state.reached(()=>state.pending.length===4,capture);clock=5001;state.pending[0].deliver();await immediate();await immediate();assert.equal(state.outcomes.get(capture).settled,false);assert.equal(state.records.filter(r=>r.file.endsWith('/e')).length,0);state.releaseAll();await assert.rejects(capture,/CX_COMPLETE_TREE_DEADLINE/);assert.equal(state.live.size,0);}finally{globalThis.performance=original;}
+}));
+test('async commitment codec and fsync share the original capture deadline',async()=>{
+ for(const boundary of['codec','fsync'])await asyncReadFixture({'leaf':'synthetic'},async state=>{
+  const original=globalThis.performance,byteLength=Buffer.byteLength,sync=fs.fsyncSync;let clock=0,entered=false;globalThis.performance={now:()=>clock};const home=temp(),audit=path.join(home,'manifest.json');
+  Buffer.byteLength=(...args)=>{const value=byteLength(...args);if(boundary==='codec'){entered=true;clock=5001;}return value;};
+  fs.fsyncSync=fd=>{const value=sync(fd);if(boundary==='fsync'){entered=true;clock=5001;}return value;};
+  try{await assert.rejects(state.track(captureClientTreeInventoryAsync(state.root,audit)),/CX_COMPLETE_TREE_DEADLINE/);assert.equal(entered,true);assert.equal(state.live.size,0);}finally{globalThis.performance=original;Buffer.byteLength=byteLength;fs.fsyncSync=sync;fs.rmSync(home,{recursive:true,force:true});}
+ });
+});
+test('async final root frame follows the last nested canonical directory observation',async()=>asyncReadFixture({'nested/leaf':'synthetic'},async state=>{
+ const named=fs.lstatSync,real=fs.realpathSync,nested=path.join(state.root,'nested');let nestedChecks=0,rootChecks=0,atInsert,inserted=false;
+ const closed=()=>state.records.filter(x=>x.file.endsWith('/nested/leaf')&&x.closed).length;
+ fs.lstatSync=(file,...args)=>{const value=named(file,...args);if(file===state.root&&closed()===2)rootChecks++;return value;};
+ const resolve=(file,...args)=>{const value=(real.native??real)(file,...args);if(file===nested&&closed()===2&&++nestedChecks===2){atInsert=rootChecks;fs.writeFileSync(path.join(state.root,'late'),'late');inserted=true;}return value;};
+ fs.realpathSync=(...args)=>resolve(...args);if(real.native)fs.realpathSync.native=resolve;
+ try{await assert.rejects(state.track(captureClientTreeAsync(state.root)),/CX_COMPLETE_TREE_FINAL_PATH_CHANGED/);assert.equal(inserted,true);assert.equal(closed(),2);assert.ok(rootChecks>atInsert);}finally{fs.lstatSync=named;fs.realpathSync=real;}
+}));
+test('actual async public producer waits for complete capture and retains refusal before acknowledgment',async()=>{
+ const {prepareClientRuntimeInventoryAsync}=await import('./prepare-client-extensions.mjs');
+ for(const outcome of['success','read-refusal','source-drift'])await asyncReadFixture({'entry.mjs':'synthetic'},async state=>{
+  const home=temp(),audit=path.join(home,'audit.json'),output=path.join(home,'inventory.json');let snapshots=0;
+  const q={kind:'prepare-native-client-runtime-inventory',preparedOnly:true,purpose:'appium',platform:'ios',root:state.root,appiumEntry:path.join(state.root,'entry.mjs'),output,manifestOutput:audit};
+  state.hold=true;const promise=state.track(prepareClientRuntimeInventoryAsync(q,{snapshot:()=>{snapshots++;return{sourceDirty:false,version:outcome==='source-drift'&&snapshots===2?'changed':'original'};}}));
+  try{await state.reached(()=>state.pending.length===1,promise);assert.equal(fs.existsSync(audit),false);assert.equal(fs.existsSync(output),false);
+   if(outcome==='read-refusal'){const error=Error('SYNTHETIC_CAPTURE_REFUSAL');state.pending[0].deliver(error);state.releaseAll();await assert.rejects(promise,value=>value===error);assert.equal(fs.existsSync(audit),false);}
+   else{state.releaseAll();if(outcome==='source-drift')await assert.rejects(promise);else{const result=await promise;assert.equal(result.inventory.tree.observations,2);assert.equal(result.privateReads,0);assert.equal(result.nativeActions,0);assert.equal(result.inventory.appiumEntry,q.appiumEntry);assert.equal(fs.existsSync(audit),true);}}
+   assert.equal(fs.existsSync(output),false);assert.equal(state.live.size,0);
+  }finally{state.releaseAll();await Promise.allSettled([promise]);fs.rmSync(home,{recursive:true,force:true});}
+ });
+});
+test('actual async Appium admission dispatches no command until fresh capture succeeds',async()=>{
+ for(const outcome of['success','changed'])await asyncReadFixture({'entry.mjs':'synthetic'},async state=>{
+  const home=temp(),audit=path.join(home,'audit.json'),inventory=runtimeEnvelope(captureClientTreeInventory(state.root,audit),'appium'),ref={path:'/synthetic',sha256:'a'.repeat(64)},q={platform:'ios',appiumUrl:'http://127.0.0.1:4727',appiumServerEvidence:ref,appiumInventoryEvidence:ref},observed='synthetic-start '+inventory.appiumEntry;
+  const server={observed:true,owned:true,platform:'ios',pid:10,inventoryEvidence:ref,appiumUrl:q.appiumUrl,uid:process.getuid(),utcStartAndCommandSha256:sha(observed)};let reads=0,commands=0,changed=false;fs.unlinkSync(audit);
+  const command=(_file,args)=>{commands++;return args.includes('uid=')?String(process.getuid()):args.includes('-Fpfn')?'p10\nf1\nn127.0.0.1:4727\n':observed;};
+  if(outcome==='changed')state.afterRead=()=>{if(!changed){changed=true;fs.appendFileSync(path.join(state.root,'entry.mjs'),'change');}};
+  state.hold=true;const promise=state.track(admitClientServerAsync(q,{read:()=>++reads===1?server:inventory,command}));
+  try{await state.reached(()=>state.pending.length===1,promise);assert.equal(commands,0);assert.equal(state.outcomes.get(promise).settled,false);state.releaseAll();if(outcome==='success'){assert.equal((await promise).inventory,inventory);assert.equal(commands,3);}else{await assert.rejects(promise);assert.equal(commands,0);}assert.equal(state.live.size,0);}
+  finally{state.releaseAll();await Promise.allSettled([promise]);fs.rmSync(home,{recursive:true,force:true});}
+ });
+});
+test('async admission awaits the actual server hook before runtime recapture or protected readers',async()=>{
+ const f=clientAdmissionPacket(),gate=deferred(),tree=f.io.tree;let servers=0,trees=0;f.io.server=()=>++servers===1?gate.promise:{};f.io.tree=(...args)=>{trees++;return tree(...args);};
+ const promise=admitClientExtensions(f.q,f.io);let settled=false;promise.then(()=>{settled=true;},()=>{settled=true;});
+ try{await immediate();assert.equal(servers,1);assert.equal(trees,0);assert.equal(f.reads(),0);assert.equal(settled,false);gate.resolve({});const result=await promise;assert.equal(f.reads(),2);assert.equal(trees,1);assert.equal(servers,3);for(const member of result.members)for(const key of Object.keys(member.value))member.value[key]=undefined;}
+ finally{gate.resolve({});await Promise.allSettled([promise]);}
+});
+test('async admission awaits runtime success or rejection before GET or private entry',async()=>{
+ for(const outcome of['success','refused']){
+  const f=clientAdmissionPacket(),gate=deferred(),read=f.io.getJson;let gets=0;f.io.tree=()=>gate.promise;f.io.getJson=(...args)=>{gets++;return read(...args);};const promise=admitClientExtensions(f.q,f.io);let settled=false;promise.then(()=>{settled=true;},()=>{settled=true;});
+  try{await immediate();assert.equal(f.reads(),0);assert.equal(gets,0);assert.equal(settled,false);if(outcome==='refused'){const error=Error('SYNTHETIC_RUNTIME_REFUSED');gate.reject(error);await assert.rejects(promise,value=>value===error);assert.equal(f.reads(),0);assert.equal(gets,0);}else{gate.resolve(structuredClone(f.values.get(f.q.clientRuntimeInventoryEvidence.path).tree));const result=await promise;assert.equal(f.reads(),2);for(const member of result.members)for(const key of Object.keys(member.value))member.value[key]=undefined;}}
+  finally{gate.resolve({});await Promise.allSettled([promise]);}
+ }
+});
+test('each protected reader awaits its current server guard and prior transferred data clears on refusal',async()=>{
+ const f=clientAdmissionPacket(),gate=deferred();let servers=0;f.io.server=()=>++servers===3?gate.promise:{};const promise=admitClientExtensions(f.q,f.io);let settled=false;promise.then(()=>{settled=true;},()=>{settled=true;});
+ try{for(let n=0;n<128&&servers<3;n++){if(settled)await promise;await immediate();}assert.equal(servers,3);assert.equal(f.reads(),1);assert.equal(settled,false);const error=Error('SYNTHETIC_CURRENT_SERVER_REFUSAL');gate.reject(error);await assert.rejects(promise,value=>value===error);assert.equal(f.reads(),1);assert.ok(Object.values(f.loadedValues[0]).every(value=>value===undefined));}
+ finally{gate.resolve({});await Promise.allSettled([promise]);}
+});
+test('run preflight waits before control construction and clears retained values after rejected guard',async t=>{
+ const f=admittedCleanupFixture(t),gate=deferred();let controls=0;f.admitted.currentGuard=()=>gate.promise;f.dependencies.controls=async()=>{controls++;throw Error('MUST_NOT_CONSTRUCT');};
+ const promise=runClientExtensions(f.q,f.dependencies);let settled=false;promise.then(()=>{settled=true;},()=>{settled=true;});
+ try{await immediate();assert.equal(controls,0);assert.equal(settled,false);gate.reject(Error('SYNTHETIC_ASYNC_PREFLIGHT_REFUSAL'));const summary=await promise;assert.notEqual(summary.status,'passed');assert.equal(summary.actualNativeExecution,false);assert.equal(controls,0);f.verify();}
+ finally{gate.resolve({});await Promise.allSettled([promise]);}
+});
+function asyncLiveFixture(t,server){
+ const f=admittedCleanupFixture(t);f.q.leaseDeadlineMs=4000000;f.admitted.installed={};f.admitted.currentGuard=async()=>{};
+ Object.assign(f.dependencies,{harness:()=>f.q.expectedHarnessFingerprint,snapshot:()=>f.admitted.source,installed:()=>f.admitted.installed,server,now:()=>0,controls:async()=>({closeRun:async()=>({allOwnedControlsClosed:true,authorityCleared:true}),dispose:()=>{}})});return f;
+}
+test('actual runner awaits live server recapture before its first native session attempt',async t=>{
+ const gate=deferred();let servers=0;const f=asyncLiveFixture(t,()=>++servers===1?gate.promise:{}),promise=runClientExtensions(f.q,f.dependencies);let settled=false;promise.then(()=>{settled=true;},()=>{settled=true;});
+ try{await immediate();assert.equal(servers,1);assert.equal(settled,false);assert.equal(fs.existsSync(path.join(f.q.report,'summary.json')),false);gate.reject(Error('SYNTHETIC_LIVE_RECAPTURE_REFUSAL'));const summary=await promise;assert.equal(summary.actualNativeExecution,false);assert.notEqual(summary.status,'passed');assert.equal(servers,2);f.verify();}
+ finally{gate.resolve({});await Promise.allSettled([promise]);}
+});
+test('actual runner awaits its final live guard before summary publication and value cleanup',async t=>{
+ const gate=deferred();let servers=0;const f=asyncLiveFixture(t,()=>{if(++servers===1)throw Error('SYNTHETIC_SETUP_STOP');return gate.promise;}),promise=runClientExtensions(f.q,f.dependencies);let settled=false;promise.then(()=>{settled=true;},()=>{settled=true;});
+ try{for(let n=0;n<128&&servers<2;n++){if(settled)await promise;await immediate();}assert.equal(servers,2);assert.equal(settled,false);assert.equal(fs.existsSync(path.join(f.q.report,'summary.json')),false);gate.reject(Error('SYNTHETIC_FINAL_GUARD_REFUSAL'));const summary=await promise;assert.notEqual(summary.status,'passed');assert.equal(summary.actualNativeExecution,false);f.verify();}
+ finally{gate.resolve({});await Promise.allSettled([promise]);}
+});
+test('actual runner quarantines uncertain runtime cleanup before any later guard or native attempt',async t=>{
+ const error=Object.assign(Error('SYNTHETIC_CAPTURE_CLEANUP_UNCERTAIN'),{captureCleanupUncertain:true,captureRequiresProcessExit:true});let servers=0;const f=asyncLiveFixture(t,async()=>{servers++;throw error;});
+ const summary=await runClientExtensions(f.q,f.dependencies);assert.notEqual(summary.status,'passed');assert.equal(summary.actualNativeExecution,false);assert.equal(summary.captureCleanupUncertain,true);assert.equal(summary.captureRequiresProcessExit,true);assert.equal(servers,1);f.verify();
+});
+test('async server legacy, hash-only and incoherent evidence refuses before commands or payload reads',async()=>asyncReadFixture({'entry.mjs':'synthetic'},async state=>{
+ const home=temp(),audit=path.join(home,'manifest.json'),good=runtimeEnvelope(captureClientTreeInventory(state.root,audit),'appium'),ref={path:'/synthetic',sha256:'a'.repeat(64)},q={platform:'ios',appiumUrl:'http://127.0.0.1:4727',appiumServerEvidence:ref,appiumInventoryEvidence:ref},server={observed:true,owned:true,platform:'ios',pid:10,inventoryEvidence:ref,appiumUrl:q.appiumUrl};
+ try{for(const tree of[captureClientTree(state.root),{sha256:good.tree.manifest.sha256},{...good.tree,observations:1},{...good.tree,chargedBytes:good.tree.chargedBytes+1}]){let reads=0,commands=0;const before=state.reads.length;await assert.rejects(state.track(admitClientServerAsync(q,{read:()=>++reads===1?server:{...good,tree},command:()=>{commands++;throw Error('MUST_NOT_DISPATCH');}})));assert.equal(commands,0);assert.equal(state.reads.length,before);}}
+ finally{fs.rmSync(home,{recursive:true,force:true});}
+}));

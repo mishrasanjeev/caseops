@@ -68,3 +68,19 @@ scripts/mobile/privacy-policy.test.mjs text eol=lf
 
 # Byte-exact process-owner source consumed by local packaging host.
 scripts/mobile/store_process_owner.py text eol=lf
+
+# Exact upstream API installer notices retain reviewed bytes on every checkout.
+apps/api/vendor/uv-0.13.5/LICENSE-APACHE text eol=lf
+apps/api/vendor/uv-0.13.5/LICENSE-MIT text eol=lf
+apps/api/vendor/uv-0.13.5/provenance.json text eol=lf
+
+# The inherited host bootstrap and its helper have literal source commitments.
+scripts/mobile/host-node-trust*.mjs text eol=lf
+scripts/mobile/host-platform-trust*.py text eol=lf
+scripts/mobile/fixtures/host-platform-trust/** text eol=lf
+scripts/mobile/fixtures/host-native-trust.swift text eol=lf
+scripts/mobile/tooling.json text eol=lf
+.github/actions/node-trust/action.yml text eol=lf
+
+apps/mobile/vendor/sdk58-patch-20261028/provenance.json text eol=lf
+apps/mobile/vendor/sdk58-patch-20261028/EXPO-LICENSE.txt text eol=lf

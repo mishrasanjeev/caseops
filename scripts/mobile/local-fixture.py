@@ -48,7 +48,7 @@ def private_metadata_equal(first, second, *, named_path=False, windows=False):
     assert type(named_path) is bool and type(windows) is bool, "Explicit private metadata comparison mode required"
     fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
     return all(getattr(first, key) == getattr(second, key) for key in fields
-               if not (windows and named_path and key == "st_dev"))
+               if not (windows and named_path and key == "st_dev" and second.st_dev == 0))
 
 
 def _write_private(name, value, *, update=False):

@@ -59,8 +59,8 @@ Preserve Mac's actual inventory and its two explicit Windows-only skips.
       Desktop prerequisites/terms. No silent license acceptance, global developer
       directory switch, new paid/cloud service or unrelated service shutdown.
 - [ ] Install with `apps/mobile`'s own `npm ci --include=dev` and lock; it is not
-      a root workspace. Keep Expo 58.0.20, RN 0.88.0, React 19.3.0 and `@expo/ui`
-      58.0.24. iOS controls are the real SwiftUI adapter, not Compose or DOM controls.
+      a root workspace. Keep Expo 58.0.21, RN 0.88.0, React 19.3.0 and `@expo/ui`
+      58.0.25. iOS controls are the real SwiftUI adapter, not Compose or DOM controls.
 - [ ] Verify WebView 14.0.1, PDF.js 6.4.299 asset hashes/notices and
       `prepare-viewer-assets.mjs --check`; run current type/component/tooling checks.
       Do not rewrite locks, repair dependencies automatically or fetch viewer CDNs.
@@ -157,7 +157,7 @@ performed; external commands in portability tests are mocks.
 - [ ] Install/launch only that reported `.app` on the selected Simulator. See
       genuine CaseOps/SwiftUI controls, not a development launcher. Verify unchanged
       `caseops://oauth/callback` goes to this QA app, not a second dev installation.
-- [ ] Owner-local Appium 3.8.0, WebdriverIO 10.1.0 and XCUITest 12.20.0 pass
+- [ ] Owner-local freshly audited Appium 3.9.0, WebdriverIO 10.1.0 and XCUITest 12.22.2 pass
       doctor and actual WDA/Xcode/runtime checks. No project lock edit, relaxed
       security, distribution signing or cloud Mac. Tool versions are not a pass.
 

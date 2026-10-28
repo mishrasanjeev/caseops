@@ -5,6 +5,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { attestIosFilesContainers, stageIosFilesAssets, snapshotIosFilesPrivacy, assertIosFilesPrivacy, snapshotIosCameraPrivacy } from './ios-files-privacy.mjs';
 const require = createRequire(new URL('../../apps/mobile/package.json', import.meta.url));
 const plist = require('@expo/plist').default;
@@ -41,7 +43,7 @@ function fixture(t) {
   const manifest = path.join(root, 'manifest.json');
   writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, kind: 'ios-files-synthetic-fixtures', platform: 'ios', syntheticDataOnly: true, assets }));
   const options = { containers, manifestEvidence: ref(manifest), runId: 'unit-run-1234', output: path.join(root, 'staging-receipt.json') };
-  const snapshot = (stagingEvidence, name, extra = {}) => snapshotIosFilesPrivacy({ containers, stagingEvidence, output: path.join(root, name), ...extra });
+  const snapshot = (stagingEvidence, name, extra = {}) => snapshotIosFilesPrivacy({ containers, stagingEvidence, verifyProviderBytes: true, output: path.join(root, name), ...extra });
   return { root, app, group, commands, run, devicesRoot, containers, assets, manifest, options, snapshot };
 }
 
@@ -64,6 +66,120 @@ test('staging creates one exclusive provider folder with exact assets and immuta
   assert.throws(() => stageIosFilesAssets(f.options), /FILES_RECEIPT_ALREADY_EXISTS/);
   assert.deepEqual(readFileSync(result.stagingEvidence.path), before);
   assert.throws(() => stageIosFilesAssets({ ...f.options, output: path.join(f.root, 'second.json') }), /EEXIST/);
+});
+
+test('staging and deferred private cleanup never consume provider bytes before picker journeys', t => {
+  const f = fixture(t), open = fs.openSync, read = fs.readSync, close = fs.closeSync, descriptors = new Set(); let providerBytes = 0;
+  fs.openSync = (file, ...args) => { const fd = open(file, ...args); if (String(file).startsWith(f.containers.provider.storagePath + path.sep)) descriptors.add(fd); return fd; };
+  fs.readSync = (fd, ...args) => { const count = read(fd, ...args); if (descriptors.has(fd)) providerBytes += count; return count; };
+  fs.closeSync = fd => { descriptors.delete(fd); return close(fd); }; syncBuiltinESMExports();
+  let stage, snapshot;
+  try { stage = stageIosFilesAssets(f.options); snapshot = f.snapshot(stage.stagingEvidence, 'deferred-cold.json', { verifyProviderBytes: false }).snapshot; }
+  finally { fs.openSync = open; fs.readSync = read; fs.closeSync = close; syncBuiltinESMExports(); }
+  assert.equal(providerBytes, 0); assert.equal(descriptors.size, 0);
+  assert.equal(stage.staging.providerOriginalsRead, false); assert.equal(snapshot.providerOriginalsRead, false);
+  assert.equal(snapshot.providerOriginalsPreserved, null); assert.equal(snapshot.providerMetadataPreserved, true);
+});
+test('explicit final verification proves original bytes and refuses metadata replacement or provider aliases before staging', t => {
+  const f = fixture(t), staged = stageIosFilesAssets(f.options), cold = f.snapshot(staged.stagingEvidence, 'cold-before-final.json', { verifyProviderBytes: false }).snapshot;
+  assert.equal(cold.providerOriginalsPreserved, null); assert.equal(cold.providerOriginalsRead, false);
+  const final = f.snapshot(staged.stagingEvidence, 'final-originals.json').snapshot;
+  assert.equal(final.complete, true); assert.equal(final.providerOriginalsRead, true); assert.equal(final.providerOriginalsPreserved, true);
+  assert.equal(final.providerBytesRead, f.assets.reduce((sum, row) => sum + row.sizeBytes, 0));
+  const file = staged.staging.assets[0].path, retained = file + '.retained'; fs.renameSync(file, retained); fs.copyFileSync(retained, file); fs.chmodSync(file, 0o600);
+  const replaced = f.snapshot(staged.stagingEvidence, 'replaced-original.json').snapshot;
+  assert.equal(replaced.complete, false); assert.equal(replaced.providerMetadataPreserved, false); assert.equal(replaced.providerOriginalsPreserved, false);
+  const manifest = JSON.parse(readFileSync(f.manifest)); manifest.assets[0].path = staged.staging.assets[1].path;
+  writeFileSync(f.manifest, JSON.stringify(manifest));
+  assert.throws(() => stageIosFilesAssets({ ...f.options, manifestEvidence: ref(f.manifest), runId: 'alias-run-1234', output: path.join(f.root, 'alias-stage.json') }), /HOST_FIXTURE_MUST_NOT_READ_DEVICE_PROVIDER/);
+});
+test('final metadata fence catches a provider change during the private scan without reading a provider hardlink', t => {
+  const f = fixture(t), staged = stageIosFilesAssets(f.options), original = staged.staging.assets[0].path;
+  const read = fs.readSync, open = fs.openSync, descriptors = new Map(); let changed = false;
+  fs.openSync = (file, ...args) => { const fd = open(file, ...args); descriptors.set(fd, String(file)); return fd; };
+  fs.readSync = (fd, ...args) => { const count = read(fd, ...args); if (!changed && descriptors.get(fd) === path.join(f.app, META)) { changed = true; fs.appendFileSync(original, 'late'); } return count; }; syncBuiltinESMExports();
+  let result; try { result = f.snapshot(staged.stagingEvidence, 'late-final-provider.json').snapshot; }
+  finally { fs.openSync = open; fs.readSync = read; syncBuiltinESMExports(); }
+  assert.equal(changed, true); assert.equal(result.complete, false); assert.equal(result.providerOriginalsPreserved, false);
+  assert.ok(result.issues.some(row => row.reason === 'provider-original-final-metadata-changed'));
+  fs.linkSync(staged.staging.assets[1].path, path.join(f.app, 'tmp/provider-hardlink'));
+  const cold = f.snapshot(staged.stagingEvidence, 'hardlink-cold.json', { verifyProviderBytes: false }).snapshot;
+  assert.equal(cold.complete, false); assert.equal(cold.providerOriginalsRead, false); assert.equal(cold.providerBytesRead, 0);
+});
+test('private scan binds two complete root-present inventories and catches insertion after either directory traversal', t => {
+  for (const traversal of [1, 2]) {
+    const f = fixture(t), staged = stageIosFilesAssets(f.options), open = fs.opendirSync, named = fs.lstatSync;
+    let closed = 0, lastClosed, inserted = false;
+    fs.opendirSync = (file, ...args) => { const dir = open(file, ...args), close = dir.closeSync.bind(dir);
+      dir.closeSync = () => { close(); closed++; lastClosed = String(file); }; return dir; };
+    fs.lstatSync = (file, ...args) => { const result = named(file, ...args);
+      if (!inserted && closed === traversal * 4 && String(file) === lastClosed) {
+        inserted = true; writeFileSync(path.join(lastClosed, 'late-private-copy'), f.assets[0].marker);
+      } return result;
+    }; syncBuiltinESMExports();
+    let snapshot; try { snapshot = f.snapshot(staged.stagingEvidence, `late-private-${traversal}.json`, { verifyProviderBytes: false }).snapshot; }
+    finally { fs.opendirSync = open; fs.lstatSync = named; syncBuiltinESMExports(); }
+    assert.equal(inserted, true); assert.equal(snapshot.complete, false); assert.equal(snapshot.providerOriginalsRead, false);
+    assert.ok(snapshot.issues.some(row => /inventory/.test(row.reason)));
+  }
+});
+test('private directory discovery charges before retention, closes at the unchanged cap and never reads a rejected payload', t => {
+  const f = fixture(t), staged = stageIosFilesAssets(f.options);
+  for (let i = 0; i < 40; i++) writeFileSync(path.join(f.app, 'tmp', `wide-${i}`), 'unrelated');
+  const open = fs.opendirSync, read = fs.readSync; let yielded = 0, closed = 0, privateReads = 0;
+  fs.opendirSync = (...args) => { const dir = open(...args), next = dir.readSync.bind(dir), close = dir.closeSync.bind(dir);
+    dir.readSync = () => { const item = next(); if (item) yielded++; return item; }; dir.closeSync = () => { closed++; return close(); }; return dir; };
+  fs.readSync = (...args) => { privateReads++; return read(...args); }; syncBuiltinESMExports();
+  let snapshot; try { snapshot = f.snapshot(staged.stagingEvidence, 'bounded-private.json', { verifyProviderBytes: false, limits: { entries: 8 } }).snapshot; }
+  finally { fs.opendirSync = open; fs.readSync = read; syncBuiltinESMExports(); }
+  assert.equal(snapshot.complete, false); assert.ok(yielded <= 8); assert.ok(closed > 0);
+  assert.equal(snapshot.privateInventory.initialCount, null); assert.equal(snapshot.privateInventory.observations, 0);
+  // Metadata/receipt readers may run; no body scanning occurs after discovery refusal.
+  assert.equal(snapshot.counts.files, 0); assert.equal(snapshot.counts.bytesRead, 0); assert.ok(privateReads > 0);
+});
+
+test('a copy inserted during final leaf reconciliation cannot pass a complete zero-copy privacy scan', t => {
+  const f = fixture(t), staged = stageIosFilesAssets(f.options);
+  const open = fs.opendirSync, named = fs.lstatSync, canonical = fs.realpathSync;
+  let rootCloses = 0, rootFinalStats = 0, rootReconciled = false, inserted = false;
+  const late = path.join(f.app, 'late-private-copy'), leaf = path.join(f.app, META);
+  fs.opendirSync = (file, ...args) => {
+    const directory = open(file, ...args), close = directory.closeSync.bind(directory);
+    directory.closeSync = () => { const result = close(); if (String(file) === f.app) rootCloses++; return result; };
+    return directory;
+  };
+  fs.lstatSync = (file, ...args) => {
+    const result = named(file, ...args);
+    if (String(file) === f.app && rootCloses === 2 && ++rootFinalStats === 2) rootReconciled = true;
+    return result;
+  };
+  fs.realpathSync = (file, ...args) => {
+    const result = canonical(file, ...args);
+    if (!inserted && rootReconciled && String(file) === leaf) {
+      writeFileSync(late, f.assets[0].marker); inserted = true;
+    }
+    return result;
+  };
+  syncBuiltinESMExports();
+  let snapshot;
+  try { snapshot = f.snapshot(staged.stagingEvidence, 'late-final-leaf.json', { verifyProviderBytes: false }).snapshot; }
+  finally { fs.opendirSync = open; fs.lstatSync = named; fs.realpathSync = canonical; syncBuiltinESMExports(); }
+  assert.equal(inserted, true); assert.equal(rootCloses, 2);
+  assert.equal(snapshot.counts.privateAssetMatchCount, 0);
+  assert.equal(snapshot.providerOriginalsRead, false);
+  assert.equal(snapshot.complete, false);
+  assert.ok(snapshot.issues.some(row => row.reason === 'incomplete-or-changed-final-directory-inventory'));
+  assert.throws(() => assertIosFilesPrivacy(snapshot, { boundary: 'clear' }), /COMPLETE_FILES_PRIVACY_SCAN_REQUIRED/);
+});
+test('exclusive retained-buffer provider write closes after zero progress and cannot replay its partial folder', t => {
+  const f = fixture(t), open = fs.openSync, write = fs.writeSync, close = fs.closeSync, fds = new Set(); let providerFd;
+  fs.openSync = (file, ...args) => { const fd = open(file, ...args); if (String(file).startsWith(f.containers.provider.storagePath + path.sep)) { fds.add(fd); providerFd = fd; } return fd; };
+  fs.writeSync = (fd, ...args) => fds.has(fd) ? 0 : write(fd, ...args);
+  fs.closeSync = fd => { fds.delete(fd); return close(fd); }; syncBuiltinESMExports();
+  try { assert.throws(() => stageIosFilesAssets(f.options), /PROVIDER_WRITE_NO_PROGRESS/); }
+  finally { fs.openSync = open; fs.writeSync = write; fs.closeSync = close; syncBuiltinESMExports(); }
+  assert.equal(fds.size, 0); assert.throws(() => fs.fstatSync(providerFd), { code: 'EBADF' }); assert.equal(existsSync(f.options.output), false);
+  assert.throws(() => stageIosFilesAssets({ ...f.options, output: path.join(f.root, 'no-replay.json') }), /EEXIST/);
 });
 
 test('wrong asset hashes, duplicate names, private manifests and symlink assets are refused before provider staging', (t) => {

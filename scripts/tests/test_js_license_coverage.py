@@ -40,7 +40,11 @@ def workflow_contract(text):
     block = text[jobs[index].end():end]
     block = "\n".join(line for line in block.splitlines() if not line.lstrip().startswith("#"))
     required = (
-        "license-checker@25.0.1", "node-version: \"22\"", "test_js_license_coverage.py -v",
+        "license-checker@25.0.1", "node-version: \"22.14.0\"", "test_js_license_coverage.py -v",
+        "uses: ./.github/actions/node-trust", "id: node_trust",
+        "NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}",
+        "SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}",
+        "SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}",
         "scripts/check_js_license_coverage.py inventory", "scripts/check_js_license_coverage.py verify",
         'license-checker --json --packages "$packages"',
         '--review-root "$GITHUB_WORKSPACE"', '--review-root /reviewed-source',

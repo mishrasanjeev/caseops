@@ -1,11 +1,17 @@
 {
-  "appium": "3.8.0",
-  "uiautomator2": "8.7.0",
-  "xcuitest": "12.20.0",
+  "appium": "3.9.0",
+  "uiautomator2": "8.7.3",
+  "xcuitest": "12.22.2",
   "webdriverio": "10.1.0",
   "jdk": {
     "version": "17.0.20.1+1",
     "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_windows_hotspot_17.0.20.1_1.zip",
     "sha256": "e53a79c3c3d86865bd7e787903884331068e71321714ffd44f145785affc7cb0"
+  },
+  "node": "24.15.0",
+  "npm": "11.12.1",
+  "hostNodeTrust": {
+    "helperSha256": "69f4fa1bf8a32df43ee430810d48dc361ac76fbb20685e11d8b1549627f96d54",
+    "bootstrapSha256": "413f1ec79f01dae05e74bb0d5b340c7d72e528d5bbd4bce84627e3789f392e5d"
   }
 }

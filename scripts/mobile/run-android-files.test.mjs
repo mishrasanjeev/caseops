@@ -8,9 +8,27 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { androidFilesInventory, collectAndroidFiles } from '../../apps/mobile/e2e/android-files.mjs';
 import { assembleAndroidFilesFixture, androidFilesKnownSources, assertStrictAndroidFilesEnvironment, bindAndroidFilesPrivateRoots,
-  captureAndroidFilesFailure, executeAndroidFilesCases, validateAndroidFilesContainers } from './run-android-files.mjs';
+  captureAndroidFilesFailure, captureAndroidFilesPrivacy, executeAndroidFilesCases, validateAndroidFilesContainers } from './run-android-files.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+test('controller keeps every preflight/checkpoint cold and overrides input flags only for final postflight', () => {
+  for (const phase of ['preflight','checkpoint','postflight']) {
+    let observed;
+    captureAndroidFilesPrivacy({ verifyProviderBytes: phase !== 'postflight' }, phase, options => {
+      observed = options.verifyProviderBytes;
+      return { snapshot: { schemaVersion: 2, complete: true, providerMetadataPreserved: true, providerOriginalsRead: observed,
+        providerOriginalsPreserved: observed ? true : null, providerByteVerification: observed ? 'postflight' : 'deferred-until-postflight', counts: { ownedStagingFiles: 0, privateAssetMatchCount: 0 } } };
+    }); assert.equal(observed, phase === 'postflight');
+  }
+});
+test('controller refuses early provider reads, pending final proof and private copies before returning a success', () => {
+  let calls = 0; assert.throws(() => captureAndroidFilesPrivacy({}, 'unknown', () => { calls++; }), /ANDROID_FILES_PRIVACY_PHASE_REQUIRED/); assert.equal(calls, 0);
+  const good = { schemaVersion: 2, complete: true, providerMetadataPreserved: true, providerOriginalsRead: false,
+    providerOriginalsPreserved: null, providerByteVerification: 'deferred-until-postflight', counts: { ownedStagingFiles: 0, privateAssetMatchCount: 0 } };
+  for (const change of [{ providerOriginalsRead: true }, { providerOriginalsPreserved: true }, { providerMetadataPreserved: false }, { counts: { ownedStagingFiles: 1, privateAssetMatchCount: 0 } }, { counts: { ownedStagingFiles: 0, privateAssetMatchCount: 1 } }])
+    assert.throws(() => captureAndroidFilesPrivacy({}, 'checkpoint', () => ({ snapshot: { ...good, ...change } })));
+  assert.throws(() => captureAndroidFilesPrivacy({}, 'postflight', () => ({ snapshot: good })));
+});
 function fixture(t) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'caseops-android-files-run-unit-')); t.after(() => rmSync(root, { recursive: true, force: true })); let serial = 0;
   const save = (name, value) => { const file = path.join(root, `${name}-${serial++}.json`), bytes = Buffer.from(JSON.stringify(value)); writeFileSync(file, bytes); return { path: file, sha256: sha(bytes) }; };
@@ -32,13 +50,14 @@ function fixture(t) {
     backendSha: receipt.backendSha, backendRevision: receipt.backendRevision, companyId: seed.companyId, matter: seed.matter,
     isolationReceipt, source, assets };
   const manifestEvidence = save('manifest', manifest), folderName = 'CaseOpsFiles-unit-run-files';
-  const staged = { schemaVersion: 1, observed: true, platform: 'android', kind: 'android-files-provider-assets', udid: coreFixture.udid, appId: coreFixture.appId, manifestEvidence, folderName,
+  const staged = { schemaVersion: 2, providerOriginalsRead: false, observed: true, platform: 'android', kind: 'android-files-provider-assets', udid: coreFixture.udid, appId: coreFixture.appId, manifestEvidence, folderName,
     assets: assets.map(({ id, filename, sha256, sizeBytes }) => ({ id, filename, sha256, sizeBytes })) };
-  const picker = { schemaVersion: 1, observed: true, platform: 'android', udid: coreFixture.udid, appId: coreFixture.appId, packageName: 'com.android.documentsui',
+  const providerEvidence = save('provider', staged);
+  const picker = { schemaVersion: 2, providerOriginalsRead: false, stagingEvidence: providerEvidence, observed: true, platform: 'android', udid: coreFixture.udid, appId: coreFixture.appId, packageName: 'com.android.documentsui',
     manifestEvidence, buildReceipt, folderName, controls: { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: 'com.android.documentsui:id/roots_list' },
       downloads: { kind: 'text', value: 'Downloads' }, folder: { kind: 'text', value: folderName }, fileTitleId: 'android:id/title', cancel: 'android-back' },
-    assets: assets.map(value => ({ ...value, pickerName: value.filename, observedProviderHash: value.sha256 })) };
-  const request = { coreFixture, manifestEvidence, providerEvidence: save('provider', staged), pickerEvidence: save('picker', picker), filesCache: root };
+    assets: assets.map(value => ({ ...value, pickerName: value.filename, transferSha256: value.sha256 })) };
+  const request = { coreFixture, manifestEvidence, providerEvidence, pickerEvidence: save('picker', picker), filesCache: root };
   return { root, save, request, manifest, staged, picker, source };
 }
 

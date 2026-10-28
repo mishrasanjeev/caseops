@@ -183,3 +183,50 @@ physical privacy/accessibility acceptance remain separate. Verified HTTPS links
 require an actual production-domain association and signed artifact observation;
 a local custom URI or a fixture Boolean cannot establish it. The summary never
 promotes these source controls to physical hardware acceptance.
+
+## Bounded runtime receipt transport
+
+Prepare each public filesystem inventory with `prepare-client-extensions.mjs
+--runtime-inventory <request> <sha256>`. The prepared request names the platform,
+`webdriver` or `appium` purpose, canonical runtime root, exclusive public output
+and an exclusive audit-manifest output outside both runtime and source. Appium
+also names its normalized canonical regular entry file, which must be a file
+member of that complete actual capture. Parent traversal, symlink entries and
+uncaptured targets are refused before server commands. Root and audit-reference
+paths must also be normalized. This preparation acknowledges no native action.
+
+The purpose-specific inventory is version 2. Its `tree` is a strict version 3
+commitment to the complete version 2, two-observation capture: canonical root,
+logical and charged counts, and exact canonical JSON-with-LF manifest digest and
+extent. Both native consumers freshly recapture the selected actual runtime and
+compare the complete commitment before server commands or protected readers.
+Legacy inline trees, one-observation receipts and hash-only objects are refused.
+A receipt hash is not independent runtime observation.
+
+Public input and projection output remain limited to 1 MiB. The separately
+retained full manifest is audit-only, with an exclusive 16 MiB output bound and
+POSIX mode 0600 where supported; actual Windows ACL acceptance remains separate.
+It is never read as a native admission input. Capture, canonical encoding and
+manifest output share the existing 5-second deadline, 50,000 charged entries and
+512 MiB charged payload budget. Both complete observations are charged.
+
+The public CLI and native runner await
+the asynchronous capture, which has at most four 64 KiB buffers and four owned
+descriptors, including directory inspection. The two inventories remain serial.
+Each leaf keeps its opened descriptor, independent full descriptor/path frames,
+native canonical resolution and live parent checks through its read. A shared
+byte ledger reserves read capacity and permits only one aggregate overflow byte.
+On failure no new work is scheduled and every pending read finishes. Every
+other definitely held descriptor is closed before refusal returns. A close error
+is ambiguous:
+the same number can already refer to a caller's newly opened descriptor for the
+same file. It is never retried or treated as an ownership proof. The error marks
+cleanup uncertain and requires the isolated caller process to exit, with its
+owner proving process/group absence before reuse. Commands and protected readers
+wait for successful recapture. Synchronous capture APIs remain available with
+their original behavior. Source tests do not establish five-second performance
+on an installed SDK or native acceptance.
+
+Failed or partial outputs remain retained and produce no success reference. A saved
+large manifest can establish codec/transport compatibility only, not current
+SDK, server, device or native acceptance.

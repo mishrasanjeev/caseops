@@ -7,7 +7,7 @@ import test from 'node:test';
 import { gatewayBaseline } from './traffic.mjs';
 import { collectIosFiles, expandIosSourceDetails, proveIosSelectedFile, iosFilesInventory, iosFilesScenarios, validateAsset, validateIosFilesContext,
   validatePickerAsset, validatePickerProvider, validatePrivacyReceipt, validateSourceAnchor, validateSourceSeed, textSegments, chooseIosFile,
-  awaitIosTextReady, readIosText,
+  awaitIosTextReady, readIosText, repeatIosFileSelection,
   IOS_UPLOAD_PERSISTED_MESSAGE, proveIosReaderEntry, proveIosUploadPersisted, findIosUploadPersisted,
   assertIosUploadErrorsAbsent, assertIosViewerAbsent, findIosFileFact, validateIosUploadAcknowledgement, rapidActivateIosUpload } from './ios-files.mjs';
 
@@ -40,9 +40,10 @@ function fixture(t) {
     { udid: context.fixture.udid, name: 'CaseOps offline phone', state: 'Booted', isAvailable: true,
       deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17' },
   ] } });
-  const picker = { observed: true, platform: 'ios', udid: context.fixture.udid, ...provider,
+  context.assets.providerEvidence = evidence('provider-staging', { kind: 'explicit-synthetic-v2-provider-stage' });
+  const picker = { schemaVersion: 2, providerOriginalsRead: false, stagingEvidence: context.assets.providerEvidence, observed: true, platform: 'ios', udid: context.fixture.udid, ...provider,
     localRoot: { label: 'On My iPhone', deviceInventory },
-    assets: Object.values(uploads).map((asset) => ({ ...asset, observedProviderHash: asset.sha256,
+    assets: Object.values(uploads).map((asset) => ({ ...asset, transferSha256: asset.sha256,
       pickerName: asset.filename.slice(0, asset.filename.lastIndexOf('.')) + ', ' + asset.filename.slice(asset.filename.lastIndexOf('.') + 1) })) };
   context.provider = { ...provider, evidence: evidence('picker', picker) };
   return { context, source, seed, uploads, evidence, picker };
@@ -201,6 +202,7 @@ function pickerRouteDouble(context, asset, initial, { duplicateLocation = false,
     async waitUntil(check, options) { if (!await check()) throw new Error(options?.timeoutMsg || 'OFFLINE_PICKER_STATE_NOT_READY'); },
     async $$(query) {
       if (query === '~files-choose' && state === 'files') return [element('choose', initial)];
+      if (query === '~files-selection-clear' && state === 'selected') return [element('clear-selection', 'files')];
       if (query.includes('FullDocumentManagerViewControllerNavigationBar')) return !['files','selected'].includes(state) ? [element('bar')] : [];
       if (query.includes('name == "Cancel"')) return ['root','locations'].includes(state) ? [element('cancel', 'files')] : [];
       if (query.includes('Actions Menu')) return state === 'folder' ? [element('owned-folder-heading')] : [];
@@ -219,6 +221,34 @@ function pickerRouteDouble(context, asset, initial, { duplicateLocation = false,
   measuredFileDriver(context);
   return { clicks, state: () => state };
 }
+function repeatSelectionFixture(t) {
+  const f = fixture(t), fake = pickerRouteDouble(f.context, f.uploads.txt, 'folder');
+  const before = { runId: f.context.fixture.gatewayRunId, lastSequence: 0, requests: [] };
+  const ledger = { ...before, lastSequence: 1, markerRejected: 0, routeRejected: 0, overflow: false,
+    requests: [{ sequence: 1, method: 'GET', route: `/api/matters/${matterId}/workspace`, status: 200, nativeMarker: true }] };
+  f.context.gatewayBaseline = gatewayBaseline({ ...ledger, lastSequence: 0, requests: [] }, { gatewayRunId: ledger.runId });
+  const fetch = globalThis.fetch; t.after(() => { globalThis.fetch = fetch; });
+  globalThis.fetch = async () => new Response(JSON.stringify(ledger), { status: 200 });
+  const boundaries = [];
+  f.context.observeFilesystem = async boundary => { boundaries.push({ boundary, clicks: [...fake.clicks] }); return f.evidence('repeat-privacy', {
+    schemaVersion: 2, observed: true, platform: 'ios', udid: f.context.fixture.udid, bundleId: f.context.fixture.appId,
+    boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: null, providerMetadataUnchanged: true,
+    providerOriginalsRead: false, providerByteVerification: 'deferred-until-postflight', stagedFileCount: 0, privateByteMatchCount: 0 }); };
+  return { ...f, fake, before, ledger, boundaries };
+}
+test('repeat selection composes exact picker and single clear commands twice with cold cleanup between selections', async t => {
+  const f = repeatSelectionFixture(t); await repeatIosFileSelection(f.context, f.before);
+  assert.deepEqual(f.fake.clicks, ['choose','exact-owned-file','clear-selection','choose','exact-owned-file','clear-selection']);
+  assert.equal(f.fake.state(), 'files'); assert.deepEqual(f.boundaries.map(row => row.boundary), ['selection-clear-first','selection-clear']);
+  assert.equal(f.boundaries[0].clicks.filter(value => value === 'choose').length, 1);
+  assert.ok(f.ledger.requests.every(row => row.method === 'GET'));
+});
+test('lost first clear acknowledgement stops repeat selection without another click or fabricated cleanup', async t => {
+  const f = repeatSelectionFixture(t), click = f.context.driver.elementClick, lost = Error('SYNTHETIC_CLEAR_ACK_UNKNOWN'); let clears = 0;
+  f.context.driver.elementClick = async id => { await click(id); if (id === 'files-selection-clear') { clears++; throw lost; } };
+  await assert.rejects(repeatIosFileSelection(f.context, f.before), error => error === lost);
+  assert.equal(clears, 1); assert.deepEqual(f.fake.clicks, ['choose','exact-owned-file','clear-selection']); assert.deepEqual(f.boundaries, []);
+});
 test('picker selection follows only observed old-folder, On My iPhone, Locations and single-Browse routes to the exact owned file', async (t) => {
   for (const [initial, expected] of [
     ['folder', ['choose','exact-owned-file']],
@@ -470,8 +500,8 @@ test('rapid upload uses two measured native touches in one dispatch and never re
 });
 test('privacy acceptance rejects wrong device, unowned scans, altered originals and even one retained private byte match', (t) => {
   const { context } = fixture(t), boundary='selection-clear';
-  const receipt = { schemaVersion: 1, observed: true, platform: 'ios', udid: context.fixture.udid, bundleId: context.fixture.appId,
-    boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: true, stagedFileCount: 0, privateByteMatchCount: 0 };
+  const receipt = { schemaVersion: 2, observed: true, platform: 'ios', udid: context.fixture.udid, bundleId: context.fixture.appId,
+    boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: null, providerMetadataUnchanged: true, providerOriginalsRead: false, providerByteVerification: 'deferred-until-postflight', stagedFileCount: 0, privateByteMatchCount: 0 };
   assert.equal(validatePrivacyReceipt(context,boundary,receipt),receipt);
   for (const change of [{ observed:false }, {udid:'other'}, {boundary:'other'}, {ownedAppScopeOnly:false}, {providerOriginalsUnchanged:false}, {stagedFileCount:1}, {privateByteMatchCount:1}])
     assert.throws(()=>validatePrivacyReceipt(context,boundary,{...receipt,...change}));
@@ -511,8 +541,8 @@ test('picker cancel includes authoritative entry read even when the actual choos
       return [];
     },
   };
-  context.observeFilesystem=async(boundary)=>evidence('cancel-privacy',{schemaVersion:1,observed:true,platform:'ios',udid:context.fixture.udid,
-    bundleId:context.fixture.appId,boundary,ownedAppScopeOnly:true,providerOriginalsUnchanged:true,stagedFileCount:0,privateByteMatchCount:0});
+  context.observeFilesystem=async(boundary)=>evidence('cancel-privacy',{schemaVersion:2,observed:true,platform:'ios',udid:context.fixture.udid,
+    bundleId:context.fixture.appId,boundary,ownedAppScopeOnly:true,providerOriginalsUnchanged:null,providerMetadataUnchanged:true,providerOriginalsRead:false,providerByteVerification:'deferred-until-postflight',stagedFileCount:0,privateByteMatchCount:0});
   measuredFileDriver(context);
   const protocolClick=context.driver.elementClick;
   context.driver.elementClick=async id=>id===files.elementId?files.click():protocolClick(id);

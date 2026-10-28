@@ -9,8 +9,8 @@ from xml.etree import ElementTree
 
 import pytest
 
-# Source685 hosted run40634043720 measured complete phase costs. Keep every
-# other ordinal assignment and the existing16 jobs/12-minute deadline.
+# Source685 hosted run40634043720 measured complete phase costs. Retain this
+# sixteen-parent inventory, including these four routes, when splitting32 jobs.
 _MEASURED_SIXTEEN_SHARD_DESTINATIONS = {
     (
         "tests/test_ip_import_review_gaps_20261013.py::"
@@ -45,7 +45,16 @@ def partition(nodeids: list[str], shard: int, total: int) -> list[str]:
     ):
         raise ValueError("The complete PostgreSQL collection must be nonempty and unique")
     ordered = sorted(nodeids)
-    if total == 16:
+    if total == 32:
+        parent = (shard - 1) % 16 + 1
+        parent_nodes = partition(nodeids, parent, 16)
+        child = int(shard > 16)
+        # Balanced ABBA prefixes split each frozen parent without new case routes.
+        selected = [
+            node for index, node in enumerate(parent_nodes)
+            if (index + 1) // 2 % 2 == child
+        ]
+    elif total == 16:
         selected = [
             node
             for index, node in enumerate(ordered)

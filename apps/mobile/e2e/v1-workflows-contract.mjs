@@ -184,12 +184,13 @@ export function readV1Bytes(value, maximum = 1048576) {
     const a = fstatSync(fd, { bigint: true }), named = lstatSync(value.path, { bigint: true });
     const regular = s => s.isFile() && !s.isSymbolicLink() && s.size > 0n && s.size <= BigInt(maximum);
     const same = (x, y, namedPath) => ['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs', 'uid', 'gid', 'mode', 'nlink']
-      .every(key => namedPath && process.platform === 'win32' && key === 'dev' || x[key] === y[key]);
+      .every(key => (namedPath && process.platform === 'win32' && key === 'dev' && y.dev === 0n) || x[key] === y[key]);
     assert.ok(regular(a) && regular(named) && same(a, named, true), 'V1_EVIDENCE_IDENTITY_CHANGED');
     const buffer = Buffer.alloc(maximum + 1); let length = 0;
     while (length < buffer.length) { const n = readSync(fd, buffer, length, buffer.length - length, null); if (!n) break; length += n; }
     const after = fstatSync(fd, { bigint: true }), final = lstatSync(value.path, { bigint: true });
-    assert.ok(length <= maximum && BigInt(length) === a.size && regular(final) && same(a, after, false) && same(a, final, true), 'V1_EVIDENCE_CHANGED_OR_OVERBOUND');
+    assert.ok(length <= maximum && BigInt(length) === a.size && regular(final)
+      && same(a, after, false) && same(a, final, true) && same(named, final, false), 'V1_EVIDENCE_CHANGED_OR_OVERBOUND');
     bytes = buffer.subarray(0, length); assert.equal(v1Hash(bytes), value.sha256, 'V1_EVIDENCE_HASH_MISMATCH');
   } finally { closeSync(fd); }
   return Buffer.from(bytes);

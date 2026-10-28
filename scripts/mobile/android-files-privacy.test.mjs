@@ -107,7 +107,7 @@ function fixture(t) {
   const containers = attestAndroidFilesContainers(options), manifestEvidence = manifest('012345abcdef');
   const stage = (suffix = 'first', selectedManifest = manifestEvidence) => stageAndroidFilesAssets({ ...options, containers,
     manifestEvidence: selectedManifest, runId: `unit-run-${suffix}`, output: path.join(root, `provider-${suffix}.json`) });
-  const snapshot = (stagingEvidence, extra = {}) => snapshotAndroidFilesPrivacy({ ...options, containers, stagingEvidence,
+  const snapshot = (stagingEvidence, extra = {}) => snapshotAndroidFilesPrivacy({ ...options, containers, stagingEvidence, verifyProviderBytes: true,
     output: path.join(root, `snapshot-${Math.random().toString(16).slice(2)}.json`), ...extra });
   const camera = () => snapshotAndroidCameraPrivacy({ ...options, containers, output: path.join(root, `camera-${Math.random().toString(16).slice(2)}.json`) });
   return { root, nodes, calls, add, state, command, options, save, manifest, manifestEvidence, containers, stage, snapshot, camera };
@@ -137,6 +137,48 @@ test('staging copies only exact public manifest assets to one exclusive provider
   assert.throws(() => f.stage(), /ANDROID_FILES_OUTPUT_EXISTS/);
   assert.equal(f.calls.filter(args => args.some(value => value.includes('CASEOPS_ANDROID_WRITE_ASSET_V1'))).length, 2);
   assert.equal(f.calls.some(args => args.includes('rm') || args.includes('delete')), false);
+});
+
+test('verified-buffer provider transfer never runs a provider byte read before picker journeys', t => {
+  const f = fixture(t), result = f.stage();
+  assert.equal(f.calls.filter(args => args[0] === 'shell' && args[1] === 'sha256sum').length, 0);
+  assert.equal(result.receipt.providerOriginalsRead, false);
+  assert.ok(result.receipt.assets.every(asset => asset.transferSha256 === asset.sha256 && asset.providerMetadata.kind === 'file'));
+});
+test('deferred cleanup checks provider metadata without hashes or descriptor payload reads', t => {
+  const f = fixture(t), result = f.stage(); f.calls.length = 0;
+  const current = f.snapshot(result.evidence, { verifyProviderBytes: false });
+  assert.equal(f.calls.filter(args => args[0] === 'shell' && args[1] === 'sha256sum').length, 0);
+  assert.equal(f.calls.filter(args => args.some(value => value.includes('CASEOPS_ANDROID_READ_FD_V1'))).length, 0);
+  assert.equal(current.snapshot.complete, true); assert.equal(current.snapshot.providerOriginalsRead, false);
+  assert.equal(current.snapshot.providerOriginalsPreserved, null); assert.equal(current.snapshot.providerMetadataPreserved, true);
+});
+test('final original verification uses bounded admitted descriptors and rejects same-byte inode replacement', t => {
+  const f = fixture(t), staged = f.stage(), cold = f.snapshot(staged.evidence, { verifyProviderBytes: false });
+  assert.equal(cold.snapshot.providerOriginalsPreserved, null);
+  const final = f.snapshot(staged.evidence);
+  assert.equal(final.snapshot.complete, true); assert.equal(final.snapshot.providerOriginalsRead, true); assert.equal(final.snapshot.providerOriginalsPreserved, true);
+  assert.equal(final.snapshot.providerBytesRead, staged.receipt.assets.reduce((sum, row) => sum + row.sizeBytes, 0));
+  assert.equal(f.calls.some(args => args[0] === 'shell' && args[1] === 'sha256sum'), false);
+  f.nodes.get(staged.receipt.assets[0].devicePath).inode = '999999';
+  const replaced = f.snapshot(staged.evidence);
+  assert.equal(replaced.snapshot.complete, false); assert.equal(replaced.snapshot.providerMetadataPreserved, false); assert.equal(replaced.snapshot.providerOriginalsPreserved, false);
+});
+test('final provider metadata is reconciled after private scanning, including a cold checkpoint', t => {
+  for (const verifyProviderBytes of [false, true]) {
+    const f = fixture(t), staged = f.stage(), privateFile = `${PRIVATE}/cache/unrelated`;
+    f.add(privateFile, 'unrelated private cache content'); const command = f.options.command; let changed = false;
+    f.options.command = (binary, args, options) => { const value = command(binary, args, options);
+      if (!changed && args.some(arg => arg.includes('CASEOPS_ANDROID_READ_FD_V1') && arg.includes(privateFile))) {
+        changed = true; f.nodes.get(staged.receipt.assets[0].devicePath).modified = '2026-10-26 00:00:01.123456789 +0000';
+      } return value;
+    };
+    const result = f.snapshot(staged.evidence, { verifyProviderBytes });
+    assert.equal(changed, true); assert.equal(result.snapshot.complete, false); assert.equal(result.snapshot.providerMetadataPreserved, false);
+    assert.equal(result.snapshot.providerOriginalsPreserved, verifyProviderBytes ? false : null);
+    if (!verifyProviderBytes) assert.equal(result.snapshot.providerOriginalsRead, false);
+    assert.ok(result.snapshot.issues.some(row => row.reason === 'provider-original-final-metadata-changed'));
+  }
 });
 
 test('staging rejects mismatched local bytes, credential-named inputs and another platform before creating a provider folder', t => {

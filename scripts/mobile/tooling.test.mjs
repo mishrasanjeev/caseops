@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { createHash, X509Certificate } from 'node:crypto';
+import { execFileSync, spawn } from 'node:child_process';
 import http from 'node:http';
+import https from 'node:https';
+import fs from 'node:fs';
+import tls from 'node:tls';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,6 +27,8 @@ import { configuredSessionDeleteAdmission, MAX_SESSION_ADMISSION_EVENTS, proveCu
 import { browserStep } from '../../apps/mobile/e2e/browser-progress.mjs';
 import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
+import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, DENIED_HOST_CA } from './host-node-trust.mjs';
+import { localCertificates } from './host-node-trust-fixture.mjs';
 
 const installedHash = 'a'.repeat(64);
 const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
@@ -2602,4 +2607,427 @@ test('already enabled signed-out control admits browser auth exactly once withou
   assert.equal(actual.elapsedVirtualMs, 0);
   assert.deepEqual(actual.clicks.map(row => row.id), ['sign-in']);
   assert.deepEqual(actual.browserAdmissions, [0]);
+});
+
+// These tests are local transport/source contracts, not native SDK acceptance.
+const trustHelper = fileURLToPath(new URL('./host-node-trust.mjs', import.meta.url));
+const trustFixture = fileURLToPath(new URL('./host-node-trust-fixture.mjs', import.meta.url));
+const neutralTrustEnv = () => {
+  const result = { ...process.env };
+  for (const key of Object.keys(result)) if (/^(NODE_OPTIONS|NODE_EXTRA_CA_CERTS|NODE_USE_SYSTEM_CA|NODE_TLS_REJECT_UNAUTHORIZED|OPENSSL_CONF|OPENSSL_CONF_INCLUDE|SSL_CERT_FILE|SSL_CERT_DIR|CASEOPS_HOST_NODE_TRUST_POLICY_FILE|CASEOPS_HOST_NODE_TRUST_POLICY_SHA256)$/i.test(key)) delete result[key];
+  return result;
+};
+const trustRoot = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-scoped-node-trust-')));
+async function trustChild(args, environment) {
+  const child = spawn(process.execPath, args, { env: environment, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  let stdout = '', stderr = '', exceeded = false;
+  const consume = name => value => { if (stdout.length + stderr.length + value.length > 32768) { exceeded = true; child.kill(); } else if (name === 'stdout') stdout += value; else stderr += value; };
+  child.stdout.on('data', consume('stdout')); child.stderr.on('data', consume('stderr'));
+  const timer = setTimeout(() => child.kill(), 12000);
+  try { const [code, signal] = await once(child, 'close'); return { code, signal, stdout, stderr, exceeded }; }
+  finally { clearTimeout(timer); }
+}
+let tlsMaterials;
+const materials = () => tlsMaterials ??= localCertificates();
+function qaTrust(root) {
+  const cert = materials().trusted.cert, file = path.join(root, 'isolated-ca.pem');
+  fs.writeFileSync(file, cert, { mode: 0o600, flag: 'wx' });
+  const reference = { path: file, sha256: createHash('sha256').update(cert).digest('hex'), certificateSha256: new X509Certificate(cert).fingerprint256.replaceAll(':', '').toLowerCase() };
+  return { reference, prepared: prepareHostNodeTrust({ directory: path.join(root, 'policy'), role: 'native-qa', fixtureCA: reference, environment: neutralTrustEnv() }) };
+}
+async function localTls(material, callback) {
+  let requests = 0;
+  const server = https.createServer({ key: material.privateKey, cert: material.cert }, (request, response) => {
+    assert.equal(request.headers['x-caseops-automated-test'], 'no-paid-providers'); requests++; response.end('local-only');
+  });
+  const sockets = new Set(); server.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  try { return await callback(`https://127.0.0.1:${server.address().port}/`, () => requests); }
+  finally { for (const socket of sockets) socket.destroy(); await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
+}
+
+test('host trust removes only the exact compromised DER and accepts the exact already-clean set', () => {
+  const roots = reviewHostNodeRoots();
+  assert.equal(roots.outputCount, 144); assert.equal(roots.removedCount, 1); assert.equal(roots.fingerprints.includes(DENIED_HOST_CA), false);
+  const cleaned = roots.pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g);
+  const again = reviewHostNodeRoots(cleaned);
+  assert.equal(again.removedCount, 0); assert.equal(again.outputSetSha256, roots.outputSetSha256);
+  assert.equal(again.pem, roots.pem);
+});
+test('host trust refuses duplicates, omitted unaffected roots, changed roots and unreviewed runtimes', () => {
+  for (const values of [[...tls.rootCertificates, tls.rootCertificates[0]], tls.rootCertificates.slice(1), ['invalid', ...tls.rootCertificates.slice(1)]]) {
+    assert.throws(() => reviewHostNodeRoots(values), /HOST_TRUST_/);
+  }
+  assert.throws(() => reviewHostNodeRoots(tls.rootCertificates, '24.15.1'), /HOST_TRUST_NODE_OR_ROOTS_UNREVIEWED/);
+});
+test('host trust preparation is exclusive, private and does not mutate the process environment or TLS defaults', () => {
+  const root = trustRoot(), before = { ...process.env }, defaultBefore = tls.getCACertificates('default');
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
+    assert.equal(prepared.effectiveDefaultVerified, false); assert.equal(prepared.globalTrustChanges, 0);
+    assert.equal(prepared.descriptor.runtimeSource.helper.sha256, createHash('sha256').update(fs.readFileSync(trustHelper)).digest('hex'));
+    assert.ok(prepared.environment.NODE_OPTIONS.length < 24000);
+    assert.equal(fs.readdirSync(prepared.descriptor.emptyDirectory).length, 0);
+    if (process.platform !== 'win32') for (const name of ['policy.json', 'roots.pem']) assert.equal(fs.statSync(path.join(root, 'policy', name)).mode & 0o777, 0o600);
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() }), /EEXIST/);
+    assert.equal(Object.keys(process.env).length === Object.keys(before).length && Object.keys(before).every(key => process.env[key] === before[key]), true); assert.deepEqual(tls.getCACertificates('default'), defaultBefore);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('actual inherited bootstrap activates the exact Node24 default store before the entry', async () => {
+  const root = trustRoot();
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
+    const result = await trustChild([trustHelper, 'verify'], { ...neutralTrustEnv(), ...prepared.environment });
+    assert.equal(result.code, 0, result.stderr); assert.equal(result.signal, null); assert.equal(result.exceeded, false);
+    const report = JSON.parse(result.stdout); assert.equal(report.defaultEnumerationVerified, true); assert.equal(report.expectedDefaultCount, 144);
+    assert.equal(report.expectedDefaultSetSha256, prepared.descriptor.outputSetSha256); assert.equal(report.globalTrustChanges, 0);
+    const standalone = { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_HOST_NODE_BOOTSTRAP_TEST: '1' };
+    // A separate Node test controller must not inherit the parent's internal reporter context.
+    delete standalone.NODE_TEST_CONTEXT;
+    const forwarded = await trustChild(['--test', '--test-reporter=tap', trustFixture], standalone);
+    assert.equal(forwarded.code, 0, forwarded.stderr || forwarded.stdout); assert.match(forwarded.stdout, /# tests 1\n/); assert.match(forwarded.stdout, /# pass 1\n/); assert.match(forwarded.stdout, /# fail 0\n/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('native-QA default HTTPS and fetch preserve certificate and hostname rejection', async () => {
+  const root = trustRoot();
+  try {
+    const { reference, prepared } = qaTrust(root), env = { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_TEST_FIXTURE_CA: JSON.stringify(reference) };
+    for (const [name, expected] of [['trusted', 'local-only'], ['untrusted', 'DEPTH_ZERO_SELF_SIGNED_CERT'], ['wrongHost', 'ERR_TLS_CERT_ALTNAME_INVALID']]) {
+      await localTls(materials()[name], async (origin, requests) => {
+        const result = await trustChild([trustFixture, 'probe', origin], env);
+        assert.equal(result.code, 0, result.stderr); const report = JSON.parse(result.stdout);
+        assert.deepEqual(report.output, [expected, expected]); assert.equal(report.expectedDefaultCount, 145); assert.equal(report.defaultEnumerationVerified, true);
+        assert.equal(requests(), name === 'trusted' ? 2 : 0);
+      });
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('normal Worker and subprocess inherit the activated fixture-bound default clients', async () => {
+  const root = trustRoot();
+  try {
+    const { reference, prepared } = qaTrust(root);
+    await localTls(materials().trusted, async (origin, requests) => {
+      const result = await trustChild([trustFixture, 'descendants', origin], { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_TEST_FIXTURE_CA: JSON.stringify(reference) });
+      assert.equal(result.code, 0, result.stderr); const report = JSON.parse(result.stdout);
+      assert.deepEqual(Object.keys(report).sort(), ['direct', 'subprocess', 'worker']);
+      for (const value of Object.values(report)) { assert.equal(value.defaultEnumerationVerified, true); assert.equal(value.expectedDefaultCount, 145); assert.deepEqual(value.output, ['local-only', 'local-only']); }
+      assert.equal(requests(), 6);
+    });
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('base role never admits an isolated QA CA and explicit QA requires its exact public reference', () => {
+  const root = trustRoot();
+  try {
+    const { reference } = qaTrust(root);
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'base'), fixtureCA: reference, environment: neutralTrustEnv() }), /HOST_TRUST_FIXTURE_ROLE/);
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'missing'), role: 'native-qa', environment: neutralTrustEnv() }), /HOST_TRUST_FIXTURE_ROLE/);
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'wrong'), role: 'native-qa', fixtureCA: { ...reference, sha256: '0'.repeat(64) }, environment: neutralTrustEnv() }), /HOST_TRUST_FIXTURE_CHANGED/);
+    assert.equal(fs.existsSync(path.join(root, 'base')), false); assert.equal(fs.existsSync(path.join(root, 'missing')), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('competing trust, npm bypasses, additive CA and CLI overrides refuse before the entry', async () => {
+  const root = trustRoot();
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() }), base = { ...neutralTrustEnv(), ...prepared.environment };
+    for (const override of [{ NODE_USE_SYSTEM_CA: '0' }, { OPENSSL_CONF: 'unexpected' }, { NODE_TLS_REJECT_UNAUTHORIZED: '0' }, { NODE_EXTRA_CA_CERTS: prepared.descriptor.bundle.path }, { npm_config_strict_ssl: 'false' }, { npm_config_ca: 'unexpected' }, { npm_config_cafile: prepared.descriptor.bundle.path }, { npm_config_node_options: '--use-bundled-ca' }, { NODE_OPTIONS: '--use-openssl-ca' }]) {
+      const result = await trustChild(['-e', "console.log('ENTRY_RAN')"], { ...base, ...override });
+      // Without the mandatory bootstrap Node itself can run; the explicit guard must refuse.
+      if (override.NODE_OPTIONS) {
+        const guarded = await trustChild([trustHelper, 'verify'], { ...base, ...override }); assert.notEqual(guarded.code, 0);
+      } else { assert.notEqual(result.code, 0); assert.equal(result.stdout.includes('ENTRY_RAN'), false); }
+    }
+    for (const flag of ['--use-bundled-ca', '--no-use-openssl-ca', '--tls-min-v1.0', '--tls-cipher-list=DEFAULT@SECLEVEL=0']) {
+      const result = await trustChild([flag, '-e', "console.log('ENTRY_RAN')"], base); assert.notEqual(result.code, 0); assert.equal(result.stdout.includes('ENTRY_RAN'), false);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('changed policy/bundle and nonempty root directory refuse before the actual entry', async () => {
+  const root = trustRoot();
+  try {
+    for (const variant of ['policy', 'bundle', 'empty']) {
+      const prepared = prepareHostNodeTrust({ directory: path.join(root, variant), environment: neutralTrustEnv() });
+      if (variant === 'policy') fs.appendFileSync(prepared.policyRef.path, '\n');
+      else if (variant === 'bundle') fs.appendFileSync(prepared.descriptor.bundle.path, '\n');
+      else fs.writeFileSync(path.join(prepared.descriptor.emptyDirectory, 'unadmitted.pem'), 'public synthetic');
+      const result = await trustChild(['-e', "console.log('ENTRY_RAN')"], { ...neutralTrustEnv(), ...prepared.environment });
+      assert.notEqual(result.code, 0); assert.equal(result.stdout, ''); assert.equal(result.stderr.includes('BEGIN CERTIFICATE'), false);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('changed checked helper or bootstrap source refuses before any entry code', async () => {
+  const root = trustRoot();
+  try {
+    for (const name of ['host-node-trust.mjs', 'host-node-trust-start.mjs']) {
+      const copy = path.join(root, name === 'host-node-trust.mjs' ? 'helper' : 'bootstrap'); fs.mkdirSync(copy, { mode: 0o700 });
+      for (const source of ['host-node-trust.mjs', 'host-node-trust-start.mjs', 'tooling.json']) fs.copyFileSync(path.join(path.dirname(trustHelper), source), path.join(copy, source));
+      const outer = fs.readFileSync(new URL('./setup-open-source-tooling.ps1', import.meta.url), 'utf8').match(/\$prepare = @'\n([\s\S]+?)\n'@/);
+      assert.ok(outer);
+      const setup = await trustChild(['--input-type=module', '-e', outer[1], copy, path.join(copy, 'policy')], neutralTrustEnv());
+      assert.equal(setup.code, 0, setup.stderr); const prepared = JSON.parse(setup.stdout).prepared;
+      fs.appendFileSync(path.join(copy, name), '\nconsole.log("UNADMITTED_CODE");\n');
+      const result = await trustChild(['-e', "console.log('ENTRY_RAN')"], { ...neutralTrustEnv(), ...prepared.environment });
+      assert.notEqual(result.code, 0); assert.equal(result.stdout, '');
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('public fixture descriptor failures close the actual FD before any policy output', () => {
+  for (const variant of ['read', 'stat', 'growth', 'replacement', 'parent-symlink']) {
+    const root = trustRoot(), parent = path.join(root, 'source'); fs.mkdirSync(parent, { mode: 0o700 });
+    const cert = materials().trusted.cert, file = path.join(parent, 'ca.pem'); fs.writeFileSync(file, cert, { mode: 0o600 });
+    const reference = { path: file, sha256: createHash('sha256').update(cert).digest('hex'), certificateSha256: new X509Certificate(cert).fingerprint256.replaceAll(':', '').toLowerCase() };
+    const original = { open: fs.openSync, stat: fs.fstatSync, read: fs.readSync, close: fs.closeSync }; let fd, closed = false, injected = false;
+    fs.openSync = (name, ...args) => { const opened = original.open(name, ...args); if (name === file && fd === undefined) fd = opened; return opened; };
+    fs.fstatSync = (value, ...args) => { if (value === fd && variant === 'stat') throw new Error('SYNTHETIC_STAT_FAILURE'); return original.stat(value, ...args); };
+    fs.readSync = (value, ...args) => {
+      if (value === fd && !injected) {
+        injected = true;
+        if (variant === 'read') throw new Error('SYNTHETIC_READ_FAILURE');
+        if (variant === 'growth') fs.appendFileSync(file, 'x'.repeat(1024));
+        if (variant === 'replacement') { fs.renameSync(file, file + '.held'); fs.writeFileSync(file, cert, { mode: 0o600 }); }
+        if (variant === 'parent-symlink') { fs.renameSync(parent, parent + '.held'); fs.symlinkSync(parent + '.held', parent, process.platform === 'win32' ? 'junction' : 'dir'); }
+      }
+      return original.read(value, ...args);
+    };
+    fs.closeSync = value => { if (value === fd) closed = true; return original.close(value); };
+    try {
+      assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'policy'), role: 'native-qa', fixtureCA: reference, environment: neutralTrustEnv() }));
+      assert.equal(closed, true); assert.throws(() => original.stat(fd), { code: 'EBADF' }); assert.equal(fs.existsSync(path.join(root, 'policy')), false);
+    } finally { Object.assign(fs, { openSync: original.open, fstatSync: original.stat, readSync: original.read, closeSync: original.close }); fs.rmSync(root, { recursive: true, force: true }); }
+  }
+});
+test('host trust exclusive writer refuses zero progress and leaves no falsely completed policy', () => {
+  const root = trustRoot(), original = fs.writeSync; let writes = 0;
+  fs.writeSync = () => { writes++; return 0; };
+  try {
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() }), /HOST_TRUST_WRITE_PROGRESS/);
+    assert.equal(writes, 1); assert.equal(fs.existsSync(path.join(root, 'policy', 'policy.json')), false);
+  } finally { fs.writeSync = original; fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('zero, oversize, hardlinked, shared-write and symlink CA inputs refuse before reading policy secrets or creating output', () => {
+  for (const variant of ['zero', 'oversize', 'hardlink', 'shared-write', 'symlink']) {
+    const root = trustRoot(), file = path.join(root, 'ca.pem');
+    try {
+      const cert = materials().trusted.cert;
+      fs.writeFileSync(file, variant === 'zero' ? '' : variant === 'oversize' ? Buffer.alloc(65537) : cert, { mode: 0o600 });
+      if (variant === 'hardlink') fs.linkSync(file, file + '.alias');
+      if (variant === 'shared-write' && process.platform !== 'win32') fs.chmodSync(file, 0o666);
+      if (variant === 'shared-write' && process.platform === 'win32') { fs.unlinkSync(file); fs.mkdirSync(file); }
+      if (variant === 'symlink') { fs.renameSync(file, file + '.original'); if (process.platform === 'win32') { fs.mkdirSync(file + '.directory'); fs.symlinkSync(file + '.directory', file, 'junction'); } else fs.symlinkSync(file + '.original', file); }
+      const reference = { path: file, sha256: createHash('sha256').update(cert).digest('hex'), certificateSha256: createHash('sha256').update(new X509Certificate(cert).raw).digest('hex') };
+      assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'policy'), role: 'native-qa', fixtureCA: reference, environment: neutralTrustEnv() }));
+      assert.equal(fs.existsSync(path.join(root, 'policy')), false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  }
+});
+test('provisioning pins exact accepted Node/npm and clean official Appium driver releases', () => {
+  const pins = JSON.parse(fs.readFileSync(new URL('./tooling.json', import.meta.url), 'utf8'));
+  assert.equal(pins.node, '24.15.0'); assert.equal(pins.npm, '11.12.1');
+  assert.equal(pins.appium, '3.9.0'); assert.equal(pins.xcuitest, '12.22.2'); assert.equal(pins.uiautomator2, '8.7.3'); assert.equal(pins.webdriverio, '10.1.0');
+  for (const [name, expected] of Object.entries(pins.hostNodeTrust)) {
+    assert.match(expected, /^[a-f0-9]{64}$/);
+    const source = fs.readFileSync(new URL(name === 'helperSha256' ? './host-node-trust.mjs' : './host-node-trust-start.mjs', import.meta.url));
+    assert.equal(createHash('sha256').update(source).digest('hex'), expected);
+  }
+});
+test('the actual provisioner outer executes only pinned held helper bytes before npm', async () => {
+  const root = trustRoot(), script = fs.readFileSync(new URL('./setup-open-source-tooling.ps1', import.meta.url), 'utf8');
+  const match = script.match(/\$prepare = @'\n([\s\S]+?)\n'@/); assert.ok(match);
+  assert.ok(script.indexOf("Invoke-OwnedNode 'trust-prepare'") < script.indexOf("Invoke-OwnedNode 'npm-version'"));
+  assert.ok(script.indexOf("Invoke-OwnedNode 'trust-verify'") < script.indexOf("Invoke-OwnedNode 'core-install'"));
+  assert.doesNotMatch(script, /Invoke-WebRequest|\$env:APPIUM_HOME\s*=/);
+  try {
+    const valid = await trustChild(['--input-type=module', '-e', match[1], path.dirname(trustHelper), path.join(root, 'valid')], neutralTrustEnv());
+    assert.equal(valid.code, 0, valid.stderr); const q = JSON.parse(valid.stdout);
+    assert.equal(q.prepared.descriptor.nodeVersion, '24.15.0'); assert.equal(q.pins.appium, '3.9.0');
+    const source = path.join(root, 'source'); fs.mkdirSync(source, { mode: 0o700 });
+    for (const name of ['tooling.json', 'host-node-trust.mjs', 'host-node-trust-start.mjs']) fs.copyFileSync(path.join(path.dirname(trustHelper), name), path.join(source, name));
+    fs.appendFileSync(path.join(source, 'host-node-trust.mjs'), '\nconsole.log("UNADMITTED_SOURCE_EXECUTED");\n');
+    const invalid = await trustChild(['--input-type=module', '-e', match[1], source, path.join(root, 'invalid')], neutralTrustEnv());
+    assert.notEqual(invalid.code, 0); assert.equal(invalid.stdout, ''); assert.equal(invalid.stderr.trim(), 'HOST_TRUST_PREPARATION_REFUSED');
+    assert.equal(fs.existsSync(path.join(root, 'invalid')), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('Windows provisioner cleanup statically requires a started exact child and current parent identity', () => {
+  const source = fs.readFileSync(new URL('./setup-open-source-tooling.ps1', import.meta.url), 'utf8');
+  assert.match(source, /\$started = \$false/);
+  assert.match(source, /if \(-not \$process\.Start\(\)\) \{ throw[^\n]+\}\n\s+\$started = \$true/);
+  assert.ok(source.indexOf('$childIdentity = Get-ProcessSnapshot $process.Id') < source.indexOf('$process.StandardOutput.BaseStream'));
+  const cleanup = source.slice(source.indexOf('    finally {'), source.indexOf('    # Successful native tools'));
+  assert.match(cleanup, /if \(\$started\)\s*\{[\s\S]+if \(-not \$process\.HasExited\)/);
+  assert.match(cleanup, /Test-ExactSnapshot \$childIdentity \$freshChild/);
+  assert.match(cleanup, /Test-ExactSnapshot \$parentIdentity \$freshParent/);
+  assert.match(cleanup, /\$freshChild\[1\] -eq \[string\]\$PID/);
+  assert.match(cleanup, /StartTime\.ToUniversalTime\(\)\.ToString\('o'\) -eq \$created/);
+  assert.match(source, /\$row\.CreationDate\.ToUniversalTime\(\)\.ToString\('o'\)/);
+  assert.match(source, /\[string\]\$row\.CommandLine/); assert.match(source, /\$row\.ExecutablePath/);
+  assert.doesNotMatch(cleanup, /\.Kill\(\$true\)|Stop-Process|\$failure\s*=/);
+  assert.match(cleanup, /\$cleanupFailure = 'Owned cleanup identity unavailable; no further signal/);
+});
+test('compiled OpenSSL root paths refuse through the production build guard, with controlled build fixtures distinguished', () => {
+  assert.deepEqual(reviewHostNodeBuildConfiguration(), { compiledSystemCaPathEmpty: true });
+  assert.deepEqual(reviewHostNodeBuildConfiguration({ openssl_system_ca_path: '' }), { compiledSystemCaPathEmpty: true });
+  for (const value of ['/etc/ssl/cert.pem', 'C:/unreviewed/store.pem', false, 0, null]) {
+    assert.throws(() => reviewHostNodeBuildConfiguration({ openssl_system_ca_path: value }), /HOST_TRUST_COMPILED_CA_PATH_UNREVIEWED/);
+  }
+});
+test('a forged hash-correct public policy cannot turn the approved bootstrap into arbitrary helper execution', async () => {
+  const root = trustRoot();
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
+    const malicious = path.join(root, 'source'); fs.mkdirSync(malicious, { mode: 0o700 });
+    const file = path.join(malicious, 'host-node-trust.mjs'), body = Buffer.from('console.log("UNADMITTED_HELPER_EXECUTED");export function activateHostNodeTrust(){}\n');
+    fs.writeFileSync(file, body, { mode: 0o600, flag: 'wx' });
+    const changed = { ...prepared.descriptor, runtimeSource: { ...prepared.descriptor.runtimeSource, helper: { path: file, sha256: createHash('sha256').update(body).digest('hex'), sizeBytes: body.length } } };
+    const policy = Buffer.from(JSON.stringify(changed)); fs.writeFileSync(prepared.policyRef.path, policy);
+    const result = await trustChild(['-e', 'console.log("ENTRY_RAN")'], { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: createHash('sha256').update(policy).digest('hex') });
+    assert.notEqual(result.code, 0); assert.equal(result.stdout, ''); assert.equal(result.stderr.trim(), 'HOST_TRUST_BOOTSTRAP_REFUSED');
+    const bootstrap = fs.readFileSync(new URL('./host-node-trust-start.mjs', import.meta.url), 'utf8');
+    const pinned = bootstrap.match(/const APPROVED_HELPER_SHA256 = '([a-f0-9]{64})'/); assert.ok(pinned);
+    assert.equal(pinned[1], prepared.descriptor.runtimeSource.helper.sha256);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('unknown and modified import URIs refuse before preload or application entry', async () => {
+  const root = trustRoot();
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
+    const bootstrap = fs.readFileSync(new URL('./host-node-trust-start.mjs', import.meta.url));
+    const unknown = Buffer.from('console.log("UNADMITTED_PRELOAD");\n');
+    const modified = Buffer.concat([bootstrap, unknown]);
+    for (const body of [unknown, modified]) {
+      const option = '--import=data:text/javascript;base64,' + body.toString('base64');
+      const result = await trustChild([option, '-e', 'console.log("ENTRY_RAN")'], { ...neutralTrustEnv(), ...prepared.environment });
+      assert.notEqual(result.code, 0); assert.equal(result.stdout, '');
+      assert.equal(result.stderr.includes('UNADMITTED_PRELOAD'), false);
+      assert.equal(result.stderr.includes('HOST_TRUST_CLI_OVERRIDE_REFUSED'), true);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+import { createRequire as ciTrustCreateRequire } from 'node:module';
+import { appendCITrustOutputs, prepareCIHostNodeTrust } from './host-node-trust-ci.mjs';
+const ciTrustYaml = ciTrustCreateRequire(new URL('../../apps/mobile/package.json', import.meta.url))('js-yaml');
+const ciTrustKeys = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY'];
+const ciTrustValues = Object.fromEntries(ciTrustKeys.map(key => [key, 'public-fixture-' + key]));
+function ciTrustFiles(callback) {
+  const root = trustRoot(), file = path.join(root, 'commands');
+  fs.writeFileSync(file, 'EARLIER=retained', { flag: 'wx', mode: 0o600 });
+  fs.mkdirSync(path.join(root, 'workspace'), { mode: 0o700 });
+  try { return callback({ root, file }); }
+  finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+test('CI trust output append preserves prior bytes and writes only nine exact single-line outputs', () => ciTrustFiles(({ root, file }) => {
+  const result = appendCITrustOutputs(file, root, ciTrustValues);
+  const expected = 'EARLIER=retained\n' + ciTrustKeys.map(key => key + '=' + ciTrustValues[key] + '\n').join('');
+  assert.equal(fs.readFileSync(file, 'utf8'), expected);
+  assert.deepEqual(result, { appendedKeys: 9, previousBytes: 16, finalBytes: Buffer.byteLength(expected) });
+}));
+test('CI trust output refuses extra keys and multiline output injection before any write', () => ciTrustFiles(({ root, file }) => {
+  const original = fs.readFileSync(file);
+  for (const value of [{ ...ciTrustValues, PATH: 'unreviewed' }, { ...ciTrustValues, NODE_OPTIONS: 'one\nUNREVIEWED=two' }, { ...ciTrustValues, SSL_CERT_FILE: 'one\rtwo' }]) {
+    assert.throws(() => appendCITrustOutputs(file, root, value));
+    assert.deepEqual(fs.readFileSync(file), original);
+  }
+}));
+test('CI trust output refuses an out-of-runner file without modifying it', () => ciTrustFiles(({ root }) => {
+  const outside = trustRoot(), file = path.join(outside, 'commands'); fs.writeFileSync(file, 'unchanged', { mode: 0o600 });
+  try { assert.throws(() => appendCITrustOutputs(file, root, ciTrustValues), /CI_TRUST_RUNNER_SCOPE/); assert.equal(fs.readFileSync(file, 'utf8'), 'unchanged'); }
+  finally { fs.rmSync(outside, { recursive: true, force: true }); }
+}));
+test('CI trust output refuses hardlinked and oversized command files before mutation', () => ciTrustFiles(({ root, file }) => {
+  const alias = path.join(root, 'alias'); fs.linkSync(file, alias);
+  assert.throws(() => appendCITrustOutputs(file, root, ciTrustValues), /CI_TRUST_COMMAND_FILE/);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'EARLIER=retained'); fs.unlinkSync(alias);
+  fs.writeFileSync(file, Buffer.alloc(1048577, 0x61));
+  assert.throws(() => appendCITrustOutputs(file, root, ciTrustValues), /CI_TRUST_COMMAND_FILE/);
+  assert.equal(fs.statSync(file).size, 1048577);
+}));
+test('CI trust output closes its retained descriptor and rejects a replacement pathname after write', () => ciTrustFiles(({ root, file }) => {
+  const originalOpen = fs.openSync, originalWrite = fs.writeSync, selected = new Set(); let changed = false;
+  fs.openSync = (name, ...args) => { const fd = originalOpen(name, ...args); if (name === file) selected.add(fd); return fd; };
+  fs.writeSync = (fd, ...args) => {
+    const count = originalWrite(fd, ...args);
+    if (selected.has(fd) && !changed) { changed = true; fs.renameSync(file, path.join(root, 'retained-original')); fs.writeFileSync(file, 'replacement', { mode: 0o600, flag: 'wx' }); }
+    return count;
+  };
+  try { assert.throws(() => appendCITrustOutputs(file, root, ciTrustValues), /CI_TRUST_NAMED_DESCRIPTOR_CHANGED/); }
+  finally { fs.openSync = originalOpen; fs.writeSync = originalWrite; }
+  assert.equal(changed, true); assert.equal(fs.readFileSync(file, 'utf8'), 'replacement');
+  for (const fd of selected) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+}));
+test('CI trust preparation requires explicit GitHub CI and never edits the global environment file', () => ciTrustFiles(({ root, file }) => {
+  const global = path.join(root, 'global-env'); fs.writeFileSync(global, 'PYTHON_SCOPE=preserved', { mode: 0o600 });
+  const environment = { ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: path.join(root, 'workspace'), GITHUB_OUTPUT: file, GITHUB_ENV: global };
+  for (const key of ['CI', 'GITHUB_ACTIONS']) assert.throws(() => prepareCIHostNodeTrust({ ...environment, [key]: 'false' }));
+  const projectConfig = path.join(root, 'workspace', '.npmrc'); fs.writeFileSync(projectConfig, 'cafile=unreviewed-public-fixture\n', { mode: 0o600 });
+  assert.throws(() => prepareCIHostNodeTrust(environment), /CI_TRUST_PROJECT_NPMRC_UNREVIEWED/); fs.unlinkSync(projectConfig);
+  const result = prepareCIHostNodeTrust(environment);
+  assert.equal(result.nodeVersion, process.versions.node); assert.equal(result.appendedKeys, 9);
+  assert.equal(fs.readFileSync(global, 'utf8'), 'PYTHON_SCOPE=preserved');
+  const rows = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(1);
+  assert.deepEqual(rows.map(row => row.slice(0, row.indexOf('='))), ciTrustKeys);
+}));
+test('CI trust output activates the actual Node child before its entry and leaves its parent environment unchanged', () => ciTrustFiles(({ root, file }) => {
+  const before = Object.fromEntries(ciTrustKeys.map(key => [key, process.env[key]]));
+  prepareCIHostNodeTrust({ ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: path.join(root, 'workspace'), GITHUB_OUTPUT: file });
+  const scoped = Object.fromEntries(fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(1).map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
+  const text = execFileSync(process.execPath, [trustHelper, 'verify'], { env: { ...neutralTrustEnv(), ...scoped }, timeout: 12000, maxBuffer: 16384, encoding: 'utf8' });
+  const proof = JSON.parse(text); assert.equal(proof.selectedStoreVerified, true); assert.equal(proof.nodeVersion, process.versions.node);
+  assert.ok(ciTrustKeys.every(key => process.env[key] === before[key]), 'CI_PARENT_ENVIRONMENT_UNCHANGED');
+}));
+test('CI preparation rejects a project config inserted during policy creation before issuing command outputs', () => ciTrustFiles(({ root, file }) => {
+  const workspace = path.join(root, 'workspace'), config = path.join(workspace, '.npmrc');
+  const original = fs.mkdtempSync; let inserted = false;
+  fs.mkdtempSync = (...args) => {
+    const created = original(...args);
+    if (String(args[0]).startsWith(path.join(root, 'caseops-node-trust-'))) {
+      fs.writeFileSync(config, 'cafile=unreviewed-public-fixture\n', { mode: 0o600, flag: 'wx' }); inserted = true;
+    }
+    return created;
+  };
+  try {
+    assert.throws(() => prepareCIHostNodeTrust({ ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: workspace, GITHUB_OUTPUT: file }), /CI_TRUST_PROJECT_(?:NPMRC_UNREVIEWED|CHANGED)/);
+  } finally { fs.mkdtempSync = original; }
+  assert.equal(inserted, true); assert.equal(fs.readFileSync(file, 'utf8'), 'EARLIER=retained');
+}));
+test('CI preparation refuses to complete when a project config appears during the output append', () => ciTrustFiles(({ root, file }) => {
+  const workspace = path.join(root, 'workspace'), originalOpen = fs.openSync, originalWrite = fs.writeSync;
+  let commandFD, inserted = false;
+  fs.openSync = (name, ...args) => { const fd = originalOpen(name, ...args); if (name === file) commandFD = fd; return fd; };
+  fs.writeSync = (fd, ...args) => {
+    const count = originalWrite(fd, ...args);
+    if (fd === commandFD && !inserted) { fs.writeFileSync(path.join(workspace, '.npmrc'), 'cafile=unreviewed-public-fixture\n', { mode: 0o600, flag: 'wx' }); inserted = true; }
+    return count;
+  };
+  try {
+    assert.throws(() => prepareCIHostNodeTrust({ ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: workspace, GITHUB_OUTPUT: file }), /CI_TRUST_PROJECT_(?:NPMRC_UNREVIEWED|CHANGED)/);
+  } finally { fs.openSync = originalOpen; fs.writeSync = originalWrite; }
+  assert.equal(inserted, true); assert.ok(fs.readFileSync(file, 'utf8').length > 16, 'retain written output separately from failed completion');
+  assert.throws(() => fs.fstatSync(commandFD), { code: 'EBADF' });
+}));
+test('CI workflows scope the nine trust outputs to Node commands and retain exact conditional setup admission', () => {
+  let setupCount = 0, commandCount = 0;
+  for (const name of ['ci.yml', 'mobile-source.yml', 'security.yml', 'release-verify.yml', 'prod-verify.yml']) {
+    const workflow = ciTrustYaml.load(readFileSync(new URL('../../.github/workflows/' + name, import.meta.url), 'utf8'));
+    assert.ok(ciTrustKeys.every(key => !Object.hasOwn(workflow.env ?? {}, key)));
+    for (const job of Object.values(workflow.jobs)) {
+      assert.ok(ciTrustKeys.every(key => !Object.hasOwn(job.env ?? {}, key)));
+      let setup, trust;
+      for (const step of job.steps ?? []) {
+        if (step.uses === 'actions/setup-node@v4') { setup = step; trust = null; assert.ok(['22.14.0', '24.15.0'].includes(step.with['node-version'])); setupCount++; }
+        if (step.uses === './.github/actions/node-trust') { assert.ok(setup && !trust); assert.equal(step.id, 'node_trust'); assert.equal(step.if, setup.if); trust = step; }
+        const isNode = typeof step.run === 'string' && /\b(?:npm|npx|node)\s|bash\s+"\$RUNNER_TEMP\/caseops-prod-playwright"/.test(step.run);
+        if (isNode) { assert.ok(trust, 'Node command requires prepared policy: ' + name); commandCount++; }
+        for (const key of ciTrustKeys) {
+          if (isNode) assert.equal(step.env?.[key], '${{ steps.node_trust.outputs.' + key + ' }}');
+          else assert.equal(Object.hasOwn(step.env ?? {}, key), false, 'Non-Node step must keep its own runtime environment');
+        }
+      }
+    }
+  }
+  assert.equal(setupCount, 15); assert.equal(commandCount, 106);
+  const action = ciTrustYaml.load(readFileSync(new URL('../../.github/actions/node-trust/action.yml', import.meta.url), 'utf8'));
+  assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
+  for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');
+  assert.equal(action.runs.steps[0].id, 'prepare');
 });

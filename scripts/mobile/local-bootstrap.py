@@ -135,7 +135,7 @@ def private_metadata_equal(first, second, *, named_path=False, windows=False):
     assert type(named_path) is bool and type(windows) is bool, "Explicit private metadata comparison mode required"
     fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
     return all(getattr(first, key) == getattr(second, key) for key in fields
-               if not (windows and named_path and key == "st_dev"))
+               if not (windows and named_path and key == "st_dev" and second.st_dev == 0))
 
 
 def write_new(path, value):
@@ -339,10 +339,10 @@ def port_free(port):
         probe.bind(("127.0.0.1", port))
 
 
-def https_json(url, cache, marked=True):
+def https_json(url, cache):
     context = ssl.create_default_context(cafile=str(cache / "tls/ca.crt"))
     context.minimum_version = ssl.TLSVersion.TLSv1_2
-    with urlopen(Request(url, headers=MARKER if marked else {}), context=context, timeout=15) as response:
+    with urlopen(Request(url, headers=MARKER), context=context, timeout=15) as response:
         return json.load(response)
 
 
@@ -445,7 +445,7 @@ def finish(cache, config, source, args, suffix="", *, core_ledger=False):
             except OSError:
                 time.sleep(0.5)
     assert status["implementationSha256"] == gateway_hash, "Gateway runtime source mismatch"
-    web = https_json(f"https://127.0.0.1:{config['CASEOPS_MOBILE_WEB_PORT']}/api/release-identity", cache, False)
+    web = https_json(f"https://127.0.0.1:{config['CASEOPS_MOBILE_WEB_PORT']}/api/release-identity", cache)
     assert web["release_sha"] == config["CASEOPS_MOBILE_WEB_SHA"]
     assert web["revision"] == config["CASEOPS_MOBILE_WEB_REVISION"]
     ids = run(command + ["ps", "-aq"], env=env).splitlines()

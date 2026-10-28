@@ -22,7 +22,7 @@ export const iosFilesInventory = Object.freeze({
   cases: Object.freeze([
     ['FILES-01', 'Seeded TXT source identity, authoritative reload, private read and return'],
     ['FILES-02', 'Actual iOS picker cancellation creates no selection or upload'],
-    ['FILES-03', 'Actual TXT selection and explicit clear create no upload'],
+    ['FILES-03', 'Actual TXT select-clear-select and final clear create no upload'],
     ['FILES-04', 'Rapid repeated TXT activation admits exactly one upload, persisted identity and original bytes'],
     ['FILES-05', 'Exactly one native two-page PDF upload and persisted source'],
     ['FILES-06', 'Exactly one native PNG upload and persisted source'],
@@ -165,6 +165,9 @@ export function validatePickerProvider(context) {
   const value = context.provider;
   if (!value?.evidence) fail('IOS_FILES_OBSERVED_PICKER_REQUIRED');
   const proof = json(value.evidence);
+  assert.equal(proof.schemaVersion, 2, 'IOS_FILES_COLD_PICKER_PROVENANCE_REQUIRED');
+  assert.equal(proof.providerOriginalsRead, false, 'IOS_FILES_COLD_PICKER_PROVENANCE_REQUIRED');
+  assert.deepEqual(proof.stagingEvidence, context.assets.providerEvidence, 'IOS_FILES_PICKER_STAGING_MISMATCH');
   assert.equal(proof.observed, true, 'IOS_FILES_OBSERVED_PICKER_REQUIRED');
   assert.equal(proof.platform, 'ios', 'IOS_FILES_PICKER_PLATFORM_MISMATCH');
   assert.equal(proof.udid, context.fixture.udid, 'IOS_FILES_PICKER_DEVICE_MISMATCH');
@@ -182,7 +185,8 @@ export function validatePickerAsset(context, asset) {
   const observed = validatePickerProvider(context), proof = json(observed.evidence);
   const files = Array.isArray(proof.assets) ? proof.assets : Object.values(proof.assets || {});
   const matches = files.filter((file) => (file.filename ?? file.name) === asset.filename
-    && file.sha256 === asset.sha256 && file.sizeBytes === asset.sizeBytes && file.observedProviderHash === asset.sha256);
+    && file.sha256 === asset.sha256 && file.sizeBytes === asset.sizeBytes && file.transferSha256 === asset.sha256
+    && !Object.hasOwn(file, 'observedProviderHash'));
   assert.equal(matches.length, 1, 'IOS_FILES_OBSERVED_PROVIDER_ASSET_REQUIRED');
   const dot = asset.filename.lastIndexOf('.');
   assert.ok(dot > 0, 'IOS_FILES_PICKER_EXTENSION_REQUIRED');
@@ -652,14 +656,17 @@ async function readText(context, anchor) {
 }
 export { readText as readIosText };
 export function validatePrivacyReceipt(context, boundary, receipt) {
-  assert.equal(receipt.schemaVersion, 1, 'IOS_FILES_PRIVACY_SCHEMA_REQUIRED');
+  assert.equal(receipt.schemaVersion, 2, 'IOS_FILES_PRIVACY_SCHEMA_REQUIRED');
   assert.equal(receipt.observed, true, 'IOS_FILES_ACTUAL_PRIVACY_OBSERVATION_REQUIRED');
   assert.equal(receipt.platform, 'ios', 'IOS_FILES_PRIVACY_PLATFORM_MISMATCH');
   assert.equal(receipt.udid, context.fixture.udid, 'IOS_FILES_PRIVACY_DEVICE_MISMATCH');
   assert.equal(receipt.bundleId, context.fixture.appId, 'IOS_FILES_PRIVACY_APP_MISMATCH');
   assert.equal(receipt.boundary, boundary, 'IOS_FILES_PRIVACY_BOUNDARY_MISMATCH');
   assert.equal(receipt.ownedAppScopeOnly, true, 'IOS_FILES_OWNED_SCOPE_REQUIRED');
-  assert.equal(receipt.providerOriginalsUnchanged, true, 'IOS_FILES_PROVIDER_ORIGINALS_CHANGED');
+  assert.equal(receipt.providerMetadataUnchanged, true, 'IOS_FILES_PROVIDER_ORIGINALS_CHANGED');
+  assert.equal(receipt.providerOriginalsUnchanged, null, 'IOS_FILES_PROVIDER_BYTE_PROOF_MUST_BE_DEFERRED');
+  assert.equal(receipt.providerOriginalsRead, false, 'IOS_FILES_PROVIDER_MUST_REMAIN_COLD');
+  assert.equal(receipt.providerByteVerification, 'deferred-until-postflight', 'IOS_FILES_PROVIDER_BYTE_PROOF_MUST_BE_DEFERRED');
   assert.equal(receipt.stagedFileCount, 0, 'IOS_FILES_STAGED_BYTES_RETAINED');
   assert.equal(receipt.privateByteMatchCount, 0, 'IOS_FILES_PRIVATE_BYTES_RETAINED');
   return receipt;
@@ -696,10 +703,19 @@ async function renderer(context, anchor, pages) {
   event(context, 'ios-private-native-renderer-acknowledged', { attachmentId: anchor.attachmentId, sha256: anchor.sha256, pages, zoom: 125, privateDomRead: false });
 }
 
+export async function repeatIosFileSelection(context, before) {
+  assert.ok(before && Array.isArray(before.requests), 'IOS_FILES_ENTRY_LEDGER_REQUIRED');
+  const asset = validateAsset(context, 'txt');
+  for (let selection = 0; selection < 2; selection++) {
+    await choose(context, asset); await clickIosFileFact(context, 'files-selection-clear'); await noSelection(context);
+    await privacy(context, selection === 0 ? 'selection-clear-first' : 'selection-clear');
+    await noPosts(context, before); event(context, 'repeated-selection-cleared', { selection: selection + 1, filename: asset.filename, sha256: asset.sha256 });
+  }
+}
 export const iosFilesScenarios = Object.freeze([
   { id: 'FILES-01', run: async (context) => { await enterFiles(context); const before = await traffic(context); await reload(context, context.source); await readText(context, context.source); await noPosts(context, before); } },
   { id: 'FILES-02', run: async (context) => { const before = await traffic(context); await enterFiles(context); await choose(context, null, { cancel: true }); await noSelection(context); await noPosts(context, before); await privacy(context, 'picker-cancel'); } },
-  { id: 'FILES-03', run: async (context) => { const before = await traffic(context); await enterFiles(context); await choose(context, validateAsset(context, 'txt')); await clickIosFileFact(context, 'files-selection-clear'); await noSelection(context); await noPosts(context, before); await privacy(context, 'selection-clear'); } },
+  { id: 'FILES-03', run: async (context) => { const before = await traffic(context); await enterFiles(context); await repeatIosFileSelection(context, before); await noPosts(context, before); } },
   ...KINDS.map((kind, index) => ({ id: `FILES-${String(index + 4).padStart(2, '0')}`, ...(kind === 'jpeg' ? { freshAuthentication: true } : {}), run: async (context) => { await upload(context, kind); if (kind === 'txt') await readText(context, uploadAnchor(context, kind)); await privacy(context, `uploaded-${kind}`); } })),
   { id: 'FILES-09', freshAuthentication: true, requires: ['FILES-05'], run: async (context) => { await enterFiles(context); const before = await traffic(context); await renderer(context, uploadAnchor(context, 'pdf'), 2); await noPosts(context, before); } },
   { id: 'FILES-10', requires: ['FILES-06', 'FILES-07'], run: async (context) => { await enterFiles(context); const before = await traffic(context); for (const kind of ['png', 'jpeg']) await renderer(context, uploadAnchor(context, kind), 1); await noPosts(context, before); } },

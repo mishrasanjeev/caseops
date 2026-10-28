@@ -81,7 +81,7 @@ services:
       scanner:
         condition: service_started
     healthcheck:
-      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=3)"]
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8000/api/health',headers={'X-CaseOps-Automated-Test':'no-paid-providers'}),timeout=3)"]
       interval: 3s
       timeout: 4s
       retries: 60
@@ -99,7 +99,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/release-identity').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/release-identity',{headers:{'X-CaseOps-Automated-Test':'no-paid-providers'}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 3s
       timeout: 4s
       retries: 30

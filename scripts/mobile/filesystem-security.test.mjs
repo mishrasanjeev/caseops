@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { rootCertificates } from 'node:tls';
 import test from 'node:test';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
@@ -120,6 +121,55 @@ test('Windows volume normalization preserves inode/file/symlink refusals and oth
   }
 });
 
+test('binary Windows dev-zero portability retains pre-read identity and independent final FD and named frames', t => {
+  const value = fixture(t), platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  for (const change of ['zero', 'same', 'nonzero', 'inode', 'owner', 'fd-dev', 'fd-owner', 'named-dev', 'named-owner', 'darwin']) {
+    let reads = 0;
+    Object.defineProperty(process, 'platform', { ...platform, value: change === 'darwin' ? 'darwin' : 'win32' });
+    try {
+      const proof = withFs({
+        lstatSync(original, file, options) {
+          const stat = original(file, options); if (file !== value.file || !options?.bigint) return stat;
+          const dev = change === 'same' || change === 'named-dev' && reads > 0 ? stat.dev : change === 'nonzero' ? stat.dev + 1n : 0n;
+          const patch = { dev, ...(change === 'inode' ? { ino: stat.ino + 1n } : {}),
+            ...((change === 'owner' || change === 'named-owner' && reads > 0) ? { uid: stat.uid + 1n } : {}) };
+          return new Proxy(stat, { get: (target, key) => Object.hasOwn(patch, key) ? patch[key] : Reflect.get(target, key) });
+        },
+        fstatSync(original, ...args) {
+          const stat = original(...args), patch = reads > 0 ? change === 'fd-dev' ? { dev: stat.dev + 1n } : change === 'fd-owner' ? { uid: stat.uid + 1n } : {} : {};
+          return new Proxy(stat, { get: (target, key) => Object.hasOwn(patch, key) ? patch[key] : Reflect.get(target, key) });
+        },
+        readFileSync(original, ...args) { reads++; return original(...args); },
+        readSync(original, ...args) { reads++; return original(...args); },
+      }, () => descriptorProof(value.file, () => binaryHash(value.file)));
+      if (['zero', 'same'].includes(change)) assert.equal(proof.result, value.expected);
+      else assert.match(proof.thrown?.message || '', /BINARY_FILE_(?:REPLACED|CHANGED)/, change);
+      if (['nonzero', 'inode', 'owner', 'darwin'].includes(change)) assert.equal(proof.reads.length, 0, change);
+    } finally { Object.defineProperty(process, 'platform', platform); }
+  }
+});
+
+test('binary growth after descriptor admission consumes at most the opened extent plus one and closes on refusal', t => {
+  const value = fixture(t, 'original'), originalLength = Buffer.byteLength(value.data);
+  let fd, consumed = 0, changed = false, nested = 0;
+  const grow = () => { if (!changed) { changed = true; fs.appendFileSync(value.file, ' replacement-growth'.repeat(100)); } };
+  withFs({
+    openSync(original, ...args) { fd = original(...args); return fd; },
+    readFileSync(original, argument, ...args) {
+      if (argument !== fd) return original(argument, ...args);
+      grow(); nested++;
+      try { const bytes = original(argument, ...args); consumed += bytes.length; return bytes; }
+      finally { nested--; }
+    },
+    readSync(original, argument, ...args) {
+      if (argument === fd) grow();
+      const count = original(argument, ...args); if (argument === fd && !nested) consumed += count; return count;
+    },
+  }, () => assert.throws(() => binaryHash(value.file), /BINARY_FILE_CHANGED/));
+  assert.equal(changed, true); assert.ok(consumed <= originalLength + 1, `${consumed} exceeds admitted detector extent`);
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+
 test('evidence opens before path checks and checks/reads/closes one descriptor', (t) => {
   const value = fixture(t);
   const proof = descriptorProof(value.file, () => verifiedFile(value.file, value.expected));
@@ -154,8 +204,8 @@ test('same-length in-place artifact mutation cannot pass by restoring mtime', (t
       // precision. The descriptor's independently changed ctime must reject it.
       return new Proxy(actual, { get: (target, key) => key === 'mtimeNs' ? opened.mtimeNs : Reflect.get(target, key) });
     },
-    readFileSync: (original, fd, ...args) => {
-    if (typeof fd === 'number' && !changed) {
+    readSync: (original, fd, ...args) => {
+    if (!changed) {
       changed = true;
       fs.writeFileSync(value.file, 'mutated! bytes');
       fs.utimesSync(value.file, before.atime, before.mtime);
@@ -171,7 +221,7 @@ test('APK hashing reads the descriptor and retains the actual SHA-256 format', (
   const proof = descriptorProof(value.file, () => binaryHash(value.file));
   assert.equal(proof.thrown, undefined);
   assert.equal(proof.result, value.expected);
-  assert.equal(proof.reads.length, 1);
+  assert.equal(proof.reads.length, 2, 'payload read followed by one EOF/growth detector read');
 });
 
 test('a replacement at a path-read boundary cannot substitute unchecked APK bytes', (t) => {
@@ -197,16 +247,119 @@ test('bundle tree digest keeps its existing sorted path/size/byte serialization 
   assert.equal(binaryHash(bundle), expected);
 });
 
+test('bundle hash keeps sorted DFS order when a directory prefix and dotted sibling sort differently', t => {
+  const f = fixture(t), root = path.join(f.dir, 'App.app'); fs.mkdirSync(path.join(root, 'a'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'a', 'z'), 'first'); fs.writeFileSync(path.join(root, 'a.txt'), 'second');
+  const expected = createHash('sha256').update('/a/z\0' + '5\0first/a.txt\0' + '6\0second').digest('hex');
+  assert.equal(binaryHash(root), expected);
+});
+
+test('bundle census rejects a real insertion in an already visited nested directory', t => {
+  const f = fixture(t), root = path.join(f.dir, 'App.app'), early = path.join(root, 'a'), late = path.join(root, 'z');
+  fs.mkdirSync(early, { recursive: true }); fs.mkdirSync(late); fs.writeFileSync(path.join(early, 'first'), 'first');
+  const last = path.join(late, 'last'); fs.writeFileSync(last, 'last'); let selected, inserted = false;
+  withFs({ openSync(original, name, ...args) { const fd = original(name, ...args); if (name === last) selected = fd; return fd; },
+    readSync(original, fd, ...args) { if (fd === selected && !inserted) { inserted = true; fs.writeFileSync(path.join(early, 'missed'), 'new'); } return original(fd, ...args); },
+  }, () => assert.throws(() => binaryHash(root), /BINARY_(?:CENSUS|DIRECTORY)_CHANGED/));
+  assert.equal(inserted, true); assert.throws(() => fs.fstatSync(selected), { code: 'EBADF' });
+});
+
+test('bundle final reconciliation catches insertion after the second leaf metadata observation', t => {
+  const f = fixture(t), root = path.join(f.dir, 'App.app'); fs.mkdirSync(root); const file = path.join(root, 'file'); fs.writeFileSync(file, 'x');
+  let inventories = 0, secondClosed = false, leafStats = 0, inserted = false;
+  withFs({ opendirSync(original, name, ...args) { const dir = original(name, ...args); if (name !== root) return dir;
+      const observation = ++inventories; return { readSync: () => dir.readSync(), closeSync() { dir.closeSync(); if (observation === 2) secondClosed = true; } }; },
+    lstatSync(original, name, ...args) { const value = original(name, ...args); if (name === file && secondClosed && ++leafStats === 2) {
+      inserted = true; fs.writeFileSync(path.join(root, 'late'), 'late'); } return value; },
+  }, () => assert.throws(() => binaryHash(root), /BINARY_CENSUS_CHANGED/));
+  assert.equal(inventories, 2); assert.equal(inserted, true);
+});
+
+test('bundle empty-root second census cannot return zero-copy success after a late insertion', t => {
+  const f = fixture(t), root = path.join(f.dir, 'App.app'); fs.mkdirSync(root); let observations = 0, inserted = false, closed = 0;
+  withFs({ opendirSync(original, ...args) { const dir = original(...args), observation = ++observations;
+    return { readSync: () => dir.readSync(), closeSync() { dir.closeSync(); closed++; if (observation === 2) { inserted = true; fs.writeFileSync(path.join(root, 'late'), 'late'); } } }; },
+  }, () => assert.throws(() => binaryHash(root), /BINARY_DIRECTORY_CHANGED/));
+  assert.equal(observations, 2); assert.equal(closed, 2); assert.equal(inserted, true);
+});
+
+test('bundle held-file parent replacement refuses before bytes and closes its actual descriptor', t => {
+  const f = fixture(t), root = path.join(f.dir, 'App.app'), dir = path.join(root, 'parent'), moved = path.join(root, 'moved'); fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'file'); fs.writeFileSync(file, 'x'); let selected, changed = false, reads = 0;
+  withFs({ openSync(original, name, ...args) { const fd = original(name, ...args); if (name === file) selected = fd; return fd; },
+    fstatSync(original, fd, ...args) { const value = original(fd, ...args); if (fd === selected && !changed) { changed = true; fs.renameSync(dir, moved); fs.symlinkSync(moved, dir); } return value; },
+    readSync(original, fd, ...args) { if (fd === selected) reads++; return original(fd, ...args); },
+  }, () => assert.throws(() => binaryHash(root), /BINARY_NAMESPACE_CHANGED/));
+  assert.equal(changed, true); assert.equal(reads, 0); assert.throws(() => fs.fstatSync(selected), { code: 'EBADF' });
+});
+
+test('bundle two-observation entry cap includes root and EOF while duplicates refuse before retention', t => {
+  const f = fixture(t), root = path.join(f.dir, 'App.app'); fs.mkdirSync(root); fs.writeFileSync(path.join(root, 'file'), 'x');
+  assert.match(binaryHash(root, { maxEntries: 4 }), /^[a-f0-9]{64}$/);
+  let opened = 0, closed = 0;
+  const tracked = (original, ...args) => { const dir = original(...args); opened++; return { readSync: () => dir.readSync(), closeSync() { dir.closeSync(); closed++; } }; };
+  withFs({ opendirSync: tracked }, () => assert.throws(() => binaryHash(root, { maxEntries: 3 }), /BINARY_CENSUS_ENTRY_BOUND/));
+  assert.equal(opened, 2); assert.equal(closed, opened);
+  let reads = 0;
+  withFs({ readdirSync: () => ['file', 'file'], opendirSync(original, ...args) { const dir = original(...args); let first;
+    return { readSync() { reads++; if (first) return first; first = dir.readSync(); return first; }, closeSync() { dir.closeSync(); } }; },
+  }, () => assert.throws(() => binaryHash(root), /BINARY_DUPLICATE_ENTRY/));
+  assert.equal(reads, 2);
+});
+
+test('bundle census enforces depth and checks its shared deadline before and after iterator next', t => {
+  const f = fixture(t), root = path.join(f.dir, 'App.app'); fs.mkdirSync(root); fs.writeFileSync(path.join(root, 'file'), 'x');
+  assert.throws(() => binaryHash(root, { maxDepth: 0 }), /BINARY_CENSUS_DEPTH_BOUND/);
+  const descriptor = Object.getOwnPropertyDescriptor(performance, 'now');
+  for (const point of ['before-next', 'after-next']) {
+    let now = 0, reads = 0, closed = 0; Object.defineProperty(performance, 'now', { configurable: true, value: () => now });
+    try { withFs({ opendirSync(original, ...args) { const dir = original(...args); if (point === 'before-next') now = 30000;
+      return { readSync() { reads++; const value = dir.readSync(); now = 30000; return value; }, closeSync() { dir.closeSync(); closed++; } }; },
+    }, () => assert.throws(() => binaryHash(root), /BINARY_CENSUS_DEADLINE/));
+      assert.equal(reads, point === 'before-next' ? 0 : 1); assert.equal(closed, 1);
+    } finally { if (descriptor) Object.defineProperty(performance, 'now', descriptor); else delete performance.now; }
+  }
+});
+
+test('bundle declared aggregate and remaining descriptor extents refuse before payload', t => {
+  const f = fixture(t), root = path.join(f.dir, 'App.app'); fs.mkdirSync(root);
+  const a = path.join(root, 'a'), b = path.join(root, 'b'); fs.writeFileSync(a, 'a'); fs.writeFileSync(b, 'b'); let reads = 0;
+  withFs({ lstatSync(original, name, options) { const value = original(name, options);
+    return [a, b].includes(name) && options?.bigint ? new Proxy(value, { get: (target, key) => key === 'size' ? 1610612736n : Reflect.get(target, key) }) : value; },
+    readSync(original, ...args) { reads++; return original(...args); },
+  }, () => assert.throws(() => binaryHash(root), /BINARY_BOUND_EXCEEDED/));
+  assert.equal(reads, 0);
+  let selected;
+  withFs({ openSync(original, name, ...args) { const fd = original(name, ...args); if (name === a) selected = fd; return fd; },
+    fstatSync(original, fd, ...args) { const value = original(fd, ...args); return fd === selected
+      ? new Proxy(value, { get: (target, key) => key === 'size' ? 2147483649n : Reflect.get(target, key) }) : value; },
+    readSync(original, ...args) { reads++; return original(...args); },
+  }, () => assert.throws(() => binaryHash(root), /BINARY_BOUND_EXCEEDED/));
+  assert.equal(reads, 0); assert.throws(() => fs.fstatSync(selected), { code: 'EBADF' });
+});
+
+test('bundle second complete census reads metadata only while legacy payload bytes are consumed once', t => {
+  const f = fixture(t), root = path.join(f.dir, 'App.app'); fs.mkdirSync(root); const file = path.join(root, 'file'); fs.writeFileSync(file, 'payload');
+  let observations = 0, consumed = 0, selected;
+  withFs({ opendirSync(original, ...args) { observations++; return original(...args); },
+    openSync(original, name, ...args) { const fd = original(name, ...args); if (name === file) selected = fd; return fd; },
+    readSync(original, fd, ...args) { const count = original(fd, ...args); if (fd === selected) consumed += count; return count; },
+  }, () => assert.match(binaryHash(root, { maxEntries: 4 }), /^[a-f0-9]{64}$/));
+  assert.equal(observations, 2); assert.equal(consumed, 7); assert.throws(() => fs.fstatSync(selected), { code: 'EBADF' });
+});
+
 test('bundle membership changing during enumeration is refused rather than silently omitted', (t) => {
   const value = fixture(t);
   const bundle = path.join(value.dir, 'App.app');
   fs.mkdirSync(bundle); fs.writeFileSync(path.join(bundle, 'original'), 'original');
   let added = false;
-  withFs({ readdirSync: (original, file, ...args) => {
-    const entries = original(file, ...args);
-    if (file === bundle && !added) { added = true; fs.writeFileSync(path.join(bundle, 'new'), 'unreviewed'); }
-    return entries;
+  withFs({ opendirSync: (original, file, ...args) => {
+    const directory = original(file, ...args);
+    return { readSync() { const entry = directory.readSync();
+      if (!entry && file === bundle && !added) { added = true; fs.writeFileSync(path.join(bundle, 'new'), 'unreviewed'); }
+      return entry; }, closeSync: () => directory.closeSync() };
   } }, () => assert.throws(() => binaryHash(bundle), /BINARY_DIRECTORY_CHANGED/));
+  assert.equal(added, true);
 });
 
 test('binary descriptors close on a failed read; empty root and nonregular input stay unavailable', (t) => {

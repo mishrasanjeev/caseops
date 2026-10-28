@@ -33,11 +33,12 @@ export function gatewayEvidenceReference(file, maxBytes = 1048576) {
   try {
     const opened = fstatSync(fd, { bigint: true }), named = lstatSync(file, { bigint: true });
     const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
-    const same = (a, b, cross = false) => fields.every(key => cross && key === 'dev' && process.platform === 'win32' || a[key] === b[key]);
+    const same = (a, b, cross = false) => fields.every(key =>
+      (cross && key === 'dev' && process.platform === 'win32' && b.dev === 0n) || a[key] === b[key]);
     assert.ok(opened.isFile() && named.isFile() && !named.isSymbolicLink() && opened.nlink === 1n
       && (typeof process.getuid !== 'function' || opened.uid === BigInt(process.getuid()))
       && opened.size > 0n && opened.size <= BigInt(maxBytes), 'BOUNDED_FIXTURE_EVIDENCE_REQUIRED');
-    assert.ok(same(named, opened, true), 'FIXTURE_EVIDENCE_REPLACED');
+    assert.ok(same(opened, named, true), 'FIXTURE_EVIDENCE_REPLACED');
     const namespace = () => {
       const canonical = realpathSync(file);
       assert.ok(same(opened, lstatSync(canonical, { bigint: true }), true), 'FIXTURE_EVIDENCE_NAMESPACE_CHANGED');

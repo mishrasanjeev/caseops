@@ -235,7 +235,9 @@ C24 Security39506605978 failed nine Pillow12.3.0 vulnerabilities. Docker15
 was deliberately superseded before native/browser acceptance. Close the
 Pillow13/FastEmbed metadata constraint with the pinned compatibility rebuild,
 retain ordinary dependency checks, and audit actual installed inventories plus
-shipped uv0.13.4 with fresh data before another complete candidate gate.
+shipped uv0.13.5 with fresh data before another complete candidate gate.
+Its clean120 roots are distinct from the fixed0.103.16 certificate verifier;
+actual Linux image/TLS/inference acceptance remains required.
 
 C23 patches Python certifi but leaves the affected anchor in pinned Node's
 web HTTPS defaults. Close both trust stores before fresh combined gates;

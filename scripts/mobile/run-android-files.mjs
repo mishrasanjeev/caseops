@@ -20,6 +20,20 @@ import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { attestAndroidFilesContainers, snapshotAndroidFilesPrivacy } from './android-files-privacy.mjs';
 
+export function captureAndroidFilesPrivacy(options, phase, snapshot = snapshotAndroidFilesPrivacy) {
+  assert.ok(['preflight', 'checkpoint', 'postflight'].includes(phase), 'ANDROID_FILES_PRIVACY_PHASE_REQUIRED');
+  const result = snapshot({ ...options, verifyProviderBytes: phase === 'postflight' }), value = result.snapshot;
+  assert.equal(value.schemaVersion, 2, 'ANDROID_FILES_COLD_PRIVACY_SCHEMA_REQUIRED');
+  assert.equal(value.complete, true, 'ANDROID_FILES_COMPLETE_PRIVACY_SCAN_REQUIRED');
+  assert.equal(value.providerMetadataPreserved, true, 'ANDROID_FILES_PROVIDER_METADATA_CHANGED');
+  assert.equal(value.providerByteVerification, phase === 'postflight' ? 'postflight' : 'deferred-until-postflight', 'ANDROID_FILES_PROVIDER_VERIFICATION_PHASE_MISMATCH');
+  assert.equal(value.providerOriginalsRead, phase === 'postflight', 'ANDROID_FILES_PROVIDER_READ_PHASE_MISMATCH');
+  assert.equal(value.providerOriginalsPreserved, phase === 'postflight' ? true : null, 'ANDROID_FILES_PROVIDER_ORIGINALS_CHANGED');
+  assert.equal(value.counts.ownedStagingFiles, 0, 'ANDROID_FILES_OWNED_STAGING_REMAINS');
+  assert.equal(value.counts.privateAssetMatchCount, 0, 'ANDROID_FILES_PRIVATE_COPY_REMAINS');
+  return result;
+}
+
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const readRef = ref => JSON.parse(verifiedFile(ref?.path, ref?.sha256));
@@ -42,7 +56,7 @@ export function assembleAndroidFilesFixture({ coreFixture, manifestEvidence, pro
   assert.equal(manifest.matter?.id, coreFixture.matter?.id, 'ANDROID_FILES_MANIFEST_MATTER_MISMATCH');
   assert.equal(manifest.source?.matterId, coreFixture.matter?.id, 'ANDROID_FILES_MANIFEST_SOURCE_REQUIRED');
   assert.equal(staged.kind, 'android-files-provider-assets', 'ANDROID_FILES_PROVIDER_RECEIPT_REQUIRED');
-  for (const [key, expected] of Object.entries({ schemaVersion: 1, observed: true, platform: 'android' }))
+  for (const [key, expected] of Object.entries({ schemaVersion: 2, observed: true, platform: 'android', providerOriginalsRead: false }))
     assert.equal(staged[key], expected, 'ANDROID_FILES_OBSERVED_PROVIDER_RECEIPT_REQUIRED');
   for (const key of ['udid', 'appId']) assert.equal(staged[key], coreFixture[key], 'ANDROID_FILES_PROVIDER_DEVICE_MISMATCH');
   assert.deepEqual(staged.manifestEvidence, manifestEvidence, 'ANDROID_FILES_PROVIDER_MANIFEST_MISMATCH');
@@ -63,7 +77,7 @@ export function assembleAndroidFilesFixture({ coreFixture, manifestEvidence, pro
   for (const [index, reference] of priorStagingEvidence.entries()) {
     const previous = readRef(reference), previousManifest = readRef(priorManifestEvidence[index]);
     assert.deepEqual(previous.manifestEvidence, priorManifestEvidence[index], 'ANDROID_FILES_PAIRED_PRIOR_MANIFEST_MISMATCH');
-    for (const [key, expected] of Object.entries({ schemaVersion: 1, kind: 'android-files-provider-assets', observed: true,
+    for (const [key, expected] of Object.entries({ schemaVersion: 2, kind: 'android-files-provider-assets', observed: true, providerOriginalsRead: false,
       platform: 'android', udid: coreFixture.udid, appId: coreFixture.appId })) assert.equal(previous[key], expected, 'ANDROID_FILES_PRIOR_PROVIDER_IDENTITY_MISMATCH');
     assert.equal(previousManifest.kind, 'android-files-synthetic-fixtures', 'ANDROID_FILES_PRIOR_MANIFEST_REQUIRED');
     assert.equal(previousManifest.platform, 'android', 'ANDROID_FILES_PRIOR_MANIFEST_REQUIRED');
@@ -251,10 +265,10 @@ export async function runAndroidFiles() {
     };
     await runtimeFence(); baseline = gatewayBaseline(await localJson(`${fixture.gatewayUrl}/__caseops_e2e/status`), isolation);
     containers = attestAndroidFilesContainers({ udid: fixture.udid, appId: fixture.appId });
-    const before = snapshotAndroidFilesPrivacy({ containers, stagingEvidence: assets.providerEvidence,
-      priorStagingEvidence: assets.priorStagingEvidence, knownSources: androidFilesKnownSources(assets), output: path.join(report, 'preflight-filesystem.json') });
+    const before = captureAndroidFilesPrivacy({ containers, stagingEvidence: assets.providerEvidence,
+      priorStagingEvidence: assets.priorStagingEvidence, knownSources: androidFilesKnownSources(assets), output: path.join(report, 'preflight-filesystem.json') }, 'preflight');
     assert.equal(before.snapshot.complete, true, 'ANDROID_FILES_COMPLETE_PREFLIGHT_SCAN_REQUIRED');
-    assert.equal(before.snapshot.providerOriginalsPreserved, true, 'ANDROID_FILES_PROVIDER_ORIGINALS_CHANGED');
+    assert.equal(before.snapshot.providerMetadataPreserved, true, 'ANDROID_FILES_PROVIDER_ORIGINALS_CHANGED');
     assert.equal(before.snapshot.counts.privateAssetMatchCount, 0, 'ANDROID_FILES_PREFLIGHT_PRIVATE_COPY_RETAINS');
     assert.equal(before.snapshot.counts.ownedStagingFiles, 0, 'ANDROID_FILES_PREFLIGHT_STAGING_RETAINS');
     const tooling = process.env.CASEOPS_MOBILE_TOOLING_HOME || path.join(os.homedir(), '.cache/caseops-mobile/tooling');
@@ -284,12 +298,13 @@ export async function runAndroidFiles() {
           await runtimeFence();
           containers = bindAndroidFilesPrivateRoots(containers, attestAndroidFilesContainers({ udid: fixture.udid, appId: fixture.appId }));
           const output = path.join(report, `${scenario.id}-${boundary}-${randomUUID().slice(0, 8)}.json`);
-          const { snapshot, evidence } = snapshotAndroidFilesPrivacy({ containers, stagingEvidence: assets.providerEvidence,
-            priorStagingEvidence: assets.priorStagingEvidence, knownSources: androidFilesKnownSources(assets), output });
+          const { snapshot, evidence } = captureAndroidFilesPrivacy({ containers, stagingEvidence: assets.providerEvidence,
+            priorStagingEvidence: assets.priorStagingEvidence, knownSources: androidFilesKnownSources(assets), output }, 'checkpoint');
           assert.equal(snapshot.complete, true, 'ANDROID_FILES_COMPLETE_PRIVACY_SCAN_REQUIRED');
-          const normalized = newJson(`${output}.assertion.json`, { schemaVersion: 1, observed: snapshot.observed, platform: snapshot.platform,
+          const normalized = newJson(`${output}.assertion.json`, { schemaVersion: 2, observed: snapshot.observed, platform: snapshot.platform,
             udid: snapshot.udid, appId: snapshot.appId, boundary, ownedAppScopeOnly: snapshot.ownedAppScopeOnly,
-            providerOriginalsUnchanged: snapshot.providerOriginalsPreserved, stagedFileCount: snapshot.counts.ownedStagingFiles,
+            providerOriginalsUnchanged: snapshot.providerOriginalsPreserved, providerMetadataUnchanged: snapshot.providerMetadataPreserved,
+            providerOriginalsRead: snapshot.providerOriginalsRead, providerByteVerification: snapshot.providerByteVerification, stagedFileCount: snapshot.counts.ownedStagingFiles,
             privateByteMatchCount: snapshot.counts.privateAssetMatchCount, rawEvidence: evidence });
           journal.write({ type: 'filesystem_observation', id, boundary, evidence: normalized, rawEvidence: evidence }); return normalized;
         },
@@ -312,6 +327,10 @@ export async function runAndroidFiles() {
     try { after = await localJson(`${fixture.gatewayUrl}/__caseops_e2e/status`); newJson(path.join(report, 'gateway-after.json'), after); }
     catch { journal.write({ type: 'gateway_capture_failed', reason: 'ANDROID_FILES_POSTFLIGHT_LEDGER_UNAVAILABLE' }); }
     try {
+      const originals = captureAndroidFilesPrivacy({ containers: bindAndroidFilesPrivateRoots(containers, attestAndroidFilesContainers({ udid: fixture.udid, appId: fixture.appId })),
+        stagingEvidence: assets.providerEvidence, priorStagingEvidence: assets.priorStagingEvidence, knownSources: androidFilesKnownSources(assets),
+        output: path.join(report, 'postflight-filesystem.json') }, 'postflight');
+      journal.write({ type: 'provider_originals_postflight', evidence: originals.evidence, status: 'passed' });
       await runtimeFence(); assert.ok(after, 'ANDROID_FILES_POSTFLIGHT_LEDGER_UNAVAILABLE'); validateTraffic(after, baseline);
       for (const id of collection.intended) {
         const sessions = journal.events.filter(event => event.type === 'appium_session' && event.id === id);

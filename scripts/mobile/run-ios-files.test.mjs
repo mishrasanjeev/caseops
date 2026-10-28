@@ -7,13 +7,33 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { reconcileResults } from '../../apps/mobile/e2e/support.mjs';
-import { captureIosFilesCallFailure, filesCaseRecovery, knownFileSources, validateIosFilesCache,
+import { captureIosFilesCallFailure, captureIosFilesPrivacy, filesCaseRecovery, knownFileSources, validateIosFilesCache,
   iosSourceAdmissionDiagnostic } from './run-ios-files.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const RUNNER = path.join(ROOT, 'scripts/mobile/run-ios-files.mjs');
 const EXPECTED = ['FILES-01', 'FILES-02', 'FILES-03', 'FILES-04', 'FILES-05', 'FILES-06', 'FILES-07', 'FILES-08',
   'FILES-09', 'FILES-10', 'FILES-11', 'FILES-12', 'FILES-13', 'FILES-14', 'FILES-15', 'FILES-16', 'FILES-17'].map((id) => `ios:${id}`);
+
+test('controller forces cold preflight and checkpoints, reserving byte verification for final postflight', () => {
+  for (const phase of ['preflight','checkpoint','postflight']) {
+    let observed;
+    const result = captureIosFilesPrivacy({ verifyProviderBytes: phase !== 'postflight' }, phase, options => {
+      observed = options.verifyProviderBytes;
+      return { snapshot: { schemaVersion: 2, complete: true, providerMetadataPreserved: true, providerOriginalsRead: observed,
+        providerOriginalsPreserved: observed ? true : null, providerByteVerification: observed ? 'postflight' : 'deferred-until-postflight', counts: { ownedStagingFiles: 0, privateAssetMatchCount: 0 } } };
+    });
+    assert.equal(observed, phase === 'postflight'); assert.equal(result.snapshot.providerOriginalsRead, observed);
+  }
+});
+test('controller rejects unknown phases, early byte reads and unverified final originals without weakening private-copy checks', () => {
+  let calls = 0; assert.throws(() => captureIosFilesPrivacy({}, 'unknown', () => { calls++; }), /FILES_PRIVACY_PHASE_REQUIRED/); assert.equal(calls, 0);
+  const good = { schemaVersion: 2, complete: true, providerMetadataPreserved: true, providerOriginalsRead: false,
+    providerOriginalsPreserved: null, providerByteVerification: 'deferred-until-postflight', counts: { ownedStagingFiles: 0, privateAssetMatchCount: 0 } };
+  for (const change of [{ providerOriginalsRead: true }, { providerOriginalsPreserved: true }, { providerMetadataPreserved: false }, { counts: { ownedStagingFiles: 1, privateAssetMatchCount: 0 } }, { counts: { ownedStagingFiles: 0, privateAssetMatchCount: 1 } }])
+    assert.throws(() => captureIosFilesPrivacy({}, 'checkpoint', () => ({ snapshot: { ...good, ...change } })));
+  assert.throws(() => captureIosFilesPrivacy({}, 'postflight', () => ({ snapshot: good })));
+});
 function environment(t) {
   const reportRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-ios-files-controller-')));
   t.after(() => rmSync(reportRoot, { recursive: true, force: true }));

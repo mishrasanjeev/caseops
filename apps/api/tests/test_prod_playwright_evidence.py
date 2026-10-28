@@ -307,6 +307,16 @@ def capture(tmp_path, monkeypatch):
 
 
 def test_complete_native_evidence_binds_release_config_and_full_utf8_inventory(capture):
+    node_environment = {
+        key: "synthetic-scoped-" + key
+        for key in (
+            "NODE_OPTIONS", "SSL_CERT_FILE", "SSL_CERT_DIR",
+            "CASEOPS_HOST_NODE_TRUST_POLICY_FILE", "CASEOPS_HOST_NODE_TRUST_POLICY_SHA256",
+            "NPM_CONFIG_USERCONFIG", "NPM_CONFIG_GLOBALCONFIG",
+            "NPM_CONFIG_STRICT_SSL", "NPM_CONFIG_REGISTRY",
+        )
+    }
+    capture.env.update(node_environment)
     assert capture.run() == 0
     evidence.validate(capture.root, ["offline"], BASE)
     inventory = json.loads((capture.path / "discovery.json").read_text(encoding="utf-8"))
@@ -320,6 +330,7 @@ def test_complete_native_evidence_binds_release_config_and_full_utf8_inventory(c
         capture.root / "playwright.offline.config.ts"
     )
     for command, kwargs in capture.calls:
+        assert {key: kwargs["env"][key] for key in node_environment} == node_environment
         assert "PLAYWRIGHT_JSON_OUTPUT_DIR" not in kwargs["env"]
         assert "PLAYWRIGHT_JUNIT_OUTPUT_NAME" not in kwargs["env"]
         assert kwargs["stdout"] == kwargs["stderr"] == subprocess.DEVNULL
@@ -1889,13 +1900,23 @@ def test_all_suite_arguments_filters_and_order_are_unchanged_from_release_base()
             assert len(wrapped) == 1
             arguments = wrapped[0][wrapped[0].index("--config=") :]
             assert arguments == BASE_COMMANDS[step["name"]]
+            original_env = dict(step.get("env") or {})
+            node_keys = (
+                "NODE_OPTIONS", "SSL_CERT_FILE", "SSL_CERT_DIR",
+                "CASEOPS_HOST_NODE_TRUST_POLICY_FILE", "CASEOPS_HOST_NODE_TRUST_POLICY_SHA256",
+                "NPM_CONFIG_USERCONFIG", "NPM_CONFIG_GLOBALCONFIG",
+                "NPM_CONFIG_STRICT_SSL", "NPM_CONFIG_REGISTRY",
+            )
+            assert {key: original_env.pop(key) for key in node_keys} == {
+                key: "${{ steps.node_trust.outputs." + key + " }}" for key in node_keys
+            }
             bindings.append(
                 dict(
                     job=job_name,
                     name=step["name"],
                     condition=step.get("if"),
                     timeout=step.get("timeout-minutes"),
-                    env=step.get("env"),
+                    env=original_env,
                     arguments=arguments,
                 )
             )

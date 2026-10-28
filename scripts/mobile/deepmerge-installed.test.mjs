@@ -112,8 +112,8 @@ test('every locked hidden-lock and physically installed deepmerge copy is the re
 });
 
 test('actual installed Expo consumer resolves the protected runtime with unchanged SDK identity and retained MIT', () => {
-  assert.equal(json(require.resolve('expo/package.json')).version, '58.0.20');
-  assert.equal(json(require.resolve('@expo/config/package.json')).version, '58.0.8');
+  assert.equal(json(require.resolve('expo/package.json')).version, '58.0.21');
+  assert.equal(json(require.resolve('@expo/config/package.json')).version, '58.0.9');
   const consumer = createRequire(require.resolve('@expo/config'));
   const resolved = consumer.resolve('deepmerge');
   assert.equal(resolved, path.join(app, 'node_modules/deepmerge/dist/cjs.js'));

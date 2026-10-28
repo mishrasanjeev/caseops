@@ -20,7 +20,7 @@ export const androidFilesInventory = Object.freeze({ schemaVersion: 1, inventory
   cases: Object.freeze([
     ['FILES-01', 'Seeded TXT identity, authoritative reload, private read and return'],
     ['FILES-02', 'Observed Android picker cancellation creates no selection or upload'],
-    ['FILES-03', 'Actual TXT selection and explicit Clear create no upload'],
+    ['FILES-03', 'Actual TXT select-Clear-select and final Clear create no upload'],
     ['FILES-04', 'Rapid TXT activation admits one upload and original-byte persisted identity'],
     ['FILES-05', 'Exactly one two-page PDF upload and persisted source'],
     ['FILES-06', 'Exactly one PNG upload and persisted source'],
@@ -110,7 +110,7 @@ export function validateAndroidFileAsset(context, kind) {
 }
 export function validateAndroidPicker(context, asset) {
   const value = context.provider, proof = json(value?.evidence);
-  for (const [key, expected] of Object.entries({ schemaVersion: 1, observed: true, platform: 'android', udid: context.fixture.udid,
+  for (const [key, expected] of Object.entries({ schemaVersion: 2, providerOriginalsRead: false, observed: true, platform: 'android', udid: context.fixture.udid,
     appId: context.fixture.appId })) assert.equal(proof[key], expected, 'ANDROID_FILES_OBSERVED_PICKER_REQUIRED');
   assert.ok(['com.android.documentsui', 'com.google.android.documentsui'].includes(proof.packageName), 'ANDROID_FILES_SYSTEM_PICKER_PACKAGE_REQUIRED');
   assert.ok(/^CaseOpsFiles-[A-Za-z0-9-]{6,64}$/.test(value.folderName || ''), 'ANDROID_FILES_OWNED_FOLDER_REQUIRED');
@@ -118,11 +118,12 @@ export function validateAndroidPicker(context, asset) {
   verifiedFile(context.fixture.buildReceipt?.path, context.fixture.buildReceipt?.sha256);
   assert.deepEqual(proof.buildReceipt, context.fixture.buildReceipt, 'ANDROID_FILES_PICKER_BUILD_MISMATCH');
   assert.deepEqual(proof.manifestEvidence, context.assets.manifestEvidence, 'ANDROID_FILES_PICKER_MANIFEST_MISMATCH');
+  assert.deepEqual(proof.stagingEvidence, context.assets.providerEvidence, 'ANDROID_FILES_PICKER_STAGING_MISMATCH');
   const controls = { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: `${proof.packageName}:id/roots_list` },
     downloads: { kind: 'text', value: 'Downloads' }, folder: { kind: 'text', value: value.folderName }, fileTitleId: 'android:id/title', cancel: 'android-back' };
   assert.deepEqual(proof.controls, controls, 'ANDROID_FILES_OBSERVED_PICKER_CONTROLS_REQUIRED');
   if (asset) assert.equal(proof.assets?.filter(item => item.filename === asset.filename && item.sha256 === asset.sha256
-    && item.sizeBytes === asset.sizeBytes && item.observedProviderHash === asset.sha256 && item.pickerName === asset.filename).length,
+    && item.sizeBytes === asset.sizeBytes && item.transferSha256 === asset.sha256 && !Object.hasOwn(item, 'observedProviderHash') && item.pickerName === asset.filename).length,
   1, 'ANDROID_FILES_OBSERVED_PICKER_ASSET_REQUIRED');
   return { ...proof, controls };
 }
@@ -263,13 +264,15 @@ async function renderer(context, anchor, pages) {
   await assertSourceRead(context, before, anchor); await closeReader(context);
 }
 export function validateAndroidPrivacyReceipt(context, boundary, receipt) {
-  for (const [key, expected] of Object.entries({ schemaVersion: 1, observed: true, platform: 'android', udid: context.fixture.udid,
-    appId: context.fixture.appId, boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: true, stagedFileCount: 0, privateByteMatchCount: 0 }))
+  for (const [key, expected] of Object.entries({ schemaVersion: 2, observed: true, platform: 'android', udid: context.fixture.udid,
+    appId: context.fixture.appId, boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: null, providerMetadataUnchanged: true,
+    providerOriginalsRead: false, providerByteVerification: 'deferred-until-postflight', stagedFileCount: 0, privateByteMatchCount: 0 }))
     assert.equal(receipt[key], expected, 'ANDROID_FILES_PRIVACY_BOUNDARY_MISMATCH');
   assert.ok(receipt.rawEvidence, 'ANDROID_FILES_RAW_PRIVACY_EVIDENCE_REQUIRED'); const raw = json(receipt.rawEvidence);
-  for (const [key, expected] of Object.entries({ schemaVersion: 1, kind: 'android-files-privacy-snapshot', observed: true,
+  for (const [key, expected] of Object.entries({ schemaVersion: 2, kind: 'android-files-privacy-snapshot', observed: true,
     platform: 'android', udid: context.fixture.udid, appId: context.fixture.appId, ownedAppScopeOnly: true,
-    complete: true, providerOriginalsPreserved: true })) assert.equal(raw[key], expected, 'ANDROID_FILES_RAW_PRIVACY_MISMATCH');
+    complete: true, providerOriginalsPreserved: null, providerMetadataPreserved: true, providerOriginalsRead: false,
+    providerByteVerification: 'deferred-until-postflight' })) assert.equal(raw[key], expected, 'ANDROID_FILES_RAW_PRIVACY_MISMATCH');
   assert.equal(raw.counts?.ownedStagingFiles, receipt.stagedFileCount, 'ANDROID_FILES_RAW_PRIVACY_MISMATCH');
   assert.equal(raw.counts?.privateAssetMatchCount, receipt.privateByteMatchCount, 'ANDROID_FILES_RAW_PRIVACY_MISMATCH');
   return receipt;
@@ -288,10 +291,19 @@ async function discardSelection(context, action) {
   assert.equal(await read(context, 'id', 'android:id/button1'), 'LEAVE FILES', 'ANDROID_FILES_DISCARD_LEAVE_MISMATCH');
   await click(context, 'id', action === 'stay' ? 'android:id/button2' : 'android:id/button1');
 }
+export async function repeatAndroidFileSelection(context, before) {
+  assert.ok(before && Array.isArray(before.requests), 'ANDROID_FILES_ENTRY_LEDGER_REQUIRED');
+  const asset = validateAndroidFileAsset(context, 'txt');
+  for (let selection = 0; selection < 2; selection++) {
+    await chooseAndroidFile(context, asset); await click(context, 'id', 'files-selection-clear', { scroll: true }); await noSelection(context);
+    await privacy(context, selection === 0 ? 'selection-clear-first' : 'selection-clear'); await noPosts(context, before);
+    event(context, 'repeated-selection-cleared', { selection: selection + 1, filename: asset.filename, sha256: asset.sha256 });
+  }
+}
 export const androidFilesScenarios = Object.freeze([
   { id: 'FILES-01', run: async c => { await enterFiles(c); const before = await traffic(c); await reload(c, c.source); await readText(c, c.source); await noPosts(c, before); } },
   { id: 'FILES-02', run: async c => { const before = await traffic(c); await enterFiles(c); await chooseAndroidFile(c, null, { cancel: true }); await noSelection(c); await noPosts(c, before); await privacy(c, 'picker-cancel'); } },
-  { id: 'FILES-03', run: async c => { const before = await traffic(c); await enterFiles(c); await chooseAndroidFile(c, validateAndroidFileAsset(c, 'txt')); await click(c, 'id', 'files-selection-clear', { scroll: true }); await noSelection(c); await noPosts(c, before); await privacy(c, 'selection-clear'); } },
+  { id: 'FILES-03', run: async c => { const before = await traffic(c); await enterFiles(c); await repeatAndroidFileSelection(c, before); await noPosts(c, before); } },
   ...KINDS.map((kind, index) => ({ id: `FILES-${String(index + 4).padStart(2, '0')}`, run: async c => { await upload(c, kind); if (kind === 'txt') await readText(c, uploadAnchor(c, kind)); await privacy(c, `uploaded-${kind}`); } })),
   { id: 'FILES-09', freshAuthentication: true, requires: ['FILES-05'], run: async c => { await enterFiles(c); const before = await traffic(c); await renderer(c, uploadAnchor(c, 'pdf'), 2); await noPosts(c, before); } },
   { id: 'FILES-10', requires: ['FILES-06', 'FILES-07'], run: async c => { await enterFiles(c); const before = await traffic(c); for (const kind of ['png', 'jpeg']) await renderer(c, uploadAnchor(c, kind), 1); await noPosts(c, before); } },

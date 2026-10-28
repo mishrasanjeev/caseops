@@ -163,16 +163,42 @@ test('file metadata drift refuses and closes the descriptor before returning an 
     const io = { ...fs, fstatSync(fd, options) {
       const stat = fs.fstatSync(fd, options); return ++count === 2 ? mutateStat(stat, key) : stat;
     }, closeSync(fd) { closes++; fs.closeSync(fd); } };
-    assert.throws(() => create(value, { io }), /SOURCE_EXPORT_FILE_CHANGED/); assert.equal(closes, 1);
+    assert.throws(() => create(value, { io }), /SOURCE_EXPORT_FILE_CHANGED/, key); assert.equal(closes, 1);
     let named = 0, namedCloses = 0;
     const namedIo = { ...fs, lstatSync(file, options) {
       const stat = fs.lstatSync(file, options);
       return path.basename(file) === 'public-ca.pem' && ++named === 2 ? mutateStat(stat, key) : stat;
     }, closeSync(fd) { namedCloses++; fs.closeSync(fd); } };
-    if (key === 'dev' && process.platform === 'win32') {
-      assert.match(create(value, { io: namedIo }).sha256, /^[a-f0-9]{64}$/);
-    } else assert.throws(() => create(value, { io: namedIo }), /SOURCE_EXPORT_FILE_CHANGED/);
+    assert.throws(() => create(value, { io: namedIo }), /SOURCE_EXPORT_FILE_CHANGED/);
     assert.equal(namedCloses, 1);
+  }
+});
+
+test('source export Windows dev-zero portability refuses nonzero mismatches before readback and retains independent frames', t => {
+  const value = fixture(t), platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  for (const change of ['zero', 'same', 'nonzero', 'inode', 'owner', 'directory', 'symlink', 'fd-drift', 'named-drift', 'darwin']) {
+    let fd, reads = 0;
+    Object.defineProperty(process, 'platform', { ...platform, value: change === 'darwin' ? 'darwin' : 'win32' });
+    const io = { ...fs, openSync(...args) { fd = fs.openSync(...args); return fd; },
+      fstatSync(...args) { const stat = fs.fstatSync(...args); return change === 'fd-drift' && reads > 0 ? mutateStat(stat, 'dev') : stat; },
+      lstatSync(name, options) {
+        const stat = fs.lstatSync(name, options); if (path.basename(name) !== 'public-ca.pem') return stat;
+        const device = change === 'same' || change === 'named-drift' && reads > 0 ? stat.dev : change === 'nonzero' ? stat.dev + 1n : 0n;
+        return new Proxy(stat, { get(target, key) {
+          if (key === 'dev') return device;
+          if (key === 'ino' && change === 'inode') return stat.ino + 1n;
+          if (key === 'uid' && change === 'owner') return stat.uid + 1n;
+          if (key === 'isFile' && change === 'directory') return () => false;
+          if (key === 'isSymbolicLink' && change === 'symlink') return () => true;
+          return Reflect.get(target, key);
+        } });
+      }, readSync(...args) { reads++; return fs.readSync(...args); } };
+    try {
+      if (['zero', 'same'].includes(change)) assert.match(create(value, { io }).sha256, /^[a-f0-9]{64}$/);
+      else assert.throws(() => create(value, { io }), /SOURCE_EXPORT_FILE_CHANGED/, change);
+      if (!['zero', 'same', 'fd-drift', 'named-drift'].includes(change)) assert.equal(reads, 0, `${change}: refuse before readback`);
+      assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+    } finally { Object.defineProperty(process, 'platform', platform); }
   }
 });
 

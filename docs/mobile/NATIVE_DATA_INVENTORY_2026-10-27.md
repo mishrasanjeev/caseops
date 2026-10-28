@@ -151,3 +151,54 @@ semantics; removal failure remains actionable. OS keychain remnants,
 backup/uninstall and enrollment invalidation are not certified. See
 `BIOMETRIC_SCREEN_LOCK_2026-10-27.md`. Final store labels still require actual
 artifact/SDK/operational review; source presence is not native acceptance.
+
+## Cold Files provider harness correction, 2026-10-28
+
+The independent Android and iOS Files inventories still contain exactly17
+cases/51 phases. FILES-03 now selects the same exact TXT asset, clears it,
+checks owned cleanup, selects it again and clears it again. Each selection
+uses the real platform picker recipe and each click uses the existing single
+protocol dispatch. A lost acknowledgement stops the sequence; no second click
+or cleanup success is invented. This adds one per-case cleanup checkpoint
+(14 rather than the earlier13), without adding a case or upload. Native
+execution of this strengthened workflow remains unrun.
+
+Provider staging now emits schema2 receipts from the verified host buffers.
+iOS writes those buffers through exclusive0600 descriptors; Android transfers
+the admitted buffers through its existing exclusive device write. Neither
+stager rereads the provider destination. Each asset records `transferSha256`,
+its write method and original provider metadata; it does not claim an observed
+provider-content hash. Fresh picker observations must also use schema2, bind
+the exact `stagingEvidence` and declare `providerOriginalsRead:false`. The old
+`observedProviderHash` field is rejected. These public fields need actual
+source-bound staging/OS-observation evidence, not restamped historical JSON.
+
+Every preflight and per-case Files privacy scan defaults to metadata-only
+provider verification. It still scans app-owned private copies under the
+unchanged entry/file/depth/byte limits. Its schema2 result reports
+`providerMetadataPreserved:true`, `providerOriginalsRead:false`,
+`providerOriginalsPreserved:null` and
+`providerByteVerification:'deferred-until-postflight'`. Null means the original
+bytes have not yet been verified. The iOS private scan now takes two bounded,
+unique root-present metadata inventories and reconciles every final path;
+an incomplete/late inventory cannot become a clean zero-copy result.
+
+Only the runners' postflight, after the full case loop and session teardown,
+enables provider byte reads. That proof requires the staged metadata and exact
+original sizes/SHA values, same-descriptor bounded reads, and final metadata
+reconciliation after the private scan. A missing, replaced or changed original,
+partial scan, timeout or unreached postflight refuses a full pass. The existing
+30-minute serial and interactive budgets remain unchanged. Earlier8928/native
+failures, blocked/unreached phases and schema1 receipts retain their own scope;
+they do not certify the new cold-provider workflow, a new artifact, tablet or
+physical-device acceptance.
+
+## SDK patch replacement, 2026-10-28
+
+The current source candidate pins FileSystem 58.0.13 and Linking 58.0.15 with
+Expo 58.0.21, dev client 58.0.17 and UI 58.0.25. The earlier dated supplier
+inventory above retains its original source scope. Exact official archive
+references/MIT text are retained in `apps/mobile/vendor/sdk58-patch-20261028`.
+No permission, minimum deployment target or app data-handling contract changes
+are authorized by this package update. Final-binary supplier privacy manifests,
+permissions and device behavior require fresh independently bound acceptance.

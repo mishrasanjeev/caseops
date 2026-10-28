@@ -132,11 +132,6 @@ function knownSource(value) {
   return { id: value.id, filename: value.filename, sha256: value.sha256, sizeBytes: value.sizeBytes,
     ...(value.marker ? { marker: value.marker } : {}) };
 }
-function providerHash(io, file) {
-  const output = io.text(['shell', 'sha256sum', file]);
-  assert.ok(SHA.test(output.slice(0, 64)) && output.slice(64) === `  ${file}`, 'ANDROID_FILES_EXACT_PROVIDER_HASH_REQUIRED');
-  return output.slice(0, 64);
-}
 export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, output, ...options }) {
   absoluteOutput(output); const io = current(containers, options), manifest = read(manifestEvidence);
   assert.equal(manifest.schemaVersion, 1, 'ANDROID_FILES_MANIFEST_VERSION_REQUIRED');
@@ -178,15 +173,16 @@ export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, o
     const metadata = io.stat(devicePath);
     assert.equal(metadata?.kind, 'file', 'ANDROID_FILES_PROVIDER_FILE_REQUIRED');
     assert.equal(metadata.sizeBytes, asset.sizeBytes, 'ANDROID_FILES_PROVIDER_SIZE_MISMATCH');
-    assert.equal(providerHash(io, devicePath), asset.sha256, 'ANDROID_FILES_PROVIDER_HASH_MISMATCH');
     verifiedFile(asset.path, asset.sha256, 262144);
-    observed.push({ ...knownSource(asset), devicePath, observedProviderHash: asset.sha256 });
+    observed.push({ ...knownSource(asset), devicePath, transferSha256: hash(asset.bytes),
+      transferMethod: 'verified-buffer-exclusive-device-write', providerMetadata: metadata });
   }
   current(containers, options);
-  const receipt = { schemaVersion: 1, kind: 'android-files-provider-assets', observed: true, platform: 'android',
+  const receipt = { schemaVersion: 2, kind: 'android-files-provider-assets', observed: true, platform: 'android',
     udid: containers.udid, appId: containers.appId, bootId: containers.bootId, avdName: containers.avdName,
     manifestEvidence, attemptEvidence, folderName, deviceFolderPath, provider: containers.provider,
-    appData: containers.appData, assets: observed, originalsDeleted: false };
+    appData: containers.appData, assets: observed, originalsDeleted: false, providerOriginalsRead: false,
+    providerOriginalsPreserved: null, originalByteVerification: 'deferred-until-postflight' };
   return { receipt, evidence: save(output, receipt) };
 }
 
@@ -222,16 +218,17 @@ function openedBytes(io, file, expected, maxBytes, singleLink = false) {
 }
 
 export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, priorStagingEvidence = [], knownSources = [], output,
-  limits = ANDROID_FILES_SCAN_LIMITS, ...options }) {
+  limits = ANDROID_FILES_SCAN_LIMITS, verifyProviderBytes = false, ...options }) {
+  assert.equal(typeof verifyProviderBytes, 'boolean', 'ANDROID_FILES_EXPLICIT_PROVIDER_VERIFICATION_REQUIRED');
   absoluteOutput(output); assert.deepEqual(limits, ANDROID_FILES_SCAN_LIMITS, 'ANDROID_FILES_REVIEWED_SCAN_LIMITS_REQUIRED');
   const deadline = Date.now() + 30000, budget = { bytes: 0, limit: limits.totalBytes }, scanOptions = { ...options, deadline, budget };
   const io = current(containers, scanOptions);
   assert.ok(Array.isArray(priorStagingEvidence) && priorStagingEvidence.length <= 4, 'ANDROID_FILES_PRIOR_COHORT_BOUND');
   const cohorts = [stagingEvidence, ...priorStagingEvidence].map(ref => ({ reference: ref, value: read(ref) }));
   assert.equal(new Set(cohorts.map(({ value }) => value.deviceFolderPath)).size, cohorts.length, 'ANDROID_FILES_DUPLICATE_PROVIDER_COHORT');
-  const sources = [], originals = [], issues = [], findings = [];
+  const sources = [], originals = [], providerChecks = [], issues = [], findings = []; let providerBytesRead = 0;
   for (const { value } of cohorts) {
-    for (const [key, expected] of Object.entries({ schemaVersion: 1, kind: 'android-files-provider-assets', observed: true,
+    for (const [key, expected] of Object.entries({ schemaVersion: 2, kind: 'android-files-provider-assets', observed: true, providerOriginalsRead: false,
       platform: 'android', udid: containers.udid, appId: containers.appId, bootId: containers.bootId })) assert.equal(value[key], expected, 'ANDROID_FILES_STAGING_IDENTITY_MISMATCH');
     assert.ok(/^CaseOpsFiles-[A-Za-z0-9-]{6,64}$/.test(value.folderName || ''), 'ANDROID_FILES_OWNED_PROVIDER_FOLDER_REQUIRED');
     assert.equal(value.deviceFolderPath, `${containers.provider.path}/${value.folderName}`, 'ANDROID_FILES_PROVIDER_FOLDER_MISMATCH');
@@ -245,10 +242,23 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
     assert.deepEqual(metadata(value.assets), metadata(manifest.assets), 'ANDROID_FILES_COMPLETE_PROVIDER_COHORT_REQUIRED');
     for (const asset of value.assets) {
       sources.push(knownSource(asset)); assert.equal(asset.devicePath, `${value.deviceFolderPath}/${asset.filename}`, 'ANDROID_FILES_PROVIDER_ASSET_PATH_MISMATCH');
-      const metadata = io.stat(asset.devicePath), actualHash = metadata?.kind === 'file' && metadata.sizeBytes === asset.sizeBytes ? providerHash(io, asset.devicePath) : null;
-      const preserved = metadata?.sizeBytes === asset.sizeBytes && actualHash === asset.sha256;
-      originals.push({ filename: asset.filename, sha256: asset.sha256, sizeBytes: asset.sizeBytes, preserved });
-      if (!preserved) issues.push({ reason: 'provider-original-changed', filename: asset.filename });
+      assert.equal(asset.transferSha256, asset.sha256, 'ANDROID_FILES_VERIFIED_TRANSFER_REQUIRED');
+      assert.equal(asset.transferMethod, 'verified-buffer-exclusive-device-write', 'ANDROID_FILES_VERIFIED_TRANSFER_REQUIRED');
+      assert.deepEqual(Object.keys(asset.providerMetadata || {}).sort(), ['kind','uid','device','inode','sizeBytes','modified','changed'].sort(), 'ANDROID_FILES_STAGED_METADATA_REQUIRED');
+      const metadata = io.stat(asset.devicePath);
+      const metadataPreserved = ['kind','uid','device','inode','sizeBytes','modified','changed'].every(key => metadata?.[key] === asset.providerMetadata[key])
+        && metadata?.kind === 'file' && metadata.sizeBytes === asset.sizeBytes;
+      let actualHash = null;
+      if (verifyProviderBytes && metadataPreserved) {
+        try { const data = openedBytes(io, asset.devicePath, metadata, asset.sizeBytes, true); providerBytesRead += data.length;
+          assert.deepEqual(io.stat(asset.devicePath), metadata, 'ANDROID_FILES_PROVIDER_METADATA_CHANGED'); actualHash = hash(data); }
+        catch { issues.push({ reason: 'provider-original-unreadable', filename: asset.filename }); }
+      }
+      const preserved = verifyProviderBytes ? metadataPreserved && actualHash === asset.sha256 : null;
+      originals.push({ filename: asset.filename, sha256: asset.sha256, sizeBytes: asset.sizeBytes, metadataPreserved, preserved,
+        ...(verifyProviderBytes ? { observedSha256: actualHash } : { byteVerification: 'deferred-until-postflight' }) });
+      providerChecks.push({ path: asset.devicePath, metadata: asset.providerMetadata, row: originals.at(-1) });
+      if (!metadataPreserved || verifyProviderBytes && !preserved) issues.push({ reason: 'provider-original-changed', filename: asset.filename });
     }
   }
   assert.ok(Array.isArray(knownSources) && knownSources.length <= 64, 'ANDROID_FILES_KNOWN_SOURCE_BOUND');
@@ -316,10 +326,17 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
       catch { issues.push({ reason: 'directory-or-file-metadata-changed', relativePath }); }
     }
   }
+  for (const expected of providerChecks) {
+    try { assert.deepEqual(io.stat(expected.path), expected.metadata, 'ANDROID_FILES_PROVIDER_METADATA_CHANGED'); }
+    catch { expected.row.metadataPreserved = false; if (verifyProviderBytes) expected.row.preserved = false;
+      issues.push({ reason: 'provider-original-final-metadata-changed', relativePath: expected.row.filename }); }
+  }
   current(containers, scanOptions);
-  const snapshot = { schemaVersion: 1, kind: 'android-files-privacy-snapshot', observed: true, platform: 'android',
+  const snapshot = { schemaVersion: 2, kind: 'android-files-privacy-snapshot', observed: true, platform: 'android',
     udid: containers.udid, appId: containers.appId, bootId: containers.bootId, ownedAppScopeOnly: true,
-    providerOriginalsPreserved: originals.every(value => value.preserved), providerOriginals: originals,
+    providerOriginalsPreserved: verifyProviderBytes ? originals.every(value => value.preserved) : null,
+    providerMetadataPreserved: originals.every(value => value.metadataPreserved), providerOriginalsRead: providerBytesRead > 0,
+    providerBytesRead, providerByteVerification: verifyProviderBytes ? 'postflight' : 'deferred-until-postflight', providerOriginals: originals,
     complete: issues.length === 0, limits, knownSources: unique.map(({ marker, ...metadata }) => metadata), stagingEvidence, priorStagingEvidence,
     counts: { entries, files, bytesRead, observationBytes: budget.bytes, ownedStagingFiles, privateAssetMatchCount: findings.length }, inventories, findings, issues,
     fileContentsRetained: false, credentialValuesPrinted: false, deviceFilesDeleted: false };

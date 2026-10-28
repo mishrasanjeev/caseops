@@ -14,7 +14,7 @@ const CODES = new Set(['SOURCE_EXPORT_CI_REQUIRED', 'SOURCE_EXPORT_OPT_IN_REQUIR
 const fail = code => { throw new Error(code); };
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const same = (left, right, fields, named = false) => fields.every(key =>
-  key === 'dev' && named && process.platform === 'win32' || left[key] === right[key]);
+  (key === 'dev' && named && process.platform === 'win32' && right.dev === 0n) || left[key] === right[key]);
 const owned = value => typeof process.getuid !== 'function' || value.uid === BigInt(process.getuid());
 const directory = value => value.isDirectory() && !value.isSymbolicLink() && owned(value);
 
@@ -92,9 +92,11 @@ export function prepareSourceExportCa({ environment = process.env, certificates 
       if (count === 0) break;
       size += count;
     }
+    const finalNamed = io.lstatSync(file, { bigint: true });
     if (size !== bytes.length || !retained.subarray(0, size).equals(bytes)
       || !same(opened, io.fstatSync(fd, { bigint: true }), FILE_FIELDS)
-      || !same(opened, io.lstatSync(file, { bigint: true }), FILE_FIELDS, true)) fail('SOURCE_EXPORT_FILE_CHANGED');
+      || !same(opened, finalNamed, FILE_FIELDS, true)
+      || !same(named, finalNamed, FILE_FIELDS)) fail('SOURCE_EXPORT_FILE_CHANGED');
     const entries = io.readdirSync(output, { withFileTypes: true });
     if (entries.length !== 1 || entries[0].name !== 'public-ca.pem' || !entries[0].isFile()
       || entries[0].isSymbolicLink() || !same(created, io.lstatSync(output, { bigint: true }), DIRECTORY_FIELDS)

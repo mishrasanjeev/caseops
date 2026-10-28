@@ -58,6 +58,38 @@ for (const change of ['none', 'growth', 'replacement', 'parent-replacement', 're
   });
 }
 
+test('build input Windows dev-zero portability never admits nonzero mismatches or independent frame drift', (t) => {
+  const folder = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-build-portability-')));
+  t.after(() => rmSync(folder, { recursive: true, force: true }));
+  const file = path.join(folder, 'public.json'); writeFileSync(file, '{"public":true}');
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  for (const change of ['zero', 'same', 'nonzero', 'inode', 'owner', 'directory', 'symlink', 'fd-drift', 'named-drift', 'darwin']) {
+    let fd, reads = 0;
+    Object.defineProperty(process, 'platform', { ...platform, value: change === 'darwin' ? 'darwin' : 'win32' });
+    const io = { openSync(...args) { fd = openSync(...args); return fd; }, closeSync,
+      fstatSync(...args) { const value = fstatSync(...args); return change === 'fd-drift' && reads > 0
+        ? new Proxy(value, { get: (target, key) => key === 'dev' ? value.dev + 1n : Reflect.get(target, key) }) : value; },
+      lstatSync(name, options) {
+        const value = lstatSync(name, options); if (name !== file) return value;
+        const device = change === 'same' || change === 'named-drift' && reads > 0 ? value.dev : change === 'nonzero' ? value.dev + 1n : 0n;
+        return new Proxy(value, { get(target, key) {
+          if (key === 'dev') return device;
+          if (key === 'ino' && change === 'inode') return value.ino + 1n;
+          if (key === 'uid' && change === 'owner') return value.uid + 1n;
+          if (key === 'isFile' && change === 'directory') return () => false;
+          if (key === 'isSymbolicLink' && change === 'symlink') return () => true;
+          return Reflect.get(target, key);
+        } });
+      }, readSync(...args) { reads++; return readSync(...args); } };
+    try {
+      if (['zero', 'same'].includes(change)) assert.equal(readBuildInput(file, 64, io).toString(), '{"public":true}');
+      else assert.throws(() => readBuildInput(file, 64, io), /BUILD_INPUT/, change);
+      if (!['zero', 'same', 'fd-drift', 'named-drift'].includes(change)) assert.equal(reads, 0, `${change}: refuse before payload`);
+      assert.throws(() => fstatSync(fd), { code: 'EBADF' });
+    } finally { Object.defineProperty(process, 'platform', platform); }
+  }
+});
+
 test('mobile dependency closure installs and audits actual Linux and Windows graphs', () => {
   const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
   const job = workflow.jobs['dependency-closure'];
@@ -89,13 +121,17 @@ test('source exports use existing loopback QA profiles after the audit without w
   const steps = workflow.jobs.source.steps;
   const audit = steps.findIndex(step => step.name === 'Enforce the unwaived high-severity dependency gate');
   const prepare = steps.findIndex(step => step.name === 'Prepare loopback-only source-export inputs');
+  const scopedTrust = Object.fromEntries(['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE',
+    'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY']
+    .map(key => [key, '${{ steps.node_trust.outputs.' + key + ' }}']));
   assert.equal(prepare > audit, true);
-  assert.deepEqual(steps[prepare].env, { CASEOPS_MOBILE_SOURCE_EXPORT: '1' });
+  assert.deepEqual(steps[prepare].env, { ...scopedTrust, CASEOPS_MOBILE_SOURCE_EXPORT: '1' });
   assert.equal(steps[prepare].run, 'node scripts/mobile/prepare-source-exports.mjs >> "$GITHUB_ENV"');
   const android = steps.findIndex(step => step.run === 'npm run export:android');
   const ios = steps.findIndex(step => step.run === 'npm run export:ios');
   assert.equal(android > prepare && ios > android, true);
   assert.deepEqual(steps[android].env, {
+    ...scopedTrust,
     CASEOPS_MOBILE_BUILD_PROFILE: 'android-local-acceptance',
     EXPO_PUBLIC_API_ORIGIN: 'https://10.0.2.2:8453',
     EXPO_PUBLIC_WEB_ORIGIN: 'https://10.0.2.2:3453',
@@ -103,6 +139,7 @@ test('source exports use existing loopback QA profiles after the audit without w
     CASEOPS_MOBILE_ANDROID_CA_SHA256: '${{ env.CASEOPS_MOBILE_SOURCE_EXPORT_CA_SHA256 }}',
   });
   assert.deepEqual(steps[ios].env, {
+    ...scopedTrust,
     CASEOPS_MOBILE_BUILD_PROFILE: 'ios-simulator-acceptance',
     EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443',
     EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443',

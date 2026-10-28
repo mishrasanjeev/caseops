@@ -170,6 +170,7 @@ def test_offline_playwright_evidence_dependencies_follow_the_resolved_shard():
         step for step in steps
         if step.get("name") == "Install offline evidence Playwright dependencies"
     )
+    trust = next(step for step in steps if step.get("id") == "node_trust")
     execution = next(step for step in steps if step.get("id") == "pytest")
     assert "python ../../scripts/pytest_shard_plan.py" in selection["run"]
     assert (
@@ -177,11 +178,21 @@ def test_offline_playwright_evidence_dependencies_follow_the_resolved_shard():
         in selection["run"]
     )
     assert "rg " not in selection["run"]
-    assert node["if"] == install["if"] == "steps.shard-files.outputs.requires_playwright == 'true'"
+    assert (
+        node["if"] == trust["if"] == install["if"]
+        == "steps.shard-files.outputs.requires_playwright == 'true'"
+    )
     assert node["uses"] == "actions/setup-node@v4"
-    assert node["with"]["node-version"] == 22
+    assert node["with"]["node-version"] == "22.14.0"
+    assert trust["uses"] == "./.github/actions/node-trust"
+    for key in (
+        "NODE_OPTIONS", "SSL_CERT_FILE", "SSL_CERT_DIR",
+        "CASEOPS_HOST_NODE_TRUST_POLICY_FILE", "CASEOPS_HOST_NODE_TRUST_POLICY_SHA256",
+    ):
+        assert install["env"][key] == "${{ steps.node_trust.outputs." + key + " }}"
     assert install["run"] == "npm ci --ignore-scripts --no-audit --no-fund"
     assert "working-directory" not in install
     assert (
-        steps.index(selection) < steps.index(node) < steps.index(install) < steps.index(execution)
+        steps.index(selection) < steps.index(node) < steps.index(trust)
+        < steps.index(install) < steps.index(execution)
     )

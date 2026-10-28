@@ -192,7 +192,7 @@ node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs
 git diff --exit-code -- apps/mobile/package.json apps/mobile/package-lock.json
 ```
 
-Current pins: Expo 58.0.20, RN 0.88.0, React 19.3.0, `@expo/ui` 58.0.24,
+Current pins: Expo 58.0.21, RN 0.88.0, React 19.3.0, `@expo/ui` 58.0.25,
 WebView 14.0.1, and public PDF.js inputs 6.4.299. iOS uses the actual SwiftUI
 adapter, not Android Compose or DOM controls. Verify committed renderer assets
 and notices; a missing closure is a stop, not permission for a CDN, fake PDF
@@ -421,20 +421,20 @@ These are pinned tooling versions, not proof of compatibility on the owner Mac.
 Use outside-repository caches and inspect an existing installation before
 changing it. Owner approves installation; no relaxed Appium security or cloud Mac.
 
-```bash
-export CASEOPS_MOBILE_TOOLING_HOME="$HOME/.cache/caseops-mobile/tooling"
-export APPIUM_HOME="$HOME/.cache/caseops-mobile/appium"
-npm install --prefix "$CASEOPS_MOBILE_TOOLING_HOME" --save-exact --no-audit --no-fund appium@3.8.0 webdriverio@10.1.0
-node "$CASEOPS_MOBILE_TOOLING_HOME/node_modules/appium/index.js" driver list --installed --json
-node "$CASEOPS_MOBILE_TOOLING_HOME/node_modules/appium/index.js" driver install xcuitest@12.20.0
-node "$CASEOPS_MOBILE_TOOLING_HOME/node_modules/appium/index.js" driver doctor xcuitest
-node "$CASEOPS_MOBILE_TOOLING_HOME/node_modules/appium/index.js" --address 127.0.0.1 --port 4723 --log-level error
-```
+The earlier bare npm/Appium commands are retired: their raw Node trust and
+retained driver homes are rejected scopes. Follow
+[scoped host tooling preparation](../../docs/mobile/HOST_TOOLING_SECURITY_2026-10-28.md)
+for the held-buffer bootstrap, typed child environment and fresh per-platform
+`{core,home}` root. Current official pins are Appium3.9.0/WebdriverIO10.1.0,
+XCUITest12.22.2 and UiAutomator2 8.7.3 on exact Node24.15.0/npm11.12.1.
 
-Skip installation when the exact matching package/driver is already installed;
-review a different version rather than overwrite it. Run the server in its own
-owner-controlled terminal. Doctor, WDA/Xcode/runtime or browser-context failure
-is a blocker, not permission to alter the driver/security/signing constraints.
+Before driver doctor or a new loopback server: reconcile all actual physical and
+locked package identities/advisories/notices, exact scoped TLS, internal Appium
+alias/registration and the complete bounded payload inventory. Keep successful
+stderr diagnostics and actual exit status. Start only the invocation-owned
+loopback listener under its reviewed process controller; neither a version string
+nor metadata sizing establishes native readiness. No relaxed Appium security or
+cloud Mac is admitted. Older installation and native evidence stays historical.
 
 ## 7. Prepare, Run And Reconcile All 23 Cases
 

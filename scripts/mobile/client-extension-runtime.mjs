@@ -6,10 +6,16 @@ import { execFileSync } from 'node:child_process';
 import { readClientPublicInput, assertClientNamedDescriptor } from './client-extension-public-input.mjs';
 
 const fields=['dev','ino','uid','gid','mode','nlink','size','mtimeNs','ctimeNs'];
+const identityFields=['dev','ino','uid','gid','mode'];
 const meta=s=>Object.fromEntries(fields.map(k=>[k,String(s[k])]));
+const rawMeta=s=>Object.freeze(Object.fromEntries(fields.map(k=>{const value=s[k];assert.equal(typeof value,'bigint');return[k,value];})));
+function assertMetadataEqual(actual,expected,code) {
+  for(const key of fields)assert.equal(actual[key],expected[key],code);
+}
 const sha=b=>createHash('sha256').update(b).digest('hex');
+const canonical=file=>(fs.realpathSync.native??fs.realpathSync)(file);
 function canonicalParents(file) {
-  assert.equal(fs.realpathSync(file),file,'CX_CANONICAL_RUNTIME_NAMESPACE_REQUIRED');const result=[];
+  assert.equal(canonical(file),file,'CX_CANONICAL_RUNTIME_NAMESPACE_REQUIRED');const result=[];
   for(let parent=path.dirname(file);;parent=path.dirname(parent)){
     const value=fs.lstatSync(parent,{bigint:true});assert.ok(value.isDirectory()&&!value.isSymbolicLink());
     result.push([parent,...['dev','ino','uid','gid','mode'].map(k=>String(value[k]))]);
@@ -24,29 +30,36 @@ export function selectedClientExecutable(name,environment=process.env) {
   }
   throw Error('CX_ACCEPTED_EXECUTABLE_NOT_ON_PATH');
 }
-function admitOpenedRegular(opened, maxBytes) {
-  assert.ok(opened.isFile() && opened.nlink === 1n && opened.size <= BigInt(maxBytes), 'CX_COMPLETE_TREE_BYTE_BOUND');
-  if (typeof process.getuid === 'function') assert.equal(opened.uid, BigInt(process.getuid()));
+function admitOpenedRegular(opened, maxBytes, frame=opened) {
+  assert.ok(opened.isFile() && frame.nlink === 1n && frame.size <= BigInt(maxBytes), 'CX_COMPLETE_TREE_BYTE_BOUND');
+  if (typeof process.getuid === 'function') assert.equal(frame.uid, BigInt(process.getuid()));
 }
-function readOpenedFile(file, fd, opened, maxBytes, check = () => {}) {
-  admitOpenedRegular(opened, maxBytes);
-  const named = fs.lstatSync(file, { bigint: true });
+function readOpenedFile(file, fd, opened, maxBytes, check = () => {}, namespace = canonicalParents, buffer = Buffer.alloc(65536), initial) {
+  const openedFrame=initial?.openedFrame??rawMeta(opened);
+  admitOpenedRegular(opened, maxBytes, openedFrame);
+  const named = initial?.named ?? fs.lstatSync(file, { bigint: true }),namedFrame=initial?.namedFrame??rawMeta(named);
   assert.ok(named.isFile() && !named.isSymbolicLink());
-  assertClientNamedDescriptor(named, opened);
-  const parents = canonicalParents(file), hash = createHash('sha256'), buffer = Buffer.alloc(65536);
-  let bytes = 0;
+  assertClientNamedDescriptor(namedFrame, openedFrame);
+  const parents = namespace(file), hash = createHash('sha256');
+  const extent=Number(openedFrame.size);let bytes = 0;
   while (bytes <= maxBytes) {
     check();
-    const n = fs.readSync(fd, buffer, 0, Math.min(buffer.length, maxBytes + 1 - bytes), null);
+    const remaining=extent-bytes,width=Math.min(buffer.length,maxBytes+1-bytes);
+    const n = fs.readSync(fd, buffer, 0, width, null);
     if (!n) break;
     bytes += n; assert.ok(bytes <= maxBytes, 'CX_COMPLETE_TREE_BYTE_BOUND'); hash.update(buffer.subarray(0,n));
+    // A short read that included the growth sentinel already observed the end
+    // of the admitted extent. Exact buffer boundaries and partial reads still
+    // require another read; the independent final FD/named frames remain below.
+    if(width>remaining && n===remaining)break;
   }
-  assert.equal(BigInt(bytes), opened.size);
-  assert.deepEqual(meta(fs.fstatSync(fd, {bigint:true})), meta(opened));
+  assert.equal(BigInt(bytes), openedFrame.size);
+  const finalParents=namespace(file);
+  if(parents!==undefined)assert.deepEqual(finalParents,parents);
+  assertMetadataEqual(fs.fstatSync(fd, {bigint:true}), openedFrame);
   const finalNamed = fs.lstatSync(file, {bigint:true});
-  assert.deepEqual(meta(finalNamed), meta(named)); assertClientNamedDescriptor(finalNamed, opened);
-  assert.deepEqual(canonicalParents(file), parents);
-  return {path:file, sha256:hash.digest('hex'), extent:bytes, metadata:meta(opened), namedMetadata:meta(named), parents};
+  assertMetadataEqual(finalNamed, namedFrame); assertClientNamedDescriptor(finalNamed, openedFrame);
+  return {path:file, sha256:hash.digest('hex'), extent:bytes, metadata:meta(openedFrame)};
 }
 export function captureClientFile(file,maxBytes=268435456) {
   assert.ok(Number.isSafeInteger(maxBytes) && maxBytes > 0 && maxBytes <= 268435456);
@@ -62,42 +75,61 @@ export function captureClientFile(file,maxBytes=268435456) {
 /** Receipt v2 requires a fresh capture; legacy one-observation receipts are not upgraded.
  * bytes remains logical payload size. chargedBytes/chargedEntries account for both
  * complete observations under one budget; internal links are never traversed. */
-export function captureClientTree(root,{maxEntries=50000,maxBytes=536870912,timeoutMs=5000}={}) {
+function captureTree(root,{maxEntries=50000,maxBytes=536870912,timeoutMs=5000}={},project=value=>value) {
   assert.ok(Number.isSafeInteger(maxEntries) && maxEntries > 0 && maxEntries <= 50000);
   assert.ok(Number.isSafeInteger(maxBytes) && maxBytes > 0 && maxBytes <= 536870912);
   assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 5000);
-  assert.equal(path.resolve(root),root); assert.equal(fs.realpathSync(root),root);
   const deadline = performance.now()+timeoutMs; let charged=0,bytes=0;
   const check=()=>assert.ok(performance.now()<deadline,'CX_COMPLETE_TREE_DEADLINE');
   const charge=()=>{check();assert.ok(charged<maxEntries,'CX_COMPLETE_TREE_ENTRY_BOUND');charged++;};
+  assert.equal(path.resolve(root),root); assert.equal(canonical(root),root);check();
+  const ancestors=canonicalParents(root),buffer=Buffer.alloc(65536);
+  const externalFence=()=>{check();assert.deepEqual(canonicalParents(root),ancestors,'CX_COMPLETE_TREE_ROOT_NAMESPACE_CHANGED');};
   function inventory() {
     const rows=[],states=new Map(),scheduled=new Set(),todo=[];
+    externalFence();
+    // Every directory inside root has one complete descriptor/named frame in
+    // this observation. Shared external ancestors are bound once per inventory
+    // and again at the final fence; they are not restatted for every file.
+    const namespace=file=>{
+      check();assert.equal(canonical(file),file,'CX_CANONICAL_RUNTIME_NAMESPACE_REQUIRED');
+      if(file!==root)for(let parent=path.dirname(file);;parent=path.dirname(parent)){
+        check();const state=states.get(parent);assert.ok(state?.kind==='directory','CX_TREE_PARENT_NOT_ADMITTED');
+        const value=fs.lstatSync(parent,{bigint:true});assert.ok(value.isDirectory()&&!value.isSymbolicLink());
+        for(const key of identityFields)assert.equal(value[key],state.named[key],'CX_TREE_PARENT_IDENTITY_CHANGED');
+        if(parent===root)break;
+      }
+      // Both live checks compare against the same immutable admitted baseline.
+      // Native canonical resolution above also binds every external component;
+      // external identity fences remain independent at each inventory boundary.
+    };
     const schedule=file=>{assert.ok(!scheduled.has(file),'CX_DUPLICATE_TREE_ENTRY');charge();scheduled.add(file);todo.push(file);};
     schedule(root);
     while(todo.length) {
-      check();const file=todo.pop(),relative=path.relative(root,file);let fd,opened,named;
+      check();const file=todo.pop(),relative=path.relative(root,file);let fd,opened,named,openedFrame,namedFrame;
       try {
         try {
           fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0));
-          opened=fs.fstatSync(fd,{bigint:true});
+          opened=fs.fstatSync(fd,{bigint:true});openedFrame=rawMeta(opened);
           if(file===root)assert.ok(opened.isDirectory(),'CX_TREE_ROOT_DIRECTORY_REQUIRED');
-          if(opened.isFile())admitOpenedRegular(opened,maxBytes);
-          named=fs.lstatSync(file,{bigint:true});
+          if(opened.isFile())admitOpenedRegular(opened,maxBytes,openedFrame);
+          named=fs.lstatSync(file,{bigint:true});namedFrame=rawMeta(named);
         } catch(error) {
           if(fd!==undefined)throw error;
-          named=fs.lstatSync(file,{bigint:true});
+          named=fs.lstatSync(file,{bigint:true});namedFrame=rawMeta(named);
           const directoryFallback=process.platform==='win32'&&named.isDirectory()&&['EISDIR','EPERM'].includes(error.code);
           if(!named.isSymbolicLink()&&!directoryFallback)throw error;
         }
         if(file===root)assert.ok(named.isDirectory()&&!named.isSymbolicLink(),'CX_TREE_ROOT_DIRECTORY_REQUIRED');
-        if(typeof process.getuid==='function')assert.equal(named.uid,BigInt(process.getuid()));
+        if(typeof process.getuid==='function')assert.equal(namedFrame.uid,BigInt(process.getuid()));
         let row;
         if(named.isSymbolicLink()) {
           const target=fs.readlinkSync(file),real=fs.realpathSync(file);
           assert.ok(real===root||real.startsWith(root+path.sep),'CX_EXTERNAL_TOOL_SYMLINK');
-          row={path:relative,kind:'symlink',metadata:meta(named),target};
+          row={path:relative,kind:'symlink',metadata:meta(namedFrame),target};
         } else if(named.isDirectory()) {
-          if(opened){assert.ok(opened.isDirectory());assertClientNamedDescriptor(named,opened);}
+          if(opened){assert.ok(opened.isDirectory());assertClientNamedDescriptor(namedFrame,openedFrame);}
+          namespace(file);
           const names=[],seen=new Set();let dir;
           try {
             dir=fs.opendirSync(file,{bufferSize:1});
@@ -110,36 +142,340 @@ export function captureClientTree(root,{maxEntries=50000,maxBytes=536870912,time
               charge();seen.add(entry.name);names.push(entry.name);
             }
           } finally { if(dir)dir.closeSync(); }
-          names.sort();row={path:relative,kind:'directory',metadata:meta(opened??named),names};
+          names.sort();row={path:relative,kind:'directory',metadata:meta(openedFrame??namedFrame),names};
           for(const name of [...names].reverse()) {
             const child=path.join(file,name);assert.ok(!scheduled.has(child),'CX_DUPLICATE_TREE_ENTRY');scheduled.add(child);todo.push(child);
           }
         } else {
           assert.ok(opened?.isFile()&&named.isFile(),'CX_REGULAR_TREE_INPUT_REQUIRED');
-          const value=readOpenedFile(file,fd,opened,maxBytes-bytes,check);bytes+=value.extent;
+          const value=readOpenedFile(file,fd,opened,maxBytes-bytes,check,namespace,buffer,{named,openedFrame,namedFrame});bytes+=value.extent;
           assert.ok(bytes<=maxBytes,'CX_COMPLETE_TREE_BYTE_BOUND');
           row={path:relative,kind:'file',metadata:value.metadata,sha256:value.sha256};
         }
-        assert.deepEqual(meta(fs.lstatSync(file,{bigint:true})),meta(named));
-        if(opened)assert.deepEqual(meta(fs.fstatSync(fd,{bigint:true})),meta(opened));
-        const parents=canonicalParents(path.dirname(file));
-        states.set(file,{named:meta(named),parents,kind:row.kind,target:row.target});rows.push(row);
+        if(row.kind!=='file') {
+          assertMetadataEqual(fs.lstatSync(file,{bigint:true}),namedFrame);
+          if(opened)assertMetadataEqual(fs.fstatSync(fd,{bigint:true}),openedFrame);
+        }
+        states.set(file,{named:namedFrame,kind:row.kind,target:row.target});rows.push(row);
       } finally { if(fd!==undefined)fs.closeSync(fd); }
     }
     assert.ok(states.has(root),'CX_COMPLETE_TREE_ROOT_REQUIRED');
+    externalFence();
     rows.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
     return {rows,states};
   }
   const first=inventory(),logicalBytes=bytes,second=inventory();assert.deepEqual(second.rows,first.rows,'CX_COMPLETE_TREE_INVENTORY_CHANGED');
   for(const [file,state]of second.states) {
-    check();assert.deepEqual(meta(fs.lstatSync(file,{bigint:true})),state.named,'CX_COMPLETE_TREE_FINAL_PATH_CHANGED');
-    assert.deepEqual(canonicalParents(path.dirname(file)),state.parents,'CX_COMPLETE_TREE_FINAL_NAMESPACE_CHANGED');
+    check();assertMetadataEqual(fs.lstatSync(file,{bigint:true}),state.named,'CX_COMPLETE_TREE_FINAL_PATH_CHANGED');
     if(state.kind==='symlink') {
-      const real=fs.realpathSync(file);assert.ok(real===root||real.startsWith(root+path.sep),'CX_EXTERNAL_TOOL_SYMLINK');
+      const real=canonical(file);assert.ok(real===root||real.startsWith(root+path.sep),'CX_EXTERNAL_TOOL_SYMLINK');
       assert.equal(fs.readlinkSync(file),state.target);
-    }
+    }else assert.equal(canonical(file),file,'CX_COMPLETE_TREE_FINAL_NAMESPACE_CHANGED');
   }
-  check();return {schemaVersion:2,observations:2,root,entries:first.rows,bytes:logicalBytes,chargedBytes:bytes,chargedEntries:charged,complete:true};
+  // Leaf namespace checks can themselves be the final observation boundary.
+  // Reconcile every unique directory once more after all leaves, so a late
+  // inserted entry cannot hide behind a root visited earlier in the loop.
+  // A parent is admitted before its children. Reconcile in reverse order so
+  // every parent, including root, is checked after its last descendant fence.
+  const finalDirectories=[];
+  for(const item of second.states)if(item[1].kind==='directory')finalDirectories.push(item);
+  for(let i=finalDirectories.length-1;i>=0;i--){const [file,state]=finalDirectories[i];
+    check();assertMetadataEqual(fs.lstatSync(file,{bigint:true}),state.named,'CX_COMPLETE_TREE_FINAL_PATH_CHANGED');
+    assert.equal(canonical(file),file,'CX_COMPLETE_TREE_FINAL_NAMESPACE_CHANGED');
+  }
+  externalFence();
+  check();const tree={schemaVersion:2,observations:2,root,entries:first.rows,bytes:logicalBytes,chargedBytes:bytes,chargedEntries:charged,complete:true};
+  const result=project(tree,check);check();return result;
+}
+
+export function captureClientTree(root,options) { return captureTree(root,options); }
+
+/** The asynchronous path changes only payload I/O scheduling. Both inventories
+ * remain complete and serial; all admission/final namespace checks are live.
+ * Every job settles and attempts close once before returning. Other definitely
+ * held leases close independently; an ambiguous close requires process cleanup. */
+async function captureTreeAsync(root,{maxEntries=50000,maxBytes=536870912,timeoutMs=5000}={},project=value=>value) {
+  assert.ok(Number.isSafeInteger(maxEntries)&&maxEntries>0&&maxEntries<=50000);
+  assert.ok(Number.isSafeInteger(maxBytes)&&maxBytes>0&&maxBytes<=536870912);
+  assert.ok(Number.isSafeInteger(timeoutMs)&&timeoutMs>0&&timeoutMs<=5000);
+  const deadline=performance.now()+timeoutMs,buffers=Array.from({length:4},()=>Buffer.alloc(65536));
+  const jobs=new Set(),waiters=new Set(),cleanupErrors=[];let charged=0,bytes=0,reserved=0,failure,result;
+  const wake=()=>{const waiting=[...waiters];waiters.clear();for(const resolve of waiting)resolve();};
+  const fail=error=>{failure??=error;wake();};
+  const check=()=>{if(failure)throw failure;assert.ok(performance.now()<deadline,'CX_COMPLETE_TREE_DEADLINE');};
+  const progress=()=>new Promise(resolve=>waiters.add(resolve));
+  const charge=()=>{check();assert.ok(charged<maxEntries,'CX_COMPLETE_TREE_ENTRY_BOUND');charged++;};
+  const timer=setTimeout(()=>fail(new Error('CX_COMPLETE_TREE_DEADLINE')),Math.max(1,deadline-performance.now()));
+  const close=fd=>{
+    try{fs.closeSync(fd);}catch(error){
+      cleanupErrors.push(error);fail(error);
+      // The numeric descriptor may already identify a caller's new lease, even
+      // for the same inode and full metadata. Only the isolated process owner
+      // can close this uncertainty; no second close or ownership probe is safe.
+    }
+  };
+  const drain=async()=>{while(jobs.size)await progress();};
+  async function readChunk(fd,buffer) {
+    let width;
+    for(;;){
+      check();const available=maxBytes+1-bytes-reserved;
+      if(available>0){width=Math.min(buffer.length,available);reserved+=width;break;}
+      assert.ok(reserved>0,'CX_COMPLETE_TREE_BYTE_BOUND');await progress();
+    }
+    return new Promise((resolve,reject)=>{
+      let completed=false;
+      const done=(error,n)=>{
+        if(completed){fail(new Error('CX_CAPTURE_READ_CALLBACK_REPEATED'));return;}completed=true;
+        reserved-=width;
+        try{
+          // Charge a reported partial count even when the same syscall fails.
+          // An error with no count cannot certify a capture; its reservation
+          // still bounds the attempted I/O and no further read is admitted.
+          const knownCount=Number.isSafeInteger(n)&&n>=0&&n<=width;
+          if(knownCount)bytes+=n;
+          if(error)throw error;
+          assert.ok(knownCount,'CX_CAPTURE_READ_COUNT_REQUIRED');
+          assert.ok(bytes<=maxBytes,'CX_COMPLETE_TREE_BYTE_BOUND');check();resolve({n,width});
+        }catch(error){fail(error);reject(error);}finally{wake();}
+      };
+      try{fs.read(fd,buffer,0,width,null,done);}catch(error){done(error,0);}
+    });
+  }
+  async function readLeaf(file,fd,opened,openedFrame,named,namedFrame,namespace,buffer) {
+    admitOpenedRegular(opened,maxBytes,openedFrame);
+    assert.ok(named.isFile()&&!named.isSymbolicLink());assertClientNamedDescriptor(namedFrame,openedFrame);
+    const parents=namespace(file),hash=createHash('sha256'),extent=Number(openedFrame.size);let count=0;
+    for(;;){
+      check();const remaining=extent-count,{n,width}=await readChunk(fd,buffer);
+      if(!n)break;
+      count+=n;hash.update(buffer.subarray(0,n));
+      if(width>remaining&&n===remaining)break;
+    }
+    assert.equal(BigInt(count),openedFrame.size);const finalParents=namespace(file);
+    if(parents!==undefined)assert.deepEqual(finalParents,parents);
+    assertMetadataEqual(fs.fstatSync(fd,{bigint:true}),openedFrame);
+    const finalNamed=fs.lstatSync(file,{bigint:true});assertMetadataEqual(finalNamed,namedFrame);assertClientNamedDescriptor(finalNamed,openedFrame);
+    return {path:path.relative(root,file),kind:'file',metadata:meta(openedFrame),sha256:hash.digest('hex')};
+  }
+  try{
+    assert.equal(path.resolve(root),root);assert.equal(canonical(root),root);check();
+    const ancestors=canonicalParents(root);
+    const externalFence=()=>{check();assert.deepEqual(canonicalParents(root),ancestors,'CX_COMPLETE_TREE_ROOT_NAMESPACE_CHANGED');};
+    async function inventory() {
+      const rows=[],states=new Map(),scheduled=new Set(),todo=[];externalFence();
+      const namespace=file=>{
+        check();assert.equal(canonical(file),file,'CX_CANONICAL_RUNTIME_NAMESPACE_REQUIRED');
+        if(file!==root)for(let parent=path.dirname(file);;parent=path.dirname(parent)){
+          check();const state=states.get(parent);assert.ok(state?.kind==='directory','CX_TREE_PARENT_NOT_ADMITTED');
+          const value=fs.lstatSync(parent,{bigint:true});assert.ok(value.isDirectory()&&!value.isSymbolicLink());
+          for(const key of identityFields)assert.equal(value[key],state.named[key],'CX_TREE_PARENT_IDENTITY_CHANGED');
+          if(parent===root)break;
+        }
+      };
+      const schedule=file=>{assert.ok(!scheduled.has(file),'CX_DUPLICATE_TREE_ENTRY');charge();scheduled.add(file);todo.push(file);};
+      const launch=(file,fd,opened,openedFrame,named,namedFrame)=>{
+        const buffer=buffers.pop();assert.ok(buffer&&jobs.size<4,'CX_CAPTURE_FOUR_FILE_JOBS_REQUIRED');const job={};jobs.add(job);
+        job.done=(async()=>{
+          try{const row=await readLeaf(file,fd,opened,openedFrame,named,namedFrame,namespace,buffer);check();states.set(file,{named:namedFrame,kind:'file'});rows.push(row);}
+          catch(error){fail(error);}
+          finally{close(fd);buffers.push(buffer);jobs.delete(job);wake();}
+        })();
+      };
+      schedule(root);
+      try{
+        while(todo.length){
+          check();while(jobs.size>=4){await progress();check();}
+          const file=todo.pop(),relative=path.relative(root,file);let fd,opened,named,openedFrame,namedFrame;
+          try{
+            try{
+              fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0));
+              opened=fs.fstatSync(fd,{bigint:true});openedFrame=rawMeta(opened);
+              if(file===root)assert.ok(opened.isDirectory(),'CX_TREE_ROOT_DIRECTORY_REQUIRED');
+              if(opened.isFile())admitOpenedRegular(opened,maxBytes,openedFrame);
+              named=fs.lstatSync(file,{bigint:true});namedFrame=rawMeta(named);
+            }catch(error){
+              if(fd!==undefined)throw error;
+              named=fs.lstatSync(file,{bigint:true});namedFrame=rawMeta(named);
+              const directoryFallback=process.platform==='win32'&&named.isDirectory()&&['EISDIR','EPERM'].includes(error.code);
+              if(!named.isSymbolicLink()&&!directoryFallback)throw error;
+            }
+            if(file===root)assert.ok(named.isDirectory()&&!named.isSymbolicLink(),'CX_TREE_ROOT_DIRECTORY_REQUIRED');
+            if(typeof process.getuid==='function')assert.equal(namedFrame.uid,BigInt(process.getuid()));
+            let row;
+            if(named.isSymbolicLink()){
+              const target=fs.readlinkSync(file),real=fs.realpathSync(file);assert.ok(real===root||real.startsWith(root+path.sep),'CX_EXTERNAL_TOOL_SYMLINK');
+              row={path:relative,kind:'symlink',metadata:meta(namedFrame),target};
+            }else if(named.isDirectory()){
+              // Together with this descriptor and the iterator, no more than
+              // four owned descriptors are live, including pending file jobs.
+              while(jobs.size>2){await progress();check();}
+              if(opened){assert.ok(opened.isDirectory());assertClientNamedDescriptor(namedFrame,openedFrame);}namespace(file);
+              const names=[],seen=new Set();let dir;
+              try{
+                dir=fs.opendirSync(file,{bufferSize:1});
+                for(;;){
+                  check();assert.ok(charged<=maxEntries,'CX_COMPLETE_TREE_ENTRY_BOUND');const entry=dir.readSync();check();if(!entry)break;
+                  assert.ok(entry.name!=='.'&&entry.name!=='..'&&!entry.name.includes(path.sep)&&!seen.has(entry.name),'CX_DUPLICATE_TREE_ENTRY');
+                  charge();seen.add(entry.name);names.push(entry.name);
+                }
+              }finally{if(dir)try{dir.closeSync();}catch(error){cleanupErrors.push(error);fail(error);}}
+              names.sort();row={path:relative,kind:'directory',metadata:meta(openedFrame??namedFrame),names};
+              for(const name of [...names].reverse()){const child=path.join(file,name);assert.ok(!scheduled.has(child),'CX_DUPLICATE_TREE_ENTRY');scheduled.add(child);todo.push(child);}
+            }else{
+              assert.ok(opened?.isFile()&&named.isFile(),'CX_REGULAR_TREE_INPUT_REQUIRED');launch(file,fd,opened,openedFrame,named,namedFrame);fd=undefined;continue;
+            }
+            assertMetadataEqual(fs.lstatSync(file,{bigint:true}),namedFrame);if(opened)assertMetadataEqual(fs.fstatSync(fd,{bigint:true}),openedFrame);
+            states.set(file,{named:namedFrame,kind:row.kind,target:row.target});rows.push(row);
+          }catch(error){fail(error);}finally{if(fd!==undefined)close(fd);}
+          check();
+        }
+        await drain();check();assert.ok(states.has(root),'CX_COMPLETE_TREE_ROOT_REQUIRED');externalFence();
+        rows.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);return {rows,states};
+      }catch(error){fail(error);await drain();throw failure;}
+    }
+    const first=await inventory(),logicalBytes=bytes,second=await inventory();assert.deepEqual(second.rows,first.rows,'CX_COMPLETE_TREE_INVENTORY_CHANGED');
+    for(const [file,state]of second.states){
+      check();assertMetadataEqual(fs.lstatSync(file,{bigint:true}),state.named,'CX_COMPLETE_TREE_FINAL_PATH_CHANGED');
+      if(state.kind==='symlink'){const real=canonical(file);assert.ok(real===root||real.startsWith(root+path.sep),'CX_EXTERNAL_TOOL_SYMLINK');assert.equal(fs.readlinkSync(file),state.target);}
+      else assert.equal(canonical(file),file,'CX_COMPLETE_TREE_FINAL_NAMESPACE_CHANGED');
+    }
+    const directories=[...second.states].filter(([,state])=>state.kind==='directory');
+    for(let i=directories.length-1;i>=0;i--){const [file,state]=directories[i];check();assertMetadataEqual(fs.lstatSync(file,{bigint:true}),state.named,'CX_COMPLETE_TREE_FINAL_PATH_CHANGED');assert.equal(canonical(file),file,'CX_COMPLETE_TREE_FINAL_NAMESPACE_CHANGED');}
+    externalFence();check();result=project({schemaVersion:2,observations:2,root,entries:first.rows,bytes:logicalBytes,chargedBytes:bytes,chargedEntries:charged,complete:true},check);check();
+  }catch(error){fail(error);}finally{await drain();clearTimeout(timer);}
+  if(failure){
+    const errors=[failure,...cleanupErrors.filter(error=>error!==failure)];
+    if(cleanupErrors.length){const error=new AggregateError(errors,failure.message,{cause:failure});error.captureCleanupUncertain=true;error.captureRequiresProcessExit=true;throw error;}
+    throw failure;
+  }
+  check();return result;
+}
+
+export function captureClientTreeAsync(root,options) { return captureTreeAsync(root,options); }
+
+// This audit-output role is distinct from the unchanged one-MiB public reader
+// and projection writer. Full manifests are never native admission inputs.
+export const CLIENT_TREE_AUDIT_MAX_BYTES=16777216;
+const TREE_ENCODING='caseops-client-tree-v2-json-lf';
+function exactKeys(value,keys) {
+  assert.ok(value&&typeof value==='object'&&!Array.isArray(value),'CX_TREE_SHAPE_REQUIRED');
+  const actual=Object.keys(value);assert.equal(actual.length,keys.length,'CX_TREE_SHAPE_REQUIRED');
+  assert.deepEqual(actual.sort(),[...keys].sort(),'CX_TREE_SHAPE_REQUIRED');
+}
+function integer(value,max) { assert.ok(Number.isSafeInteger(value)&&value>=0&&value<=max,'CX_TREE_COUNTS_REQUIRED'); }
+function text(value) { assert.ok(typeof value==='string'&&value.length<=1048576,'CX_TREE_TEXT_BOUND'); }
+function captureCounts(value,count) {
+  integer(count,25000);assert.ok(count>=1,'CX_TREE_ROOT_DIRECTORY_REQUIRED');
+  integer(value.bytes,268435456);integer(value.chargedBytes,536870912);integer(value.chargedEntries,50000);
+  assert.equal(value.chargedEntries,count*2,'CX_TREE_TWO_OBSERVATION_COUNTS_REQUIRED');
+  assert.equal(value.chargedBytes,value.bytes*2,'CX_TREE_TWO_OBSERVATION_COUNTS_REQUIRED');
+}
+
+/** Fixed field order, exact full v2 fields and one LF. This codec by itself
+ * makes no fresh-observation claim; native admission uses the capture below. */
+function treeMaterial(tree,check) {
+  check();
+  exactKeys(tree,['schemaVersion','observations','root','entries','bytes','chargedBytes','chargedEntries','complete']);
+  assert.ok(tree.schemaVersion===2&&tree.observations===2&&tree.complete===true,'CX_FRESH_TWO_OBSERVATION_TREE_REQUIRED');
+  text(tree.root);assert.ok(path.isAbsolute(tree.root)&&path.resolve(tree.root)===tree.root,'CX_NORMALIZED_RUNTIME_PATH_REQUIRED');assert.ok(Array.isArray(tree.entries));
+  captureCounts(tree,tree.entries.length);
+  const chunks=[];let extent=0,fileBytes=0,names=0,previous;
+  const emit=token=>{check();const n=Buffer.byteLength(token);assert.ok(extent+n<=CLIENT_TREE_AUDIT_MAX_BYTES,'CX_TREE_MANIFEST_OUTPUT_BOUND');chunks.push(token);extent+=n;};
+  const string=value=>{check();text(value);emit(JSON.stringify(value));};
+  emit('{"schemaVersion":2,"observations":2,"root":');string(tree.root);emit(',"entries":[');
+  for(let i=0;i<tree.entries.length;i++) {
+    check();const row=tree.entries[i];assert.ok(['directory','file','symlink'].includes(row?.kind),'CX_TREE_ROW_KIND_REQUIRED');
+    exactKeys(row,['path','kind','metadata',row.kind==='directory'?'names':row.kind==='file'?'sha256':'target']);
+    text(row.path);assert.ok(i===0?row.path===''&&row.kind==='directory':row.path!==''&&previous<row.path,'CX_TREE_ORDER_REQUIRED');previous=row.path;
+    exactKeys(row.metadata,fields);for(const key of fields)assert.ok(typeof row.metadata[key]==='string'&&/^-?(?:0|[1-9][0-9]{0,39})$/.test(row.metadata[key]),'CX_TREE_METADATA_REQUIRED');
+    if(i)emit(',');emit('{"path":');string(row.path);emit(',"kind":');string(row.kind);emit(',"metadata":{');
+    for(let k=0;k<fields.length;k++){if(k)emit(',');string(fields[k]);emit(':');string(row.metadata[fields[k]]);}emit('}');
+    if(row.kind==='directory') {
+      assert.ok(Array.isArray(row.names)&&row.names.length<tree.entries.length,'CX_TREE_DIRECTORY_COUNTS_REQUIRED');names+=row.names.length;assert.ok(names<tree.entries.length,'CX_TREE_DIRECTORY_COUNTS_REQUIRED');emit(',"names":[');
+      for(let n=0;n<row.names.length;n++){if(n)emit(',');string(row.names[n]);assert.ok(row.names[n]!==''&&(n===0||row.names[n-1]<row.names[n]),'CX_TREE_ORDER_REQUIRED');}emit(']');
+    } else if(row.kind==='file') {
+      const size=Number(row.metadata.size);integer(size,268435456);fileBytes+=size;assert.ok(fileBytes<=tree.bytes,'CX_TREE_FILE_BYTES_REQUIRED');assert.match(row.sha256,/^[a-f0-9]{64}$/);emit(',"sha256":');string(row.sha256);
+    } else { emit(',"target":');string(row.target); }
+    emit('}');
+  }
+  assert.equal(names,tree.entries.length-1,'CX_TREE_DIRECTORY_COUNTS_REQUIRED');assert.equal(fileBytes,tree.bytes,'CX_TREE_FILE_BYTES_REQUIRED');
+  emit('],"bytes":'+tree.bytes+',"chargedBytes":'+tree.chargedBytes+',"chargedEntries":'+tree.chargedEntries+',"complete":true}\n');
+  check();const bytes=Buffer.from(chunks.join(''));check();assert.equal(bytes.length,extent);
+  const commitment={schemaVersion:3,kind:'caseops-client-tree-commitment',captureSchemaVersion:2,observations:2,complete:true,root:tree.root,entryCount:tree.entries.length,bytes:tree.bytes,chargedEntries:tree.chargedEntries,chargedBytes:tree.chargedBytes,manifest:{encoding:TREE_ENCODING,sha256:sha(bytes),extent}};
+  check();return {bytes,commitment};
+}
+
+export function clientTreeManifest(tree,{timeoutMs=5000}={}) {
+  assert.ok(Number.isSafeInteger(timeoutMs)&&timeoutMs>0&&timeoutMs<=5000);
+  const end=performance.now()+timeoutMs;return treeMaterial(tree,()=>assert.ok(performance.now()<end,'CX_COMPLETE_TREE_DEADLINE'));
+}
+
+export function assertClientTreeCommitment(value,root) {
+  assert.ok(value?.schemaVersion===3&&value.kind==='caseops-client-tree-commitment'&&value.captureSchemaVersion===2&&value.observations===2&&value.complete===true,'CX_FRESH_TWO_OBSERVATION_TREE_REQUIRED');
+  exactKeys(value,['schemaVersion','kind','captureSchemaVersion','observations','complete','root','entryCount','bytes','chargedEntries','chargedBytes','manifest']);
+  text(value.root);assert.ok(path.isAbsolute(value.root)&&path.resolve(value.root)===value.root,'CX_NORMALIZED_RUNTIME_PATH_REQUIRED');if(root!==undefined)assert.equal(value.root,root,'CX_TREE_ROOT_CHANGED');captureCounts(value,value.entryCount);
+  exactKeys(value.manifest,['encoding','sha256','extent']);assert.equal(value.manifest.encoding,TREE_ENCODING);assert.match(value.manifest.sha256,/^[a-f0-9]{64}$/);integer(value.manifest.extent,CLIENT_TREE_AUDIT_MAX_BYTES);assert.ok(value.manifest.extent>0);
+  return value;
+}
+
+function capturedRuntimeFile(tree,file,check) {
+  check();assert.ok(typeof file==='string'&&path.isAbsolute(file)&&path.resolve(file)===file&&file.startsWith(tree.root+path.sep),'CX_CANONICAL_CAPTURED_RUNTIME_FILE_REQUIRED');
+  assert.equal(canonical(file),file,'CX_CANONICAL_CAPTURED_RUNTIME_FILE_REQUIRED');
+  const row=tree.entries.find(value=>value.path===path.relative(tree.root,file));
+  assert.equal(row?.kind,'file','CX_CAPTURED_RUNTIME_REGULAR_FILE_REQUIRED');
+  const named=fs.lstatSync(file,{bigint:true});assert.ok(named.isFile()&&!named.isSymbolicLink(),'CX_CAPTURED_RUNTIME_REGULAR_FILE_REQUIRED');
+  assertClientNamedDescriptor(named,Object.fromEntries(fields.map(key=>[key,BigInt(row.metadata[key])])));check();
+}
+export function captureClientTreeCommitment(root,options,requiredFile) {
+  return captureTree(root,options,(tree,check)=>{if(requiredFile!==undefined)capturedRuntimeFile(tree,requiredFile,check);return treeMaterial(tree,check).commitment;});
+}
+export function captureClientTreeCommitmentAsync(root,options,requiredFile) {
+  return captureTreeAsync(root,options,(tree,check)=>{if(requiredFile!==undefined)capturedRuntimeFile(tree,requiredFile,check);return treeMaterial(tree,check).commitment;});
+}
+
+function writeTreeAudit(file,material,check) {
+  check();
+  assert.ok(Buffer.isBuffer(material.bytes)&&material.bytes.length>0&&material.bytes.length<=CLIENT_TREE_AUDIT_MAX_BYTES,'CX_TREE_MANIFEST_OUTPUT_BOUND');
+  assertClientTreeCommitment(material.commitment);assert.equal(material.bytes.length,material.commitment.manifest.extent);assert.equal(sha(material.bytes),material.commitment.manifest.sha256);
+  assert.ok(path.isAbsolute(file)&&path.resolve(file)===file);const parent=path.dirname(file);assert.equal(canonical(parent),parent);assert.ok(parent!==material.commitment.root&&!parent.startsWith(material.commitment.root+path.sep),'CX_AUDIT_OUTPUT_OUTSIDE_RUNTIME_REQUIRED');
+  const parentFrame=()=>{assert.equal(canonical(parent),parent);const value=fs.lstatSync(parent,{bigint:true});assert.ok(value.isDirectory()&&!value.isSymbolicLink());return [[parent,...['dev','ino','uid','gid','mode'].map(k=>String(value[k]))],...canonicalParents(parent)];};
+  const parents=parentFrame();let fd;
+  try {
+    check();fd=fs.openSync(file,fs.constants.O_WRONLY|fs.constants.O_CREAT|fs.constants.O_EXCL|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0),0o600);
+    const opened=fs.fstatSync(fd,{bigint:true}),named=fs.lstatSync(file,{bigint:true});
+    assert.ok(opened.isFile()&&opened.nlink===1n&&named.isFile()&&!named.isSymbolicLink());assertClientNamedDescriptor(named,opened);
+    assert.deepEqual(parentFrame(),parents);check();
+    if(process.getuid){assert.equal(opened.uid,BigInt(process.getuid()));assert.equal(opened.mode&0o777n,0o600n);}
+    let offset=0;while(offset<material.bytes.length){check();const width=Math.min(65536,material.bytes.length-offset),n=fs.writeSync(fd,material.bytes,offset,width);assert.ok(Number.isSafeInteger(n)&&n>0&&n<=width);offset+=n;}
+    check();fs.fsyncSync(fd);check();const after=fs.fstatSync(fd,{bigint:true}),final=fs.lstatSync(file,{bigint:true});
+    assert.equal(after.size,BigInt(material.bytes.length));for(const key of ['dev','ino','uid','gid','mode','nlink'])assert.equal(after[key],opened[key]);
+    assert.ok(final.isFile()&&!final.isSymbolicLink());assertClientNamedDescriptor(final,after);assert.deepEqual(meta(fs.fstatSync(fd,{bigint:true})),meta(after));assert.deepEqual(meta(fs.lstatSync(file,{bigint:true})),meta(final));assert.deepEqual(parentFrame(),parents);assert.equal(canonical(file),file);check();
+    return {path:file,sha256:material.commitment.manifest.sha256,extent:offset,metadata:meta(after)};
+  } finally { if(fd!==undefined)fs.closeSync(fd); }
+}
+
+export function writeClientTreeAuditManifest(file,material,{timeoutMs=5000}={}) {
+  assert.ok(Number.isSafeInteger(timeoutMs)&&timeoutMs>0&&timeoutMs<=5000);const end=performance.now()+timeoutMs;
+  return writeTreeAudit(file,material,()=>assert.ok(performance.now()<end,'CX_COMPLETE_TREE_DEADLINE'));
+}
+
+export function captureClientTreeInventory(root,manifestFile,options,requiredFile) {
+  return captureTree(root,options,(tree,check)=>{if(requiredFile!==undefined)capturedRuntimeFile(tree,requiredFile,check);const material=treeMaterial(tree,check);const auditManifest=writeTreeAudit(manifestFile,material,check);return {root,tree:material.commitment,auditManifest};});
+}
+export function captureClientTreeInventoryAsync(root,manifestFile,options,requiredFile) {
+  return captureTreeAsync(root,options,(tree,check)=>{if(requiredFile!==undefined)capturedRuntimeFile(tree,requiredFile,check);const material=treeMaterial(tree,check);const auditManifest=writeTreeAudit(manifestFile,material,check);return {root,tree:material.commitment,auditManifest};});
+}
+
+export function assertClientRuntimeInventory(value,purpose,platform) {
+  assert.ok(['webdriver','appium'].includes(purpose)&&['ios','android'].includes(platform));
+  exactKeys(value,['schemaVersion','kind','complete','platform','root','tree','auditManifest',...(purpose==='appium'?['appiumEntry']:[])]);
+  assert.equal(value.schemaVersion,2);assert.equal(value.kind,'native-client-'+purpose+'-inventory');assert.equal(value.complete,true);assert.equal(value.platform,platform);assertClientTreeCommitment(value.tree,value.root);
+  exactKeys(value.auditManifest,['path','sha256','extent','metadata']);text(value.auditManifest.path);assert.ok(path.isAbsolute(value.auditManifest.path)&&path.resolve(value.auditManifest.path)===value.auditManifest.path,'CX_NORMALIZED_RUNTIME_PATH_REQUIRED');assert.equal(value.auditManifest.sha256,value.tree.manifest.sha256);assert.equal(value.auditManifest.extent,value.tree.manifest.extent);exactKeys(value.auditManifest.metadata,fields);
+  for(const key of fields)assert.ok(typeof value.auditManifest.metadata[key]==='string'&&/^-?(?:0|[1-9][0-9]{0,39})$/.test(value.auditManifest.metadata[key]),'CX_TREE_METADATA_REQUIRED');
+  assert.equal(value.auditManifest.metadata.size,String(value.auditManifest.extent));assert.equal(value.auditManifest.metadata.nlink,'1');
+  assert.ok(value.auditManifest.path!==value.root&&!value.auditManifest.path.startsWith(value.root+path.sep),'CX_AUDIT_OUTPUT_OUTSIDE_RUNTIME_REQUIRED');
+  if(purpose==='appium'){text(value.appiumEntry);assert.ok(path.isAbsolute(value.appiumEntry)&&path.resolve(value.appiumEntry)===value.appiumEntry&&value.appiumEntry.startsWith(value.root+path.sep),'CX_CANONICAL_CAPTURED_RUNTIME_FILE_REQUIRED');}
+  return value;
 }
 
 export function clientHarnessFingerprint(root) {
@@ -168,8 +504,26 @@ export function admitClientServer(q,{command=execFileSync,read=ref=>readClientPu
   assert.equal(server.appiumUrl,q.appiumUrl);const url=new URL(server.appiumUrl);
   assert.equal(url.protocol,'http:');assert.ok(['127.0.0.1','localhost','[::1]'].includes(url.hostname));assert.ok(Number(url.port)>=1024);
   assert.equal(inventory.complete,true);assert.equal(inventory.platform,q.platform);
-  assert.ok(inventory.tree?.schemaVersion===2&&inventory.tree.observations===2,'CX_FRESH_TWO_OBSERVATION_TREE_REQUIRED');
-  assert.deepEqual(captureClientTree(inventory.root),inventory.tree,'CX_COMPLETE_APPIUM_INVENTORY_CHANGED');
+  assertClientTreeCommitment(inventory.tree,inventory.root);assertClientRuntimeInventory(inventory,'appium',q.platform);
+  assert.deepEqual(captureClientTreeCommitment(inventory.root,undefined,inventory.appiumEntry),inventory.tree,'CX_COMPLETE_APPIUM_INVENTORY_CHANGED');
+  const observed=command('/bin/ps',['-p',String(server.pid),'-o','lstart=','-o','command='],{
+    encoding:'utf8',timeout:5000,maxBuffer:65536,env:{PATH:'/usr/bin:/bin',LC_ALL:'C',TZ:'UTC'}}).trim();
+  assert.equal(sha(Buffer.from(observed)),server.utcStartAndCommandSha256,'CX_OWNED_SERVER_IDENTITY_CHANGED');
+  assert.ok(observed.includes(inventory.appiumEntry),'CX_EXACT_APPIUM_ENTRY_REQUIRED');
+  const owner=command('/bin/ps',['-p',String(server.pid),'-o','uid='],{encoding:'utf8',timeout:5000,maxBuffer:65536,env:{PATH:'/usr/bin:/bin',LC_ALL:'C',TZ:'UTC'}}).trim();assert.match(owner,/^[0-9]{1,10}$/);assert.equal(Number(owner),process.getuid());assert.equal(server.uid,process.getuid());
+  const listener=command('/usr/sbin/lsof',['-nP','-a','-p',String(server.pid),'-iTCP:'+url.port,'-sTCP:LISTEN','-Fpfn'],{encoding:'utf8',timeout:5000,maxBuffer:65536,env:{PATH:'/usr/bin:/bin',LC_ALL:'C',TZ:'UTC'}});clientListenerIdentity(listener,server.pid,Number(url.port));
+  return {server,inventory};
+}
+
+export async function admitClientServerAsync(q,{command=execFileSync,read=ref=>readClientPublicInput(ref.path,{expectedSha256:ref.sha256}).value}={}) {
+  const server=read(q.appiumServerEvidence),inventory=read(q.appiumInventoryEvidence);
+  assert.equal(server.observed,true);assert.equal(server.owned,true);assert.equal(server.platform,q.platform);
+  assert.ok(Number.isSafeInteger(server.pid)&&server.pid>1);assert.equal(server.inventoryEvidence.sha256,q.appiumInventoryEvidence.sha256);
+  assert.equal(server.appiumUrl,q.appiumUrl);const url=new URL(server.appiumUrl);
+  assert.equal(url.protocol,'http:');assert.ok(['127.0.0.1','localhost','[::1]'].includes(url.hostname));assert.ok(Number(url.port)>=1024);
+  assert.equal(inventory.complete,true);assert.equal(inventory.platform,q.platform);
+  assertClientTreeCommitment(inventory.tree,inventory.root);assertClientRuntimeInventory(inventory,'appium',q.platform);
+  assert.deepEqual(await captureClientTreeCommitmentAsync(inventory.root,undefined,inventory.appiumEntry),inventory.tree,'CX_COMPLETE_APPIUM_INVENTORY_CHANGED');
   const observed=command('/bin/ps',['-p',String(server.pid),'-o','lstart=','-o','command='],{
     encoding:'utf8',timeout:5000,maxBuffer:65536,env:{PATH:'/usr/bin:/bin',LC_ALL:'C',TZ:'UTC'}}).trim();
   assert.equal(sha(Buffer.from(observed)),server.utcStartAndCommandSha256,'CX_OWNED_SERVER_IDENTITY_CHANGED');

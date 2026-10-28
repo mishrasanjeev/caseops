@@ -289,7 +289,7 @@ historical migration/index controls.
 ## October 21 Cross-Dialect Renewal Responses
 
 C24 is NO-GO after nine Pillow findings. The subsequent installed-set audit
-also identifies vulnerable uv outside the app lock. Require Pillow13, uv0.13.4
+also identifies vulnerable uv outside the app lock. Require Pillow13, uv0.13.5
 and an auditable FastEmbed metadata-only compatibility rebuild with ordinary
 installed-dependency validation, not an incompatible overridden environment.
 Debian and pip trust selection must exclude G3 while preserving other roots,
@@ -3625,3 +3625,7 @@ and guide pack/recommendation statements. Twenty-five source cases pass after
 seven reproduced claim failures. The visible browser checks include nondefault
 drafting/FAQ states. Exact-release production proof and CI image-pull recovery
 remain required; no public registry or IAM change is authorized by these tests.
+
+October28 installer follow-up: uv0.13.4 already has clean120 roots, but its
+separate0.103.14 verifier is affected. The current uv0.13.5 pin uses0.103.16
+without replacing Requests/HTTPX roots; Linux image acceptance stays pending.

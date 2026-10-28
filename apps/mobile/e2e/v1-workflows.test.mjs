@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -258,6 +259,33 @@ test('publicfixtureJSON is descriptor verified and malformed input has a fixed e
   fs.writeFileSync(file, JSON.stringify({ synthetic: true })); const reference = { path: file, sha256: v1Hash(fs.readFileSync(file)) }; assert.deepEqual(readV1Reference(reference), { synthetic: true });
   fs.writeFileSync(file, '{SYNTHETIC_INVALID_JSON'); const bad = { path: file, sha256: v1Hash(fs.readFileSync(file)) }; assert.throws(() => readV1Reference(bad), /^Error: V1_EVIDENCE_JSON_REQUIRED$/);
   assert.throws(() => readV1Reference(reference), /V1_EVIDENCE_HASH_MISMATCH/);
+});
+test('V1 public evidence dev-zero portability refuses nonzero pairs before bytes and retains both final frames', t => {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'v1-public-portability-')));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'public.json'), data = Buffer.from('{"synthetic":true}'); fs.writeFileSync(file, data);
+  const reference = { path: file, sha256: v1Hash(data) }, platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const original = Object.fromEntries(['openSync', 'fstatSync', 'lstatSync', 'readSync'].map(key => [key, fs[key]]));
+  for (const change of ['zero', 'same', 'nonzero', 'inode', 'owner', 'fd-dev', 'named-dev', 'named-owner', 'darwin']) {
+    let fd, reads = 0;
+    Object.defineProperty(process, 'platform', { ...platform, value: change === 'darwin' ? 'darwin' : 'win32' });
+    fs.openSync = (...args) => { fd = original.openSync(...args); return fd; };
+    fs.fstatSync = (...args) => { const stat = original.fstatSync(...args); return change === 'fd-dev' && reads > 0
+      ? new Proxy(stat, { get: (target, key) => key === 'dev' ? stat.dev + 1n : Reflect.get(target, key) }) : stat; };
+    fs.lstatSync = (name, options) => {
+      const stat = original.lstatSync(name, options); if (name !== file) return stat;
+      const patch = { dev: change === 'same' || change === 'named-dev' && reads > 0 ? stat.dev : change === 'nonzero' ? stat.dev + 1n : 0n,
+        ...(change === 'inode' ? { ino: stat.ino + 1n } : {}), ...((change === 'owner' || change === 'named-owner' && reads > 0) ? { uid: stat.uid + 1n } : {}) };
+      return new Proxy(stat, { get: (target, key) => Object.hasOwn(patch, key) ? patch[key] : Reflect.get(target, key) });
+    };
+    fs.readSync = (...args) => { reads++; return original.readSync(...args); }; syncBuiltinESMExports();
+    try {
+      if (['zero', 'same'].includes(change)) assert.deepEqual(readV1Reference(reference), { synthetic: true });
+      else assert.throws(() => readV1Reference(reference), /V1_EVIDENCE_(?:IDENTITY_CHANGED|CHANGED_OR_OVERBOUND)/, change);
+      if (['nonzero', 'inode', 'owner', 'darwin'].includes(change)) assert.equal(reads, 0, change);
+      assert.throws(() => original.fstatSync(fd), { code: 'EBADF' });
+    } finally { Object.assign(fs, original); syncBuiltinESMExports(); Object.defineProperty(process, 'platform', platform); }
+  }
 });
 test('new separate inventory does not overwrite the dated23core or17Files inventory sources', () => {
   const root = fileURLToPath(new URL('../../../', import.meta.url));
