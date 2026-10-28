@@ -14,11 +14,14 @@ const { readHashed, readJson, validateStoreBuild, readStoreBuildSettings, reserv
 const { readNativeLinkConfig } = require('../../apps/web/lib/native-link-config.cjs');
 const repo = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const digest = value => createHash('sha256').update(value).digest('hex');
-function appConfig(extra = {}) {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(CASEOPS_|EXPO_PUBLIC_|NODE_ENV$|__EXPO_CONFIG_MODE$|EX_UPDATES_NATIVE_DEBUG$|SKIP_BUNDLING$)/.test(key)));
-  // Resolve through this checkout's already installed mobile graph.
-  delete env.NODE_PATH;
-  const script = "import {createRequire} from 'node:module'; import {pathToFileURL} from 'node:url'; const f=process.cwd()+'/apps/mobile/app.config.ts'; globalThis.require=createRequire(f); const {default:c}=await import(pathToFileURL(f)); console.log(JSON.stringify({version:c.version,ios:c.ios,android:c.android,extra:c.extra}));";
+function appConfig(extra = {}, inherited = process.env) {
+  // This is offline config evaluation, not a Node TLS-policy child. Inheriting
+  // only part of CI's scoped preload/policy tuple cannot form a valid recipe.
+  // Retain OS lookup/temp and the source gate's coverage output, never preload,
+  // trust, proxy, owner-home or product configuration from the parent.
+  const env = Object.fromEntries(['PATH', 'SystemRoot', 'WINDIR', 'TMP', 'TEMP', 'TMPDIR', 'NODE_V8_COVERAGE']
+    .filter(key => typeof inherited[key] === 'string').map(key => [key, inherited[key]]));
+  const script = "import {createRequire,syncBuiltinESMExports} from 'node:module'; import {pathToFileURL} from 'node:url'; import http from 'node:http'; import https from 'node:https'; import net from 'node:net'; import tls from 'node:tls'; const refuse=()=>{throw Error('OFFLINE_CONFIG_NETWORK_FORBIDDEN')}; globalThis.fetch=refuse; for(const m of [http,https]) { m.request=refuse; m.get=refuse; } net.Socket.prototype.connect=refuse; tls.connect=refuse; syncBuiltinESMExports(); const f=process.cwd()+'/apps/mobile/app.config.ts'; globalThis.require=createRequire(f); const {default:c}=await import(pathToFileURL(f)); console.log(JSON.stringify({version:c.version,ios:c.ios,android:c.android,extra:c.extra}));";
   return spawnSync(process.execPath, ['--experimental-strip-types', '--no-experimental-transform-types', '--input-type=module', '-e', script], { cwd: repo, env: { ...env, ...extra }, encoding: 'utf8', timeout: 5000 });
 }
 function fixture(t) {
@@ -183,6 +186,20 @@ test('actual production TypeScript config refuses absent numbering and projects 
   assert.equal(projected.version, '1.0.0'); assert.equal(projected.ios.buildNumber, '8'); assert.equal(projected.android.versionCode, 10);
   assert.equal(projected.ios.deploymentTarget, '17.4'); assert.equal(projected.extra.nativeLinkPolicy.mode, 'https');
   assert.deepEqual(projected.extra.privacyPolicy, { url: 'https://auth.contract-fixture.org/privacy-policy', version: 'synthetic-policy-v1', sha256: privacy.sha256 });
+});
+test('offline app config evaluation ignores an inherited CI preload and every incomplete trust-policy field', () => {
+  const preload = 'data:text/javascript,' + encodeURIComponent("throw Error('UNADMITTED_CI_PRELOAD_EXECUTED')");
+  const inherited = { ...process.env, NODE_OPTIONS: '--use-openssl-ca --import=' + preload,
+    CASEOPS_HOST_NODE_TRUST_POLICY_FILE: '/unadmitted/policy.json', CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: 'a'.repeat(64),
+    SSL_CERT_FILE: '/unadmitted/roots.pem', SSL_CERT_DIR: '/unadmitted/empty', NODE_EXTRA_CA_CERTS: '/unadmitted/extra.pem',
+    OPENSSL_CONF: '/unadmitted/openssl.cnf', HTTPS_PROXY: 'http://127.0.0.1:1', NODE_PATH: '/unadmitted/modules',
+    NODE_ENV: 'production', CASEOPS_STORE_BUILD_FILE: '/unadmitted/build.json' };
+  const actual = appConfig({}, inherited);
+  assert.equal(actual.status, 0, actual.stderr);
+  assert.doesNotMatch(actual.stdout + actual.stderr, /UNADMITTED_CI_PRELOAD_EXECUTED|HOST_TRUST_BOOTSTRAP_REFUSED/);
+  const config = JSON.parse(actual.stdout);
+  assert.equal(config.version, '0.1.0'); assert.equal(config.ios.bundleIdentifier, 'ai.caseops.mobile.dev');
+  assert.equal(config.ios.buildNumber, undefined); assert.equal(config.android.versionCode, undefined);
 });
 test('growth after initial fstat cannot cause more than limit-plus-one descriptor bytes to be consumed', t => {
   const f = fixture(t); const ref = f.save('growing.json', '{}');

@@ -1907,7 +1907,8 @@ def test_all_suite_arguments_filters_and_order_are_unchanged_from_release_base()
                 "NPM_CONFIG_USERCONFIG", "NPM_CONFIG_GLOBALCONFIG",
                 "NPM_CONFIG_STRICT_SSL", "NPM_CONFIG_REGISTRY",
             )
-            assert {key: original_env.pop(key) for key in node_keys} == {
+            node_environment = {key: original_env.pop(key) for key in node_keys}
+            assert node_environment == {
                 key: "${{ steps.node_trust.outputs." + key + " }}" for key in node_keys
             }
             bindings.append(

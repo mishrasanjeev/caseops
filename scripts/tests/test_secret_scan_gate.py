@@ -138,6 +138,45 @@ class GitFixture(unittest.TestCase):
 class ReviewedPublicVectorTests(GitFixture):
     """Public-vector review remains bound to one exact immutable origin span."""
 
+    def test_repository_public_certifi_digest_review_binds_current_immutable_origin(self):
+        path = "scripts/mobile/host-platform-trust.py"
+        origins = {
+            "751b47fa9369d276c8dd280030fbc88b2837cf9d": 80,
+            "df4b299a660e9ab00655054f7f4caf1b28a1f340": 81,
+        }
+        policy = (ROOT / ".gitleaksignore").read_text().splitlines()
+        for origin, line in origins.items():
+            self.assertEqual(policy.count(f"{origin}:{path}:generic-api-key:{line}"), 1)
+        historical = "2fe2d37cc8623fe91d9e463244a2880469939612"
+        self.assertEqual(policy.count(f"{historical}:{path}:generic-api-key:35"), 1)
+        self.assertNotIn(f"{path}:generic-api-key:81", policy)
+        self.assertNotIn(f"{path}:generic-api-key:35", policy)
+        source = scan.git(ROOT, "show", "HEAD:" + path)
+        expected = "0c3ed116e3a6d25ea71ba6336dabfa79c49fcdea1bc629a17ec6ce0b09637fe4"
+        candidates = [
+            (number, span)
+            for number, span in enumerate(source.splitlines(keepends=True), 1)
+            if hashlib.sha256(span).hexdigest() == expected
+        ]
+        self.assertEqual(len(candidates), 1)
+        current_line, span = candidates[0]
+        blame = scan.git(
+            ROOT, "blame", "--line-porcelain", "-L", f"{current_line},{current_line}",
+            "HEAD", "--", path,
+        ).splitlines()
+        origin, original, current = blame[0].decode().split()[:3]
+        self.assertIn(origin, origins)
+        self.assertEqual((int(original), int(current)), (origins[origin], current_line))
+        retained = scan.git(ROOT, "show", f"{origin}:{path}").splitlines(
+            keepends=True
+        )[origins[origin] - 1]
+        self.assertEqual(hashlib.sha256(retained).hexdigest(), hashlib.sha256(span).hexdigest())
+        ancestor = REAL_RUN(
+            ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", origin, "HEAD"],
+            capture_output=True, timeout=30, check=False,
+        )
+        self.assertEqual(ancestor.returncode, 0)
+
     def test_repository_public_apk_report_review_requires_all_six_exact_origins(self):
         origin = "e8c3049b7150219073718689d7106d4a82df7c5a"
         digests = (

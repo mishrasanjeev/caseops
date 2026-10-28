@@ -105,3 +105,39 @@ nested body-parser/shell-quote copies and official provenance/notices; actual
 Appium/driver CLI registration; owned loopback health with zero sessions;
 current trust policy; full runtime payload capture; and actual source/binary,
 backend, device and provider/auth bindings. None is supplied by this document.
+# Exact public checksum review after the hosted scan
+
+The hosted tree scan of `df4b299a660e9ab00655054f7f4caf1b28a1f340`
+reported the public certifi bundle checksum at line81 of
+`scripts/mobile/host-platform-trust.py`. Its35 native findings and34 previously
+accepted origins remain retained. The history boundary was not reached.
+
+An independent marked HTTPS read of the official
+[certifi2026.10.19 PyPI metadata](https://pypi.org/pypi/certifi/2026.10.19/json)
+and its exact `certifi-2026.10.19-py3-none-any.whl` verifies these public inputs:
+
+- Wheel:136,464 bytes, SHA256
+  `42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b`.
+- The wheel's `certifi/cacert.pem` exactly matches the installed120-anchor bundle:
+  `50f79f98dac192b20dbf73f35c56f0b0c557ab267ff5199d1117cc1180b70785`.
+- The complete reviewed source line has SHA256
+  `0c3ed116e3a6d25ea71ba6336dabfa79c49fcdea1bc629a17ec6ce0b09637fe4`.
+
+The HTTPS verifier used only the descriptor-held120-anchor bundle, hostname
+and certificate verification, no redirects or retries, and the exact no-paid
+marker on both requests. No trust store changed. The policy adds only the two
+independently verified immutable local/published origin fingerprints. A
+repository regression checks the current exact span and ancestral blame;
+changed spans, later origins and unrelated findings remain blocking. This
+review is not a successful replacement tree/history scan or a release waiver.
+
+The first replacement's complete74 canaries and current-tree scan passed,
+but its82-commit local history scan found an earlier representation of the same
+official bundle digest. That separate failed history evidence is retained.
+The exact additional origin is `2fe2d37cc8623fe91d9e463244a2880469939612`,
+line35, with complete-line SHA256
+`99aa023b175ad129caccb5840eb31efb84788a510b30f615901ed50c8a371b8c`.
+Its immutable source contains the independently verified public bundle hash.
+Only this separately reviewed historical fingerprint is added; the successful
+tree result does not substitute for a complete replacement history scan.
+

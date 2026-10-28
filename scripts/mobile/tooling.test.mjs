@@ -27,7 +27,7 @@ import { configuredSessionDeleteAdmission, MAX_SESSION_ADMISSION_EVENTS, proveCu
 import { browserStep } from '../../apps/mobile/e2e/browser-progress.mjs';
 import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
-import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, DENIED_HOST_CA } from './host-node-trust.mjs';
+import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, DENIED_HOST_CA } from './host-node-trust.mjs';
 import { localCertificates } from './host-node-trust-fixture.mjs';
 
 const installedHash = 'a'.repeat(64);
@@ -2904,8 +2904,8 @@ test('unknown and modified import URIs refuse before preload or application entr
 });
 
 
-import { createRequire as ciTrustCreateRequire } from 'node:module';
-import { appendCITrustOutputs, prepareCIHostNodeTrust } from './host-node-trust-ci.mjs';
+import { createRequire as ciTrustCreateRequire, syncBuiltinESMExports } from 'node:module';
+import { appendCITrustOutputs, prepareCIHostNodeTrust, ciTrustFailureCode } from './host-node-trust-ci.mjs';
 const ciTrustYaml = ciTrustCreateRequire(new URL('../../apps/mobile/package.json', import.meta.url))('js-yaml');
 const ciTrustKeys = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY'];
 const ciTrustValues = Object.fromEntries(ciTrustKeys.map(key => [key, 'public-fixture-' + key]));
@@ -3030,4 +3030,106 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
   assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
   for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');
   assert.equal(action.runs.steps[0].id, 'prepare');
+});
+
+
+test('actual Next page-data Worker preserves inherited default HTTPS and fetch verification', async () => {
+  const root = trustRoot();
+  try {
+    const { reference, prepared } = qaTrust(root);
+    for (const [name, expected] of [['trusted', 'local-only'], ['untrusted', 'DEPTH_ZERO_SELF_SIGNED_CERT'], ['wrongHost', 'ERR_TLS_CERT_ALTNAME_INVALID']]) {
+      await localTls(materials()[name], async (origin, requests) => {
+        const result = await trustChild([trustFixture, 'next-worker', origin], { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_TEST_FIXTURE_CA: JSON.stringify(reference) });
+        assert.equal(result.code, 0, result.stderr); const report = JSON.parse(result.stdout);
+        assert.equal(report.defaultEnumerationVerified, true); assert.equal(report.expectedDefaultCount, 145);
+        assert.deepEqual(report.output, [expected, expected]); assert.equal(requests(), name === 'trusted' ? 2 : 0);
+      });
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('reviewed source-map inheritance keeps every extra preload and proxy override closed', async () => {
+  const root = trustRoot();
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
+    const base = { ...neutralTrustEnv(), ...prepared.environment }, allowed = base.NODE_OPTIONS + ' --enable-source-maps';
+    const positive = await trustChild([trustHelper, 'verify'], { ...base, NODE_OPTIONS: allowed });
+    assert.equal(positive.code, 0, positive.stderr); assert.equal(JSON.parse(positive.stdout).expectedDefaultCount, 144);
+    for (const options of [allowed + ' --enable-source-maps', allowed + ' --import=data:text/javascript,console.log(%22UNADMITTED_PRELOAD_EXECUTED%22)', allowed + ' --use-env-proxy', allowed + ' --use-openssl-ca', '--enable-source-maps ' + base.NODE_OPTIONS]) {
+      const result = await trustChild([trustHelper, 'verify'], { ...base, NODE_OPTIONS: options });
+      assert.notEqual(result.code, 0); assert.doesNotMatch(result.stdout, /UNADMITTED_PRELOAD_EXECUTED/);
+    }
+    for (const key of ['NODE_USE_ENV_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY']) {
+      const result = await trustChild([trustHelper, 'verify'], { ...base, NODE_OPTIONS: allowed, [key]: 'unreviewed' });
+      assert.notEqual(result.code, 0); assert.match(result.stderr, /HOST_TRUST_OVERRIDE_REFUSED/);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Windows ACL proof keeps current-owner and foreign-writer failures distinct and strict', () => {
+  assert.deepEqual(reviewHostNodeWindowsAclProof({ ownerMatches: true, writeScopeSafe: true }), { ownerMatches: true, writeScopeSafe: true });
+  assert.throws(() => reviewHostNodeWindowsAclProof({ ownerMatches: false, writeScopeSafe: true }), /HOST_TRUST_CURRENT_OWNER_REQUIRED/);
+  for (const value of [false, 'true', 1, null]) assert.throws(() => reviewHostNodeWindowsAclProof({ ownerMatches: true, writeScopeSafe: value }), /HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED/);
+  assert.throws(() => reviewHostNodeWindowsAclProof({ ownerMatches: true, writeScopeSafe: true, arbitrary: true }), /HOST_TRUST_SCHEMA/);
+});
+
+test('all Windows owner queries refuse an arbitrary token-default group with implied DACL authority', () => {
+  const expected = "($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')))";
+  for (const name of ['host-node-trust.mjs', 'host-node-trust-start.mjs', 'host-node-trust-ci.mjs']) {
+    const source = fs.readFileSync(new URL(name, import.meta.url), 'utf8');
+    const literal = source.match(/const code = ("[^\n]+");/);
+    assert.ok(literal, name); const query = JSON.parse(literal[1]);
+    const condition = query.match(/(?:\$ok=|ownerMatches=)(\([^;]+\));/);
+    assert.ok(condition, name); assert.equal(condition[1], expected, name);
+    // These literal identities are independent of the OS query. This source
+    // contract does not claim that Windows ACLs were exercised on another OS.
+    const trustedDefaultOwners = [...condition[1].matchAll(/'(S-[0-9-]+)'/g)].map(row => row[1]);
+    assert.deepEqual(trustedDefaultOwners, ['S-1-5-18', 'S-1-5-32-544']);
+    for (const [user, tokenOwner, owner, permitted] of [
+      ['S-1-5-21-1000', 'S-1-5-21-9999', 'S-1-5-21-9999', false],
+      ['S-1-5-21-1000', 'S-1-5-32-544', 'S-1-5-21-9999', false],
+      ['S-1-5-21-1000', 'S-1-5-21-9999', 'S-1-5-21-1000', true],
+      ['S-1-5-21-1000', 'S-1-5-32-544', 'S-1-5-32-544', true],
+      ['S-1-5-21-1000', 'S-1-5-18', 'S-1-5-18', true],
+      ['S-1-5-21-1000', 'S-1-5-21-9999', 'S-1-5-32-544', false],
+    ]) assert.equal(owner === user || owner === tokenOwner && trustedDefaultOwners.includes(owner), permitted, name);
+  }
+});
+
+test('Windows ownership refusal precedes descriptor bytes and closes every opened source', () => {
+  // This is an actual filesystem/constructor composition with injected Windows
+  // OS proof responses. It is not an actual Windows ACL acceptance claim on Mac.
+  const require = ciTrustCreateRequire(import.meta.url), cp = require('node:child_process');
+  const originalSpawn = cp.spawnSync, originalUid = Object.getOwnPropertyDescriptor(process, 'getuid'), originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const originalSystemRoot = process.env.SystemRoot, originalOpen = fs.openSync, originalRead = fs.readSync;
+  const root = trustRoot();
+  try {
+    process.env.SystemRoot = root; Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+    for (const [code, result] of [
+      ['HOST_TRUST_CURRENT_OWNER_REQUIRED', { status: 0, stdout: JSON.stringify({ ownerMatches: false, writeScopeSafe: true }) }],
+      ['HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED', { status: 0, stdout: JSON.stringify({ ownerMatches: true, writeScopeSafe: false }) }],
+      ['HOST_TRUST_WINDOWS_ACL_PROTOCOL', { status: 0, stdout: 'malformed' }],
+      ['HOST_TRUST_WINDOWS_ACL_TIMEOUT', { status: null, error: { code: 'ETIMEDOUT' }, stdout: '' }],
+    ]) {
+      const fds = []; let reads = 0, commands = 0;
+      fs.openSync = (...args) => { const fd = originalOpen(...args); fds.push(fd); return fd; };
+      fs.readSync = (...args) => { reads++; return originalRead(...args); };
+      cp.spawnSync = (executable, args, options) => { commands++; assert.equal(executable, path.join(root, 'System32/WindowsPowerShell/v1.0/powershell.exe')); assert.match(args.at(-1), /\$t=\$i\.Owner\.Value/); assert.equal(options.timeout, 5000); return result; };
+      syncBuiltinESMExports();
+      assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'never-created'), environment: neutralTrustEnv() }), new RegExp(code));
+      assert.equal(commands, 1); assert.equal(reads, 0); assert.ok(fds.length > 0); for (const fd of fds) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+    }
+  } finally {
+    fs.openSync = originalOpen; fs.readSync = originalRead; cp.spawnSync = originalSpawn; syncBuiltinESMExports();
+    Object.defineProperty(process, 'getuid', originalUid); Object.defineProperty(process, 'platform', originalPlatform);
+    if (originalSystemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = originalSystemRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('CI preparation diagnostics reflect only reviewed fixed labels and no raw error data', () => {
+  assert.equal(ciTrustFailureCode(new Error('HOST_TRUST_WINDOWS_ACL_TIMEOUT')), 'HOST_TRUST_WINDOWS_ACL_TIMEOUT');
+  assert.equal(ciTrustFailureCode(new Error('CI_TRUST_COMMAND_OWNER\nPRIVATE_OWNER_VALUE')), 'CI_TRUST_COMMAND_OWNER');
+  for (const value of [new Error('PRIVATE_PASSWORD'), new Error('https://private.invalid/owner'), { message: { private: true } }, null]) assert.equal(ciTrustFailureCode(value), 'CI_TRUST_PREPARATION_REFUSED');
 });

@@ -32,7 +32,7 @@ export function localCertificates() {
   return { trusted, untrusted: material('untrusted'), wrongHost: material('wrong-host', trusted, true) };
 }
 
-async function probe(raw, transportOnly = false) {
+export async function probe(raw, transportOnly = false) {
   const target = new URL(raw);
   if (target.protocol !== 'https:' || target.hostname !== '127.0.0.1' || !target.port || target.username || target.password || target.pathname !== '/' || raw.includes('?') || raw.includes('#')) throw new Error('HOST_TLS_FIXTURE_LOOPBACK_ONLY');
   const policyRef = { path: process.env[HOST_NODE_TRUST_ENV.file], sha256: process.env[HOST_NODE_TRUST_ENV.sha256] };
@@ -62,6 +62,21 @@ async function descendants(target) {
   try { const [exit, signal] = await once(child, 'close'); if (exit !== 0 || signal || stderr) throw new Error('HOST_TLS_FIXTURE_CHILD_REFUSED'); return { direct, worker: workerReport, subprocess: JSON.parse(stdout) }; }
   finally { clearTimeout(childTimer); }
 }
+async function nextWorker(target) {
+  const require = createRequire(new URL('../../package.json', import.meta.url));
+  if (require('next/package.json').version !== '16.4.2') throw new Error('HOST_TLS_FIXTURE_NEXT_VERSION');
+  const { Worker: NextWorker } = require('next/dist/lib/worker');
+  const worker = new NextWorker(fileURLToPath(new URL('./host-node-trust-next-worker.cjs', import.meta.url)), {
+    numWorkers: 1, enableSourceMaps: true, isolatedMemory: true, exposedMethods: ['probe'],
+    enableWorkerThreads: false,
+  });
+  let timer;
+  try {
+    return await Promise.race([worker.probe(target), new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('HOST_TLS_FIXTURE_NEXT_DEADLINE')), 8000);
+    })]);
+  } finally { clearTimeout(timer); await worker.end(); }
+}
 if (!isMainThread) {
   try { parentPort.postMessage(await probe(workerData.target)); }
   catch { parentPort.postMessage({ refused: true }); process.exitCode = 1; }
@@ -74,7 +89,7 @@ if (!isMainThread) {
 } else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const mode = process.argv[2];
-    if (!['probe', 'descendants', 'transport-only'].includes(mode)) throw new Error('HOST_TLS_FIXTURE_MODE');
-    console.log(JSON.stringify(mode === 'descendants' ? await descendants(process.argv[3]) : await probe(process.argv[3], mode === 'transport-only')));
+    if (!['probe', 'descendants', 'transport-only', 'next-worker'].includes(mode)) throw new Error('HOST_TLS_FIXTURE_MODE');
+    console.log(JSON.stringify(mode === 'next-worker' ? await nextWorker(process.argv[3]) : mode === 'descendants' ? await descendants(process.argv[3]) : await probe(process.argv[3], mode === 'transport-only')));
   } catch (error) { console.error(/^HOST_[A-Z_]+$/.test(error.message) ? error.message : 'HOST_TLS_FIXTURE_REFUSED'); process.exitCode = 1; }
 }

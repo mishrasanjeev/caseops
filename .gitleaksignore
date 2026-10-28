@@ -197,3 +197,16 @@ e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acce
 # changed spans, new origins and new rules remain blocking.
 f43c10e3eed509ea2240f5add52e09aea5c4857a:apps/mobile/e2e/v1-workflows-fixture.mjs:generic-api-key:225
 a52e43caa57d1253271f581b347841e855112a29:apps/mobile/e2e/v1-workflows-fixture.mjs:generic-api-key:225
+
+# 2026-10-28: exact public certifi2026.10.19 cacert.pem SHA256, independently
+# byte-matched to its official PyPI wheel. Complete immutable line SHA256:
+# 0c3ed116e3a6d25ea71ba6336dabfa79c49fcdea1bc629a17ec6ce0b09637fe4
+# Local integration and separately published source have distinct origins.
+# No path/rule/value-wide exclusion; future origins and changed bytes still fail.
+751b47fa9369d276c8dd280030fbc88b2837cf9d:scripts/mobile/host-platform-trust.py:generic-api-key:80
+df4b299a660e9ab00655054f7f4caf1b28a1f340:scripts/mobile/host-platform-trust.py:generic-api-key:81
+# The first local prototype encoded the same independently verified public
+# bundle digest in a different complete line (SHA25699aa023b...71b8c).
+# Its exact historical span is reviewed separately; current-tree proof above
+# does not confer a history waiver.
+2fe2d37cc8623fe91d9e463244a2880469939612:scripts/mobile/host-platform-trust.py:generic-api-key:35

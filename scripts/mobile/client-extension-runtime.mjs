@@ -241,18 +241,31 @@ async function captureTreeAsync(root,{maxEntries=50000,maxBytes=536870912,timeou
       try{fs.read(fd,buffer,0,width,null,done);}catch(error){done(error,0);}
     });
   }
+  const canonicalAsync=file=>new Promise((resolve,reject)=>{
+    let completed=false;
+    const done=(error,value)=>{
+      if(completed){fail(new Error('CX_CAPTURE_CANONICAL_CALLBACK_REPEATED'));return;}completed=true;
+      try{if(error)throw error;check();assert.equal(typeof value,'string');resolve(value);}
+      catch(error){fail(error);reject(error);}
+    };
+    try{check();(fs.realpath.native??fs.realpath)(file,done);}catch(error){done(error);}
+  });
   async function readLeaf(file,fd,opened,openedFrame,named,namedFrame,namespace,buffer) {
     admitOpenedRegular(opened,maxBytes,openedFrame);
     assert.ok(named.isFile()&&!named.isSymbolicLink());assertClientNamedDescriptor(namedFrame,openedFrame);
-    const parents=namespace(file),hash=createHash('sha256'),extent=Number(openedFrame.size);let count=0;
+    await namespace(file);
+    // A canonical callback can yield after descriptor admission. Rebind BOTH
+    // independent frames before allowing any payload byte through that gap.
+    assertMetadataEqual(fs.fstatSync(fd,{bigint:true}),openedFrame);
+    const admittedNamed=fs.lstatSync(file,{bigint:true});assertMetadataEqual(admittedNamed,namedFrame);assertClientNamedDescriptor(admittedNamed,openedFrame);
+    const hash=createHash('sha256'),extent=Number(openedFrame.size);let count=0;
     for(;;){
       check();const remaining=extent-count,{n,width}=await readChunk(fd,buffer);
       if(!n)break;
       count+=n;hash.update(buffer.subarray(0,n));
       if(width>remaining&&n===remaining)break;
     }
-    assert.equal(BigInt(count),openedFrame.size);const finalParents=namespace(file);
-    if(parents!==undefined)assert.deepEqual(finalParents,parents);
+    assert.equal(BigInt(count),openedFrame.size);await namespace(file);
     assertMetadataEqual(fs.fstatSync(fd,{bigint:true}),openedFrame);
     const finalNamed=fs.lstatSync(file,{bigint:true});assertMetadataEqual(finalNamed,namedFrame);assertClientNamedDescriptor(finalNamed,openedFrame);
     return {path:path.relative(root,file),kind:'file',metadata:meta(openedFrame),sha256:hash.digest('hex')};
@@ -272,11 +285,20 @@ async function captureTreeAsync(root,{maxEntries=50000,maxBytes=536870912,timeou
           if(parent===root)break;
         }
       };
+      const fileNamespace=async file=>{
+        check();assert.equal(await canonicalAsync(file),file,'CX_CANONICAL_RUNTIME_NAMESPACE_REQUIRED');
+        if(file!==root)for(let parent=path.dirname(file);;parent=path.dirname(parent)){
+          check();const state=states.get(parent);assert.ok(state?.kind==='directory','CX_TREE_PARENT_NOT_ADMITTED');
+          const value=fs.lstatSync(parent,{bigint:true});assert.ok(value.isDirectory()&&!value.isSymbolicLink());
+          for(const key of identityFields)assert.equal(value[key],state.named[key],'CX_TREE_PARENT_IDENTITY_CHANGED');
+          if(parent===root)break;
+        }
+      };
       const schedule=file=>{assert.ok(!scheduled.has(file),'CX_DUPLICATE_TREE_ENTRY');charge();scheduled.add(file);todo.push(file);};
       const launch=(file,fd,opened,openedFrame,named,namedFrame)=>{
         const buffer=buffers.pop();assert.ok(buffer&&jobs.size<4,'CX_CAPTURE_FOUR_FILE_JOBS_REQUIRED');const job={};jobs.add(job);
         job.done=(async()=>{
-          try{const row=await readLeaf(file,fd,opened,openedFrame,named,namedFrame,namespace,buffer);check();states.set(file,{named:namedFrame,kind:'file'});rows.push(row);}
+          try{const row=await readLeaf(file,fd,opened,openedFrame,named,namedFrame,fileNamespace,buffer);check();states.set(file,{named:namedFrame,kind:'file'});rows.push(row);}
           catch(error){fail(error);}
           finally{close(fd);buffers.push(buffer);jobs.delete(job);wake();}
         })();
@@ -334,11 +356,24 @@ async function captureTreeAsync(root,{maxEntries=50000,maxBytes=536870912,timeou
       }catch(error){fail(error);await drain();throw failure;}
     }
     const first=await inventory(),logicalBytes=bytes,second=await inventory();assert.deepEqual(second.rows,first.rows,'CX_COMPLETE_TREE_INVENTORY_CHANGED');
-    for(const [file,state]of second.states){
-      check();assertMetadataEqual(fs.lstatSync(file,{bigint:true}),state.named,'CX_COMPLETE_TREE_FINAL_PATH_CHANGED');
-      if(state.kind==='symlink'){const real=canonical(file);assert.ok(real===root||real.startsWith(root+path.sep),'CX_EXTERNAL_TOOL_SYMLINK');assert.equal(fs.readlinkSync(file),state.target);}
-      else assert.equal(canonical(file),file,'CX_COMPLETE_TREE_FINAL_NAMESPACE_CHANGED');
-    }
+    // File jobs are fully drained before this separate four-worker phase.
+    // On any refusal every already-dispatched canonical callback settles before
+    // returning; no Promise.race, detached callback, or borrowed descriptor.
+    const remaining=second.states.entries();
+    const finalWorker=async()=>{
+      for(;;){
+        try{
+          check();const next=remaining.next();if(next.done)return;const [file,state]=next.value;
+          assertMetadataEqual(fs.lstatSync(file,{bigint:true}),state.named,'CX_COMPLETE_TREE_FINAL_PATH_CHANGED');
+          const real=await canonicalAsync(file);
+          if(state.kind==='symlink'){assert.ok(real===root||real.startsWith(root+path.sep),'CX_EXTERNAL_TOOL_SYMLINK');assert.equal(fs.readlinkSync(file),state.target);}
+          else assert.equal(real,file,'CX_COMPLETE_TREE_FINAL_NAMESPACE_CHANGED');
+          // Retain the original independent named frame across this new yield.
+          assertMetadataEqual(fs.lstatSync(file,{bigint:true}),state.named,'CX_COMPLETE_TREE_FINAL_PATH_CHANGED');
+        }catch(error){fail(error);return;}
+      }
+    };
+    await Promise.all(Array.from({length:4},()=>finalWorker()));check();
     const directories=[...second.states].filter(([,state])=>state.kind==='directory');
     for(let i=directories.length-1;i>=0;i--){const [file,state]=directories[i];check();assertMetadataEqual(fs.lstatSync(file,{bigint:true}),state.named,'CX_COMPLETE_TREE_FINAL_PATH_CHANGED');assert.equal(canonical(file),file,'CX_COMPLETE_TREE_FINAL_NAMESPACE_CHANGED');}
     externalFence();check();result=project({schemaVersion:2,observations:2,root,entries:first.rows,bytes:logicalBytes,chargedBytes:bytes,chargedEntries:charged,complete:true},check);check();

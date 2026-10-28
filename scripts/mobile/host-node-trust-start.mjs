@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 // Public reviewed source identity, not a policy-supplied code authority.
-const APPROVED_HELPER_SHA256 = '69f4fa1bf8a32df43ee430810d48dc361ac76fbb20685e11d8b1549627f96d54';
+const APPROVED_HELPER_SHA256 = '82c268e2fd8cc93c2c4b950184a059ead1e51779b013114492850fcd53e64bea';
 const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
 const end = performance.now() + 20000;
 const check = () => { if (performance.now() >= end) throw new Error('HOST_TRUST_BOOTSTRAP_DEADLINE'); };
@@ -29,7 +29,7 @@ function owner(file, s, privateFile) {
     return;
   }
   insist(process.platform === 'win32' && path.isAbsolute(process.env.SystemRoot || ''));
-  const code = "$ErrorActionPreference='Stop';$a=Get-Acl -LiteralPath $env:CASEOPS_TRUST_ACL_PATH;$u=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;$ok=($a.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq $u);foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$ok=$false}};if($ok){'SAFE'}else{exit 1}";
+  const code = "$ErrorActionPreference='Stop';$a=Get-Acl -LiteralPath $env:CASEOPS_TRUST_ACL_PATH;$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$ok=$false}};if($ok){'SAFE'}else{exit 1}";
   check(); const result = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', code], { env: { SystemRoot: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file }, encoding: 'utf8', timeout: Math.max(1, Math.min(5000, end - performance.now())), maxBuffer: 4096, windowsHide: true });
   insist(!result.error && result.status === 0 && result.stdout.trim() === 'SAFE'); check();
 }

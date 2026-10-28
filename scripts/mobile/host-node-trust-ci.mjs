@@ -37,7 +37,7 @@ function commandOwner(file, state) {
     return;
   }
   assert.ok(process.platform === 'win32' && path.isAbsolute(process.env.SystemRoot || ''), 'CI_TRUST_OWNER_UNAVAILABLE');
-  const code = "$ErrorActionPreference='Stop';$a=Get-Acl -LiteralPath $env:CASEOPS_TRUST_ACL_PATH;$u=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;$ok=($a.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq $u);foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$ok=$false}};if($ok){'SAFE'}else{exit 1}";
+  const code = "$ErrorActionPreference='Stop';$a=Get-Acl -LiteralPath $env:CASEOPS_TRUST_ACL_PATH;$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$ok=$false}};if($ok){'SAFE'}else{exit 1}";
   const proof = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', code], {
     env: { SystemRoot: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file }, encoding: 'utf8', timeout: 4000, maxBuffer: 4096, windowsHide: true,
   });
@@ -150,7 +150,22 @@ export function prepareCIHostNodeTrust(environment = process.env) {
   return { nodeVersion: prepared.descriptor.nodeVersion, approvedRoots: prepared.descriptor.outputCount, ...result };
 }
 
+const DIAGNOSTICS = new Set([
+  'HOST_TRUST_WINDOWS_ACL_TIMEOUT', 'HOST_TRUST_WINDOWS_ACL_COMMAND_FAILED',
+  'HOST_TRUST_WINDOWS_ACL_PROTOCOL', 'HOST_TRUST_CURRENT_OWNER_REQUIRED',
+  'HOST_TRUST_OVERRIDE_REFUSED', 'HOST_TRUST_CLI_OVERRIDE_REFUSED',
+  'HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED', 'HOST_TRUST_DEADLINE',
+  'HOST_TRUST_NAMED_FD_CHANGED', 'HOST_TRUST_DIRECTORY_PATH',
+  'CI_TRUST_COMMAND_OWNER', 'CI_TRUST_NAMESPACE', 'CI_TRUST_CONFIG_DEADLINE',
+  'CI_TRUST_APPEND_DEADLINE', 'CI_TRUST_PREPARATION_DEADLINE',
+  'CI_TRUST_CANONICAL_PATH', 'CI_TRUST_PROJECT_NPMRC_UNREVIEWED',
+]);
+export function ciTrustFailureCode(error) {
+  const first = typeof error?.message === 'string' ? error.message.split('\n', 1)[0] : '';
+  return DIAGNOSTICS.has(first) ? first : 'CI_TRUST_PREPARATION_REFUSED';
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try { console.log(JSON.stringify(prepareCIHostNodeTrust())); }
-  catch { console.error('CaseOps CI Node trust preparation refused.'); process.exitCode = 1; }
+  catch (error) { console.error('CaseOps CI Node trust preparation refused: ' + ciTrustFailureCode(error)); process.exitCode = 1; }
 }

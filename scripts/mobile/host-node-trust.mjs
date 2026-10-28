@@ -76,13 +76,24 @@ function ownership(file, value, directory = false, publicCertificate = false) {
   }
   requireThat(process.platform === 'win32' && path.isAbsolute(process.env.SystemRoot || ''), 'HOST_TRUST_OWNER_UNAVAILABLE');
   // Read-only ACL proof. The fixed command never returns SID/account values.
-  const code = "$ErrorActionPreference='Stop';$p=$env:CASEOPS_TRUST_ACL_PATH;$a=Get-Acl -LiteralPath $p;$u=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;$safe=$true;foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$safe=$false}};@{ownerMatches=($o -eq $u);writeScopeSafe=$safe}|ConvertTo-Json -Compress";
+  const code = "$ErrorActionPreference='Stop';$p=$env:CASEOPS_TRUST_ACL_PATH;$a=Get-Acl -LiteralPath $p;$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;$safe=$true;foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$safe=$false}};@{ownerMatches=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));writeScopeSafe=$safe}|ConvertTo-Json -Compress";
   const executable = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const result = spawnSync(executable, ['-NoProfile', '-NonInteractive', '-Command', code], { encoding: 'utf8', timeout: 5000, maxBuffer: 4096, windowsHide: true, env: { SystemRoot: process.env.SystemRoot, WINDIR: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file } });
+  requireThat(result.error?.code !== 'ETIMEDOUT', 'HOST_TRUST_WINDOWS_ACL_TIMEOUT');
   requireThat(!result.error && result.status === 0, 'HOST_TRUST_WINDOWS_ACL_COMMAND_FAILED');
   let parsed; try { parsed = JSON.parse(result.stdout); } catch { fail('HOST_TRUST_WINDOWS_ACL_PROTOCOL'); }
-  exactKeys(parsed, ['ownerMatches', 'writeScopeSafe']); requireThat(parsed.ownerMatches === true && parsed.writeScopeSafe === true, 'HOST_TRUST_CURRENT_OWNER_REQUIRED');
+  reviewHostNodeWindowsAclProof(parsed);
 }
+/** Windows applies the current token's default owner to newly created objects.
+ * The alternate owner must also be SYSTEM or Builtin Administrators, already
+ * trusted for writes. An arbitrary default-owner group is never admitted. */
+export function reviewHostNodeWindowsAclProof(parsed) {
+  exactKeys(parsed, ['ownerMatches', 'writeScopeSafe']);
+  requireThat(parsed.ownerMatches === true, 'HOST_TRUST_CURRENT_OWNER_REQUIRED');
+  requireThat(parsed.writeScopeSafe === true, 'HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED');
+  return { ownerMatches: true, writeScopeSafe: true };
+}
+
 function readHeld(file, limit, check, publicCertificate = false) {
   requireThat(typeof file === 'string' && path.isAbsolute(file) && path.resolve(file) === file, 'HOST_TRUST_ABSOLUTE_PATH');
   let fd;
@@ -129,8 +140,8 @@ function rejectOverrides(environment, bootstrap, role, fixture, argv, approvedIm
     requireThat(!/^npm_config_(?:ca|cafile|node_options)$/i.test(key), 'HOST_TRUST_NPM_OVERRIDE_REFUSED');
     if (/^npm_config_strict_ssl$/i.test(key)) requireThat(value === 'true', 'HOST_TRUST_NPM_OVERRIDE_REFUSED');
   }
-  for (const key of ['NODE_USE_SYSTEM_CA', 'OPENSSL_CONF', 'OPENSSL_CONF_INCLUDE', 'NODE_TLS_REJECT_UNAUTHORIZED']) requireThat(envValue(environment, key) === undefined, 'HOST_TRUST_OVERRIDE_REFUSED');
-  const forbidden = ['--use-bundled-ca', '--use-system-ca', '--use-openssl-ca', '--no-use-bundled-ca', '--no-use-system-ca', '--no-use-openssl-ca', '--security-revert'];
+  for (const key of ['NODE_USE_SYSTEM_CA', 'NODE_USE_ENV_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'OPENSSL_CONF', 'OPENSSL_CONF_INCLUDE', 'NODE_TLS_REJECT_UNAUTHORIZED']) requireThat(envValue(environment, key) === undefined, 'HOST_TRUST_OVERRIDE_REFUSED');
+  const forbidden = ['--use-bundled-ca', '--use-system-ca', '--use-openssl-ca', '--no-use-bundled-ca', '--no-use-system-ca', '--no-use-openssl-ca', '--security-revert', '--use-env-proxy', '--no-use-env-proxy'];
   const compiledCipherOption = '--tls-cipher-list=' + cryptoConstants.defaultCoreCipherList;
   requireThat(!argv.some(arg => arg !== compiledCipherOption && arg !== approvedImport && arg !== '--use-openssl-ca' && (arg.startsWith('-r') || /^--(?:tls-|openssl-|require|import|experimental-loader|loader)/.test(arg) || forbidden.some(flag => arg === flag || arg.startsWith(flag + '=')))), 'HOST_TRUST_CLI_OVERRIDE_REFUSED');
   const extra = envValue(environment, 'NODE_EXTRA_CA_CERTS'); requireThat(extra === undefined || role === 'native-qa' && fixture && extra === fixture.path, 'HOST_TRUST_EXTRA_CA_REFUSED');
@@ -206,7 +217,7 @@ function validatePolicy({ policyRef, role = 'base', expectedFixtureCA = null } =
   const roots = reviewHostNodeRoots(); requireThat(descriptor.inputCount === roots.inputCount && descriptor.inputSetSha256 === roots.inputSetSha256 && descriptor.removedCount === roots.removedCount && descriptor.outputCount === roots.outputCount && descriptor.outputSetSha256 === roots.outputSetSha256, 'HOST_TRUST_POLICY_ROOTS');
   const options = sourceRecipe(descriptor.runtimeSource, check);
   rejectOverrides(environment, false, role, expectedFixtureCA, execArgv, options.slice('--use-openssl-ca '.length));
-  requireThat(envValue(environment, 'NODE_OPTIONS') === options, 'HOST_TRUST_BOOTSTRAP_SOURCE_REQUIRED');
+  requireThat(envValue(environment, 'NODE_OPTIONS') === options || envValue(environment, 'NODE_OPTIONS') === options + ' --enable-source-maps', 'HOST_TRUST_BOOTSTRAP_SOURCE_REQUIRED');
   requireThat(equal(descriptor.fixtureCA, expectedFixtureCA) && (role === 'native-qa' ? expectedFixtureCA !== null : expectedFixtureCA === null), 'HOST_TRUST_EXPECTED_FIXTURE_REQUIRED');
   const parent = path.dirname(policyRef.path); privateDirectory(parent, check); exactKeys(descriptor.bundle, ['path', 'sha256', 'sizeBytes']);
   requireThat(path.basename(policyRef.path) === 'policy.json' && descriptor.bundle.path === path.join(parent, 'roots.pem') && descriptor.emptyDirectory === path.join(parent, 'empty'), 'HOST_TRUST_POLICY_PATHS');

@@ -327,9 +327,10 @@ test('two complete tree inventories share the original entry and byte caps',()=>
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 test('tree deadline expires during actual enumeration and closes the iterator',()=>{
- const root=temp();fs.writeFileSync(path.join(root,'seed'),'x');const oldOpen=fs.opendirSync;let closed=0;
- fs.opendirSync=(...args)=>{const dir=oldOpen(...args),read=dir.readSync.bind(dir),close=dir.closeSync.bind(dir);dir.readSync=()=>{const result=read();const end=Date.now()+5;while(Date.now()<end){}return result;};dir.closeSync=()=>{closed++;return close();};return dir;};
- try{assert.throws(()=>captureClientTree(root,{timeoutMs:1}),/CX_COMPLETE_TREE_DEADLINE/);assert.equal(closed,1);}finally{fs.opendirSync=oldOpen;fs.rmSync(root,{recursive:true,force:true});}
+ const root=temp();fs.writeFileSync(path.join(root,'seed'),'x');const oldOpen=fs.opendirSync,oldPerformance=globalThis.performance;let now=0,readCount=0,closed=0;
+ globalThis.performance={now:()=>now};
+ fs.opendirSync=(...args)=>{const dir=oldOpen(...args),read=dir.readSync.bind(dir),close=dir.closeSync.bind(dir);dir.readSync=()=>{const result=read();readCount++;now=1;return result;};dir.closeSync=()=>{closed++;return close();};return dir;};
+ try{assert.throws(()=>captureClientTree(root,{timeoutMs:1}),/CX_COMPLETE_TREE_DEADLINE/);assert.equal(readCount,1);assert.equal(closed,1);}finally{fs.opendirSync=oldOpen;globalThis.performance=oldPerformance;fs.rmSync(root,{recursive:true,force:true});}
 });
 test('internal tool symlinks remain metadata-only and included in both complete inventories',()=>{
  const root=temp();fs.writeFileSync(path.join(root,'seed'),'x');fs.symlinkSync('seed',path.join(root,'alias'));
@@ -638,11 +639,23 @@ async function asyncReadFixture(files,operation){
  const state={root,records:[],live:new Map(),buffers:new Set(),pending:[],promises:[],outcomes:new Map(),reads:[],actualBytes:0,activeDirs:0,peakOwned:0,hold:false};
  const inside=file=>typeof file==='string'&&(file===root||file.startsWith(root+path.sep));
  const peak=()=>{state.peakOwned=Math.max(state.peakOwned,state.live.size+state.activeDirs);};
- state.track=promise=>{state.promises.push(promise);const value={settled:false};state.outcomes.set(promise,value);promise.then(result=>{value.settled=true;value.result=result;},error=>{value.settled=true;value.error=error;});return promise;};
- state.reached=async(predicate,promise)=>{const end=performance.now()+1000;for(let n=0;n<256&&performance.now()<end;n++){if(predicate())return;const outcome=state.outcomes.get(promise);if(outcome?.settled)throw outcome.error??Error('ASYNC_CONTROL_COMPLETED_BEFORE_BARRIER');await immediate();}throw Error('ASYNC_CONTROL_BARRIER_NOT_REACHED');};
+ const fixtureNow=performance.now.bind(performance),waiters=new Set(),timers=new Set();
+ state.changed=()=>{for(const wake of [...waiters])wake();};
+ state.barrierState=()=>({waiters:waiters.size,timers:timers.size});
+ const waitChanged=end=>new Promise(resolve=>{
+  let done=false,timer;const wake=()=>{if(done)return;done=true;waiters.delete(wake);if(timer!==undefined){clearTimeout(timer);timers.delete(timer);}resolve();};
+  waiters.add(wake);timer=setTimeout(wake,Math.max(0,end-fixtureNow()));timers.add(timer);
+ });
+ state.track=promise=>{state.promises.push(promise);const value={settled:false};state.outcomes.set(promise,value);promise.then(result=>{value.settled=true;value.result=result;state.changed();},error=>{value.settled=true;value.error=error;state.changed();});return promise;};
+ state.reached=async(predicate,promise)=>{
+  const end=fixtureNow()+1000;
+  const observed=()=>{if(predicate())return true;const outcome=state.outcomes.get(promise);if(outcome?.settled)throw outcome.error??Error('ASYNC_CONTROL_COMPLETED_BEFORE_BARRIER');return false;};
+  for(let n=0;n<256&&fixtureNow()<end;n++){if(observed())return;await waitChanged(end);}
+  if(observed())return;throw Error('ASYNC_CONTROL_BARRIER_NOT_REACHED');
+ };
  state.releaseAll=()=>{state.hold=false;for(const entry of state.pending)if(!entry.delivered)entry.deliver();};
- fs.openSync=(file,...args)=>{const fd=original.open(file,...args);if(inside(file)){assert.equal(state.live.has(fd),false);const record={fd,file,closed:false};state.records.push(record);state.live.set(fd,record);peak();}return fd;};
- fs.closeSync=fd=>{const record=state.live.get(fd);try{return original.close(fd);}finally{if(record){record.closed=true;state.live.delete(fd);}}};
+ fs.openSync=(file,...args)=>{const fd=original.open(file,...args);if(inside(file)){assert.equal(state.live.has(fd),false);const record={fd,file,closed:false};state.records.push(record);state.live.set(fd,record);peak();state.changed();}return fd;};
+ fs.closeSync=fd=>{const record=state.live.get(fd);try{return original.close(fd);}finally{if(record){record.closed=true;state.live.delete(fd);state.changed();}}};
  fs.opendirSync=(file,...args)=>{const dir=original.dir(file,...args);if(!inside(file))return dir;state.activeDirs++;peak();let closed=false;return{readSync:()=>dir.readSync(),closeSync:()=>{assert.equal(closed,false);closed=true;try{return dir.closeSync();}finally{state.activeDirs--;}}};};
  fs.read=(fd,buffer,offset,width,position,callback)=>{
   const record=state.live.get(fd);if(!record)return original.read(fd,buffer,offset,width,position,callback);
@@ -650,7 +663,7 @@ async function asyncReadFixture(files,operation){
   return original.read(fd,buffer,offset,selected,position,(error,n,result)=>{
    if(Number.isInteger(n))state.actualBytes+=n;state.reads.push({file:record.file,requested:width,actualRequested:selected,n});state.afterRead?.({fd,file:record.file,buffer,width,error,n});
    const entry={fd,file:record.file,delivered:false,deliver:(override=error)=>{assert.equal(entry.delivered,false);entry.delivered=true;callback(override,n,result);}};
-   if(state.hold)state.pending.push(entry);else entry.deliver();
+   if(state.hold)state.pending.push(entry);else entry.deliver();state.changed();
   });
  };
  let value,primary;const cleanup=[];
@@ -658,7 +671,7 @@ async function asyncReadFixture(files,operation){
  finally{
   state.releaseAll();await Promise.allSettled(state.promises);
   Object.assign(fs,{openSync:original.open,closeSync:original.close,read:original.read,opendirSync:original.dir});
-  try{assert.equal(state.activeDirs,0);assert.equal(state.live.size,0);for(const record of state.records)assert.throws(()=>original.stat(record.fd),{code:'EBADF'});}catch(error){cleanup.push(error);}
+  try{assert.deepEqual(state.barrierState(),{waiters:0,timers:0});assert.equal(state.activeDirs,0);assert.equal(state.live.size,0);for(const record of state.records)assert.throws(()=>original.stat(record.fd),{code:'EBADF'});}catch(error){cleanup.push(error);}
   fs.rmSync(root,{recursive:true,force:true});
  }
  if(primary)throw cleanup.length?new AggregateError([primary,...cleanup],primary.message,{cause:primary}):primary;
@@ -764,13 +777,110 @@ test('async commitment codec and fsync share the original capture deadline',asyn
  });
 });
 test('async final root frame follows the last nested canonical directory observation',async()=>asyncReadFixture({'nested/leaf':'synthetic'},async state=>{
- const named=fs.lstatSync,real=fs.realpathSync,nested=path.join(state.root,'nested');let nestedChecks=0,rootChecks=0,atInsert,inserted=false;
+ const named=fs.lstatSync,real=fs.realpathSync,asyncReal=fs.realpath,nested=path.join(state.root,'nested');let nestedChecks=0,rootChecks=0,atInsert,inserted=false;
  const closed=()=>state.records.filter(x=>x.file.endsWith('/nested/leaf')&&x.closed).length;
  fs.lstatSync=(file,...args)=>{const value=named(file,...args);if(file===state.root&&closed()===2)rootChecks++;return value;};
- const resolve=(file,...args)=>{const value=(real.native??real)(file,...args);if(file===nested&&closed()===2&&++nestedChecks===2){atInsert=rootChecks;fs.writeFileSync(path.join(state.root,'late'),'late');inserted=true;}return value;};
+ const observed=(file,value)=>{if(file===nested&&closed()===2&&++nestedChecks===2){atInsert=rootChecks;fs.writeFileSync(path.join(state.root,'late'),'late');inserted=true;}return value;};
+ const resolve=(file,...args)=>observed(file,(real.native??real)(file,...args));
+ const resolveAsync=(file,...args)=>{const callback=args.pop();return (asyncReal.native??asyncReal)(file,...args,(error,value)=>callback(error,error?value:observed(file,value)));};
+ fs.realpath=(...args)=>resolveAsync(...args);if(asyncReal.native)fs.realpath.native=resolveAsync;
  fs.realpathSync=(...args)=>resolve(...args);if(real.native)fs.realpathSync.native=resolve;
- try{await assert.rejects(state.track(captureClientTreeAsync(state.root)),/CX_COMPLETE_TREE_FINAL_PATH_CHANGED/);assert.equal(inserted,true);assert.equal(closed(),2);assert.ok(rootChecks>atInsert);}finally{fs.lstatSync=named;fs.realpathSync=real;}
+ try{await assert.rejects(state.track(captureClientTreeAsync(state.root)),/CX_COMPLETE_TREE_FINAL_PATH_CHANGED/);assert.equal(inserted,true);assert.equal(closed(),2);assert.ok(rootChecks>atInsert);}finally{fs.lstatSync=named;fs.realpathSync=real;fs.realpath=asyncReal;}
 }));
+// Real filesystem operations complete first; only their callback delivery is held.
+// Both callback constructors retain their original arguments/results and no
+// fixture reads SDK data or invents a successful metadata observation.
+async function asyncCanonicalFixture(state,operation){
+ const original=fs.realpath,read=fs.read,inside=file=>typeof file==='string'&&(file===state.root||file.startsWith(state.root+path.sep));
+ const metadata={pending:[],calls:[],active:0,peak:0,hold:false};state.metadata=metadata;
+ const admitted=()=>{metadata.active++;metadata.peak=Math.max(metadata.peak,metadata.active);state.changed();};
+ const canonical=(constructor,self,args)=>{
+  const file=args[0];if(!inside(file))return Reflect.apply(constructor,self,args);
+  admitted();const callback=args.at(-1);let completed=false;
+  const deliver=(error,value)=>{assert.equal(completed,false);completed=true;metadata.active--;try{return callback(error,value);}finally{state.changed();}};
+  args[args.length-1]=(error,value)=>{
+   const entry={file,error,value,delivered:false,deliver:(override=error)=>{assert.equal(entry.delivered,false);entry.delivered=true;return deliver(override,value);}};
+   metadata.calls.push(entry);try{if(metadata.hold===true||(typeof metadata.hold==='function'&&metadata.hold(entry)))metadata.pending.push(entry);else entry.deliver();}catch(error){if(!entry.delivered)entry.deliver(error);else throw error;}finally{state.changed();}
+  };
+  try{return Reflect.apply(constructor,self,args);}catch(error){if(!completed){completed=true;metadata.active--;}throw error;}
+ };
+ fs.realpath=function(...args){return canonical(original,this,args);};if(original.native)fs.realpath.native=function(...args){return canonical(original.native,this,args);};
+ fs.read=function(...args){
+  if(!state.live.has(args[0]))return Reflect.apply(read,this,args);
+  admitted();const callback=args.at(-1);let completed=false;
+  args[args.length-1]=function(...values){assert.equal(completed,false);completed=true;metadata.active--;return Reflect.apply(callback,this,values);};
+  try{return Reflect.apply(read,this,args);}catch(error){if(!completed){completed=true;metadata.active--;}throw error;}
+ };
+ metadata.releaseAll=()=>{metadata.hold=false;for(const entry of metadata.pending)if(!entry.delivered)entry.deliver();};
+ try{return await operation(metadata);}
+ finally{metadata.releaseAll();await Promise.allSettled(state.promises);fs.realpath=original;fs.read=read;assert.equal(metadata.active,0);}
+}
+test('async canonical and payload callbacks share four held jobs across both complete observations',async()=>asyncReadFixture(Object.fromEntries(Array.from({length:8},(_,i)=>['file-'+i,'synthetic-'+i])),async state=>asyncCanonicalFixture(state,async metadata=>{
+ metadata.hold=true;const capture=state.track(captureClientTreeAsync(state.root));await state.reached(()=>metadata.pending.length===4,capture);
+ assert.equal(state.live.size,4);assert.equal(state.reads.length,0);assert.equal(metadata.active,4);assert.equal(metadata.peak,4);
+ metadata.releaseAll();const tree=await capture;assert.equal(tree.complete,true);assert.equal(tree.observations,2);assert.equal(metadata.active,0);assert.ok(metadata.peak<=4);assert.ok(state.peakOwned<=4);assert.equal(state.live.size,0);
+})));
+test('async canonical leaf replacement after actual resolution refuses before the first byte',async()=>asyncReadFixture({'leaf':'original'},async state=>asyncCanonicalFixture(state,async metadata=>{
+ metadata.hold=true;const capture=state.track(captureClientTreeAsync(state.root));await state.reached(()=>metadata.pending.length===1,capture);
+ const file=path.join(state.root,'leaf');assert.equal(metadata.pending[0].file,file);fs.renameSync(file,file+'-retained');fs.writeFileSync(file,'replacement');metadata.releaseAll();
+ await assert.rejects(capture);assert.equal(state.reads.length,0);assert.equal(state.live.size,0);assert.equal(metadata.active,0);
+})));
+test('async canonical parent aliases inside or outside the captured root remain refused',async()=>{
+ for(const kind of['internal','external-ancestor'])await asyncReadFixture({'outer/sdk/nested/leaf':'synthetic'},async state=>asyncCanonicalFixture(state,async metadata=>{
+  const root=path.join(state.root,'outer/sdk'),parent=kind==='internal'?path.join(root,'nested'):path.join(state.root,'outer'),moved=parent+'-retained';metadata.hold=true;
+  const capture=state.track(captureClientTreeAsync(root));await state.reached(()=>metadata.pending.length===1,capture);fs.renameSync(parent,moved);fs.symlinkSync(moved,parent);metadata.releaseAll();
+  await assert.rejects(capture);assert.equal(state.live.size,0);assert.equal(metadata.active,0);if(kind==='internal')assert.equal(state.reads.length,0);
+ }));
+});
+test('async read refusal drains other held canonical callbacks before returning',async()=>asyncReadFixture({'a':'a','b':'b','c':'c','d':'d','e':'e'},async state=>asyncCanonicalFixture(state,async metadata=>{
+ state.hold=true;metadata.hold=entry=>!entry.file.endsWith('/a');const capture=state.track(captureClientTreeAsync(state.root));await state.reached(()=>metadata.pending.length===3&&state.pending.length===1,capture);
+ const opened=state.records.length,failure=Error('SYNTHETIC_PRIMARY_READ');state.pending[0].deliver(failure);await immediate();await immediate();assert.equal(state.outcomes.get(capture).settled,false);assert.equal(state.records.length,opened);assert.equal(metadata.active,3);
+ metadata.releaseAll();state.releaseAll();await assert.rejects(capture,value=>value===failure);assert.equal(state.live.size,0);assert.equal(metadata.active,0);assert.equal(state.records.length,opened);
+})));
+test('async canonical deadline drains every held callback and descriptor before refusal',async()=>asyncReadFixture({'a':'a','b':'b','c':'c','d':'d','e':'e'},async state=>asyncCanonicalFixture(state,async metadata=>{
+ const original=globalThis.performance;let clock=0;globalThis.performance={now:()=>clock};metadata.hold=true;const capture=state.track(captureClientTreeAsync(state.root));
+ try{await state.reached(()=>metadata.pending.length===4,capture);clock=5001;metadata.pending[0].deliver();await immediate();await immediate();assert.equal(state.outcomes.get(capture).settled,false);assert.equal(metadata.active,3);assert.equal(state.reads.length,0);metadata.releaseAll();await assert.rejects(capture,/CX_COMPLETE_TREE_DEADLINE/);assert.equal(state.live.size,0);assert.equal(metadata.active,0);assert.equal(state.records.filter(row=>row.file.endsWith('/e')).length,0);}finally{globalThis.performance=original;}
+})));
+test('async final path mutation refuses after draining all final canonical workers',async()=>asyncReadFixture({'a':'a','b':'b','c':'c','d':'d'},async state=>asyncCanonicalFixture(state,async metadata=>{
+ metadata.hold=()=>state.records.filter(row=>row.file===state.root).length===2&&state.live.size===0;const capture=state.track(captureClientTreeAsync(state.root));await state.reached(()=>metadata.pending.length===4,capture);
+ const selected=metadata.pending.find(entry=>entry.file.endsWith('/a'));assert.ok(selected);fs.appendFileSync(selected.file,'changed');selected.deliver();await immediate();await immediate();assert.equal(state.outcomes.get(capture).settled,false);assert.equal(metadata.active,3);metadata.releaseAll();
+ await assert.rejects(capture,/CX_COMPLETE_TREE_FINAL_PATH_CHANGED/);assert.equal(state.live.size,0);assert.equal(metadata.active,0);assert.ok(metadata.peak<=4);
+})));
+test('async close ambiguity preserves a same-number caller while draining held canonical leases',async t=>asyncReadFixture({'a':'a','b':'b','c':'c','d':'d'},async state=>asyncCanonicalFixture(state,async metadata=>{
+ metadata.hold=true;const capture=state.track(captureClientTreeAsync(state.root));await state.reached(()=>metadata.pending.length===4,capture);
+ const close=fs.closeSync,failure=Object.assign(Error('SYNTHETIC_AMBIGUOUS_CLOSE'),{code:'EIO'});let caller,number,attempts=0,callerFile;
+ fs.closeSync=fd=>{if(caller===undefined){callerFile=state.live.get(fd).file;number=fd;const before=fs.fstatSync(fd,{bigint:true});close(fd);caller=fs.openSync(callerFile,fs.constants.O_RDONLY);const after=fs.fstatSync(caller,{bigint:true});for(const field of['dev','ino','uid','gid','mode','nlink','size','mtimeNs','ctimeNs'])assert.equal(after[field],before[field]);assert.equal(caller,number);attempts++;throw failure;}if(fd===caller)attempts++;return close(fd);};
+ try{metadata.hold=entry=>!entry.file.endsWith('/a');metadata.pending.find(entry=>entry.file.endsWith('/a')).deliver();await state.reached(()=>caller!==undefined,capture);assert.equal(state.outcomes.get(capture).settled,false);assert.equal(metadata.active,3);assert.doesNotThrow(()=>fs.fstatSync(caller));metadata.releaseAll();await assert.rejects(capture,error=>error instanceof AggregateError&&error.cause===failure&&error.captureCleanupUncertain&&error.captureRequiresProcessExit);assert.equal(attempts,1);assert.doesNotThrow(()=>fs.fstatSync(caller));assert.equal(state.live.size,1);t.diagnostic(JSON.stringify({sameNumber:caller===number,fullMetadataEqual:true,callerLeaseOpen:true,canonicalCallbacksDrained:metadata.active===0}));}
+ finally{fs.closeSync=close;if(caller!==undefined&&state.live.has(caller))close(caller);}
+})));
+test('async canonical constructor refusal closes its admitted descriptor without a byte read',async()=>asyncReadFixture({'leaf':'synthetic'},async state=>{
+ const original=fs.realpath,failure=Error('SYNTHETIC_CANONICAL_CONSTRUCTOR');fs.realpath=()=>{throw failure;};if(original.native)fs.realpath.native=fs.realpath;
+ try{await assert.rejects(state.track(captureClientTreeAsync(state.root)),error=>error===failure);assert.equal(state.reads.length,0);assert.equal(state.live.size,0);}finally{fs.realpath=original;}
+}));
+
+test('fixture barrier waits for an actual held read across 256 unrelated immediate turns',async()=>asyncReadFixture({'leaf':'synthetic'},async state=>{
+ const read=fs.read;let held,blocked=false,delivered=false;
+ fs.read=function(...args){const callback=args.at(-1);args[args.length-1]=function(...values){if(!blocked){blocked=true;held=()=>{delivered=true;try{return Reflect.apply(callback,this,values);}finally{state.changed();}};state.changed();}else return Reflect.apply(callback,this,values);};return Reflect.apply(read,this,args);};
+ const capture=state.track(captureClientTreeAsync(state.root));let barrier;
+ try{await state.reached(()=>typeof held==='function',capture);barrier=state.reached(()=>delivered,capture);let settled=false;barrier.then(()=>{settled=true;},()=>{settled=true;});for(let n=0;n<256;n++)await immediate();assert.equal(settled,false);assert.equal(delivered,false);held();await barrier;assert.equal(delivered,true);assert.equal((await capture).complete,true);assert.deepEqual(state.barrierState(),{waiters:0,timers:0});}
+ finally{if(held&&!delivered)held();if(barrier)await Promise.allSettled([barrier]);await Promise.allSettled([capture]);fs.read=read;}
+}));
+test('fixture barrier surfaces a completed request exception or missing event before timeout',async()=>asyncReadFixture({},async state=>{
+ const failure=Error('SYNTHETIC_REQUEST_EXCEPTION');const rejected=state.track(Promise.reject(failure));await assert.rejects(state.reached(()=>false,rejected),error=>error===failure);
+ const completed=state.track(Promise.resolve('completed'));await assert.rejects(state.reached(()=>false,completed),/ASYNC_CONTROL_COMPLETED_BEFORE_BARRIER/);
+ await state.reached(()=>true,completed);assert.deepEqual(state.barrierState(),{waiters:0,timers:0});
+}));
+test('fixture barrier reconciles the final actual snapshot at its unchanged 1000ms boundary',async()=>asyncReadFixture({},async state=>{
+ const gate=deferred(),capture=state.track(gate.promise),now=performance.now.bind(performance),start=now();let checks=0;
+ try{await state.reached(()=>{checks++;return now()-start>=1000;},capture);assert.ok(checks<=257);assert.equal(state.outcomes.get(capture).settled,false);assert.deepEqual(state.barrierState(),{waiters:0,timers:0});}
+ finally{gate.resolve();await capture;}
+}));
+test('fixture barrier retains the pending deadline and removes its waiter and timer',async()=>asyncReadFixture({},async state=>{
+ const gate=deferred(),capture=state.track(gate.promise),now=performance.now.bind(performance),start=now();
+ try{await assert.rejects(state.reached(()=>false,capture),/ASYNC_CONTROL_BARRIER_NOT_REACHED/);assert.ok(now()-start>=1000);assert.equal(state.outcomes.get(capture).settled,false);assert.deepEqual(state.barrierState(),{waiters:0,timers:0});}
+ finally{gate.resolve();await capture;}
+}));
+
 test('actual async public producer waits for complete capture and retains refusal before acknowledgment',async()=>{
  const {prepareClientRuntimeInventoryAsync}=await import('./prepare-client-extensions.mjs');
  for(const outcome of['success','read-refusal','source-drift'])await asyncReadFixture({'entry.mjs':'synthetic'},async state=>{

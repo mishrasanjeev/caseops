@@ -213,6 +213,14 @@ manifest output share the existing 5-second deadline, 50,000 charged entries and
 The public CLI and native runner await
 the asynchronous capture, which has at most four 64 KiB buffers and four owned
 descriptors, including directory inspection. The two inventories remain serial.
+Native canonical lookups within the four held file jobs use the callback API;
+each job has at most one pending canonical or read operation. The independent
+full descriptor and named frames are rebound before the first byte after that
+new callback boundary. The complete final path pass has a separate four-worker
+canonical phase after every file job drains; the unique directory pass still
+runs child-first and root-last, followed by the external namespace fence. Any
+failure waits for every dispatched callback, including canonical callbacks,
+before returning. No cached canonical result replaces a fresh observation.
 Each leaf keeps its opened descriptor, independent full descriptor/path frames,
 native canonical resolution and live parent checks through its read. A shared
 byte ledger reserves read capacity and permits only one aggregate overflow byte.
