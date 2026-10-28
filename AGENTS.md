@@ -1343,6 +1343,12 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- A successful CodeQL upload workflow is not a successful code-scanning result.
+  Reconcile the exact-head independent GitHub Advanced Security results check,
+  every annotation and required status before starting costly release gates or
+  claiming security is green. Preserve interrupted gate evidence when a missed
+  result requires changed source; never treat its outer shell exit as acceptance.
+
 - Request-based Cloud Run does not guarantee CPU after the HTTP response.
   Public enquiry admission and founder retries must only persist the outbox;
   the scheduled worker owns mail claims and transport. Prove zero HTTP worker

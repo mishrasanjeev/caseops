@@ -8,6 +8,15 @@ traffic, a backlink, or a conversion.
 
 ## 2026-10-28 13:14 UTC - Release Gate, Not A Search Audit
 
+16:46 UTC engineering correction:68C's CI, Security and CodeQL Advanced workflows
+passed, but the independent CodeQL results check122895415429 FAILED (two errors,
+four notes). Workflow-only green reporting was incomplete. The source correction
+passes75 local fixture tests, including six interruption-completion regressions.
+Frozen Docker15 was interrupted before source edits and retains1887 passing calls,
+not full native/browser acceptance. New independent results and all release gates
+remain required. No new deployment or GSC/public-content audit is claimed; the
+October27 browser safety stop and existing privacy/provider fences remain intact.
+
 Later engineering correction: DE333 CI40698272945 was cancelled at the outer
 12-minute PostgreSQL shard15 job boundary. Retained reports reconcile3483 cases
 and10449 passing phases, but the aggregate correctly refuses a cancelled job.

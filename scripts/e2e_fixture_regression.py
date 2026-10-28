@@ -1,4 +1,4 @@
-"""Run the fixed 18-process/51-SQLite E2E fixture inventory without installing anything."""
+"""Run the fixed 6-controller/18-process/51-SQLite fixture inventory without installs."""
 from __future__ import annotations
 
 import argparse
@@ -176,7 +176,8 @@ def reconcile_node(directory: Path):
     return inventory
 
 
-def reconcile_sqlite(directory: Path):
+def reconcile_sqlite(directory: Path, count: int = 51,
+                     module: str = "tests/e2e/fixture-tests/test_ip_entitlement_fixture.py"):
     path = directory / "phases.jsonl"
     if path.stat().st_size > 32 * 1024 * 1024:
         raise ValueError("Fixture phase journal exceeded its evidence bound")
@@ -184,20 +185,19 @@ def reconcile_sqlite(directory: Path):
     collections = [item for item in records if item["event"] == "collection"]
     completions = [item for item in records if item["event"] == "complete"]
     if len(collections) != 1 or len(completions) != 1 or completions[0] != {
-        "event": "complete", "exitstatus": 0, "collected": 51,
+        "event": "complete", "exitstatus": 0, "collected": count,
     }:
-        raise ValueError("Missing or unsuccessful complete SQLite inventory")
+        raise ValueError("Missing or unsuccessful complete Python inventory")
     ids = collections[0]["ids"]
-    module = "tests/e2e/fixture-tests/test_ip_entitlement_fixture.py"
-    if len(ids) != 51 or len(set(ids)) != 51 or any(item.split("::", 1)[0] != module for item in ids):
-        raise ValueError("Expected exactly 51 identities from the selected SQLite fixture file")
+    if len(ids) != count or len(set(ids)) != count or any(item.split("::", 1)[0] != module for item in ids):
+        raise ValueError(f"Expected exactly {count} identities from the selected Python fixture file")
     phases = [item for item in records if item["event"] == "phase"]
     expected = Counter((identity, phase) for identity in ids for phase in ("setup", "call", "teardown"))
-    if (len(records) != 155 or Counter((item["id"], item["phase"]) for item in phases) != expected
+    if (len(records) != 3 * count + 2 or Counter((item["id"], item["phase"]) for item in phases) != expected
             or any(item["outcome"] != "passed" for item in phases)):
-        raise ValueError("SQLite setup/call/teardown identities are incomplete or unsuccessful")
-    if {item.split("::", 1)[1] for item in ids} != set(junit_names(directory / "junit.xml", 51)):
-        raise ValueError("SQLite collection/JUnit identities disagree")
+        raise ValueError("Python setup/call/teardown identities are incomplete or unsuccessful")
+    if {item.split("::", 1)[1] for item in ids} != set(junit_names(directory / "junit.xml", count)):
+        raise ValueError("Python collection/JUnit identities disagree")
     return ids
 
 
@@ -210,7 +210,8 @@ def main() -> int:
     results = args.results_directory.absolute()
     results.mkdir(parents=True, exist_ok=False)
     journal = results / "supervisor.jsonl"
-    state = {"complete": False, "passed": False, "expected": {"process": 18, "sqlite": 51}, "phases": []}
+    state = {"complete": False, "passed": False,
+             "expected": {"controller": 6, "process": 18, "sqlite": 51}, "phases": []}
     before = None
     run_deadline = time.monotonic() + RUN_TIMEOUT_SECONDS
     try:
@@ -257,11 +258,31 @@ def main() -> int:
         save(sqlite / "reconciled.json", {"complete": True, "ids": inventory})
         state["phases"].append({"phase": "sqlite", "passed": 51})
         record(journal, event="verified", phase="sqlite", count=51)
+        if snapshot() != before:
+            raise ValueError("Fixture source changed before controller execution")
+        controller = results / "controller"
+        controller_env = {**env, "CASEOPS_IP_FIXTURE_PHASE_JOURNAL": str(controller / "phases.jsonl")}
+        run_phase("controller", [sys.executable, "-B", "-m", "pytest", "-p", "fixture_test_evidence",
+                  "-p", "no:cacheprovider", "--confcutdir", str(TESTS), "--rootdir", str(ROOT),
+                  "--import-mode=importlib", "--basetemp", str(scratch / "controller-pytest"),
+                  "--junitxml=" + str(controller / "junit.xml"), "-q",
+                  str(TESTS / "test_fixture_regression_completion.py")],
+                  controller_env, controller, journal, run_deadline, supervisor)
+        inventory = reconcile_sqlite(controller, count=6,
+                    module="tests/e2e/fixture-tests/test_fixture_regression_completion.py")
+        save(controller / "reconciled.json", {"complete": True, "ids": inventory})
+        state["phases"].append({"phase": "controller", "passed": 6})
+        record(journal, event="verified", phase="controller", count=6)
         state.update(complete=True, passed=True)
-    except BaseException as error:
-        state["error_type"] = type(error).__name__
+    except Exception as error:
+        state.update(complete=False, passed=False, error_type=type(error).__name__)
         record(journal, event="incomplete", error_type=type(error).__name__)
     finally:
+        pending_error_type = sys.exc_info()[0]
+        if pending_error_type is not None:
+            state.update(complete=False, passed=False, error_type=pending_error_type.__name__)
+            record(journal, event="incomplete", error_type=pending_error_type.__name__)
+        source_snapshot_finished = False
         try:
             after = snapshot()
             save(results / "source-after.json", after)
@@ -269,10 +290,17 @@ def main() -> int:
                 state.update(complete=False, passed=False, source_unchanged=False)
             else:
                 state["source_unchanged"] = True
-        except BaseException as error:
+            source_snapshot_finished = True
+        except Exception as error:
             state.update(complete=False, passed=False, source_error_type=type(error).__name__)
-        save(results / "completion.json", state)
-        record(journal, event="complete" if state["passed"] else "incomplete_final", passed=state["passed"])
+            source_snapshot_finished = True
+        finally:
+            # A pending outer interruption is not a failure of a completed snapshot.
+            if not source_snapshot_finished:
+                source_error_type = sys.exc_info()[0]
+                state.update(complete=False, passed=False, source_error_type=source_error_type.__name__)
+            save(results / "completion.json", state)
+            record(journal, event="complete" if state["passed"] else "incomplete_final", passed=state["passed"])
     print(f"Fixture regression {'passed' if state['passed'] else 'incomplete/failed'}: {results}")
     return 0 if state["passed"] else 1
 

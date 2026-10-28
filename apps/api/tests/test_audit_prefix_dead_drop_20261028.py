@@ -71,6 +71,7 @@ def test_second_drop_wait_cancel_retains_dead_prefix_and_replays(database, recor
         held["r1"] = r1
         observed["r1_pid"] = r1.exec_driver_sql("SELECT pg_backend_pid()").scalar_one()
         r1.execute(sa.text(f"SELECT id FROM {TABLE}")).all()
+        return
 
     def wait_stage(monitor, dead, blocker_key, label):
         while time.monotonic() < observe_end and not future.done():

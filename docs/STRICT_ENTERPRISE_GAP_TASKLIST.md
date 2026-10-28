@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 28 Scan Workflow Success Is Not Results Acceptance
+
+**NO-GO.** 68C's CI/Security/CodeQL Advanced workflows succeeded, but independent
+CodeQL results122895415429 failed with two driver-initialization errors and four
+notes. Reporting workflow success as full security clearance was incomplete.
+The replacement makes initialization explicit, preserves uncaught interruption
+propagation plus incomplete evidence, and includes six new controller cases.
+All75 local standard fixture tests passed with matching inventories and phases;
+fresh independent results, full Docker, main and production gates remain open.
+Docker15's interrupted1887-call progress is retained, never a whole-release pass.
+No alert dismissal, policy waiver, timeout increase or mobile-owner edit occurred.
+
 ## October 28 Outer CI Deadline Is Not Accepted Coverage
 
 **NO-GO.** DE333's16 PostgreSQL shards retain3483 passing cases/10449 phases,

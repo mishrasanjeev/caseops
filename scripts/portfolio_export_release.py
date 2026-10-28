@@ -317,6 +317,7 @@ class Release:
                         ):
                             return None
                     except ValueError:
+                        # An invalid 404 body cannot prove absence; reject it below.
                         pass
             finally:
                 exc.close()

@@ -181,6 +181,7 @@ def _sqlite_cursor(connection):
 
 def main() -> int:
     connection = None
+    driver = None
     try:
         with stage("validate"):
             raw = sys.stdin.buffer.read(4097)
@@ -191,15 +192,19 @@ def main() -> int:
         with stage("driver"):
             if dialect == "sqlite":
                 import sqlite3
+                driver = sqlite3
             else:
                 import psycopg
+                driver = psycopg
         with stage("connect"):
+            if driver is None:
+                raise FixtureRejected()
             if dialect == "sqlite":
-                connection = sqlite3.connect(target.as_uri() + "?mode=rw", uri=True, timeout=1.0)
+                connection = driver.connect(target.as_uri() + "?mode=rw", uri=True, timeout=1.0)
                 connection.execute("PRAGMA foreign_keys=ON")
                 connection.set_progress_handler(lambda: int(time.monotonic() - STARTED > 8), 1000)
             else:
-                connection = psycopg.connect(**target)
+                connection = driver.connect(**target)
         grant(connection, dialect, scope)
     except Exception:
         # Stage evidence is sufficient; exception text can contain credentials.

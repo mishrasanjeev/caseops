@@ -1,5 +1,27 @@
 # CaseOps  - Work To Be Done
 
+## October 28 Independent CodeQL Results Correction
+
+68c394b9 CI40710768303 succeeded (42 jobs passed, one intentional staging
+skip); Security40710768226 and CodeQL Advanced40710768204 also succeeded.
+However the separate GitHub Advanced Security CodeQL results check122895415429
+FAILED with two conditional-driver initialization errors and four quality notes.
+Earlier workflow-only green statements were incomplete, not release clearance.
+Driver initialization is now explicit; controller interruptions propagate while
+retaining incomplete completion evidence, with six additional supervised cases.
+The standard preflight now has75 tests (18 process,51 SQLite,6 controller), all
+passed locally with complete inventories/JUnit and unchanged source. No deadlines,
+policy, provider-cost fences, existing SQL or shared mobile/OAuth code changed.
+The other notes receive consistent callback returns and an explained fail-closed
+malformed404 handler. Fresh independent scan results and full gates remain open.
+
+Docker15 was deliberately interrupted before editing its frozen68C source.
+It retains1887 passing calls across four complete groups and one interrupted
+group, not3483-case acceptance; no browser execution or complete Docker PASS.
+Its owned processes and Compose resources were cleaned. New source needs fresh
+CI/results, complete Docker and exact production replay. Production remains
+F49; neither merge, new deployment nor final workbook certification is claimed.
+
 ## October 28 CI Capacity Replacement
 
 DE333 CI40698272945 is cancelled, not green. Its PostgreSQL shard15 hit the
