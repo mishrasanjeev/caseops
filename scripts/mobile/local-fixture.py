@@ -108,6 +108,22 @@ def save(name, value):
         target.write("\n")
 
 
+def certificate_time_utc(certificate, attribute):
+    """X.509 legacy validity fields are naive UTC; never local wall time."""
+    if attribute not in ("not_valid_before", "not_valid_after"):
+        raise ValueError("INVALID_CERTIFICATE_TIME_FIELD")
+    try:
+        value = getattr(certificate, attribute + "_utc")
+    except AttributeError:
+        value = getattr(certificate, attribute)
+        if not isinstance(value, datetime) or value.tzinfo is not None:
+            raise ValueError("INVALID_LEGACY_CERTIFICATE_TIME")
+        return value.replace(tzinfo=UTC)
+    if not isinstance(value, datetime) or value.utcoffset() is None:
+        raise ValueError("INVALID_CERTIFICATE_UTC_TIME")
+    return value.astimezone(UTC)
+
+
 def prepare(args):
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes, serialization
@@ -167,7 +183,7 @@ def prepare(args):
         "caSha256": ca.fingerprint(hashes.SHA256()).hex(),
         "serverSha256": cert.fingerprint(hashes.SHA256()).hex(),
         "subjectAlternativeNames": ["localhost", "127.0.0.1", "10.0.2.2"],
-        "privateKeysOutsideGit": True, "expires": cert.not_valid_after_utc.isoformat(),
+        "privateKeysOutsideGit": True, "expires": certificate_time_utc(cert, "not_valid_after").isoformat(),
     })
     save("gateway-routes.json", {"routes": ["GET /api/build", "GET /api/health"]})
     print(json.dumps({"prepared": True, "publicCA": "tls/ca.crt", "passwordLogged": False}))
@@ -188,7 +204,8 @@ def repair_tls(args):
         (tls / f"{name}-failed-{stamp}.crt").write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
         builder = (x509.CertificateBuilder().subject_name(certificate.subject).issuer_name(certificate.issuer)
                    .public_key(key.public_key()).serial_number(x509.random_serial_number())
-                   .not_valid_before(certificate.not_valid_before_utc).not_valid_after(certificate.not_valid_after_utc))
+                   .not_valid_before(certificate_time_utc(certificate, "not_valid_before"))
+                   .not_valid_after(certificate_time_utc(certificate, "not_valid_after")))
         for extension in certificate.extensions:
             if extension.oid not in (x509.oid.ExtensionOID.SUBJECT_KEY_IDENTIFIER, x509.oid.ExtensionOID.AUTHORITY_KEY_IDENTIFIER):
                 builder = builder.add_extension(extension.value, extension.critical)
@@ -388,7 +405,7 @@ def seed(args):
             "terminalNoteDenied": True, "cleanUploadAndDownload": True, "eicarRejected": True,
         })
     print(json.dumps({"seeded": True, "syntheticTenants": 2, "nativeNoteCount": 0,
-                      "realScannerCleanAndEicar": True, "mfaEnrolled": mfa_enabled}))
+                      "realScannerCleanAndEicar": True}))
 
 
 def probe(args):

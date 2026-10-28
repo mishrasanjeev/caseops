@@ -6,6 +6,7 @@ import { ContractError } from "./contracts.ts";
 import { JsonTransport, MobileApiError } from "../network/http.ts";
 import * as privacy from "./privacy-requests.ts";
 import * as publisher from "./publisher-contact.ts";
+import { createPrivacyPolicyOpener } from "./privacy-policy.ts";
 import { cameraLicences } from "../files/camera-notices.ts";
 import type { AuthorizedRequest } from "./repository.ts";
 const id = (n: number) =>
@@ -411,6 +412,7 @@ function componentHost() {
     Text: "Text",
     View: "View",
     ScrollView: "ScrollView",
+    Pressable: "Pressable",
     Linking: { openURL: async () => {} },
     AppState: {
       get currentState() {
@@ -438,10 +440,20 @@ function componentHost() {
     "./NativeControls": controls,
     "./theme": theme,
   }).AccountPrivacyRequests;
+  const policyLink = load("../components/PrivacyPolicyLink.tsx", {
+    ...shared,
+    "expo-constants": {
+      __esModule: true,
+      default: { expoConfig: { extra: {} } },
+    },
+    "../domain/privacy-policy": { createPrivacyPolicyOpener },
+    "./theme": theme,
+  }).PrivacyPolicyLink;
   const help = load("../components/AccountHelp.tsx", {
     ...shared,
     "../domain/publisher-contact": publisher,
     "./NativeControls": controls,
+    "./PrivacyPolicyLink": { PrivacyPolicyLink: policyLink },
     "./theme": theme,
   }).AccountHelp;
   const screen = load("../application/screens/AccountScreen.tsx", {

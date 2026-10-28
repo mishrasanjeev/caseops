@@ -13,19 +13,19 @@
     "export:ios": "expo export --platform ios --output-dir dist/ios"
   },
   "dependencies": {
-    "@expo/ui": "58.0.23",
+    "@expo/ui": "58.0.24",
     "@expo/vector-icons": "15.0.2",
-    "expo": "58.0.19",
+    "expo": "58.0.20",
     "expo-crypto": "58.0.7",
-    "expo-dev-client": "58.0.15",
+    "expo-dev-client": "58.0.16",
     "expo-document-picker": "58.0.4",
-    "expo-file-system": "58.0.11",
+    "expo-file-system": "58.0.12",
     "expo-image-picker": "58.0.10",
     "expo-linking": "58.0.14",
     "expo-screen-capture": "58.0.6",
     "expo-secure-store": "58.0.2",
     "expo-status-bar": "58.0.4",
-    "expo-web-browser": "58.0.6",
+    "expo-web-browser": "58.0.7",
     "react": "19.3.0",
     "react-native": "0.88.0",
     "react-native-safe-area-context": "5.10.1",
@@ -38,9 +38,11 @@
     "@types/react": "19.3.0",
     "pdfjs-dist": "6.4.299",
     "prettier": "3.6.2",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "deepmerge": "file:vendor/deepmerge-4.3.1-caseops.1/deepmerge-4.3.1-caseops.1.tgz"
   },
   "overrides": {
-    "zod": "$zod"
+    "zod": "$zod",
+    "deepmerge": "$deepmerge"
   }
 }

@@ -381,6 +381,7 @@ export function checkBuildConfig(platform) {
   return { ...source, profile: settings.profile, platform,
     appId: platform === 'android' ? settings.androidAppId : settings.iosBundleIdentifier,
     apiOrigin: settings.apiOrigin, webOrigin: settings.webOrigin, automatedTest: true,
+    privacyPolicy: exp.extra.privacyPolicy ?? null,
     publicCaSha256: settings.ca?.sha256 ?? null, devEnabled: false,
     nativeExecution: 'not-run-by-build-wrapper' };
 }
@@ -393,6 +394,7 @@ export function finishBuild(platform, before, artifact, embeddedConfig, nativeSe
   assert.equal(embeddedConfig.extra.apiOrigin, after.apiOrigin, 'EMBEDDED_API_ORIGIN_MISMATCH');
   assert.equal(embeddedConfig.extra.webOrigin, after.webOrigin, 'EMBEDDED_WEB_ORIGIN_MISMATCH');
   assert.equal(embeddedConfig.extra.releaseSha, after.sourceSha, 'EMBEDDED_SOURCE_MISMATCH');
+  assert.deepEqual(embeddedConfig.extra.privacyPolicy ?? null, after.privacyPolicy, 'EMBEDDED_PRIVACY_POLICY_MISMATCH');
   if (platform === 'ios') assert.equal(embeddedConfig.ios.bundleIdentifier, after.appId, 'EMBEDDED_QA_BUNDLE_ID_REQUIRED');
   const hash = binaryHash(artifact);
   if (platform === 'android' && nativeSecurity) {

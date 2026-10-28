@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "83678c604b96a442be6cf81f445e50c2bcf1b88ed9b2ff0b6ac3e0b1780f996a"
-MAP_SCHEMA_FINGERPRINT = "0f53f3ee86ba799473f3c28e6092cb2ccd207723c4913a7f1a575c4e89a67f4d"
+MAP_DOCUMENT_FINGERPRINT = "d6002d17fc3cd513e455b4d9630c5d4171d161790cbf081df713130d7112b1b0"
+MAP_SCHEMA_FINGERPRINT = "f7fb9bae65284bc0fba9095088bc952b107f681890ccec9c4ca993f84ba30e7b"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "b4c2fda9eb5e7426cee9ff50a775cdf6b7ddf14220a68b26062b9222e8e7f060"
+ORM_SCHEMA_FINGERPRINT = "844d1384ff4b209b429b1362fed0f304c4042d26bfbe48586ed5448b69e07be7"
 
-PROJECTION_ID = "d70c91a60dd5d2db7e864871bf36afcaa2fc32bae0d51a015673be2925dcb565"
+PROJECTION_ID = "9c05e2c68bc2a3653a8b386bfeba2370a3d3d0d85362be544b660ffc70656d7d"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -285,7 +285,9 @@ INVENTORIED_SQL_TABLES = frozenset(
         "matter_court_sync_jobs",
         "matter_court_sync_runs",
         "matter_deadlines",
+        "matter_decision_read_pages",
         "matter_file_qa_entries",
+        "matter_hearing_pack_read_pages",
         "matter_hearings",
         "matter_intake_requests",
         "matter_invoice_exports",
@@ -295,9 +297,13 @@ INVENTORIED_SQL_TABLES = frozenset(
         "matter_next_hearing_history",
         "matter_next_hearing_suggestions",
         "matter_notes",
+        "matter_option_read_pages",
         "matter_outside_counsel_assignments",
+        "matter_pack_item_read_pages",
         "matter_portal_grants",
         "matter_proceeding_signals",
+        "matter_readthrough_dirty",
+        "matter_recommendation_read_pages",
         "matter_statute_references",
         "matter_strategy_entries",
         "matter_tag_assignments",

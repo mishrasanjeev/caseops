@@ -30,6 +30,17 @@ if (
 )
   throw new Error("STORE_BUILD_REQUIRES_NATIVE_LINK_CONFIG");
 const storeBuild = links ? readStoreBuildSettings(process.env, links) : null;
+const webOrigin =
+  process.env.EXPO_PUBLIC_WEB_ORIGIN ||
+  process.env.EXPO_PUBLIC_API_ORIGIN ||
+  "https://caseops.ai";
+const { readPrivacyPolicySettings } = require("./plugins/privacy-policy.cjs");
+const privacyPolicy = readPrivacyPolicySettings(process.env, {
+  links,
+  webOrigin,
+  required:
+    !acceptance && (process.env.NODE_ENV === "production" || !!storeBuild),
+});
 
 const config: ExpoConfig = {
   name: "CaseOps",
@@ -97,6 +108,12 @@ const config: ExpoConfig = {
       },
     ],
     "./plugins/with-local-acceptance.cjs",
+    [
+      "./plugins/with-privacy-policy.cjs",
+      privacyPolicy
+        ? { configured: true, policy: privacyPolicy }
+        : { configured: false },
+    ],
   ],
   updates: { enabled: false },
   extra: {
@@ -104,10 +121,8 @@ const config: ExpoConfig = {
       ? LOCAL_NATIVE_LINK_POLICY
       : links?.projections.policy || DISABLED_NATIVE_LINK_POLICY,
     apiOrigin: process.env.EXPO_PUBLIC_API_ORIGIN || "https://caseops.ai",
-    webOrigin:
-      process.env.EXPO_PUBLIC_WEB_ORIGIN ||
-      process.env.EXPO_PUBLIC_API_ORIGIN ||
-      "https://caseops.ai",
+    webOrigin,
+    ...(privacyPolicy ? { privacyPolicy } : {}),
     automatedTest: acceptance
       ? true
       : process.env.CASEOPS_MOBILE_AUTOMATED_TEST === "1",

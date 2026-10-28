@@ -26,8 +26,8 @@ the dated SDK/binary observations retain their own source scope.
 ## Pinned SDK purposes and declarations
 
 The top-level installed inputs include Expo58/RN0.88, SecureStore 58.0.2,
-FileSystem58.0.11, DocumentPicker58.0.4, ScreenCapture58.0.6,
-WebBrowser58.0.6, Crypto58.0.7, Linking58.0.14, WebView14.0.1,
+FileSystem58.0.12, DocumentPicker58.0.4, ScreenCapture58.0.6,
+WebBrowser58.0.7, Crypto58.0.7, Linking58.0.14, WebView14.0.1,
 and PDF.js6.4.299 public renderer assets. The application calls screen-capture
 prevention (`App.tsx:42`), explicit document selection and app-owned file I/O,
 OS credential storage, cryptographic randomness/digests, browser authentication,

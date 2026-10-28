@@ -26,7 +26,7 @@ BROWSER_ROUTES = {
     "POST /api/auth/native/authorize",
 }
 HOP = {"connection", "keep-alive", "transfer-encoding", "upgrade", "proxy-authorization", "proxy-authenticate"}
-HEADER_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+\Z")
+HEADER_TOKEN_CHARACTERS = frozenset("!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
 REQUEST_SINGLETONS = ("Authorization", MARKER_HEADER, "Cookie", "Origin", "Host", "Content-Length",
                       "Content-Type", "X-CSRF-Token", "X-CaseOps-V1-Control", "X-Forwarded-Proto")
 
@@ -38,12 +38,19 @@ def upstream_destination(web):
 
 
 def upstream_target(value):
-    assert isinstance(value, str) and 0 < len(value) <= 16384
-    assert value.startswith("/") and not value.startswith("//"), "ORIGIN_FORM_REQUIRED"
-    assert not any(ord(char) <= 32 or ord(char) == 127 or char == "\\" for char in value), "INVALID_REQUEST_TARGET"
+    if not isinstance(value, str) or not 0 < len(value) <= 16384:
+        raise ValueError("INVALID_REQUEST_TARGET")
+    if not value.startswith("/") or value.startswith("//"):
+        raise ValueError("ORIGIN_FORM_REQUIRED")
+    if not re.fullmatch(r"/[A-Za-z0-9._~!$&'()*+,;=:@%/?-]*", value):
+        raise ValueError("INVALID_REQUEST_TARGET")
+    if any(ord(char) <= 32 or ord(char) == 127 or char == "\\" for char in value):
+        raise ValueError("INVALID_REQUEST_TARGET")
     parsed = urlsplit(value)
-    assert not parsed.scheme and not parsed.netloc and not parsed.fragment, "ORIGIN_FORM_REQUIRED"
-    assert not re.search(r"%(?:0[0ad]|2f|5c)", parsed.path, re.IGNORECASE), "INVALID_REQUEST_PATH"
+    if parsed.scheme or parsed.netloc or parsed.fragment:
+        raise ValueError("ORIGIN_FORM_REQUIRED")
+    if re.search(r"%(?:0[0ad]|2f|5c)", parsed.path, re.IGNORECASE):
+        raise ValueError("INVALID_REQUEST_PATH")
     # Preserve the already encoded query byte-for-byte, including signed cursors.
     return parsed.path + ("?" + parsed.query if "?" in value else "")
 
@@ -51,8 +58,11 @@ def upstream_target(value):
 def forwarded_headers(values):
     result = []
     for key, value in values:
-        assert isinstance(key, str) and HEADER_NAME.fullmatch(key), "INVALID_UPSTREAM_HEADER"
-        assert isinstance(value, str) and not re.search(r"[\x00-\x08\x0a-\x1f\x7f]", value), "INVALID_UPSTREAM_HEADER"
+        # A single bounded ASCII token scan avoids regex backtracking on names.
+        if not isinstance(key, str) or not 0 < len(key) <= 65536 or any(char not in HEADER_TOKEN_CHARACTERS for char in key):
+            raise ValueError("INVALID_UPSTREAM_HEADER")
+        if not isinstance(value, str) or any(ord(char) < 32 and char != "\t" or ord(char) == 127 for char in value):
+            raise ValueError("INVALID_UPSTREAM_HEADER")
         if key.lower() not in HOP and key.lower() != "content-length":
             result.append((key, value))
     return result
@@ -66,10 +76,12 @@ def request_headers(values):
         lowered = key.lower()
         # The bounded local protocol never accepts transfer coding, including
         # an empty first value or a control request that returns before body parsing.
-        assert lowered != "transfer-encoding", "TRANSFER_ENCODING_NOT_ADMITTED"
+        if lowered == "transfer-encoding":
+            raise ValueError("TRANSFER_ENCODING_NOT_ADMITTED")
         if lowered in counts:
             counts[lowered] += 1
-            assert counts[lowered] == 1, "DUPLICATE_SECURITY_HEADER"
+            if counts[lowered] != 1:
+                raise ValueError("DUPLICATE_SECURITY_HEADER")
     # Classification and forwarding consume the same unambiguous values.
     return {canonical.get(key.lower(), key): value for key, value in forwarded_headers(values)}
 
@@ -136,8 +148,10 @@ def verified_v1_controls(root, run_id, environment=None):
     expected = env.get("CASEOPS_MOBILE_V1_IMPLEMENTATION_SHA256", "")
     assert re.fullmatch(r"[a-f0-9]{64}", expected), "V1_RUNTIME_SOURCE_PIN_REQUIRED"
     profile = env.get("CASEOPS_MOBILE_V1_PROFILE", "source-work-v3")
-    assert profile in ("source-work-v3", "queue-privacy-v1"), "EXACT_LITERAL_CONTROL_PROFILE_REQUIRED"
-    implementation = Path(__file__).resolve().with_name("local-v1-controls.py" if profile == "source-work-v3" else "local-queue-privacy-controls.py")
+    assert profile in ("source-work-v3", "queue-privacy-v1", "native-client-extensions-v1"), "EXACT_LITERAL_CONTROL_PROFILE_REQUIRED"
+    implementation_name = {"source-work-v3": "local-v1-controls.py", "queue-privacy-v1": "local-queue-privacy-controls.py",
+                           "native-client-extensions-v1": "local-client-extension-controls.py"}[profile]
+    implementation = Path(__file__).resolve().with_name(implementation_name)
     held = runtime_source_bytes(implementation, expected)
     registration_path = Path(env["CASEOPS_MOBILE_V1_REGISTRATION"])
     assert Path(root).resolve() in registration_path.parents, "V1_RUNTIME_REGISTRATION_ROOT_REQUIRED"
@@ -148,7 +162,7 @@ def verified_v1_controls(root, run_id, environment=None):
     module.__file__ = str(implementation)
     exec(compile(held, str(implementation), "exec"), module.__dict__)
     extra = {}
-    if profile == "queue-privacy-v1":
+    if profile in ("queue-privacy-v1", "native-client-extensions-v1"):
         base_path = Path(__file__).resolve().with_name("local-v1-controls.py")
         base_bytes = runtime_source_bytes(base_path, "a03af49be43afd3618688c64e0f7ac7938b8fa3e5e30b05bff00aeeb629ec4fc")
         base = ModuleType("caseops_queue_privacy_verified_helpers")
@@ -181,10 +195,12 @@ class Gateway:
             self.state["v1RegistrationSha256"] = self.v1.registration_sha
             if self.v1.registration.get("profile") == "queue-privacy-v1":
                 self.state["v1ControlProfile"] = "queue-privacy-v1"
+            elif self.v1.registration.get("profile") == "native-client-extensions-v1":
+                self.state["v1ControlProfile"] = "native-client-extensions-v1"
 
     def allowed(self):
         config = json.loads((self.root / "gateway-routes.json").read_text())
-        return set(config["routes"]) | (set(self.v1.registration["exactRoutes"]) if self.v1 and not self.v1.closed else set())
+        return set(config["routes"]) | ((set(self.v1.registration["exactRoutes"]) | getattr(self.v1, "dynamic_routes", set())) if self.v1 and not self.v1.closed else set())
 
     def admit_current_session(self, data, request_id):
         try:
@@ -238,7 +254,7 @@ class Gateway:
                 path = urlsplit(target).path
                 try:
                     incoming_headers = request_headers(self.headers.items())
-                except AssertionError:
+                except (ValueError, AssertionError):
                     return self.reply(400, {"code": "INVALID_REQUEST_HEADERS"})
                 marked = incoming_headers.get(MARKER_HEADER) == MARKER
                 if not web and path == "/__caseops_e2e/v1-control":
@@ -314,7 +330,7 @@ class Gateway:
                     return self.reply(400, {"code": "INVALID_BODY"})
                 try:
                     headers = dict(incoming_headers)
-                except AssertionError:
+                except (ValueError, AssertionError):
                     return self.reply(400, {"code": "INVALID_REQUEST_HEADERS"})
                 headers["Connection"] = "close"
                 headers["X-Forwarded-Proto"] = "https"
@@ -356,9 +372,11 @@ class Gateway:
                 try:
                     if gateway.v1:
                         if hasattr(gateway.v1, "validate_native_request"):
+                            version_metadata = {"client_version_headers": self.headers.get_all("X-CaseOps-Client-Version", []),
+                                                "request_id": request_id} if gateway.v1.registration.get("profile") == "native-client-extensions-v1" else {}
                             gateway.v1.validate_native_request(self.command, path, native=native_bearer, body=body,
                                 query=urlsplit(self.path).query, authorization=incoming_headers.get("Authorization"),
-                                cookie_present=incoming_headers.get("Cookie") is not None)
+                                cookie_present=incoming_headers.get("Cookie") is not None, **version_metadata)
                         intercept = gateway.v1.before_native(self.command, path, native=native_bearer, request_id=request_id)
                         if intercept and intercept.get("fault"):
                             fault = intercept["fault"]
@@ -370,6 +388,11 @@ class Gateway:
                             data = b'{}'
                             record_request()
                             return self.reply(status, {})
+                    # RFC 3986 ASCII origin-form only. This final boundary keeps
+                    # the validated path/query bytes unchanged, including cursors;
+                    # no request field can supply a scheme, authority or fragment.
+                    if not re.fullmatch(r"/[A-Za-z0-9._~!$&'()*+,;=:@%/?-]*", target):
+                        raise ValueError("INVALID_REQUEST_TARGET")
                     upstream.request(self.command, target, body=body, headers=headers)
                     response = upstream.getresponse()
                     status = response.status
@@ -393,7 +416,13 @@ class Gateway:
                     response_started = True
                     self.send_response(status)
                     for key, value in response_headers:
-                        self.send_header(key, value)
+                        # Reject both header components before the response sink.
+                        # The replacements are defense in depth and are identities
+                        # for every admitted value; unsafe input is never repaired.
+                        if "\r" in key or "\n" in key or "\r" in value or "\n" in value:
+                            raise ValueError("INVALID_UPSTREAM_HEADER")
+                        self.send_header(key.replace("\r", "").replace("\n", ""),
+                                         value.replace("\r", "").replace("\n", ""))
                     self.send_header("Content-Length", str(len(data)))
                     self.send_header("Connection", "close")
                     self.end_headers()

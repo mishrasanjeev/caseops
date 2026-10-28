@@ -4,6 +4,7 @@ import { appendFileSync, closeSync, fstatSync, linkSync, mkdirSync, mkdtempSync,
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
 import { assertCameraCopiesRemoved, CAMERA_PRIVACY_LIMITS, observeIosCameraDirectory } from './camera-files-privacy.mjs';
 
 const NAME = '11111111-2222-4333-8444-555555555555.jpg';
@@ -15,6 +16,70 @@ function fixture(t, present = true) {
   t.after(() => rmSync(base, { force: true, recursive: true }));
   return { base, app, root, image: path.join(root, NAME) };
 }
+
+function descriptorProbe(t, mode) {
+  const f = fixture(t); writeFileSync(f.image, 'stable-synthetic-copy');
+  // A separate process keeps the builtin instrumentation local to this real
+  // filesystem control; no shared ESM bindings or other tests are patched.
+  const source = String.raw`
+    import fs from 'node:fs';
+    import { syncBuiltinESMExports } from 'node:module';
+    const q = JSON.parse(fs.readFileSync(0, 'utf8'));
+    const open = fs.openSync, lstat = fs.lstatSync, fstat = fs.fstatSync;
+    let descriptor, changed = false, reads = 0; const events = [];
+    fs.openSync = function(file, ...args) {
+      const fd = open(file, ...args);
+      if (file === q.image) { descriptor = fd; events.push('open'); }
+      return fd;
+    };
+    fs.lstatSync = function(file, ...args) {
+      if (file === q.image) events.push('named');
+      return lstat(file, ...args);
+    };
+    fs.fstatSync = function(fd, ...args) {
+      const value = fstat(fd, ...args);
+      if (fd === descriptor) {
+        events.push('descriptor');
+        if (q.mode === 'replace' && !changed) {
+          changed = true; fs.renameSync(q.image, q.saved);
+          fs.writeFileSync(q.image, 'replacement-current-leaf');
+        }
+      }
+      return value;
+    };
+    syncBuiltinESMExports();
+    const { observeIosCameraDirectory } = await import(q.module);
+    const value = observeIosCameraDirectory(q.app, { readChunk(fd, ...args) {
+      events.push('body'); reads++; return fs.readSync(fd, ...args);
+    } });
+    let closed = false;
+    try { fstat(descriptor); } catch (error) { closed = error.code === 'EBADF'; }
+    process.stdout.write(JSON.stringify({ value, events, reads, changed, closed }));
+  `;
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', source], {
+    input: JSON.stringify({ mode, app: f.app, image: f.image, saved: path.join(f.base, 'retained-copy'),
+      module: new URL('./camera-files-privacy.mjs', import.meta.url).href }),
+    encoding: 'utf8', timeout: 5000, maxBuffer: 65536,
+  });
+  assert.equal(child.error, undefined); assert.equal(child.status, 0); assert.equal(child.stderr, '');
+  return JSON.parse(child.stdout);
+}
+
+test('the opened descriptor is admitted before its named camera leaf and body', t => {
+  const value = descriptorProbe(t, 'stable');
+  assert.deepEqual(value.events.slice(0, 3), ['open', 'descriptor', 'named']);
+  assert.ok(value.events.indexOf('body') > value.events.indexOf('named'));
+  assert.equal(value.value.complete, true); assert.equal(value.value.counts.copies, 1);
+  assert.equal(value.value.counts.bytesRead, Buffer.byteLength('stable-synthetic-copy'));
+  assert.equal(value.closed, true);
+});
+
+test('actual leaf replacement after descriptor opening refuses before any body read and closes it', t => {
+  const value = descriptorProbe(t, 'replace');
+  assert.equal(value.changed, true); assert.equal(value.reads, 0);
+  assert.equal(value.value.counts.bytesRead, 0); assert.equal(value.value.complete, false);
+  assert.equal(value.value.copies.length, 0); assert.equal(value.closed, true);
+});
 
 test('absent or empty exact SDK directory has its own charged zero-copy scope', t => {
   for (const present of [false, true]) {

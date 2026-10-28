@@ -7,6 +7,7 @@ import {
 import type { PublisherEnquiry } from "../domain/publisher-contact";
 import { NativeButton } from "./NativeControls";
 import { styles } from "./theme";
+import { PrivacyPolicyLink } from "./PrivacyPolicyLink";
 
 export function AccountHelp({
   disabled = false,
@@ -76,6 +77,10 @@ export function AccountHelp({
             Signing out ends this app's session. It does not delete your account
             or your organization's records.
           </Text>
+          <Text accessibilityRole="header" style={styles.heading}>
+            Privacy policy
+          </Text>
+          <PrivacyPolicyLink disabled={disabled || opening} />
           <Text accessibilityRole="header" style={styles.heading}>
             Publisher enquiries
           </Text>

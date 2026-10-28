@@ -173,12 +173,16 @@ test('actual production TypeScript config refuses absent numbering and projects 
   const config = { ...f.config, syntheticDataOnly: false }; const lr = f.save('structural-links.json', config);
   const baseline = { ...f.baseline, syntheticDataOnly: false }; const previous = f.save('structural-baseline.json', baseline);
   const br = f.save('structural-build.json', { ...f.build, syntheticDataOnly: false, nativeLinkConfigSha256: lr.sha256, baseline: previous });
-  const env = { NODE_ENV: 'production', CASEOPS_NATIVE_LINK_CONFIG_FILE: lr.path, CASEOPS_NATIVE_LINK_CONFIG_SHA256: lr.sha256 };
+  const privacy = f.save('structural-policy.json', { schemaVersion: 1, kind: 'caseops-mobile-privacy-policy', nativeLinkConfigSha256: lr.sha256,
+    url: 'https://auth.contract-fixture.org/privacy-policy', version: 'synthetic-policy-v1' });
+  const env = { NODE_ENV: 'production', CASEOPS_NATIVE_LINK_CONFIG_FILE: lr.path, CASEOPS_NATIVE_LINK_CONFIG_SHA256: lr.sha256,
+    EXPO_PUBLIC_WEB_ORIGIN: 'https://auth.contract-fixture.org', CASEOPS_MOBILE_PRIVACY_POLICY_FILE: privacy.path, CASEOPS_MOBILE_PRIVACY_POLICY_SHA256: privacy.sha256 };
   const absent = appConfig(env); assert.notEqual(absent.status, 0); assert.match(absent.stderr, /EXACT_STORE_REFERENCE_REQUIRED/);
   const run = appConfig({ ...env, CASEOPS_STORE_BUILD_FILE: br.path, CASEOPS_STORE_BUILD_SHA256: br.sha256 });
   assert.equal(run.status, 0, run.stderr); const projected = JSON.parse(run.stdout);
   assert.equal(projected.version, '1.0.0'); assert.equal(projected.ios.buildNumber, '8'); assert.equal(projected.android.versionCode, 10);
   assert.equal(projected.ios.deploymentTarget, '17.4'); assert.equal(projected.extra.nativeLinkPolicy.mode, 'https');
+  assert.deepEqual(projected.extra.privacyPolicy, { url: 'https://auth.contract-fixture.org/privacy-policy', version: 'synthetic-policy-v1', sha256: privacy.sha256 });
 });
 test('growth after initial fstat cannot cause more than limit-plus-one descriptor bytes to be consumed', t => {
   const f = fixture(t); const ref = f.save('growing.json', '{}');

@@ -338,3 +338,46 @@ YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER
 PROGRAMS), EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGES.
 
+
+
+========================================================================
+deepmerge 4.3.1-caseops.1 — private CaseOps compatibility backport
+
+This is not an upstream release. Original: deepmerge 4.3.1, MIT licence,
+https://registry.npmjs.org/deepmerge/-/deepmerge-4.3.1.tgz
+upstream gitHead: 5b87756a5671635679001cbac72aa42f23472c81
+
+GHSA-gcqx-w48m-w2h4 / CVE-2026-93753:
+The three destination assignments across the target/source loops now define
+own writable, enumerable and configurable data properties. This prevents an
+own __proto__ data key from invoking Object.prototype's setter on the result.
+Keys and values remain data; no key is silently discarded by this backport.
+Existing unsafe-inherited-property guards, recursion, symbols, custom merges,
+array behavior and .all are retained. The source, CJS and UMD forms agree.
+
+The original seven LOW npm audit entries are retained in remediation evidence.
+A local package version or audit omission is not proof of upstream remediation.
+No Expo SDK downgrade, package publication or audit exception is authorized.
+The original MIT copyright and licence are preserved byte-for-byte in license.txt.
+
+The MIT License (MIT)
+
+Copyright (c) 2012 James Halliday, Josh Duff, and other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.

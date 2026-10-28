@@ -59,6 +59,7 @@ from tests.test_matter_readthrough_20261028 import (
 from tests.test_matter_readthrough_20261028 import (
     test_private_response_headers_cover_success_auth_validation_and_missing as private_contract,
 )
+from tests.test_matter_readthrough_evidence_20261028 import capture_plan, compact_plan_record
 
 forbid_unadmitted_network = _offline
 pytestmark = pytest.mark.postgres
@@ -286,7 +287,13 @@ COSTS = ("default", "adverse")
 def _captured_shape(statement):
     """Classify exact typed projections; unknown/new SQL is not silently omitted."""
     columns = list(statement.selected_columns)
-    top = {getattr(getattr(column, "table", None), "name", None) for column in columns}
+    # Compound packed/canonical reads retain the original typed source-column
+    # lineage. Follow those exact proxies; an unknown shape still refuses.
+    top = {
+        getattr(getattr(origin, "table", None), "name", None)
+        for column in columns
+        for origin in column.proxy_set
+    }
     names = {getattr(node, "name", None) for node in visitors.iterate(statement)}
     keys = tuple(column.key for column in columns)
     limit = getattr(getattr(statement, "_limit_clause", None), "value", None)
@@ -322,6 +329,8 @@ def _captured_shape(statement):
     if len(columns) == 1 and isinstance(columns[0], Exists) and limit is None:
         if "recommendations" in names:
             return "recommendation_parent"
+        if "hearing_packs" in names:
+            return "pack_parent"
         if "readthrough_actor" in names and "readthrough_actor_user" in names:
             return "actor"
     raise AssertionError(
@@ -427,17 +436,75 @@ def _install_non_owner_matrix_policy(client, visible, competing):
     return membership, viewer_user, token
 
 
+_PUBLIC_PREFIX_FIELDS = {
+    "type",
+    "title",
+    "confidence",
+    "status",
+    "rationale",
+    "assumptions_json",
+    "missing_facts_json",
+    "next_action",
+    "retrieved_authorities_json",
+    "strategy_payload_json",
+    "analysis_json",
+    "label",
+    "supporting_citations_json",
+    "risk_notes",
+    "actor_membership_id",
+    "decision",
+    "notes",
+    "generated_by_membership_id",
+    "reviewed_by_membership_id",
+    "model_run_id",
+    "summary",
+    "item_type",
+    "body",
+    "source_ref",
+}
+_PUBLIC_PROJECTION_KEYS = (
+    _PUBLIC_PREFIX_FIELDS
+    | {name + "_source_bytes" for name in _PUBLIC_PREFIX_FIELDS}
+    | {
+        "id",
+        "company_id",
+        "matter_id",
+        "created_at",
+        "updated_at",
+        "review_required",
+        "primary_option_index",
+        "recommendation_id",
+        "rank",
+        "selected_option_index",
+        "hearing_id",
+        "generated_at",
+        "reviewed_at",
+        "pack_id",
+        "__company_id",
+        "__matter_id",
+    }
+)
+_PUBLIC_READ_INTEGERS = {*range(27), 37, 41, 256, 401, 501, 16385}
+
+
 def _public_probe_binding(value, public_ids):
     # These GETs bind synthetic IDs, role/status literals, exact cursor dates
     # and scalar limits only. No token/password/session hash is admitted to a
     # persisted probe. Unknown binding content fails without reflecting it.
-    if value is None or type(value) in {bool, int}:
+    if value is None or type(value) is bool:
+        return value
+    if type(value) is int and value in _PUBLIC_READ_INTEGERS:
         return value
     if isinstance(value, Enum):
         value = value.value
-    if isinstance(value, str) and value in public_ids | set(ROLES) | {
+    if isinstance(value, str) and value in public_ids | set(ROLES) | _PUBLIC_PROJECTION_KEYS | {
         "active",
         "intelligent_review",
+        "",
+        "chron",
+        "rank",
+        "id",
+        "latest",
     }:
         return value
     if isinstance(value, datetime) and value == STAMP:
@@ -478,6 +545,10 @@ def test_pg_named_get_policy_and_continuation_plan_matrix(
     assert admitted_binding == [uid(1), "viewer", 26, STAMP.isoformat(timespec="microseconds")]
     with pytest.raises(AssertionError, match="outside the admitted synthetic public probe"):
         _public_probe_binding("synthetic-bearer-token-or-session-hash", {uid(1)})
+    with pytest.raises(AssertionError, match="outside the admitted synthetic public probe"):
+        _public_probe_binding("unreviewed_projection_field", {uid(1)})
+    with pytest.raises(AssertionError, match="outside the admitted synthetic public probe"):
+        _public_probe_binding(99991, {uid(1)})
     journeys = _matrix_journeys()
     assert len(journeys) == len(set(journeys)) == 36
     expected = {}
@@ -491,6 +562,7 @@ def test_pg_named_get_policy_and_continuation_plan_matrix(
     (tmp_path / "complete-plan-inventory.json").write_text(
         json.dumps(
             {
+                "schemaVersion": 2,
                 "literalJourneys": journeys,
                 "expectedLabels": list(expected),
                 "observed": expected,
@@ -785,6 +857,35 @@ def test_pg_named_get_policy_and_continuation_plan_matrix(
                         ).scalar_one()
                         plan = encoded[0]
                         work, attribution = _plan_work(plan)
+                        canonical_reads = [
+                            {
+                                "relation": owner,
+                                "node": node["Node Type"],
+                                "actualLoops": node.get("Actual Loops", 1),
+                            }
+                            for node, owner in _nodes(plan["Plan"])
+                            if owner
+                            in {
+                                "recommendations",
+                                "recommendation_options",
+                                "recommendation_decisions",
+                                "hearing_packs",
+                                "hearing_pack_items",
+                            }
+                            and node["Node Type"]
+                            in {
+                                "Seq Scan",
+                                "Index Scan",
+                                "Index Only Scan",
+                                "Bitmap Heap Scan",
+                                "Bitmap Index Scan",
+                                "Tid Scan",
+                                "Tid Range Scan",
+                                "Sample Scan",
+                                "Foreign Scan",
+                            }
+                            and node.get("Actual Loops", 1) > 0
+                        ]
                         # Retain the actual plan before a projection/readback
                         # failure can interrupt this measurement. Its original
                         # unverified record is never relabeled as accepted.
@@ -797,22 +898,20 @@ def test_pg_named_get_policy_and_continuation_plan_matrix(
                             "actualTypedSQL": sql,
                             "actualPublicBindings": public,
                             "allNodeAttribution": attribution,
+                            "cleanCanonicalSourceReads": canonical_reads,
                             "actualOccurrences": occurrences[shape],
                             "occurrenceWeightedWork": work * occurrences[shape],
                         }
-                        with (tmp_path / (label.replace("/", "-") + "-captured.json")).open(
-                            "x"
-                        ) as output:
-                            output.write(json.dumps(raw, indent=2, default=str) + "\n")
-                        observed[label] = {
-                            key: raw[key]
-                            for key in (
-                                "status",
-                                "work",
-                                "actualOccurrences",
-                                "occurrenceWeightedWork",
-                            )
-                        }
+                        captured_path = tmp_path / (label.replace("/", "-") + "-captured.json")
+                        try:
+                            captured_ref = capture_plan(captured_path, raw)
+                        except BaseException:
+                            observed[label] = {
+                                "status": "capture_incomplete",
+                                "capturedBasename": captured_path.name,
+                            }
+                            raise
+                        observed[label] = compact_plan_record(raw, captured_ref)
                         projected = [dict(row) for row in connection.execute(statement).mappings()]
                     # A cheap EXPLAIN for a wrongly rebound statement is not
                     # source evidence. Match the actual projected identities to
@@ -839,13 +938,15 @@ def test_pg_named_get_policy_and_continuation_plan_matrix(
                             assert len(projected) == 1 and projected[0]["id"] == body["id"]
                         else:
                             assert not projected
-                    elif shape in {"pack_parent", "hearing_parent"}:
+                    elif shape == "pack_parent":
+                        # Parent admission is an actual EXISTS over the exact
+                        # requested packed source, not an actor-only Boolean.
+                        assert len(projected) == 1
+                        assert list(projected[0].values()) == [positive]
+                        assert path_case["pack"] in public.values()
+                    elif shape == "hearing_parent":
                         if positive:
-                            expected_parent = (
-                                visible["pack"]
-                                if shape == "pack_parent"
-                                else visible["hearing"]["id"]
-                            )
+                            expected_parent = visible["hearing"]["id"]
                             assert len(projected) == 1 and projected[0]["id"] == expected_parent
                         else:
                             assert not projected
@@ -873,31 +974,23 @@ def test_pg_named_get_policy_and_continuation_plan_matrix(
                     assert projected == baseline_rows
                     charged = work * occurrences[shape]
                     totals[cost] += charged
-                    row = {
-                        "label": label,
-                        "status": "measured",
-                        "work": work,
-                        "cap": 400,
-                        "actualOccurrences": occurrences[shape],
-                        "occurrenceWeightedWork": charged,
-                        "plan": plan,
-                        "actualTypedSQL": sql,
-                        "actualPublicBindings": public,
-                        "allNodeAttribution": attribution,
-                        "completeProjectionRowsEqualDefault": True,
-                        "actualSourceProjectionBoundToHTTPIdentity": True,
-                        "indexTiming": index_timing,
-                        "cohortOrder": cohort_order,
-                    }
-                    (tmp_path / (label.replace("/", "-") + ".json")).write_text(
-                        json.dumps(row, indent=2, default=str) + "\n"
+                    observed[label] = compact_plan_record(
+                        raw,
+                        captured_ref,
+                        measured=True,
+                        index_timing=index_timing,
+                        cohort_order=cohort_order,
                     )
-                    observed[label] = {
-                        key: row[key]
-                        for key in ("status", "work", "actualOccurrences", "occurrenceWeightedWork")
-                    }
                     if work > 400:
                         failures.append({"label": label, "work": work})
+                        if canonical_reads:
+                            failures.append(
+                                {
+                                    "label": label,
+                                    "work": work,
+                                    "cleanCanonicalSourceReads": canonical_reads,
+                                }
+                            )
             http_row["allActualSQLCount"] = len(captured)
             http_row["allStatementOccurrenceWeightedWork"] = totals
             http_row["aggregateHTTP400Claim"] = False
@@ -918,6 +1011,7 @@ def test_pg_named_get_policy_and_continuation_plan_matrix(
         (tmp_path / "complete-plan-inventory.json").write_text(
             json.dumps(
                 {
+                    "schemaVersion": 2,
                     "literalJourneys": journeys,
                     "expectedLabels": list(expected),
                     "observed": inventory,

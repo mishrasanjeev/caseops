@@ -39,3 +39,32 @@ apps/api/src/caseops_api/db/task_queue_page_schema_v1.py text eol=lf
 apps/api/vendor/dnspython-2.9.0/LICENSE text eol=lf
 apps/api/vendor/dnspython-2.9.0/NOTICE.txt text eol=lf
 apps/api/vendor/dnspython-2.9.0/provenance.json text eol=lf
+
+# Immutable migration0008 source dependency; preserve exact bytes on Windows.
+apps/api/src/caseops_api/db/matter_readthrough_page_schema_v1.py text eol=lf
+
+scripts/mobile/local-client-extension-controls.py text eol=lf
+scripts/mobile/local-client-extension-controls.test.py text eol=lf
+scripts/mobile/local-client-extension-fixture.py text eol=lf
+scripts/mobile/client-extensions.test.py text eol=lf
+scripts/mobile/client-extension-fixture.test.py text eol=lf
+apps/mobile/e2e/client-extensions*.mjs text eol=lf
+scripts/mobile/client-extension*.mjs text eol=lf
+scripts/mobile/client-policy-checkpoint.mjs text eol=lf
+scripts/mobile/prepare-client-extensions.mjs text eol=lf
+scripts/mobile/run-client-extensions.mjs text eol=lf
+
+# Private compatibility archive and its reviewed source/notice bytes.
+apps/mobile/vendor/deepmerge-4.3.1-caseops.1/** text eol=lf
+apps/mobile/vendor/deepmerge-4.3.1-caseops.1/**/*.tgz -text
+scripts/mobile/rebuild-deepmerge-compat.py text eol=lf
+scripts/mobile/rebuild-deepmerge-compat.test.py text eol=lf
+scripts/mobile/deepmerge-security.test.mjs text eol=lf
+scripts/mobile/deepmerge-installed.test.mjs text eol=lf
+
+apps/mobile/plugins/privacy-policy.cjs text eol=lf
+apps/mobile/plugins/with-privacy-policy.cjs text eol=lf
+scripts/mobile/privacy-policy.test.mjs text eol=lf
+
+# Byte-exact process-owner source consumed by local packaging host.
+scripts/mobile/store_process_owner.py text eol=lf

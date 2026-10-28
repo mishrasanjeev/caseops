@@ -49,6 +49,7 @@ from caseops_api.schemas.matter_readthrough import (
     RecommendationSummary,
 )
 from caseops_api.schemas.recommendations import RecommendationAnalysisRecord
+from caseops_api.services import matter_readthrough_pages as pages
 from caseops_api.services.matter_readthrough_cursor import (
     decode_cursor,
     encode_cursor,
@@ -259,15 +260,22 @@ def _recommendation_statement(session, context, scope, *, detail=False):
     )
 
 
-def _recommendation_exists(session, context, scope, recommendation_id, foreign_id=None):
+def _recommendation_exists(session, context, scope, recommendation_id):
+    statement = select(Recommendation.id).where(
+        Recommendation.id == recommendation_id,
+        Recommendation.company_id == context.company.id,
+        Recommendation.matter_id == scope.matter_id,
+        Recommendation.type != literal("intelligent_review", literal_execute=True),
+        _matter_exists(session, context, scope),
+    )
     return exists(
-        select(Recommendation.id).where(
-            Recommendation.id == (foreign_id if foreign_id is not None else recommendation_id),
-            Recommendation.id == recommendation_id,
-            Recommendation.company_id == context.company.id,
-            Recommendation.matter_id == scope.matter_id,
-            Recommendation.type != literal("intelligent_review", literal_execute=True),
-            _matter_exists(session, context, scope),
+        pages.point_statement(
+            session,
+            statement,
+            Recommendation,
+            company_id=context.company.id,
+            matter_id=scope.matter_id,
+            identity=recommendation_id,
         )
     )
 
@@ -309,9 +317,14 @@ def get_recommendation(session, *, context, matter_id, recommendation_id):
     record_id(recommendation_id)
     row = (
         session.execute(
-            _recommendation_statement(session, context, scope, detail=True)
-            .where(Recommendation.id == recommendation_id)
-            .limit(1)
+            pages.point_statement(
+                session,
+                _recommendation_statement(session, context, scope, detail=True),
+                Recommendation,
+                company_id=context.company.id,
+                matter_id=scope.matter_id,
+                identity=recommendation_id,
+            )
         )
         .mappings()
         .one_or_none()
@@ -362,26 +375,39 @@ def _page(
 ):
     if type(limit) is not int or not 1 <= limit <= 25:
         _problem(422, "matter_read_limit_invalid", "Read limits are between 1 and 25.")
+    layout = "rank" if kind in {"recommendation_options", "hearing_pack_items"} else "chron"
+    after_tuple = None
     if cursor is not None:
         anchor = decode_cursor(cursor, context, scope, kind, parent_id, limit)
+        anchor_key = anchor["key"]
+        if key.type.python_type is datetime:
+            anchor_key = datetime.fromisoformat(anchor_key)
         current = (
             session.execute(
-                statement.with_only_columns(model.id, key, maintain_column_froms=True)
-                .where(model.id == anchor["id"])
-                .limit(1)
+                pages.point_statement(
+                    session,
+                    statement.with_only_columns(model.id, key, maintain_column_froms=True),
+                    model,
+                    company_id=context.company.id,
+                    matter_id=scope.matter_id,
+                    layout=layout,
+                    parent_id=parent_id,
+                    identity=anchor["id"],
+                    key=key,
+                    ascending=ascending,
+                    anchor_key=anchor_key,
+                )
             )
             .mappings()
             .one_or_none()
         )
-        anchor_key = anchor["key"]
-        if key.type.python_type is datetime:
-            anchor_key = datetime.fromisoformat(anchor_key)
         current_key = current[key.key] if current is not None else None
         if isinstance(current_key, datetime):
             current_key = utc(current_key).isoformat(timespec="microseconds")
         if current is None or current_key != anchor["key"]:
             _after(session, context, scope)
             _problem(409, "matter_read_cursor_stale", "Source changed. Reload the first page.")
+        after_tuple = (anchor_key, anchor["id"])
         pair = tuple_(key, model.id)
         statement = statement.where(
             pair > tuple_(anchor_key, anchor["id"])
@@ -390,10 +416,19 @@ def _page(
         )
     rows = list(
         session.execute(
-            statement.order_by(
-                key.asc() if ascending else key.desc(),
-                model.id.asc() if ascending else model.id.desc(),
-            ).limit(limit + 1)
+            pages.page_statement(
+                session,
+                statement,
+                model,
+                company_id=context.company.id,
+                matter_id=scope.matter_id,
+                layout=layout,
+                parent_id=parent_id,
+                key=key,
+                ascending=ascending,
+                limit=limit,
+                after=after_tuple,
+            )
         ).mappings()
     )
     _after(session, context, scope)
@@ -450,9 +485,7 @@ def list_options(session, *, context, matter_id, recommendation_id, limit=25, cu
         *_prefix(session, RecommendationOption.risk_notes),
     ).where(
         RecommendationOption.recommendation_id == recommendation_id,
-        _recommendation_exists(
-            session, context, scope, recommendation_id, RecommendationOption.recommendation_id
-        ),
+        _recommendation_exists(session, context, scope, recommendation_id),
     )
 
     def row(value):
@@ -500,9 +533,7 @@ def list_decisions(session, *, context, matter_id, recommendation_id, limit=25, 
         *_prefix(session, RecommendationDecision.notes),
     ).where(
         RecommendationDecision.recommendation_id == recommendation_id,
-        _recommendation_exists(
-            session, context, scope, recommendation_id, RecommendationDecision.recommendation_id
-        ),
+        _recommendation_exists(session, context, scope, recommendation_id),
     )
 
     def row(value):
@@ -603,10 +634,21 @@ def get_latest_pack(session, *, context, matter_id, hearing_id):
         _problem(404, "matter_read_not_found", "Hearing not found.")
     row = (
         session.execute(
-            _pack_statement(session, context, scope)
-            .where(HearingPack.hearing_id == hearing_id)
-            .order_by(HearingPack.generated_at.desc(), HearingPack.id.desc())
-            .limit(1)
+            pages.page_statement(
+                session,
+                _pack_statement(session, context, scope).where(
+                    HearingPack.hearing_id == hearing_id
+                ),
+                HearingPack,
+                company_id=context.company.id,
+                matter_id=scope.matter_id,
+                layout="latest",
+                parent_id=hearing_id,
+                key=HearingPack.generated_at,
+                ascending=False,
+                limit=1,
+                lookahead=False,
+            )
         )
         .mappings()
         .one_or_none()
@@ -620,7 +662,14 @@ def get_pack(session, *, context, matter_id, pack_id):
     record_id(pack_id)
     row = (
         session.execute(
-            _pack_statement(session, context, scope).where(HearingPack.id == pack_id).limit(1)
+            pages.point_statement(
+                session,
+                _pack_statement(session, context, scope),
+                HearingPack,
+                company_id=context.company.id,
+                matter_id=scope.matter_id,
+                identity=pack_id,
+            )
         )
         .mappings()
         .one_or_none()
@@ -631,13 +680,28 @@ def get_pack(session, *, context, matter_id, pack_id):
     return _pack_row(row, scope)
 
 
+def _pack_exists(session, context, scope, pack_id):
+    statement = (
+        _pack_statement(session, context, scope)
+        .with_only_columns(HearingPack.id, maintain_column_froms=True)
+        .where(HearingPack.id == pack_id)
+    )
+    return exists(
+        pages.point_statement(
+            session,
+            statement,
+            HearingPack,
+            company_id=context.company.id,
+            matter_id=scope.matter_id,
+            identity=pack_id,
+        )
+    )
+
+
 def list_pack_items(session, *, context, matter_id, pack_id, limit=25, cursor=None):
     scope = _scope(session, context, matter_id)
     record_id(pack_id)
-    parent = _pack_statement(session, context, scope).with_only_columns(
-        HearingPack.id, maintain_column_froms=True
-    )
-    if not session.scalar(parent.where(HearingPack.id == pack_id).limit(1)):
+    if not session.scalar(select(_pack_exists(session, context, scope, pack_id))):
         _after(session, context, scope)
         _problem(404, "matter_read_not_found", "Hearing pack not found.")
     statement = select(
@@ -650,7 +714,7 @@ def list_pack_items(session, *, context, matter_id, pack_id, limit=25, cursor=No
         *_prefix(session, HearingPackItem.source_ref, 500),
     ).where(
         HearingPackItem.pack_id == pack_id,
-        exists(parent.where(HearingPack.id == HearingPackItem.pack_id, HearingPack.id == pack_id)),
+        _pack_exists(session, context, scope, pack_id),
     )
 
     def row(value):
@@ -681,7 +745,7 @@ def list_pack_items(session, *, context, matter_id, pack_id, limit=25, cursor=No
         limit=limit,
         cursor=cursor,
     )
-    if not session.scalar(parent.where(HearingPack.id == pack_id).limit(1)):
+    if not session.scalar(select(_pack_exists(session, context, scope, pack_id))):
         _after(session, context, scope)
         _problem(404, "matter_read_not_found", "Hearing pack not found.")
     return page

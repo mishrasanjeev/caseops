@@ -22576,12 +22576,23 @@ from caseops_api.db import native_auth_models  # noqa: E402
 NativeAuthorizationCode = native_auth_models.NativeAuthorizationCode
 NativeDeviceSession = native_auth_models.NativeDeviceSession
 NativeRefreshToken = native_auth_models.NativeRefreshToken
-from caseops_api.db import task_queue_page_schema_v1  # noqa: E402, F401
+from caseops_api.db import (  # noqa: E402
+    matter_readthrough_page_schema_v1,  # noqa: E402, F401
+    task_queue_page_schema_v1,  # noqa: E402, F401
+)
 from caseops_api.db.account_privacy_models import AccountDeletionRequest  # noqa: E402, F401
 from caseops_api.db.counsel_page_models import (  # noqa: E402, F401
     CounselReadPage,
     CounselReadPageDirty,
     CounselReadPageMember,
+)
+from caseops_api.db.matter_readthrough_page_models import (  # noqa: E402, F401
+    MatterDecisionReadPage,
+    MatterHearingPackReadPage,
+    MatterOptionReadPage,
+    MatterPackItemReadPage,
+    MatterReadthroughDirty,
+    MatterRecommendationReadPage,
 )
 from caseops_api.db.patent_proceeding_models import (  # noqa: E402, F401
     IpPatentProceedingDetail,
@@ -22599,5 +22610,8 @@ from caseops_api.db.task_queue_page_models import (  # noqa: E402, F401
 )
 
 event.listen(Base.metadata, "after_create", task_queue_page_schema_v1.install_model_schema)
+event.listen(
+    Base.metadata, "after_create", matter_readthrough_page_schema_v1.install_model_schema
+)
 
 ensure_foreign_key_indexes(Base.metadata)

@@ -80,7 +80,8 @@ function fixture(t, extra = {}) {
     'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts',
     'scripts/mobile/prepare-viewer-assets.mjs', 'apps/mobile/src/viewer/renderer-runtime.ts',
     ...['LICENSES.txt', 'manifest.json', 'pdfjs-assets.ts', 'renderer-runtime-source.ts'].map(name => `apps/mobile/src/viewer/generated/${name}`),
-    'apps/mobile/package.json', 'apps/mobile/app.config.ts', 'apps/mobile/plugins/with-local-acceptance.cjs', 'apps/mobile/plugins/store-build.cjs', 'apps/mobile/e2e/support.mjs'];
+    'apps/mobile/package.json', 'apps/mobile/app.config.ts', 'apps/mobile/plugins/with-local-acceptance.cjs', 'apps/mobile/plugins/store-build.cjs',
+    'apps/mobile/plugins/privacy-policy.cjs', 'apps/mobile/plugins/with-privacy-policy.cjs', 'apps/mobile/e2e/support.mjs'];
   for (const name of files) { const destination = path.join(checkout, name); mkdirSync(path.dirname(destination), { recursive: true }); copyFileSync(path.join(repo, name), destination); }
   // Trace actual source capture in the temporary contract fixture, so an order
   // assertion cannot pass merely because the wrapper contains command strings.
@@ -143,6 +144,7 @@ printf 'gradle:%s\\n' "$*" >> "$CASEOPS_TEST_TRACE"
 if [[ "\${CASEOPS_TEST_GRADLE_EXIT:-0}" != 0 ]]; then echo RETAINED_GRADLE_FAILURE >&2; exit "$CASEOPS_TEST_GRADLE_EXIT"; fi
 python3 "$CASEOPS_TEST_ROOT/make-apk.py" "$PWD/app/build/outputs/apk/localAcceptance/app-localAcceptance.apk"
 if [[ -n "\${CASEOPS_TEST_MUTATE_SOURCE:-}" ]]; then echo changed > ../source-changed.ts; fi
+if [[ -n "\${CASEOPS_TEST_MUTATE_POLICY_HELPER:-}" ]]; then echo '// synthetic post-preflight helper change' >> "../plugins/$CASEOPS_TEST_MUTATE_POLICY_HELPER"; fi
 `, true);
   file('make-apk.py', `import os,sys,json,pathlib,zipfile
 p=pathlib.Path(sys.argv[1]);p.parent.mkdir(parents=True,exist_ok=True)
@@ -186,7 +188,7 @@ test('actual shell orchestration binds portable source/CA receipt, ARM64 ELF and
 test('actual preflight order verifies generated public renderer bytes before source snapshots, prebuild and Gradle', t => {
   const f = fixture(t), result = f.run(); assert.equal(result.status, 0, result.stdout + result.stderr);
   for (const input of ['scripts/mobile/prepare-native-links.mjs', 'scripts/mobile/prepare-store-packaging.mjs',
-    'apps/mobile/plugins/store-build.cjs', 'apps/mobile/metro.config.js',
+    'apps/mobile/plugins/store-build.cjs', 'apps/mobile/plugins/privacy-policy.cjs', 'apps/mobile/plugins/with-privacy-policy.cjs', 'apps/mobile/metro.config.js',
     'apps/web/lib/native-link-policy.cjs', 'apps/web/lib/native-link-policy.d.cts',
     'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts'])
     assert.deepEqual(readFileSync(path.join(f.checkout, input)), readFileSync(path.join(repo, input)), 'EXACT_SHARED_NATIVE_LINK_INPUT_CLOSURE_REQUIRED');
@@ -249,6 +251,8 @@ for (const [label, extra, error] of [
   ['failed signature verifier despite successful-looking stdout', { CASEOPS_TEST_SIGNER_EXIT: '9' }, null],
   ['APK mutation after signature verification', { CASEOPS_TEST_MUTATE_APK: '1' }, /APK_CHANGED_DURING_SDK_INSPECTION/],
   ['source mutation after the actual preflight', { CASEOPS_TEST_MUTATE_SOURCE: '1' }, /SOURCE_OR_CONFIGURATION_CHANGED_DURING_BUILD/],
+  ['policy reader mutation after the actual preflight', { CASEOPS_TEST_MUTATE_POLICY_HELPER: 'privacy-policy.cjs' }, /SOURCE_OR_CONFIGURATION_CHANGED_DURING_BUILD/],
+  ['policy native plugin mutation after the actual preflight', { CASEOPS_TEST_MUTATE_POLICY_HELPER: 'with-privacy-policy.cjs' }, /SOURCE_OR_CONFIGURATION_CHANGED_DURING_BUILD/],
 ]) test(`orchestrator rejects ${label} and retains the failed candidate`, t => {
   const f = fixture(t, extra), result = f.run(); assert.notEqual(result.status, 0);
   if (error) assert.match(result.stdout + result.stderr, error);

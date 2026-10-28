@@ -6,10 +6,10 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `83678c604b96a442be6cf81f445e50c2bcf1b88ed9b2ff0b6ac3e0b1780f996a`
-- SQL tables: `354`
-- SQL columns: `5721`
-- ORM indexes: `1810`
+- Canonical map SHA-256: `d6002d17fc3cd513e455b4d9630c5d4171d161790cbf081df713130d7112b1b0`
+- SQL tables: `360`
+- SQL columns: `5774`
+- ORM indexes: `1817`
 - Alembic/raw index declarations: `1594`
 - Non-SQL data classes: `16`
 
@@ -266,7 +266,9 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_court_sync_jobs` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
 | `matter_court_sync_runs` | `public_or_licensed_legal_reference` | 10 | `registry_fail_closed` |
 | `matter_deadlines` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
+| `matter_decision_read_pages` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `matter_file_qa_entries` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
+| `matter_hearing_pack_read_pages` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `matter_hearings` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `matter_intake_requests` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
 | `matter_invoice_exports` | `billing_provider_evidence` | 10 | `registry_fail_closed` |
@@ -276,9 +278,13 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_next_hearing_history` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
 | `matter_next_hearing_suggestions` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `matter_notes` | `tenant_restricted_legal_content` | 5 | `registry_fail_closed` |
+| `matter_option_read_pages` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `matter_outside_counsel_assignments` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
+| `matter_pack_item_read_pages` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `matter_portal_grants` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
 | `matter_proceeding_signals` | `tenant_restricted_legal_content` | 22 | `registry_fail_closed` |
+| `matter_readthrough_dirty` | `tenant_operational_record` | 3 | `registry_fail_closed` |
+| `matter_recommendation_read_pages` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `matter_statute_references` | `public_or_licensed_legal_reference` | 8 | `registry_fail_closed` |
 | `matter_strategy_entries` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
 | `matter_tag_assignments` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |

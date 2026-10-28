@@ -280,8 +280,11 @@ def walk(client, case, suffix, *, token=None):
 def exercise_pages(client, reverse):
     case = setup(client, reverse=reverse)
     rows, pages = walk(
-        client, case,
-        "/api/matter-readthrough/{matter_id}/recommendations".format(matter_id=case["matter"]["id"]),
+        client,
+        case,
+        "/api/matter-readthrough/{matter_id}/recommendations".format(
+            matter_id=case["matter"]["id"]
+        ),
     )
     expected = [uid(case["start"] + n) for n in list(reversed(range(30))) + [30, 31]]
     assert [row["id"] for row in rows] == expected and len(pages) == 2
@@ -297,21 +300,27 @@ def exercise_pages(client, reverse):
         for row in rows
     )
     options, _ = walk(
-        client, case,
+        client,
+        case,
         "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}/options".format(
-            matter_id=case["matter"]["id"], recommendation_id=case["recommendation"],
+            matter_id=case["matter"]["id"],
+            recommendation_id=case["recommendation"],
         ),
     )
     decisions, _ = walk(
-        client, case,
+        client,
+        case,
         "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}/decisions".format(
-            matter_id=case["matter"]["id"], recommendation_id=case["recommendation"],
+            matter_id=case["matter"]["id"],
+            recommendation_id=case["recommendation"],
         ),
     )
     items, _ = walk(
-        client, case,
+        client,
+        case,
         "/api/matter-readthrough/{matter_id}/hearing-packs/{pack_id}/items".format(
-            matter_id=case["matter"]["id"], pack_id=case["pack"],
+            matter_id=case["matter"]["id"],
+            pack_id=case["pack"],
         ),
     )
     assert [r["id"] for r in options] == [uid(case["start"] + 1000 + n) for n in range(32)]
@@ -339,7 +348,8 @@ def exercise_pages(client, reverse):
         "source_ref": "opaque:recorded/ref-1",
     }
     url = "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}".format(
-        matter_id=case["matter"]["id"], recommendation_id=case["recommendation"],
+        matter_id=case["matter"]["id"],
+        recommendation_id=case["recommendation"],
     )
     first = request(client, "GET", url, case["token"])
     reload = request(client, "GET", url, case["token"])
@@ -444,7 +454,8 @@ def test_fixture_role_admission_rejects_unknown_before_any_http():
 def exercise_latest(client):
     case = setup(client, count=1)
     url = "/api/matter-readthrough/{matter_id}/hearings/{hearing_id}/pack".format(
-        matter_id=case["matter"]["id"], hearing_id=case["hearing"]["id"],
+        matter_id=case["matter"]["id"],
+        hearing_id=case["hearing"]["id"],
     )
     response = request(client, "GET", url, case["token"])
     assert response.status_code == 200
@@ -833,11 +844,23 @@ def exercise_foreign(client):
         client,
         "GET",
         "/api/matter-readthrough/{matter_id}/hearing-packs/{pack_id}".format(
-            matter_id=own["matter"]["id"], pack_id=other["pack"],
+            matter_id=own["matter"]["id"],
+            pack_id=other["pack"],
         ),
         own["token"],
     )
     assert wrong_pack.status_code == 404
+    # Each absent key has a visible successor. Packed candidate membership is
+    # never a substitute for the exact requested source/parent identity.
+    for suffix in [
+        "/recommendations/" + uid(own["start"] - 1),
+        "/recommendations/" + uid(own["start"] - 1) + "/options",
+        "/recommendations/" + uid(own["start"] - 1) + "/decisions",
+        "/hearing-packs/" + uid(own["start"] + 3000),
+        "/hearing-packs/" + uid(own["start"] + 3000) + "/items",
+    ]:
+        missing = request(client, "GET", BASE + "/" + own["matter"]["id"] + suffix, own["token"])
+        assert missing.status_code == 404 and "Recorded rationale" not in missing.text
 
 
 def test_foreign_tenant_matter_parent_and_child_ids_never_authorize_reads(client):

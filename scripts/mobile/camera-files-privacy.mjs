@@ -67,19 +67,23 @@ export function observeIosCameraDirectory(appDataPath, { readChunk = readSync } 
     for (const name of names) {
       assert.ok(Date.now() <= deadline, 'CAMERA_OBSERVATION_BOUND');
       if (!CAMERA_COPY_NAME.test(name)) { issues.push({ reason: 'unreviewed-camera-entry' }); continue; }
-      const file = path.join(root, name), before = lstatSync(file, { bigint: true });
-      initialFileMetadata.set(name, identity(before));
-      if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || before.uid !== app.uid || before.dev !== app.dev) {
-        issues.push({ reason: 'camera-copy-owner-or-kind' }); continue;
-      }
-      if (before.size > BigInt(limits.fileBytes) || BigInt(bytesRead) + before.size > BigInt(limits.totalBytes)) {
-        issues.push({ reason: 'camera-copy-byte-bound' }); continue;
-      }
+      const file = path.join(root, name);
       let fd;
       try {
-        assert.equal(realpathSync(file), file, 'CAMERA_COPY_NAMESPACE_REQUIRED');
+        // Admit the opened descriptor, then bind its still-current named leaf.
+        // No bytes are read from a pathname checked before this open.
         fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-        assert.deepEqual(identity(fstatSync(fd, { bigint: true })), identity(before), 'CAMERA_COPY_CHANGED');
+        const opened = fstatSync(fd, { bigint: true }), before = lstatSync(file, { bigint: true });
+        initialFileMetadata.set(name, identity(before));
+        if (!opened.isFile() || !before.isFile() || before.isSymbolicLink()
+          || opened.nlink !== 1n || opened.uid !== app.uid || opened.dev !== app.dev) {
+          issues.push({ reason: 'camera-copy-owner-or-kind' }); continue;
+        }
+        assert.deepEqual(identity(opened), identity(before), 'CAMERA_COPY_CHANGED');
+        assert.equal(realpathSync(file), file, 'CAMERA_COPY_NAMESPACE_REQUIRED');
+        if (opened.size > BigInt(limits.fileBytes) || BigInt(bytesRead) + opened.size > BigInt(limits.totalBytes)) {
+          issues.push({ reason: 'camera-copy-byte-bound' }); continue;
+        }
         const hash = createHash('sha256'), chunk = Buffer.alloc(65536); let consumed = 0;
         while (true) {
           assert.ok(Date.now() <= deadline, 'CAMERA_OBSERVATION_BOUND');
@@ -90,12 +94,13 @@ export function observeIosCameraDirectory(appDataPath, { readChunk = readSync } 
           if (length === 0) break;
           hash.update(chunk.subarray(0, length));
         }
-        assert.equal(BigInt(consumed), before.size, 'CAMERA_COPY_CHANGED');
-        assert.deepEqual(identity(fstatSync(fd, { bigint: true })), identity(before), 'CAMERA_COPY_CHANGED');
+        assert.equal(BigInt(consumed), opened.size, 'CAMERA_COPY_CHANGED');
+        assert.deepEqual(identity(fstatSync(fd, { bigint: true })), identity(opened), 'CAMERA_COPY_CHANGED');
         assert.deepEqual(identity(lstatSync(file, { bigint: true })), identity(before), 'CAMERA_COPY_CHANGED');
         assert.equal(realpathSync(file), file, 'CAMERA_COPY_NAMESPACE_REQUIRED');
         copies.push({ nameSha256: digest(name), sizeBytes: consumed, sha256: hash.digest('hex'), classification: 'owned-camera-sdk-copy' });
-      } catch { issues.push({ reason: 'camera-copy-read-or-identity-failed' }); }
+      } catch (error) { issues.push({ reason: error.code === 'ELOOP'
+        ? 'camera-copy-owner-or-kind' : 'camera-copy-read-or-identity-failed' }); }
       finally { if (fd !== undefined) closeSync(fd); }
     }
     finalNames = inventory();

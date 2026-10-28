@@ -38,6 +38,9 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
         "uv", "run", "python", "-m", "pytest", "-q", "-m", "postgres",
     ]
     assert "--postgres-shards=${{ matrix.total_shards }}" in step["env"]["PYTEST_ADDOPTS"]
+    assert step["env"]["CASEOPS_READTHROUGH_EVIDENCE_DIR"] == (
+        "${{ github.workspace }}/apps/api/postgres-shard-${{ matrix.shard }}-readthrough"
+    )
     for shard in strategy["matrix"]["shard"]:
         options = shlex.split(_render_postgres_matrix(step["env"]["PYTEST_ADDOPTS"], shard, total))
         assert options == [
@@ -58,7 +61,10 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     assert upload["with"]["path"].splitlines() == [
         f"apps/api/postgres-shard-${{{{ matrix.shard }}}}.{extension}"
         for extension in ("json", "xml", "jsonl")
-    ] + ["apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl"]
+    ] + [
+        "apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl",
+        "apps/api/postgres-shard-${{ matrix.shard }}-readthrough/",
+    ]
     aggregate = workflow["jobs"]["postgres-validation"]
     assert aggregate["needs"] == ["postgres-validation-shards"]
     assert aggregate["if"] == "always() && !cancelled()"

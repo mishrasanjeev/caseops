@@ -826,6 +826,108 @@ class PortabilityTests(unittest.TestCase):
 
 
 class TlsPolicyTests(unittest.TestCase):
+    def test_x509_legacy_naive_utc_and_modern_aware_times_keep_exact_instants(self):
+        from datetime import UTC, datetime, timedelta, timezone
+        before = datetime(2026, 10, 28, 1, 2, 3)
+        after = datetime(2026, 11, 11, 4, 5, 6)
+        legacy = SimpleNamespace(not_valid_before=before, not_valid_after=after)
+        for name, value in (("not_valid_before", before), ("not_valid_after", after)):
+            self.assertEqual(fixture_module.certificate_time_utc(legacy, name), value.replace(tzinfo=UTC))
+            modern = SimpleNamespace(**{name: "must not use the legacy fallback",
+                name + "_utc": value.replace(tzinfo=timezone(timedelta(hours=5, minutes=30)))})
+            self.assertEqual(fixture_module.certificate_time_utc(modern, name),
+                             value.replace(tzinfo=timezone(timedelta(hours=5, minutes=30))).astimezone(UTC))
+        for certificate in (SimpleNamespace(not_valid_after="bad"),
+                            SimpleNamespace(not_valid_after=after.replace(tzinfo=UTC)),
+                            SimpleNamespace(not_valid_after_utc=after),
+                            SimpleNamespace(not_valid_after_utc=None, not_valid_after=after)):
+            with self.assertRaises(ValueError):
+                fixture_module.certificate_time_utc(certificate, "not_valid_after")
+        with self.assertRaises(ValueError):
+            fixture_module.certificate_time_utc(legacy, "unreviewed_field")
+
+    def test_real_prepare_and_reissue_work_with_legacy_x509_interface_without_changing_keys_or_dates(self):
+        from cryptography import x509
+        class LegacyCertificate:
+            def __init__(self, certificate): self.certificate = certificate
+            def __getattr__(self, name):
+                if name in ("not_valid_before_utc", "not_valid_after_utc"): raise AttributeError(name)
+                return getattr(self.certificate, name)
+        original_sign, original_load = x509.CertificateBuilder.sign, x509.load_pem_x509_certificate
+        def legacy_sign(builder, *args, **kwargs): return LegacyCertificate(original_sign(builder, *args, **kwargs))
+        def legacy_load(*args, **kwargs): return LegacyCertificate(original_load(*args, **kwargs))
+        with tempfile.TemporaryDirectory() as directory, patch.object(fixture_module, "ROOT", Path(directory)), \
+                patch.object(x509.CertificateBuilder, "sign", legacy_sign), \
+                patch.object(x509, "load_pem_x509_certificate", side_effect=legacy_load), redirect_stdout(io.StringIO()):
+            root = Path(directory)
+            fixture_module.prepare(argparse.Namespace())
+            before = {name: original_load((root / "tls" / (name + ".crt")).read_bytes()) for name in ("ca", "server")}
+            keys = {name: (root / "tls" / (name + ".key")).read_bytes() for name in ("ca", "server")}
+            receipt = json.loads((root / "tls-receipt.json").read_bytes())
+            self.assertEqual(receipt["expires"], fixture_module.certificate_time_utc(before["server"], "not_valid_after").isoformat())
+            fixture_module.repair_tls(argparse.Namespace())
+            for name in ("ca", "server"):
+                self.assertEqual((root / "tls" / (name + ".key")).read_bytes(), keys[name])
+                after = original_load((root / "tls" / (name + ".crt")).read_bytes())
+                for attribute in ("not_valid_before", "not_valid_after"):
+                    self.assertEqual(fixture_module.certificate_time_utc(after, attribute),
+                                     fixture_module.certificate_time_utc(before[name], attribute))
+                retained = list((root / "tls").glob(name + "-failed-*.crt"))
+                self.assertEqual(len(retained), 1)
+                self.assertEqual(original_load(retained[0].read_bytes()).serial_number, before[name].serial_number)
+            # This shim exercises the real crypto engine through its legacy API;
+            # the hosted old cryptography engine still needs its fresh CI replay.
+
+    def test_complete_seed_keeps_mfa_only_in_retained_receipt_and_never_console(self):
+        # Execute the complete fixture function with an admitted offline transport
+        # double. No API, database, MFA enrollment or provider is exercised here.
+        owner = {"user": {"full_name": "Synthetic owner"}, "company": {"id": "company", "name": "Synthetic company"},
+                 "membership": {"id": "member"}}
+        other = {"company": {"id": "other-company"}}
+        class Transport:
+            def __init__(self): self.workspace_reads = 0
+            def response(self, data, status=200, content=None):
+                return SimpleNamespace(status_code=status, content=b"json" if content is None else content, json=lambda: data)
+            def get(self, path):
+                if path == "/api/matters/matter/workspace":
+                    self.workspace_reads += 1
+                    return self.response({"tasks": [], "hearings": [], "attachments": [], "notes": []},
+                                         404 if self.workspace_reads == 2 else 200)
+                if path == "/api/matters/other-matter/workspace": return self.response({}, 404)
+                if path.endswith("/drafts"): return self.response({"drafts": [{"id": "draft", "title": "Synthetic manual draft"}]})
+                if path.endswith("/drafts/draft"): return self.response({"id": "draft"})
+                if path.endswith("/download"): return self.response(None, content=fixture_module.CLEAN)
+                raise AssertionError("Unexpected offline fixture GET")
+            def post(self, path, **kwargs):
+                if path.endswith("/tasks"): return self.response({"id": "task"})
+                if path.endswith("/hearings"): return self.response({"id": "hearing"})
+                if path.endswith("/attachments"):
+                    return self.response({"id": "clean"}, 400 if kwargs["files"]["file"][0] == "eicar.txt" else 200)
+                if path.endswith("/notes"): return self.response({}, 403)
+                raise AssertionError("Unexpected offline fixture POST")
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                credentials = {"email": "synthetic@example.invalid", "password": "SYNTHETIC_PASSWORD_SENTINEL",
+                               "totp_secret": "SYNTHETIC_TOTP_SENTINEL"}
+                output = io.StringIO()
+                with patch.object(fixture_module, "ROOT", root):
+                    fixture_module.save("credentials.json", credentials)
+                    retained = (root / "credentials.json").read_bytes()
+                    with patch.object(fixture_module, "client", return_value=nullcontext(Transport())), \
+                            patch.object(fixture_module, "bootstrap", side_effect=[owner, other]), \
+                            patch.object(fixture_module, "ensure_matter", side_effect=[{"id": "matter", "matter_code": "SYNTHETIC-1"},
+                                {"id": "closed", "status": "disposed", "lifecycle_version": 1}, {"id": "other-matter"}]), \
+                            patch.object(fixture_module, "seed_manual_draft_version"), \
+                            patch.object(fixture_module, "submit_synthetic_review", return_value={"id": "draft"}), \
+                            patch.object(fixture_module, "login"), redirect_stdout(output):
+                        fixture_module.seed(argparse.Namespace(mfa=enabled))
+                self.assertEqual(json.loads(output.getvalue()), {"seeded": True, "syntheticTenants": 2,
+                    "nativeNoteCount": 0, "realScannerCleanAndEicar": True})
+                self.assertEqual(json.loads((root / "seed.json").read_bytes())["mfaEnrolled"], enabled)
+                self.assertEqual((root / "credentials.json").read_bytes(), retained)
+                for secret in credentials.values(): self.assertNotIn(secret, output.getvalue())
+
     def test_seed_mfa_status_cannot_log_or_consume_an_arbitrary_argument_value(self):
         for value in ("SYNTHETIC_PASSWORD_SENTINEL", 1, None, {"password": "SYNTHETIC_PASSWORD_SENTINEL"}):
             with self.subTest(kind=type(value).__name__), patch.object(Path, "read_text") as read, patch.object(fixture_module, "client") as transport:
@@ -950,7 +1052,7 @@ class GatewayTests(unittest.TestCase):
                          [("Set-Cookie", "a=one; Secure; HttpOnly"), ("Set-Cookie", "b=two; Secure; SameSite=Lax")])
         for pair in (("X-Synthetic", "safe\r\nInjected: private"), ("X-Synthetic", "safe\nInjected: private"), ("Bad:Name", "value"), ("X-Synthetic", "NUL\0value")):
             with self.subTest(pair=pair[0]):
-                with self.assertRaises(AssertionError): gateway_module.forwarded_headers([pair])
+                with self.assertRaises(ValueError): gateway_module.forwarded_headers([pair])
         class Upstream:
             def __init__(self, *args, **kwargs): pass
             def request(self, *args, **kwargs): pass
@@ -960,6 +1062,64 @@ class GatewayTests(unittest.TestCase):
             status, body = self.request("GET", "/api/build", {gateway_module.MARKER_HEADER: gateway_module.MARKER})
         self.assertEqual(status, 502); self.assertEqual(json.loads(body), {"code": "UPSTREAM_TRANSPORT_FAILED"})
         self.assertNotIn("private", body.decode())
+
+    def test_header_token_scan_accepts_only_ascii_tokens_and_bounds_repeated_punctuation(self):
+        accepted = "!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+        self.assertEqual(gateway_module.forwarded_headers([(accepted, "unchanged\tvalue")]), [(accepted, "unchanged\tvalue")])
+        self.assertEqual(gateway_module.forwarded_headers([("!" * 65536, "safe")]), [("!" * 65536, "safe")])
+        for key in ("", "!" * 65537, "!" * 65535 + ":", "xé", "x\r", "x\n", "x "):
+            with self.subTest(length=len(key)), self.assertRaises(ValueError):
+                gateway_module.forwarded_headers([(key, "safe")])
+        for code in range(128):
+            key = "x" + chr(code)
+            if chr(code) in accepted:
+                self.assertEqual(gateway_module.forwarded_headers([(key, "safe")]), [(key, "safe")])
+            else:
+                with self.assertRaises(ValueError): gateway_module.forwarded_headers([(key, "safe")])
+
+    def test_final_target_guard_survives_bypassed_parser_and_optimized_python(self):
+        import ast
+        # Compile the real parser with -O semantics, rather than assuming assert
+        # statements survive the interpreter used by the gateway image.
+        tree = ast.parse(Path(gateway_module.__file__).read_text())
+        node = next(item for item in tree.body if isinstance(item, ast.FunctionDef) and item.name == "upstream_target")
+        scope = {"re": gateway_module.re, "urlsplit": gateway_module.urlsplit}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "actual-gateway-parser", "exec", optimize=2), scope)
+        query = "/api/build?cursor=a%2Fb%26c%3D%3D&term=%E2%82%B9&empty=&term=second"
+        self.assertEqual(scope["upstream_target"](query), query)
+        for value in ("https://synthetic.invalid/api/build", "//synthetic.invalid/api/build", "/api/build#fragment",
+                      "/api/%2Fhidden", "/api/build?raw=é", "/api/build?raw=[bad]", "/api/build\r\nX: bad"):
+            with self.subTest(target=value), self.assertRaises(ValueError): scope["upstream_target"](value)
+        for target in ("https://synthetic.invalid/api/build", "/api/build\r\nX: bad", "/api/build?raw=é"):
+            with patch.object(gateway_module, "upstream_target", return_value=target), \
+                    patch.object(gateway_module.http.client, "HTTPConnection") as upstream:
+                upstream.return_value.getresponse.side_effect = AssertionError("No response read permitted")
+                # Only the admitted /api/build raw path reaches the final target
+                # fence; absolute paths are already rejected by route policy.
+                result = self.request("GET", "/api/build", {gateway_module.MARKER_HEADER: gateway_module.MARKER})
+                self.assertIn(result[0], (403, 502))
+                upstream.return_value.request.assert_not_called()
+
+    def test_response_sink_keeps_duplicate_cookies_and_refuses_both_header_components(self):
+        pairs = [("Set-Cookie", "first=one; Secure; HttpOnly"), ("Set-Cookie", "second=two; Secure; SameSite=Lax")]
+        for supplied, expected in ((pairs, 200), ([("X-Bad\r\nInjected", "safe")], 502),
+                                   ([("Set-Cookie", "safe\r\nInjected: bad")], 502)):
+            class Upstream:
+                def __init__(self, *_args, **_kwargs): pass
+                def request(self, *_args, **_kwargs): pass
+                def getresponse(self): return SimpleNamespace(status=200, getheaders=lambda: supplied, read=lambda _limit: b"ok")
+                def close(self): pass
+            with self.subTest(expected=expected), patch.object(gateway_module.http.client, "HTTPConnection", Upstream), \
+                    closing(self.connection_type("127.0.0.1", self.server.server_port, timeout=3)) as client:
+                client.request("GET", "/api/build", headers={gateway_module.MARKER_HEADER: gateway_module.MARKER})
+                response = client.getresponse(); headers = response.getheaders(); body = response.read()
+                self.assertEqual(response.status, expected)
+                if expected == 200:
+                    self.assertEqual([value for key, value in headers if key.lower() == "set-cookie"], [value for _, value in pairs])
+                    self.assertEqual(body, b"ok")
+                else:
+                    self.assertEqual(json.loads(body), {"code": "UPSTREAM_TRANSPORT_FAILED"})
+                    self.assertFalse(any("injected" in key.lower() for key, _value in headers))
 
     def test_folded_client_header_and_duplicate_content_lengths_never_forward(self):
         for raw in (b"GET /api/build HTTP/1.1\r\nHost: localhost\r\nX-Synthetic: first\r\n folded\r\n\r\n",

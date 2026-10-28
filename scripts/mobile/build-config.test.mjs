@@ -66,12 +66,13 @@ test('mobile dependency closure installs and audits actual Linux and Windows gra
   assert.equal(job['runs-on'], '${{ matrix.os }}');
   assert.equal(job.defaults.run['working-directory'], 'apps/mobile');
   assert.equal(job.defaults.run.shell, 'pwsh');
+  assert.deepEqual(job.env, { CASEOPS_MOBILE_DEPENDENCY_SCOPE: 'mobile-only' });
   assert.equal(job.steps.find(step => step.uses === 'actions/setup-node@v4').with['node-version'], '24.15.0');
   const commands = job.steps.filter(step => step.run).map(step => step.run);
   assert.deepEqual(commands, [
     'npm ci --no-audit --no-fund',
     'npm ls --all --json --long > installed-dependencies.json',
-    'node --test ../../scripts/mobile/forge-security.test.mjs',
+    'node --test ../../scripts/mobile/forge-security.test.mjs ../../scripts/mobile/deepmerge-installed.test.mjs',
     'npm audit --audit-level=high --json > dependency-audit.json',
   ]);
   for (const step of job.steps) assert.notEqual(step['continue-on-error'], true);
@@ -127,9 +128,9 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/build-android-local-acceptance.test.mjs',
     'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs',
     'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
-    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/forge-security.test.mjs',
+    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
     'scripts/mobile/prepare-source-exports.test.mjs', 'apps/mobile/e2e/v1-workflows.test.mjs',
-    'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs'];
+    'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
@@ -138,9 +139,14 @@ test('mobile CI selects every tooling module and audits before either platform e
   const fixturePreparation = steps.find(step => step.name === 'Verify isolated fixture preparation and gateway');
   assert.equal(fixturePreparation?.run, 'python3 scripts/mobile/local-fixture.test.py');
   const filesFixtureCommands = [
+    ['Verify guarded local store packaging child transport', 'python3 scripts/mobile/store-packaging-host.test.py'],
+    ['Verify deterministic private deepmerge package', 'python3 scripts/mobile/rebuild-deepmerge-compat.test.py'],
     ['Verify disabled-by-default synthetic V1 controls', 'python3 scripts/mobile/local-v1-controls.test.py'],
     ['Verify separate queue and account-request controls', 'python3 scripts/mobile/local-queue-privacy-controls.test.py'],
     ['Verify independent queue and account-request inventory', 'python3 scripts/mobile/queue-privacy.test.py'],
+    ['Verify isolated native client extension controls', 'python3 scripts/mobile/local-client-extension-controls.test.py'],
+    ['Verify native client extension fixture producer', 'python3 scripts/mobile/client-extension-fixture.test.py'],
+    ['Verify independent native client extension inventory', 'python3 scripts/mobile/client-extensions.test.py'],
     ['Verify the scoped canonical in-app Inbox fixture worker', 'python3 scripts/mobile/local-v1-inbox.test.py'],
     ['Verify the independent complete V1 source inventory', 'python3 scripts/mobile/v1-workflows.test.py'],
     ['Verify synthetic iOS Files picker inputs', 'python3 scripts/mobile/prepare-ios-files-fixture.test.py'],
@@ -394,6 +400,7 @@ test('default Expo config retains production origins, native IDs and no QA trust
   assert.equal(config.extra.automatedTest, false);
   assert.equal(config.updates.enabled, false);
   assert.deepEqual(config.extra.nativeLinkPolicy, { mode: 'disabled' });
+  assert.equal(config.extra.privacyPolicy, undefined);
   assert.equal(config.ios.infoPlist.NSAppTransportSecurity, undefined);
   assert.equal(config.android.networkSecurityConfig, undefined);
   assert.doesNotMatch(JSON.stringify(config), /BEGIN CERTIFICATE|public-ca\.pem|fingerprint256/);
@@ -415,8 +422,13 @@ function publicLinkFixture(t, syntheticDataOnly = true) {
   const store = { schemaVersion: 1, kind: 'caseops-store-build', syntheticDataOnly, nativeLinkConfigSha256: digest(bytes), identities,
     version: '1.0.0', iosBuildNumber: '1', androidVersionCode: 1, baseline: { path: baselineFile, sha256: digest(baselineBytes) } };
   const storeFile = path.join(dir, 'store-build.json'), storeBytes = JSON.stringify(store) + '\n'; writeFileSync(storeFile, storeBytes);
+  const policyFile = path.join(dir, 'privacy-policy.json');
+  const policyBytes = JSON.stringify({ schemaVersion: 1, kind: 'caseops-mobile-privacy-policy', nativeLinkConfigSha256: digest(bytes),
+    url: new URL(config.redirectUri).origin + '/privacy-policy', version: 'synthetic-policy-v1' }) + '\n';
+  writeFileSync(policyFile, policyBytes);
   return { dir, file, config, bytes, env: { CASEOPS_NATIVE_LINK_CONFIG_FILE: file, CASEOPS_NATIVE_LINK_CONFIG_SHA256: digest(bytes),
-    CASEOPS_STORE_BUILD_FILE: storeFile, CASEOPS_STORE_BUILD_SHA256: digest(storeBytes) } };
+    CASEOPS_STORE_BUILD_FILE: storeFile, CASEOPS_STORE_BUILD_SHA256: digest(storeBytes), EXPO_PUBLIC_WEB_ORIGIN: new URL(config.redirectUri).origin,
+    CASEOPS_MOBILE_PRIVACY_POLICY_FILE: policyFile, CASEOPS_MOBILE_PRIVACY_POLICY_SHA256: digest(policyBytes) } };
 }
 test('production Expo configuration refuses absent, partial, tampered and synthetic public link inputs', t => {
   assert.throws(() => expoConfig({ NODE_ENV: 'production', __EXPO_CONFIG_MODE: 'production' }), /IMMUTABLE_NATIVE_LINK_CONFIG_REQUIRED/);
@@ -447,6 +459,7 @@ test('complete immutable structural config projects exactly matching mobile, web
   assert.equal(p.assetlinks[0].target.package_name, config.android.package);
   assert.deepEqual(p.assetlinks[0].target.sha256_cert_fingerprints, [f.config.android.signingCertificateSha256[0].toUpperCase().match(/../g).join(':')]);
   assert.equal(config.extra.nativeLinkPolicy.configSha256, digest(f.bytes));
+  assert.deepEqual(config.extra.privacyPolicy, { url: 'https://native.caseops.ai/privacy-policy', version: 'synthetic-policy-v1', sha256: f.env.CASEOPS_MOBILE_PRIVACY_POLICY_SHA256 });
 });
 test('production policy rejects reserved endpoints, scheme downgrade, QA identities and malformed or unknown fields', t => {
   const f = publicLinkFixture(t, false);
@@ -456,6 +469,18 @@ test('production policy rejects reserved endpoints, scheme downgrade, QA identit
   assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, ios: { ...f.config.ios, bundleIdentifier: 'ai.caseops.mobile.dev' } }));
   assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, ios: { ...f.config.ios, applicationIdentifierPrefix: 1234567890 } }));
   assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, android: { ...f.config.android, signingCertificateSha256: ['a'.repeat(64)] } }));
+});
+test('production and store config refuse absent or partial privacy-policy references', t => {
+  const f = publicLinkFixture(t, false), env = { ...f.env, NODE_ENV: 'production' };
+  delete env.CASEOPS_MOBILE_PRIVACY_POLICY_FILE; delete env.CASEOPS_MOBILE_PRIVACY_POLICY_SHA256;
+  assert.throws(() => expoConfig(env), /IMMUTABLE_PRIVACY_POLICY_REFERENCE_REQUIRED/);
+  assert.throws(() => expoConfig({ ...env, CASEOPS_MOBILE_PRIVACY_POLICY_FILE: path.join(f.dir, 'privacy-policy.json') }), /IMMUTABLE_PRIVACY_POLICY_REFERENCE_REQUIRED/);
+});
+test('production privacy-policy config refuses changed bytes and a different configured web origin', t => {
+  const f = publicLinkFixture(t, false);
+  assert.throws(() => expoConfig({ ...f.env, NODE_ENV: 'production', EXPO_PUBLIC_WEB_ORIGIN: 'https://foreign.contract-fixture.org' }), /EXACT_APPROVED_PRIVACY_POLICY_REQUIRED/);
+  writeFileSync(f.env.CASEOPS_MOBILE_PRIVACY_POLICY_FILE, 'PRIVATE_SYNTHETIC_INVALID_POLICY');
+  assert.throws(() => expoConfig({ ...f.env, NODE_ENV: 'production' }), /PRIVACY_POLICY_HASH_MISMATCH/);
 });
 test('native public config is read and hashed from the opened descriptor, with no parse-error content reflection', t => {
   const f = publicLinkFixture(t), fs = require('node:fs');
@@ -744,17 +769,33 @@ test('build receipt binds exact current source and rejects a stale requested rel
     assert.equal(before.appId, plugin.ANDROID_APP_ID);
     assert.equal(before.sourceSha, sha);
     assert.equal(before.devEnabled, false);
+    assert.equal(before.privacyPolicy, null);
     const config = { extra: { automatedTest: true, apiOrigin: before.apiOrigin,
       webOrigin: before.webOrigin, releaseSha: sha } };
     assert.throws(() => finishBuild('android', { ...before, sourceFingerprint: 'changed' }, env.CASEOPS_MOBILE_ANDROID_CA_FILE, config), /SOURCE_OR_CONFIGURATION_CHANGED_DURING_BUILD/);
     assert.throws(() => finishBuild('android', before, env.CASEOPS_MOBILE_ANDROID_CA_FILE,
       { extra: { ...config.extra, automatedTest: false } }), /EMBEDDED_MARKER_REQUIRED/);
+    assert.throws(() => finishBuild('android', before, env.CASEOPS_MOBILE_ANDROID_CA_FILE,
+      { extra: { ...config.extra, privacyPolicy: { url: 'https://publisher.contract-fixture.org/privacy', version: 'synthetic-v1', sha256: 'a'.repeat(64) } } }), /EMBEDDED_PRIVACY_POLICY_MISMATCH/);
     const receipt = finishBuild('android', before, env.CASEOPS_MOBILE_ANDROID_CA_FILE, config);
     assert.equal(receipt.binaryHash, digest(certificate)); // synthetic file, not APK acceptance.
   });
   await withEnv({ ...env, CASEOPS_MOBILE_RELEASE_SHA: '0'.repeat(40) }, () => {
     assert.throws(() => checkBuildConfig('android'), /CURRENT_SOURCE_SHA_REQUIRED/);
   });
+  // Expo caches dynamic config in-process. Each real builder owns one platform;
+  // use a new child rather than reuse the earlier Android module instance.
+  const iosScript = `import assert from 'node:assert/strict';
+import {checkBuildConfig,finishBuild} from './scripts/mobile/build-acceptance.mjs';
+const before=checkBuildConfig('ios');assert.equal(before.privacyPolicy,null);
+assert.equal(before.apiOrigin,'https://127.0.0.1:8443');
+assert.throws(()=>finishBuild('ios',before,process.argv[1],{ios:{bundleIdentifier:before.appId},extra:{automatedTest:true,apiOrigin:before.apiOrigin,webOrigin:before.webOrigin,releaseSha:before.sourceSha,privacyPolicy:{url:'https://publisher.contract-fixture.org/privacy',version:'synthetic-v1',sha256:'a'.repeat(64)}}}),/EMBEDDED_PRIVACY_POLICY_MISMATCH/);`;
+  const ios = spawnSync(process.execPath, ['--input-type=module', '-e', iosScript, env.CASEOPS_MOBILE_ANDROID_CA_FILE], {
+    cwd: repo, encoding: 'utf8', timeout: 30000, env: cleanEnv({ CASEOPS_MOBILE_BUILD_PROFILE: plugin.IOS_PROFILE,
+      CASEOPS_MOBILE_AUTOMATED_TEST: '1', CASEOPS_MOBILE_RELEASE_SHA: sha,
+      EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443' }),
+  });
+  assert.equal(ios.status, 0, ios.stdout + ios.stderr);
 });
 
 test('build wrappers never start Metro, use distinct standalone tasks and retain raw logs', () => {

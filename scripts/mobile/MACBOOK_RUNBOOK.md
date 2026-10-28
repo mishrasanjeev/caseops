@@ -192,7 +192,7 @@ node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs
 git diff --exit-code -- apps/mobile/package.json apps/mobile/package-lock.json
 ```
 
-Current pins: Expo 58.0.19, RN 0.88.0, React 19.3.0, `@expo/ui` 58.0.23,
+Current pins: Expo 58.0.20, RN 0.88.0, React 19.3.0, `@expo/ui` 58.0.24,
 WebView 14.0.1, and public PDF.js inputs 6.4.299. iOS uses the actual SwiftUI
 adapter, not Android Compose or DOM controls. Verify committed renderer assets
 and notices; a missing closure is a stop, not permission for a CDN, fake PDF
