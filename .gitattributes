@@ -86,3 +86,9 @@ apps/mobile/vendor/sdk58-patch-20261028/provenance.json text eol=lf
 apps/mobile/vendor/sdk58-patch-20261028/EXPO-LICENSE.txt text eol=lf
 
 scripts/mobile/host-node-trust-next-worker.cjs text eol=lf
+# Immutable iOS host policy and retained CocoaPods constructor source.
+scripts/mobile/ios-host-launch.mjs text eol=lf
+scripts/mobile/ios-host-pods.rb text eol=lf
+scripts/mobile/ios-local-qa-host.py text eol=lf
+scripts/mobile/ios-node-build-env.json text eol=lf
+scripts/mobile/ios-git-readonly.py text eol=lf

@@ -38,16 +38,19 @@ function fixture(t) {
   const historyValue = { kind: 'caseops-reviewed-actual-store-history', identities, observedAt: new Date().toISOString(),
     iosBuildNumber: '0', androidVersionCode: 0, evidence: [save('history-evidence.json', { synthetic: true })] };
   const history = save('history.json', historyValue);
-  const names = ['node', 'python', 'git', 'pod', 'xcodebuild', 'codesign', 'security', 'xcrun', 'java', 'keytool', 'jarsigner', 'bundletool'];
+  const iosNames = ['node', 'python', 'git', 'ruby', 'curl', 'pod', 'xcodebuild', 'codesign', 'security', 'xcrun'];
+  const names = [...iosNames, 'java', 'keytool', 'jarsigner', 'bundletool'];
   const allTools = Object.fromEntries(names.map(name => { const ref = save(name + '-tool', 'SYNTHETIC_TOOL'); fs.chmodSync(ref.path, 0o700);
-    return [name, { ...ref, sizeBytes: 14, version: name === 'node' ? '24.15.0' : name === 'python' ? '3.13.17' : 'fixture-pinned', ownerUid: process.getuid?.() || 0 }]; }));
+    return [name, { ...ref, sizeBytes: 14, version: ({ node: '24.15.0', python: '3.13.17', ruby: '4.0.9', curl: '8.7.1', pod: '1.17.0' })[name] || 'fixture-pinned', ownerUid: process.getuid?.() || 0 }]; }));
+  const hostRef = save('synthetic-ios-host-policy.json', { syntheticContractOnly: true });
   const runtimeRef = save('runtime-public.txt', 'PUBLIC_RUNTIME');
   const generatedValue = platform => (platform === 'ios' ? [['Podfile', 'PUBLIC SYNTHETIC PODFILE']]
     : [['gradlew', '#!/bin/sh\n'], ['gradle/wrapper/gradle-wrapper.jar', 'PUBLIC WRAPPER JAR'], ['gradle/wrapper/gradle-wrapper.properties', 'distributionUrl=synthetic-offline\n']])
     .map(([name, body]) => ({ path: name, sha256: digest(body), sizeBytes: Buffer.byteLength(body) }));
   const toolsValue = platform => ({ schemaVersion: 1, kind: 'caseops-local-store-tools', hostPlatform: 'darwin',
-    entries: Object.fromEntries((platform === 'ios' ? names.slice(0, 8) : ['node', 'python', 'git', 'java', 'keytool', 'jarsigner', 'bundletool']).map(n => [n, allTools[n]])),
-    runtimeInputs: [{ ...runtimeRef, sizeBytes: 14 }], generatedInputs: generatedValue(platform) });
+    entries: Object.fromEntries((platform === 'ios' ? iosNames : ['node', 'python', 'git', 'java', 'keytool', 'jarsigner', 'bundletool']).map(n => [n, allTools[n]])),
+    runtimeInputs: [{ ...runtimeRef, sizeBytes: 14 }], generatedInputs: generatedValue(platform),
+    iosHostPolicy: platform === 'ios' ? { ...hostRef, sizeBytes: fs.statSync(hostRef.path).size } : null });
   for (const name of ['BUILD_TOOL_NOTICES.txt', 'CAMERA_NOTICES.txt', 'src/viewer/generated/LICENSES.txt']) {
     const p = path.join(root, 'apps/mobile', name); fs.mkdirSync(path.dirname(p), { recursive: true, mode: 0o700 }); fs.writeFileSync(p, 'PUBLIC SYNTHETIC NOTICE');
   }
@@ -80,6 +83,13 @@ function fixture(t) {
     streamCleanupComplete: true, cleanup: { complete: true, signals: [] }, stdout: { bytes: 0, sha256: digest(''), base64: '' },
     stderr: { bytes: Buffer.byteLength(stderr), sha256: digest(stderr), base64: Buffer.from(stderr).toString('base64') } });
   const adapter = {
+    iosHost: {
+      admit: async () => ({ tools: allTools, paths: { home: path.join(base, 'synthetic-isolated-home') }, deadlineEpochMs: Date.now() + 3600000 }),
+      compose: async (_ref, role, args, { environment }) => ({ executable: role === 'pod' ? allTools.ruby.path : undefined,
+        args: role === 'pod' ? ['/SYNTHETIC/pod-script', ...args] : [...args], bundle: null,
+        environment: { ...environment, HOME: path.join(base, 'synthetic-isolated-home'),
+          ...(role === 'node' ? { SSL_CERT_FILE: '/SYNTHETIC/node144' } : role === 'pod' ? { SSL_CERT_FILE: '/SYNTHETIC/ruby188', GEM_HOME: '/SYNTHETIC/gems' } : {}) } }),
+    },
     privacyPolicy: (value, sha256) => ({ url: value.url, version: value.version, sha256 }),
     source: () => { sourceReads++; return structuredClone(source); },
     signingAdmission: async () => { signingReads++; },
@@ -278,4 +288,35 @@ test('actual private reader follows public gates with no secret digest leak or r
  let result;try{result=await executeStorePackaging(a.ref(),{root:f.root,adapter:f.adapter});}finally{fs.openSync=open;crypto.createHash=create;syncBuiltinESMExports();}
  assert.equal(result.observed,false);assert.equal(result.cleanup.complete,false);assert.equal(privateReads,1);assert.equal(signerCalls,1);assert.equal(secretHashCalls,0);assert.equal(environment.CASEOPS_UPLOAD_STORE_PASSWORD,undefined);assert.equal(environment.CASEOPS_UPLOAD_KEY_PASSWORD,undefined);assert.ok(!JSON.stringify(result).includes('synthetic-only'));assert.ok(!fs.readFileSync(path.join(a.q.outputDirectory,'events.jsonl'),'utf8').includes('synthetic-only'));assert.ok(fs.readdirSync(f.reservations).some(x=>x.endsWith('.claim')));
  await assert.rejects(executeStorePackaging(a.ref(),{root:f.root,adapter:f.adapter}));assert.equal(privateReads,1);assert.equal(signerCalls,1);
+});
+
+test('iOS host admission failure precedes output reservation build and signing boundaries', async t => {
+  const f = fixture(t), a = f.make('ios'); let reads = 0;
+  f.adapter.iosHost.admit = async () => { reads++; throw new Error('IOS_HOST_OWNER_CONFIG_REFUSED'); };
+  await assert.rejects(executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter }), /IOS_HOST_OWNER_CONFIG_REFUSED/);
+  assert.equal(reads, 1); assert.equal(f.calls.length, 0); assert.equal(f.reads().signingReads, 0); assert.deepEqual(fs.readdirSync(f.reservations), []);
+});
+test('iOS scope must bind the exact publicly admitted Ruby Node Pods curl and Python tools', async t => {
+  const f = fixture(t), a = f.make('ios');
+  f.adapter.iosHost.admit = async () => ({ tools: { ...f.allTools, ruby: { ...f.allTools.ruby, sha256: '0'.repeat(64) } }, paths: { home: '/SYNTHETIC' } });
+  await assert.rejects(executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter }), /STORE_IOS_HOST_TOOL_MISMATCH/);
+  assert.equal(f.calls.length, 0); assert.equal(f.reads().signingReads, 0); assert.deepEqual(fs.readdirSync(f.reservations), []);
+});
+test('complete iOS store command graph composes Node Ruby and neutral environments before each transport', async t => {
+  const f = fixture(t), a = f.make('ios'), command = f.adapter.command, rows = [];
+  f.adapter.command = async (c, env) => { rows.push({ executable: c.executable, args: c.args, env: { ...env } }); return command(c, env); };
+  const result = await executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter });
+  assert.equal(result.observed, true, JSON.stringify(result.originalFailure));
+  const node = rows.find(r => r.args.includes('prebuild')), pod = rows.find(r => r.args.includes('install')), xcode = rows.find(r => r.args.includes('archive'));
+  assert.equal(node.env.SSL_CERT_FILE, '/SYNTHETIC/node144'); assert.equal(pod.env.SSL_CERT_FILE, '/SYNTHETIC/ruby188');
+  assert.equal(pod.executable, f.allTools.ruby.path); assert.equal(xcode.env.SSL_CERT_FILE, undefined);
+  assert.equal(node.env.HOME, path.join(f.base, 'synthetic-isolated-home')); assert.equal(pod.env.HOME, node.env.HOME); assert.equal(xcode.env.HOME, node.env.HOME);
+});
+test('late iOS constructor refusal consumes only its existing claim and does not reach signer or replay', async t => {
+  const f = fixture(t), a = f.make('ios'), compose = f.adapter.iosHost.compose;
+  f.adapter.iosHost.compose = async (ref, role, args, options) => { if (role === 'pod') throw new Error('IOS_HOST_OWNER_CONFIG_REFUSED'); return compose(ref, role, args, options); };
+  const result = await executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter });
+  assert.equal(result.observed, false); assert.equal(result.originalFailure.code, 'IOS_HOST_OWNER_CONFIG_REFUSED'); assert.equal(f.reads().signingReads, 0);
+  assert.equal(f.calls.some(c => c.args.includes('archive')), false); assert.ok(fs.readdirSync(f.reservations).some(n => n.endsWith('.claim')));
+  assert.equal(result.phases.find(p => p.name === 'artifact-postflight').status, 'unreached');
 });

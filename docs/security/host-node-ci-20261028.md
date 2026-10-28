@@ -59,3 +59,13 @@ is relaxed. The five CI outputs plus four anonymous npm configuration outputs
 remain per-step; no job/global trust environment is added. Updated helper and
 bootstrap digests in `tooling.json` require freshly prepared policies after
 integration. Old policy artifacts and failed attempts keep their original scope.
+
+The subsequent e141 Windows job completed the bounded ACL query and refused
+`ownerMatches=false` in 2.965 seconds. The retained log does not identify the
+object role or owner class. It does not establish a foreign-writer failure or
+a normal default-owner cause. Diagnostic source now reports only fixed object
+roles, owner/token-owner classes and safe/unsafe writer classifications on this
+refusal. It never emits SIDs, account names, paths or raw PowerShell output.
+Current-owner and writer admission remains unchanged; no existing or newly
+created object's ownership or ACL is modified. A fresh Windows observation is
+required before claiming a cause or an ownership remediation.

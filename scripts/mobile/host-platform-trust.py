@@ -986,6 +986,486 @@ def scoped_environment(
     return env
 
 
+GRADLE_KIND = "caseops-host-gradle-jdks-trust-v1"
+GRADLE_SCOPE = "gradle-java21-java17"
+GRADLE_KEYS = {
+    "schemaVersion",
+    "kind",
+    "runtimeScope",
+    "qaOnly",
+    "fixture",
+    "deniedSha256",
+    "aliasOrigin",
+    "sourcePolicy",
+    "platformPolicy",
+    "inputs",
+    "inputVerification",
+    "store",
+    "type",
+    "aliases",
+    "fingerprintSetSha256",
+    "runtimeVerification",
+    "scope",
+}
+
+
+def _gradle_ref(reference, end):
+    need(time.monotonic() < end, "GRADLE_HELPER_DEADLINE")
+    need(
+        type(reference) is dict
+        and set(reference) == {"path", "sha256", "sizeBytes"}
+        and type(reference["path"]) is str
+        and Path(reference["path"]).is_absolute()
+        and type(reference["sizeBytes"]) is int
+        and 0 < reference["sizeBytes"] <= MAX_BYTES
+        and type(reference["sha256"]) is str
+        and re.fullmatch("[a-f0-9]{64}", reference["sha256"]),
+        "EXACT_PUBLIC_REFERENCE_REQUIRED",
+    )
+    with opened_public(reference["path"], expected=reference, deadline=end) as (
+        _,
+        data,
+        _,
+    ):
+        return data
+
+
+def _gradle_fixture(reference, end):
+    need(
+        type(reference) is dict
+        and type(reference.get("path")) is str
+        and Path(reference["path"]).is_relative_to(SHARED),
+        "PUBLIC_FIXTURE_RECEIPT_PATH_REQUIRED",
+    )
+    value = json.loads(_gradle_ref(reference, end))
+    need(
+        type(value) is dict
+        and set(value) == {"schemaVersion", "kind", "noPaid", "network", "hosts", "ca"}
+        and type(value["schemaVersion"]) is int
+        and value["schemaVersion"] == 1
+        and value["kind"] == "caseops-owned-loopback-tls-fixture-v1"
+        and value["noPaid"] is True
+        and value["network"] == "loopback-only"
+        and value["hosts"] == ["localhost", "127.0.0.1"]
+        and type(value["ca"]) is dict
+        and type(value["ca"].get("path")) is str,
+        "EXACT_QA_FIXTURE_RECEIPT_REQUIRED",
+    )
+    path = Path(value["ca"]["path"])
+    need(
+        path.is_relative_to(SHARED)
+        and (path.name == "ca.pem" or path.name.endswith("-ca.pem")),
+        "PUBLIC_FIXTURE_CA_PATH_REQUIRED",
+    )
+    retained = _gradle_ref(value["ca"], end)
+    certificates = pem_certificates(retained)
+    need(
+        len(certificates) == 1 and sha(certificates[0]) != DENIED,
+        "ONE_SAFE_QA_CA_REQUIRED",
+    )
+    return value, retained, certificates[0]
+
+
+def _gradle_aliases(aliases, fixture_der=None):
+    need(type(aliases) is dict and aliases, "GRADLE_ALIAS_MAP_REQUIRED")
+    need(
+        all(
+            type(key) is str
+            and key
+            and len(key) <= 512
+            and type(value) is str
+            and re.fullmatch("[a-f0-9]{64}", value)
+            for key, value in aliases.items()
+        ),
+        "GRADLE_ALIAS_IDENTITIES_REQUIRED",
+    )
+    values = list(aliases.values())
+    need(
+        len(values) == len(set(values)) and DENIED not in values,
+        "GRADLE_DUPLICATE_OR_DENIED_ALIAS",
+    )
+    fixture_hash = sha(fixture_der) if fixture_der else None
+    base = [value for value in values if value != fixture_hash]
+    need(
+        len(base) == 117
+        and set_digest(base) == CONTRACTS["java"][3]
+        and len(values) == 117 + (1 if fixture_der else 0)
+        and (not fixture_der or values.count(fixture_hash) == 1),
+        "GRADLE_OTHER_ANCHORS_CHANGED",
+    )
+    return set_digest(values)
+
+
+def _gradle_java_environment(base, reference, store_type="PKCS12"):
+    env = checked_environment(base)
+    need(store_type in {"PKCS12", "JKS"}, "EXACT_JAVA_POLICY_REQUIRED")
+    need(
+        re.fullmatch(r"[/A-Za-z0-9_.+@=\-]+", reference["path"]),
+        "JAVA_PROPERTY_PATH_REQUIRED",
+    )
+    env["JAVA_TOOL_OPTIONS"] = (
+        "-Djavax.net.ssl.trustStore="
+        + reference["path"]
+        + " -Djavax.net.ssl.trustStoreType="
+        + store_type
+        + " -Djavax.net.ssl.trustStorePassword=changeit"
+    )
+    return env
+
+
+def _gradle_input_policy(reference, end):
+    value = json.loads(_gradle_ref(reference, end))
+    need(
+        type(value) is dict
+        and type(value.get("schemaVersion")) is int
+        and value["schemaVersion"] == 1
+        and value.get("kind") == "caseops-host-platform-trust-v1"
+        and value.get("qaOnly") is False
+        and value.get("fixture") is None
+        and value.get("deniedSha256") == DENIED
+        and type(value.get("java")) is dict
+        and set(value["java"]) == set(JDKS),
+        "GRADLE_PRODUCTION_INPUT_REQUIRED",
+    )
+    for runtime, store in value["java"].items():
+        need(
+            type(store) is dict
+            and set(store)
+            == {"store", "type", "fingerprintSetSha256", "aliases", "javaHome"}
+            and store["javaHome"] == str(JDKS[runtime])
+            and store["type"] == {"java21": "PKCS12", "java17": "JKS"}[runtime]
+            and store["fingerprintSetSha256"] == CONTRACTS["java"][3]
+            and type(store["store"]) is dict
+            and store["store"].get("path")
+            == str(Path(reference["path"]).parent / (runtime + ".truststore")),
+            "GRADLE_DISTINCT_INPUT_RUNTIME_REQUIRED",
+        )
+        _gradle_aliases(store["aliases"])
+    return value
+
+
+def _gradle_default_report(value, count, digest):
+    need(
+        type(value) is dict
+        and set(value) == {"count", "setSha256", "deniedCount"}
+        and type(value["count"]) is int
+        and value["count"] == count
+        and type(value["deniedCount"]) is int
+        and value["deniedCount"] == 0
+        and value["setSha256"] == digest,
+        "GRADLE_EXACT_EFFECTIVE_DEFAULT_REQUIRED",
+    )
+
+
+def _gradle_decode_report(value, retained, aliases, digest):
+    expected = {
+        "storeType": "PKCS12",
+        "inputSha256": sha(retained),
+        "inputSizeBytes": len(retained),
+        "aliases": aliases,
+        "count": len(aliases),
+        "setSha256": digest,
+    }
+    need(
+        type(value) is dict
+        and value == expected
+        and type(value["inputSizeBytes"]) is int
+        and type(value["count"]) is int,
+        "GRADLE_EXACT_SHARED_DECODE_REQUIRED",
+    )
+
+
+def _gradle_logger(output, prefix, end):
+    logs = []
+
+    def record(value):
+        need(len(logs) < 12, "GRADLE_DIAGNOSTIC_COUNT_BOUND")
+        logs.append(value)
+        # Preserve every completed Java diagnostic before admitting its result,
+        # including a nonzero child. Failure never erases already-written rows.
+        write_new(
+            output / (prefix + "-step-" + str(len(logs)) + ".json"),
+            json_bytes(value),
+            deadline=end,
+        )
+
+    return logs, record
+
+
+def _gradle_input_checks(reference, child, end, log):
+    source = _gradle_input_policy(reference, end)
+    checks = {}
+    for runtime in ("java21", "java17"):
+        store = source["java"][runtime]
+        with opened_public(
+            store["store"]["path"], expected=store["store"], deadline=end
+        ):
+            own_environment = _gradle_java_environment(
+                child, store["store"], store["type"]
+            )
+            observed = run_java(runtime, ["inspect"], own_environment, end, log)
+            _gradle_default_report(observed, 117, CONTRACTS["java"][3])
+        checks[runtime] = observed
+    return checks
+
+
+def _gradle_checks(store_bytes, store_reference, aliases, fixture_der, child, end, log):
+    expected_set = _gradle_aliases(aliases, fixture_der)
+    token = sha(fixture_der) if fixture_der else "-"
+    checks = {}
+    with opened_public(
+        store_reference["path"], expected=store_reference, deadline=end
+    ) as (_, current, _):
+        need(current == store_bytes, "GRADLE_EXACT_SHARED_BYTES_REQUIRED")
+        for runtime in ("java21", "java17"):
+            decoded = run_java(
+                runtime,
+                ["decode-shared", token],
+                child,
+                end,
+                log,
+                public_buffers=(store_bytes,),
+            )
+            effective = run_java(
+                runtime,
+                ["inspect-shared", token],
+                _gradle_java_environment(child, store_reference),
+                end,
+                log,
+            )
+            _gradle_decode_report(decoded, store_bytes, aliases, expected_set)
+            _gradle_default_report(effective, len(aliases), expected_set)
+            checks[runtime] = {"decode": decoded, "default": effective}
+    return checks
+
+
+def _gradle_output(output):
+    output = Path(output)
+    need(
+        output.is_absolute()
+        and output.is_relative_to(SHARED)
+        and output.parent.resolve() == output.parent
+        and not output.exists(),
+        "NEW_OWNED_OUTPUT_REQUIRED",
+    )
+    output.mkdir(mode=0o700)
+    for name in ("home", "temporary"):
+        (output / name).mkdir(mode=0o700)
+    return output, {
+        "HOME": str(output / "home"),
+        "TMPDIR": str(output / "temporary"),
+        "PATH": "/usr/bin:/bin",
+        "LANG": "en_US.UTF-8",
+    }
+
+
+def prepare_gradle_policy(output, source_policy_reference, *, environment=None):
+    """A separate common store; both original single-runtime recipes stay intact."""
+    end = time.monotonic() + SECONDS
+    checked_environment(dict(os.environ) if environment is None else environment)
+    source = _gradle_input_policy(source_policy_reference, end)
+    output, child = _gradle_output(output)
+    logs, record = _gradle_logger(output, "java-gradle", end)
+    # Each real, independently pinned JVM first proves its own typed store.
+    input_checks = _gradle_input_checks(source_policy_reference, child, end, record)
+    retained = _gradle_ref(source["java"]["java21"]["store"], end)
+    reference = write_new(output / "gradle-jdks.truststore", retained, deadline=end)
+    aliases = source["java"]["java21"]["aliases"]
+    checks = _gradle_checks(retained, reference, aliases, None, child, end, record)
+    value = {
+        "schemaVersion": 1,
+        "kind": GRADLE_KIND,
+        "runtimeScope": GRADLE_SCOPE,
+        "qaOnly": False,
+        "fixture": None,
+        "deniedSha256": DENIED,
+        "aliasOrigin": "java21",
+        "sourcePolicy": source_policy_reference,
+        "platformPolicy": source_policy_reference,
+        "inputs": source["java"],
+        "inputVerification": input_checks,
+        "store": reference,
+        "type": "PKCS12",
+        "aliases": aliases,
+        "fingerprintSetSha256": CONTRACTS["java"][3],
+        "runtimeVerification": checks,
+        "scope": "Shared Gradle21/toolchain17 trust only; actual marked local TLS and Gradle propagation proofs remain separate caller prerequisites.",
+    }
+    need(time.monotonic() < end, "GRADLE_HELPER_DEADLINE")
+    write_new(output / "java-gradle-log.json", json_bytes(logs), deadline=end)
+    policy = write_new(output / "policy.json", json_bytes(value), deadline=end)
+    recipe = _gradle_java_environment(child, reference)
+    recipe[POLICY_FILE], recipe[POLICY_SHA] = policy["path"], policy["sha256"]
+    write_new(output / "environment-recipe.json", json_bytes(recipe), deadline=end)
+    return policy
+
+
+def _read_gradle_policy(reference, qa_fixture_reference=None, *, deadline):
+    path = Path(reference.get("path", "")) if type(reference) is dict else Path("")
+    need(
+        path.is_relative_to(SHARED) and path.name == "policy.json",
+        "OWNED_POLICY_PATH_REQUIRED",
+    )
+    value = json.loads(_gradle_ref(reference, deadline))
+    need(
+        type(value) is dict
+        and set(value) == GRADLE_KEYS
+        and type(value["schemaVersion"]) is int
+        and value["schemaVersion"] == 1
+        and value["kind"] == GRADLE_KIND
+        and value["runtimeScope"] == GRADLE_SCOPE
+        and type(value["qaOnly"]) is bool
+        and value["deniedSha256"] == DENIED
+        and value["aliasOrigin"] == "java21"
+        and value["type"] == "PKCS12",
+        "EXACT_SHARED_GRADLE_POLICY_REQUIRED",
+    )
+    fixture_der = None
+    if value["qaOnly"]:
+        need(
+            qa_fixture_reference is not None
+            and value["fixture"] == qa_fixture_reference,
+            "EXPLICIT_QA_POLICY_REQUIRED",
+        )
+        _, _, fixture_der = _gradle_fixture(qa_fixture_reference, deadline)
+        production, _, _ = _read_gradle_policy(value["sourcePolicy"], deadline=deadline)
+        need(
+            production["qaOnly"] is False
+            and value["inputs"] == production["inputs"]
+            and value["inputVerification"] == production["inputVerification"]
+            and value["platformPolicy"] == production["platformPolicy"],
+            "GRADLE_QA_INPUT_LINEAGE_REQUIRED",
+        )
+    else:
+        need(
+            qa_fixture_reference is None and value["fixture"] is None,
+            "PRODUCTION_FIXTURE_REFUSED",
+        )
+        need(
+            value["platformPolicy"] == value["sourcePolicy"],
+            "GRADLE_INPUT_LINEAGE_REQUIRED",
+        )
+    source = _gradle_input_policy(value["platformPolicy"], deadline)
+    need(value["inputs"] == source["java"], "GRADLE_INPUT_LINEAGE_REQUIRED")
+    expected_set = _gradle_aliases(value["aliases"], fixture_der)
+    need(
+        type(value["store"]) is dict
+        and value["fingerprintSetSha256"] == expected_set
+        and value["store"].get("path")
+        == str(
+            path.parent
+            / ("gradle-jdks-qa.truststore" if fixture_der else "gradle-jdks.truststore")
+        ),
+        "GRADLE_EXACT_STORE_REQUIRED",
+    )
+    retained = _gradle_ref(value["store"], deadline)
+    need(
+        type(value["inputVerification"]) is dict
+        and set(value["inputVerification"]) == set(JDKS)
+        and type(value["runtimeVerification"]) is dict
+        and set(value["runtimeVerification"]) == set(JDKS),
+        "GRADLE_BOTH_RUNTIME_VERIFICATIONS_REQUIRED",
+    )
+    for runtime in ("java21", "java17"):
+        _gradle_default_report(
+            value["inputVerification"][runtime], 117, CONTRACTS["java"][3]
+        )
+        observed = value["runtimeVerification"][runtime]
+        need(
+            type(observed) is dict and set(observed) == {"decode", "default"},
+            "GRADLE_BOTH_RUNTIME_VERIFICATIONS_REQUIRED",
+        )
+        _gradle_decode_report(
+            observed["decode"], retained, value["aliases"], expected_set
+        )
+        _gradle_default_report(observed["default"], len(value["aliases"]), expected_set)
+    return value, retained, fixture_der
+
+
+def scoped_gradle_environment(
+    policy_reference, base, *, verification_log, qa_fixture_reference=None
+):
+    """Fresh dual-JDK admission; retain every Java diagnostic through the caller."""
+    end = time.monotonic() + SECONDS
+    env = checked_environment(base)
+    need(callable(verification_log), "GRADLE_VERIFICATION_LOG_REQUIRED")
+    policy, retained, fixture_der = _read_gradle_policy(
+        policy_reference, qa_fixture_reference, deadline=end
+    )
+    inputs = _gradle_input_checks(policy["platformPolicy"], env, end, verification_log)
+    need(inputs == policy["inputVerification"], "GRADLE_CURRENT_INPUTS_CHANGED")
+    observed = _gradle_checks(
+        retained,
+        policy["store"],
+        policy["aliases"],
+        fixture_der,
+        env,
+        end,
+        verification_log,
+    )
+    need(
+        observed == policy["runtimeVerification"], "GRADLE_CURRENT_SHARED_STORE_CHANGED"
+    )
+    need(time.monotonic() < end, "GRADLE_HELPER_DEADLINE")
+    env = _gradle_java_environment(env, policy["store"])
+    env[POLICY_FILE], env[POLICY_SHA] = (
+        policy_reference["path"],
+        policy_reference["sha256"],
+    )
+    return env
+
+
+def prepare_gradle_qa_policy(
+    policy_reference, fixture_reference, output, *, environment=None
+):
+    """Distinct local-only 118-anchor derivative; production remains 117."""
+    end = time.monotonic() + SECONDS
+    checked_environment(dict(os.environ) if environment is None else environment)
+    production, retained, _ = _read_gradle_policy(policy_reference, deadline=end)
+    need(production["qaOnly"] is False, "PRODUCTION_POLICY_INPUT_REQUIRED")
+    fixture, ca_bytes, ca_der = _gradle_fixture(fixture_reference, end)
+    output, child = _gradle_output(output)
+    logs, record = _gradle_logger(output, "java-gradle-qa", end)
+    value, reference = write_java_store(
+        "java21",
+        "fixture",
+        output / "gradle-jdks-qa.truststore",
+        child,
+        end,
+        record,
+        (retained, ca_bytes),
+    )
+    aliases = value["aliases"]
+    need(
+        value["outputCount"] == 118
+        and value["fixtureSha256"] == sha(ca_der)
+        and value["baseAliasesPreserved"] is True,
+        "QA_JAVA_ANCHORS_REQUIRED",
+    )
+    expected_set = _gradle_aliases(aliases, ca_der)
+    checks = _gradle_checks(
+        _gradle_ref(reference, end), reference, aliases, ca_der, child, end, record
+    )
+    result = {
+        **production,
+        "qaOnly": True,
+        "fixture": fixture_reference,
+        "sourcePolicy": policy_reference,
+        "store": reference,
+        "aliases": aliases,
+        "fingerprintSetSha256": expected_set,
+        "runtimeVerification": checks,
+        "scope": "Explicit owned loopback QA only; 117 production anchors plus exactly one owned fixture CA, never an outbound production recipe.",
+    }
+    need(time.monotonic() < end, "GRADLE_HELPER_DEADLINE")
+    write_new(output / "java-gradle-qa-log.json", json_bytes(logs), deadline=end)
+    policy = write_new(output / "policy.json", json_bytes(result), deadline=end)
+    recipe = _gradle_java_environment(child, reference)
+    recipe[POLICY_FILE], recipe[POLICY_SHA] = policy["path"], policy["sha256"]
+    write_new(output / "environment-recipe.json", json_bytes(recipe), deadline=end)
+    return policy
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepare", type=Path, required=True)

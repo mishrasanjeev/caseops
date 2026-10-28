@@ -1,39 +1,19 @@
 #!/bin/bash
 set -euo pipefail
-
-if [[ "$(uname -s)" != Darwin ]]; then
-  echo 'An actual Mac with Xcode is required; no iOS execution is claimed on Windows.' >&2
-  exit 1
-fi
-: "${SIMULATOR_UDID:?Select one existing dedicated simulator UDID}"
-: "${EXPO_PUBLIC_API_ORIGIN:?Supply the isolated HTTPS API origin}"
-: "${EXPO_PUBLIC_WEB_ORIGIN:?Supply the isolated HTTPS web origin}"
+trap ':' EXIT
+for name in ${!DYLD_@} LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT LD_DEBUG LD_PROFILE LD_ASSUME_KERNEL LD_BIND_NOW; do if declare -p "$name" >/dev/null 2>&1; then echo IOS_HOST_DYNAMIC_LOADER_OVERRIDE_REFUSED >&2; exit 1; fi; done
+[[ "$(uname -s)" == Darwin ]] || { echo "An actual Mac with Xcode is required." >&2; exit 1; }
+: "${CASEOPS_IOS_HOST_NODE:?Supply the admitted Node24 executable}"
+: "${CASEOPS_IOS_HOST_POLICY_FILE:?Prepare an immutable iOS host policy}"
+: "${CASEOPS_IOS_HOST_POLICY_SHA256:?Bind the exact iOS host policy bytes}"
+: "${CASEOPS_IOS_HOST_POLICY_SIZE:?Bind the exact policy extent}"
+: "${CASEOPS_IOS_SIMULATOR_BUILD_GO:?An explicit reviewed local simulator build is required}"
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
-mkdir -p "$HOME/.cache/caseops-mobile"
-run="$(mktemp -d "$HOME/.cache/caseops-mobile/ios-build-XXXXXXXX")"
-trap 'printf "Raw build evidence retained: %s\n" "$run"' EXIT
-cd "$repo/apps/mobile"
-export CASEOPS_MOBILE_BUILD_PROFILE=ios-simulator-acceptance
-export CASEOPS_MOBILE_AUTOMATED_TEST=1
-export CASEOPS_MOBILE_RELEASE_SHA="$(git rev-parse HEAD)"
-export NODE_ENV=production EXPO_NO_DOTENV=1
-node "$repo/scripts/mobile/prepare-viewer-assets.mjs" --check 2>&1 | tee "$run/viewer-assets-check.log"
-node "$repo/scripts/mobile/build-acceptance.mjs" check ios "$run/before.json" 2>&1 | tee "$run/check.log"
-node ./node_modules/expo/bin/cli prebuild --platform ios --no-install 2>&1 | tee "$run/prebuild.log"
-(
-  cd ios
-  if [[ -f Podfile.lock ]]; then pod install --deployment; else pod install; fi
-) 2>&1 | tee "$run/pods.log"
-cp ios/Podfile.lock "$run/Podfile.lock"
-xcodebuild -workspace ios/CaseOps.xcworkspace -scheme CaseOps -configuration Release \
-  -sdk iphonesimulator -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-  -derivedDataPath "$run/DerivedData" -jobs 4 \
-  CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_INJECT_BASE_ENTITLEMENTS=YES \
-  build 2>&1 | tee "$run/xcodebuild.log"
-app="$run/DerivedData/Build/Products/Release-iphonesimulator/CaseOps.app"
-test -s "$app/main.jsbundle"
-test "$(plutil -extract CFBundleIdentifier raw -o - "$app/Info.plist")" = ai.caseops.mobile.dev.simulatoracceptance
-node "$repo/scripts/mobile/build-acceptance.mjs" finish ios "$run/before.json" "$app" \
-  "$app/EXConstants.bundle/app.config" "$run/receipt.json" 2>&1 | tee "$run/finish.log"
-printf 'Locally ad-hoc-signed standalone simulator build only: %s\n' "$app"
-printf 'Owner/parent must separately install, launch, and run the native acceptance inventory.\n'
+# IOS_HOST_REVIEWED_ENTRY: execute retained reviewed bytes, never a module-path reopen.
+"$CASEOPS_IOS_HOST_NODE" --input-type=module -e 'import fs from'\''node:fs'\'';import path from'\''node:path'\'';import{createHash}from'\''node:crypto'\'';
+const[file,pin,size,role,...args]=process.argv.slice(1),end=Date.now()+20000;let fd,b;
+const fail=()=>{throw Error('\''IOS_HOST_SHIM_SOURCE_REFUSED'\'')};
+const frame=s=>['\''dev'\'','\''ino'\'','\''mode'\'','\''uid'\'','\''gid'\'','\''nlink'\'','\''size'\'','\''mtimeNs'\'','\''ctimeNs'\''].map(k=>String(s[k])).join('\'':'\'');
+const ns=()=>{const out=[fs.realpathSync(file)];for(let p=path.dirname(out[0]);;p=path.dirname(p)){const s=fs.lstatSync(p,{bigint:true});if(!s.isDirectory()||s.isSymbolicLink()||out.length>128)fail();out.push([p,...['\''dev'\'','\''ino'\'','\''mode'\'','\''uid'\'','\''gid'\''].map(k=>String(s[k]))]);if(p===path.dirname(p))return JSON.stringify(out)}};
+try{if(!path.isAbsolute(file)||!/^\d+$/.test(size)||Number(size)>131072)fail();fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0));const a=fs.fstatSync(fd,{bigint:true}),n=fs.lstatSync(file,{bigint:true}),before=ns();if(!a.isFile()||n.isSymbolicLink()||a.uid!==BigInt(process.getuid())||a.nlink!==1n||a.size!==BigInt(size)||frame(a)!==frame(n)||(a.mode&0o022n)!==0n)fail();b=Buffer.alloc(Number(size)+1);let count=0;while(count<b.length){if(Date.now()>=end)fail();const v=fs.readSync(fd,b,count,Math.min(65536,b.length-count),null);if(!v)break;count+=v}if(count!==Number(size)||frame(a)!==frame(fs.fstatSync(fd,{bigint:true}))||frame(n)!==frame(fs.lstatSync(file,{bigint:true}))||ns()!==before||createHash('\''sha256'\'').update(b.subarray(0,count)).digest('\''hex'\'')!==pin)fail();const module=await import('\''data:text/javascript;base64,'\''+b.subarray(0,count).toString('\''base64'\''));process.exitCode=await module.iosHostCli([role,...args]);}catch(error){const code=String(error?.message||'\'''\'').split('\''\n'\'',1)[0];console.error(/^IOS_HOST_[A-Z0-9_]+$/.test(code)?code:'\''IOS_HOST_CHILD_REFUSED'\'');process.exitCode=1}finally{b?.fill(0);if(fd!==undefined)fs.closeSync(fd)}
+' "$repo/scripts/mobile/ios-host-launch.mjs" '8634dad58b4355cb9cb0314ffc30b789687bc7d43d3cf533b6954348ddff90de' '70295' simulator

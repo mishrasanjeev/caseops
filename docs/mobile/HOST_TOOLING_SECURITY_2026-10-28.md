@@ -141,3 +141,46 @@ Its immutable source contains the independently verified public bundle hash.
 Only this separately reviewed historical fingerprint is added; the successful
 tree result does not substitute for a complete replacement history scan.
 
+
+
+## Explicit shared Gradle/JDK scope
+
+The Android wrapper keeps real Temurin21 for Gradle9.4.1 and real Temurin17
+for toolchain children. The existing `java21` PKCS12 and `java17` JKS recipes
+remain separate. Passing the Java21 recipe to the Java17 label is refused.
+
+`prepare_gradle_policy(output, freshPlatformPolicyRef, environment=neutral)`
+creates kind `caseops-host-gradle-jdks-trust-v1`, runtime scope
+`gradle-java21-java17`. It independently checks both original typed117-anchor
+stores, retains Java21's exact PKCS12 bytes in one owned store, and records
+`aliasOrigin: java21`. Both pinned JVMs decode those exact retained bytes and
+inspect the effective default117 anchors before the policy is published.
+A producer diagnostic is written before each result is admitted, including
+nonzero children; partial output is retained on refusal.
+
+Call `scoped_gradle_environment(sharedRef, neutralBase,
+verification_log=durableRecorder)` before applying the common environment.
+The recorder is mandatory. Export freshly checks both original inputs, both
+shared-store decoders and both effective defaults; every JVM's stderr and
+executable/source/input hashes reach that recorder before environment return.
+The result adds one PKCS12 `JAVA_TOOL_OPTIONS` and the policy reference pair.
+Node, Python and CMake trust recipes remain separate. No JDK home, executable,
+system store or owner configuration is replaced.
+
+`prepare_gradle_qa_policy` is a distinct118-anchor local-fixture derivative.
+Only an exact owned fixture receipt can export it. Production remains117.
+Actual marked default-client trusted, untrusted and wrong-host controls on
+BOTH JVMs are required. Their HTTP deadlines remain3 seconds; each helper's
+entire shared deadline remains60 seconds, including retained inputs and logs.
+The helper proof does not establish Gradle client/daemon/compiler propagation
+or a successful Android build. A separate offline Gradle9.4.1 propagation proof
+and the canonical build remain required before native acceptance.
+
+The pinned public API review distinguishes compiler
+[ForkOptions](https://raw.githubusercontent.com/gradle/gradle/v9.4.1/platforms/jvm/language-jvm/src/main/java/org/gradle/api/tasks/compile/ForkOptions.java)
+and [BaseForkOptions](https://raw.githubusercontent.com/gradle/gradle/v9.4.1/platforms/jvm/language-jvm/src/main/java/org/gradle/api/tasks/compile/BaseForkOptions.java)
+from task-specific
+[ProcessForkOptions](https://raw.githubusercontent.com/gradle/gradle/v9.4.1/subprojects/core-api/src/main/java/org/gradle/process/ProcessForkOptions.java).
+Task-specific environment APIs exist; they do not provide a reviewed uniform
+hook for every compiler/plugin worker used by the canonical wrapper. No init
+script, generated project mutation or internal Gradle API is introduced here.

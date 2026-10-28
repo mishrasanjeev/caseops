@@ -67,7 +67,16 @@ function namespace(file, check) {
 function namedDescriptor(named, opened) {
   for (const key of FIELDS) if (!(process.platform === 'win32' && key === 'dev' && named.dev === 0n)) requireThat(named[key] === opened[key], 'HOST_TRUST_NAMED_FD_CHANGED');
 }
-function ownership(file, value, directory = false, publicCertificate = false) {
+const WINDOWS_OWNER_ROLES = new Set(["PUBLIC_INPUT", "PUBLIC_SOURCE", "SOURCE_HELPER", "SOURCE_BOOTSTRAP", "FIXTURE_INPUT", "PARENT_DIRECTORY", "POLICY_DIRECTORY", "OUTPUT_DIRECTORY", "EMPTY_DIRECTORY", "DIRECTORY", "ROOTS_OUTPUT", "POLICY_OUTPUT", "PUBLIC_OUTPUT", "POLICY_INPUT", "ROOTS_INPUT"]);
+const WINDOWS_OWNER_CLASSES = new Set(['CURRENT_USER', 'SYSTEM', 'ADMINISTRATORS', 'TOKEN_OTHER', 'OTHER', 'MISSING']);
+const WINDOWS_TOKEN_CLASSES = new Set(['CURRENT_USER', 'SYSTEM', 'ADMINISTRATORS', 'OTHER', 'MISSING']);
+function ownerRefusalCode(parsed, role) {
+  exactKeys(parsed, ['ownerMatches', 'writeScopeSafe', 'ownerClass', 'tokenOwnerClass']);
+  requireThat(parsed.ownerMatches === false && typeof parsed.writeScopeSafe === 'boolean' && WINDOWS_OWNER_ROLES.has(role) && WINDOWS_OWNER_CLASSES.has(parsed.ownerClass) && parsed.ownerClass !== 'CURRENT_USER' && WINDOWS_TOKEN_CLASSES.has(parsed.tokenOwnerClass), 'HOST_TRUST_WINDOWS_ACL_PROTOCOL');
+  return 'HOST_TRUST_CURRENT_OWNER_REQUIRED_' + role + '_OWNER_' + parsed.ownerClass + '_TOKEN_' + parsed.tokenOwnerClass + '_WRITE_' + (parsed.writeScopeSafe ? 'SAFE' : 'UNSAFE');
+}
+function ownership(file, value, directory = false, publicCertificate = false, role = 'PUBLIC_INPUT') {
+  requireThat(WINDOWS_OWNER_ROLES.has(role), 'HOST_TRUST_WINDOWS_ACL_PROTOCOL');
   if (typeof process.getuid === 'function') {
     requireThat(value.uid === BigInt(process.getuid()), 'HOST_TRUST_CURRENT_OWNER_REQUIRED');
     const mode = value.mode & 0o7777n;
@@ -76,7 +85,7 @@ function ownership(file, value, directory = false, publicCertificate = false) {
   }
   requireThat(process.platform === 'win32' && path.isAbsolute(process.env.SystemRoot || ''), 'HOST_TRUST_OWNER_UNAVAILABLE');
   // Read-only ACL proof. The fixed command never returns SID/account values.
-  const code = "$ErrorActionPreference='Stop';[Console]::Error.WriteLine('COPS_ACL0');try{$s=[Security.AccessControl.AccessControlSections]'Access,Owner';if($env:CASEOPS_TRUST_ACL_KIND -eq 'directory'){$a=[IO.Directory]::GetAccessControl($env:CASEOPS_TRUST_ACL_PATH,$s)}elseif($env:CASEOPS_TRUST_ACL_KIND -eq 'file'){$a=[IO.File]::GetAccessControl($env:CASEOPS_TRUST_ACL_PATH,$s)}else{throw 'ACL_KIND'};[Console]::Error.WriteLine('COPS_ACL1');$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;[Console]::Error.WriteLine('COPS_ACL2');$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));$safe=$true;foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$safe=$false}};[Console]::Error.WriteLine('COPS_ACL3');[Console]::Out.Write(('{\"ownerMatches\":'+$ok.ToString().ToLowerInvariant()+',\"writeScopeSafe\":'+$safe.ToString().ToLowerInvariant()+'}'))}catch{[Console]::Error.WriteLine('COPS_ACL_FAIL');exit 1}";
+  const code = "$ErrorActionPreference='Stop';[Console]::Error.WriteLine('COPS_ACL0');try{$s=[Security.AccessControl.AccessControlSections]'Access,Owner';if($env:CASEOPS_TRUST_ACL_KIND -eq 'directory'){$a=[IO.Directory]::GetAccessControl($env:CASEOPS_TRUST_ACL_PATH,$s)}elseif($env:CASEOPS_TRUST_ACL_KIND -eq 'file'){$a=[IO.File]::GetAccessControl($env:CASEOPS_TRUST_ACL_PATH,$s)}else{throw 'ACL_KIND'};[Console]::Error.WriteLine('COPS_ACL1');$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;[Console]::Error.WriteLine('COPS_ACL2');$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));$safe=$true;foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$safe=$false}};[Console]::Error.WriteLine('COPS_ACL3');if($ok){[Console]::Out.Write(('{\"ownerMatches\":'+$ok.ToString().ToLowerInvariant()+',\"writeScopeSafe\":'+$safe.ToString().ToLowerInvariant()+'}'))}else{$oc=if([string]::IsNullOrEmpty($o)){'MISSING'}elseif($o -eq $u){'CURRENT_USER'}elseif($o -eq 'S-1-5-18'){'SYSTEM'}elseif($o -eq 'S-1-5-32-544'){'ADMINISTRATORS'}elseif($o -eq $t){'TOKEN_OTHER'}else{'OTHER'};$tc=if([string]::IsNullOrEmpty($t)){'MISSING'}elseif($t -eq $u){'CURRENT_USER'}elseif($t -eq 'S-1-5-18'){'SYSTEM'}elseif($t -eq 'S-1-5-32-544'){'ADMINISTRATORS'}else{'OTHER'};[Console]::Out.Write(('{\"ownerMatches\":false,\"writeScopeSafe\":'+$safe.ToString().ToLowerInvariant()+',\"ownerClass\":\"'+$oc+'\",\"tokenOwnerClass\":\"'+$tc+'\"}'))}}catch{[Console]::Error.WriteLine('COPS_ACL_FAIL');exit 1}";
   const executable = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const result = spawnSync(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], { encoding: 'utf8', timeout: 5000, maxBuffer: 4096, windowsHide: true, env: { SystemRoot: process.env.SystemRoot, WINDIR: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file, CASEOPS_TRUST_ACL_KIND: directory ? 'directory' : 'file' } });
   const phase = reviewHostNodeWindowsAclPhase(result.stderr);
@@ -84,6 +93,7 @@ function ownership(file, value, directory = false, publicCertificate = false) {
   requireThat(!result.error && result.status === 0, 'HOST_TRUST_WINDOWS_ACL_COMMAND_FAILED');
   requireThat(phase === 'RULES_READ', 'HOST_TRUST_WINDOWS_ACL_PROTOCOL');
   let parsed; try { parsed = JSON.parse(result.stdout); } catch { fail('HOST_TRUST_WINDOWS_ACL_PROTOCOL'); }
+  if (parsed?.ownerMatches === false && (Object.hasOwn(parsed, 'ownerClass') || Object.hasOwn(parsed, 'tokenOwnerClass'))) fail(ownerRefusalCode(parsed, role));
   reviewHostNodeWindowsAclProof(parsed);
 }
 /** Fixed progress only; never return a path, SID or unreviewed stderr text. */
@@ -104,32 +114,32 @@ export function reviewHostNodeWindowsAclProof(parsed) {
   return { ownerMatches: true, writeScopeSafe: true };
 }
 
-function readHeld(file, limit, check, publicCertificate = false) {
+function readHeld(file, limit, check, publicCertificate = false, role = 'PUBLIC_INPUT') {
   requireThat(typeof file === 'string' && path.isAbsolute(file) && path.resolve(file) === file, 'HOST_TRUST_ABSOLUTE_PATH');
   let fd;
   try {
     check(); fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
     const opened = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true });
     requireThat(opened.isFile() && named.isFile() && !named.isSymbolicLink() && opened.nlink === 1n && opened.size > 0n && opened.size <= BigInt(limit), 'HOST_TRUST_FILE_BOUND');
-    namedDescriptor(named, opened); ownership(file, named, false, publicCertificate); const ns = namespace(file, check), storage = Buffer.alloc(Number(opened.size) + 1); let count = 0;
+    namedDescriptor(named, opened); ownership(file, named, false, publicCertificate, role); const ns = namespace(file, check), storage = Buffer.alloc(Number(opened.size) + 1); let count = 0;
     while (count < storage.length) { check(); const n = fs.readSync(fd, storage, count, storage.length - count, null); if (!n) break; count += n; }
     requireThat(BigInt(count) === opened.size && equal(frame(fs.fstatSync(fd, { bigint: true })), frame(opened)) && equal(frame(fs.lstatSync(file, { bigint: true })), frame(named)) && equal(namespace(file, check), ns), 'HOST_TRUST_FILE_CHANGED');
     return { bytes: storage.subarray(0, count), path: ns.resolved };
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
-function privateDirectory(file, check, empty = false) {
+function privateDirectory(file, check, empty = false, role = 'DIRECTORY') {
   check(); requireThat(path.isAbsolute(file) && path.resolve(file) === file && canonical(file) === file, 'HOST_TRUST_DIRECTORY_PATH');
-  const before = fs.lstatSync(file, { bigint: true }); requireThat(before.isDirectory() && !before.isSymbolicLink(), 'HOST_TRUST_DIRECTORY_REQUIRED'); ownership(file, before, true);
+  const before = fs.lstatSync(file, { bigint: true }); requireThat(before.isDirectory() && !before.isSymbolicLink(), 'HOST_TRUST_DIRECTORY_REQUIRED'); ownership(file, before, true, false, role);
   const ns = namespace(file, check); let iterator;
   try { if (empty) { iterator = fs.opendirSync(file, { bufferSize: 1 }); check(); requireThat(iterator.readSync() === null, 'HOST_TRUST_EMPTY_DIRECTORY_REQUIRED'); } }
   finally { iterator?.closeSync(); }
   requireThat(equal(frame(fs.lstatSync(file, { bigint: true })), frame(before)) && equal(namespace(file, check), ns), 'HOST_TRUST_DIRECTORY_CHANGED');
 }
 function writeExclusive(file, bytes, check) {
-  privateDirectory(path.dirname(file), check); let fd;
+  privateDirectory(path.dirname(file), check, false, 'OUTPUT_DIRECTORY'); let fd;
   try {
     check(); fd = fs.openSync(file, fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0), 0o600);
-    const before = fs.fstatSync(fd, { bigint: true }); requireThat(before.isFile() && before.nlink === 1n && before.size === 0n, 'HOST_TRUST_EXCLUSIVE_WRITE'); ownership(file, before);
+    const before = fs.fstatSync(fd, { bigint: true }); requireThat(before.isFile() && before.nlink === 1n && before.size === 0n, 'HOST_TRUST_EXCLUSIVE_WRITE'); ownership(file, before, false, false, path.basename(file) === 'roots.pem' ? 'ROOTS_OUTPUT' : path.basename(file) === 'policy.json' ? 'POLICY_OUTPUT' : 'PUBLIC_OUTPUT');
     const ns = namespace(file, check); let count = 0;
     while (count < bytes.length) { check(); const n = fs.writeSync(fd, bytes, count, Math.min(65536, bytes.length - count)); requireThat(n > 0 && n <= bytes.length - count, 'HOST_TRUST_WRITE_PROGRESS'); count += n; }
     fs.fsyncSync(fd); const finished = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true }); namedDescriptor(named, finished);
@@ -161,14 +171,14 @@ function rejectOverrides(environment, bootstrap, role, fixture, argv, approvedIm
 }
 function fixtureCertificate(reference, check) {
   exactKeys(reference, ['path', 'sha256', 'certificateSha256']); requireThat(DIGEST.test(reference.sha256) && DIGEST.test(reference.certificateSha256), 'HOST_TRUST_FIXTURE_REFERENCE');
-  const input = readHeld(reference.path, 65536, check, true);
+  const input = readHeld(reference.path, 65536, check, true, 'FIXTURE_INPUT');
   try {
     const rows = certificates(new TextDecoder('utf-8', { fatal: true }).decode(input.bytes)); requireThat(rows.length === 1 && rows[0].fingerprint === reference.certificateSha256 && rows[0].fingerprint !== DENIED_HOST_CA && rows[0].cert.subject === rows[0].cert.issuer && rows[0].cert.verify(rows[0].cert.publicKey), 'HOST_TRUST_ISOLATED_FIXTURE_REQUIRED');
     requireThat(publicSha256(input.bytes) === reference.sha256 && input.path === reference.path, 'HOST_TRUST_FIXTURE_CHANGED'); return rows[0];
   } finally { input.bytes.fill(0); }
 }
 function publicSource(file, limit, check) {
-  const retained = readHeld(file, limit, check, true);
+  const retained = readHeld(file, limit, check, true, path.basename(file) === 'host-node-trust.mjs' ? 'SOURCE_HELPER' : path.basename(file) === 'host-node-trust-start.mjs' ? 'SOURCE_BOOTSTRAP' : 'PUBLIC_SOURCE');
   return { retained, reference: { path: retained.path, sha256: publicSha256(retained.bytes), sizeBytes: retained.bytes.length } };
 }
 function sourceRecipe(runtimeSource, check) {
@@ -206,8 +216,8 @@ export function prepareHostNodeTrust({ directory, role = 'base', fixtureCA = nul
   const options = sourceRecipe(runtimeSource, check);
   rejectOverrides(environment, true, role, fixtureCA, process.execArgv, options.slice('--use-openssl-ca '.length));
   requireThat(typeof directory === 'string' && path.isAbsolute(directory) && path.resolve(directory) === directory, 'HOST_TRUST_OUTPUT_DIRECTORY');
-  const parent = canonical(path.dirname(directory)); privateDirectory(parent, check); const target = path.join(parent, path.basename(directory));
-  fs.mkdirSync(target, { mode: 0o700 }); privateDirectory(target, check); const empty = path.join(target, 'empty'); fs.mkdirSync(empty, { mode: 0o700 }); privateDirectory(empty, check, true);
+  const parent = canonical(path.dirname(directory)); privateDirectory(parent, check, false, 'PARENT_DIRECTORY'); const target = path.join(parent, path.basename(directory));
+  fs.mkdirSync(target, { mode: 0o700 }); privateDirectory(target, check, false, 'POLICY_DIRECTORY'); const empty = path.join(target, 'empty'); fs.mkdirSync(empty, { mode: 0o700 }); privateDirectory(empty, check, true, 'EMPTY_DIRECTORY');
   const bundle = writeExclusive(path.join(target, 'roots.pem'), Buffer.from(roots.pem), check);
   const descriptor = { schemaVersion: 1, kind: 'caseops-host-node-trust-v1', runtime: 'node', role, nodeVersion: roots.version, inputCount: roots.inputCount, inputSetSha256: roots.inputSetSha256, outputCount: roots.outputCount, outputSetSha256: roots.outputSetSha256, removedCount: roots.removedCount, deniedSha256: DENIED_HOST_CA, runtimeSource, bundle, emptyDirectory: empty, fixtureCA };
   const written = writeExclusive(path.join(target, 'policy.json'), Buffer.from(JSON.stringify(descriptor, null, 2) + '\n'), check), policyRef = { path: written.path, sha256: written.sha256 };
@@ -218,7 +228,7 @@ export function prepareHostNodeTrust({ directory, role = 'base', fixtureCA = nul
 function validatePolicy({ policyRef, role = 'base', expectedFixtureCA = null } = {}) {
   const environment = process.env, execArgv = process.execArgv;
   const check = operation(); reviewHostNodeBuildConfiguration(); requireThat(policyRef && DIGEST.test(policyRef.sha256 || ''), 'HOST_TRUST_POLICY_REFERENCE');
-  const input = readHeld(policyRef.path, 16384, check); let descriptor;
+  const input = readHeld(policyRef.path, 16384, check, false, 'POLICY_INPUT'); let descriptor;
   try {
     descriptor = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(input.bytes));
     exactKeys(descriptor, ['schemaVersion', 'kind', 'runtime', 'role', 'nodeVersion', 'inputCount', 'inputSetSha256', 'outputCount', 'outputSetSha256', 'removedCount', 'deniedSha256', 'runtimeSource', 'bundle', 'emptyDirectory', 'fixtureCA']);
@@ -229,20 +239,20 @@ function validatePolicy({ policyRef, role = 'base', expectedFixtureCA = null } =
   rejectOverrides(environment, false, role, expectedFixtureCA, execArgv, options.slice('--use-openssl-ca '.length));
   requireThat(envValue(environment, 'NODE_OPTIONS') === options || envValue(environment, 'NODE_OPTIONS') === options + ' --enable-source-maps', 'HOST_TRUST_BOOTSTRAP_SOURCE_REQUIRED');
   requireThat(equal(descriptor.fixtureCA, expectedFixtureCA) && (role === 'native-qa' ? expectedFixtureCA !== null : expectedFixtureCA === null), 'HOST_TRUST_EXPECTED_FIXTURE_REQUIRED');
-  const parent = path.dirname(policyRef.path); privateDirectory(parent, check); exactKeys(descriptor.bundle, ['path', 'sha256', 'sizeBytes']);
+  const parent = path.dirname(policyRef.path); privateDirectory(parent, check, false, 'POLICY_DIRECTORY'); exactKeys(descriptor.bundle, ['path', 'sha256', 'sizeBytes']);
   requireThat(path.basename(policyRef.path) === 'policy.json' && descriptor.bundle.path === path.join(parent, 'roots.pem') && descriptor.emptyDirectory === path.join(parent, 'empty'), 'HOST_TRUST_POLICY_PATHS');
   requireThat(envValue(environment, HOST_NODE_TRUST_ENV.file) === policyRef.path && envValue(environment, HOST_NODE_TRUST_ENV.sha256) === policyRef.sha256 && envValue(environment, 'SSL_CERT_FILE') === descriptor.bundle.path && envValue(environment, 'SSL_CERT_DIR') === descriptor.emptyDirectory, 'HOST_TRUST_SCOPED_ENVIRONMENT_REQUIRED');
-  const bundle = readHeld(descriptor.bundle.path, 1048576, check); let pems;
+  const bundle = readHeld(descriptor.bundle.path, 1048576, check, false, 'ROOTS_INPUT'); let pems;
   try { const rows = certificates(new TextDecoder('utf-8', { fatal: true }).decode(bundle.bytes)), ids = rows.map(row => row.fingerprint); requireThat(ids.length === roots.outputCount && new Set(ids).size === ids.length && setDigest(ids) === roots.outputSetSha256 && !ids.includes(DENIED_HOST_CA) && bundle.bytes.length === descriptor.bundle.sizeBytes && publicSha256(bundle.bytes) === descriptor.bundle.sha256, 'HOST_TRUST_BUNDLE_CHANGED'); pems = rows.map(row => row.pem); }
   finally { bundle.bytes.fill(0); }
-  privateDirectory(descriptor.emptyDirectory, check, true); const expected = [...roots.fingerprints];
+  privateDirectory(descriptor.emptyDirectory, check, true, 'EMPTY_DIRECTORY'); const expected = [...roots.fingerprints];
   if (expectedFixtureCA) { const fixture = fixtureCertificate(expectedFixtureCA, check); requireThat(!expected.includes(fixture.fingerprint) && envValue(environment, 'NODE_EXTRA_CA_CERTS') === expectedFixtureCA.path, 'HOST_TRUST_FIXTURE_ENVIRONMENT'); expected.push(fixture.fingerprint); pems.push(fixture.pem); }
   return { descriptor, roots, expected, pems, check };
 }
 function effectiveReport(validated) {
   const { descriptor, roots, expected, check } = validated; let enumerated = false;
   if (typeof tls.getCACertificates === 'function') { const actual = tls.getCACertificates('default').flatMap(certificates).map(row => row.fingerprint); requireThat(actual.length === expected.length && new Set(actual).size === actual.length && setDigest(actual) === setDigest(expected) && !actual.includes(DENIED_HOST_CA), 'HOST_TRUST_EFFECTIVE_DEFAULT_MISMATCH'); enumerated = true; }
-  privateDirectory(descriptor.emptyDirectory, check, true);
+  privateDirectory(descriptor.emptyDirectory, check, true, 'EMPTY_DIRECTORY');
   return { runtime: 'node', nodeVersion: roots.version, role: descriptor.role, expectedDefaultCount: expected.length, expectedDefaultSetSha256: setDigest(expected), defaultEnumerationVerified: enumerated, selectedStoreVerified: true, node22EnumerationUnavailable: !enumerated, activationScope: 'current-thread-before-entry', workersRequireInheritedBootstrap: true, globalTrustChanges: 0 };
 }
 /** Called only by the reviewed inherited bootstrap, before the actual entry. */

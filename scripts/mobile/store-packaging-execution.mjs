@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { packagingPlan } from './prepare-store-packaging.mjs';
 import { checkDeadline, digest, gitSource, jsonInput as rawJsonInput, objectKeys, privateDirectory as rawPrivateDirectory, readInput as rawReadInput, readPrivateCredentials, writePrivate as rawWritePrivate, writePublicLock } from './store-packaging-inputs.mjs';
 import { EMBED_PROGRAM, inspectDistributionArtifact, PLIST_JSON_PROGRAM } from './store-artifact-postflight.mjs';
+import { admitIosHostExecution, composeIosHostCommand } from './ios-host-launch.mjs';
 
 const require = createRequire(import.meta.url);
 const { reference, validateStoreBuild, reserveBuildNumbers } = require('../../apps/mobile/plugins/store-build.cjs');
@@ -29,7 +30,7 @@ sys.argv=[p]
 exec(compile(bytes(b),p,'exec'),{'__name__':'__main__','__file__':p,'__caseops_host_source__':bytes(b)})
 `;
 const roles = platform => ['node', 'python', 'git', ...(platform === 'ios'
-  ? ['pod', 'xcodebuild', 'codesign', 'security', 'xcrun'] : ['java', 'keytool', 'jarsigner', 'bundletool'])];
+  ? ['ruby', 'curl', 'pod', 'xcodebuild', 'codesign', 'security', 'xcrun'] : ['java', 'keytool', 'jarsigner', 'bundletool'])];
 const utf8Json = bytes => {
   try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
   catch { throw new Error('STORE_PUBLIC_JSON_REFUSED'); }
@@ -37,7 +38,7 @@ const utf8Json = bytes => {
 function safeFailure(error) {
   const message = typeof error?.message === 'string' ? error.message.split('\n', 1)[0] : '';
   return { class: ['Error', 'AssertionError', 'TypeError', 'RangeError', 'SyntaxError'].includes(error?.name) ? error.name : 'Error',
-    code: /^STORE_[A-Z0-9_]+$/.test(message) ? message : 'STORE_EXECUTION_REFUSED' };
+    code: /^(?:STORE|IOS_HOST)_[A-Z0-9_]+$/.test(message) ? message : 'STORE_EXECUTION_REFUSED' };
 }
 export function pendingStoreExecution(platform) {
   assert.ok(['ios', 'android'].includes(platform), 'STORE_PLATFORM_REQUIRED');
@@ -49,7 +50,7 @@ export function pendingStoreExecution(platform) {
 export function admitTools(value, platform, { contractOnly = false, deadline } = {}) {
   const readInput = (file, options) => rawReadInput(file, { ...options, deadline });
   checkDeadline(deadline);
-  objectKeys(value, ['schemaVersion', 'kind', 'hostPlatform', 'entries', 'runtimeInputs', 'generatedInputs'], 'STORE_TOOLS_REQUIRED');
+  objectKeys(value, ['schemaVersion', 'kind', 'hostPlatform', 'entries', 'runtimeInputs', 'generatedInputs', 'iosHostPolicy'], 'STORE_TOOLS_REQUIRED');
   assert.equal(value.schemaVersion, 1); assert.equal(value.kind, 'caseops-local-store-tools');
   assert.equal(value.hostPlatform, 'darwin', 'STORE_MACOS_HOST_REQUIRED');
   objectKeys(value.entries, roles(platform), 'STORE_EXACT_TOOL_ROLES_REQUIRED');
@@ -70,6 +71,14 @@ export function admitTools(value, platform, { contractOnly = false, deadline } =
   }
   assert.equal(value.entries.node.version, '24.15.0', 'STORE_NODE_VERSION_REQUIRED');
   assert.equal(value.entries.python.version, '3.13.17', 'STORE_PYTHON_VERSION_REQUIRED');
+  if (platform === 'ios') {
+    objectKeys(value.iosHostPolicy, ['path', 'sha256', 'sizeBytes'], 'STORE_IOS_HOST_POLICY_REQUIRED');
+    assert.ok(path.isAbsolute(value.iosHostPolicy.path) && /^[a-f0-9]{64}$/.test(value.iosHostPolicy.sha256)
+      && Number.isSafeInteger(value.iosHostPolicy.sizeBytes) && value.iosHostPolicy.sizeBytes > 0 && value.iosHostPolicy.sizeBytes <= 65536, 'STORE_IOS_HOST_POLICY_REQUIRED');
+    assert.equal(value.entries.ruby.version, '4.0.9', 'STORE_RUBY_VERSION_REQUIRED');
+    assert.equal(value.entries.curl.version, '8.7.1', 'STORE_CURL_VERSION_REQUIRED');
+    assert.equal(value.entries.pod.version, '1.17.0', 'STORE_PODS_VERSION_REQUIRED');
+  } else assert.equal(value.iosHostPolicy, null, 'STORE_ANDROID_IOS_POLICY_FORBIDDEN');
   assert.ok(Array.isArray(value.runtimeInputs) && value.runtimeInputs.length > 0 && value.runtimeInputs.length <= 5000, 'STORE_RUNTIME_INPUTS_REQUIRED');
   for (const item of value.runtimeInputs) {
     checkDeadline(deadline); objectKeys(item, ['path', 'sha256', 'sizeBytes'], 'STORE_RUNTIME_REFERENCE_REQUIRED');
@@ -235,6 +244,14 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
   } else if (!contractOnly) {
     assert.equal(fs.realpathSync(tools.xcodebuild.path), fs.realpathSync(path.join(request.signing.developerDirectory, 'usr/bin/xcodebuild')), 'STORE_XCODE_DIRECTORY_MISMATCH');
   }
+  const iosHost = q.platform === 'ios' ? (contractOnly && adapter.iosHost ? adapter.iosHost
+    : { admit: admitIosHostExecution, compose: composeIosHostCommand }) : null;
+  const iosPolicy = iosHost ? await iosHost.admit(toolsInput.value.iosHostPolicy, { end: admissionDeadline, activeNode: !contractOnly }) : null;
+  if (iosPolicy) for (const name of ['node', 'ruby', 'pod', 'curl', 'python']) {
+    const actual = iosPolicy.tools[name];
+    assert.ok(actual && actual.path === tools[name].path && actual.sha256 === tools[name].sha256
+      && actual.sizeBytes === tools[name].sizeBytes && actual.version === tools[name].version, 'STORE_IOS_HOST_TOOL_MISMATCH');
+  }
   assert.ok(q.outputDirectory !== root && !q.outputDirectory.startsWith(root + path.sep), 'STORE_OUTPUT_OUTSIDE_SOURCE_REQUIRED');
   privateDirectory(q.reservationDirectory); privateDirectory(path.dirname(q.outputDirectory));
   const output = privateDirectory(q.outputDirectory, { existing: false });
@@ -257,7 +274,18 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
   let environment = {};
   const invoke = async command => {
     assert.ok(result.commands.length < LIMITS.commands && Date.now() + 30000 < deadline, 'STORE_COMMAND_BUDGET');
-    const executable = command.executable || tools[command.tool]?.path;
+    let executable = command.executable || tools[command.tool]?.path;
+    let commandEnvironment = environment;
+    let derivedInput;
+    if (iosHost) {
+      const name = Object.keys(tools).find(key => tools[key].path === executable);
+      const role = ['node', 'pod', 'ruby', 'curl', 'xcodebuild'].includes(name) ? name : 'neutral';
+      const scoped = await iosHost.compose(toolsInput.value.iosHostPolicy, role, command.args,
+        { environment: { ...environment, CASEOPS_IOS_HOST_OUTER_DEADLINE: String(Math.min(deadline - 30000, iosPolicy.deadlineEpochMs)) }, end: admissionDeadline });
+      executable = scoped.executable || executable; command = { ...command, args: scoped.args, ...(scoped.input ? { input: scoped.input } : {}) }; commandEnvironment = scoped.environment;
+      derivedInput = scoped.input;
+      assert.equal(scoped.bundle, null, 'STORE_DIRECT_CURL_COMMAND_FORBIDDEN');
+    }
     assert.ok(path.isAbsolute(executable || ''), 'STORE_PINNED_COMMAND_REQUIRED');
     const declaredTool = Object.values(tools).find(t => t.path === executable);
     const generatedTool = toolsInput.value.generatedInputs.find(t => path.join(root, 'apps/mobile', q.platform, t.path) === executable);
@@ -269,9 +297,12 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
     result.commands.push(row); persist(row);
     lastCommandCleanup = false;
     if (!contractOnly) readInput(tools.python.path, { sha256: tools.python.sha256, maxBytes: tools.python.sizeBytes, systemTool: true });
-    const answer = adapter?.command ? await adapter.command({ ...command, executable }, environment)
-      : await runHostCommand({ ...command, executable }, { python: tools.python.path,
-        hostScript: runtime['store-packaging-host.py'], environment, deadline });
+    let answer;
+    try {
+      answer = adapter?.command ? await adapter.command({ ...command, executable }, commandEnvironment)
+        : await runHostCommand({ ...command, executable }, { python: tools.python.path,
+          hostScript: runtime['store-packaging-host.py'], environment: commandEnvironment, deadline });
+    } finally { derivedInput?.fill(0); }
     row.exitCode = answer.exitCode; row.workerExitCode = answer.workerExitCode ?? (contractOnly ? answer.exitCode : null);
     row.timedOut = answer.timedOut; row.cleanup = answer.cleanup;
     row.stdout = { bytes: answer.stdout?.bytes || 0, sha256: answer.stdout?.sha256 || digest('') };
@@ -299,7 +330,7 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
       assert.ok(contractOnly || row, 'STORE_RUNTIME_SOURCE_ROW_REQUIRED');
       const ref = writePrivate(path.join(runtimeDirectory, name), bytes); fs.chmodSync(ref.path, 0o400); return [name, ref];
     }));
-    environment = { HOME: process.env.HOME, PATH: [...new Set([...Object.values(tools).map(t => path.dirname(t.path)), '/usr/bin', '/bin', '/usr/sbin', '/sbin'])].join(path.delimiter),
+    environment = { ...(q.platform === 'android' ? { HOME: process.env.HOME } : {}), PATH: [...new Set([...Object.values(tools).map(t => path.dirname(t.path)), '/usr/bin', '/bin', '/usr/sbin', '/sbin'])].join(path.delimiter),
       LANG: 'C', LC_ALL: 'C', TZ: 'UTC', ...plan.environment, COCOAPODS_DISABLE_STATS: 'true',
       CASEOPS_MOBILE_PRIVACY_POLICY_FILE: q.privacyPolicy.path, CASEOPS_MOBILE_PRIVACY_POLICY_SHA256: q.privacyPolicy.sha256 };
     const notices = ['apps/mobile/BUILD_TOOL_NOTICES.txt', 'apps/mobile/CAMERA_NOTICES.txt', 'apps/mobile/src/viewer/generated/LICENSES.txt'];
@@ -360,6 +391,15 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
         if (!fs.existsSync(file)) return false;
         return readInput(file, { sha256: request.signing.provisioningProfileEvidence.sha256, maxBytes: 1048576 }).sha256 === profile.sha256;
       }), 'STORE_EXACT_INSTALLED_PROFILE_REQUIRED');
+      // The explicit profile read above remains at the existing signing boundary;
+      // Xcode receives an admitted copy in the isolated home, never owner HOME.
+      let install = iosPolicy.paths.home;
+      for (const part of ['Library', 'MobileDevice', 'Provisioning Profiles']) {
+        install = path.join(install, part);
+        if (fs.lstatSync(install, { throwIfNoEntry: false }) === undefined) fs.mkdirSync(install, { mode: 0o700 });
+        privateDirectory(install);
+      }
+      writePrivate(path.join(install, p.UUID + '.mobileprovision'), profile.bytes);
       const identity = await invoke({ role: 'signing-admission', tool: 'security', args: ['find-identity', '-v', '-p', 'codesigning'], cwd: output, timeoutMs: 30000, capture: true });
       assert.equal(identity.stdout.toString().split(/\r?\n/).filter(line => {
         const match = /^\s*[1-9][0-9]*\) ([a-fA-F0-9]{40}) ".*"\s*$/.exec(line);

@@ -991,7 +991,11 @@ assert.throws(()=>finishBuild('ios',before,process.argv[1],{ios:{bundleIdentifie
 
 test('build wrappers never start Metro, use distinct standalone tasks and retain raw logs', () => {
   const android = readFileSync(new URL('./build-android-local-acceptance.ps1', import.meta.url), 'utf8');
-  const ios = readFileSync(new URL('./build-ios-simulator-acceptance.sh', import.meta.url), 'utf8');
+  const entry = readFileSync(new URL('./build-ios-simulator-acceptance.sh', import.meta.url), 'utf8');
+  const ios = readFileSync(new URL('./ios-simulator-build.sh', import.meta.url), 'utf8');
+  assert.match(entry, /IOS_HOST_REVIEWED_ENTRY/);
+  assert.match(entry, /--input-type=module -e/);
+  assert.doesNotMatch(entry, /pod install|xcodebuild|prebuild/);
   assert.match(android, /:app:assembleLocalAcceptance/);
   assert.match(android, /& \$Command @Arguments/);
   assert.match(android, /GetEntry\('assets\/index.android.bundle'\)/);

@@ -86,6 +86,22 @@ public class HostPlatformTrust {
     StringJoiner aliases=new StringJoiner(",","{","}");for(var entry:after.entrySet())aliases.add(quote(entry.getKey())+":"+quote(entry.getValue()));
     System.out.println("{\"inputCount\":"+before.size()+",\"outputCount\":117,\"outputSetSha256\":"+quote(CLEAN)+",\"aliasesPreserved\":true,\"storeType\":"+quote(type)+",\"outputSizeBytes\":"+retained.length+",\"outputSha256\":"+quote(sha(retained))+",\"aliases\":"+aliases+"}");
   }
+  static String sharedSet(Collection<String> values,String fixture)throws Exception {
+    need(fixture.equals("-")||fixture.matches("[a-f0-9]{64}"),"EXACT_SHARED_FIXTURE_TOKEN");
+    ArrayList<String> clean=new ArrayList<>(values);need(new HashSet<>(clean).size()==clean.size()&&!clean.contains(DENIED),"SHARED_DUPLICATE_OR_DENIED_ROOT");
+    if(!fixture.equals("-")){need(Collections.frequency(clean,fixture)==1,"EXACT_SHARED_QA_ANCHOR");clean.remove(fixture);}
+    need(clean.size()==117&&setHash(clean).equals(CLEAN)&&values.size()==(fixture.equals("-")?117:118),"SHARED_OTHER_ANCHORS_CHANGED");return setHash(values);
+  }
+  static void sharedRuntime()throws Exception {
+    String version=System.getProperty("java.version");need(Set.of("21.0.12.1","17.0.20.1").contains(version)&&System.getProperty("java.runtime.version").startsWith(version+"+1"),"PINNED_SHARED_JDK_REQUIRED");
+  }
+  static void decodeShared(String fixture)throws Exception {
+    sharedRuntime();byte[] retained=publicFrames(1).get(0);KeyStore store=KeyStore.getInstance("PKCS12");store.load(new ByteArrayInputStream(retained),"changeit".toCharArray());TreeMap<String,String> aliases=entries(store);String hash=sharedSet(aliases.values(),fixture);StringJoiner encoded=new StringJoiner(",","{","}");for(var entry:aliases.entrySet())encoded.add(quote(entry.getKey())+":"+quote(entry.getValue()));
+    System.out.println("{\"storeType\":\"PKCS12\",\"inputSha256\":"+quote(sha(retained))+",\"inputSizeBytes\":"+retained.length+",\"aliases\":"+encoded+",\"count\":"+aliases.size()+",\"setSha256\":"+quote(hash)+"}");
+  }
+  static void inspectShared(String fixture)throws Exception {
+    sharedRuntime();TreeSet<String> roots=defaults();String hash=sharedSet(roots,fixture);System.out.println("{\"count\":"+roots.size()+",\"setSha256\":"+quote(hash)+",\"deniedCount\":0}");
+  }
   static void probe(String raw)throws Exception {
     URI uri=new URI(raw);need(uri.getScheme().equals("https")&&Set.of("localhost","127.0.0.1").contains(uri.getHost())&&uri.getPort()>1023&&uri.getRawUserInfo()==null&&uri.getRawQuery()==null&&uri.getRawFragment()==null&&uri.getPath().equals("/trust-probe"),"LOOPBACK_METADATA_PROBE_ONLY");
     URL target=new URI("https",null,uri.getHost().equals("localhost")?"localhost":"127.0.0.1",uri.getPort(),"/trust-probe",null,null).toURL();
@@ -93,7 +109,7 @@ public class HostPlatformTrust {
     try {need(connection.getResponseCode()==200,"LOCAL_PROBE_STATUS");try(InputStream input=connection.getInputStream()){byte[] body=input.readNBytes(65537);need(body.length<=65536&&new String(body,StandardCharsets.UTF_8).equals("public-trust-ok"),"LOCAL_PROBE_BODY");}System.out.println("{\"connected\":true}");}finally{connection.disconnect();}
   }
   public static void main(String[] args)throws Exception {
-    try {need(args.length>0,"EXACT_ACTION_REQUIRED");switch(args[0]){case "prepare":need(args.length==2,"ONE_OUTPUT_REQUIRED");prepare(Path.of(args[1]));break;case "inspect":need(args.length==1,"NO_INSPECT_ARGUMENTS");inspect();break;case "fixture":need(args.length==2,"EXACT_FIXTURE_ARGUMENTS");fixture(Path.of(args[1]));break;case "probe":need(args.length==2,"ONE_LOCAL_PROBE");probe(args[1]);break;default:throw new Exception("UNKNOWN_ACTION");}}
+    try {need(args.length>0,"EXACT_ACTION_REQUIRED");switch(args[0]){case "prepare":need(args.length==2,"ONE_OUTPUT_REQUIRED");prepare(Path.of(args[1]));break;case "inspect":need(args.length==1,"NO_INSPECT_ARGUMENTS");inspect();break;case "fixture":need(args.length==2,"EXACT_FIXTURE_ARGUMENTS");fixture(Path.of(args[1]));break;case "decode-shared":need(args.length==2,"ONE_SHARED_FIXTURE_TOKEN");decodeShared(args[1]);break;case "inspect-shared":need(args.length==2,"ONE_SHARED_FIXTURE_TOKEN");inspectShared(args[1]);break;case "probe":need(args.length==2,"ONE_LOCAL_PROBE");probe(args[1]);break;default:throw new Exception("UNKNOWN_ACTION");}}
     catch(Exception error){System.err.println("Host platform trust refused: "+error.getClass().getSimpleName());System.exit(37);}
   }
 }

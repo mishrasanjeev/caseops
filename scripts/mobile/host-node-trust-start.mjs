@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 // Public reviewed source identity, not a policy-supplied code authority.
-const APPROVED_HELPER_SHA256 = 'a24871027b16b8cfcb7bb902de9167a3d4e84286f74db819358bb7e25d80f3d4';
+const APPROVED_HELPER_SHA256 = '13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787';
 const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
 const end = performance.now() + 20000;
 const check = () => { if (performance.now() >= end) throw new Error('HOST_TRUST_BOOTSTRAP_DEADLINE'); };

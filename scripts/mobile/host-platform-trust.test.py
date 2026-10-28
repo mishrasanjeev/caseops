@@ -9,7 +9,7 @@ import tempfile
 import time
 import types
 import unittest
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -32,6 +32,412 @@ class HostTrust(unittest.TestCase):
             trust.set_digest([trust.sha(c) for c in clean]),
         )
         return certs, denied, clean, contract
+
+    @contextmanager
+    def gradle_fixture(self):
+        # Pure protocol fixture only. Actual PKCS12/JDK/TLS proof is separate.
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            source = root / "source"
+            source.mkdir()
+            aliases = {
+                "unit-root-" + str(i): trust.sha(("unit-" + str(i)).encode())
+                for i in range(117)
+            }
+            digest = trust.set_digest(aliases.values())
+            stores = {}
+            for runtime in ("java21", "java17"):
+                reference = trust.write_new(
+                    source / (runtime + ".truststore"),
+                    ("UNIT_STORE_" + runtime).encode(),
+                )
+                stores[runtime] = {
+                    "store": reference,
+                    "type": {"java21": "PKCS12", "java17": "JKS"}[runtime],
+                    "fingerprintSetSha256": digest,
+                    "aliases": aliases,
+                    "javaHome": str(trust.JDKS[runtime]),
+                }
+            policy = {
+                "schemaVersion": 1,
+                "kind": "caseops-host-platform-trust-v1",
+                "qaOnly": False,
+                "fixture": None,
+                "deniedSha256": trust.DENIED,
+                "java": stores,
+            }
+            reference = trust.write_new(
+                source / "policy.json", trust.json_bytes(policy)
+            )
+            state = {
+                "root": root,
+                "source": reference,
+                "aliases": aliases,
+                "digest": digest,
+                "calls": [],
+                "failure": None,
+                "after": None,
+                "originalScoped": trust.scoped_environment,
+            }
+
+            def java(
+                runtime,
+                arguments,
+                environment,
+                deadline,
+                log,
+                *,
+                public_buffers=(),
+                output_fd=None,
+            ):
+                row = {
+                    "runtime": runtime,
+                    "arguments": arguments,
+                    "environment": dict(environment),
+                    "buffers": public_buffers,
+                    "outputFd": output_fd,
+                }
+                state["calls"].append(row)
+                failed = state["failure"] == (runtime, arguments[0])
+                log(
+                    {
+                        "runtime": runtime,
+                        "action": arguments[0],
+                        "exitCode": 37 if failed else 0,
+                        "stderr": "UNIT_DIAGNOSTIC",
+                    }
+                )
+                if failed:
+                    raise ValueError("JAVA_COMMAND_FAILED")
+                if state["after"]:
+                    state["after"](row)
+                if arguments[0] == "inspect":
+                    return {"count": 117, "setSha256": digest, "deniedCount": 0}
+                token = arguments[1]
+                selected = dict(aliases)
+                if token != "-":
+                    selected["caseops-owned-loopback-fixture-" + token] = token
+                result = {
+                    "count": len(selected),
+                    "setSha256": trust.set_digest(selected.values()),
+                }
+                if arguments[0] == "inspect-shared":
+                    return {**result, "deniedCount": 0}
+                self.assertEqual(arguments[0], "decode-shared")
+                self.assertEqual(len(public_buffers), 1)
+                self.assertIs(type(public_buffers[0]), bytes)
+                return {
+                    **result,
+                    "storeType": "PKCS12",
+                    "aliases": selected,
+                    "inputSizeBytes": len(public_buffers[0]),
+                    "inputSha256": trust.sha(public_buffers[0]),
+                }
+
+            with (
+                mock.patch.object(trust, "SHARED", root),
+                mock.patch.dict(
+                    trust.CONTRACTS, {"java": (118, "unit-original", 117, digest)}
+                ),
+                mock.patch.object(trust, "run_java", side_effect=java),
+                mock.patch.object(
+                    trust,
+                    "scoped_environment",
+                    side_effect=lambda ref, runtime, base: {
+                        **base,
+                        "UNIT_RUNTIME": runtime,
+                    },
+                ),
+            ):
+                yield state
+
+    def test_gradle_preparer_independently_inspects_inputs_and_same_retained_store(
+        self,
+    ):
+        with self.gradle_fixture() as state:
+            reference = trust.prepare_gradle_policy(
+                state["root"] / "shared", state["source"], environment={}
+            )
+            value = json.loads(trust.read_ref(reference))
+            self.assertEqual(value["aliasOrigin"], "java21")
+            self.assertEqual(value["inputs"]["java17"]["type"], "JKS")
+            self.assertEqual(value["type"], "PKCS12")
+            self.assertEqual(
+                [(v["runtime"], v["arguments"][0]) for v in state["calls"]],
+                [
+                    ("java21", "inspect"),
+                    ("java17", "inspect"),
+                    ("java21", "decode-shared"),
+                    ("java21", "inspect-shared"),
+                    ("java17", "decode-shared"),
+                    ("java17", "inspect-shared"),
+                ],
+            )
+            buffers = [
+                v["buffers"][0]
+                for v in state["calls"]
+                if v["arguments"][0] == "decode-shared"
+            ]
+            self.assertEqual(buffers, [b"UNIT_STORE_java21"] * 2)
+            self.assertEqual(
+                len(list((state["root"] / "shared").glob("java-gradle-step-*.json"))), 6
+            )
+
+    def test_gradle_reader_freshly_checks_every_runtime_before_environment(self):
+        with self.gradle_fixture() as state:
+            reference = trust.prepare_gradle_policy(
+                state["root"] / "shared", state["source"], environment={}
+            )
+            state["calls"].clear()
+            logs = []
+            env = trust.scoped_gradle_environment(
+                reference, {"PATH": "/owned/tools"}, verification_log=logs.append
+            )
+            self.assertEqual(len(state["calls"]), 6)
+            self.assertEqual(len(logs), 6)
+            self.assertIn("trustStoreType=PKCS12", env["JAVA_TOOL_OPTIONS"])
+            self.assertEqual(env["PATH"], "/owned/tools")
+            self.assertNotIn("SSL_CERT_FILE", env)
+            self.assertNotIn("NODE_OPTIONS", env)
+            self.assertEqual(env[trust.POLICY_SHA], reference["sha256"])
+
+    def test_gradle_failed_second_input_keeps_diagnostic_without_shared_store(self):
+        with self.gradle_fixture() as state:
+            state["failure"] = ("java17", "inspect")
+            output = state["root"] / "failed"
+            with self.assertRaisesRegex(ValueError, "JAVA_COMMAND_FAILED"):
+                trust.prepare_gradle_policy(output, state["source"], environment={})
+            self.assertFalse((output / "gradle-jdks.truststore").exists())
+            self.assertFalse((output / "policy.json").exists())
+            self.assertEqual(
+                json.loads((output / "java-gradle-step-2.json").read_bytes())[
+                    "exitCode"
+                ],
+                37,
+            )
+
+    def test_gradle_failed_second_shared_decoder_never_publishes_policy(self):
+        with self.gradle_fixture() as state:
+            state["failure"] = ("java17", "decode-shared")
+            output = state["root"] / "failed"
+            with self.assertRaisesRegex(ValueError, "JAVA_COMMAND_FAILED"):
+                trust.prepare_gradle_policy(output, state["source"], environment={})
+            self.assertTrue((output / "gradle-jdks.truststore").exists())
+            self.assertFalse((output / "policy.json").exists())
+            self.assertEqual(
+                json.loads((output / "java-gradle-step-5.json").read_bytes())[
+                    "exitCode"
+                ],
+                37,
+            )
+
+    def test_gradle_scope_refuses_legacy_and_single_runtime_relabeling(self):
+        with self.gradle_fixture() as state:
+            reference = trust.prepare_gradle_policy(
+                state["root"] / "shared", state["source"], environment={}
+            )
+            state["calls"].clear()
+            with self.assertRaises(ValueError):
+                trust.scoped_gradle_environment(
+                    state["source"], {}, verification_log=lambda value: None
+                )
+            with self.assertRaises(ValueError):
+                state["originalScoped"](reference, "java17", {})
+            self.assertEqual(state["calls"], [])
+
+    def test_gradle_alias_lineage_and_shape_tampering_refuses_before_java(self):
+        changes = [
+            lambda v: v.update(runtimeScope="java21"),
+            lambda v: v.update(aliasOrigin="java17"),
+            lambda v: v["inputs"]["java17"].update(type="PKCS12"),
+            lambda v: v["inputs"]["java17"].update(javaHome="/fake/jdk"),
+            lambda v: v.update(extra=True),
+            lambda v: v["aliases"].pop(next(iter(v["aliases"]))),
+            lambda v: v["aliases"].update(extra="f" * 64),
+            lambda v: v["aliases"].update(extra=trust.DENIED),
+        ]
+        with self.gradle_fixture() as state:
+            reference = trust.prepare_gradle_policy(
+                state["root"] / "shared", state["source"], environment={}
+            )
+            original = json.loads(trust.read_ref(reference))
+            state["calls"].clear()
+            for index, change in enumerate(changes):
+                with self.subTest(index=index):
+                    value = json.loads(json.dumps(original))
+                    change(value)
+                    directory = state["root"] / ("bad-" + str(index))
+                    directory.mkdir()
+                    bad = trust.write_new(
+                        directory / "policy.json", trust.json_bytes(value)
+                    )
+                    with self.assertRaises(ValueError):
+                        trust.scoped_gradle_environment(
+                            bad, {}, verification_log=lambda value: None
+                        )
+            self.assertEqual(state["calls"], [])
+
+    def test_gradle_proofs_reject_missing_runtime_and_boolean_or_float_counts(self):
+        changes = [
+            lambda v: v["runtimeVerification"].pop("java17"),
+            lambda v: v["inputVerification"]["java17"].update(count=117.0),
+            lambda v: v["inputVerification"]["java17"].update(deniedCount=False),
+            lambda v: v["runtimeVerification"]["java17"]["decode"].update(
+                inputSizeBytes=17.0
+            ),
+            lambda v: v["runtimeVerification"]["java17"]["default"].update(
+                deniedCount=False
+            ),
+        ]
+        with self.gradle_fixture() as state:
+            reference = trust.prepare_gradle_policy(
+                state["root"] / "shared", state["source"], environment={}
+            )
+            original = json.loads(trust.read_ref(reference))
+            state["calls"].clear()
+            for index, change in enumerate(changes):
+                with self.subTest(index=index):
+                    value = json.loads(json.dumps(original))
+                    change(value)
+                    directory = state["root"] / ("bad-" + str(index))
+                    directory.mkdir()
+                    bad = trust.write_new(
+                        directory / "policy.json", trust.json_bytes(value)
+                    )
+                    with self.assertRaises(ValueError):
+                        trust.scoped_gradle_environment(
+                            bad, {}, verification_log=lambda value: None
+                        )
+            self.assertEqual(state["calls"], [])
+
+    def test_gradle_shared_store_hash_drift_or_symlink_refuses_before_java(self):
+        for kind in ("hash", "symlink"):
+            with self.subTest(kind=kind), self.gradle_fixture() as state:
+                reference = trust.prepare_gradle_policy(
+                    state["root"] / "shared", state["source"], environment={}
+                )
+                value = json.loads(trust.read_ref(reference))
+                store = Path(value["store"]["path"])
+                if kind == "hash":
+                    store.write_bytes(b"CHANGED")
+                else:
+                    retained = store.with_name("retained")
+                    store.rename(retained)
+                    store.symlink_to(retained)
+                state["calls"].clear()
+                with self.assertRaises(ValueError):
+                    trust.scoped_gradle_environment(
+                        reference, {}, verification_log=lambda value: None
+                    )
+                self.assertEqual(state["calls"], [])
+
+    def test_gradle_diagnostic_sink_and_inherited_overrides_fail_closed(self):
+        with self.gradle_fixture() as state:
+            reference = trust.prepare_gradle_policy(
+                state["root"] / "shared", state["source"], environment={}
+            )
+            for key in (
+                "JAVA_TOOL_OPTIONS",
+                "JDK_JAVA_OPTIONS",
+                "GRADLE_OPTS",
+                "NODE_OPTIONS",
+            ):
+                with self.subTest(key=key), self.assertRaises(ValueError):
+                    trust.scoped_gradle_environment(
+                        reference, {key: ""}, verification_log=lambda value: None
+                    )
+            with self.assertRaisesRegex(ValueError, "GRADLE_VERIFICATION_LOG_REQUIRED"):
+                trust.scoped_gradle_environment(reference, {}, verification_log=None)
+            state["calls"].clear()
+
+            def refuse(value):
+                raise RuntimeError("UNIT_RECEIPT_SINK_FAILED")
+
+            with self.assertRaisesRegex(RuntimeError, "UNIT_RECEIPT_SINK_FAILED"):
+                trust.scoped_gradle_environment(reference, {}, verification_log=refuse)
+            self.assertEqual(len(state["calls"]), 1)
+
+    def test_gradle_qa_derivative_is_separate_and_requires_exact_fixture(self):
+        with self.gradle_fixture() as state:
+            reference = trust.prepare_gradle_policy(
+                state["root"] / "shared", state["source"], environment={}
+            )
+            production = trust.read_ref(reference)
+            fixture = {
+                "path": str(state["root"] / "fixture.json"),
+                "sha256": "a" * 64,
+                "sizeBytes": 10,
+            }
+            ca = b"UNIT_PUBLIC_CA"
+
+            def store(
+                runtime, action, destination, environment, deadline, log, public_buffers
+            ):
+                self.assertEqual((runtime, action), ("java21", "fixture"))
+                self.assertEqual(public_buffers, (b"UNIT_STORE_java21", ca))
+                digest = trust.sha(ca)
+                aliases = {
+                    **state["aliases"],
+                    "caseops-owned-loopback-fixture-" + digest: digest,
+                }
+                output = trust.write_new(
+                    destination, b"UNIT_SHARED_QA", deadline=deadline
+                )
+                log({"runtime": runtime, "exitCode": 0, "stderr": "UNIT_QA_DIAGNOSTIC"})
+                return {
+                    "aliases": aliases,
+                    "outputCount": 118,
+                    "fixtureSha256": digest,
+                    "baseAliasesPreserved": True,
+                }, output
+
+            with (
+                mock.patch.object(trust, "_gradle_fixture", return_value=({}, ca, ca)),
+                mock.patch.object(trust, "write_java_store", side_effect=store),
+            ):
+                qa = trust.prepare_gradle_qa_policy(
+                    reference, fixture, state["root"] / "qa", environment={}
+                )
+                state["calls"].clear()
+                with self.assertRaisesRegex(ValueError, "EXPLICIT_QA_POLICY_REQUIRED"):
+                    trust.scoped_gradle_environment(
+                        qa, {}, verification_log=lambda value: None
+                    )
+                logs = []
+                env = trust.scoped_gradle_environment(
+                    qa, {}, verification_log=logs.append, qa_fixture_reference=fixture
+                )
+                self.assertIn("gradle-jdks-qa.truststore", env["JAVA_TOOL_OPTIONS"])
+                self.assertEqual(len(logs), 6)
+                self.assertEqual(trust.read_ref(reference), production)
+                self.assertEqual(len(json.loads(trust.read_ref(qa))["aliases"]), 118)
+
+    def test_gradle_deadline_before_at_after_does_not_publish_late_recipe(self):
+        for elapsed in (59, 60, 61):
+            with self.subTest(elapsed=elapsed), self.gradle_fixture() as state:
+                clock = [0]
+
+                def advance(row):
+                    if len(state["calls"]) == 2:
+                        clock[0] = elapsed
+
+                state["after"] = advance
+                output = state["root"] / "shared"
+                with mock.patch.object(
+                    trust.time, "monotonic", side_effect=lambda: clock[0]
+                ):
+                    if elapsed < 60:
+                        reference = trust.prepare_gradle_policy(
+                            output, state["source"], environment={}
+                        )
+                        self.assertTrue(Path(reference["path"]).exists())
+                    else:
+                        with self.assertRaises(ValueError):
+                            trust.prepare_gradle_policy(
+                                output, state["source"], environment={}
+                            )
+                        self.assertFalse((output / "policy.json").exists())
+                        self.assertFalse((output / "environment-recipe.json").exists())
 
     def test_known_original_removes_only_denied_der(self):
         certs, denied, clean, contract = self.fake_contract()

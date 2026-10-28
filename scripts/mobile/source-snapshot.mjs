@@ -87,6 +87,7 @@ export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.met
     'scripts/mobile/prepare-store-packaging.mjs',
     'scripts/mobile/ios-host-launch.mjs', 'scripts/mobile/ios-host-pods.rb',
     'scripts/mobile/ios-simulator-build.sh', 'scripts/mobile/ios-local-qa-host.py',
+    'scripts/mobile/ios-git-readonly.py',
     'scripts/mobile/ios-node-build-env.json',
     'scripts/mobile/host-node-trust.mjs', 'scripts/mobile/host-node-trust-start.mjs',
     'scripts/mobile/store-packaging-host.py', 'scripts/mobile/store_process_owner.py',

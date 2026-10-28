@@ -29,6 +29,7 @@ import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFai
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA } from './host-node-trust.mjs';
 import { localCertificates } from './host-node-trust-fixture.mjs';
+import { readIosHostInput, neutralIosEnvironment, validatePodsCurlArguments, validateIosCurlArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments } from './ios-host-launch.mjs';
 
 const installedHash = 'a'.repeat(64);
 const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
@@ -3181,3 +3182,485 @@ test('CI Windows ACL completion markers are mandatory before writing even when S
     if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
   }
 }));
+// iOS host launch tests are constructor/source contracts, not a native build.
+function iosProjectionFixture() {
+  const base = '/SYNTHETIC/owned-ios-host';
+  const paths = Object.fromEntries(['home', 'empty', 'bin', 'cache', 'pods', 'repos', 'temporary', 'build', 'runtime'].map(k => [k, base + '/' + k]));
+  const policy = { paths, podHome: '/SYNTHETIC/Cellar/pods/libexec', rubyGems: '/SYNTHETIC/Cellar/ruby/lib/ruby/gems/4.0.0', deadlineEpochMs: Date.now() + 60000,
+    tools: { node: { path: '/SYNTHETIC/node24' }, ruby: { path: '/SYNTHETIC/ruby4' }, curl: { path: '/usr/bin/curl' }, git: { path: '/SYNTHETIC/git' } },
+    shims: { node: { path: paths.bin + '/node' } }, bundle: { path: base + '/ruby188.pem', sha256: '1'.repeat(64), sizeBytes: 100 }, fixtureCA: null,
+    nodeNpm: { user: { path: base + '/npm-user.npmrc' }, global: { path: base + '/npm-global.npmrc' }, cli: { path: '/SYNTHETIC/node24/lib/node_modules/npm/bin/npm-cli.js' } },
+    source: { 'ios-host-pods.rb': { sha256: IOS_PODS_SOURCE_SHA256 } } };
+  const environment = { NODE_OPTIONS: '--use-openssl-ca --import=data:text/javascript;base64,REVIEWED', SSL_CERT_FILE: base + '/node144.pem', SSL_CERT_DIR: base + '/node-empty',
+    CASEOPS_HOST_NODE_TRUST_POLICY_FILE: base + '/node.json', CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: '2'.repeat(64) };
+  const admitted = { policy, node: { environment }, bundle: { bytes: Buffer.from('SYNTHETIC-PUBLIC-CA') },
+    podsSource: Buffer.from('# SYNTHETIC CONTRACT SOURCE'), podEntry: Buffer.from('# SYNTHETIC POD ENTRY') };
+  const ref = { path: base + '/policy.json', sha256: '3'.repeat(64), sizeBytes: 100 };
+  return { policy, admitted, ref, environment };
+}
+function curlDownloaderArgs(output = '/SYNTHETIC/owned-ios-host/cache/package.tgz') {
+  return ['-f', '-L', '-o', output, 'https://packages.contract-fixture.org/file.tgz', '--create-dirs', '--netrc-optional', '--retry', '2'];
+}
+test('iOS Node and Pods constructors use separate stores and owned HOME without global environment mutation', () => {
+  const f = iosProjectionFixture(), input = { EXPO_PUBLIC_API_ORIGIN: 'https://api.contract-fixture.org' }, before = { ...input };
+  const node = iosHostCommandProjection(f.admitted, f.ref, 'node', ['--print', '1'], input);
+  const pod = iosHostCommandProjection(f.admitted, f.ref, 'pod', ['install', '--deployment', '--no-repo-update'], input);
+  assert.equal(node.environment.SSL_CERT_FILE, '/SYNTHETIC/owned-ios-host/node144.pem');
+  assert.equal(node.environment.NPM_CONFIG_USERCONFIG, f.policy.nodeNpm.user.path); assert.equal(node.environment.NPM_CONFIG_STRICT_SSL, 'true');
+  assert.equal(pod.environment.SSL_CERT_FILE, '/SYNTHETIC/owned-ios-host/ruby188.pem');
+  assert.equal(pod.environment.NODE_OPTIONS, undefined); assert.equal(pod.environment.NODE_EXTRA_CA_CERTS, undefined);
+  assert.equal(pod.environment.NPM_CONFIG_USERCONFIG, undefined);
+  assert.equal(pod.environment.HOME, '/SYNTHETIC/owned-ios-host/home'); assert.equal(pod.environment.GEM_PATH, '/SYNTHETIC/Cellar/pods/libexec:/SYNTHETIC/Cellar/ruby/lib/ruby/gems/4.0.0');
+  assert.equal(pod.executable, '/SYNTHETIC/ruby4'); assert.deepEqual(pod.args, ['-', 'install', '--deployment', '--no-repo-update']);
+  assert.equal(pod.input.toString(), '# SYNTHETIC CONTRACT SOURCE\nCaseopsIosPods.run\n'); pod.input.fill(0);
+  assert.equal(pod.environment.NODE_BINARY, '/SYNTHETIC/owned-ios-host/bin/node'); assert.deepEqual(input, before);
+});
+test('iOS neutral Xcode and offline tools receive no Node or Ruby CA environment', () => {
+  const f = iosProjectionFixture(), result = iosHostCommandProjection(f.admitted, f.ref, 'xcodebuild', ['build'], { ...f.environment, HOME: f.policy.paths.home });
+  for (const key of ['SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS', 'GEM_HOME', 'GEM_PATH']) assert.equal(result.environment[key], undefined, key);
+  assert.equal(result.environment.NODE_BINARY, f.policy.paths.bin + '/node');
+  assert.equal(result.environment.LANG, 'en_US.UTF-8'); assert.equal(result.environment.LC_ALL, 'en_US.UTF-8');
+});
+test('iOS cross-role rebind permits only the exact admitted previous recipe and rejects foreign overrides', () => {
+  for (const field of ['SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS', 'GEM_HOME', 'HOME', 'RUBYOPT', 'HTTPS_PROXY', 'OPENSSL_CONF']) {
+    const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { [field]: 'UNADMITTED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
+  assert.throws(() => neutralIosEnvironment({ PRIVATE_OPERATOR_TOKEN: 'SYNTHETIC_ONLY' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const name of ['CASEOPS_MOBILE_PASSWORD', 'CASEOPS_MOBILE_EMAIL', 'CASEOPS_STORE_BUILD_PRIVATE_KEY', 'CODE_SIGN_PASSWORD'])
+    assert.throws(() => neutralIosEnvironment({ [name]: 'SYNTHETIC_UNADMITTED' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { GIT_CONFIG_GLOBAL: '/operator/config' }), /IOS_HOST_OWNER_GIT_CONFIG_REFUSED/);
+});
+test('CocoaPods curl constructor preserves exact payload and headers while using held CA FD and required marker', () => {
+  const f = iosProjectionFixture(), input = [...curlDownloaderArgs(), "-A 'CocoaPods/1.17.0 cocoapods-downloader/2.1'", '-H', 'If-None-Match: SYNTHETIC-ETAG'];
+  const result = iosHostCommandProjection(f.admitted, f.ref, 'curl', input, {});
+  assert.deepEqual(result.args.slice(0, 7), ['--disable', '--cacert', '/dev/fd/3', '--proto', '=https', '--proto-redir', '=https']);
+  assert.deepEqual(result.args.slice(7, 7 + input.length), input);
+  assert.deepEqual(result.args.slice(-2), ['-H', 'X-CaseOps-Automated-Test: no-paid-providers']);
+  assert.equal(result.environment.CURL_SSL_BACKEND, 'secure-transport'); assert.equal(result.environment.SSL_CERT_FILE, undefined);
+  assert.equal(result.environment.CURL_HOME, '/SYNTHETIC/owned-ios-host/home'); assert.equal(result.bundle.toString(), 'SYNTHETIC-PUBLIC-CA');
+  result.bundle.fill(0);
+});
+test('CocoaPods curl allowlist rejects abbreviations next config proxy and later trust escapes', () => {
+  for (const option of ['--next', '--config', '-K', '--cacert', '--ca-native', '--capath', '--proxy', '-k', '--insecure', '--url', '--head', '--max-time'])
+    assert.throws(() => validatePodsCurlArguments([...curlDownloaderArgs(), option, 'SYNTHETIC']), /IOS_HOST_CURL_OPTION_REFUSED/);
+  for (const option of ['--fail', '--location']) { const args = curlDownloaderArgs(); args[0] = option; assert.throws(() => validatePodsCurlArguments(args), /IOS_HOST_EXACT_DOWNLOADER_FORM/); }
+});
+test('CocoaPods curl authority rejects non HTTPS credential URLs fragments foreign output and malformed headers', () => {
+  for (const url of ['http://packages.contract-fixture.org/a', 'https://user:pass@packages.contract-fixture.org/a', 'https://packages.contract-fixture.org/a#']) {
+    const args = curlDownloaderArgs(); args[4] = url; assert.throws(() => validatePodsCurlArguments(args), /IOS_HOST_HTTPS_DOWNLOAD/);
+  }
+  for (const header of ['X-A: bad\r\nInjected: yes', 'X-CaseOps-Automated-Test: 1']) assert.throws(() => validatePodsCurlArguments([...curlDownloaderArgs(), '-H', header]), /IOS_HOST_/);
+  const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'curl', curlDownloaderArgs('/SYNTHETIC/owner/file'), {}), /IOS_HOST_CURL_OWNED_OUTPUT/);
+});
+test('iOS public input reader retains exact held bytes and closes its real descriptor', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readIosHostInput({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const file = path.join(base, 'input'), bytes = Buffer.from('PUBLIC SYNTHETIC INPUT'); fs.writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
+  const ref = { path: file, sha256: createHash('sha256').update(bytes).digest('hex'), sizeBytes: bytes.length };
+  const original = fs.openSync; let fd;
+  fs.openSync = (...args) => { const result = original(...args); if (args[0] === file) fd = result; return result; };
+  try { const actual = readIosHostInput(ref); assert.deepEqual(actual.bytes, bytes); actual.bytes.fill(0); } finally { fs.openSync = original; }
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+test('iOS public input reader refuses actual growth before returning and closes the held FD', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readIosHostInput({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true })); const file = path.join(base, 'input'); fs.writeFileSync(file, 'PUBLIC', { mode: 0o600 });
+  const ref = { path: file, sha256: createHash('sha256').update('PUBLIC').digest('hex'), sizeBytes: 6 }, original = fs.readSync; let fd, once = false;
+  fs.readSync = (value, ...args) => { fd = value; if (!once) { once = true; fs.appendFileSync(file, 'GROWTH'); } return original(value, ...args); };
+  try { assert.throws(() => readIosHostInput(ref), /IOS_HOST_INPUT_CHANGED/); } finally { fs.readSync = original; }
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+test('iOS public input catches late parent rename to same-leaf symlink and closes FD', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readIosHostInput({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true })); const dir = path.join(base, 'owned'); fs.mkdirSync(dir, { mode: 0o700 }); const file = path.join(dir, 'input'); fs.writeFileSync(file, 'PUBLIC', { mode: 0o600 });
+  const ref = { path: file, sha256: createHash('sha256').update('PUBLIC').digest('hex'), sizeBytes: 6 }, original = fs.readSync; let fd, once = false;
+  fs.readSync = (value, ...args) => { fd = value; const result = original(value, ...args); if (!once) { once = true; fs.renameSync(dir, dir + '-moved'); fs.symlinkSync(dir + '-moved', dir, process.platform === 'win32' ? 'junction' : 'dir'); } return result; };
+  try { assert.throws(() => readIosHostInput(ref), /IOS_HOST_INPUT_CHANGED/); } finally { fs.readSync = original; }
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+test('iOS input read failure zero size oversize hardlink and wrong hash refuse without leaked descriptors', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readIosHostInput({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true })); const file = path.join(base, 'input'); fs.writeFileSync(file, 'PUBLIC', { mode: 0o600 });
+  const ref = { path: file, sha256: createHash('sha256').update('PUBLIC').digest('hex'), sizeBytes: 6 }, original = fs.readSync; let fd;
+  fs.readSync = value => { fd = value; throw new Error('SYNTHETIC_IO_REFUSAL'); };
+  try { assert.throws(() => readIosHostInput(ref), /SYNTHETIC_IO_REFUSAL/); } finally { fs.readSync = original; }
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+  assert.throws(() => readIosHostInput({ ...ref, sizeBytes: 0 }), /IOS_HOST_REFERENCE/);
+  assert.throws(() => readIosHostInput(ref, { maxBytes: 5 }), /IOS_HOST_REFERENCE/);
+  assert.throws(() => readIosHostInput({ ...ref, sha256: '0'.repeat(64) }), /IOS_HOST_HASH_CHANGED/);
+  fs.linkSync(file, file + '-linked'); assert.throws(() => readIosHostInput(ref), /IOS_HOST_FILE_IDENTITY/);
+});
+test('iOS selected Pods preload and build body retain exact approved bytes and independent guard contracts', () => {
+  const bytes = fs.readFileSync(new URL('./ios-host-pods.rb', import.meta.url)); assert.equal(createHash('sha256').update(bytes).digest('hex'), IOS_PODS_SOURCE_SHA256);
+  const source = bytes.toString(); assert.match(source, /ssl_verifypeer => true/); assert.match(source, /ssl_verifyhost => 2/); assert.match(source, /'X-CaseOps-Automated-Test' => MARKER/);
+  assert.match(source, /:cainfo => @policy.fetch\('bundle'\)/); assert.match(source, /options.merge\(expected\)/); assert.match(source, /:netrc\] == :optional/);
+  const shell = fs.readFileSync(new URL('./build-ios-simulator-acceptance.sh', import.meta.url), 'utf8'); assert.match(shell, /IOS_HOST_REVIEWED_ENTRY/); assert.doesNotMatch(shell, /pod install|prebuild|xcodebuild/);
+});
+test('iOS simulator launch is unarmed before any policy read or synthetic transport entry', async () => {
+  let calls = 0;
+  await assert.rejects(runIosSimulatorBuild({ path: '/NEVER_READ', sha256: '0'.repeat(64), sizeBytes: 1 }, {}, { transport: () => { calls++; } }), /IOS_HOST_SIMULATOR_NOT_ARMED/);
+  assert.equal(calls, 0);
+});
+function iosDescriptorFixture(t) {
+  if (typeof process.getuid !== 'function') return { role: 'curl', bundle: Buffer.from('SYNTHETIC'), policy: { paths: {} } };
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  for (const p of ['home', 'temporary']) fs.mkdirSync(path.join(base, p), { mode: 0o700 });
+  return { role: 'curl', bundle: Buffer.from('PUBLIC SYNTHETIC CA BYTES'), policy: { paths: { home: path.join(base, 'home'), temporary: path.join(base, 'temporary') } }, homeObservation: reviewIosHostHome(path.join(base, 'home')) };
+}
+test('iOS CA transport passes a real same regular FD with exact retained bytes and closes its owned copy', t => {
+  const command = iosDescriptorFixture(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const transport = openIosCurlTransport(command), actual = Buffer.alloc(command.bundle.length + 1);
+  const n = fs.readSync(transport.fd, actual, 0, actual.length, 0); assert.equal(n, command.bundle.length); assert.deepEqual(actual.subarray(0, n), command.bundle);
+  assert.equal(fs.fstatSync(transport.fd).isFile(), true); transport.finish(); assert.equal(fs.existsSync(transport.file), false);
+  assert.throws(() => fs.fstatSync(transport.fd), { code: 'EBADF' }); command.bundle.fill(0);
+});
+test('iOS CA transport refuses zero progress with FD closure and no false completed descriptor', t => {
+  const command = iosDescriptorFixture(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const original = fs.writeSync; let fd;
+  fs.writeSync = value => { fd = value; return 0; };
+  try { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_WRITE_PROGRESS/); } finally { fs.writeSync = original; }
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' }); command.bundle.fill(0);
+});
+test('iOS CA transport detects actual parent rename to same-inode alias and preserves foreign namespace', t => {
+  const command = iosDescriptorFixture(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const transport = openIosCurlTransport(command), dir = command.policy.paths.temporary;
+  fs.renameSync(dir, dir + '-moved'); fs.symlinkSync(dir + '-moved', dir, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.throws(() => transport.finish(), /IOS_HOST_TRANSPORT_CHANGED|IOS_HOST_TRANSPORT_NAMESPACE_CHANGED|IOS_HOST_NAMESPACE/);
+  assert.throws(() => fs.fstatSync(transport.fd), { code: 'EBADF' }); assert.equal(fs.existsSync(path.join(dir + '-moved', path.basename(transport.file))), true); command.bundle.fill(0);
+});
+test('iOS CA transport refuses a netrc insertion or removed-late insertion using the owned HOME frame', t => {
+  const command = iosDescriptorFixture(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const transport = openIosCurlTransport(command), file = path.join(command.policy.paths.home, '.netrc'); fs.writeFileSync(file, 'SYNTHETIC ONLY', { mode: 0o600 });
+  assert.throws(() => reviewIosHostHome(command.policy.paths.home), /IOS_HOST_OWNER_CONFIG_REFUSED/); fs.unlinkSync(file);
+  assert.throws(() => transport.finish(), /IOS_HOST_HOME_CHANGED/); assert.throws(() => fs.fstatSync(transport.fd), { code: 'EBADF' }); command.bundle.fill(0);
+});
+test('iOS public input refuses a controlled foreign-owner metadata frame before any body read', t => {
+  if (typeof process.getuid !== 'function') { assert.equal(process.platform, 'win32'); return; }
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true })); const file = path.join(base, 'input'); fs.writeFileSync(file, 'PUBLIC', { mode: 0o600 });
+  const ref = { path: file, sha256: createHash('sha256').update('PUBLIC').digest('hex'), sizeBytes: 6 }, actualStat = fs.fstatSync, actualRead = fs.readSync; let reads = 0, fd;
+  fs.fstatSync = (value, options) => { fd = value; const real = actualStat(value, options); return new Proxy(real, { get(target, key) { return key === 'uid' ? target.uid + 1n : typeof target[key] === 'function' ? target[key].bind(target) : target[key]; } }); };
+  fs.readSync = (...args) => { reads++; return actualRead(...args); };
+  try { assert.throws(() => readIosHostInput(ref), /IOS_HOST_FILE_IDENTITY/); } finally { fs.fstatSync = actualStat; fs.readSync = actualRead; }
+  assert.equal(reads, 0); assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+test('iOS Git shim permits exact local source inventory reads and refuses all transport or option escapes', () => {
+  for (const args of [['--version'], ['check-ignore', '-z', '--stdin'], ['rev-parse', 'HEAD'], ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'apps/mobile', 'scripts/mobile/ios-host-pods.rb'], ['status', '--porcelain', '--untracked-files=all', '--', 'apps/mobile']])
+    assert.deepEqual(validateIosReadonlyGitArguments(args), ['-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', ...args]);
+  for (const args of [['clone', 'https://public.contract-fixture.org/repo'], ['fetch'], ['-c', 'http.sslVerify=false', 'status'], ['status', '--porcelain', '--untracked-files=all', '--', '../outside'], ['rev-parse', 'HEAD', '--show-toplevel']])
+    assert.throws(() => validateIosReadonlyGitArguments(args), /IOS_HOST_GIT_TLS_UNPROVEN/);
+});
+test('real source inventory pathspecs retain the256 bound separately from the16-argument Git mutation bound', () => {
+  const f = iosProjectionFixture(), paths = Array.from({ length: 32 }, (_, i) => 'scripts/mobile/source-' + i + '.mjs');
+  for (const prefix of [['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--'], ['status', '--porcelain', '--untracked-files=all', '--']]) {
+    const args = [...prefix, ...paths], row = projectIosGitArguments(args, f.policy.paths);
+    assert.equal(row.family, 'local-source-inventory'); assert.deepEqual(row.args.slice(-args.length), args);
+  }
+  assert.throws(() => projectIosGitArguments(['clone', ...Array(16).fill('public')], f.policy.paths), /IOS_HOST_GIT_MUTATION_ARGUMENT_BOUND/);
+  assert.throws(() => projectIosGitArguments(Array(257).fill('public'), f.policy.paths), /IOS_HOST_GIT_ARGUMENTS/);
+  assert.throws(() => validateIosReadonlyGitArguments(['check-ignore', '-z', '--stdin', '--no-index']), /IOS_HOST_GIT_TLS_UNPROVEN/);
+});
+test('iOS build entry pins the complete actual helper bytes and executes only its retained buffer', () => {
+  const file = fileURLToPath(new URL('./ios-host-launch.mjs', import.meta.url)), bytes = fs.readFileSync(file), ref = { path: file, sha256: createHash('sha256').update(bytes).digest('hex'), sizeBytes: bytes.length };
+  const expected = renderIosHostBuildEntry(ref), actual = fs.readFileSync(new URL('./build-ios-simulator-acceptance.sh', import.meta.url), 'utf8');
+  assert.equal(actual, expected); assert.match(actual, /fs\.openSync\(file/); assert.match(actual, /sha256/); assert.match(actual, /await import/); assert.match(actual, /data:text\/javascript;base64,/);
+  assert.doesNotMatch(actual, /exec "\$CASEOPS_IOS_HOST_NODE" "\$repo\/scripts/);
+});
+test('iOS retained entry refuses a same-sized replaced helper before any sentinel execution', t => {
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const helper = fs.readFileSync(new URL('./ios-host-launch.mjs', import.meta.url)), root = path.join(base, 'source'), folder = path.join(root, 'scripts/mobile'); fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
+  const sentinel = path.join(base, 'UNADMITTED_HELPER'), file = path.join(folder, 'ios-host-launch.mjs'), entry = path.join(folder, 'build-ios-simulator-acceptance.sh');
+  let fake = `import fs from 'node:fs';fs.writeFileSync(${JSON.stringify(sentinel)},'SYNTHETIC');export async function iosHostCli(){return 0};`;
+  fake = fake.padEnd(helper.length, ' '); assert.equal(Buffer.byteLength(fake), helper.length); fs.writeFileSync(file, fake, { mode: 0o600 });
+  fs.writeFileSync(entry, renderIosHostBuildEntry({ path: file, sha256: createHash('sha256').update(helper).digest('hex'), sizeBytes: helper.length }), { mode: 0o700 });
+  if (process.platform === 'win32') { assert.equal(fs.existsSync(sentinel), false); return; }
+  const child = spawnSyncForIosEntry(entry, { PATH: '/usr/bin:/bin', CASEOPS_IOS_HOST_NODE: process.execPath, CASEOPS_IOS_HOST_POLICY_FILE: '/NEVER_READ', CASEOPS_IOS_HOST_POLICY_SHA256: '0'.repeat(64), CASEOPS_IOS_HOST_POLICY_SIZE: '1', CASEOPS_IOS_SIMULATOR_BUILD_GO: 'EXPLICIT_REVIEWED_LOCAL_SIMULATOR_BUILD' });
+  assert.equal(child.status, 1); assert.equal(fs.existsSync(sentinel), false);
+  if (process.platform === 'darwin') assert.match(child.stderr, /IOS_HOST_SHIM_SOURCE_REFUSED/); else assert.match(child.stderr, /actual Mac/);
+});
+function spawnSyncForIosEntry(file, env) {
+  try { const stdout = execFileSync('/bin/bash', [file], { env, timeout: 5000, maxBuffer: 8192, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); return { status: 0, stdout, stderr: '' }; }
+  catch (error) { return { status: error.status, stdout: String(error.stdout || ''), stderr: String(error.stderr || '') }; }
+}
+test('iOS Node build names are pinned to actual retained phase evidence without owner or TLS override fields', () => {
+  const raw = fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url)), spec = JSON.parse(raw);
+  assert.equal(createHash('sha256').update(raw).digest('hex'), '050bd27cab9480e208d17141e5df2d5f98d8f7cdbadc73c31b085ff3be5f0ba6');
+  assert.equal(spec.provenance.namesEvidenceSha256, '6670f54a23ed98e6c33ec02e43339bb56e5fa4abebc3a7dc7850fea51319f257');
+  assert.equal(spec.provenance.sdkVersion, '27.1'); assert.equal(spec.provenance.simulatorRuntime, '27.0'); assert.equal(spec.names.length, 586); assert.equal(new Set(spec.names).size, 586);
+  assert.equal(spec.names.includes('LD_RUNPATH_SEARCH_PATHS'), true); assert.equal(spec.names.includes('BUILT_PRODUCTS_DIR'), true);
+  for (const key of ['HOME', 'USER', 'UID', 'PATH', 'NODE_OPTIONS', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'HTTPS_PROXY']) assert.equal(spec.names.includes(key), false, key);
+});
+test('iOS Node accepts only source-admitted typed derived build names while rebinding trust and preserving the parent', () => {
+  const f = iosProjectionFixture(); f.admitted.nodeBuildNames = ['BUILT_PRODUCTS_DIR', 'CONFIGURATION', 'LD_RUNPATH_SEARCH_PATHS'];
+  const supplied = { BUILT_PRODUCTS_DIR: '/SYNTHETIC/Release-iphonesimulator', CONFIGURATION: 'Release', LD_RUNPATH_SEARCH_PATHS: '@executable_path/Frameworks' }, before = { ...supplied };
+  const row = iosHostCommandProjection(f.admitted, f.ref, 'node', ['--print', '1'], supplied);
+  assert.equal(row.environment.BUILT_PRODUCTS_DIR, supplied.BUILT_PRODUCTS_DIR); assert.equal(row.environment.CONFIGURATION, 'Release');
+  assert.equal(row.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE); assert.deepEqual(supplied, before);
+  for (const key of ['DYLD_INSERT_LIBRARIES', 'LD_PRELOAD', 'HTTPS_PROXY']) assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [key]: 'SYNTHETIC' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { UNOBSERVED_OWNER_TOKEN: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+});
+test('iOS derived build values reject nonstrings NUL field extent and aggregate overflow before dispatch', () => {
+  for (const value of [false, 1, {}, 'bad\0value', 'x'.repeat(32769)]) assert.throws(() => neutralIosEnvironment({ CONFIGURATION: value }, { buildNames: ['CONFIGURATION'] }), /IOS_HOST_ENVIRONMENT/);
+  const names = Array.from({ length: 9 }, (_, i) => 'SOURCE_FIELD_' + i), values = Object.fromEntries(names.map(n => [n, 'x'.repeat(32768)]));
+  assert.throws(() => neutralIosEnvironment(values, { buildNames: names }), /IOS_HOST_ENVIRONMENT_BOUND/);
+});
+test('iOS generated CoreFoundation encoding metadata is typed current-user metadata and never forwarded', () => {
+  for (const value of ['foreign:0:0', '0xFFFFFFFF:0:0', '0:0', '0:../../owner:0']) assert.throws(() => neutralIosEnvironment({ __CF_USER_TEXT_ENCODING: value }), /IOS_HOST_MACOS_TEXT_ENCODING/);
+  if (typeof process.getuid === 'function') assert.deepEqual(neutralIosEnvironment({ __CF_USER_TEXT_ENCODING: '0x' + process.getuid().toString(16) + ':0x0:0x0' }), {});
+});
+test('iOS public preparation CLI rejects unknown fields before policy or tool admission', async t => {
+  const { iosHostCli } = await import('./ios-host-launch.mjs'), root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const bytes = Buffer.from(JSON.stringify({ directory: path.join(root, 'NEVER_CREATED'), nodePolicy: null, rubyBundle: null, tools: null, unknownField: 'PUBLIC SYNTHETIC FIELD' })), file = path.join(root, 'input.json'); fs.writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
+  if (typeof process.getuid !== 'function') { await assert.rejects(iosHostCli(['prepare', file, createHash('sha256').update(bytes).digest('hex'), String(bytes.length)]), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  await assert.rejects(iosHostCli(['prepare', file, createHash('sha256').update(bytes).digest('hex'), String(bytes.length)]), /IOS_HOST_PREPARE_KEYS/);
+  assert.equal(fs.existsSync(path.join(root, 'NEVER_CREATED')), false);
+});
+test('actual RN archive redirect HEAD and SHA1 curl forms preserve arguments with exact marker and selected descriptor', () => {
+  const f = iosProjectionFixture(), url = 'https://packages.contract-fixture.org/rn.tgz', target = f.policy.paths.pods + '/ReactNativeCore-artifacts/reactnative-core.download';
+  const forms = [
+    ['-A', 'react-native-0.88.0', url, '-Lo', target],
+    ['-Ls', '-o', '/dev/null', '-w', '%{url_effective}', url],
+    ['-o', '/dev/null', '--silent', '-Iw', '%{http_code}', '-L', url],
+    ['-sL', url + '.sha1'],
+  ];
+  for (const args of forms) {
+    const row = iosHostCommandProjection(f.admitted, f.ref, 'curl', args, {});
+    assert.deepEqual(row.args.slice(7, -2), args); assert.deepEqual(row.args.slice(-2), ['-H', 'X-CaseOps-Automated-Test: no-paid-providers']);
+    assert.equal(row.args[2], '/dev/fd/3');
+    // Every projection owns its retained copy; restore the synthetic admitted buffer.
+    f.admitted.bundle = { bytes: Buffer.from('SYNTHETIC-PUBLIC-CA') }; row.bundle.fill(0);
+  }
+});
+test('RN curl variants reject arbitrary options URL authority and unrelated sidecars', () => {
+  const url = 'https://packages.contract-fixture.org/rn.tgz';
+  for (const args of [
+    ['-A', 'arbitrary-user-agent', url, '-Lo', '/owned/file'],
+    ['-A', 'react-native-0.88.0', url, '-Lo', '/owned/file', '--insecure'],
+    ['-Ls', '-o', '/dev/null', '-w', '%{url_effective}', url, '--next'],
+    ['-o', '/dev/null', '--silent', '-Iw', '%{http_code}', '-L', 'http://untrusted.invalid'],
+    ['-sL', url], ['-sL', 'https://user:pass@packages.contract-fixture.org/a.sha1'],
+  ]) assert.throws(() => validateIosCurlArguments(args), /IOS_HOST_/);
+});
+test('Git typed public downloader forms retain operands and bind every transport to selected CA and marker', () => {
+  const f = iosProjectionFixture(), repo = f.policy.paths.temporary + '/clone', url = 'https://packages.contract-fixture.org/repo.git';
+  for (const args of [['ls-remote', '--', url, 'main'], ['ls-remote', url, 'main'], ['clone', url, repo, '--template=', '--single-branch', '--depth', '1', '--branch', 'main'],
+    ['-C', repo, 'fetch', 'origin', '--progress'], ['-C', repo, 'pull', '--ff-only'], ['-C', repo, 'submodule', 'update', '--init', '--recursive']]) {
+    const row = projectIosGitArguments(args, f.policy.paths);
+    assert.equal(row.network, true); assert.deepEqual(row.args.slice(-args.length), args);
+    for (const setting of ['http.sslVerify=true', 'http.sslCAInfo=/dev/fd/3', 'http.sslCAPath=' + f.policy.paths.empty, 'http.extraHeader=X-CaseOps-Automated-Test: no-paid-providers', 'credential.helper=', 'protocol.allow=never', 'protocol.https.allow=always']) assert.ok(row.args.includes(setting), setting);
+  }
+  const git = iosHostCommandProjection(f.admitted, f.ref, 'git', ['ls-remote', '--', url], {});
+  assert.equal(git.executable, '/SYNTHETIC/git'); assert.equal(git.environment.NODE_OPTIONS, undefined); assert.ok(Buffer.isBuffer(git.bundle));
+  assert.equal(git.cwd, f.policy.paths.empty); assert.equal(git.environment.GIT_CEILING_DIRECTORIES, f.policy.paths.empty); git.bundle.fill(0);
+});
+test('Git constructor refuses credentials protocols arbitrary flags foreign targets and unreviewed revisions', () => {
+  const f = iosProjectionFixture(), repo = f.policy.paths.repos + '/public', url = 'https://packages.contract-fixture.org/repo.git';
+  for (const args of [['ls-remote', '--', 'ssh://packages.contract-fixture.org/repo'], ['ls-remote', '--', 'https://user:pass@packages.contract-fixture.org/repo'],
+    ['clone', url, '/SYNTHETIC/source-worktree', '--template='], ['clone', url, repo, '--template=/operator/template'], ['clone', url, repo, '--template=', '-c', 'http.sslVerify=false'],
+    ['-C', repo, 'config', 'credential.helper', 'UNADMITTED'], ['-C', repo, 'checkout', '--', '../outside'], ['-C', repo, 'reset', '--hard', '../main'],
+    ['-C', repo, 'fetch', 'file:///operator/source'], ['-c', 'http.sslVerify=false', 'ls-remote', url]]) assert.throws(() => projectIosGitArguments(args, f.policy.paths), /IOS_HOST_/);
+});
+function iosGitFilesystemFixture(t) {
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const paths = Object.fromEntries(['home', 'cache', 'temporary', 'pods', 'repos'].map(k => [k, path.join(base, k)]));
+  for (const p of Object.values(paths)) fs.mkdirSync(p, { mode: 0o700 });
+  const repository = path.join(paths.repos, 'public'); fs.mkdirSync(repository, { mode: 0o700 }); fs.mkdirSync(path.join(repository, '.git'), { mode: 0o700 });
+  const config = path.join(repository, '.git/config');
+  fs.writeFileSync(config, '[core]\n\trepositoryformatversion = 0\n\tbare = false\n[remote "origin"]\n\turl = https://packages.contract-fixture.org/public.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n', { mode: 0o600 });
+  return { paths, repository, config, command: { policy: { paths }, git: { repository, clone: false, family: 'fetch' } } };
+}
+test('Git real owned repository admission accepts canonical public config and refuses later symlink replacement', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => admitIosGitRepository({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const f = iosGitFilesystemFixture(t), before = admitIosGitRepository(f.command);
+  assert.equal(before.repositoryIdentity.length, 5); assert.equal(before.root, f.paths.repos);
+  fs.renameSync(f.repository, f.repository + '-moved'); fs.symlinkSync(f.repository + '-moved', f.repository, 'dir');
+  assert.throws(() => admitIosGitRepository(f.command), /IOS_HOST_MUTATION_NAMESPACE/);
+});
+test('Git real config includes helper URL rewrites bypass flags and external object aliases refuse before a child', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => admitIosGitRepository({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const f = iosGitFilesystemFixture(t), original = fs.readFileSync(f.config);
+  for (const row of ['[include]\n path = /operator/config', '[credential]\n helper = shell', '[http]\n sslVerify = false', '[url "https://unadmitted.invalid/"]\n insteadOf = https://packages.contract-fixture.org/']) {
+    fs.writeFileSync(f.config, Buffer.concat([original, Buffer.from(row + '\n')]));
+    assert.throws(() => admitIosGitRepository(f.command), /IOS_HOST_GIT_CONFIG/);
+  }
+  fs.writeFileSync(f.config, original); fs.writeFileSync(path.join(f.repository, '.git/commondir'), '/operator/repo');
+  assert.throws(() => admitIosGitRepository(f.command), /IOS_HOST_GIT_EXTERNAL_OBJECTS/);
+});
+test('Git new clone target must be empty owned and canonical without following an existing symlink', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => admitIosGitRepository({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const f = iosGitFilesystemFixture(t), target = path.join(f.paths.temporary, 'new-clone'), command = { policy: { paths: f.paths }, git: { repository: target, clone: true, family: 'clone' } };
+  assert.equal(admitIosGitRepository(command).repositoryIdentity, null); fs.mkdirSync(target, { mode: 0o700 });
+  assert.equal(admitIosGitRepository(command).repositoryIdentity.length, 5); fs.writeFileSync(path.join(target, 'retained'), 'PUBLIC');
+  assert.throws(() => admitIosGitRepository(command), /IOS_HOST_GIT_NEW_TARGET/);
+});
+test('Git selected-file copy retains a real descriptor and refuses permission drift without removing changed evidence', t => {
+  const command = iosDescriptorFixture(t); command.role = 'git';
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const transport = openIosCurlTransport(command);
+  assert.equal(fs.fstatSync(transport.fd).mode & 0o777, 0o400);
+  fs.fchmodSync(transport.fd, 0o600);
+  assert.throws(() => transport.finish(), /IOS_HOST_TRANSPORT_CHANGED/);
+  assert.throws(() => fs.fstatSync(transport.fd), { code: 'EBADF' }); assert.equal(fs.existsSync(transport.file), true); command.bundle.fill(0);
+});
+test('Git selected-file final check refuses a same-leaf symlink substitution and closes the original held descriptor', t => {
+  const command = iosDescriptorFixture(t); command.role = 'git';
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const transport = openIosCurlTransport(command), retained = transport.file + '-retained'; fs.renameSync(transport.file, retained); fs.symlinkSync(retained, transport.file);
+  assert.throws(() => transport.finish(), /IOS_HOST_TRANSPORT_CHANGED/);
+  assert.throws(() => fs.fstatSync(transport.fd), { code: 'EBADF' }); assert.equal(fs.lstatSync(transport.file).isSymbolicLink(), true); command.bundle.fill(0);
+});
+test('public local QA entry rejects store signing and nonmetadata Pod modes before any policy or transport read', async () => {
+  const ref = { path: '/NEVER_READ', sha256: '0'.repeat(64), sizeBytes: 1 }; let calls = 0;
+  for (const role of ['store', 'signing', 'xcodebuild']) await assert.rejects(runIosLocalQaCommand(ref, role, [], { transport: () => { calls++; } }), /IOS_HOST_LOCAL_QA_COMMAND/);
+  await assert.rejects(runIosLocalQaCommand(ref, 'pod', ['install'], { transport: () => { calls++; } }), /IOS_HOST_LOCAL_QA_METADATA_ONLY/);
+  assert.equal(calls, 0);
+});
+test('actual generated project Pods root is separately bound from CP_HOME with owned0755 parents and no broad checkout mutation', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => admitIosGitRepository({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const f = iosGitFilesystemFixture(t), source = path.join(f.paths.home, 'source'), projectPods = path.join(source, 'apps/mobile/ios/Pods');
+  fs.mkdirSync(projectPods, { recursive: true, mode: 0o755 });
+  const paths = { ...f.paths, projectPods }, command = { policy: { paths }, git: { repository: path.join(projectPods, 'PublicPod'), clone: true, family: 'clone' } };
+  const row = admitIosGitRepository(command); assert.equal(row.root, projectPods);
+  const parent = path.dirname(projectPods); fs.chmodSync(parent, 0o777);
+  assert.throws(() => admitIosGitRepository(command), /IOS_HOST_PROJECT_PODS_NAMESPACE/); fs.chmodSync(parent, 0o755);
+  const foreign = { ...command, git: { ...command.git, repository: path.join(source, 'unrelated') } };
+  assert.throws(() => admitIosGitRepository(foreign), /IOS_HOST_OWNED_MUTATION_PATH/);
+});
+test('iOS Node and npm metadata use the exact anonymous4 layer without leaking it to Ruby curl or Xcode', () => {
+  const f = iosProjectionFixture(), original = {};
+  const node = iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], original);
+  assert.deepEqual(Object.fromEntries(Object.entries(node.environment).filter(([k]) => k.startsWith('NPM_CONFIG_'))), {
+    NPM_CONFIG_USERCONFIG: f.policy.nodeNpm.user.path, NPM_CONFIG_GLOBALCONFIG: f.policy.nodeNpm.global.path,
+    NPM_CONFIG_STRICT_SSL: 'true', NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/' });
+  const npm = iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], {});
+  assert.equal(npm.executable, f.policy.tools.node.path); assert.equal(npm.args[0], '--input-type=module');
+  assert.deepEqual(npm.args.slice(-2), ['--', '--version']);
+  assert.match(npm.args[2], /createRequire\(entry\)\('\.\.\/lib\/cli\.js'\)\(process\)/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'npm', ['publish'], {}), /IOS_HOST_NPM_METADATA_ONLY/);
+  for (const role of ['ruby', 'xcodebuild']) assert.equal(iosHostCommandProjection(f.admitted, f.ref, role, [], {}).environment.NPM_CONFIG_USERCONFIG, undefined);
+  assert.deepEqual(original, {});
+});
+test('iOS npm recipes reject lowercase conflicting registry CA proxy and credential overrides before payload', () => {
+  for (const environment of [{ npm_config_userconfig: '/operator/npmrc' }, { NPM_CONFIG_USERCONFIG: '/operator/npmrc' },
+    { NPM_CONFIG_GLOBALCONFIG: '/operator/npmrc' }, { NPM_CONFIG_REGISTRY: 'https://unadmitted.invalid/' }, { NPM_CONFIG_STRICT_SSL: 'false' },
+    { NPM_CONFIG_CAFILE: '/operator/extra.pem' }, { NPM_CONFIG_PROXY: 'http://127.0.0.1:1' }, { NPM_CONFIG__AUTH: 'SYNTHETIC_UNADMITTED' }]) {
+    const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], environment), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
+});
+test('iOS project npmrc absence fence catches late file or symlink creation without reading either payload', t => {
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'apps/mobile'), { recursive: true, mode: 0o700 }); fs.mkdirSync(path.join(root, 'scripts/mobile'), { recursive: true, mode: 0o700 });
+  const p = { helper: { path: path.join(root, 'scripts/mobile/ios-host-launch.mjs') } };
+  assert.equal(reviewProjectNpm(p).length, 2);
+  const npmrc = path.join(root, 'apps/mobile/.npmrc'), target = path.join(root, 'UNREAD_CONFIG'); fs.writeFileSync(target, 'SYNTHETIC_UNREAD_PRIVATE_CONFIG');
+  const actual = fs.readSync; let reads = 0; fs.readSync = (...args) => { reads++; return actual(...args); };
+  try { fs.writeFileSync(npmrc, 'SYNTHETIC_UNREAD_PRIVATE_CONFIG'); assert.throws(() => reviewProjectNpm(p), /IOS_HOST_PROJECT_NPMRC_REFUSED/); fs.unlinkSync(npmrc);
+    fs.symlinkSync(target, npmrc); assert.throws(() => reviewProjectNpm(p), /IOS_HOST_PROJECT_NPMRC_REFUSED/); }
+  finally { fs.readSync = actual; }
+  assert.equal(reads, 0);
+});
+test('iOS public preparation CLI refuses malformed UTF8 without normalizing hashed input bytes', async t => {
+  const { iosHostCli } = await import('./ios-host-launch.mjs'), root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'input.json'), bytes = Buffer.from([0x7b, 0x22, 0x78, 0x22, 0x3a, 0x22, 0xff, 0x22, 0x7d]); fs.writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
+  if (typeof process.getuid !== 'function') { await assert.rejects(iosHostCli(['prepare', file, createHash('sha256').update(bytes).digest('hex'), String(bytes.length)]), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  await assert.rejects(iosHostCli(['prepare', file, createHash('sha256').update(bytes).digest('hex'), String(bytes.length)]), { code: 'ERR_ENCODING_INVALID_ENCODED_DATA' });
+  assert.deepEqual(fs.readFileSync(file), bytes);
+});
+test('iOS retained Pods source uses existing bounded stdin instead of exceeding the unchanged argv contract', () => {
+  const f = iosProjectionFixture(); f.admitted.podsSource = fs.readFileSync(new URL('./ios-host-pods.rb', import.meta.url));
+  const row = iosHostCommandProjection(f.admitted, f.ref, 'pod', ['install', '--deployment', '--no-repo-update'], {});
+  assert.ok(f.admitted.podsSource.length > 8192); assert.ok(row.args.every(value => value.length <= 8192));
+  assert.ok(row.input.length <= 1048576); assert.deepEqual(row.input, Buffer.concat([f.admitted.podsSource, Buffer.from('\nCaseopsIosPods.run\n')])); row.input.fill(0);
+});
+test('iOS role projection drops only the typed pinned-worker status descriptor marker', () => {
+  assert.deepEqual(neutralIosEnvironment({ CASEOPS_STORE_CHILD_STATUS_FD: '6' }), {});
+  for (const value of ['-1', '0', '2', '3.0', 'true', '2147483648', 'SYNTHETIC']) assert.throws(() => neutralIosEnvironment({ CASEOPS_STORE_CHILD_STATUS_FD: value }), /IOS_HOST_INTERNAL_STATUS_FD/);
+  const source = fs.readFileSync(new URL('./ios-host-pods.rb', import.meta.url), 'utf8'); assert.doesNotMatch(source, /\$PROGRAM_NAME\s*=/);
+});
+
+test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
+  const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
+  assert.ok(helper.includes("const NODE_HELPER = '13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = '5aa448fb66bcbaec5127df7e7876a8b967eee3a005d045659f8141149f82a54b'"));
+  const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
+  const pin = createHash('sha256').update(input).digest('hex');
+  assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
+  const fast = helper.slice(helper.indexOf('const GIT_READONLY_BOOTSTRAP ='), helper.indexOf('export function renderIosHostBuildEntry'));
+  assert.match(fast, /exec\(compile\(bytes\(b\),ref\['path'\],'exec'\),scope\)/);
+  assert.match(fast, /case "\$\{1-\}" in --version\|rev-parse\|ls-files\|status\|check-ignore/);
+  assert.match(fast, /\/usr\/bin\/env -i PATH=\/usr\/bin:\/bin/);
+  assert.doesNotMatch(fast.slice(0, fast.indexOf('function shimBytes')), /nodeRecipe|NODE_OPTIONS|SSL_CERT_FILE/);
+  const snapshot = fs.readFileSync(new URL('source-snapshot.mjs', root), 'utf8');
+  assert.ok(snapshot.includes("'scripts/mobile/ios-git-readonly.py'"));
+  assert.ok(fs.readFileSync(new URL('../../.gitattributes', root), 'utf8').includes('scripts/mobile/ios-git-readonly.py text eol=lf'));
+});
+
+test('Windows owner refusal exposes only fixed existing-source classes before any payload read', () => {
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), originalSpawn = cp.spawnSync;
+  const uid = Object.getOwnPropertyDescriptor(process, 'getuid'), platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const systemRoot = process.env.SystemRoot, open = fs.openSync, read = fs.readSync, root = trustRoot();
+  try {
+    process.env.SystemRoot = root; Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+    const rows = [
+      [{ ownerClass: 'ADMINISTRATORS', tokenOwnerClass: 'CURRENT_USER', writeScopeSafe: true }, 'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_WRITE_SAFE'],
+      [{ ownerClass: 'SYSTEM', tokenOwnerClass: 'ADMINISTRATORS', writeScopeSafe: false }, 'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_SYSTEM_TOKEN_ADMINISTRATORS_WRITE_UNSAFE'],
+      [{ ownerClass: 'TOKEN_OTHER', tokenOwnerClass: 'OTHER', writeScopeSafe: true }, 'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_TOKEN_OTHER_TOKEN_OTHER_WRITE_SAFE'],
+      [{ ownerClass: 'S-1-5-21-PRIVATE', tokenOwnerClass: 'CURRENT_USER', writeScopeSafe: true }, 'HOST_TRUST_WINDOWS_ACL_PROTOCOL'],
+      [{ ownerClass: 'OTHER', tokenOwnerClass: root, writeScopeSafe: true }, 'HOST_TRUST_WINDOWS_ACL_PROTOCOL'],
+      [{ ownerClass: 'CURRENT_USER', tokenOwnerClass: 'CURRENT_USER', writeScopeSafe: true }, 'HOST_TRUST_WINDOWS_ACL_PROTOCOL'],
+    ];
+    for (const [detail, expected] of rows) {
+      const fds = []; let reads = 0;
+      fs.openSync = (...args) => { const fd = open(...args); fds.push(fd); return fd; }; fs.readSync = (...args) => { reads++; return read(...args); };
+      cp.spawnSync = (_exe, _args, options) => {
+        assert.equal(options.timeout, 5000); assert.equal(path.basename(options.env.CASEOPS_TRUST_ACL_PATH), 'host-node-trust.mjs');
+        return { status: 0, stdout: JSON.stringify({ ownerMatches: false, ...detail }), stderr: 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n' };
+      }; syncBuiltinESMExports();
+      assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'uncreated'), environment: neutralTrustEnv() }), error => {
+        assert.equal(error.message, expected); assert.ok(!error.message.includes(root) && !error.message.includes('S-1-5-21-PRIVATE')); assert.equal(ciTrustFailureCode(error), expected); return true;
+      });
+      assert.equal(reads, 0); assert.equal(fs.existsSync(path.join(root, 'uncreated')), false); assert.ok(fds.length > 0);
+      for (const fd of fds) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+    }
+  } finally {
+    fs.openSync = open; fs.readSync = read; cp.spawnSync = originalSpawn; syncBuiltinESMExports();
+    Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Windows parent-directory owner refusal stays distinct from existing code and creates no policy objects', () => {
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), original = cp.spawnSync;
+  const uid = Object.getOwnPropertyDescriptor(process, 'getuid'), platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const systemRoot = process.env.SystemRoot, open = fs.openSync, root = trustRoot(), fds = []; let sawCode = false, directories = 0;
+  try {
+    process.env.SystemRoot = root; Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+    fs.openSync = (...args) => { const fd = open(...args); fds.push(fd); return fd; };
+    cp.spawnSync = (_exe, _args, options) => {
+      const directory = options.env.CASEOPS_TRUST_ACL_KIND === 'directory';
+      if (directory) { directories++; assert.equal(options.env.CASEOPS_TRUST_ACL_PATH, root); } else sawCode = true;
+      return { status: 0, stdout: JSON.stringify(directory ? { ownerMatches: false, writeScopeSafe: true, ownerClass: 'SYSTEM', tokenOwnerClass: 'CURRENT_USER' } : { ownerMatches: true, writeScopeSafe: true }), stderr: 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n' };
+    }; syncBuiltinESMExports();
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() }), { message: 'HOST_TRUST_CURRENT_OWNER_REQUIRED_PARENT_DIRECTORY_OWNER_SYSTEM_TOKEN_CURRENT_USER_WRITE_SAFE' });
+    assert.equal(sawCode, true); assert.equal(directories, 1); assert.equal(fs.existsSync(path.join(root, 'policy')), false);
+    for (const fd of fds) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+  } finally {
+    fs.openSync = open; cp.spawnSync = original; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('CI owner diagnostics reject arbitrary roles and private detail instead of reflecting it', () => {
+  for (const message of [
+    'HOST_TRUST_CURRENT_OWNER_REQUIRED_PRIVATE_PATH_OWNER_SYSTEM_TOKEN_CURRENT_USER_WRITE_SAFE',
+    'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_S-1-5-21-PRIVATE_TOKEN_CURRENT_USER_WRITE_SAFE',
+    'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_SYSTEM_TOKEN_OTHER_WRITE_SAFE_TRAILING',
+    'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_CURRENT_USER_TOKEN_CURRENT_USER_WRITE_SAFE',
+  ]) assert.equal(ciTrustFailureCode(new Error(message)), 'CI_TRUST_PREPARATION_REFUSED');
+  assert.equal(ciTrustFailureCode(new Error('HOST_TRUST_CURRENT_OWNER_REQUIRED_ROOTS_OUTPUT_OWNER_OTHER_TOKEN_OTHER_WRITE_UNSAFE\nPRIVATE_PATH')), 'HOST_TRUST_CURRENT_OWNER_REQUIRED_ROOTS_OUTPUT_OWNER_OTHER_TOKEN_OTHER_WRITE_UNSAFE');
+});

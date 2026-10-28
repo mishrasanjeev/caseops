@@ -166,7 +166,7 @@ const DIAGNOSTICS = new Set([
 ]);
 export function ciTrustFailureCode(error) {
   const first = typeof error?.message === 'string' ? error.message.split('\n', 1)[0] : '';
-  return DIAGNOSTICS.has(first) ? first : 'CI_TRUST_PREPARATION_REFUSED';
+  return DIAGNOSTICS.has(first) || (first.length <= 160 && /^HOST_TRUST_CURRENT_OWNER_REQUIRED_(?:PUBLIC_INPUT|PUBLIC_SOURCE|SOURCE_HELPER|SOURCE_BOOTSTRAP|FIXTURE_INPUT|PARENT_DIRECTORY|POLICY_DIRECTORY|OUTPUT_DIRECTORY|EMPTY_DIRECTORY|DIRECTORY|ROOTS_OUTPUT|POLICY_OUTPUT|PUBLIC_OUTPUT|POLICY_INPUT|ROOTS_INPUT)_OWNER_(?:SYSTEM|ADMINISTRATORS|TOKEN_OTHER|OTHER|MISSING)_TOKEN_(?:CURRENT_USER|SYSTEM|ADMINISTRATORS|OTHER|MISSING)_WRITE_(?:SAFE|UNSAFE)$/.test(first)) ? first : 'CI_TRUST_PREPARATION_REFUSED';
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
