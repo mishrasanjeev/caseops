@@ -76,13 +76,23 @@ function ownership(file, value, directory = false, publicCertificate = false) {
   }
   requireThat(process.platform === 'win32' && path.isAbsolute(process.env.SystemRoot || ''), 'HOST_TRUST_OWNER_UNAVAILABLE');
   // Read-only ACL proof. The fixed command never returns SID/account values.
-  const code = "$ErrorActionPreference='Stop';$p=$env:CASEOPS_TRUST_ACL_PATH;$a=Get-Acl -LiteralPath $p;$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;$safe=$true;foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$safe=$false}};@{ownerMatches=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));writeScopeSafe=$safe}|ConvertTo-Json -Compress";
+  const code = "$ErrorActionPreference='Stop';[Console]::Error.WriteLine('COPS_ACL0');try{$s=[Security.AccessControl.AccessControlSections]'Access,Owner';if($env:CASEOPS_TRUST_ACL_KIND -eq 'directory'){$a=[IO.Directory]::GetAccessControl($env:CASEOPS_TRUST_ACL_PATH,$s)}elseif($env:CASEOPS_TRUST_ACL_KIND -eq 'file'){$a=[IO.File]::GetAccessControl($env:CASEOPS_TRUST_ACL_PATH,$s)}else{throw 'ACL_KIND'};[Console]::Error.WriteLine('COPS_ACL1');$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;[Console]::Error.WriteLine('COPS_ACL2');$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));$safe=$true;foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$safe=$false}};[Console]::Error.WriteLine('COPS_ACL3');[Console]::Out.Write(('{\"ownerMatches\":'+$ok.ToString().ToLowerInvariant()+',\"writeScopeSafe\":'+$safe.ToString().ToLowerInvariant()+'}'))}catch{[Console]::Error.WriteLine('COPS_ACL_FAIL');exit 1}";
   const executable = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-  const result = spawnSync(executable, ['-NoProfile', '-NonInteractive', '-Command', code], { encoding: 'utf8', timeout: 5000, maxBuffer: 4096, windowsHide: true, env: { SystemRoot: process.env.SystemRoot, WINDIR: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file } });
-  requireThat(result.error?.code !== 'ETIMEDOUT', 'HOST_TRUST_WINDOWS_ACL_TIMEOUT');
+  const result = spawnSync(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], { encoding: 'utf8', timeout: 5000, maxBuffer: 4096, windowsHide: true, env: { SystemRoot: process.env.SystemRoot, WINDIR: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file, CASEOPS_TRUST_ACL_KIND: directory ? 'directory' : 'file' } });
+  const phase = reviewHostNodeWindowsAclPhase(result.stderr);
+  requireThat(result.error?.code !== 'ETIMEDOUT', 'HOST_TRUST_WINDOWS_ACL_TIMEOUT_' + phase);
   requireThat(!result.error && result.status === 0, 'HOST_TRUST_WINDOWS_ACL_COMMAND_FAILED');
+  requireThat(phase === 'RULES_READ', 'HOST_TRUST_WINDOWS_ACL_PROTOCOL');
   let parsed; try { parsed = JSON.parse(result.stdout); } catch { fail('HOST_TRUST_WINDOWS_ACL_PROTOCOL'); }
   reviewHostNodeWindowsAclProof(parsed);
+}
+/** Fixed progress only; never return a path, SID or unreviewed stderr text. */
+export function reviewHostNodeWindowsAclPhase(stderr) {
+  if (stderr === undefined || stderr === '') return 'NO_MARKER';
+  if (typeof stderr !== 'string' || Buffer.byteLength(stderr) > 4096) return 'UNCLASSIFIED';
+  const rows = stderr.trim().split(/\r?\n/);
+  if (rows.length > 4 || rows.some((row, index) => row !== 'COPS_ACL' + index)) return 'UNCLASSIFIED';
+  return ['NO_MARKER', 'SCRIPT_ENTERED', 'ACL_READ', 'IDENTITY_READ', 'RULES_READ'][rows.length];
 }
 /** Windows applies the current token's default owner to newly created objects.
  * The alternate owner must also be SYSTEM or Builtin Administrators, already

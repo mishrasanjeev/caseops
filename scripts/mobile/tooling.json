@@ -11,7 +11,7 @@
   "node": "24.15.0",
   "npm": "11.12.1",
   "hostNodeTrust": {
-    "helperSha256": "82c268e2fd8cc93c2c4b950184a059ead1e51779b013114492850fcd53e64bea",
-    "bootstrapSha256": "063bda1485a4e049fef6ea010169c54b03144086f8d30bf8342eb5303c23fca6"
+    "helperSha256": "a24871027b16b8cfcb7bb902de9167a3d4e84286f74db819358bb7e25d80f3d4",
+    "bootstrapSha256": "ae8261b8cecc0a00395a716f09bbeef15c1b93456e870ab5cf179ed95047df71"
   }
 }

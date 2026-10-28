@@ -86,9 +86,10 @@ function fixture(t, extra = {}) {
   // Trace actual source capture in the temporary contract fixture, so an order
   // assertion cannot pass merely because the wrapper contains command strings.
   const snapshot = path.join(checkout, 'scripts/mobile/source-snapshot.mjs');
-  writeFileSync(snapshot, readFileSync(snapshot, 'utf8')
-    .replace("import { readFileSync } from 'node:fs';", "import { appendFileSync, readFileSync } from 'node:fs';")
-    .replace('  const paths = [', "  appendFileSync(process.env.CASEOPS_TEST_TRACE, 'source-snapshot\\n');\n  const paths = ["));
+  const snapshotSource = readFileSync(snapshot, 'utf8');
+  assert.equal(snapshotSource.split('  const paths = [').length, 2, 'EXACT_SOURCE_TRACE_BOUNDARY_REQUIRED');
+  writeFileSync(snapshot, "import { appendFileSync as appendCaseopsSnapshotTrace } from 'node:fs';\n" + snapshotSource
+    .replace('  const paths = [', "  appendCaseopsSnapshotTrace(process.env.CASEOPS_TEST_TRACE, 'source-snapshot\\n');\n  const paths = ["));
   file('repo/package.json', '{"type":"module"}\n'); file('repo/.gitignore', 'node_modules/\napps/mobile/android/\n');
   mkdirSync(path.join(checkout, 'apps/mobile/node_modules'), { recursive: true });
   symlinkSync(path.join(repo, 'apps/mobile/node_modules/@expo'), path.join(checkout, 'apps/mobile/node_modules/@expo'), 'dir');

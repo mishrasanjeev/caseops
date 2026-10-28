@@ -27,7 +27,7 @@ import { configuredSessionDeleteAdmission, MAX_SESSION_ADMISSION_EVENTS, proveCu
 import { browserStep } from '../../apps/mobile/e2e/browser-progress.mjs';
 import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
-import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, DENIED_HOST_CA } from './host-node-trust.mjs';
+import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA } from './host-node-trust.mjs';
 import { localCertificates } from './host-node-trust-fixture.mjs';
 
 const installedHash = 'a'.repeat(64);
@@ -3054,6 +3054,7 @@ test('reviewed source-map inheritance keeps every extra preload and proxy overri
   try {
     const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
     const base = { ...neutralTrustEnv(), ...prepared.environment }, allowed = base.NODE_OPTIONS + ' --enable-source-maps';
+    assert.ok(Buffer.byteLength(allowed) <= 8191, 'BOOTSTRAP_OPTIONS_MUST_REMAIN_WITHIN_WINDOWS_CMD_ENV_BOUND');
     const positive = await trustChild([trustHelper, 'verify'], { ...base, NODE_OPTIONS: allowed });
     assert.equal(positive.code, 0, positive.stderr); assert.equal(JSON.parse(positive.stdout).expectedDefaultCount, 144);
     for (const options of [allowed + ' --enable-source-maps', allowed + ' --import=data:text/javascript,console.log(%22UNADMITTED_PRELOAD_EXECUTED%22)', allowed + ' --use-env-proxy', allowed + ' --use-openssl-ca', '--enable-source-maps ' + base.NODE_OPTIONS]) {
@@ -3106,16 +3107,21 @@ test('Windows ownership refusal precedes descriptor bytes and closes every opene
   const root = trustRoot();
   try {
     process.env.SystemRoot = root; Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
-    for (const [code, result] of [
+    const completed = 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n';
+    for (const [code, baseResult] of [
       ['HOST_TRUST_CURRENT_OWNER_REQUIRED', { status: 0, stdout: JSON.stringify({ ownerMatches: false, writeScopeSafe: true }) }],
       ['HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED', { status: 0, stdout: JSON.stringify({ ownerMatches: true, writeScopeSafe: false }) }],
       ['HOST_TRUST_WINDOWS_ACL_PROTOCOL', { status: 0, stdout: 'malformed' }],
-      ['HOST_TRUST_WINDOWS_ACL_TIMEOUT', { status: null, error: { code: 'ETIMEDOUT' }, stdout: '' }],
+      ...['NO_MARKER', 'SCRIPT_ENTERED', 'ACL_READ', 'IDENTITY_READ', 'RULES_READ'].map((phase, index) => [
+        'HOST_TRUST_WINDOWS_ACL_TIMEOUT_' + phase,
+        { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: completed.split('\n').slice(0, index).join('\n') + (index ? '\n' : '') },
+      ]),
     ]) {
+      const result = { stderr: completed, ...baseResult };
       const fds = []; let reads = 0, commands = 0;
       fs.openSync = (...args) => { const fd = originalOpen(...args); fds.push(fd); return fd; };
       fs.readSync = (...args) => { reads++; return originalRead(...args); };
-      cp.spawnSync = (executable, args, options) => { commands++; assert.equal(executable, path.join(root, 'System32/WindowsPowerShell/v1.0/powershell.exe')); assert.match(args.at(-1), /\$t=\$i\.Owner\.Value/); assert.equal(options.timeout, 5000); return result; };
+      cp.spawnSync = (executable, args, options) => { commands++; assert.equal(executable, path.join(root, 'System32/WindowsPowerShell/v1.0/powershell.exe')); assert.match(args.at(-1), /\$t=\$i\.Owner\.Value/); assert.equal(options.env.CASEOPS_TRUST_ACL_KIND, 'file'); assert.equal(options.timeout, 5000); return result; };
       syncBuiltinESMExports();
       assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'never-created'), environment: neutralTrustEnv() }), new RegExp(code));
       assert.equal(commands, 1); assert.equal(reads, 0); assert.ok(fds.length > 0); for (const fd of fds) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
@@ -3132,4 +3138,46 @@ test('CI preparation diagnostics reflect only reviewed fixed labels and no raw e
   assert.equal(ciTrustFailureCode(new Error('HOST_TRUST_WINDOWS_ACL_TIMEOUT')), 'HOST_TRUST_WINDOWS_ACL_TIMEOUT');
   assert.equal(ciTrustFailureCode(new Error('CI_TRUST_COMMAND_OWNER\nPRIVATE_OWNER_VALUE')), 'CI_TRUST_COMMAND_OWNER');
   for (const value of [new Error('PRIVATE_PASSWORD'), new Error('https://private.invalid/owner'), { message: { private: true } }, null]) assert.equal(ciTrustFailureCode(value), 'CI_TRUST_PREPARATION_REFUSED');
+  for (const phase of ['NO_MARKER', 'SCRIPT_ENTERED', 'ACL_READ', 'IDENTITY_READ', 'RULES_READ', 'UNCLASSIFIED']) assert.equal(ciTrustFailureCode(new Error('HOST_TRUST_WINDOWS_ACL_TIMEOUT_' + phase)), 'HOST_TRUST_WINDOWS_ACL_TIMEOUT_' + phase);
 });
+
+test('Windows ACL queries use only direct Framework metadata APIs with unchanged owner and complete ACE scope', () => {
+  for (const name of ['host-node-trust.mjs', 'host-node-trust-start.mjs', 'host-node-trust-ci.mjs']) {
+    const source = fs.readFileSync(new URL(name, import.meta.url), 'utf8'), match = source.match(/const code = ("[^\n]+");/);
+    assert.ok(match, name); const query = JSON.parse(match[1]);
+    assert.match(query, /\[IO\.File\]::GetAccessControl\(\$env:CASEOPS_TRUST_ACL_PATH,\$s\)/);
+    assert.match(query, /\$s=\[Security\.AccessControl\.AccessControlSections\]'Access,Owner'/);
+    assert.ok(query.includes('$a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])'));
+    assert.ok(query.includes("$r.AccessControlType -eq 'Allow'")); assert.ok(query.includes('-band 852310'));
+    assert.ok(query.includes("@($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')"));
+    assert.doesNotMatch(query, /\b(?:Get-Acl|Import-Module|ConvertTo-Json|Get-Content|Invoke-Expression|Start-Process)\b/i);
+    for (let index = 0; index < 4; index++) assert.equal(query.split("WriteLine('COPS_ACL" + index + "')").length, 2);
+    assert.ok(query.includes("catch{[Console]::Error.WriteLine('COPS_ACL_FAIL');exit 1}"));
+    if (name === 'host-node-trust.mjs') assert.match(query, /\[IO\.Directory\]::GetAccessControl\(\$env:CASEOPS_TRUST_ACL_PATH,\$s\)/);
+    else assert.doesNotMatch(query, /\[IO\.Directory\]/);
+  }
+});
+
+test('Windows ACL milestone decoder accepts ordered fixed prefixes and never reflects an arbitrary diagnostic', () => {
+  const markers = ['COPS_ACL0', 'COPS_ACL1', 'COPS_ACL2', 'COPS_ACL3'];
+  for (const [index, expected] of ['NO_MARKER', 'SCRIPT_ENTERED', 'ACL_READ', 'IDENTITY_READ', 'RULES_READ'].entries())
+    assert.equal(reviewHostNodeWindowsAclPhase(markers.slice(0, index).join('\r\n') + (index ? '\r\n' : '')), expected);
+  for (const invalid of ['PRIVATE_OWNER_SID', 'COPS_ACL1\n', 'COPS_ACL0\nCOPS_ACL0\n', 'COPS_ACL0\nCOPS_ACL_FAIL\n', 'COPS_ACL0\nPRIVATE_PATH\n', 'x'.repeat(4097)]) assert.equal(reviewHostNodeWindowsAclPhase(invalid), 'UNCLASSIFIED');
+});
+
+test('CI Windows ACL completion markers are mandatory before writing even when SAFE was returned', () => ciTrustFiles(({ root, file }) => {
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), original = cp.spawnSync, uid = Object.getOwnPropertyDescriptor(process, 'getuid'), platform = Object.getOwnPropertyDescriptor(process, 'platform'), systemRoot = process.env.SystemRoot;
+  const bytes = fs.readFileSync(file), completed = 'COPS_ACL0\r\nCOPS_ACL1\r\nCOPS_ACL2\r\nCOPS_ACL3\r\n'; let calls = 0;
+  try {
+    process.env.SystemRoot = root; Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+    for (const stderr of ['', 'COPS_ACL0\n', completed + 'PRIVATE_PATH\n']) {
+      cp.spawnSync = (executable, args, options) => { calls++; assert.equal(options.timeout, 4000); assert.doesNotMatch(args.at(-1), /Get-Acl|ConvertTo-Json/); return { status: 0, stdout: 'SAFE', stderr }; }; syncBuiltinESMExports();
+      assert.throws(() => appendCITrustOutputs(file, root, ciTrustValues), /CI_TRUST_COMMAND_OWNER/); assert.deepEqual(fs.readFileSync(file), bytes);
+    }
+    cp.spawnSync = () => { calls++; return { status: 0, stdout: 'SAFE', stderr: completed }; }; syncBuiltinESMExports();
+    assert.equal(appendCITrustOutputs(file, root, ciTrustValues).appendedKeys, 9); assert.equal(calls, 4);
+  } finally {
+    cp.spawnSync = original; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
+  }
+}));

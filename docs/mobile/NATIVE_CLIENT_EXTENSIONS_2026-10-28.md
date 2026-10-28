@@ -213,6 +213,12 @@ manifest output share the existing 5-second deadline, 50,000 charged entries and
 The public CLI and native runner await
 the asynchronous capture, which has at most four 64 KiB buffers and four owned
 descriptors, including directory inspection. The two inventories remain serial.
+The serial traversal reserves one of the same four operation/descriptor slots
+before asynchronous descriptor opening. Every successful callback transfers its
+lease into an owned `finally`, even if the timer or another read has already
+failed. Pending opens are never raced or abandoned. Malformed acknowledgements
+and ambiguous constructor/close errors require isolated process exit; a
+caller-owned descriptor is never inferred from its numeric value or retried.
 Native canonical lookups within the four held file jobs use the callback API;
 each job has at most one pending canonical or read operation. The independent
 full descriptor and named frames are rebound before the first byte after that
@@ -221,6 +227,12 @@ canonical phase after every file job drains; the unique directory pass still
 runs child-first and root-last, followed by the external namespace fence. Any
 failure waits for every dispatched callback, including canonical callbacks,
 before returning. No cached canonical result replaces a fresh observation.
+The live-parent identity fence uses public numeric Stats only when all five
+immutable admitted BigInt identity values have exact safe-number equivalents.
+An unsafe baseline selects the original BigInt reader before observation; an
+unsafe or malformed observed Number refuses without a fallback retry. Every
+parent is still freshly read. All independent full nine-field frames, final
+reconciliation, native canonical resolution and payload reads remain unchanged.
 Each leaf keeps its opened descriptor, independent full descriptor/path frames,
 native canonical resolution and live parent checks through its read. A shared
 byte ledger reserves read capacity and permits only one aggregate overflow byte.
@@ -235,6 +247,21 @@ wait for successful recapture. Synchronous capture APIs remain available with
 their original behavior. Source tests do not establish five-second performance
 on an installed SDK or native acceptance.
 
+The canonical codec retains each checked primitive through use. Its nine
+numeric metadata fields form one at-most-512-byte chunk per row with unchanged
+field order and encoding; directory names still stream under the same output
+bound. Required-entry projection computes its constant relative key once before
+searching the private captured rows. Codec-only saved-manifest measurements do
+not certify a fresh SDK inventory or its shared capture deadline.
+
 Failed or partial outputs remain retained and produce no success reference. A saved
 large manifest can establish codec/transport compatibility only, not current
 SDK, server, device or native acceptance.
+
+The asynchronous capture retains a frozen child-to-root chain of admitted
+primitive parent paths and identity baselines per inventory. Every original
+parent lstat remains live and ordered; no filesystem observation is cached.
+Fast comparisons preserve strict Object.is identity, including signed zero,
+first-field unsafe rejection and one read of each observed identity value.
+Constructor-count, getter-order and actual grandparent replacement controls
+cover this implementation separately from timed SDK capture acceptance.

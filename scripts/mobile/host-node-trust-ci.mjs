@@ -37,11 +37,12 @@ function commandOwner(file, state) {
     return;
   }
   assert.ok(process.platform === 'win32' && path.isAbsolute(process.env.SystemRoot || ''), 'CI_TRUST_OWNER_UNAVAILABLE');
-  const code = "$ErrorActionPreference='Stop';$a=Get-Acl -LiteralPath $env:CASEOPS_TRUST_ACL_PATH;$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$ok=$false}};if($ok){'SAFE'}else{exit 1}";
-  const proof = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', code], {
+  const code = "$ErrorActionPreference='Stop';[Console]::Error.WriteLine('COPS_ACL0');try{$s=[Security.AccessControl.AccessControlSections]'Access,Owner';$a=[IO.File]::GetAccessControl($env:CASEOPS_TRUST_ACL_PATH,$s);[Console]::Error.WriteLine('COPS_ACL1');$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;[Console]::Error.WriteLine('COPS_ACL2');$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$ok=$false}};[Console]::Error.WriteLine('COPS_ACL3');if($ok){[Console]::Out.Write('SAFE')}else{exit 1}}catch{[Console]::Error.WriteLine('COPS_ACL_FAIL');exit 1}";
+  const proof = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], {
     env: { SystemRoot: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file }, encoding: 'utf8', timeout: 4000, maxBuffer: 4096, windowsHide: true,
   });
-  assert.ok(!proof.error && proof.status === 0 && proof.stdout.trim() === 'SAFE', 'CI_TRUST_COMMAND_OWNER');
+  assert.ok(!proof.error && proof.status === 0 && proof.stdout.trim() === 'SAFE'
+    && proof.stderr.replaceAll('\r', '') === 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n', 'CI_TRUST_COMMAND_OWNER');
 }
 function checkNamed(named, opened) {
   for (const key of fields) if (!(process.platform === 'win32' && key === 'dev' && named.dev === 0n)) assert.equal(named[key], opened[key], 'CI_TRUST_NAMED_DESCRIPTOR_CHANGED');
@@ -154,6 +155,9 @@ const DIAGNOSTICS = new Set([
   'HOST_TRUST_WINDOWS_ACL_TIMEOUT', 'HOST_TRUST_WINDOWS_ACL_COMMAND_FAILED',
   'HOST_TRUST_WINDOWS_ACL_PROTOCOL', 'HOST_TRUST_CURRENT_OWNER_REQUIRED',
   'HOST_TRUST_OVERRIDE_REFUSED', 'HOST_TRUST_CLI_OVERRIDE_REFUSED',
+  'HOST_TRUST_WINDOWS_ACL_TIMEOUT_NO_MARKER', 'HOST_TRUST_WINDOWS_ACL_TIMEOUT_SCRIPT_ENTERED',
+  'HOST_TRUST_WINDOWS_ACL_TIMEOUT_ACL_READ', 'HOST_TRUST_WINDOWS_ACL_TIMEOUT_IDENTITY_READ',
+  'HOST_TRUST_WINDOWS_ACL_TIMEOUT_RULES_READ', 'HOST_TRUST_WINDOWS_ACL_TIMEOUT_UNCLASSIFIED',
   'HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED', 'HOST_TRUST_DEADLINE',
   'HOST_TRUST_NAMED_FD_CHANGED', 'HOST_TRUST_DIRECTORY_PATH',
   'CI_TRUST_COMMAND_OWNER', 'CI_TRUST_NAMESPACE', 'CI_TRUST_CONFIG_DEADLINE',

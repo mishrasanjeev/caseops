@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 // Public reviewed source identity, not a policy-supplied code authority.
-const APPROVED_HELPER_SHA256 = '82c268e2fd8cc93c2c4b950184a059ead1e51779b013114492850fcd53e64bea';
+const APPROVED_HELPER_SHA256 = 'a24871027b16b8cfcb7bb902de9167a3d4e84286f74db819358bb7e25d80f3d4';
 const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
 const end = performance.now() + 20000;
 const check = () => { if (performance.now() >= end) throw new Error('HOST_TRUST_BOOTSTRAP_DEADLINE'); };
@@ -29,9 +29,9 @@ function owner(file, s, privateFile) {
     return;
   }
   insist(process.platform === 'win32' && path.isAbsolute(process.env.SystemRoot || ''));
-  const code = "$ErrorActionPreference='Stop';$a=Get-Acl -LiteralPath $env:CASEOPS_TRUST_ACL_PATH;$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$ok=$false}};if($ok){'SAFE'}else{exit 1}";
-  check(); const result = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', code], { env: { SystemRoot: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file }, encoding: 'utf8', timeout: Math.max(1, Math.min(5000, end - performance.now())), maxBuffer: 4096, windowsHide: true });
-  insist(!result.error && result.status === 0 && result.stdout.trim() === 'SAFE'); check();
+  const code = "$ErrorActionPreference='Stop';[Console]::Error.WriteLine('COPS_ACL0');try{$s=[Security.AccessControl.AccessControlSections]'Access,Owner';$a=[IO.File]::GetAccessControl($env:CASEOPS_TRUST_ACL_PATH,$s);[Console]::Error.WriteLine('COPS_ACL1');$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;[Console]::Error.WriteLine('COPS_ACL2');$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$ok=$false}};[Console]::Error.WriteLine('COPS_ACL3');if($ok){[Console]::Out.Write('SAFE')}else{exit 1}}catch{[Console]::Error.WriteLine('COPS_ACL_FAIL');exit 1}";
+  check(); const result = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], { env: { SystemRoot: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file }, encoding: 'utf8', timeout: Math.max(1, Math.min(5000, end - performance.now())), maxBuffer: 4096, windowsHide: true });
+  insist(!result.error && result.status === 0 && result.stdout.trim() === 'SAFE' && result.stderr.replaceAll('\r', '') === 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n'); check();
 }
 function held(file, expected, limit, privateFile = false) {
   insist(typeof file === 'string' && path.isAbsolute(file) && path.resolve(file) === file && /^[a-f0-9]{64}$/.test(expected));

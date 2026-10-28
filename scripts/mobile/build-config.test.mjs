@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import { createHash, X509Certificate } from 'node:crypto';
 import { appendFileSync, closeSync, existsSync, fstatSync, lstatSync, mkdtempSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { rootCertificates } from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { sourceSnapshot } from './source-snapshot.mjs';
+import { sourceSnapshot, SOURCE_SNAPSHOT_LIMITS } from './source-snapshot.mjs';
 import { readBuildInput } from './build-acceptance.mjs';
 
 const app = fileURLToPath(new URL('../../apps/mobile/', import.meta.url));
@@ -595,6 +596,159 @@ test('actual source fingerprint and dirty fence include shared callback policy c
   const after = sourceSnapshot(dir); assert.equal(after.sourceDirty, true);
   assert.notEqual(after.sourceFingerprint, before.sourceFingerprint);
   assert.equal(after.sourceSha, before.sourceSha);
+});
+
+function snapshotFixture(t, values = { 'apps/mobile/one.txt': 'one', 'apps/mobile/two.txt': 'two' }) {
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-selected-snapshot-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(path.join(root, 'apps/mobile'), { recursive: true });
+  for (const [relative, bytes] of Object.entries(values)) { mkdirSync(path.dirname(path.join(root, relative)), { recursive: true }); writeFileSync(path.join(root, relative), bytes); }
+  execFileSync('git', ['init', '--quiet'], { cwd: root }); execFileSync('git', ['add', '.'], { cwd: root });
+  execFileSync('git', ['-c', 'user.name=Offline fixture', '-c', 'user.email=offline@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '--quiet', '-m', 'Synthetic selected source'], { cwd: root });
+  return root;
+}
+function snapshotHooks(hooks, operation) {
+  const cp = require('node:child_process'), restore = [];
+  for (const [key, replacement] of Object.entries(hooks)) {
+    const target = key === 'spawnSync' ? cp : fs; restore.push([target, key, target[key]]); target[key] = replacement;
+  }
+  syncBuiltinESMExports();
+  try { return operation(); } finally { for (const [target, key, original] of restore) target[key] = original; syncBuiltinESMExports(); }
+}
+function snapshotFileHooks(file, change) {
+  const opened = new Set(), originals = { open: fs.openSync, read: fs.readSync, fstat: fs.fstatSync, lstat: fs.lstatSync };
+  let bytes = 0;
+  return { opened, bytes: () => bytes, hooks: {
+    openSync: (...args) => { const fd = originals.open(...args); if (args[0] === file) opened.add(fd); return fd; },
+    fstatSync: (...args) => { const result = originals.fstat(...args); return opened.has(args[0]) && change.fstat ? change.fstat(result, args[0]) : result; },
+    readSync: (...args) => { if (opened.has(args[0])) change.beforeRead?.(args[0]); const width = originals.read(...args); if (opened.has(args[0])) bytes += width; return width; },
+    lstatSync: (...args) => { const result = originals.lstat(...args); return args[0] === file && change.lstat ? change.lstat(result) : result; },
+  } };
+}
+const snapshotClosed = control => { assert.ok(control.opened.size > 0); for (const fd of control.opened) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' }); };
+
+test('selected source keeps legacy sorted path-NUL-digest-NUL bytes and the four-field DTO', t => {
+  const root = snapshotFixture(t), actual = sourceSnapshot(root);
+  assert.deepEqual(actual, { sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), sourceFingerprint: '99c6e5b1a2dde7671c37f2c071145645392496402ea072cfa547c154ab64abf2', sourceDirty: false, inputFileCount: 2 });
+});
+test('selected source charges exact paired root-present entries and refuses one less', t => {
+  const root = snapshotFixture(t);
+  assert.equal(sourceSnapshot(root, { limits: { entries: 10 } }).inputFileCount, 2);
+  assert.throws(() => sourceSnapshot(root, { limits: { entries: 9 } }), /SOURCE_INVENTORY_BOUND/);
+});
+test('selected source rejects an excessive declared extent before any payload and closes its FD', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt'), control = snapshotFileHooks(file, {});
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root, { limits: { fileBytes: 2 } }), /SOURCE_FILE_BYTE_BOUND/));
+  assert.equal(control.bytes(), 0); snapshotClosed(control);
+});
+test('selected source reserves native Git capture headroom inside the shared byte budget before dispatch', t => {
+  const root = snapshotFixture(t), run = args => execFileSync('git', args, { cwd: root });
+  const bytes = 65537 + 12 + 2 * run(['rev-parse', 'HEAD']).length + 2 * run(['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'apps/mobile']).length;
+  assert.equal(sourceSnapshot(root, { limits: { bytes } }).inputFileCount, 2);
+  const original = require('node:child_process').spawnSync; let calls = 0;
+  snapshotHooks({ spawnSync: (...args) => { calls++; return original(...args); } }, () => assert.throws(() => sourceSnapshot(root, { limits: { bytes: bytes - 1 } }), /SOURCE_GIT_OUTPUT_RESERVE_REQUIRED/));
+  assert.equal(calls, 5); // Final empty status command is refused before spawn.
+});
+test('selected source accounts both captured streams even when the actual child exits unsuccessfully', t => {
+  const root = snapshotFixture(t), original = require('node:child_process').spawnSync;
+  snapshotHooks({ spawnSync: (file, args, options) => original(process.execPath, ['--eval', 'const fs=require("node:fs");fs.writeSync(1,Buffer.alloc(500));fs.writeSync(2,Buffer.alloc(501));process.exit(7);'], options) }, () => {
+    assert.throws(() => sourceSnapshot(root), error => error.code === 'SOURCE_GIT_COMMAND_REFUSED'
+      && error.gitExitCode === 7 && error.stdoutBytes === 500 && error.stderrBytes === 501
+      && error.capturedBytes === 1001 && error.sourceBytesRead === 1001);
+  });
+});
+test('selected source bounds an actual overflowing child inside the Git ceiling including its native read chunk', t => {
+  const root = snapshotFixture(t), original = require('node:child_process').spawnSync; let captured = 0;
+  snapshotHooks({ spawnSync: (file, args, options) => {
+    assert.equal(options.maxBuffer + 65536, SOURCE_SNAPSHOT_LIMITS.gitBytes);
+    const result = original(process.execPath, ['--eval', 'const fs=require("node:fs");fs.writeSync(1,Buffer.alloc(2*1024*1024));fs.writeSync(2,Buffer.alloc(2*1024*1024));'], options);
+    captured = (result.stdout?.length ?? 0) + (result.stderr?.length ?? 0); return result;
+  } }, () => assert.throws(() => sourceSnapshot(root), error => error.code === 'SOURCE_GIT_COMMAND_REFUSED'
+    && error.gitErrorCode === 'ENOBUFS' && error.capturedBytes === captured));
+  assert.ok(captured > 0 && captured <= SOURCE_SNAPSHOT_LIMITS.gitBytes);
+});
+test('selected source rejects root files and cap increases before Git or source payload reads', t => {
+  const root = snapshotFixture(t), original = require('node:child_process').spawnSync; let calls = 0;
+  snapshotHooks({ spawnSync: (...args) => { calls++; return original(...args); } }, () => {
+    assert.throws(() => sourceSnapshot(path.join(root, 'apps/mobile/one.txt')), /SOURCE_ROOT_DIRECTORY_REQUIRED/);
+    for (const [key, value] of Object.entries(SOURCE_SNAPSHOT_LIMITS)) assert.throws(() => sourceSnapshot(root, { limits: { [key]: value + 1 } }), /SOURCE_LIMIT_INCREASE_REFUSED/);
+    const version = Object.getOwnPropertyDescriptor(process.versions, 'node');
+    try { Object.defineProperty(process.versions, 'node', { ...version, value: '24.15.1' }); assert.throws(() => sourceSnapshot(root), /SOURCE_GIT_RUNTIME_REQUIRED/); }
+    finally { Object.defineProperty(process.versions, 'node', version); }
+  }); assert.equal(calls, 0);
+});
+test('selected source binds the opened descriptor before bytes when its pathname is replaced', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt'); let changed = false;
+  const control = snapshotFileHooks(file, { fstat: value => { if (!changed) { changed = true; renameSync(file, file + '.retained'); writeFileSync(file, 'bad'); } return value; } });
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_NAMED_FD_CHANGED/));
+  assert.equal(control.bytes(), 0); snapshotClosed(control);
+});
+test('selected source refuses a late parent link to the same opened leaf before bytes', t => {
+  const root = snapshotFixture(t, { 'apps/mobile/a/one.txt': 'one' }), parent = path.join(root, 'apps/mobile/a'), file = path.join(parent, 'one.txt'); let changed = false;
+  const control = snapshotFileHooks(file, { fstat: value => { if (!changed) { changed = true; renameSync(parent, parent + '-retained'); symlinkSync(parent + '-retained', parent, process.platform === 'win32' ? 'junction' : 'dir'); } return value; } });
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_CANONICAL_PATH_CHANGED|SOURCE_ANCESTOR_DIRECTORY_REQUIRED/));
+  assert.equal(control.bytes(), 0); snapshotClosed(control);
+});
+test('selected source reads at most declared extent plus one on growth and always closes', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt'); let changed = false;
+  const control = snapshotFileHooks(file, { beforeRead: () => { if (!changed) { changed = true; appendFileSync(file, 'extra'); } } });
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), error => error.code === 'SOURCE_FILE_GREW' && error.detectorBytes === 1));
+  assert.equal(control.bytes(), 4); snapshotClosed(control);
+});
+test('selected source refuses hardlinked ownership aliases before payload and closes', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt'); fs.linkSync(file, path.join(root, 'retained-alias'));
+  const control = snapshotFileHooks(file, {});
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_OPENED_REGULAR_OWNER_REQUIRED/));
+  assert.equal(control.bytes(), 0); snapshotClosed(control);
+});
+test('selected source closes its retained descriptor when a real payload-read call throws', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt');
+  const control = snapshotFileHooks(file, { beforeRead: () => { throw new Error('SOURCE_FIXTURE_READ_FAILURE'); } });
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_FIXTURE_READ_FAILURE/)); snapshotClosed(control);
+});
+test('selected source refuses duplicate Git names before opening a payload', t => {
+  const root = snapshotFixture(t), original = require('node:child_process').spawnSync, file = path.join(root, 'apps/mobile/one.txt'), control = snapshotFileHooks(file, {});
+  snapshotHooks({ ...control.hooks, spawnSync: (...args) => { const result = original(...args); if (args[1][0] === 'ls-files') result.stdout = Buffer.concat([result.stdout, result.stdout.subarray(0, result.stdout.indexOf(0) + 1)]); return result; } }, () => assert.throws(() => sourceSnapshot(root), /SOURCE_DUPLICATE_GIT_PATH/));
+  assert.equal(control.bytes(), 0); assert.equal(control.opened.size, 0);
+});
+test('selected source bounds directory discovery before retaining a duplicate and closes its iterator', t => {
+  const root = snapshotFixture(t), original = fs.opendirSync; let closed = false;
+  snapshotHooks({ opendirSync: (...args) => { const dir = original(...args), first = dir.readSync(); let count = 0; return { readSync: () => ++count <= 2 ? first : dir.readSync(), closeSync: () => { closed = true; dir.closeSync(); } }; } }, () => assert.throws(() => sourceSnapshot(root), /SOURCE_DUPLICATE_DIRECTORY_ENTRY/));
+  assert.equal(closed, true);
+});
+test('selected source rejects a new untracked input after the first real Git listing', t => {
+  const root = snapshotFixture(t), original = require('node:child_process').spawnSync; let changed = false;
+  snapshotHooks({ spawnSync: (...args) => { const result = original(...args); if (!changed && args[1][0] === 'ls-files') { changed = true; writeFileSync(path.join(root, 'apps/mobile/late.txt'), 'late'); } return result; } }, () => assert.throws(() => sourceSnapshot(root), /SOURCE_SELECTED_INVENTORY_CHANGED|SOURCE_ROOT_CHANGED/));
+  assert.equal(changed, true);
+});
+for (const empty of [false, true]) test(`selected source final directories reject late insertion after both Git captures: empty=${empty}`, t => {
+  const root = snapshotFixture(t, { 'apps/mobile/a/one.txt': 'one', 'apps/mobile/z/two.txt': 'two' });
+  const target = path.join(root, 'apps/mobile', empty ? 'empty' : 'a'); if (empty) mkdirSync(target);
+  const originalSpawn = require('node:child_process').spawnSync, originalStat = fs.lstatSync; let status = 0, final = false, inserted = false;
+  snapshotHooks({ spawnSync: (...args) => { const result = originalSpawn(...args); if (args[1][0] === 'status' && ++status === 2) final = true; return result; }, lstatSync: (...args) => {
+    if (final && !inserted && args[0] === path.join(root, 'apps/mobile/z/two.txt')) { inserted = true; writeFileSync(path.join(target, 'late.txt'), 'late'); }
+    return originalStat(...args);
+  } }, () => assert.throws(() => sourceSnapshot(root), /SOURCE_FINAL_DIRECTORY_CHANGED/));
+  assert.equal(inserted, true);
+});
+test('selected source checks its shared deadline immediately after a Git response before any payload', t => {
+  const root = snapshotFixture(t), originalSpawn = require('node:child_process').spawnSync, descriptor = Object.getOwnPropertyDescriptor(performance, 'now'), now = performance.now.bind(performance), file = path.join(root, 'apps/mobile/one.txt'), control = snapshotFileHooks(file, {});
+  try { snapshotHooks({ ...control.hooks, spawnSync: (...args) => { const result = originalSpawn(...args); if (args[1][0] === 'ls-files') Object.defineProperty(performance, 'now', { configurable: true, value: () => now() + 6000 }); return result; } }, () => assert.throws(() => sourceSnapshot(root), /SOURCE_DEADLINE/)); }
+  finally { if (descriptor) Object.defineProperty(performance, 'now', descriptor); else delete performance.now; }
+  assert.equal(control.bytes(), 0); assert.equal(control.opened.size, 0);
+});
+test('selected source Windows dev-zero compatibility never admits a nonzero mismatch or final named-frame drift', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt'), platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const fake = (value, dev) => new Proxy(value, { get: (target, key, receiver) => key === 'dev' ? dev : Reflect.get(target, key, receiver) });
+  try {
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    let control = snapshotFileHooks(file, { lstat: value => fake(value, 0n) });
+    snapshotHooks(control.hooks, () => assert.equal(sourceSnapshot(root).inputFileCount, 2)); snapshotClosed(control);
+    control = snapshotFileHooks(file, { lstat: value => fake(value, value.dev + 1n) });
+    snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_NAMED_FD_CHANGED/)); assert.equal(control.bytes(), 0); snapshotClosed(control);
+    let calls = 0; control = snapshotFileHooks(file, { lstat: value => fake(value, ++calls >= 5 ? value.dev : 0n) });
+    snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_FINAL_FILE_CHANGED/)); snapshotClosed(control);
+  } finally { Object.defineProperty(process, 'platform', platform); }
 });
 
 test('Android public config is marker-enforced, exact-source and leaves iOS defaults intact', (t) => {

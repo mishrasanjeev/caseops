@@ -7,6 +7,24 @@ missing-artifact error is downstream, not a dependency vulnerability verdict.
 Fresh Windows execution is still required. Mac controls do not certify Windows
 ACLs or the Windows installed dependency graph.
 
+The later published `75196` Windows attempt returned the fixed diagnostic
+`HOST_TRUST_WINDOWS_ACL_TIMEOUT` after about 5.3 seconds, before npm or test
+bodies. This establishes timeout, not which operation consumed the interval.
+That original run is retained separately from the generic `df4b299a` refusal.
+
+The replacement keeps Windows PowerShell 5.1 and the existing five-second
+query/twenty-second helper bounds. It uses the Framework
+[File.GetAccessControl](https://learn.microsoft.com/en-us/dotnet/api/system.io.file.getaccesscontrol?view=netframework-4.8.1)
+and Directory equivalent with only `Access,Owner` sections. It reads explicit
+and inherited ACEs as SIDs, with the same writer mask and owner predicate.
+It uses no `Get-Acl`, module-import or JSON-formatting cmdlet. Four fixed
+milestones describe script entry and completed ACL, identity and rule reads;
+they contain no path, SID, account or environment data. Failure remains closed,
+including missing/malformed progress. A timeout with no marker remains an
+observation, not proof that the script never started. Every file has a fresh
+metadata/ACL observation; no result is cached. Actual Windows performance and
+ACL acceptance require a fresh hosted run.
+
 The existing Windows owner check only accepted `WindowsIdentity.User`.
 [Microsoft documents `WindowsIdentity.Owner`](https://learn.microsoft.com/en-us/dotnet/api/system.security.principal.windowsidentity.owner)
 as the token's default owner SID for newly created objects; it can identify a

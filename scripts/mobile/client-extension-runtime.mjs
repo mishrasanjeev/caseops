@@ -199,7 +199,7 @@ async function captureTreeAsync(root,{maxEntries=50000,maxBytes=536870912,timeou
   assert.ok(Number.isSafeInteger(maxBytes)&&maxBytes>0&&maxBytes<=536870912);
   assert.ok(Number.isSafeInteger(timeoutMs)&&timeoutMs>0&&timeoutMs<=5000);
   const deadline=performance.now()+timeoutMs,buffers=Array.from({length:4},()=>Buffer.alloc(65536));
-  const jobs=new Set(),waiters=new Set(),cleanupErrors=[];let charged=0,bytes=0,reserved=0,failure,result;
+  const jobs=new Set(),waiters=new Set(),cleanupErrors=[];let charged=0,bytes=0,reserved=0,pendingOpens=0,failure,result;
   const wake=()=>{const waiting=[...waiters];waiters.clear();for(const resolve of waiting)resolve();};
   const fail=error=>{failure??=error;wake();};
   const check=()=>{if(failure)throw failure;assert.ok(performance.now()<deadline,'CX_COMPLETE_TREE_DEADLINE');};
@@ -241,6 +241,26 @@ async function captureTreeAsync(root,{maxEntries=50000,maxBytes=536870912,timeou
       try{fs.read(fd,buffer,0,width,null,done);}catch(error){done(error,0);}
     });
   }
+  const openAsync=file=>new Promise((resolve,reject)=>{
+    check();assert.ok(jobs.size+pendingOpens<4,'CX_CAPTURE_FOUR_FILE_JOBS_REQUIRED');pendingOpens++;
+    let completed=false;
+    const unknown=error=>{cleanupErrors.push(error);fail(error);};
+    const done=(error,fd)=>{
+      if(completed){unknown(new Error('CX_CAPTURE_OPEN_CALLBACK_REPEATED'));return;}completed=true;pendingOpens--;
+      if(error){
+        if(fd!==undefined&&fd!==null&&fd!==-1){cleanupErrors.push(new Error('CX_CAPTURE_OPEN_ACK_UNCERTAIN'));fail(error);}
+        // The caller still owns the reviewed symlink/Windows-directory
+        // fallback classification for an ordinary no-descriptor error.
+        reject(error);return;
+      }
+      if(!Number.isInteger(fd)||fd<0){const error=new Error('CX_CAPTURE_OPEN_ACK_UNCERTAIN');unknown(error);reject(error);return;}
+      // Always transfer a successful lease into the caller's owned finally,
+      // even when another job or the timer has already refused the capture.
+      resolve(fd);
+    };
+    try{fs.open(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0),done);}
+    catch(error){unknown(error);done(error);}
+  });
   const canonicalAsync=file=>new Promise((resolve,reject)=>{
     let completed=false;
     const done=(error,value)=>{
@@ -250,6 +270,11 @@ async function captureTreeAsync(root,{maxEntries=50000,maxBytes=536870912,timeou
     };
     try{check();(fs.realpath.native??fs.realpath)(file,done);}catch(error){done(error);}
   });
+  const safeIdentity=named=>{
+    const numbers={};
+    for(const key of identityFields){const value=named[key],number=Number(value);if(!Number.isSafeInteger(number)||BigInt(number)!==value)return undefined;numbers[key]=number;}
+    return Object.freeze(numbers);
+  };
   async function readLeaf(file,fd,opened,openedFrame,named,namedFrame,namespace,buffer) {
     admitOpenedRegular(opened,maxBytes,openedFrame);
     assert.ok(named.isFile()&&!named.isSymbolicLink());assertClientNamedDescriptor(namedFrame,openedFrame);
@@ -276,24 +301,25 @@ async function captureTreeAsync(root,{maxEntries=50000,maxBytes=536870912,timeou
     const externalFence=()=>{check();assert.deepEqual(canonicalParents(root),ancestors,'CX_COMPLETE_TREE_ROOT_NAMESPACE_CHANGED');};
     async function inventory() {
       const rows=[],states=new Map(),scheduled=new Set(),todo=[];externalFence();
-      const namespace=file=>{
-        check();assert.equal(canonical(file),file,'CX_CANONICAL_RUNTIME_NAMESPACE_REQUIRED');
-        if(file!==root)for(let parent=path.dirname(file);;parent=path.dirname(parent)){
-          check();const state=states.get(parent);assert.ok(state?.kind==='directory','CX_TREE_PARENT_NOT_ADMITTED');
-          const value=fs.lstatSync(parent,{bigint:true});assert.ok(value.isDirectory()&&!value.isSymbolicLink());
-          for(const key of identityFields)assert.equal(value[key],state.named[key],'CX_TREE_PARENT_IDENTITY_CHANGED');
-          if(parent===root)break;
+      const liveParents=file=>{
+        if(file!==root){
+          const parent=path.dirname(file),admitted=states.get(parent);assert.ok(admitted?.kind==='directory','CX_TREE_PARENT_NOT_ADMITTED');
+          let link=admitted.parentChain;assert.equal(link.path,parent,'CX_TREE_PARENT_NOT_ADMITTED');
+          for(;link;link=link.parent){
+            check();
+            // Only admitted primitive paths/baselines are retained. Every call
+            // still observes each live parent, in the same child-to-root order.
+            const value=link.numeric?fs.lstatSync(link.path):fs.lstatSync(link.path,{bigint:true});assert.ok(value.isDirectory()&&!value.isSymbolicLink());
+            for(const key of identityFields){
+              const actual=value[key];
+              if(link.numeric&&!Number.isSafeInteger(actual))assert.ok(false,'CX_TREE_PARENT_IDENTITY_UNSAFE');
+              if(!Object.is(actual,link.expected[key]))assert.fail('CX_TREE_PARENT_IDENTITY_CHANGED');
+            }
+          }
         }
       };
-      const fileNamespace=async file=>{
-        check();assert.equal(await canonicalAsync(file),file,'CX_CANONICAL_RUNTIME_NAMESPACE_REQUIRED');
-        if(file!==root)for(let parent=path.dirname(file);;parent=path.dirname(parent)){
-          check();const state=states.get(parent);assert.ok(state?.kind==='directory','CX_TREE_PARENT_NOT_ADMITTED');
-          const value=fs.lstatSync(parent,{bigint:true});assert.ok(value.isDirectory()&&!value.isSymbolicLink());
-          for(const key of identityFields)assert.equal(value[key],state.named[key],'CX_TREE_PARENT_IDENTITY_CHANGED');
-          if(parent===root)break;
-        }
-      };
+      const namespace=file=>{check();assert.equal(canonical(file),file,'CX_CANONICAL_RUNTIME_NAMESPACE_REQUIRED');liveParents(file);};
+      const fileNamespace=async file=>{check();assert.equal(await canonicalAsync(file),file,'CX_CANONICAL_RUNTIME_NAMESPACE_REQUIRED');liveParents(file);};
       const schedule=file=>{assert.ok(!scheduled.has(file),'CX_DUPLICATE_TREE_ENTRY');charge();scheduled.add(file);todo.push(file);};
       const launch=(file,fd,opened,openedFrame,named,namedFrame)=>{
         const buffer=buffers.pop();assert.ok(buffer&&jobs.size<4,'CX_CAPTURE_FOUR_FILE_JOBS_REQUIRED');const job={};jobs.add(job);
@@ -310,7 +336,7 @@ async function captureTreeAsync(root,{maxEntries=50000,maxBytes=536870912,timeou
           const file=todo.pop(),relative=path.relative(root,file);let fd,opened,named,openedFrame,namedFrame;
           try{
             try{
-              fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0));
+              fd=await openAsync(file);check();
               opened=fs.fstatSync(fd,{bigint:true});openedFrame=rawMeta(opened);
               if(file===root)assert.ok(opened.isDirectory(),'CX_TREE_ROOT_DIRECTORY_REQUIRED');
               if(opened.isFile())admitOpenedRegular(opened,maxBytes,openedFrame);
@@ -347,11 +373,18 @@ async function captureTreeAsync(root,{maxEntries=50000,maxBytes=536870912,timeou
               assert.ok(opened?.isFile()&&named.isFile(),'CX_REGULAR_TREE_INPUT_REQUIRED');launch(file,fd,opened,openedFrame,named,namedFrame);fd=undefined;continue;
             }
             assertMetadataEqual(fs.lstatSync(file,{bigint:true}),namedFrame);if(opened)assertMetadataEqual(fs.fstatSync(fd,{bigint:true}),openedFrame);
-            states.set(file,{named:namedFrame,kind:row.kind,target:row.target});rows.push(row);
+            const numericIdentity=row.kind==='directory'?safeIdentity(namedFrame):undefined;
+            let parentChain;
+            if(row.kind==='directory'){
+              const parent=file===root?null:states.get(path.dirname(file));
+              assert.ok(file===root||parent?.kind==='directory','CX_TREE_PARENT_NOT_ADMITTED');
+              parentChain=Object.freeze({path:file,expected:numericIdentity??namedFrame,numeric:numericIdentity!==undefined,parent:parent?.parentChain??null});
+            }
+            states.set(file,{named:namedFrame,kind:row.kind,target:row.target,numericIdentity,parentChain});rows.push(row);
           }catch(error){fail(error);}finally{if(fd!==undefined)close(fd);}
           check();
         }
-        await drain();check();assert.ok(states.has(root),'CX_COMPLETE_TREE_ROOT_REQUIRED');externalFence();
+        await drain();check();assert.equal(pendingOpens,0);assert.ok(states.has(root),'CX_COMPLETE_TREE_ROOT_REQUIRED');externalFence();
         rows.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);return {rows,states};
       }catch(error){fail(error);await drain();throw failure;}
     }
@@ -411,32 +444,36 @@ function captureCounts(value,count) {
 function treeMaterial(tree,check) {
   check();
   exactKeys(tree,['schemaVersion','observations','root','entries','bytes','chargedBytes','chargedEntries','complete']);
-  assert.ok(tree.schemaVersion===2&&tree.observations===2&&tree.complete===true,'CX_FRESH_TWO_OBSERVATION_TREE_REQUIRED');
-  text(tree.root);assert.ok(path.isAbsolute(tree.root)&&path.resolve(tree.root)===tree.root,'CX_NORMALIZED_RUNTIME_PATH_REQUIRED');assert.ok(Array.isArray(tree.entries));
-  captureCounts(tree,tree.entries.length);
-  const chunks=[];let extent=0,fileBytes=0,names=0,previous;
+  const schemaVersion=tree.schemaVersion,observations=tree.observations,complete=tree.complete,root=tree.root,entries=tree.entries,logicalBytes=tree.bytes,chargedBytes=tree.chargedBytes,chargedEntries=tree.chargedEntries;
+  assert.ok(schemaVersion===2&&observations===2&&complete===true,'CX_FRESH_TWO_OBSERVATION_TREE_REQUIRED');
+  text(root);assert.ok(path.isAbsolute(root)&&path.resolve(root)===root,'CX_NORMALIZED_RUNTIME_PATH_REQUIRED');assert.ok(Array.isArray(entries));const count=entries.length;
+  captureCounts({bytes:logicalBytes,chargedBytes,chargedEntries},count);
+  const chunks=[],numeric=/^-?(?:0|[1-9][0-9]{0,39})$/,metadataKeys=fields.map(key=>JSON.stringify(key)+':"'),sizeIndex=fields.indexOf('size');let extent=0,fileBytes=0,names=0,previous;
   const emit=token=>{check();const n=Buffer.byteLength(token);assert.ok(extent+n<=CLIENT_TREE_AUDIT_MAX_BYTES,'CX_TREE_MANIFEST_OUTPUT_BOUND');chunks.push(token);extent+=n;};
   const string=value=>{check();text(value);emit(JSON.stringify(value));};
-  emit('{"schemaVersion":2,"observations":2,"root":');string(tree.root);emit(',"entries":[');
-  for(let i=0;i<tree.entries.length;i++) {
-    check();const row=tree.entries[i];assert.ok(['directory','file','symlink'].includes(row?.kind),'CX_TREE_ROW_KIND_REQUIRED');
-    exactKeys(row,['path','kind','metadata',row.kind==='directory'?'names':row.kind==='file'?'sha256':'target']);
-    text(row.path);assert.ok(i===0?row.path===''&&row.kind==='directory':row.path!==''&&previous<row.path,'CX_TREE_ORDER_REQUIRED');previous=row.path;
-    exactKeys(row.metadata,fields);for(const key of fields)assert.ok(typeof row.metadata[key]==='string'&&/^-?(?:0|[1-9][0-9]{0,39})$/.test(row.metadata[key]),'CX_TREE_METADATA_REQUIRED');
-    if(i)emit(',');emit('{"path":');string(row.path);emit(',"kind":');string(row.kind);emit(',"metadata":{');
-    for(let k=0;k<fields.length;k++){if(k)emit(',');string(fields[k]);emit(':');string(row.metadata[fields[k]]);}emit('}');
-    if(row.kind==='directory') {
-      assert.ok(Array.isArray(row.names)&&row.names.length<tree.entries.length,'CX_TREE_DIRECTORY_COUNTS_REQUIRED');names+=row.names.length;assert.ok(names<tree.entries.length,'CX_TREE_DIRECTORY_COUNTS_REQUIRED');emit(',"names":[');
-      for(let n=0;n<row.names.length;n++){if(n)emit(',');string(row.names[n]);assert.ok(row.names[n]!==''&&(n===0||row.names[n-1]<row.names[n]),'CX_TREE_ORDER_REQUIRED');}emit(']');
-    } else if(row.kind==='file') {
-      const size=Number(row.metadata.size);integer(size,268435456);fileBytes+=size;assert.ok(fileBytes<=tree.bytes,'CX_TREE_FILE_BYTES_REQUIRED');assert.match(row.sha256,/^[a-f0-9]{64}$/);emit(',"sha256":');string(row.sha256);
-    } else { emit(',"target":');string(row.target); }
+  emit('{"schemaVersion":2,"observations":2,"root":');string(root);emit(',"entries":[');
+  for(let i=0;i<count;i++) {
+    check();const row=entries[i],kind=row?.kind;assert.ok(['directory','file','symlink'].includes(kind),'CX_TREE_ROW_KIND_REQUIRED');
+    exactKeys(row,['path','kind','metadata',kind==='directory'?'names':kind==='file'?'sha256':'target']);
+    const rowPath=row.path,metadata=row.metadata;text(rowPath);assert.ok(i===0?rowPath===''&&kind==='directory':rowPath!==''&&previous<rowPath,'CX_TREE_ORDER_REQUIRED');previous=rowPath;
+    exactKeys(metadata,fields);
+    // Retain each checked numeric primitive once. Only fixed ASCII keys and
+    // validated decimal strings enter this bounded chunk; names still stream.
+    const values=fields.map(key=>{check();const value=metadata[key];assert.ok(typeof value==='string'&&numeric.test(value),'CX_TREE_METADATA_REQUIRED');return value;});
+    const metadataToken=',"metadata":{'+values.map((value,k)=>metadataKeys[k]+value+'"').join(',')+'}';assert.ok(Buffer.byteLength(metadataToken)<=512,'CX_TREE_METADATA_CHUNK_BOUND');
+    if(i)emit(',');emit('{"path":');string(rowPath);emit(',"kind":');string(kind);emit(metadataToken);
+    if(kind==='directory') {
+      const rowNames=row.names;assert.ok(Array.isArray(rowNames),'CX_TREE_DIRECTORY_COUNTS_REQUIRED');const length=rowNames.length;assert.ok(Number.isSafeInteger(length)&&length>=0&&length<count,'CX_TREE_DIRECTORY_COUNTS_REQUIRED');names+=length;assert.ok(names<count,'CX_TREE_DIRECTORY_COUNTS_REQUIRED');emit(',"names":[');let previousName;
+      for(let n=0;n<length;n++){if(n)emit(',');const name=rowNames[n];string(name);assert.ok(name!==''&&(n===0||previousName<name),'CX_TREE_ORDER_REQUIRED');previousName=name;}emit(']');
+    } else if(kind==='file') {
+      const size=Number(values[sizeIndex]),digest=row.sha256;integer(size,268435456);fileBytes+=size;assert.ok(fileBytes<=logicalBytes,'CX_TREE_FILE_BYTES_REQUIRED');assert.match(digest,/^[a-f0-9]{64}$/);emit(',"sha256":');string(digest);
+    } else { const target=row.target;emit(',"target":');string(target); }
     emit('}');
   }
-  assert.equal(names,tree.entries.length-1,'CX_TREE_DIRECTORY_COUNTS_REQUIRED');assert.equal(fileBytes,tree.bytes,'CX_TREE_FILE_BYTES_REQUIRED');
-  emit('],"bytes":'+tree.bytes+',"chargedBytes":'+tree.chargedBytes+',"chargedEntries":'+tree.chargedEntries+',"complete":true}\n');
+  assert.equal(names,count-1,'CX_TREE_DIRECTORY_COUNTS_REQUIRED');assert.equal(fileBytes,logicalBytes,'CX_TREE_FILE_BYTES_REQUIRED');
+  emit('],"bytes":'+logicalBytes+',"chargedBytes":'+chargedBytes+',"chargedEntries":'+chargedEntries+',"complete":true}\n');
   check();const bytes=Buffer.from(chunks.join(''));check();assert.equal(bytes.length,extent);
-  const commitment={schemaVersion:3,kind:'caseops-client-tree-commitment',captureSchemaVersion:2,observations:2,complete:true,root:tree.root,entryCount:tree.entries.length,bytes:tree.bytes,chargedEntries:tree.chargedEntries,chargedBytes:tree.chargedBytes,manifest:{encoding:TREE_ENCODING,sha256:sha(bytes),extent}};
+  const commitment={schemaVersion:3,kind:'caseops-client-tree-commitment',captureSchemaVersion:2,observations:2,complete:true,root,entryCount:count,bytes:logicalBytes,chargedEntries,chargedBytes,manifest:{encoding:TREE_ENCODING,sha256:sha(bytes),extent}};
   check();return {bytes,commitment};
 }
 
@@ -456,7 +493,7 @@ export function assertClientTreeCommitment(value,root) {
 function capturedRuntimeFile(tree,file,check) {
   check();assert.ok(typeof file==='string'&&path.isAbsolute(file)&&path.resolve(file)===file&&file.startsWith(tree.root+path.sep),'CX_CANONICAL_CAPTURED_RUNTIME_FILE_REQUIRED');
   assert.equal(canonical(file),file,'CX_CANONICAL_CAPTURED_RUNTIME_FILE_REQUIRED');
-  const row=tree.entries.find(value=>value.path===path.relative(tree.root,file));
+  const relative=path.relative(tree.root,file),row=tree.entries.find(value=>value.path===relative);
   assert.equal(row?.kind,'file','CX_CAPTURED_RUNTIME_REGULAR_FILE_REQUIRED');
   const named=fs.lstatSync(file,{bigint:true});assert.ok(named.isFile()&&!named.isSymbolicLink(),'CX_CAPTURED_RUNTIME_REGULAR_FILE_REQUIRED');
   assertClientNamedDescriptor(named,Object.fromEntries(fields.map(key=>[key,BigInt(row.metadata[key])])));check();
