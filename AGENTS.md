@@ -3443,3 +3443,14 @@ requirements when using the fallback.
   A rendered map alone leaves the exact-artifact runtime hashes stale. Review
   generated differences to preserve admitted classes and policy decisions;
   updating fingerprints is not new retention or disposition authority.
+- Attribute a browser deadline to measured phases. A fast bootstrap HTTP response
+  can be followed by an unbounded synchronous fixture process; HTTP success does
+  not bound setup or prove a later read is slow. Keep local fixture grants
+  asynchronous, lightweight, scope-checked and independently time-bounded. Prove
+  ORM-default parity on both databases, fatal malformed output and child reaping,
+  then replay the unchanged complete journey without extending its deadline.
+- A lock timeout near a loading failure does not identify its holder or caller.
+  Preserve the failed trace, observe actual waiter-to-holder edges, event-loop,
+  pool and session-close timing, and distinguish a controlled negative result
+  from reproducing the historical failure. Do not patch shared transaction or
+  cancellation behavior on a temporal correlation alone.

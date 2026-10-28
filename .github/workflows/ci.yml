@@ -514,6 +514,13 @@ jobs:
         working-directory: apps/api
         run: uv sync --all-extras --dev
 
+      - name: Verify local IP fixture protocol and database parity
+        timeout-minutes: 4
+        run: >-
+          uv run --project apps/api --python 3.13 python
+          scripts/e2e_fixture_regression.py
+          --results-directory test-results/e2e-fixtures
+
       # Keep the browser download separate from runtime verification. The
       # latter must be deterministic and must not mutate the hosted runner.
       - name: Install Chromium browser for Playwright

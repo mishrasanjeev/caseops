@@ -1,5 +1,26 @@
 # Strict Enterprise Gap Tasklist
 
+## October 28 Completed Native Gate, Failed Browser Gate
+
+**NO-GO; browser replacement and production verification remain open.** The
+5df10f35 migration/index replacement now passes the full3483-case PostgreSQL
+inventory,10449phases,0failures/skips/retries, with complete source/identity
+reconciliation. CI40606343710, Security40606343777 and CodeQL40606343729 pass.
+Docker13 nevertheless ended after desktop shard1/2:308P/4F/5configured skips/
+2unexecuted of319;321other browser cases not run. These facts supersede the
+older8f8b/6cc/942 statuses below without erasing their original failures.
+
+Three patent journeys consumed substantial time in an unbounded synchronous
+entitlement fixture. Its scoped asynchronous replacement has18process and
+51SQLite/51PostgreSQL component cases passed. The actual integrated18/51gate
+also passes with source and owned-tree reconciliation; default CI/full Docker
+and application replay remain pending. Keep the separate module-loading
+failure open: neither the natural38.8s pass nor controlled directed-lock
+cancellation checks reproduce it. Reference
+`bugfix-ip-fixture-budget-2026-10-28.md` for ownership and closure boundaries.
+No shared authentication/session/lifecycle fence, legal record or paid-provider
+policy is weakened. MainB994 and routedF49 remain unchanged at12:21UTC.
+
 ## October 28 Provenance Index Replacement
 
 **NO-GO; replacement unverified.** Current8f8b65d7 frontend05 passes1907/1907,

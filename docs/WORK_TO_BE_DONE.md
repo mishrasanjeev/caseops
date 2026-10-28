@@ -1,5 +1,41 @@
 # CaseOps  - Work To Be Done
 
+## October 28 Docker13 Completion And Browser Replacement
+
+This checkpoint supersedes the older candidate descriptions below. At5df10f35,
+full canonical PostgreSQL acceptance completed3483passes/10449phases with no
+failures, skips or retries and identical before/after source fingerprints.
+Feature CI40606343710, Security40606343777 and CodeQL40606343729 succeeded.
+Nevertheless Docker13 is **NO-GO**: desktop shard1/2 selected319 and finished
+308passed/4failed/5configured skips/2serially unexecuted;321other intended
+browser cases did not execute. No whole-release pass or production upgrade.
+
+The three patent failures include measured unbounded synchronous local grant
+gaps74.167s,47.105s and35.152s, not slow bootstrap HTTPs. The replacement local
+fixture is being integrated with explicit scope/default/foreign-key parity,
+asynchronous process supervision and no retries or deadline increases. Its
+proposal passed18process,51SQLite and51PostgreSQL component cases. The actual
+integrated18/51runner now passes with source and owned-tree reconciliation.
+Unchanged dated patent workflows, complete Docker and new CI remain
+unverified. See `bugfix-ip-fixture-budget-2026-10-28.md`.
+
+The Judge aliases loading failure remains unproved. An isolated unchanged
+natural walk and six-case accessibility/module prefix passed; a directed
+Company-lock/cancel overlap retained nine
+successful HTTP checks, including21ms health and four reads within501ms. Those
+negative reproductions do not close the historical failure. Do not speculate a
+shared transaction fix or rerun until a failure is hidden.
+
+Read-only12:21UTC Cloud Run metadata confirms API00504-478/web00481-qbn still
+route100%toF49; canonical main isB994. Both original Excel summaries were
+published as INTERIM04/NO-GO with exact Docker13 results, seven preserved
+formulas and unchanged44tracked-row verdicts36fixed/7partial/1inconclusive.
+IP15-018 remains partial pending actual new production desktop/mobile15s CSV
+acceptance. Legal/source, deferred MFA/Ram cleanup and provider holds remain.
+SEO automation was observed PAUSED; restore the owner's daily program after
+critical release coordination, without inventing a new GSC audit. Mobile558,
+MacA2A, native-security and read-through0008 remain separately owned.
+
 ## October 28 Replacement Release Is Still Blocked
 
 PR567/6cc has green Security and CodeQL but one actual CI PostgreSQL failure
