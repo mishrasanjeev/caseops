@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 28 Outer CI Deadline Is Not Accepted Coverage
+
+**NO-GO.** DE333's16 PostgreSQL shards retain3483 passing cases/10449 phases,
+but shard15 was cancelled at12minutes and its aggregate failed closed. Keep
+that job outcome distinct from its successful pytest/upload steps. The proposed
+24-shard complete selection lowers per-job work without changing12minutes,
+concurrency4, exact-once inventory, phase/JUnit proof or product deadlines.
+Current-cost forecast384.334s maximum is not a new wall-clock measurement.
+Complete focused guards/launcher, fresh CI and full Docker replacement remain
+required. Docker14 was intentionally interrupted before source edits and retains
+its incomplete phases/fixtures; zero outer-shell exit is not release acceptance.
+
 ## October 28 Completed Native Gate, Failed Browser Gate
 
 **NO-GO; browser replacement and production verification remain open.** The

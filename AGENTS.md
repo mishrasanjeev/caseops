@@ -3454,3 +3454,9 @@ requirements when using the fallback.
   pool and session-close timing, and distinguish a controlled negative result
   from reproducing the historical failure. Do not patch shared transaction or
   cancellation behavior on a temporal correlation alone.
+- A GitHub job can be cancelled at its outer deadline after pytest and artifact
+  upload report success. Read the job annotation and reconcile every retained
+  case/phase before diagnosing assertions. Reduce per-job work with a complete,
+  disjoint shard plan; retain the original deadline, concurrency and exact-once
+  aggregate. A cancelled CI or interrupted Docker wrapper remains incomplete
+  even if its tests, cleanup, or outer shell return zero.

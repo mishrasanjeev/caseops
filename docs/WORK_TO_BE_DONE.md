@@ -1,5 +1,28 @@
 # CaseOps  - Work To Be Done
 
+## October 28 CI Capacity Replacement
+
+DE333 CI40698272945 is cancelled, not green. Its PostgreSQL shard15 hit the
+12-minute job boundary after pytest, report upload and cleanup reported success;
+the aggregate correctly refused its cancelled prerequisite. Retained artifacts
+independently reconcile all3483 cases/10449 ordered phases and matching JUnit,
+but that is not an accepted CI run. Security8/8 and CodeQL3/3 passed separately.
+
+The unchanged partition algorithm now distributes the complete CI selection
+across24 rather than16 shards, preserving12minutes, concurrency4, fail-fastfalse,
+all phase/report guards and the browser dependency. Replaying observed costs
+estimates maximum phase work649.065s ->384.334s, excluding overhead/variance;
+actual new CI headroom still requires execution. Static guards, the actual
+24-child synthetic launcher and exact-once/error cases are included in replay.
+
+Docker14's69 fixture preflight passed, then its obsolete DE333 native run was
+explicitly interrupted for this changed candidate. It retains338 complete call
+passes,339 setup/338 teardown passes, session exit2 and interrupted/reaped receipt.
+The wrapper's exit0 is not acceptance: no full native/browser completion or PASS.
+All owned processes and Compose resources were cleaned; original evidence stays.
+New frozen-source full Docker and CI are required. No merge/deploy or new GSC
+audit is claimed; both original workbook snapshots remain INTERIM04/NO-GO.
+
 ## October 28 Docker13 Completion And Browser Replacement
 
 This checkpoint supersedes the older candidate descriptions below. At5df10f35,

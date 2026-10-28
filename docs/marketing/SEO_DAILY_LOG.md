@@ -8,6 +8,15 @@ traffic, a backlink, or a conversion.
 
 ## 2026-10-28 13:14 UTC - Release Gate, Not A Search Audit
 
+Later engineering correction: DE333 CI40698272945 was cancelled at the outer
+12-minute PostgreSQL shard15 job boundary. Retained reports reconcile3483 cases
+and10449 passing phases, but the aggregate correctly refuses a cancelled job.
+Security and CodeQL passed separately. A24-shard replacement keeps the same
+deadline/concurrency/coverage guards; its capacity forecast is not execution.
+Docker14's69 preflight passed, then the obsolete candidate was explicitly
+interrupted before these edits. It remains incomplete, not a new public audit,
+release pass or deployment. The source requires another frozen full replacement.
+
 J19/M21/US-063. No fresh GSC or production public-content audit is claimed.
 The October 27 browser safety stop remains authoritative. The preferred GSC
 account remains `sanjeev@orchestrum.in`; its signed-in identity was not newly
