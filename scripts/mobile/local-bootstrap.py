@@ -17,7 +17,6 @@ import subprocess
 import sys
 import time
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_CACHE = Path.home() / ".cache/caseops-mobile/local-docker-20261025"
@@ -556,7 +555,7 @@ def main(args):
             config["CASEOPS_MOBILE_WEB_SHA"] = source["web"]["head"] if not source["web"]["dirty"] else "unavailable"
             config["CASEOPS_MOBILE_WEB_REVISION"] = f"{config['CASEOPS_MOBILE_PROJECT']}-web-{source['web']['fingerprint'][:12]}"
             write_new(cache / f"source-resume-{stamp}.json", source)
-            command, env = compose(cache, config)
+            compose(cache, config)
             build_web(cache, config, cache / f"build-web-{stamp}.log")
             assert source == {"api": snapshot(API_PATHS), "web": snapshot(WEB_PATHS)}, "Build source changed"
             (cache / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
@@ -628,7 +627,7 @@ def main(args):
                       "platform": config["CASEOPS_MOBILE_PLATFORM"],
                       "apiOrigin": config["CASEOPS_MOBILE_API_ORIGIN"],
                       "webOrigin": config["CASEOPS_MOBILE_WEB_ORIGIN"]}), flush=True)
-    command, env = compose(cache, config)
+    compose(cache, config)
     build_web(cache, config, cache / "build-web.log")
     after = {"api": snapshot(API_PATHS), "web": snapshot(WEB_PATHS)}
     write_new(cache / "source-after.json", after)

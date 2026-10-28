@@ -22576,24 +22576,28 @@ from caseops_api.db import native_auth_models  # noqa: E402
 NativeAuthorizationCode = native_auth_models.NativeAuthorizationCode
 NativeDeviceSession = native_auth_models.NativeDeviceSession
 NativeRefreshToken = native_auth_models.NativeRefreshToken
+from caseops_api.db import account_privacy_models as _privacy_models  # noqa: E402
 from caseops_api.db import (  # noqa: E402
     matter_readthrough_page_schema_v1,  # noqa: E402, F401
     task_queue_page_schema_v1,  # noqa: E402, F401
 )
-from caseops_api.db.account_privacy_models import AccountDeletionRequest  # noqa: E402, F401
-from caseops_api.db.counsel_page_models import (  # noqa: E402, F401
-    CounselReadPage,
-    CounselReadPageDirty,
-    CounselReadPageMember,
-)
-from caseops_api.db.matter_readthrough_page_models import (  # noqa: E402, F401
-    MatterDecisionReadPage,
-    MatterHearingPackReadPage,
-    MatterOptionReadPage,
-    MatterPackItemReadPage,
-    MatterReadthroughDirty,
-    MatterRecommendationReadPage,
-)
+
+# Register these tables and retain the actual public class identities.
+AccountDeletionRequest = _privacy_models.AccountDeletionRequest
+from caseops_api.db import counsel_page_models as _counsel_models  # noqa: E402
+
+CounselReadPage = _counsel_models.CounselReadPage
+CounselReadPageDirty = _counsel_models.CounselReadPageDirty
+CounselReadPageMember = _counsel_models.CounselReadPageMember
+from caseops_api.db import matter_readthrough_page_models as _readthrough_models  # noqa: E402
+
+MatterDecisionReadPage = _readthrough_models.MatterDecisionReadPage
+MatterHearingPackReadPage = _readthrough_models.MatterHearingPackReadPage
+MatterOptionReadPage = _readthrough_models.MatterOptionReadPage
+MatterPackItemReadPage = _readthrough_models.MatterPackItemReadPage
+MatterReadthroughDirty = _readthrough_models.MatterReadthroughDirty
+MatterRecommendationReadPage = _readthrough_models.MatterRecommendationReadPage
+from caseops_api.db import task_queue_page_models as _queue_models  # noqa: E402
 from caseops_api.db.patent_proceeding_models import (  # noqa: E402, F401
     IpPatentProceedingDetail,
     IpPatentProceedingEvent,
@@ -22603,11 +22607,10 @@ from caseops_api.db.patent_prosecution_models import (  # noqa: E402, F401
     IpPatentEvidenceVersion,
     IpPatentProsecutionEvent,
 )
-from caseops_api.db.task_queue_page_models import (  # noqa: E402, F401
-    MatterTaskQueueDirty,
-    MatterTaskQueueGroup,
-    MatterTaskQueuePage,
-)
+
+MatterTaskQueueDirty = _queue_models.MatterTaskQueueDirty
+MatterTaskQueueGroup = _queue_models.MatterTaskQueueGroup
+MatterTaskQueuePage = _queue_models.MatterTaskQueuePage
 
 event.listen(Base.metadata, "after_create", task_queue_page_schema_v1.install_model_schema)
 event.listen(

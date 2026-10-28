@@ -11,7 +11,7 @@ import types
 import unittest
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
-from unittest import mock
+import unittest.mock as mock
 
 SPEC = importlib.util.spec_from_file_location(
     "host_platform_trust", Path(__file__).with_name("host-platform-trust.py")
@@ -417,14 +417,14 @@ class HostTrust(unittest.TestCase):
             with self.subTest(elapsed=elapsed), self.gradle_fixture() as state:
                 clock = [0]
 
-                def advance(row):
-                    if len(state["calls"]) == 2:
+                def advance(row, *, elapsed=elapsed, clock=clock, calls=state["calls"]):
+                    if len(calls) == 2:
                         clock[0] = elapsed
 
                 state["after"] = advance
                 output = state["root"] / "shared"
                 with mock.patch.object(
-                    trust.time, "monotonic", side_effect=lambda: clock[0]
+                    trust.time, "monotonic", side_effect=lambda clock=clock: clock[0]
                 ):
                     if elapsed < 60:
                         reference = trust.prepare_gradle_policy(

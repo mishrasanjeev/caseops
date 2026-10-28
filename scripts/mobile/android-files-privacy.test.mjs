@@ -12,7 +12,6 @@ const PRIVATE = `/data/user/0/${APP}`, PUBLIC = '/storage/emulated/0/Download';
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const environment = { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5038', PATH: '/unit/bin',
   CASEOPS_MOBILE_CORE_PASSWORD: 'SYNTHETIC_PRIVATE_VALUE_MUST_NOT_REACH_ADB' };
-const unquote = value => value.slice(1, -1).replaceAll("'\"'\"'", "'");
 
 // Explicit protocol/filesystem doubles only. No adb, VM, appdata, root command
 // or production operation is invoked by these source-contract tests.

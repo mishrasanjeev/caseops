@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { CX_BUDGETS, clientExtensionInventory } from '../../apps/mobile/e2e/client-extensions-inventory.mjs';
-import { readReference, readBytes } from '../../apps/mobile/e2e/client-extensions-contract.mjs';
+import { readReference } from '../../apps/mobile/e2e/client-extensions-contract.mjs';
 import { readV1Member } from '../../apps/mobile/e2e/v1-workflows-credentials.mjs';
 import { snapshotIosCameraPrivacy } from './ios-files-privacy.mjs';
 import { snapshotAndroidCameraPrivacy } from './android-files-privacy.mjs';

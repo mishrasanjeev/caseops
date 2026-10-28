@@ -185,7 +185,7 @@ class FrozenReadthroughPageAdmissionTests(unittest.TestCase):
             self.assertEqual(str(error), FAILURE)
             self.assertTrue(error.__suppress_context__)
             return error
-        self.fail("Invalid dependency source was admitted")
+        return self.fail("Invalid dependency source was admitted")
 
     def _closed(self, io):
         self.assertEqual(io.closed, io.opened)

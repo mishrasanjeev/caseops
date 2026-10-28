@@ -22,6 +22,12 @@ and consumes the helper buffer; a public descriptor cannot authorize new code.
 LF attributes preserve these byte contracts. `source-snapshot.mjs` includes the
 new body and host inputs in the mobile build fingerprint.
 
+Public reference creation opens a nonblocking, no-follow descriptor before
+pathname metadata. Its own size bounds determine allocation and both bounded
+reads retain owner, full metadata and namespace checks through final closure.
+The earlier check-before-open candidate and its CodeQL failure remain retained;
+source controls do not substitute for fresh analyzer or native acceptance.
+
 The child recipes use separate stores. Node gets its exact five-field H/B
 recipe (plus the one explicitly admitted QA fixture when applicable), Ruby gets
 all188 reviewed Ruby roots, and curl gets a new explicit selected-file Curl188

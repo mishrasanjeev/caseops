@@ -191,13 +191,14 @@ class Admissions(unittest.TestCase):
         workspace = copy.deepcopy(self.workspace)
         if bad_workspace:
             workspace["attachments"][0]["sha256_hex"] = "d" * 64
+        case = self
         class Client:
             headers = {"Authorization": "unit-only-never-output"}
-            def __enter__(inner): return inner
-            def __exit__(inner, *_): pass
-            def get(inner, path):
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def get(self, path):
                 actions.append(path)
-                return {"release_sha": self.core["backendSha"], "revision": self.core["backendRevision"]} if path == "/api/build" else workspace
+                return {"release_sha": case.core["backendSha"], "revision": case.core["backendRevision"]} if path == "/api/build" else workspace
         def login(_http, _credentials):
             actions.append("protected-login")
             return {"company": {"id": self.seed["companyId"]}, "membership": {"id": self.seed["membershipId"], "role": "owner"}}
@@ -334,28 +335,29 @@ class Admissions(unittest.TestCase):
 
     def test_container_tls_uses_fixed_compose_listener_and_public_dynamic_host_without_verification_bypass(self):
         events = []
+        case = self
         raw, secured = object(), object()
         class Context:
-            def wrap_socket(inner, connection, *, server_hostname):
-                self.assertIs(connection, raw)
+            def wrap_socket(self, connection, *, server_hostname):
+                case.assertIs(connection, raw)
                 events.append(("verified-hostname", server_hostname))
                 return secured
         class Response:
             status = 206
-            def read(inner, bound):
-                self.assertEqual(bound, 17)
+            def read(self, bound):
+                case.assertEqual(bound, 17)
                 return b"public-synthetic"
-            def getheaders(inner):
+            def getheaders(self):
                 return [("Cache-Control", "private, no-store")]
         class Connection:
-            def __init__(inner, host, port, timeout):
+            def __init__(self, host, port, timeout):
                 events.append(("http", host, port, timeout))
-            def request(inner, method, path, *, headers):
-                self.assertIs(inner.sock, secured)
+            def request(self, method, path, *, headers):
+                case.assertIs(self.sock, secured)
                 events.append(("request", method, path, headers))
-            def getresponse(inner):
+            def getresponse(self):
                 return Response()
-            def close(inner):
+            def close(self):
                 events.append(("closed",))
         with patch.object(admission.ssl, "create_default_context", return_value=Context()) as context, \
              patch.object(admission.socket, "create_connection", return_value=raw) as connect, \

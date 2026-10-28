@@ -69,3 +69,43 @@ refusal. It never emits SIDs, account names, paths or raw PowerShell output.
 Current-owner and writer admission remains unchanged; no existing or newly
 created object's ownership or ACL is modified. A fresh Windows observation is
 required before claiming a cause or an ownership remediation.
+
+The e674 hosted job supplied the next concrete boundary:
+`SOURCE_HELPER_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_WRITE_SAFE`.
+The original helper was owned by Builtin Administrators while the current token
+reported its user as the default owner; the DACL passed the unchanged writer
+restriction. This identifies that source input only. It does not establish the
+owner of a later output or explain how the checkout acquired that owner.
+
+The Windows CI entry now treats the two exact reviewed H/B Git blobs as public
+input data, before importing H. A separate bounded read admission permits this
+observed Administrators-owned input class only with the same safe writer set,
+full independent named/descriptor frames, namespace checks, exact size, SHA-256
+and Git-blob SHA-1. It is not a runtime owner exception. Both source files must
+pass before any source-copy payload is written. Unix keeps its original entry.
+
+The entry exclusively creates a new invocation-owned directory and two files,
+writes retained input bytes through their held descriptors, fsyncs, makes only
+those new descriptors readonly, and verifies same-descriptor readback. Every new
+object must pass the existing strict runtime owner/ACE rule; no existing object's
+owner, ACL or mode is changed. Two bounded Framework observations bind all six
+objects and their complete Access/Owner descriptor hashes. Source frames, copied
+frames and the exact two-name namespace are reconciled before return, with
+independent descriptor closure on every refusal. The retained copied H bytes are
+imported as a data URI; H and B then enforce their unchanged strict admission on
+the copied paths. Policies bind those new paths and require fresh preparation.
+The original checkout is not imported by pathname on the Windows entry.
+
+Source staging and CI preparation share the original thirty-second deadline.
+Each Framework query retains the five-second bound, and the existing helper's
+twenty-second preparation budget must remain available before it runs. Command
+files and anonymous npm configuration still use their original strict owner
+checks; the source diagnostic does not authorize relaxing those objects. Actual
+Windows acceptance remains pending a fresh hosted run. Portable filesystem and
+synthetic ACL controls establish their stated boundaries only.
+
+A close refusal is recorded by a fixed diagnostic independent of the original
+body fault. Cleanup never attaches properties to that fault, including a frozen
+Error or a primitive, and never retries an uncertain close. Every other held
+descriptor still receives its one close attempt. A close failure after an
+otherwise successful body refuses the result and purges the retained buffer.

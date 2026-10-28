@@ -66,7 +66,7 @@ class OwnerImportTests(unittest.TestCase):
         self.session.__enter__ = Mock(return_value=self.session)
         self.session.__exit__ = Mock(return_value=False)
         self.session.scalar.side_effect = self.scalar
-        self.session.scalars.side_effect = lambda query: self.note_query(query)
+        self.session.scalars.side_effect = self.note_query
         self.factory = Mock(return_value=Mock(return_value=self.session))
         self.context = Mock(side_effect=self.session_context)
         self.transition = Mock(side_effect=self.dispose)

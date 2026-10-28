@@ -436,6 +436,7 @@ class Gateway:
                 finally:
                     upstream.close()
                     record_request()
+                return None
 
             do_GET = handle_request
             do_POST = handle_request

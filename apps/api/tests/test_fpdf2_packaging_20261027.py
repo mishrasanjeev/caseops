@@ -12,8 +12,8 @@ import socket
 import tarfile
 import tempfile
 import unittest
+import unittest.mock as mock
 from pathlib import Path, PurePosixPath
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 VENDOR = ROOT / "apps/api/vendor/fpdf2-2.8.8"

@@ -1,6 +1,5 @@
 """Additive real-API fixture preparation for the dated 23-case native gate."""
 
-from datetime import UTC, datetime
 import hashlib
 import importlib.util
 import json

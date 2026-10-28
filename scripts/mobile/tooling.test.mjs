@@ -9,7 +9,7 @@ import tls from 'node:tls';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { binaryHash, byTestId, Journal, localJson, localUrl, MARKER, MARKER_HEADER, reconcileInventory, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
 import { scenarios } from '../../apps/mobile/e2e/core.mjs';
@@ -29,7 +29,7 @@ import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFai
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA } from './host-node-trust.mjs';
 import { localCertificates } from './host-node-trust-fixture.mjs';
-import { readIosHostInput, neutralIosEnvironment, validatePodsCurlArguments, validateIosCurlArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments } from './ios-host-launch.mjs';
+import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, validatePodsCurlArguments, validateIosCurlArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments } from './ios-host-launch.mjs';
 
 const installedHash = 'a'.repeat(64);
 const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
@@ -2906,7 +2906,7 @@ test('unknown and modified import URIs refuse before preload or application entr
 
 
 import { createRequire as ciTrustCreateRequire, syncBuiltinESMExports } from 'node:module';
-import { appendCITrustOutputs, prepareCIHostNodeTrust, ciTrustFailureCode } from './host-node-trust-ci.mjs';
+import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, stageCIHostNodeRuntimeSources, ciTrustFailureCode } from './host-node-trust-ci.mjs';
 const ciTrustYaml = ciTrustCreateRequire(new URL('../../apps/mobile/package.json', import.meta.url))('js-yaml');
 const ciTrustKeys = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY'];
 const ciTrustValues = Object.fromEntries(ciTrustKeys.map(key => [key, 'public-fixture-' + key]));
@@ -3290,6 +3290,82 @@ test('iOS input read failure zero size oversize hardlink and wrong hash refuse w
   assert.throws(() => readIosHostInput({ ...ref, sha256: '0'.repeat(64) }), /IOS_HOST_HASH_CHANGED/);
   fs.linkSync(file, file + '-linked'); assert.throws(() => readIosHostInput(ref), /IOS_HOST_FILE_IDENTITY/);
 });
+function iosReferenceFixture(t) {
+  if (typeof process.getuid !== 'function') {
+    assert.throws(() => referenceIosHostInput('/SYNTHETIC/input', Date.now() + 1000), /IOS_HOST_POSIX_OWNER_REQUIRED/); return null;
+  }
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, 'source'); fs.mkdirSync(dir, { mode: 0o700 });
+  const file = path.join(dir, 'input'); fs.writeFileSync(file, 'PUBLIC', { flag: 'wx', mode: 0o600 });
+  return { root, dir, file };
+}
+test('iOS public reference opens before pathname metadata and verifies both bounded observations', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const open = fs.openSync, lstat = fs.lstatSync, read = fs.readSync, events = [], descriptors = [], buffers = []; let consumed = 0;
+  fs.openSync = (...args) => { if (args[0] === f.file) events.push('open'); const fd = open(...args); if (args[0] === f.file) descriptors.push(fd); return fd; };
+  fs.lstatSync = (...args) => { if (args[0] === f.file) events.push('lstat'); return lstat(...args); };
+  fs.readSync = (...args) => { buffers.push(args[1]); const n = read(...args); consumed += n; return n; };
+  let ref;
+  try { ref = referenceIosHostInput(f.file, Date.now() + 20000, 6); }
+  finally { fs.openSync = open; fs.lstatSync = lstat; fs.readSync = read; }
+  assert.equal(events[0], 'open'); assert.equal(descriptors.length, 2); assert.equal(consumed, 12);
+  assert.deepEqual(ref, { path: f.file, sha256: createHash('sha256').update('PUBLIC').digest('hex'), sizeBytes: 6 });
+  for (const buffer of buffers) assert.equal(buffer.every(b => b === 0), true);
+  for (const fd of descriptors) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+test('iOS public reference refuses descriptor extent before reading and closes its FD', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const open = fs.openSync, read = fs.readSync; let descriptor, reads = 0;
+  fs.openSync = (...args) => { const fd = open(...args); if (args[0] === f.file) descriptor = fd; return fd; };
+  fs.readSync = (...args) => { reads++; return read(...args); };
+  try { assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000, 5), /IOS_HOST_FILE_IDENTITY/); }
+  finally { fs.openSync = open; fs.readSync = read; }
+  assert.equal(reads, 0); assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+  for (const max of [0, NaN, 1.5, 256 * 1024 * 1024 + 1]) assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000, max), /IOS_HOST_REFERENCE/);
+});
+test('iOS public reference refuses an actual regular to FIFO swap without blocking or reading', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const open = fs.openSync, read = fs.readSync; let descriptor, replaced = false, reads = 0;
+  fs.openSync = (...args) => {
+    if (args[0] === f.file && !replaced) {
+      assert.ok((args[1] & fs.constants.O_NONBLOCK) !== 0, 'REFERENCE_NONBLOCK_REQUIRED');
+      fs.renameSync(f.file, f.file + '.retained');
+      execFileSync('/usr/bin/mkfifo', [f.file], { env: { PATH: '/usr/bin:/bin' }, timeout: 1000, maxBuffer: 1024 }); replaced = true;
+    }
+    const fd = open(...args); if (args[0] === f.file) descriptor = fd; return fd;
+  };
+  fs.readSync = (...args) => { reads++; return read(...args); };
+  try { assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000), /IOS_HOST_FILE_IDENTITY/); }
+  finally { fs.openSync = open; fs.readSync = read; }
+  assert.equal(replaced, true); assert.equal(fs.lstatSync(f.file).isFIFO(), true); assert.equal(fs.existsSync(f.file + '.retained'), true);
+  assert.equal(reads, 0); assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
+test('iOS public reference refuses growth within its fixed read extent and wipes its buffer', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const read = fs.readSync; let descriptor, buffer, consumed = 0, grew = false;
+  fs.readSync = (...args) => { descriptor = args[0]; buffer = args[1]; if (!grew) { grew = true; fs.appendFileSync(f.file, 'GROWTH'); } const n = read(...args); consumed += n; return n; };
+  try { assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000), /IOS_HOST_INPUT_CHANGED/); }
+  finally { fs.readSync = read; }
+  assert.equal(consumed, 7); assert.equal(buffer.length, 7); assert.equal(buffer.every(b => b === 0), true);
+  assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
+test('iOS public reference retains the read error identity and closes and wipes on refusal', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const read = fs.readSync, expected = new Error('SYNTHETIC_REFERENCE_READ_REFUSAL'); let descriptor, buffer;
+  fs.readSync = (...args) => { descriptor = args[0]; buffer = args[1]; throw expected; };
+  try { assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000), error => error === expected); }
+  finally { fs.readSync = read; }
+  assert.equal(buffer.every(b => b === 0), true); assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
+test('iOS public reference rejects a replaced parent namespace after its descriptor read', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const read = fs.readSync; let descriptor, replaced = false;
+  fs.readSync = (...args) => { descriptor = args[0]; const n = read(...args); if (!replaced) { replaced = true; fs.renameSync(f.dir, f.dir + '.retained'); fs.symlinkSync(f.dir + '.retained', f.dir); } return n; };
+  try { assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000), /IOS_HOST_INPUT_CHANGED|IOS_HOST_NAMESPACE/); }
+  finally { fs.readSync = read; }
+  assert.equal(replaced, true); assert.equal(fs.lstatSync(f.dir).isSymbolicLink(), true);
+  assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
 test('iOS selected Pods preload and build body retain exact approved bytes and independent guard contracts', () => {
   const bytes = fs.readFileSync(new URL('./ios-host-pods.rb', import.meta.url)); assert.equal(createHash('sha256').update(bytes).digest('hex'), IOS_PODS_SOURCE_SHA256);
   const source = bytes.toString(); assert.match(source, /ssl_verifypeer => true/); assert.match(source, /ssl_verifyhost => 2/); assert.match(source, /'X-CaseOps-Automated-Test' => MARKER/);
@@ -3366,7 +3442,7 @@ test('real source inventory pathspecs retain the256 bound separately from the16-
 test('iOS build entry pins the complete actual helper bytes and executes only its retained buffer', () => {
   const file = fileURLToPath(new URL('./ios-host-launch.mjs', import.meta.url)), bytes = fs.readFileSync(file), ref = { path: file, sha256: createHash('sha256').update(bytes).digest('hex'), sizeBytes: bytes.length };
   const expected = renderIosHostBuildEntry(ref), actual = fs.readFileSync(new URL('./build-ios-simulator-acceptance.sh', import.meta.url), 'utf8');
-  assert.equal(actual, expected); assert.match(actual, /fs\.openSync\(file/); assert.match(actual, /sha256/); assert.match(actual, /await import/); assert.match(actual, /data:text\/javascript;base64,/);
+  assert.equal(actual, expected); assert.match(actual, /fs\.openSync\(file/); assert.match(actual, /O_NONBLOCK/); assert.match(actual, /sha256/); assert.match(actual, /await import/); assert.match(actual, /data:text\/javascript;base64,/);
   assert.doesNotMatch(actual, /exec "\$CASEOPS_IOS_HOST_NODE" "\$repo\/scripts/);
 });
 test('iOS retained entry refuses a same-sized replaced helper before any sentinel execution', t => {
@@ -3664,3 +3740,203 @@ test('CI owner diagnostics reject arbitrary roles and private detail instead of 
   ]) assert.equal(ciTrustFailureCode(new Error(message)), 'CI_TRUST_PREPARATION_REFUSED');
   assert.equal(ciTrustFailureCode(new Error('HOST_TRUST_CURRENT_OWNER_REQUIRED_ROOTS_OUTPUT_OWNER_OTHER_TOKEN_OTHER_WRITE_UNSAFE\nPRIVATE_PATH')), 'HOST_TRUST_CURRENT_OWNER_REQUIRED_ROOTS_OUTPUT_OWNER_OTHER_TOKEN_OTHER_WRITE_UNSAFE');
 });
+
+function ciSourceCheck() {
+  const deadline = performance.now() + 30000, check = () => assert.ok(performance.now() < deadline);
+  Object.defineProperty(check, 'deadline', { value: deadline }); return check;
+}
+async function ciSourceFixture(callback) {
+  const root = trustRoot(), source = path.join(root, 'source'), parent = path.join(root, 'new-parent');
+  fs.mkdirSync(source, { mode: 0o700 }); fs.mkdirSync(parent, { mode: 0o700 });
+  for (const name of ['host-node-trust-ci.mjs', 'host-node-trust.mjs', 'host-node-trust-start.mjs']) fs.writeFileSync(path.join(source, name), fs.readFileSync(new URL(name, import.meta.url)), { flag: 'wx', mode: 0o600 });
+  try { const api = await import(pathToFileURL(path.join(source, 'host-node-trust-ci.mjs')).href); return await callback({ root, source, parent, api }); }
+  finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+function ciSourceTrace() {
+  const open = fs.openSync, read = fs.readSync, write = fs.writeSync, descriptors = new Map(); let reads = 0, writes = 0;
+  fs.openSync = (name, ...args) => { const fd = open(name, ...args); descriptors.set(fd, String(name)); return fd; };
+  fs.readSync = (...args) => { reads++; return read(...args); }; fs.writeSync = (...args) => { writes++; return write(...args); };
+  return { descriptors, read, write, get reads() { return reads; }, get writes() { return writes; }, restore() { fs.openSync = open; fs.readSync = read; fs.writeSync = write; }, closed() { for (const fd of descriptors.keys()) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' }); } };
+}
+function ciSourceWindowsProofs(change) {
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), spawn = cp.spawnSync;
+  const uid = Object.getOwnPropertyDescriptor(process, 'getuid'), platform = Object.getOwnPropertyDescriptor(process, 'platform'), systemRoot = process.env.SystemRoot;
+  let calls = 0;
+  Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' }); process.env.SystemRoot = '/owned-public-windows-system';
+  cp.spawnSync = (_exe, args, options) => {
+    calls++; assert.ok(options.timeout > 0 && options.timeout <= 5000 && Number.isInteger(options.timeout)); assert.equal(options.maxBuffer, 4096); assert.doesNotMatch(args.at(-1), /Get-Acl|ConvertTo-Json|ConvertFrom-Json|SetAccessControl|SetOwner/);
+    const rows = Array.from({ length: 6 }, (_, index) => ({ runtimeOwner: index >= 2, reviewedAdminSource: index < 2, writeScopeSafe: true, tokenUserPresent: true, aclSha256: 'a'.repeat(64) }));
+    change?.(rows, calls, options); return { status: 0, stdout: JSON.stringify(rows), stderr: '' };
+  }; syncBuiltinESMExports();
+  return { get calls() { return calls; }, restore() { cp.spawnSync = spawn; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; } };
+}
+
+test('CI runtime copies retain exact reviewed Git blobs with independent readonly owned files', async () => ciSourceFixture(async ({ source, parent, api }) => {
+  const original = fs.readFileSync(path.join(source, 'host-node-trust.mjs')), staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck());
+  try {
+    assert.deepEqual(staged.retainedHelper, original);
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'c4d2ae68f4c9b0233e6246a8fe3ac504bec43b99'], ['100644', 'c7fba8c4c768e3f63a4ced2a496f06c226b5fad9']]);
+    for (const [role, name] of [['helper', 'host-node-trust.mjs'], ['bootstrap', 'host-node-trust-start.mjs']]) {
+      const input = path.join(source, name), output = staged.sourceRefs[role].path;
+      assert.notEqual(fs.statSync(input).ino, fs.statSync(output).ino); assert.deepEqual(fs.readFileSync(input), fs.readFileSync(output));
+      assert.equal(fs.statSync(output).mode & 0o777, 0o400); assert.equal(fs.statSync(input).mode & 0o777, 0o600);
+    }
+  } finally { staged.retainedHelper.fill(0); }
+}));
+
+test('CI observed Administrators source is admitted only as pinned public data while new objects stay strict', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs(), trace = ciSourceTrace(); let staged;
+  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(proof.calls, 2); assert.ok(staged.provenance.every(row => row.originalAcl.runtimeOwner === false && row.originalAcl.reviewedAdminSource && row.copiedAcl.runtimeOwner)); }
+  finally { trace.restore(); proof.restore(); staged?.retainedHelper.fill(0); }
+  trace.closed();
+}));
+
+test('CI source data exception cannot admit a foreign new copy owner or unsafe ACL before payload', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs(rows => { rows[4].runtimeOwner = false; rows[4].reviewedAdminSource = true; }), trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_OWNER_HELPER_COPY/); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+  finally { trace.restore(); proof.restore(); }
+  trace.closed();
+}));
+
+test('CI source hardlink refuses before bytes and closes its original descriptor', async () => ciSourceFixture(async ({ root, source, parent, api }) => {
+  fs.linkSync(path.join(source, 'host-node-trust.mjs'), path.join(root, 'alias')); const trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_INPUT/); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+  finally { trace.restore(); } trace.closed();
+}));
+
+test('CI source changed reviewed bytes never become copy payload and all four descriptors close', async () => ciSourceFixture(async ({ source, parent, api }) => {
+  const file = path.join(source, 'host-node-trust.mjs'), bytes = fs.readFileSync(file); bytes[0] ^= 1; fs.writeFileSync(file, bytes);
+  const trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES/); assert.equal(trace.writes, 0); assert.equal(trace.descriptors.size, 4); }
+  finally { trace.restore(); } trace.closed();
+}));
+
+test('CI source replacement during the first ACL observation gives zero payload reads', async () => ciSourceFixture(async ({ root, source, parent, api }) => {
+  const file = path.join(source, 'host-node-trust.mjs'); let changed = false;
+  const proof = ciSourceWindowsProofs((_rows, call) => { if (call === 1) { fs.renameSync(file, path.join(root, 'retained-original')); fs.copyFileSync(path.join(root, 'retained-original'), file); changed = true; } }), trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_READ/); assert.equal(changed, true); assert.equal(trace.reads, 0); }
+  finally { trace.restore(); proof.restore(); } trace.closed();
+}));
+
+test('CI source copy replacement changes no existing replacement mode and closes all descriptors', async () => ciSourceFixture(async ({ root, parent, api }) => {
+  const trace = ciSourceTrace(); let replacement, changed = false;
+  fs.writeSync = (fd, ...args) => {
+    const n = trace.write(fd, ...args), name = trace.descriptors.get(fd);
+    if (!changed && name?.endsWith('runtime-source/host-node-trust.mjs')) { changed = true; fs.renameSync(name, path.join(root, 'retained-created-copy')); fs.writeFileSync(name, 'existing replacement', { flag: 'wx', mode: 0o600 }); replacement = name; }
+    return n;
+  };
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_NAMED_DESCRIPTOR_CHANGED/); assert.equal(changed, true); assert.equal(fs.readFileSync(replacement, 'utf8'), 'existing replacement'); assert.equal(fs.statSync(replacement).mode & 0o777, 0o600); }
+  finally { trace.restore(); } trace.closed();
+}));
+
+test('CI source partial writes progress fully and zero writes refuse without losing descriptors', async () => ciSourceFixture(async ({ root, parent, api }) => {
+  const trace = ciSourceTrace(); let staged;
+  fs.writeSync = (fd, data, offset, length, position) => trace.write(fd, data, offset, Math.min(length, 7), position);
+  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(staged.retainedHelper.length, 29498); }
+  finally { staged?.retainedHelper.fill(0); trace.restore(); } trace.closed();
+  const second = path.join(root, 'second-parent'); fs.mkdirSync(second, { mode: 0o700 }); const refused = ciSourceTrace(); fs.writeSync = () => 0;
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(second, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_WRITE_PROGRESS/); }
+  finally { refused.restore(); } refused.closed();
+}));
+
+test('CI source late ACL drift is refused after owned-copy writes', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs((rows, call, options) => { if (call === 2) { rows[0].aclSha256 = 'b'.repeat(64); } }), trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_ACL_CHANGED/); }
+  finally { trace.restore(); proof.restore(); } trace.closed();
+}));
+
+test('CI explicit Windows preparation imports copied bytes and scopes child policy while Unix stays original', async () => {
+  const root = trustRoot(), file = path.join(root, 'commands'), workspace = path.join(root, 'workspace'); fs.mkdirSync(workspace, { mode: 0o700 }); fs.writeFileSync(file, 'EARLIER=retained', { flag: 'wx', mode: 0o600 });
+  const environment = { ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: workspace, GITHUB_OUTPUT: file };
+  try {
+    const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.appendedKeys, 9); assert.equal(result.runtimeSourceCopies.length, 2);
+    const scoped = Object.fromEntries(fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(1).map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
+    const policy = JSON.parse(fs.readFileSync(scoped.CASEOPS_HOST_NODE_TRUST_POLICY_FILE));
+    assert.ok(policy.runtimeSource.helper.path.startsWith(root + path.sep)); assert.match(policy.runtimeSource.helper.path, /runtime-source[/\\]host-node-trust\.mjs$/); assert.equal(policy.runtimeSource.helper.sha256, '13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787');
+    const text = execFileSync(process.execPath, ['--input-type=module', '-e', 'import tls from "node:tls"; console.log(JSON.stringify({count:tls.getCACertificates("default").length}));'], { env: { ...neutralTrustEnv(), ...scoped }, timeout: 12000, encoding: 'utf8', maxBuffer: 16384 }); assert.equal(JSON.parse(text).count, 144);
+    const unixFile = path.join(root, 'unix-commands'); fs.writeFileSync(unixFile, '', { flag: 'wx', mode: 0o600 }); prepareCIHostNodeTrust({ ...environment, GITHUB_OUTPUT: unixFile });
+    const rows = Object.fromEntries(fs.readFileSync(unixFile, 'utf8').trim().split('\n').map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
+    assert.equal(JSON.parse(fs.readFileSync(rows.CASEOPS_HOST_NODE_TRUST_POLICY_FILE)).runtimeSource.helper.path, trustHelper);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('CI source late extra namespace entry is independently refused with unchanged ACL proof', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs((_rows, call, options) => { if (call === 2) fs.writeFileSync(path.join(path.dirname(options.env.CASEOPS_SOURCE_4), 'late'), 'new', { flag: 'wx', mode: 0o600 }); }), trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_COMPLETE_NAMES/); assert.equal(proof.calls, 2); }
+  finally { trace.restore(); proof.restore(); } trace.closed();
+}));
+
+test('CI pinned input exception rejects foreign owner missing user and unsafe writers before any payload', async () => {
+  for (const change of [rows => { rows[0].reviewedAdminSource = false; }, rows => { rows[0].tokenUserPresent = false; }, rows => { rows[1].writeScopeSafe = false; }]) {
+    await ciSourceFixture(async ({ parent, api }) => {
+      const proof = ciSourceWindowsProofs(change), trace = ciSourceTrace();
+      try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_(?:OWNER_HELPER_INPUT|ACL_PROTOCOL)/); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+      finally { trace.restore(); proof.restore(); } trace.closed();
+    });
+  }
+});
+
+test('CI source closed deadline refuses before creating runtime namespace or opening payload', async () => ciSourceFixture(async ({ parent, api }) => {
+  const check = () => assert.fail('expired callback must not run'); Object.defineProperty(check, 'deadline', { value: performance.now() - 1 });
+  const trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, check), /CI_TRUST_RUNTIME_SOURCE_DEADLINE/); assert.equal(trace.descriptors.size, 0); assert.equal(fs.existsSync(path.join(parent, 'runtime-source')), false); }
+  finally { trace.restore(); }
+}));
+
+test('CI source parent alias refuses before source payload and never changes existing target', async () => ciSourceFixture(async ({ root, parent, api }) => {
+  const alias = path.join(root, 'alias'); fs.symlinkSync(parent, alias, 'dir'); const trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(alias, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_NAMESPACE/); assert.equal(trace.reads, 0); assert.equal(fs.existsSync(path.join(parent, 'runtime-source')), false); }
+  finally { trace.restore(); }
+}));
+
+test('CI Windows entry never loads original H by pathname before or after staging retained copies', async () => ciSourceFixture(async ({ root, source }) => {
+  const workspace = path.join(root, 'workspace'), commands = path.join(root, 'commands'); fs.mkdirSync(workspace, { mode: 0o700 }); fs.writeFileSync(commands, '', { flag: 'wx', mode: 0o600 });
+  const script = `import fs from 'node:fs'; import { createRequire, registerHooks, syncBuiltinESMExports } from 'node:module'; import { pathToFileURL } from 'node:url';
+    const root=process.env.OWNED_FIXTURE_ROOT, source=process.env.OWNED_FIXTURE_SOURCE; let originalLoads=0, batches=0;
+    registerHooks({load(url,context,next){if(url===pathToFileURL(source+'/host-node-trust.mjs').href){originalLoads++;throw Error('ORIGINAL_H_FILE_IMPORT_REFUSED')}return next(url,context)}});
+    Object.defineProperty(process,'platform',{value:'win32'}); Object.defineProperty(process,'getuid',{value:undefined}); process.env.SystemRoot='/owned-public-windows-system';
+    const cp=createRequire(import.meta.url)('node:child_process'); cp.spawnSync=(_exe,args,options)=>{
+      if(options.env.CASEOPS_SOURCE_0){batches++;return {status:0,stdout:JSON.stringify(Array.from({length:6},(_,i)=>({runtimeOwner:i>=2,reviewedAdminSource:i<2,writeScopeSafe:true,tokenUserPresent:true,aclSha256:'a'.repeat(64)}))),stderr:''}};
+      if(args.at(-1).includes("[Console]::Out.Write('SAFE')"))return{status:0,stdout:'SAFE',stderr:'COPS_ACL0\\nCOPS_ACL1\\nCOPS_ACL2\\nCOPS_ACL3\\n'.replaceAll('\\\\n','\\n')};
+      return{status:0,stdout:'{"ownerMatches":true,"writeScopeSafe":true}',stderr:'COPS_ACL0\\nCOPS_ACL1\\nCOPS_ACL2\\nCOPS_ACL3\\n'.replaceAll('\\\\n','\\n')};
+    }; syncBuiltinESMExports();
+    const api=await import(pathToFileURL(source+'/host-node-trust-ci.mjs')); const result=await api.prepareCIHostNodeTrustWindows();
+    console.log(JSON.stringify({originalLoads,batches,roots:result.approvedRoots,copies:result.runtimeSourceCopies.length,keys:result.appendedKeys}));`;
+  const environment = { ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: workspace, GITHUB_OUTPUT: commands, OWNED_FIXTURE_ROOT: root, OWNED_FIXTURE_SOURCE: source };
+  const output = execFileSync(process.execPath, ['--input-type=module', '--eval', script], { env: environment, timeout: 30000, encoding: 'utf8', maxBuffer: 16384 });
+  assert.deepEqual(JSON.parse(output), { originalLoads: 0, batches: 2, roots: 144, copies: 2, keys: 9 });
+}));
+
+
+test('CI source cleanup retains original failure and attempts all four descriptor closures', async () => ciSourceFixture(async ({ source, parent, api }) => {
+  const file = path.join(source, 'host-node-trust.mjs'), bytes = fs.readFileSync(file); bytes[0] ^= 1; fs.writeFileSync(file, bytes);
+  const trace = ciSourceTrace(), close = fs.closeSync, stderr = process.stderr.write, closed = [], diagnostics = []; let first = true;
+  process.stderr.write = value => { diagnostics.push(value); return true; };
+  fs.closeSync = fd => { closed.push(fd); close(fd); if (first) { first = false; throw new Error('synthetic close acknowledgement failure'); } };
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), error => error.message === 'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES'); assert.equal(closed.length, 4); assert.deepEqual(diagnostics, ['CI_TRUST_RUNTIME_SOURCE_CLOSE\n']); }
+  finally { process.stderr.write = stderr; fs.closeSync = close; trace.restore(); } trace.closed();
+}));
+
+
+async function ciOriginalFaultAndCloseFailure(original) {
+  return ciSourceFixture(async ({ parent, api }) => {
+    const trace = ciSourceTrace(), close = fs.closeSync, stderr = process.stderr.write, closed = [], diagnostics = []; let first = true, caught = false;
+    fs.writeSync = () => { throw original; }; fs.closeSync = fd => { closed.push(fd); close(fd); if (first) { first = false; throw new Error('synthetic close acknowledgement failure'); } };
+    process.stderr.write = value => { diagnostics.push(value); return true; };
+    try { try { api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); } catch (error) { caught = true; assert.equal(error, original); } assert.equal(caught, true); assert.equal(closed.length, 4); assert.deepEqual(diagnostics, ['CI_TRUST_RUNTIME_SOURCE_CLOSE\n']); }
+    finally { process.stderr.write = stderr; fs.closeSync = close; trace.restore(); } trace.closed();
+  });
+}
+test('CI source cleanup preserves a frozen original Error identity and reports only the fixed close refusal', async () => {
+  const original = Object.freeze(new Error('synthetic retained body failure')); await ciOriginalFaultAndCloseFailure(original); assert.equal(Object.hasOwn(original, 'runtimeSourceCleanupError'), false);
+});
+test('CI source cleanup preserves falsy and primitive original throws while every descriptor closes', async () => {
+  for (const original of [undefined, null, false, 0, 'synthetic primitive fault']) await ciOriginalFaultAndCloseFailure(original);
+});
+test('CI source successful body with a close failure returns no retained source and never retries the close', async () => ciSourceFixture(async ({ parent, api }) => {
+  const trace = ciSourceTrace(), close = fs.closeSync, stderr = process.stderr.write, diagnostics = [], closed = []; let first = true;
+  fs.closeSync = fd => { closed.push(fd); close(fd); if (first) { first = false; throw undefined; } }; process.stderr.write = value => { diagnostics.push(value); return true; };
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_CLOSE' }); assert.equal(closed.length, 4); assert.equal(new Set(closed).size, 4); assert.deepEqual(diagnostics, ['CI_TRUST_RUNTIME_SOURCE_CLOSE\n']); }
+  finally { process.stderr.write = stderr; fs.closeSync = close; trace.restore(); } trace.closed();
+}));

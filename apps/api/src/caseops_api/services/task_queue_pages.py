@@ -21,6 +21,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.statement_clock import StatementUtc
 from caseops_api.db.task_queue_page_models import SLOTS, TASK_FIELDS
+from caseops_api.services.matter_work_queue_policy import _current_actor, _utc
 from caseops_api.services.record_access_policy import active_actor_team_ids, visible_matters_filter
 
 
@@ -46,8 +47,6 @@ def statement(
     _actor_fence=None,
     _owner_teams=None,
 ):
-    from caseops_api.services.matter_work_queue import _current_actor, _utc
-
     groups = MatterTaskQueueGroup.__table__
     pages = MatterTaskQueuePage.__table__
     if type(outer_bound) is not bool:

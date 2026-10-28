@@ -13,7 +13,7 @@ import { clientExtensionCodeClosure } from './prepare-client-extensions.mjs';
 import { CX_BUDGETS } from '../../apps/mobile/e2e/client-extensions-inventory.mjs';
 import { collectNativeClientExtensions, clientExtensionScenarios } from '../../apps/mobile/e2e/client-extensions-20261028.mjs';
 import { requireClientExtensionRequest, validateClientExtensionFixture } from '../../apps/mobile/e2e/client-extensions-contract.mjs';
-import { ClientExtensionUnavailable, tap, waitId, account, signOut, cameraPrivacy } from '../../apps/mobile/e2e/client-extensions-ui.mjs';
+import { ClientExtensionUnavailable, account, signOut, cameraPrivacy } from '../../apps/mobile/e2e/client-extensions-ui.mjs';
 import { readV1Member } from '../../apps/mobile/e2e/v1-workflows-credentials.mjs';
 import { validateBuildReceipt, validateCoreFixture } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { binaryHash, localJson, Journal, reconcileResults } from '../../apps/mobile/e2e/support.mjs';

@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { prepareHostNodeTrust } from './host-node-trust.mjs';
+// Windows must stage exact reviewed bytes before loading any H code.
+const unixTrust = process.platform === 'win32' ? null : await import('./host-node-trust.mjs');
 
 const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
 const identity = fields.slice(0, 6);
@@ -125,9 +127,129 @@ export function appendCITrustOutputs(file, root, environment) {
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 
-export function prepareCIHostNodeTrust(environment = process.env) {
+
+
+// Exact reviewed Git blobs at9bc9c622; these are public data inputs only.
+// Executed copies must independently pass the unchanged strict owner rule.
+const REVIEWED_RUNTIME_SOURCES = Object.freeze([
+  Object.freeze({ role: 'helper', name: 'host-node-trust.mjs', gitMode: '100644', gitBlobSha1: 'c4d2ae68f4c9b0233e6246a8fe3ac504bec43b99', sha256: '13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787', sizeBytes: 29498 }),
+  Object.freeze({ role: 'bootstrap', name: 'host-node-trust-start.mjs', gitMode: '100644', gitBlobSha1: 'c7fba8c4c768e3f63a4ced2a496f06c226b5fad9', sha256: '5aa448fb66bcbaec5127df7e7876a8b967eee3a005d045659f8141149f82a54b', sizeBytes: 6043 }),
+]);
+const sha = data => createHash('sha256').update(data).digest('hex');
+function sourceAclFrames(objects, check) {
+  assert.equal(objects.length, 6, 'CI_TRUST_RUNTIME_SOURCE_ACL_DOMAIN'); check();
+  if (typeof process.getuid === 'function') return objects.map(({ state }) => {
+    const mode = state.mode & 0o7777n;
+    assert.ok(state.uid === BigInt(process.getuid()) && (state.isDirectory() ? mode === 0o700n : (mode & 0o7133n) === 0n), 'CI_TRUST_RUNTIME_SOURCE_MODE');
+    return { runtimeOwner: true, reviewedAdminSource: false, writeScopeSafe: true, tokenUserPresent: true, uid: String(state.uid) };
+  });
+  assert.ok(process.platform === 'win32' && path.isAbsolute(process.env.SystemRoot || ''), 'CI_TRUST_OWNER_UNAVAILABLE');
+  const sourceCode = "$ErrorActionPreference='Stop';try{$paths=@($env:CASEOPS_SOURCE_0,$env:CASEOPS_SOURCE_1,$env:CASEOPS_SOURCE_2,$env:CASEOPS_SOURCE_3,$env:CASEOPS_SOURCE_4,$env:CASEOPS_SOURCE_5);$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$present=![string]::IsNullOrEmpty($u);$sections=[Security.AccessControl.AccessControlSections]'Access,Owner';$rows=@();for($n=0;$n -lt 6;$n++){if($n -eq 2 -or $n -eq 3){$a=[IO.Directory]::GetAccessControl($paths[$n],$sections)}else{$a=[IO.File]::GetAccessControl($paths[$n],$sections)};$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;$runtimeOwner=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));$reviewedAdminSource=($present -and $o -eq 'S-1-5-32-544' -and $t -eq $u);$safe=$true;foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$safe=$false}};$hash=[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($a.GetSecurityDescriptorBinaryForm())).Replace('-','').ToLowerInvariant();$rows+=('{\"runtimeOwner\":'+$runtimeOwner.ToString().ToLowerInvariant()+',\"reviewedAdminSource\":'+$reviewedAdminSource.ToString().ToLowerInvariant()+',\"writeScopeSafe\":'+$safe.ToString().ToLowerInvariant()+',\"tokenUserPresent\":'+$present.ToString().ToLowerInvariant()+',\"aclSha256\":\"'+$hash+'\"}')};[Console]::Out.Write('['+[string]::Join(',',$rows)+']')}catch{[Console]::Error.WriteLine('CI_SOURCE_ACL_REFUSED');exit 1}";
+  const environment = { SystemRoot: process.env.SystemRoot, WINDIR: process.env.SystemRoot };
+  objects.forEach((value, index) => { environment['CASEOPS_SOURCE_' + index] = value.path; });
+  const remaining = Math.floor(check.deadline - performance.now()); assert.ok(remaining >= 1, 'CI_TRUST_PREPARATION_DEADLINE');
+  const proof = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', sourceCode], {
+    env: environment, encoding: 'utf8', timeout: Math.min(5000, remaining), maxBuffer: 4096, windowsHide: true,
+  });
+  assert.ok(!proof.error && proof.status === 0 && proof.stderr === '', 'CI_TRUST_RUNTIME_SOURCE_ACL_COMMAND');
+  let values; try { values = JSON.parse(proof.stdout); } catch { assert.fail('CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL'); }
+  assert.ok(Array.isArray(values) && values.length === 6, 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL');
+  values.forEach((value, index) => {
+    assert.ok(value && equal(Object.keys(value).sort(), ['aclSha256', 'reviewedAdminSource', 'runtimeOwner', 'tokenUserPresent', 'writeScopeSafe'])
+      && typeof value.runtimeOwner === 'boolean' && typeof value.reviewedAdminSource === 'boolean' && value.writeScopeSafe === true && value.tokenUserPresent === true
+      && typeof value.aclSha256 === 'string' && /^[a-f0-9]{64}$/.test(value.aclSha256), 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL');
+    assert.ok(value.runtimeOwner === true || objects[index].data === true && value.reviewedAdminSource === true, 'CI_TRUST_RUNTIME_SOURCE_OWNER_' + ['HELPER_INPUT', 'BOOTSTRAP_INPUT', 'PARENT_DIRECTORY', 'RUNTIME_DIRECTORY', 'HELPER_COPY', 'BOOTSTRAP_COPY'][index]);
+  });
+  check(); return values;
+}
+function directoryFrame(directory, check) {
+  check(); assert.ok(path.isAbsolute(directory) && canonical(directory) === directory, 'CI_TRUST_RUNTIME_SOURCE_NAMESPACE');
+  const state = fs.lstatSync(directory, { bigint: true }); assert.ok(state.isDirectory() && !state.isSymbolicLink(), 'CI_TRUST_RUNTIME_SOURCE_DIRECTORY');
+  return { path: directory, state, namespace: parents(directory, check) };
+}
+function sourceNames(directory, check) {
+  const state = fs.lstatSync(directory, { bigint: true }), namespace = parents(directory, check), names = []; let iterator;
+  try {
+    iterator = fs.opendirSync(directory, { bufferSize: 1 });
+    while (true) { check(); const entry = iterator.readSync(); if (!entry) break; assert.ok(names.length < 2 && !names.includes(entry.name), 'CI_TRUST_RUNTIME_SOURCE_COMPLETE_NAMES'); names.push(entry.name); }
+  } finally { iterator?.closeSync(); }
+  assert.ok(equal(frame(state), frame(fs.lstatSync(directory, { bigint: true }))) && equal(namespace, parents(directory, check)), 'CI_TRUST_RUNTIME_SOURCE_DIRECTORY_CHANGED');
+  assert.deepEqual(names.sort(), REVIEWED_RUNTIME_SOURCES.map(value => value.name).sort(), 'CI_TRUST_RUNTIME_SOURCE_COMPLETE_NAMES');
+}
+/** Fixed code-only producer: no environment-selected path, digest or owner waiver. */
+export function stageCIHostNodeRuntimeSources(parent, incomingCheck) {
+  const deadline = incomingCheck.deadline;
+  assert.ok(typeof deadline === 'number' && Number.isFinite(deadline) && deadline > performance.now() && deadline - performance.now() <= 30000, 'CI_TRUST_RUNTIME_SOURCE_DEADLINE');
+  const check = () => { assert.ok(performance.now() < deadline, 'CI_TRUST_PREPARATION_DEADLINE'); incomingCheck(); };
+  Object.defineProperty(check, 'deadline', { value: deadline });
+  const parentFrame = directoryFrame(parent, check), directory = path.join(parent, 'runtime-source');
+  fs.mkdirSync(directory, { mode: 0o700 }); const runtimeFrame = directoryFrame(directory, check);
+  const inputs = [], copies = []; let retainedHelper, bodyFailed = false, closeFailed = false;
+  try {
+    for (const pin of REVIEWED_RUNTIME_SOURCES) {
+      const original = fileURLToPath(new URL('./' + pin.name, import.meta.url)); check();
+      const input = { path: original, pin, fd: fs.openSync(original, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0)) }; inputs.push(input);
+      input.opened = fs.fstatSync(input.fd, { bigint: true }); input.state = fs.lstatSync(original, { bigint: true });
+      assert.ok(input.opened.isFile() && input.state.isFile() && !input.state.isSymbolicLink() && input.opened.nlink === 1n && input.opened.size === BigInt(pin.sizeBytes), 'CI_TRUST_RUNTIME_SOURCE_INPUT');
+      checkNamed(input.state, input.opened); input.namespace = parents(original, check);
+      const file = path.join(directory, pin.name), copy = { path: file, pin, fd: fs.openSync(file, fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0), 0o600) }; copies.push(copy);
+      copy.opened = fs.fstatSync(copy.fd, { bigint: true }); copy.state = fs.lstatSync(file, { bigint: true });
+      assert.ok(copy.opened.isFile() && copy.state.isFile() && !copy.state.isSymbolicLink() && copy.opened.nlink === 1n && copy.opened.size === 0n, 'CI_TRUST_RUNTIME_SOURCE_EXCLUSIVE');
+      checkNamed(copy.state, copy.opened); copy.namespace = parents(file, check);
+    }
+    sourceNames(directory, check);
+    const objects = [...inputs.map(value => ({ ...value, data: true })), parentFrame, runtimeFrame, ...copies];
+    const unchangedDirectories = () => { for (const directory of [parentFrame, runtimeFrame]) { check(); const current = fs.lstatSync(directory.path, { bigint: true }); for (const key of ['dev', 'ino', 'uid', 'gid', 'mode']) assert.equal(directory.state[key], current[key], 'CI_TRUST_RUNTIME_SOURCE_DIRECTORY_IDENTITY'); assert.ok(equal(directory.namespace, parents(directory.path, check)), 'CI_TRUST_RUNTIME_SOURCE_DIRECTORY_CHANGED'); } };
+    unchangedDirectories();
+    const before = sourceAclFrames(objects, check);
+    unchangedDirectories();
+    for (const value of [...inputs, ...copies]) assert.ok(equal(frame(value.opened), frame(fs.fstatSync(value.fd, { bigint: true }))) && equal(frame(value.state), frame(fs.lstatSync(value.path, { bigint: true }))) && equal(value.namespace, parents(value.path, check)), 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_READ');
+    // Verify both public source blobs before writing any source-copy payload.
+    for (const input of inputs) {
+      input.bytes = Buffer.alloc(input.pin.sizeBytes + 1); let count = 0;
+      while (count < input.bytes.length) { check(); const n = fs.readSync(input.fd, input.bytes, count, input.bytes.length - count, null); if (!n) break; count += n; }
+      assert.ok(count === input.pin.sizeBytes && sha(input.bytes.subarray(0, count)) === input.pin.sha256
+        && createHash('sha1').update(Buffer.from('blob ' + count + '\0')).update(input.bytes.subarray(0, count)).digest('hex') === input.pin.gitBlobSha1, 'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES');
+    }
+    for (let index = 0; index < 2; index++) {
+      const input = inputs[index], copy = copies[index], data = input.bytes.subarray(0, input.pin.sizeBytes); let count = 0;
+      while (count < data.length) { check(); const n = fs.writeSync(copy.fd, data, count, data.length - count, count); assert.ok(n > 0 && n <= data.length - count, 'CI_TRUST_RUNTIME_SOURCE_WRITE_PROGRESS'); count += n; }
+      fs.fsyncSync(copy.fd); fs.fchmodSync(copy.fd, 0o400); copy.final = fs.fstatSync(copy.fd, { bigint: true }); copy.named = fs.lstatSync(copy.path, { bigint: true }); checkNamed(copy.named, copy.final);
+      for (const key of ['dev', 'ino', 'uid', 'gid', 'nlink']) assert.equal(copy.opened[key], copy.final[key], 'CI_TRUST_RUNTIME_SOURCE_OUTPUT_IDENTITY');
+      assert.ok(copy.final.size === BigInt(data.length) && (copy.final.mode & 0o222n) === 0n, 'CI_TRUST_RUNTIME_SOURCE_OUTPUT_EXTENT');
+      copy.bytes = Buffer.alloc(data.length + 1); count = 0;
+      while (count < copy.bytes.length) { check(); const n = fs.readSync(copy.fd, copy.bytes, count, copy.bytes.length - count, count); if (!n) break; count += n; }
+      assert.ok(count === data.length && copy.bytes.subarray(0, count).equals(data) && equal(frame(copy.final), frame(fs.fstatSync(copy.fd, { bigint: true }))) && equal(frame(copy.named), frame(fs.lstatSync(copy.path, { bigint: true }))) && equal(copy.namespace, parents(copy.path, check)), 'CI_TRUST_RUNTIME_SOURCE_OUTPUT_CHANGED');
+      copy.reference = { path: copy.path, sha256: input.pin.sha256, sizeBytes: count };
+    }
+    sourceNames(directory, check);
+    const afterObjects = [...inputs.map(value => ({ ...value, state: fs.lstatSync(value.path, { bigint: true }), data: true })), directoryFrame(parent, check), directoryFrame(directory, check), ...copies.map(value => ({ ...value, state: value.named }))];
+    const after = sourceAclFrames(afterObjects, check); assert.ok(equal(before, after), 'CI_TRUST_RUNTIME_SOURCE_ACL_CHANGED'); unchangedDirectories();
+    for (const input of inputs) assert.ok(equal(frame(input.opened), frame(fs.fstatSync(input.fd, { bigint: true }))) && equal(frame(input.state), frame(fs.lstatSync(input.path, { bigint: true }))) && equal(input.namespace, parents(input.path, check)) && canonical(input.path) === input.path, 'CI_TRUST_RUNTIME_SOURCE_INPUT_CHANGED');
+    for (const copy of copies) assert.ok(equal(frame(copy.final), frame(fs.fstatSync(copy.fd, { bigint: true }))) && equal(frame(copy.named), frame(fs.lstatSync(copy.path, { bigint: true }))) && equal(copy.namespace, parents(copy.path, check)) && canonical(copy.path) === copy.path, 'CI_TRUST_RUNTIME_SOURCE_OUTPUT_FINAL_CHANGED');
+    sourceNames(directory, check);
+    const refs = Object.fromEntries(copies.map(value => [value.pin.role, value.reference])); retainedHelper = copies[0].bytes.subarray(0, copies[0].pin.sizeBytes);
+    return { sourceRefs: refs, retainedHelper, provenance: inputs.map((value, index) => ({ name: value.pin.name, gitMode: value.pin.gitMode, gitBlobSha1: value.pin.gitBlobSha1, originalSha256: value.pin.sha256, originalMetadata: frame(value.state), originalAcl: before[index], copied: copies[index].reference, copiedMetadata: frame(copies[index].named), copiedAcl: after[index + 4] })) };
+  } catch (error) { bodyFailed = true; throw error; }
+  finally {
+    for (const value of [...inputs, ...copies]) {
+      if (value.bytes && value.bytes.buffer !== retainedHelper?.buffer) value.bytes.fill(0);
+      try { fs.closeSync(value.fd); } catch { closeFailed = true; }
+    }
+    if (closeFailed) {
+      retainedHelper?.fill(0);
+      // A fixed independent diagnostic must not mutate/replace a frozen or
+      // primitive body fault. A failed diagnostic write is also not a replay.
+      try { process.stderr.write('CI_TRUST_RUNTIME_SOURCE_CLOSE\n'); } catch {}
+      if (!bodyFailed) throw new Error('CI_TRUST_RUNTIME_SOURCE_CLOSE');
+    }
+  }
+}
+
+function ciContext(environment) {
   const end = performance.now() + 30000;
   const check = () => assert.ok(performance.now() < end, 'CI_TRUST_PREPARATION_DEADLINE');
+  Object.defineProperty(check, 'deadline', { value: end });
   assert.equal(environment.GITHUB_ACTIONS, 'true', 'CI_TRUST_GITHUB_REQUIRED');
   assert.equal(environment.CI, 'true', 'CI_TRUST_CI_REQUIRED');
   const root = environment.RUNNER_TEMP, file = environment.GITHUB_OUTPUT;
@@ -138,7 +260,10 @@ export function prepareCIHostNodeTrust(environment = process.env) {
   // Never inspect an owner's npmrc. A project configuration needs fresh review.
   const projects = projectConfigsAbsent(workspace, check);
   const parent = fs.mkdtempSync(path.join(root, 'caseops-node-trust-'));
-  const prepared = prepareHostNodeTrust({ directory: path.join(parent, 'policy'), environment });
+  return { environment, check, root, file, workspace, projects, parent };
+}
+function finishCI(context, prepared) {
+  const { check, root, file, workspace, projects, parent } = context;
   const scoped = { ...prepared.environment,
     NPM_CONFIG_USERCONFIG: neutralConfig(path.join(parent, 'user.npmrc')),
     NPM_CONFIG_GLOBALCONFIG: neutralConfig(path.join(parent, 'global.npmrc')),
@@ -149,6 +274,21 @@ export function prepareCIHostNodeTrust(environment = process.env) {
   assert.ok(equal(projects, projectConfigsAbsent(workspace, check)), 'CI_TRUST_PROJECT_CHANGED');
   check();
   return { nodeVersion: prepared.descriptor.nodeVersion, approvedRoots: prepared.descriptor.outputCount, ...result };
+}
+export function prepareCIHostNodeTrust(environment = process.env) {
+  assert.ok(unixTrust, 'CI_TRUST_WINDOWS_ASYNC_ENTRY_REQUIRED');
+  const context = ciContext(environment);
+  const prepared = unixTrust.prepareHostNodeTrust({ directory: path.join(context.parent, 'policy'), environment });
+  return finishCI(context, prepared);
+}
+export async function prepareCIHostNodeTrustWindows(environment = process.env) {
+  const context = ciContext(environment), staged = stageCIHostNodeRuntimeSources(context.parent, context.check);
+  try {
+    const helper = await import('data:text/javascript;base64,' + staged.retainedHelper.toString('base64'));
+    context.check(); assert.ok(context.check.deadline - performance.now() >= 20000, 'CI_TRUST_RUNTIME_SOURCE_PREPARE_BUDGET');
+    const prepared = helper.prepareHostNodeTrust({ directory: path.join(context.parent, 'policy'), environment, sourceRefs: staged.sourceRefs });
+    return { ...finishCI(context, prepared), runtimeSourceCopies: staged.provenance };
+  } finally { staged.retainedHelper.fill(0); }
 }
 
 const DIAGNOSTICS = new Set([
@@ -162,6 +302,20 @@ const DIAGNOSTICS = new Set([
   'HOST_TRUST_NAMED_FD_CHANGED', 'HOST_TRUST_DIRECTORY_PATH',
   'CI_TRUST_COMMAND_OWNER', 'CI_TRUST_NAMESPACE', 'CI_TRUST_CONFIG_DEADLINE',
   'CI_TRUST_APPEND_DEADLINE', 'CI_TRUST_PREPARATION_DEADLINE',
+  'CI_TRUST_RUNTIME_SOURCE_ACL_COMMAND', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL', 'CI_TRUST_RUNTIME_SOURCE_OWNER',
+  'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES', 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_READ',
+  'CI_TRUST_RUNTIME_SOURCE_INPUT_CHANGED', 'CI_TRUST_RUNTIME_SOURCE_ACL_CHANGED',
+  'CI_TRUST_RUNTIME_SOURCE_OUTPUT_CHANGED', 'CI_TRUST_RUNTIME_SOURCE_OUTPUT_IDENTITY',
+  'CI_TRUST_RUNTIME_SOURCE_OUTPUT_FINAL_CHANGED', 'CI_TRUST_RUNTIME_SOURCE_OUTPUT_ACL_CHANGED',
+  'CI_TRUST_WINDOWS_ASYNC_ENTRY_REQUIRED', 'CI_TRUST_RUNTIME_SOURCE_PREPARE_BUDGET',
+  'CI_TRUST_RUNTIME_SOURCE_EXCLUSIVE', 'CI_TRUST_RUNTIME_SOURCE_COMPLETE_NAMES',
+  'CI_TRUST_RUNTIME_SOURCE_INPUT', 'CI_TRUST_RUNTIME_SOURCE_WRITE_PROGRESS',
+  'CI_TRUST_RUNTIME_SOURCE_OUTPUT_EXTENT', 'CI_TRUST_RUNTIME_SOURCE_DIRECTORY_CHANGED',
+  'CI_TRUST_RUNTIME_SOURCE_CLOSE', 'CI_TRUST_RUNTIME_SOURCE_DIRECTORY_IDENTITY',
+  'CI_TRUST_RUNTIME_SOURCE_OWNER_HELPER_INPUT', 'CI_TRUST_RUNTIME_SOURCE_OWNER_BOOTSTRAP_INPUT',
+  'CI_TRUST_RUNTIME_SOURCE_OWNER_PARENT_DIRECTORY', 'CI_TRUST_RUNTIME_SOURCE_OWNER_RUNTIME_DIRECTORY',
+  'CI_TRUST_RUNTIME_SOURCE_OWNER_HELPER_COPY', 'CI_TRUST_RUNTIME_SOURCE_OWNER_BOOTSTRAP_COPY',
+  'CI_TRUST_RUNTIME_SOURCE_MODE', 'CI_TRUST_RUNTIME_SOURCE_NAMESPACE', 'CI_TRUST_RUNTIME_SOURCE_DEADLINE',
   'CI_TRUST_CANONICAL_PATH', 'CI_TRUST_PROJECT_NPMRC_UNREVIEWED',
 ]);
 export function ciTrustFailureCode(error) {
@@ -170,6 +324,6 @@ export function ciTrustFailureCode(error) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { console.log(JSON.stringify(prepareCIHostNodeTrust())); }
+  try { console.log(JSON.stringify(process.platform === 'win32' ? await prepareCIHostNodeTrustWindows() : prepareCIHostNodeTrust())); }
   catch (error) { console.error('CaseOps CI Node trust preparation refused: ' + ciTrustFailureCode(error)); process.exitCode = 1; }
 }

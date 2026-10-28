@@ -18,7 +18,6 @@ from sqlalchemy.orm import aliased
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
-    Company,
     CompanyMembership,
     Matter,
     MatterTask,
@@ -32,7 +31,9 @@ from caseops_api.schemas.matter_work_queue import (
     WorkQueueMatter,
     WorkQueueTask,
 )
+from caseops_api.services.matter_work_queue_policy import _current_actor, _utc
 from caseops_api.services.record_access_policy import active_actor_team_ids, visible_matters_filter
+from caseops_api.services.task_queue_pages import statement as _packed_work_queue_statement
 
 CURSOR_TTL_SECONDS = 3600
 _FIELDS = {
@@ -53,10 +54,6 @@ _FIELDS = {
 }
 
 
-def _utc(value):
-    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
-
-
 def _problem(status, code, message):
     raise HTTPException(status, detail={"code": code, "message": message})
 
@@ -72,7 +69,7 @@ def _day(value):
             raise ValueError
         return parsed
     except (ValueError, TypeError):
-        _problem(422, "work_queue_date_invalid", "Use a calendar date in YYYY-MM-DD format.")
+        return _problem(422, "work_queue_date_invalid", "Use a calendar date in YYYY-MM-DD format.")
 
 
 def _filters(ownership, dates, limit, due_from, due_to):
@@ -173,26 +170,6 @@ def decode_work_cursor(value, context, ownership, dates, limit, lower, upper, *,
         _problem(
             400, "work_queue_cursor_invalid", "The work queue continuation is invalid or expired."
         )
-
-
-def _current_actor(context):
-    """Fresh SQL facts must agree with the role used to compose the ACL."""
-    actor = aliased(CompanyMembership, name="queue_actor")
-    actor_user = aliased(User, name="queue_actor_user")
-    return exists(
-        select(actor.id)
-        .join(actor_user, actor_user.id == actor.user_id)
-        .join(Company, Company.id == actor.company_id)
-        .where(
-            actor.id == context.membership.id,
-            actor.company_id == context.company.id,
-            actor.user_id == context.user.id,
-            actor.role == context.membership.role,
-            actor.is_active.is_(True),
-            actor_user.is_active.is_(True),
-            Company.is_active.is_(True),
-        )
-    )
 
 
 def _require_current_actor(session, context):
@@ -337,8 +314,6 @@ def work_queue_statement(
     ).limit(26)
     if not postgres:
         return logical
-    from caseops_api.services.task_queue_pages import statement
-
     # The predicate is SQL, not a construction-time Python check: the SAME
     # retained Select must observe later own writes/flushes before commit.
     dirty = exists(
@@ -346,7 +321,7 @@ def work_queue_statement(
             MatterTaskQueueDirty.transaction_id == func.txid_current_if_assigned()
         )
     )
-    committed = statement(
+    committed = _packed_work_queue_statement(
         session,
         context=context,
         ownership=ownership,

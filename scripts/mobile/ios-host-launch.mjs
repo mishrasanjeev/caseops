@@ -77,24 +77,32 @@ export function readIosHostInput(ref, { end = Date.now() + 20000, maxBytes = 104
     return { bytes: Buffer.from(bytes.subarray(0, n)), metadata: fields.map(k => String(a[k])), canonical, namespace: ns };
   } finally { bytes?.fill(0); fs.closeSync(fd); }
 }
-function reference(file, end, maxBytes = 1048576, system = false) {
-  check(end); const s = fs.lstatSync(file); assert.ok(s.isFile() && !s.isSymbolicLink() && s.size > 0 && s.size <= maxBytes, 'IOS_HOST_REFERENCE');
-  // Select a public digest, then independently admit/read through one descriptor.
-  const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+export function referenceIosHostInput(file, end, maxBytes = 1048576, system = false) {
+  assert.ok(typeof process.getuid === 'function', 'IOS_HOST_POSIX_OWNER_REQUIRED');
+  check(end); assert.ok(absolute(file) && Number.isSafeInteger(maxBytes) && maxBytes > 0
+    && maxBytes <= 256 * 1024 * 1024 && typeof system === 'boolean', 'IOS_HOST_REFERENCE');
+  // Admit the opened descriptor before observing or consuming the pathname.
+  const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
   let b;
   try {
     const before = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true });
     const uid = process.getuid?.();
-    assert.ok(same(before, named) && before.isFile() && before.nlink === 1n && before.size === BigInt(s.size)
+    assert.ok(same(before, named) && before.isFile() && named.isFile() && !named.isSymbolicLink()
+      && before.nlink === 1n && before.size > 0n && before.size <= BigInt(maxBytes)
       && (uid !== undefined && (before.uid === BigInt(uid) || system && before.uid === 0n))
       && (before.mode & 0o022n) === 0n, 'IOS_HOST_FILE_IDENTITY');
-    const canonical = fs.realpathSync(file), ns = namespace(canonical, end); b = Buffer.alloc(s.size + 1); let n = 0;
+    const canonical = fs.realpathSync(file), ns = namespace(canonical, end), size = Number(before.size);
+    assert.ok(canonical === file && same(before, fs.lstatSync(canonical, { bigint: true })), 'IOS_HOST_NAMESPACE');
+    b = Buffer.alloc(size + 1); let n = 0;
     while (n < b.length) { check(end); const v = fs.readSync(fd, b, n, Math.min(65536, b.length - n), null); if (!v) break; n += v; }
-    assert.ok(n === s.size && same(before, fs.fstatSync(fd, { bigint: true })) && same(named, fs.lstatSync(file, { bigint: true }))
+    check(end); assert.ok(n === size && same(before, fs.fstatSync(fd, { bigint: true })) && same(named, fs.lstatSync(file, { bigint: true }))
       && fs.realpathSync(file) === canonical, 'IOS_HOST_INPUT_CHANGED');
     assert.deepEqual(namespace(canonical, end), ns, 'IOS_HOST_NAMESPACE_CHANGED');
     const ref = { path: file, sha256: sha(b.subarray(0, n)), sizeBytes: n };
-    const verified = readIosHostInput(ref, { end, maxBytes, system }); verified.bytes.fill(0); return ref;
+    const verified = readIosHostInput(ref, { end, maxBytes, system }); verified.bytes.fill(0);
+    check(end); assert.ok(same(before, fs.fstatSync(fd, { bigint: true })) && same(named, fs.lstatSync(file, { bigint: true }))
+      && fs.realpathSync(file) === canonical, 'IOS_HOST_INPUT_CHANGED');
+    assert.deepEqual(namespace(canonical, end), ns, 'IOS_HOST_NAMESPACE_CHANGED'); return ref;
   } finally { b?.fill(0); fs.closeSync(fd); }
 }
 function writeExclusive(file, bytes, end, mode = 0o600) {
@@ -197,7 +205,7 @@ const[file,pin,size,role,...args]=process.argv.slice(1),end=Date.now()+20000;let
 const fail=()=>{throw Error('IOS_HOST_SHIM_SOURCE_REFUSED')};
 const frame=s=>['dev','ino','mode','uid','gid','nlink','size','mtimeNs','ctimeNs'].map(k=>String(s[k])).join(':');
 const ns=()=>{const out=[fs.realpathSync(file)];for(let p=path.dirname(out[0]);;p=path.dirname(p)){const s=fs.lstatSync(p,{bigint:true});if(!s.isDirectory()||s.isSymbolicLink()||out.length>128)fail();out.push([p,...['dev','ino','mode','uid','gid'].map(k=>String(s[k]))]);if(p===path.dirname(p))return JSON.stringify(out)}};
-try{if(!path.isAbsolute(file)||!/^\d+$/.test(size)||Number(size)>131072)fail();fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0));const a=fs.fstatSync(fd,{bigint:true}),n=fs.lstatSync(file,{bigint:true}),before=ns();if(!a.isFile()||n.isSymbolicLink()||a.uid!==BigInt(process.getuid())||a.nlink!==1n||a.size!==BigInt(size)||frame(a)!==frame(n)||(a.mode&0o022n)!==0n)fail();b=Buffer.alloc(Number(size)+1);let count=0;while(count<b.length){if(Date.now()>=end)fail();const v=fs.readSync(fd,b,count,Math.min(65536,b.length-count),null);if(!v)break;count+=v}if(count!==Number(size)||frame(a)!==frame(fs.fstatSync(fd,{bigint:true}))||frame(n)!==frame(fs.lstatSync(file,{bigint:true}))||ns()!==before||createHash('sha256').update(b.subarray(0,count)).digest('hex')!==pin)fail();const module=await import('data:text/javascript;base64,'+b.subarray(0,count).toString('base64'));process.exitCode=await module.iosHostCli([role,...args]);}catch(error){const code=String(error?.message||'').split('\n',1)[0];console.error(/^IOS_HOST_[A-Z0-9_]+$/.test(code)?code:'IOS_HOST_CHILD_REFUSED');process.exitCode=1}finally{b?.fill(0);if(fd!==undefined)fs.closeSync(fd)}
+try{if(!path.isAbsolute(file)||!/^\d+$/.test(size)||Number(size)>131072)fail();fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0));const a=fs.fstatSync(fd,{bigint:true}),n=fs.lstatSync(file,{bigint:true}),before=ns();if(!a.isFile()||n.isSymbolicLink()||a.uid!==BigInt(process.getuid())||a.nlink!==1n||a.size!==BigInt(size)||frame(a)!==frame(n)||(a.mode&0o022n)!==0n)fail();b=Buffer.alloc(Number(size)+1);let count=0;while(count<b.length){if(Date.now()>=end)fail();const v=fs.readSync(fd,b,count,Math.min(65536,b.length-count),null);if(!v)break;count+=v}if(count!==Number(size)||frame(a)!==frame(fs.fstatSync(fd,{bigint:true}))||frame(n)!==frame(fs.lstatSync(file,{bigint:true}))||ns()!==before||createHash('sha256').update(b.subarray(0,count)).digest('hex')!==pin)fail();const module=await import('data:text/javascript;base64,'+b.subarray(0,count).toString('base64'));process.exitCode=await module.iosHostCli([role,...args]);}catch(error){const code=String(error?.message||'').split('\n',1)[0];console.error(/^IOS_HOST_[A-Z0-9_]+$/.test(code)?code:'IOS_HOST_CHILD_REFUSED');process.exitCode=1}finally{b?.fill(0);if(fd!==undefined)fs.closeSync(fd)}
 `;
 const LOADER_FENCE = 'for name in ${!DYLD_@} LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT LD_DEBUG LD_PROFILE LD_ASSUME_KERNEL LD_BIND_NOW; do if declare -p "$name" >/dev/null 2>&1; then echo IOS_HOST_DYNAMIC_LOADER_OVERRIDE_REFUSED >&2; exit 1; fi; done\n';
 // The readonly branch is a separate pinned Python transport. It never imports
@@ -297,24 +305,24 @@ export async function prepareIosHostLaunch({ directory: output, nodePolicy, ruby
   paths.projectPods = path.join(sourceRoot, 'apps/mobile/ios/Pods');
   for (const suffix of ['Library', 'Library/Caches', 'Library/Caches/ReactNative']) fs.mkdirSync(path.join(paths.home, suffix), { mode: 0o700 });
   const bundle = writeExclusive(path.join(output, 'ruby-curl-roots.pem'), ca, end); ca.fill(0);
-  const helper = reference(path.join(sourceRoot, 'scripts/mobile/ios-host-launch.mjs'), end, 131072);
+  const helper = referenceIosHostInput(path.join(sourceRoot, 'scripts/mobile/ios-host-launch.mjs'), end, 131072);
   const executing = readIosHostInput(helper, { end, maxBytes: 131072 });
   try { assert.ok(import.meta.url === pathToFileURL(helper.path).href || import.meta.url === 'data:text/javascript;base64,' + executing.bytes.toString('base64'), 'IOS_HOST_PREPARE_SOURCE_AUTHORITY'); }
   finally { executing.bytes.fill(0); }
   const podHome = path.resolve(path.dirname(tools.pod.path), '../libexec'); directory(podHome, end, false);
   const rubyGems = path.resolve(path.dirname(tools.ruby.path), '../lib/ruby/gems/4.0.0'); directory(rubyGems, end, false);
-  const podScript = reference(path.join(podHome, 'bin/pod'), end, 32768, true);
+  const podScript = referenceIosHostInput(path.join(podHome, 'bin/pod'), end, 32768, true);
   const source = {};
   for (const [name, pin] of Object.entries(SOURCE_PINS)) {
-    source[name] = reference(path.join(sourceRoot, 'scripts/mobile', name), end, 32768);
+    source[name] = referenceIosHostInput(path.join(sourceRoot, 'scripts/mobile', name), end, 32768);
     assert.equal(source[name].sha256, pin, 'IOS_HOST_RUNTIME_SOURCE_UNREVIEWED');
     if (name.endsWith('.py')) { const input = readIosHostInput(source[name], { end, maxBytes: 32768 }); try { writeExclusive(path.join(paths.runtime, name), input.bytes, end); } finally { input.bytes.fill(0); } }
   }
   const shims = {};
   for (const name of ['node', 'npm', 'ruby', 'pod', 'curl', 'git']) shims[name] = writeExclusive(path.join(paths.bin, name), shimBytes(tools.node.path, helper, node.environment, name, { source: source['ios-git-readonly.py'], python: tools.python, git: tools.git }), end, 0o700);
   const nodeNpm = { user: writeExclusive(path.join(output, 'npm-user.npmrc'), NPMRC, end), global: writeExclusive(path.join(output, 'npm-global.npmrc'), NPMRC, end),
-    cli: reference(path.resolve(path.dirname(tools.node.path), '../lib/node_modules/npm/bin/npm-cli.js'), end, 4096),
-    package: reference(path.resolve(path.dirname(tools.node.path), '../lib/node_modules/npm/package.json'), end, 65536) };
+    cli: referenceIosHostInput(path.resolve(path.dirname(tools.node.path), '../lib/node_modules/npm/bin/npm-cli.js'), end, 4096),
+    package: referenceIosHostInput(path.resolve(path.dirname(tools.node.path), '../lib/node_modules/npm/package.json'), end, 65536) };
   const policy = { schemaVersion: 1, kind: 'caseops-ios-host-launch-v1', role, deadlineEpochMs: deadline, nodePolicy, nodeNpm, tools, helper, podHome, rubyGems, podScript,
     rubySourceBundle: rubyBundle, rubyRootCount: 188, rubyRootSetSha256: RUBY_ROOT_SET, bundle, fixtureCA, paths, shims, source,
     curlScope: 'explicit-selected-ruby188-file; native-OS-default-unverified', requiresOwnedOuterController: true };
@@ -499,7 +507,7 @@ function ownedMutationPath(value, paths, end) {
   return { root, namespace: namespace(value, end) };
 }
 function gitConfig(ref, end) {
-  const input = reference(ref, end, 65536); const held = readIosHostInput(input, { end, maxBytes: 65536 });
+  const input = referenceIosHostInput(ref, end, 65536); const held = readIosHostInput(input, { end, maxBytes: 65536 });
   try {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(held.bytes); assert.ok(!text.includes('\0'), 'IOS_HOST_GIT_CONFIG');
     let section = '', remote = null;
