@@ -406,12 +406,19 @@ def report_findings(report: Path) -> list[dict]:
 
 
 def _cleanup_owned_container(
-    docker: str, name: str, receipt_path: Path, scan_error_type: str | None
+    docker: str,
+    name: str,
+    receipt_path: Path,
+    scan_error_type: str | None,
+    *,
+    container_id: str | None,
 ) -> dict:
     if not re.fullmatch(r"caseops-secret-[0-9a-f]{32}", name):
         raise ScanError("Scanner cleanup requires its exact owned container name")
     receipt = {
         "container": name,
+        "container_id": container_id,
+        "create_acknowledged": container_id is not None,
         "cleanup_confirmed": False,
         "remove_exit_code": None,
         "inspect_attempts": 0,
@@ -455,6 +462,10 @@ def _cleanup_owned_container(
                     raise ScanError(
                         "Scanner container cleanup could not verify absence"
                     )
+                if container_id is None:
+                    raise ScanError(
+                        "Scanner creation outcome is unacknowledged; cleanup is unconfirmed"
+                    )
                 receipt["cleanup_confirmed"] = True
                 return receipt
             # Removal acknowledgement can precede daemon-visible absence.
@@ -482,7 +493,7 @@ def scan_boundary(
     report = workspace / (kind + ".sarif")
     args = [
         docker,
-        "run",
+        "create",
         "--rm",
         "--network",
         "none",
@@ -517,17 +528,35 @@ def scan_boundary(
             f"--no-ext-diff --no-textconv {selection}"
         )
     result = None
+    container_id = None
     scan_error_type = None
+    deadline = monotonic() + timeout
     try:
-        result = subprocess.run(args, capture_output=True, timeout=timeout, check=False)
+        created = subprocess.run(args, capture_output=True, timeout=timeout, check=False)
+        if created.returncode != 0 or not re.fullmatch(
+            rb"[0-9a-f]{64}\n?", created.stdout
+        ):
+            raise ScanError("Scanner container creation was not acknowledged")
+        container_id = created.stdout.decode("ascii").strip()
+        # Only an acknowledged create may start. A killed run/create client can
+        # leave a daemon request that creates AFTER an exact not-found response.
+        start = [docker, "start", "--attach", container_id]
+        budget = deadline - monotonic()
+        if budget <= 0:
+            raise subprocess.TimeoutExpired(start, timeout)
+        result = subprocess.run(start, capture_output=True, timeout=budget, check=False)
     except BaseException as exc:
         scan_error_type = type(exc).__name__
         raise
     finally:
-        # A killed Docker client can leave a running scanner. Remove only this
-        # invocation's uniquely named container, including on interruption.
+        # Start cannot recreate a removed ID. Without a create acknowledgement,
+        # absence is only a snapshot, never proof that no late create can appear.
         _cleanup_owned_container(
-            docker, name, output / (kind + "-cleanup.json"), scan_error_type
+            docker,
+            name,
+            output / (kind + "-cleanup.json"),
+            scan_error_type,
+            container_id=container_id,
         )
     if result is None:
         raise ScanError("Scanner did not complete")

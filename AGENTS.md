@@ -1343,6 +1343,17 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- A timed-out Docker client can leave an unsettled create request even after a
+  momentary exact-name absence. A scanner must acknowledge creation before
+  starting the immutable container ID, share its original execution deadline,
+  and retain cleanup as unconfirmed when creation was not acknowledged. Prove
+  late creation, actual timeout/interruption and lost acknowledgement offline;
+  never turn a single not-found snapshot into whole-invocation cleanup proof.
+- Parameter values may contain backend names and literal test separators.
+  Reconcile canonical collected identities, phases and JUnit before adding
+  category totals; a substring count of hostile URL inputs is not a backend
+  inventory. Preserve a failed evidence adapter separately from actual results.
+
 - A successful CodeQL upload workflow is not a successful code-scanning result.
   Reconcile the exact-head independent GitHub Advanced Security results check,
   every annotation and required status before starting costly release gates or

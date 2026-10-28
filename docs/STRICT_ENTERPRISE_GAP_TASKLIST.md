@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## October 28 Unsettled Scanner Creation Is Not Proven Cleanup
+
+**NO-GO pending joined-source gates.** Security40729502028 fails the real
+timeout cleanup test despite a positive cleanup receipt. A deterministic late
+create reproduces the false absence claim. Acknowledged create followed by
+immutable-ID start shares the existing deadline and cannot recreate a removed
+container; missing acknowledgement remains explicitly unconfirmed. Isolated
+proposal75/75 preserves all67 prior identities and adds8 regressions, including
+three actual Docker timeout/interruption/lost-ack boundaries. Source/head CI,
+independent CodeQL results, full Docker and exact production acceptance are
+still required. No waived audit, raised deadline or broader cleanup is allowed.
+Both real Excel summaries now carry INTERIM05/NO-GO, not a certified release.
+
 ## October 28 Scan Workflow Success Is Not Results Acceptance
 
 **NO-GO.** 68C's CI/Security/CodeQL Advanced workflows succeeded, but independent

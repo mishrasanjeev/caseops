@@ -8,6 +8,15 @@ traffic, a backlink, or a conversion.
 
 ## 2026-10-28 13:14 UTC - Release Gate, Not A Search Audit
 
+17:08 UTC engineering update: A729 Security40729502028 failed one real scanner
+cleanup test out of67; full CI40729501940 was cancelled for changed source,
+not accepted. The isolated acknowledged-create replacement passes all75 scanner
+cases (67retained+8new), separately from the75fixture-component inventory.
+Joined-source/current-head security, independent CodeQL, full Docker and exact
+production certification remain open. Both actual original Excel summaries were
+updated/read back INTERIM05/NO-GO at17:05UTC with formulas/verdicts preserved.
+No new live release, public acceptance, GSC metrics or conversion is inferred.
+
 16:46 UTC engineering correction:68C's CI, Security and CodeQL Advanced workflows
 passed, but the independent CodeQL results check122895415429 FAILED (two errors,
 four notes). Workflow-only green reporting was incomplete. The source correction

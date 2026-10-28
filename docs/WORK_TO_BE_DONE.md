@@ -1,5 +1,28 @@
 # CaseOps  - Work To Be Done
 
+## October 28 Scanner Creation Race Replacement
+
+A729 Security40729502028 failed one of67 offline scanner tests: its cleanup
+receipt claimed absence, but a later inspect found the owned container. The
+deterministic regression confirms unsettled daemon creation can outlive the
+killed `docker run` client and appear after that absence snapshot. The new
+scanner acknowledges `create` before `start --attach` on its immutable ID,
+sharing the original deadline; unacknowledged creation remains unconfirmed.
+No timeout, network, digest pin, redaction, history or policy fence is weakened.
+All original67 identities plus8 regressions pass in the isolated proposal
+(75/75,113.867s), with real timeout/interruption/lost-ack cases and26 owned
+containers confirmed absent. The joined checkout and hosted gates still need
+fresh verification. The remaining observed-state helper note now returns the
+pytest failure explicitly, not a misplaced change to its capture callback.
+
+A729 CI40729501940 was deliberately cancelled for changed source (43jobs:
+8success/35cancelled), not accepted; CodeQL Advanced3P and independent results
+success with1note do not cancel Security failure. New current-head Security,
+independent results, CI, complete Docker and production replay remain required.
+Both original workbooks were actually published/read back as INTERIM05 at
+17:05UTC, retaining7formulas and44tracked36fixed/7partial/1inconclusive rows.
+IP15-018 remains partial; no new production51-row export or release is claimed.
+
 ## October 28 Independent CodeQL Results Correction
 
 68c394b9 CI40710768303 succeeded (42 jobs passed, one intentional staging

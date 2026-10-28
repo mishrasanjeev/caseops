@@ -1,5 +1,16 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 28 Security Evidence Replacement
+
+ARCH-OPS-23/QG-SEC-004/SEC-031 require independent exact-head CodeQL results,
+not merely successful analysis upload. The scanner cleanup boundary now needs
+acknowledged creation before immutable-ID start, original shared timeout and
+explicitly unconfirmed unknown creation. Eight additive tests retain all67
+existing scanner identities; isolated75/75 and75standardfixture component
+passes are distinct inventories, not150browser tests or release acceptance.
+Complete joined-source Docker/CI/main/exact-production gates remain pending.
+J19/M21/US-063 records an engineering deferral only, not a fresh search audit.
+
 ## October 26 Verification Isolation Coverage
 
 ARCH-OPS-23/QG-SEC-004/SEC-031 add VR561-01..05 across actual primary/adjacent
