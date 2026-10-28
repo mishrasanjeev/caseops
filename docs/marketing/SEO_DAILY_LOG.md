@@ -91,6 +91,20 @@ separate and not yet certified. The saved SEO automation readback is ACTIVE
 with unchanged schedule/account and an explicit non-interruption release guard.
 These engineering results are not a new Search Console observation or release.
 
+At00:04UTC October28, F7 is rejected before release. CI40603387893 fails its
+governance branch-diff check because0002 declared an unchanged map despite the
+updated purpose documentation. Two PG test failures and the separate local
+dead-DROP failure miss SQLAlchemy's leading newline in compiled DROP statements;
+the native wait/cancel/replay assertions remain unproved, not waived. Normalize
+only observation whitespace and correct the declaration, then replay the full
+contract chain and native cases. The parent stopped the known-unreleasable CI
+and unfinished focused08 run; completed phases remain separate from unexecuted
+identities. Security40603387883 and CodeQL40603387936 succeeded, not release
+acceptance. Ordinary interim maintenance10 is clean for eight tenants with zero
+rebuilds; this is not post-release certification. Mobile's official Forge1.4.2
+repair now has347 source-test passes and no high/moderate audit findings; native
+device/iOS acceptance remains separate. No new GSC result or deployment follows.
+
 ## 2026-10-27 IST - Marked Public Checks; GSC Safety Stop
 
 Later engineering update,17:09 UTC: protected PR566/main

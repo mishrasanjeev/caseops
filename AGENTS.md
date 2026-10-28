@@ -1,5 +1,14 @@
 # CaseOps agent instructions
 
+- Validate the complete CI contract step, including branch-diff check-change
+  commands, before an expensive freeze. A valid rendered governance map does
+  not prove that each new migration has its required updated-map declaration.
+- Native DDL observation must normalize leading SQL whitespace. SQLAlchemy's
+  PostgreSQL DROP INDEX starts with a newline; match the actual compiled text
+  in callbacks and pg_stat_activity, retaining exact database/backend/index
+  ownership and native wait assertions. A missed observer is not a proved
+  migration interruption or a reason to weaken recovery assertions.
+
 - A mirror's null first-patched field is not proof that no official fix exists.
   Reconcile the CVE's maintainer advisory, aliases, released commits and npm
   tags before declaring an upstream blocker. A GitHub Releases404 can coexist

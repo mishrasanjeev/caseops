@@ -57,7 +57,7 @@ def test_second_drop_wait_cancel_retains_dead_prefix_and_replays(database, recor
 
     def capture_drop(connection, cursor, statement, parameters, context, executemany):
         if (connection.engine.url.database != engine.url.database
-                or not statement.startswith("DROP INDEX CONCURRENTLY")
+                or not statement.lstrip().startswith("DROP INDEX CONCURRENTLY")
                 or not re.search(rf"\b{re.escape(LEGACY)}\b", statement)
                 or "worker_pid" in observed):
             return
@@ -80,7 +80,7 @@ def test_second_drop_wait_cancel_retains_dead_prefix_and_replays(database, recor
                 native = monitor.execute(sa.text(
                     "SELECT state, wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers "
                     "FROM pg_stat_activity WHERE pid = :pid AND datname = :database "
-                    "AND query LIKE :query"
+                    "AND ltrim(query, E' \\t\\n\\r') LIKE :query"
                 ), {"pid": worker, "database": engine.url.database,
                     "query": f"DROP INDEX CONCURRENTLY%{LEGACY}%"}).mappings().one_or_none()
                 flags = None if state is None else (

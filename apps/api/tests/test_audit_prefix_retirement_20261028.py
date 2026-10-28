@@ -354,8 +354,8 @@ def _cancel_upgrade(engine, revision, name, phase, company, record_property):
 
     def target(connection, statement):
         return (connection.engine.url.database == engine.url.database
-                and statement.startswith("CREATE INDEX CONCURRENTLY" if create
-                                         else "DROP INDEX CONCURRENTLY")
+                and statement.lstrip().startswith("CREATE INDEX CONCURRENTLY" if create
+                                                  else "DROP INDEX CONCURRENTLY")
                 and re.search(rf"\b{re.escape(name)}\b", statement))
 
     def hold(connection, cursor, statement, parameters, context, executemany):
@@ -387,7 +387,7 @@ def _cancel_upgrade(engine, revision, name, phase, company, record_property):
                         ) as monitor:
                             pid = monitor.scalar(sa.text(
                                 "SELECT pid FROM pg_stat_activity WHERE datname = :database "
-                                "AND state = 'active' AND query LIKE :query "
+                                "AND state = 'active' AND ltrim(query, E' \\t\\n\\r') LIKE :query "
                                 "AND wait_event_type = 'Lock'"
                             ), {"database": engine.url.database,
                                 "query": ("CREATE INDEX CONCURRENTLY" if create else
@@ -454,7 +454,8 @@ def test_drop_dispatch_interruption_resumes_without_parent_rewrite(database, pha
 
     def interrupt(connection, cursor, statement, parameters, context, executemany):
         if (connection.engine.url.database == engine.url.database
-                and statement.startswith("DROP INDEX CONCURRENTLY") and LEGACY in statement):
+                and statement.lstrip().startswith("DROP INDEX CONCURRENTLY")
+                and LEGACY in statement):
             assert connection.connection.driver_connection.autocommit is True
             raise RuntimeError("staged-interruption-" + phase)
 
@@ -509,6 +510,7 @@ def test_restore_and_parent_drop_share_one_rollback_boundary(
     budgets, ddl = {}, []
 
     def observe(connection, cursor, statement, parameters, context, executemany):
+        statement = statement.lstrip()
         if (connection.engine.url.database == engine.url.database
                 and (statement.startswith("CREATE INDEX") or statement.startswith("DROP INDEX"))
                 and (LEGACY in statement or FULL in statement)):

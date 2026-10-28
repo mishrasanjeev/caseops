@@ -2,7 +2,8 @@
 
 Revision ID: 20261028_0002
 Revises: 20261028_0001
-DATA-GOVERNANCE-MAP: unchanged. No row, ACL, provenance or table-content change.
+DATA-GOVERNANCE-MAP: updated. Audit index purpose documents guarded retirement;
+no row, ACL, provenance or table-content change.
 MIGRATION-LOCK-RISK: acknowledged. PostgreSQL retirement is concurrent under
 the existing migration budgets. Downgrade restores the prefix with an ordinary
 transactional CREATE; its bounded ShareLock can wait for a concurrent writer.
