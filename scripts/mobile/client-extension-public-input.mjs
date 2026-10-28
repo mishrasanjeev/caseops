@@ -17,18 +17,28 @@ function namespace(file) {
   }
 }
 
+/** Only Windows named-path device zero differs from the held descriptor.
+ * Each full named/FD frame is still reconciled separately after consumption. */
+export function assertClientNamedDescriptor(named, opened, platform = process.platform) {
+  for (const key of fields) {
+    if (platform === 'win32' && key === 'dev' && named.dev === 0n) continue;
+    assert.equal(named[key], opened[key], 'CX_NAMED_DESCRIPTOR_IDENTITY_CHANGED');
+  }
+}
+
 /** Unknown-digest public ACKs are consumed from one bounded, verified FD. */
 export function readClientPublicInput(file, { maxBytes = 1048576, expectedSha256, afterOpen, json = true } = {}) {
   assert.ok(Number.isSafeInteger(maxBytes) && maxBytes > 0 && maxBytes <= 1048576);
-  const ancestors = namespace(file), named = fs.lstatSync(file, { bigint: true });
-  assert.ok(named.isFile() && !named.isSymbolicLink());
-  if (typeof process.getuid === 'function') assert.equal(named.uid, BigInt(process.getuid()));
-  assert.equal(named.nlink, 1n);
-  assert.ok(named.size <= BigInt(maxBytes));
   let fd;
   try {
-    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
-    assert.deepEqual(metadata(fs.fstatSync(fd, { bigint: true })), metadata(named));
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+    const opened = fs.fstatSync(fd, { bigint: true });
+    assert.ok(opened.isFile() && opened.nlink === 1n && opened.size <= BigInt(maxBytes));
+    if (typeof process.getuid === 'function') assert.equal(opened.uid, BigInt(process.getuid()));
+    const named = fs.lstatSync(file, { bigint: true });
+    assert.ok(named.isFile() && !named.isSymbolicLink());
+    assertClientNamedDescriptor(named, opened);
+    const ancestors = namespace(file);
     afterOpen?.(fd);
     const storage = Buffer.alloc(maxBytes + 1);
     let count = 0;
@@ -38,16 +48,18 @@ export function readClientPublicInput(file, { maxBytes = 1048576, expectedSha256
       count += size;
     }
     assert.ok(count <= maxBytes, 'CX_PUBLIC_INPUT_BOUND');
-    assert.equal(BigInt(count),named.size,'CX_PUBLIC_INPUT_EXTENT_CHANGED');
-    assert.deepEqual(metadata(fs.fstatSync(fd, { bigint: true })), metadata(named));
-    assert.deepEqual(metadata(fs.lstatSync(file, { bigint: true })), metadata(named));
+    assert.equal(BigInt(count), opened.size, 'CX_PUBLIC_INPUT_EXTENT_CHANGED');
+    assert.deepEqual(metadata(fs.fstatSync(fd, { bigint: true })), metadata(opened));
+    const finalNamed = fs.lstatSync(file, { bigint: true });
+    assert.deepEqual(metadata(finalNamed), metadata(named));
+    assertClientNamedDescriptor(finalNamed, opened);
     assert.deepEqual(namespace(file), ancestors);
     const bytes = storage.subarray(0, count);
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     if (expectedSha256 !== undefined) assert.equal(sha256, expectedSha256);
     const value = json ? JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) : undefined;
     if (json) assert.ok(value && typeof value === 'object' && !Array.isArray(value));
-    return { bytes, value, evidence: { path: file, sha256 }, metadata: metadata(named) };
+    return { bytes, value, evidence: { path: file, sha256 }, metadata: metadata(opened) };
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
   }

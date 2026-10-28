@@ -15,7 +15,7 @@ Its `recipe` references the original immutable plan request; that schema and
 plan-only CLI remain unchanged. Other references bind the exact source tree,
 reviewed gate bundle, tool inventory, actual store-history observation, approved
 privacy descriptor, reservation directory and a new private output directory.
-An Android request additionally references a private password JSON object;
+An Android request additionally supplies an exact path-only `{path}` descriptor for a private password JSON object; it has no secret-content hash or public evidence fingerprint.
 iOS forbids it. Architectures are explicit, with Android arm64 required.
 
 The gate bundle binds source commit/tree, mobile fingerprint/count, tools digest,
@@ -59,13 +59,18 @@ source/build/link batch. A complete matching batch can be reused for the other
 platform; each platform has its own exclusive execution claim. Partial batches,
 existing claims and existing output directories refuse rather than reset or
 replay. Outputs use owner-private directories and exclusive0600 files.
+The public Podfile.lock copy has a separate exclusive0600 writer: its generated
+project parent may be0755, must be canonical/current-owned without shared write,
+and is never chmodded by the executor. Same-FD bounded readback and final leaf/
+namespace/deadline checks bind the retained public bytes; an existing lock refuses
+without overwrite. Secret/output directory requirements remain unchanged.
 
 Public viewer/prebuild/Pod preparation runs before profile/keychain or Android
 keystore/password admission. iOS checks the exact installed distribution profile,
 Team and application prefix separately, app identity, expiration, certificate
 membership and valid private-key identity. Android copies the admitted private
 keystore into owned output, obtains passwords from a0400/0600 JSON descriptor,
-and verifies its private-key entry and upload certificate. Password values travel
+and verifies its private-key entry and upload certificate. The dedicated owner0400/0600 reader bounds the exact password-pair JSON to16KiB, validates UTF8/fields/NULs, purges raw buffers, and never computes or returns its content digest. Password values travel
 only in child environment, never argv or persistent logs. Upload and Play
 app-signing certificates retain separate roles. No key/profile is generated,
 installed, exported or searched for by this runner.
@@ -109,7 +114,7 @@ scope; they are not complete native-tool logs or an assertion of signing success
 Original failure, cleanup and persistence failures remain separate. Unreached
 phases remain unverified, and failed cleanup cannot produce acceptance.
 
-The38 Node and14 Python controls use real temporary files, ZIP/ELF/certificate
+The original38 Node and14 Python controls use real temporary files, ZIP/ELF/certificate
 parsers and explicitly synthetic command observations. Test adapters are code-only
 and always produce `contractOnly:true`, never distribution-signing acceptance.
 An actual accepted Temurin21.0.12.1+1 unsigned synthetic JAR reached the verifier
@@ -118,13 +123,32 @@ stderr. The earlier pipe-based source transport failed before verifier entry
 (`Illegal seek`) and remains retained; the corrected transport uses the same
 verified seekable anonymous FD. None is a signed IPA/AAB positive or app build.
 
-The baseline branch is `cfcb98d7`. Its missing privacy reader intentionally blocks
-real execution. The separate Host privacy implementation at `b1e0efa7` supplies
-`readPrivacyPolicySettings` and the agreed compiled metadata keys after merge;
-its digest binds descriptor bytes, not deployed policy content or approval.
-Final integration must reconcile literal CI/LF inventories and rerun the complete
-affected original recipe plus both new Node modules and Python module. Real
+The preserved original executor branch was based on `cfcb98d7` and refused
+its missing privacy reader. The published `685b8793` includes the separate Host
+privacy implementation from `b1e0efa7`: `readPrivacyPolicySettings` and the agreed
+compiled metadata keys. Its digest binds descriptor bytes, not deployed policy
+content or approval. Final integration still must reconcile literal CI/LF
+inventories and rerun the complete affected original recipe plus both new Node
+modules and Python module. Real
 registered IDs, current store history, profiles/private keys, approved policy
 content/URL, final security/native gates and signed-artifact positives remain
 external or unrun prerequisites. No owner account, credential or tax identifier
 is stored in this source preparation.
+
+The published `685b8793` CodeQL findings are retained. The original password-file
+SHA256 was an integrity reference, not a password verifier or stored login hash;
+removing that content fingerprint is a privacy improvement, not a KDF substitute
+or scanner exception. Public source/policy/keystore references still use their
+existing SHA256 contracts. New execution requests must use the path-only private
+descriptor; old hashed password descriptors are refused. Podfile.lock creation
+now calls the complete exclusive FD writer directly: an existing file produces
+a fixed EEXIST classification without prechecking or overwriting its bytes.
+Fresh CodeQL analysis and its separate alert verdict remain required.
+
+This repair adds eight offline controls to the two affected Node modules
+(23 artifact/input controls and23 execution controls). In addition to the exact
+exclusive-write refusal, they prove no private credential-content hash operation,
+raw-buffer purge including an in-flight read failure, strict path/schema/mode/
+UTF8/extent admission, failed-public-gate zero private reads, and one consumed
+unknown synthetic signer attempt with cleared environment/no value reflection.
+These are46 source contracts, not actual password-file, signing or store proof.

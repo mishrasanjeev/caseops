@@ -7,12 +7,18 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from xml.etree import ElementTree
 
 import pytest
 import yaml
 
-from tests.postgres_sharding import _junit_identity, partition, verify_reports
+from tests.postgres_sharding import (
+    _junit_identity,
+    partition,
+    pytest_collection_modifyitems,
+    verify_reports,
+)
 
 
 def _render_postgres_matrix(value: str, shard: int, total: int) -> str:
@@ -208,7 +214,9 @@ def test_sixteen_shards_split_each_previous_shard_without_changing_its_inventory
 
 
 @pytest.mark.parametrize("nodes,shard,total", [([], 1, 4), (["a", "a"], 1, 1),
-    (["a"], 2, 4), (["a"], 0, 1), (["a"], 1, 33)])
+    (["a"], 2, 4), (["a"], 0, 1), (["a"], 1, 33),
+    (["a"], True, 1), (["a"], 1, True), (["a"], 1.0, 1), (["a"], 1, 1.0),
+    ("abc", 1, 1), ({"a": None}, 1, 1), ([None], 1, 1), ([""], 1, 1), (["a", 1], 1, 1)])
 def test_postgres_partition_rejects_incomplete_or_invalid_selections(nodes, shard, total):
     with pytest.raises(ValueError):
         partition(nodes, shard, total)
@@ -243,3 +251,138 @@ def test_postgres_report_gate_requires_every_actual_success(tmp_path, fault, tot
     else:
         with pytest.raises(ValueError):
             verify_reports(tmp_path, total)
+
+
+# Independent literal source685 job/phase evidence, not imported from selector.
+MEASURED_CASES = {
+    (
+        "tests/test_ip_import_review_gaps_20261013.py::"
+        "test_thousand_same_mark_distinct_applicants_commit_has_linear_materialization"
+    ): 10,
+    (
+        "tests/test_matter_readthrough_page_worker_20261028_postgres.py::"
+        "test_named_0008_waits_for_acknowledged_historical_source_writer_"
+        "before_current_head[hearing_pack_items]"
+    ): 3,
+    (
+        "tests/test_matter_readthrough_page_worker_20261028_postgres.py::"
+        "test_named_0008_waits_for_acknowledged_historical_source_writer_"
+        "before_current_head[hearing_packs]"
+    ): 6,
+    (
+        "tests/test_matter_readthrough_page_worker_20261028_postgres.py::"
+        "test_named_0008_waits_for_acknowledged_historical_source_writer_"
+        "before_current_head[recommendation_decisions]"
+    ): 16,
+}
+
+
+def _measured_fixture_nodes():
+    return sorted(
+        [
+            *(f"tests/test_sample.py::test_item[{i}]" for i in range(130)),
+            *MEASURED_CASES,
+            *(node + "-near-match" for node in MEASURED_CASES),
+        ]
+    )
+
+
+@pytest.mark.parametrize("node,target", list(MEASURED_CASES.items()))
+def test_measured_cases_use_only_the_reviewed_literal_target(node, target):
+    nodes = _measured_fixture_nodes()
+    locations = [shard for shard in range(1, 17) if node in partition(nodes, shard, 16)]
+    assert locations == [target]
+
+
+@pytest.mark.parametrize("total", [1, 2, 4, 8, 16, 32])
+def test_measured_routing_keeps_the_complete_union_and_every_other_assignment(total):
+    nodes = _measured_fixture_nodes()
+    result = [partition(nodes, shard, total) for shard in range(1, total + 1)]
+    flat = [node for group in result for node in group]
+    assert len(flat) == len(set(flat)) == len(nodes)
+    assert sorted(flat) == nodes
+    actual = {node: shard for shard, group in enumerate(result, 1) for node in group}
+    for index, node in enumerate(nodes):
+        expected = (
+            MEASURED_CASES[node] if total == 16 and node in MEASURED_CASES else index % total + 1
+        )
+        assert actual[node] == expected
+    assert result == [
+        partition(list(reversed(nodes)), shard, total) for shard in range(1, total + 1)
+    ]
+
+
+@pytest.mark.parametrize(
+    "fault", [None, "old-allocation", "missing-relocated-case", "duplicate-relocated-case"]
+)
+def test_measured_routing_report_gate_rejects_old_or_incomplete_allocation(tmp_path, fault):
+    nodes = _measured_fixture_nodes()
+    ordinal = {node: index % 16 + 1 for index, node in enumerate(nodes)}
+    expected = {node: MEASURED_CASES.get(node, ordinal[node]) for node in nodes}
+    chosen = next(iter(MEASURED_CASES))
+    for shard in range(1, 17):
+        # Build expected artifacts independently of partition() under test.
+        assignment = ordinal if fault == "old-allocation" else expected
+        selected = [node for node in nodes if assignment[node] == shard]
+        if shard == expected[chosen]:
+            if fault == "missing-relocated-case":
+                selected.remove(chosen)
+            elif fault == "duplicate-relocated-case":
+                selected.append(chosen)
+        inventory = {"shard": shard, "total": 16, "nodeids": nodes, "selected": selected}
+        (tmp_path / f"postgres-shard-{shard}.json").write_text(json.dumps(inventory))
+        suite = ElementTree.Element("testsuite")
+        for node in selected:
+            classname, name = _junit_identity(node)
+            ElementTree.SubElement(suite, "testcase", classname=classname, name=name)
+        ElementTree.ElementTree(suite).write(tmp_path / f"postgres-shard-{shard}.xml")
+    if fault is None:
+        assert verify_reports(tmp_path, 16) == {
+            "status": "passed",
+            "shards": 16,
+            "collected": len(nodes),
+            "skipped": 0,
+        }
+    else:
+        with pytest.raises(ValueError):
+            verify_reports(tmp_path, 16)
+
+
+def test_measured_collection_hook_keeps_selected_items_in_declaration_order(tmp_path):
+    original = list(reversed(_measured_fixture_nodes()))
+    ordered = sorted(original)
+    destinations = {node: MEASURED_CASES.get(node, i % 16 + 1) for i, node in enumerate(ordered)}
+    observed_targets = []
+    for shard in (3, 6, 10, 16):
+        inventory = tmp_path / f"postgres-shard-{shard}.json"
+        options = {
+            "--postgres-shard": shard,
+            "--postgres-shards": 16,
+            "--postgres-inventory": str(inventory),
+        }
+        deselected = []
+        config = SimpleNamespace(
+            getoption=options.__getitem__,
+            hook=SimpleNamespace(
+                pytest_deselected=lambda *, items, recorded=deselected: recorded.extend(
+                    item.nodeid for item in items
+                )
+            ),
+        )
+        items = [
+            SimpleNamespace(
+                nodeid=node,
+                get_closest_marker=lambda name: object() if name == "postgres" else None,
+            )
+            for node in original
+        ]
+        pytest_collection_modifyitems(config, items)
+        assert [item.nodeid for item in items] == [
+            node for node in original if destinations[node] == shard
+        ]
+        assert deselected == [node for node in original if destinations[node] != shard]
+        assert json.loads(inventory.read_text())["selected"] == [
+            node for node in ordered if destinations[node] == shard
+        ]
+        observed_targets.append(shard)
+    assert observed_targets == [3, 6, 10, 16]

@@ -222,7 +222,7 @@ def build(upstream):
 
 def write_new(path, body, deadline):
     path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         count = 0
         while count < len(body):
@@ -273,6 +273,26 @@ def member_parent_names(path):
     return tuple(parent.as_posix() for parent in path.parents)
 
 
+
+def bounded_directory_names(path, budget, observation):
+    budget.check()
+    names, seen = [], set()
+    with os.scandir(path) as stream:
+        iterator = iter(stream)
+        while True:
+            budget.check()
+            try:
+                entry = next(iterator)
+            except StopIteration:
+                break
+            if entry.name in seen:
+                raise ValueError("DUPLICATE_GENERATED_DIRECTORY_ENTRY")
+            budget.entry(path / entry.name, observation)
+            seen.add(entry.name)
+            names.append(entry.name)
+    return sorted(names)
+
+
 def output_inventory(root, expected, budget, observation):
     rows, pending = {}, [root]
     while pending:
@@ -289,7 +309,7 @@ def output_inventory(root, expected, budget, observation):
             raise ValueError("GENERATED_SYMLINK_REFUSED")
         relative = relative_member_name(path, root)
         if stat.S_ISDIR(initial.st_mode):
-            names = sorted(os.listdir(path))
+            names = bounded_directory_names(path, budget, observation)
             rows[path] = {"path": relative, "kind": "directory", "namedMetadata": metadata(initial),
                           "children": names, "namespace": ancestors}
             pending.extend(path / name for name in reversed(names))
@@ -348,7 +368,7 @@ def verify_output(root, expected, deadline):
         require_owner(named)
         if metadata(named) != row["namedMetadata"] or namespace(path, root) != row["namespace"]:
             raise ValueError("FINAL_GENERATED_PATH_RECONCILIATION_REQUIRED")
-        if row["kind"] == "directory" and sorted(os.listdir(path)) != row["children"]:
+        if row["kind"] == "directory" and bounded_directory_names(path, budget, "after") != row["children"]:
             raise ValueError("FINAL_GENERATED_CHILDREN_RECONCILIATION_REQUIRED")
         if metadata(path.lstat()) != row["namedMetadata"]:
             raise ValueError("FINAL_GENERATED_PATH_RECONCILIATION_REQUIRED")

@@ -27,11 +27,11 @@ export function namespace(file, deadline) {
     if (p === path.dirname(p)) return rows;
   }
 }
-export function readInput(file, { sha256, maxBytes = 1048576, privateFile = false, systemTool = false, deadline, allowEmpty = false } = {}) {
+function readOwnedBuffer(file, { maxBytes = 1048576, privateFile = false, systemTool = false, deadline, allowEmpty = false } = {}) {
   checkDeadline(deadline);
   assert.ok(path.isAbsolute(file || '') && path.resolve(file) === file, 'STORE_ABSOLUTE_INPUT_REQUIRED');
   assert.ok(Number.isSafeInteger(maxBytes) && maxBytes > 0 && maxBytes <= 512 * 1024 * 1024, 'STORE_INPUT_BOUND');
-  if (sha256 !== undefined) assert.match(sha256, /^[a-f0-9]{64}$/, 'STORE_HASH_REQUIRED');
+  const allocations = []; let body;
   const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
   try {
     const a = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true });
@@ -46,7 +46,7 @@ export function readInput(file, { sha256, maxBytes = 1048576, privateFile = fals
     const limit = Number(a.size) + 1, chunks = [];
     let bytes = 0;
     while (bytes < limit) {
-      checkDeadline(deadline); const chunk = Buffer.alloc(Math.min(65536, limit - bytes));
+      checkDeadline(deadline); const chunk = Buffer.alloc(Math.min(65536, limit - bytes)); allocations.push(chunk);
       const count = fs.readSync(fd, chunk, 0, chunk.length, bytes);
       if (!count) break;
       chunks.push(chunk.subarray(0, count)); bytes += count;
@@ -58,10 +58,37 @@ export function readInput(file, { sha256, maxBytes = 1048576, privateFile = fals
     const finalParents = namespace(canonical, deadline);
     assert.ok(parents.length === finalParents.length && parents.every((row, i) => row.path === finalParents[i].path
       && same(row.stat, finalParents[i].stat, identity)), 'STORE_INPUT_NAMESPACE_CHANGED');
-    const body = Buffer.concat(chunks, bytes), actual = digest(body);
+    body = Buffer.concat(chunks, bytes);
+    return { bytes: body, metadata: Object.fromEntries(fields.map(k => [k, String(a[k])])), canonical };
+  } finally { for (const allocation of allocations) allocation.fill(0); try { fs.closeSync(fd); } catch (error) { body?.fill(0); throw error; } }
+}
+export function readInput(file, { sha256, ...options } = {}) {
+  if (sha256 !== undefined) assert.match(sha256, /^[a-f0-9]{64}$/, 'STORE_HASH_REQUIRED');
+  const read = readOwnedBuffer(file, options);
+  try {
+    const actual = digest(read.bytes);
     if (sha256 !== undefined) assert.equal(actual, sha256, 'STORE_INPUT_HASH_MISMATCH');
-    return { bytes: body, sha256: actual, metadata: Object.fromEntries(fields.map(k => [k, String(a[k])])), canonical };
-  } finally { fs.closeSync(fd); }
+    return { ...read, sha256: actual };
+  } catch (error) { read.bytes.fill(0); throw error; }
+}
+// Password-pair input is not a public evidence reference. Never hash its
+// contents or return a digest/raw buffer for persistence. Ownership/namespace
+// and the actual keystore certificate provide the relevant local boundaries.
+export function readPrivateCredentials(input, { deadline } = {}) {
+  objectKeys(input, ['path'], 'STORE_PRIVATE_CREDENTIAL_PATH_REQUIRED');
+  let read, value, transferred = false;
+  try {
+    read = readOwnedBuffer(input.path, { maxBytes: 16384, privateFile: true, deadline });
+    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(read.bytes));
+    objectKeys(value, ['storePassword', 'keyPassword'], 'STORE_PASSWORD_FIELDS_REQUIRED');
+    assert.ok(Object.values(value).every(v => typeof v === 'string' && v.length > 0 && v.length <= 1024 && !v.includes('\0')), 'STORE_PASSWORD_VALUES_REQUIRED');
+    transferred = true;
+    return { value, metadata: read.metadata, canonical: read.canonical };
+  } catch { throw new Error('STORE_PRIVATE_CREDENTIALS_REFUSED'); }
+  finally {
+    read?.bytes.fill(0);
+    if (!transferred && value && typeof value === 'object') for (const key of Object.keys(value)) value[key] = undefined;
+  }
 }
 export function jsonInput(ref, options = {}) {
   objectKeys(ref, ['path', 'sha256'], 'STORE_REFERENCE_REQUIRED');
@@ -92,6 +119,58 @@ export function writePrivate(file, bytes, { deadline } = {}) {
     fs.fsyncSync(fd);
   } finally { fs.closeSync(fd); }
   return { path: file, sha256: digest(bytes) };
+}
+
+// Generated project directories are public source (normally 0755), unlike
+// secret/output directories. Do not relax writePrivate for this one public copy.
+export function writePublicLock(file, bytes, { deadline } = {}) {
+  checkDeadline(deadline);
+  assert.ok(path.isAbsolute(file || '') && path.resolve(file) === file
+    && Buffer.isBuffer(bytes) && bytes.length > 0 && bytes.length <= 1048576, 'STORE_PUBLIC_LOCK_INPUT_REQUIRED');
+  const parent = path.dirname(file), uid = process.getuid?.(), before = namespace(file, deadline);
+  const parentAllowed = stat => stat.isDirectory() && !stat.isSymbolicLink()
+    && (uid === undefined || stat.uid === BigInt(uid)) && (stat.mode & 0o022n) === 0n;
+  assert.ok(parentAllowed(before[0].stat) && fs.realpathSync(parent) === parent, 'STORE_PUBLIC_LOCK_PARENT_REQUIRED');
+  const reconcileParents = () => {
+    const after = namespace(file, deadline);
+    assert.ok(before.length === after.length && before.every((row, i) => row.path === after[i].path
+      && same(row.stat, after[i].stat, identity)) && parentAllowed(after[0].stat)
+      && fs.realpathSync(parent) === parent, 'STORE_PUBLIC_LOCK_NAMESPACE_CHANGED');
+  };
+  checkDeadline(deadline);
+  const fd = fs.openSync(file, fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL
+    | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
+  try {
+    const opened = fs.fstatSync(fd, { bigint: true });
+    assert.ok(opened.isFile() && opened.nlink === 1n && opened.size === 0n
+      && (uid === undefined || opened.uid === BigInt(uid)) && (opened.mode & 0o7777n) === 0o600n
+      && namedMatchesStoreDescriptor(opened, fs.lstatSync(file, { bigint: true }))
+      && fs.realpathSync(file) === file, 'STORE_PUBLIC_LOCK_IDENTITY_REQUIRED');
+    reconcileParents();
+    let count = 0;
+    while (count < bytes.length) {
+      checkDeadline(deadline);
+      const n = fs.writeSync(fd, bytes, count, Math.min(65536, bytes.length - count), count);
+      assert.ok(n > 0 && n <= Math.min(65536, bytes.length - count), 'STORE_OUTPUT_NO_PROGRESS'); count += n;
+    }
+    checkDeadline(deadline); fs.fsyncSync(fd); checkDeadline(deadline);
+    const written = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true });
+    assert.ok(same(opened, written, fields.slice(0, 6)) && written.size === BigInt(bytes.length)
+      && namedMatchesStoreDescriptor(written, named), 'STORE_PUBLIC_LOCK_CHANGED');
+    const retained = Buffer.alloc(bytes.length + 1); let read = 0;
+    while (read < retained.length) {
+      checkDeadline(deadline);
+      const n = fs.readSync(fd, retained, read, Math.min(65536, retained.length - read), read);
+      if (!n) break;
+      read += n;
+    }
+    checkDeadline(deadline);
+    assert.ok(read === bytes.length && retained.subarray(0, read).equals(bytes)
+      && same(written, fs.fstatSync(fd, { bigint: true })) && same(named, fs.lstatSync(file, { bigint: true }))
+      && fs.realpathSync(file) === file, 'STORE_PUBLIC_LOCK_CHANGED');
+    reconcileParents();
+    return { path: file, sha256: digest(retained.subarray(0, read)) };
+  } finally { fs.closeSync(fd); }
 }
 
 // Complete Git-tracked file contents and root/file metadata, not a full filesystem

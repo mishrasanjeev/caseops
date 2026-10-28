@@ -9,7 +9,7 @@ import {collectClientExtensions} from '../../apps/mobile/e2e/client-extensions-i
 import {parseClientCompatibility,requireClientExtensionRequest,decodeReadPage,decodeRecommendation} from '../../apps/mobile/e2e/client-extensions-contract.mjs';
 import {ClientExtensionUnavailable} from '../../apps/mobile/e2e/client-extensions-ui.mjs';
 import {readClientPublicInput} from './client-extension-public-input.mjs';
-import {captureClientTree,captureClientFile} from './client-extension-runtime.mjs';
+import {captureClientTree,captureClientFile,admitClientServer} from './client-extension-runtime.mjs';
 import {admitClientExtensions,executeClientExtensionInventory,runClientExtensions} from './run-client-extensions.mjs';
 import {waitForClientOperator} from './client-extension-controls.mjs';
 import {fileURLToPath} from 'node:url';
@@ -244,4 +244,126 @@ test('second member core refusal clears the earlier transferred member and curre
  f.io.reader=file=>{const value=reader(file);held.push(value);return value;};f.io.coreCheck=()=>{if(++checked===2)throw Error('SYNTHETIC_SECOND_CORE_REFUSAL');};
  await assert.rejects(admitClientExtensions(f.q,f.io),/SYNTHETIC_SECOND_CORE_REFUSAL/);assert.equal(f.reads(),2);assert.equal(checked,2);
  assert.ok(held.every(value=>value.bytes.every(b=>b===0)&&Object.values(value.value).every(v=>v===undefined)));
+});
+
+function withInstrumentedFile(reader, { replace = false } = {}) {
+ const root=temp(),file=path.join(root,'owned.json');fs.writeFileSync(file,'{"synthetic":true}',{mode:0o600});
+ const original={open:fs.openSync,stat:fs.fstatSync,named:fs.lstatSync,read:fs.readSync};let fd,reads=0,replaced=false;const order=[];
+ fs.openSync=(name,...args)=>{const result=original.open(name,...args);if(name===file&&fd===undefined){fd=result;order.push('open');}return result;};
+ fs.fstatSync=(value,...args)=>{const result=original.stat(value,...args);if(value===fd){order.push('fstat');if(replace&&!replaced){replaced=true;fs.renameSync(file,path.join(root,'retained'));fs.writeFileSync(file,'{}',{mode:0o600});}}return result;};
+ fs.lstatSync=(name,...args)=>{if(name===file)order.push('named');return original.named(name,...args);};
+ fs.readSync=(value,...args)=>{if(value===fd){reads++;order.push('read');}return original.read(value,...args);};
+ let error,result;try{result=reader(file);}catch(value){error=value;}finally{Object.assign(fs,{openSync:original.open,fstatSync:original.stat,lstatSync:original.named,readSync:original.read});}
+ try{assert.notEqual(fd,undefined);assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});return{order,reads,error,result,replaced};}finally{fs.rmSync(root,{recursive:true,force:true});}
+}
+test('public reader admits opened descriptor before named leaf or body',()=>{
+ const result=withInstrumentedFile(file=>readClientPublicInput(file));assert.ifError(result.error);assert.deepEqual(result.order.slice(0,3),['open','fstat','named']);assert.ok(result.reads>0);
+});
+test('runtime file admits opened descriptor before named leaf or body',()=>{
+ const result=withInstrumentedFile(file=>captureClientFile(file));assert.ifError(result.error);assert.deepEqual(result.order.slice(0,3),['open','fstat','named']);assert.ok(result.reads>0);
+});
+test('public leaf replacement after fstat is refused before zero body reads and FD closes',()=>{
+ const result=withInstrumentedFile(file=>readClientPublicInput(file),{replace:true});assert.ok(result.replaced&&result.error);assert.equal(result.reads,0);
+});
+test('runtime leaf replacement after fstat is refused before zero body reads and FD closes',()=>{
+ const result=withInstrumentedFile(file=>captureClientFile(file),{replace:true});assert.ok(result.replaced&&result.error);assert.equal(result.reads,0);
+});
+test('tree regular file uses descriptor-first admission and replacement consumes zero bytes',()=>{
+ const result=withInstrumentedFile(file=>captureClientTree(path.dirname(file)),{replace:true});assert.ok(result.replaced&&result.error);assert.equal(result.reads,0);
+});
+test('portable named device zero preserves inode owner and every other metadata field',async()=>{
+ const {assertClientNamedDescriptor}=await import('./client-extension-public-input.mjs');
+ const fd={dev:7n,ino:9n,mode:0o100600n,uid:501n,gid:20n,nlink:1n,size:2n,mtimeNs:3n,ctimeNs:4n};
+ assertClientNamedDescriptor({...fd,dev:0n},fd,'win32');
+ assert.throws(()=>assertClientNamedDescriptor({...fd,dev:0n},fd,'darwin'));
+ for(const change of [{dev:8n},{ino:10n},{uid:999n},{nlink:2n},{size:3n},{ctimeNs:5n}])assert.throws(()=>assertClientNamedDescriptor({...fd,dev:0n,...change},fd,'win32'));
+});
+test('tree late nested insertion after second directory observation is refused',()=>{
+ const root=temp(),nested=path.join(root,'nested'),late=path.join(nested,'late');fs.mkdirSync(nested);fs.writeFileSync(path.join(nested,'seed'),'x');
+ const oldRead=fs.readdirSync,oldOpen=fs.opendirSync;let reads=0,closes=0,inserted=false;
+ const insert=()=>{if(!inserted){inserted=true;fs.writeFileSync(late,'late');}};
+ fs.readdirSync=(file,...args)=>{const result=oldRead(file,...args);if(file===root&&++reads===2)insert();return result;};
+ fs.opendirSync=(file,...args)=>{const dir=oldOpen(file,...args);if(file===root){const close=dir.closeSync.bind(dir);dir.closeSync=()=>{close();if(++closes===2)insert();};}return dir;};
+ let error;try{captureClientTree(root);}catch(value){error=value;}finally{fs.readdirSync=oldRead;fs.opendirSync=oldOpen;}
+ try{assert.ok(inserted,'actual late entry was created');assert.ok(error,'late nested entry must not be certified complete');}finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('wide tree discovery uses bounded iterator before retaining entries and closes it',()=>{
+ const root=temp();for(let i=0;i<100;i++)fs.writeFileSync(path.join(root,'file-'+i),'x');
+ const oldRead=fs.readdirSync,oldOpen=fs.opendirSync;let yielded=0,closed=0;
+ fs.readdirSync=()=>{throw Error('UNBOUNDED_READDIR_REFUSED');};
+ fs.opendirSync=(...args)=>{const dir=oldOpen(...args),read=dir.readSync.bind(dir),close=dir.closeSync.bind(dir);dir.readSync=()=>{const value=read();if(value)yielded++;return value;};dir.closeSync=()=>{closed++;return close();};return dir;};
+ try{assert.throws(()=>captureClientTree(root,{maxEntries:8}),/CX_COMPLETE_TREE_ENTRY_BOUND/);assert.ok(yielded<=8);assert.equal(closed,1);}finally{fs.readdirSync=oldRead;fs.opendirSync=oldOpen;fs.rmSync(root,{recursive:true,force:true});}
+});
+test('two complete tree inventories share the original entry and byte caps',()=>{
+ const root=temp();fs.writeFileSync(path.join(root,'seed'),'x');
+ try{assert.throws(()=>captureClientTree(root,{maxEntries:3}),/CX_COMPLETE_TREE_ENTRY_BOUND/);assert.throws(()=>captureClientTree(root,{maxBytes:1}),/CX_COMPLETE_TREE_BYTE_BOUND/);
+  const positive=captureClientTree(root,{maxEntries:4,maxBytes:2});assert.equal(positive.complete,true);assert.equal(positive.entries[0].path,'');assert.equal(positive.bytes,1);assert.equal(positive.chargedBytes,2);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('tree deadline expires during actual enumeration and closes the iterator',()=>{
+ const root=temp();fs.writeFileSync(path.join(root,'seed'),'x');const oldOpen=fs.opendirSync;let closed=0;
+ fs.opendirSync=(...args)=>{const dir=oldOpen(...args),read=dir.readSync.bind(dir),close=dir.closeSync.bind(dir);dir.readSync=()=>{const result=read();const end=Date.now()+5;while(Date.now()<end){}return result;};dir.closeSync=()=>{closed++;return close();};return dir;};
+ try{assert.throws(()=>captureClientTree(root,{timeoutMs:1}),/CX_COMPLETE_TREE_DEADLINE/);assert.equal(closed,1);}finally{fs.opendirSync=oldOpen;fs.rmSync(root,{recursive:true,force:true});}
+});
+test('internal tool symlinks remain metadata-only and included in both complete inventories',()=>{
+ const root=temp();fs.writeFileSync(path.join(root,'seed'),'x');fs.symlinkSync('seed',path.join(root,'alias'));
+ try{const tree=captureClientTree(root);assert.equal(tree.entries.find(row=>row.path==='alias').kind,'symlink');assert.equal(tree.bytes,1);assert.equal(tree.chargedBytes,2);}finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('late entry after the second file FD closes is caught by final every-path reconciliation',()=>{
+ const root=temp(),nested=path.join(root,'nested'),file=path.join(nested,'seed');fs.mkdirSync(nested);fs.writeFileSync(file,'x');
+ const oldOpen=fs.openSync,oldClose=fs.closeSync;const selected=new Set();let closed=0,inserted=false;
+ fs.openSync=(name,...args)=>{const fd=oldOpen(name,...args);if(name===file)selected.add(fd);return fd;};
+ fs.closeSync=fd=>{const chosen=selected.delete(fd);const result=oldClose(fd);if(chosen&&++closed===2){inserted=true;fs.writeFileSync(path.join(nested,'late'),'late');}return result;};
+ let error;try{captureClientTree(root);}catch(value){error=value;}finally{fs.openSync=oldOpen;fs.closeSync=oldClose;}
+ try{assert.ok(inserted,'actual second descriptor completion was reached');assert.match(error?.message??'',/CX_COMPLETE_TREE_FINAL_PATH_CHANGED/);}finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('tree aggregate growing-file consumption is capped at shared maximum plus one and all FDs close',()=>{
+ const root=temp(),a=path.join(root,'a'),b=path.join(root,'b');fs.writeFileSync(a,'aaa');fs.writeFileSync(b,'bbb');
+ const oldOpen=fs.openSync,oldRead=fs.readSync;const selected=new Map();let bytes=0,grown=false;
+ fs.openSync=(name,...args)=>{const fd=oldOpen(name,...args);if(name===a||name===b)selected.set(fd,name);return fd;};
+ fs.readSync=(fd,...args)=>{if(selected.get(fd)===b&&!grown){grown=true;fs.appendFileSync(b,'x'.repeat(100000));}const n=oldRead(fd,...args);if(selected.has(fd))bytes+=n;return n;};
+ let error;try{captureClientTree(root,{maxBytes:8});}catch(value){error=value;}finally{fs.openSync=oldOpen;fs.readSync=oldRead;}
+ try{assert.ok(grown&&error);assert.equal(bytes,9);for(const fd of selected.keys())assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});}finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('runtime and tree descriptor ownership admission refuses matching foreign metadata before bytes',()=>{
+ const originalUid=process.getuid;if(!originalUid)process.getuid=()=>0;
+ try{for(const reader of [captureClientFile,file=>captureClientTree(path.dirname(file))]){
+  const root=temp(),file=path.join(root,'owned');fs.writeFileSync(file,'x');const oldOpen=fs.openSync,oldStat=fs.fstatSync,oldNamed=fs.lstatSync,oldRead=fs.readSync;let fd,reads=0;
+  const foreign=s=>new Proxy(s,{get(target,key){return key==='uid'?BigInt(process.getuid()+1):Reflect.get(target,key);}});
+  fs.openSync=(name,...args)=>{const opened=oldOpen(name,...args);if(name===file)fd=opened;return opened;};
+  fs.fstatSync=(value,...args)=>{const s=oldStat(value,...args);return value===fd?foreign(s):s;};fs.lstatSync=(name,...args)=>{const s=oldNamed(name,...args);return name===file?foreign(s):s;};fs.readSync=(value,...args)=>{if(value===fd)reads++;return oldRead(value,...args);};
+  let error;try{reader(file);}catch(value){error=value;}finally{fs.openSync=oldOpen;fs.fstatSync=oldStat;fs.lstatSync=oldNamed;fs.readSync=oldRead;}
+  try{assert.ok(error);assert.equal(reads,0);assert.notEqual(fd,undefined);assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});}finally{fs.rmSync(root,{recursive:true,force:true});}
+ }}finally{if(!originalUid)delete process.getuid;}
+});
+test('empty directory exact two-observation entry cap passes while one less refuses',()=>{
+ const root=temp();try{const value=captureClientTree(root,{maxEntries:2});assert.equal(value.entries.length,1);assert.equal(value.chargedEntries,2);assert.equal(value.bytes,0);assert.equal(value.chargedBytes,0);assert.throws(()=>captureClientTree(root,{maxEntries:1}),/CX_COMPLETE_TREE_ENTRY_BOUND/);}finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('expired exact-cap EOF probe does not call next and closes both directory iterators',()=>{
+ const root=temp(),oldOpen=fs.opendirSync,oldPerformance=globalThis.performance;let now=0,opened=0,next=0,closed=0;globalThis.performance={now:()=>now};
+ fs.opendirSync=(...args)=>{const dir=oldOpen(...args),read=dir.readSync.bind(dir),close=dir.closeSync.bind(dir);if(++opened===2)now=1;dir.readSync=()=>{next++;return read();};dir.closeSync=()=>{closed++;return close();};return dir;};
+ try{assert.throws(()=>captureClientTree(root,{maxEntries:2,timeoutMs:1}),/CX_COMPLETE_TREE_DEADLINE/);assert.equal(opened,2);assert.equal(next,1);assert.equal(closed,2);}finally{fs.opendirSync=oldOpen;globalThis.performance=oldPerformance;fs.rmSync(root,{recursive:true,force:true});}
+});
+test('tree root must be a real directory before nonempty or zero-size file body consumption',()=>{
+ for(const contents of ['', 'synthetic']){const root=temp(),file=path.join(root,'file');fs.writeFileSync(file,contents);const oldOpen=fs.openSync,oldRead=fs.readSync;let fd,reads=0;
+  fs.openSync=(name,...args)=>{const value=oldOpen(name,...args);if(name===file)fd=value;return value;};fs.readSync=(value,...args)=>{if(value===fd)reads++;return oldRead(value,...args);};
+  let error;try{captureClientTree(file);}catch(value){error=value;}finally{fs.openSync=oldOpen;fs.readSync=oldRead;}
+  try{assert.match(error?.message??'',/CX_TREE_ROOT_DIRECTORY_REQUIRED/);assert.equal(reads,0);assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});}finally{fs.rmSync(root,{recursive:true,force:true});}}
+});
+test('versioned tree receipt preserves logical bytes and refuses historical proof before server commands',()=>{
+ const root=temp();fs.writeFileSync(path.join(root,'seed'),'abc');
+ try{const current=captureClientTree(root);assert.equal(current.schemaVersion,2);assert.equal(current.observations,2);assert.equal(current.bytes,3);assert.equal(current.chargedBytes,6);assert.equal(current.chargedEntries,4);
+  const legacy={root,entries:current.entries,bytes:3,complete:true},ref={path:'/synthetic',sha256:'a'.repeat(64)},q={platform:'ios',appiumUrl:'http://127.0.0.1:4727',appiumServerEvidence:ref,appiumInventoryEvidence:ref};let commands=0;
+  const server={observed:true,owned:true,platform:'ios',pid:10,inventoryEvidence:ref,appiumUrl:q.appiumUrl},inventory={complete:true,platform:'ios',root,tree:legacy};let reads=0;
+  assert.throws(()=>admitClientServer(q,{read:()=>++reads===1?server:inventory,command:()=>{commands++;throw Error('MUST_NOT_DISPATCH');}}),/CX_FRESH_TWO_OBSERVATION_TREE_REQUIRED/);assert.equal(commands,0);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('internal late alias fallback consumes metadata only at the exact two-observation byte cap',()=>{
+ const root=temp(),target=path.join(root,'a-target'),alias=path.join(root,'z-alias');fs.writeFileSync(target,'abc');fs.symlinkSync('a-target',alias);
+ const oldOpen=fs.openSync,oldRead=fs.readSync,oldClose=fs.closeSync,aliases=new Set();let aliasOpens=0,aliasReads=0;
+ // Scoped capability model: only this owned alias uses the no-NOFOLLOW path.
+ fs.openSync=(file,flags,...args)=>{const fd=oldOpen(file,file===alias?flags&~(fs.constants.O_NOFOLLOW??0):flags,...args);if(file===alias){aliasOpens++;aliases.add(fd);}return fd;};
+ fs.readSync=(fd,...args)=>{if(aliases.has(fd))aliasReads++;return oldRead(fd,...args);};fs.closeSync=fd=>{aliases.delete(fd);return oldClose(fd);};
+ let tree,error;try{tree=captureClientTree(root,{maxEntries:6,maxBytes:6});}catch(value){error=value;}finally{fs.openSync=oldOpen;fs.readSync=oldRead;fs.closeSync=oldClose;}
+ try{assert.ifError(error);assert.equal(tree.bytes,3);assert.equal(tree.chargedBytes,6);assert.equal(tree.chargedEntries,6);assert.equal(tree.entries.find(row=>row.path==='z-alias').kind,'symlink');assert.equal(aliasOpens,2);assert.equal(aliasReads,0);assert.equal(aliases.size,0);}finally{fs.rmSync(root,{recursive:true,force:true});}
 });

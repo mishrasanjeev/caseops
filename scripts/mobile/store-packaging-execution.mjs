@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { packagingPlan } from './prepare-store-packaging.mjs';
-import { checkDeadline, digest, gitSource, jsonInput as rawJsonInput, objectKeys, privateDirectory as rawPrivateDirectory, readInput as rawReadInput, writePrivate as rawWritePrivate } from './store-packaging-inputs.mjs';
+import { checkDeadline, digest, gitSource, jsonInput as rawJsonInput, objectKeys, privateDirectory as rawPrivateDirectory, readInput as rawReadInput, readPrivateCredentials, writePrivate as rawWritePrivate, writePublicLock } from './store-packaging-inputs.mjs';
 import { EMBED_PROGRAM, inspectDistributionArtifact, PLIST_JSON_PROGRAM } from './store-artifact-postflight.mjs';
 
 const require = createRequire(import.meta.url);
@@ -165,7 +165,7 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
     && typeof q.syntheticDataOnly === 'boolean' && (contractOnly || !q.syntheticDataOnly), 'STORE_COMPLETE_REAL_REQUEST_REQUIRED');
   assert.ok(['ios', 'android'].includes(q.platform), 'STORE_PLATFORM_REQUIRED');
   if (q.platform === 'ios') assert.equal(q.signingSecrets, null, 'STORE_IOS_PASSWORD_INPUT_FORBIDDEN');
-  else reference(q.signingSecrets);
+  else { objectKeys(q.signingSecrets, ['path'], 'STORE_PRIVATE_CREDENTIAL_PATH_REQUIRED'); assert.ok(path.isAbsolute(q.signingSecrets.path || '') && path.resolve(q.signingSecrets.path) === q.signingSecrets.path, 'STORE_PRIVATE_CREDENTIAL_PATH_REQUIRED'); }
   assert.equal(fs.lstatSync(path.join(root, 'apps/mobile', q.platform), { throwIfNoEntry: false }), undefined, 'STORE_FRESH_NATIVE_PROJECT_REQUIRED');
   objectKeys(q.architecture, ['ios', 'android'], 'STORE_ARCHITECTURES_REQUIRED');
   assert.ok(Array.isArray(q.architecture.ios) && q.architecture.ios.length > 0
@@ -323,7 +323,7 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
     else if (q.platform === 'android') {
       const keystore = readInput(request.signing.uploadKeystoreEvidence.path, { sha256: request.signing.uploadKeystoreEvidence.sha256, maxBytes: 1048576, privateFile: true });
       privateCopy = writePrivate(path.join(output, 'upload.keystore'), keystore.bytes); keystore.bytes.fill(0);
-      const loaded = jsonInput(reference(q.signingSecrets), { maxBytes: 16384, privateFile: true }); secret = loaded.value; loaded.bytes.fill(0);
+      const loaded = readPrivateCredentials(q.signingSecrets, { deadline: admissionDeadline }); secret = loaded.value;
       objectKeys(secret, ['storePassword', 'keyPassword'], 'STORE_PASSWORD_FIELDS_REQUIRED');
       assert.ok(Object.values(secret).every(v => typeof v === 'string' && v.length > 0 && v.length <= 1024 && !v.includes('\0')), 'STORE_PASSWORD_VALUES_REQUIRED');
       Object.assign(environment, { CASEOPS_UPLOAD_KEYSTORE: privateCopy.path, CASEOPS_UPLOAD_STORE_PASSWORD: secret.storePassword, CASEOPS_UPLOAD_KEY_PASSWORD: secret.keyPassword });
@@ -385,7 +385,8 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
         if (q.platform === 'ios') {
           const lock = readInput(request.signing.podfileLockEvidence.path, { sha256: request.signing.podfileLockEvidence.sha256, maxBytes: 1048576 });
           const lockFile = path.join(root, 'apps/mobile/ios/Podfile.lock');
-          assert.equal(fs.existsSync(lockFile), false, 'STORE_EXISTING_POD_LOCK_REFUSED'); fs.writeFileSync(lockFile, lock.bytes, { flag: 'wx', mode: 0o600 });
+          try { writePublicLock(lockFile, lock.bytes, { deadline: admissionDeadline }); }
+          catch (error) { if (error?.code === 'EEXIST') throw new Error('STORE_EXISTING_POD_LOCK_REFUSED', { cause: error }); throw error; }
         }
         const embedded = await invoke({ role: 'embed', tool: 'python', args: ['-c', EMBED_PROGRAM, q.platform, path.join(root, 'apps/mobile'), attestationRef.path,
           path.join(output, 'native-before-info.plist')], cwd: output, timeoutMs: 30000, capture: true });

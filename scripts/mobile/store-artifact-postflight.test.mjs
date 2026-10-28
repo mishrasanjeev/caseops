@@ -8,7 +8,9 @@ import { X509Certificate } from 'node:crypto';
 import { deflateRawSync } from 'node:zlib';
 import { inspectStoreZip, safeMember, certificateIdentity, elfLoadAlignments,
   verifyIosDistribution, verifyAndroidDistribution } from './store-artifact-postflight.mjs';
-import { digest, jsonInput, namedMatchesStoreDescriptor, readInput, writePrivate } from './store-packaging-inputs.mjs';
+import crypto from 'node:crypto';
+import { syncBuiltinESMExports } from 'node:module';
+import { readPrivateCredentials, digest, jsonInput, namedMatchesStoreDescriptor, readInput, writePrivate, writePublicLock } from './store-packaging-inputs.mjs';
 
 function crc(b) { let n = 0xffffffff; for (const v of b) { n ^= v; for (let i = 0; i < 8; i++) n = (n >>> 1) ^ ((n & 1) ? 0xedb88320 : 0); } return (n ^ 0xffffffff) >>> 0; }
 function zip(rows) {
@@ -175,4 +177,82 @@ test('one invocation deadline refuses before open and during bounded chunks with
     assert.throws(() => readInput(f.file, { deadline: 200 }), /STORE_TOTAL_DEADLINE/);
   } finally { fs.openSync = open; fs.readSync = read; fs.closeSync = close; Date.now = now; }
   assert.equal(opens, 1); assert.throws(() => fs.fstatSync(closed), /EBADF/);
+});
+
+test('private credential pair uses no content hash and purges every raw allocation before returning', t => {
+  const f=fixture(t),value={storePassword:'SYNTHETIC_PRIVATE_PAIR',keyPassword:'SYNTHETIC_PRIVATE_PAIR'};
+  fs.writeFileSync(f.file,JSON.stringify(value),{flag:'wx',mode:0o600});const hash=crypto.createHash,read=fs.readSync,close=fs.closeSync;const allocations=[];let fd;
+  crypto.createHash=()=>{throw Error('UNEXPECTED_PRIVATE_CONTENT_HASH');};syncBuiltinESMExports();
+  fs.readSync=(handle,buffer,...args)=>{allocations.push(buffer);return read(handle,buffer,...args);};fs.closeSync=handle=>{fd=handle;return close(handle);};
+  let got;try{got=readPrivateCredentials({path:f.file});}finally{crypto.createHash=hash;syncBuiltinESMExports();fs.readSync=read;fs.closeSync=close;}
+  assert.deepEqual(got.value,value);assert.deepEqual(Object.keys(got).sort(),['canonical','metadata','value']);assert.equal(got.canonical,f.file);assert.ok(allocations.length>0&&allocations.every(buffer=>buffer.every(b=>b===0)));assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});
+  for(const key of Object.keys(got.value))got.value[key]=undefined;
+});
+test('private path-only descriptor and exact UTF8 password schema modes NUL and16KiB bound refuse safely', t => {
+  const f=fixture(t);fs.writeFileSync(f.file,'{}',{flag:'wx',mode:0o600});const open=fs.openSync;let opens=0;fs.openSync=(...args)=>{opens++;return open(...args);};
+  try{assert.throws(()=>readPrivateCredentials({path:f.file,sha256:'a'.repeat(64)}),/STORE_PRIVATE_CREDENTIAL_PATH_REQUIRED/);assert.equal(opens,0);}finally{fs.openSync=open;}
+  const bad=[Buffer.from([255]),Buffer.from('{}'),Buffer.from('[]'),Buffer.from(JSON.stringify({storePassword:'one',keyPassword:'two',extra:'SYNTHETIC_PRIVATE_MARKER'})),Buffer.from(JSON.stringify({storePassword:'x\0y',keyPassword:'two'})),Buffer.from(JSON.stringify({storePassword:1,keyPassword:'two'})),Buffer.alloc(16385,32)];
+  for(const body of bad){fs.writeFileSync(f.file,body);assert.throws(()=>readPrivateCredentials({path:f.file}),error=>error.message==='STORE_PRIVATE_CREDENTIALS_REFUSED'&&!String(error).includes('SYNTHETIC_PRIVATE_MARKER'));}
+  fs.writeFileSync(f.file,JSON.stringify({storePassword:'one',keyPassword:'two'}));fs.chmodSync(f.file,0o644);assert.throws(()=>readPrivateCredentials({path:f.file}),/STORE_PRIVATE_CREDENTIALS_REFUSED/);
+});
+test('growing private credential file reads only its observed extent plus one and wipes refusal buffers', t => {
+  const f=fixture(t),body=Buffer.from(JSON.stringify({storePassword:'one',keyPassword:'two'}));fs.writeFileSync(f.file,body,{flag:'wx',mode:0o600});const read=fs.readSync,close=fs.closeSync;let grown=false,count=0,fd;const allocations=[];
+  fs.readSync=(handle,buffer,...args)=>{allocations.push(buffer);if(!grown){grown=true;fs.appendFileSync(f.file,Buffer.alloc(1000));}const n=read(handle,buffer,...args);count+=n;return n;};fs.closeSync=handle=>{fd=handle;return close(handle);};
+  try{assert.throws(()=>readPrivateCredentials({path:f.file}),/STORE_PRIVATE_CREDENTIALS_REFUSED/);}finally{fs.readSync=read;fs.closeSync=close;}
+  assert.equal(count,body.length+1);assert.ok(allocations.every(buffer=>buffer.every(v=>v===0)));assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});
+});
+test('private parent replacement to the same held inode refuses closes and clears buffers', t => {
+  const f=fixture(t),parent=path.join(f.root,'private');fs.mkdirSync(parent,{mode:0o700});const file=path.join(parent,'passwords');fs.writeFileSync(file,JSON.stringify({storePassword:'one',keyPassword:'two'}),{mode:0o600,flag:'wx'});const inode=fs.statSync(file).ino,read=fs.readSync,close=fs.closeSync;let moved=false,fd;const allocations=[];
+  fs.readSync=(handle,buffer,...args)=>{allocations.push(buffer);if(!moved){moved=true;fs.renameSync(parent,parent+'-retained');fs.symlinkSync(parent+'-retained',parent,'dir');}return read(handle,buffer,...args);};fs.closeSync=handle=>{fd=handle;return close(handle);};
+  try{assert.throws(()=>readPrivateCredentials({path:file}),/STORE_PRIVATE_CREDENTIALS_REFUSED/);}finally{fs.readSync=read;fs.closeSync=close;}
+  assert.equal(fs.statSync(file).ino,inode);assert.ok(allocations.every(buffer=>buffer.every(v=>v===0)));assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});
+});
+test('private read and close errors purge in-flight and retained buffers without reflecting bytes', t => {
+  const f=fixture(t);fs.writeFileSync(f.file,JSON.stringify({storePassword:'one',keyPassword:'two'}),{mode:0o600,flag:'wx'});const read=fs.readSync,close=fs.closeSync;let allocation,fd;
+  fs.readSync=(handle,buffer)=>{allocation=buffer;buffer.fill(88);throw Error('SYNTHETIC_PRIVATE_MARKER');};fs.closeSync=handle=>{fd=handle;return close(handle);};
+  try{assert.throws(()=>readPrivateCredentials({path:f.file}),error=>error.message==='STORE_PRIVATE_CREDENTIALS_REFUSED'&&!String(error).includes('SYNTHETIC_PRIVATE_MARKER'));}finally{fs.readSync=read;fs.closeSync=close;}
+  assert.ok(allocation.every(v=>v===0));assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});
+  const concat=Buffer.concat;let retained,closeCalls=0;Buffer.concat=(...args)=>{retained=concat(...args);return retained;};
+  fs.closeSync=handle=>{fd=handle;closeCalls++;close(handle);throw Error('SYNTHETIC_CLOSE_ACK_REFUSAL');};
+  try{assert.throws(()=>readPrivateCredentials({path:f.file}),/STORE_PRIVATE_CREDENTIALS_REFUSED/);}finally{Buffer.concat=concat;fs.closeSync=close;}
+  assert.equal(closeCalls,1);assert.ok(retained.every(v=>v===0));assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});
+});
+test('public lock uses an exclusive0600 held descriptor with short writes and bounded retained readback', t => {
+  const f = fixture(t), parent = path.join(f.root, 'generated-ios'); fs.mkdirSync(parent, { mode: 0o755 }); fs.chmodSync(parent, 0o755);
+  const file = path.join(parent, 'Podfile.lock'), bytes = Buffer.from('PUBLIC SYNTHETIC POD LOCK');
+  const write = fs.writeSync, read = fs.readSync, close = fs.closeSync; let fd, readBytes = 0, largestRead = 0, writes = 0;
+  fs.writeSync = (handle, buffer, offset, length, position) => { writes++; return write(handle, buffer, offset, Math.min(2, length), position); };
+  fs.readSync = (handle, buffer, offset, length, position) => { largestRead = Math.max(largestRead, buffer.length); const n = read(handle, buffer, offset, Math.min(3, length), position); readBytes += n; return n; };
+  fs.closeSync = handle => { fd = handle; return close(handle); };
+  let got; try { got = writePublicLock(file, bytes, { deadline: Date.now() + 5000 }); }
+  finally { fs.writeSync = write; fs.readSync = read; fs.closeSync = close; }
+  assert.deepEqual(got, { path: file, sha256: digest(bytes) }); assert.deepEqual(fs.readFileSync(file), bytes);
+  assert.ok(writes > 1); assert.equal(readBytes, bytes.length); assert.equal(largestRead, bytes.length + 1);
+  assert.equal(fs.statSync(parent).mode & 0o777, 0o755); assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+  assert.throws(() => writePrivate(path.join(parent, 'PRIVATE_OUTPUT_MUST_STILL_REFUSE'), bytes), /STORE_PRIVATE_DIRECTORY_REQUIRED/);
+  assert.equal(fs.existsSync(path.join(parent, 'PRIVATE_OUTPUT_MUST_STILL_REFUSE')), false);
+});
+test('public lock late namespace read write and deadline failures close the actual descriptor', t => {
+  for (const fault of ['namespace', 'read', 'zero-write', 'deadline']) {
+    const f = fixture(t), parent = path.join(f.root, 'generated-ios'); fs.mkdirSync(parent, { mode: 0o755 });
+    const file = path.join(parent, 'Podfile.lock'), write = fs.writeSync, read = fs.readSync, close = fs.closeSync, now = Date.now;
+    let fd, changed = false; const deadline = now() + 5000;
+    fs.writeSync = (handle, ...args) => {
+      if (fault === 'zero-write') return 0;
+      const n = write(handle, ...args);
+      if (fault === 'namespace' && !changed) { changed = true; fs.renameSync(parent, parent + '-retained'); fs.symlinkSync(parent + '-retained', parent, 'dir'); }
+      return n;
+    };
+    fs.readSync = (handle, ...args) => {
+      if (fault === 'read') throw Error('SYNTHETIC_PUBLIC_READ_FAILURE');
+      const n = read(handle, ...args); if (fault === 'deadline') Date.now = () => deadline; return n;
+    };
+    fs.closeSync = handle => { fd = handle; return close(handle); };
+    let failure; try { writePublicLock(file, Buffer.from('PUBLIC SYNTHETIC LOCK'), { deadline }); } catch (error) { failure = error; }
+    finally { fs.writeSync = write; fs.readSync = read; fs.closeSync = close; Date.now = now; }
+    assert.match(failure?.message || '', { namespace: /STORE_PUBLIC_LOCK_CHANGED|STORE_PUBLIC_LOCK_NAMESPACE_CHANGED/, read: /SYNTHETIC_PUBLIC_READ_FAILURE/, 'zero-write': /STORE_OUTPUT_NO_PROGRESS/, deadline: /STORE_TOTAL_DEADLINE/ }[fault]);
+    assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' }); assert.equal(fs.existsSync(file), true);
+    if (fault === 'namespace') assert.equal(fs.statSync(file).ino, fs.statSync(path.join(parent + '-retained', 'Podfile.lock')).ino);
+  }
 });

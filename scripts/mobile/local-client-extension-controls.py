@@ -323,7 +323,7 @@ class Controls:
             try: self.owner.close()
             finally: self.authority = None; self.close_journal()
 
-def from_environment(root, run_id, *, environment=None, verified_implementation_sha256=None, verified_registration_bytes=None, base_module=None, **_unused):
+def from_environment(root, run_id, *, environment=None, verified_implementation_sha256=None, verified_registration_bytes=None, base_module=None, http_client_factory=None, **_unused):
     env = environment or {}
     assert env.get("CASEOPS_ENV") == "local" and env.get("CASEOPS_MOBILE_V1_CONTROLS") == "1" and env.get("CASEOPS_MOBILE_V1_PROFILE") == PROFILE
     assert not any(env.get(k) for k in ("K_SERVICE", "K_REVISION", "CLOUD_RUN_JOB", "GAE_ENV", "FUNCTION_TARGET"))
@@ -337,8 +337,13 @@ def from_environment(root, run_id, *, environment=None, verified_implementation_
         calls["count"] += 1; assert calls["count"] <= LIMITS["http"], "CX_ALL_HTTP_BOUND"
         return original(*args, **kwargs)
     base_module.bounded_http = charged
-    import httpx
-    with httpx.Client(timeout=3, follow_redirects=False, headers={"X-CaseOps-Automated-Test": "no-paid-providers"}) as http:
+    # This is a trusted code-only construction seam, never registration/env/RPC data.
+    # Real gateways keep the locked transport; stdlib source controls inject no I/O.
+    if http_client_factory is None:
+        import httpx
+        http_client_factory = httpx.Client
+    assert callable(http_client_factory)
+    with http_client_factory(timeout=3, follow_redirects=False, headers={"X-CaseOps-Automated-Test": "no-paid-providers"}) as http:
         for origin, route, key in (("http://api:8000", "/api/build", "backendRevision"), ("http://web:3000", "/api/release-identity", "webRevision")):
             r = charged(http, "GET", origin + route)
             assert r.status_code == 200 and r.json()["release_sha"] == v["sourceSha"] and r.json()["revision"] == v[key]

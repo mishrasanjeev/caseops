@@ -30,6 +30,98 @@ class GeneratorFilesystem(unittest.TestCase):
             path.write_bytes(body)
         return expected
 
+    @unittest.skipIf(os.name == "nt", "POSIX mode proof; Windows ACL acceptance is separate")
+    def test_exclusive_staging_stays_private_under_permissive_host_umask(self):
+        original_umask = os.umask(0)
+        try:
+            target = self.root / "public-package.tgz"
+            M.write_new(target, b"public archive bytes", time.monotonic() + 5)
+            self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
+            self.assertEqual(target.read_bytes(), b"public archive bytes")
+            with self.assertRaises(FileExistsError):
+                M.write_new(target, b"must not replace", time.monotonic() + 5)
+            self.assertEqual(target.read_bytes(), b"public archive bytes")
+        finally:
+            os.umask(original_umask)
+
+    def test_directory_discovery_stops_at_the_shared_entry_cap_before_body_reads(self):
+        expected = self.fixture({f"file-{index:02d}.txt": b"public" for index in range(20)})
+        initial_cost = 1 + len(M.namespace(self.root, self.root))
+        original_listdir, original_scandir, original_read = M.os.listdir, M.os.scandir, M.os.read
+        observed = {"names": 0, "closed": False}
+
+        def listed(path):
+            names = original_listdir(path)
+            observed["names"] += len(names)
+            return names
+
+        class CountedDirectory:
+            def __init__(self, path):
+                self.iterator = original_scandir(path)
+
+            def __enter__(self):
+                return self
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                entry = next(self.iterator)
+                observed["names"] += 1
+                return entry
+
+            def __exit__(self, *args):
+                self.iterator.close()
+                observed["closed"] = True
+
+        with patch.object(M, "OUTPUT_MAX_ENTRIES", initial_cost + 3), \
+                patch.object(M.os, "listdir", side_effect=listed), \
+                patch.object(M.os, "scandir", side_effect=CountedDirectory), \
+                patch.object(M.os, "read", wraps=original_read) as read:
+            with self.assertRaisesRegex(ValueError, "GENERATED_ENTRY_BOUND"):
+                M.verify_output(self.root, expected, time.monotonic() + 5)
+            self.assertLessEqual(observed["names"], 4)
+            self.assertTrue(observed["closed"])
+            read.assert_not_called()
+
+    def test_duplicate_real_directory_entry_refuses_before_retention_and_closes_stream(self):
+        self.fixture({"seed.txt": b"public"})
+        actual_scandir = M.os.scandir
+        observed = {"yielded": 0, "closed": False}
+        budget = M.OutputBudget(time.monotonic() + 5)
+
+        class RepeatedEntry:
+            def __init__(self, path):
+                self.stream = actual_scandir(path)
+                observed["stream"] = self.stream
+                self.entry = next(self.stream)
+
+            def __enter__(self):
+                return self
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                if observed["yielded"] == 4:
+                    raise StopIteration
+                observed["yielded"] += 1
+                return self.entry
+
+            def __exit__(self, *args):
+                self.stream.close()
+                observed["closed"] = True
+
+        with patch.object(M.os, "scandir", side_effect=RepeatedEntry), patch.object(M.os, "read") as read:
+            with self.assertRaisesRegex(ValueError, "DUPLICATE_GENERATED_DIRECTORY_ENTRY"):
+                M.bounded_directory_names(self.root, budget, "before")
+            read.assert_not_called()
+        self.assertEqual(observed["yielded"], 2)
+        self.assertTrue(observed["closed"])
+        self.assertEqual(budget.entries, 1)
+        with self.assertRaises(StopIteration):
+            next(observed["stream"])
+
     def test_portable_named_dev0_keeps_all_other_fields_and_each_full_frame(self):
         self.assertEqual(M.relative_member_name(PureWindowsPath("C:/owned/output/package/dist/cjs.js"),
                                                PureWindowsPath("C:/owned/output")), "package/dist/cjs.js")

@@ -152,15 +152,31 @@ class ResourceCleanup(unittest.TestCase):
             with self.subTest(failed=failed),tempfile.TemporaryDirectory() as raw:
                 root=Path(raw).resolve();v=registration();v.update(registrationId="f"*32,backendRevision="api",webRevision="web",implementationSha256="c"*64,authorityEvidence={"path":str(root/'authority.json'),"sha256":"d"*64,"uid":os.getuid()},expiresAt=__import__('time').time()+100)
                 b=json.dumps(v).encode();env={"CASEOPS_ENV":"local","CASEOPS_MOBILE_V1_CONTROLS":"1","CASEOPS_MOBILE_V1_PROFILE":p.PROFILE,"CASEOPS_MOBILE_V1_REGISTRATION_SHA256":hashlib.sha256(b).hexdigest(),"CASEOPS_RELEASE_SHA":"a"*40}
-                opened=[];actual=base.create_journal
+                opened=[];descriptors=[];actual=base.create_journal
                 def journal(*args):
-                    persist,close=actual(*args);opened.append((persist,close));return persist,close
-                def http(_http,method,url,*args):return SimpleNamespace(status_code=200,json=lambda:{"release_sha":"a"*40,"revision":"api"if url.startswith('http://api:')else"web"})
-                owner=Owner();original=RuntimeError('synthetic constructor')
+                    original_open=base.os.open
+                    def capture(*a,**kw):
+                        fd=original_open(*a,**kw);descriptors.append(fd);return fd
+                    with patch.object(base.os,'open',side_effect=capture):persist,close=actual(*args)
+                    opened.append((persist,close));return persist,close
+                requests=[]
+                def http(_http,method,url,*args):
+                    self.assertIsInstance(_http,Client);requests.append((method,url))
+                    return SimpleNamespace(status_code=200,json=lambda:{"release_sha":"a"*40,"revision":"api"if url.startswith('http://api:')else"web"})
+                owner=Owner();original=RuntimeError('synthetic constructor');transport=[]
+                class Client:
+                    def __init__(self, **options):
+                        self.options=options;transport.append(('factory',options))
+                    def __enter__(self):transport.append(('enter',True));return self
+                    def __exit__(self,*args):transport.append(('exit',True))
                 def fail(*args,**kwargs):raise original
                 with patch.object(base,'bounded_http',side_effect=http),patch.object(base,'create_journal',side_effect=journal),patch.object(base,'RegisteredOwner',side_effect=fail if failed=='owner'else lambda *_args:owner),patch.object(p,'checked_json',return_value={"control_secret":"e"*64}),patch.object(p,'Controls',side_effect=fail):
-                    with self.assertRaises(RuntimeError) as result:p.from_environment(root,v['runId'],environment=env,verified_implementation_sha256="c"*64,verified_registration_bytes=b,base_module=base)
+                    with self.assertRaises(RuntimeError) as result:p.from_environment(root,v['runId'],environment=env,verified_implementation_sha256="c"*64,verified_registration_bytes=b,base_module=base,http_client_factory=Client)
                 self.assertIs(result.exception,original);self.assertEqual(len(opened),1)
+                self.assertEqual(len(descriptors),1)
+                with self.assertRaises(OSError):os.fstat(descriptors[0])
+                self.assertEqual(transport,[('factory',{'timeout':3,'follow_redirects':False,'headers':{'X-CaseOps-Automated-Test':'no-paid-providers'}}),('enter',True),('exit',True)])
+                self.assertEqual(requests,[('GET','http://api:8000/api/build'),('GET','http://web:3000/api/release-identity')])
                 with self.assertRaises(AssertionError):opened[0][0]({"synthetic":"after-close"})
                 if failed=='controls':self.assertTrue(owner.closed)
 

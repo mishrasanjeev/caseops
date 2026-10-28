@@ -6,6 +6,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { executeStorePackaging, pendingStoreExecution, admitTools, GATES } from './store-packaging-execution.mjs';
+import crypto from 'node:crypto';
+import { syncBuiltinESMExports } from 'node:module';
 import { digest, gitSource } from './store-packaging-inputs.mjs';
 
 const repo = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
@@ -24,7 +26,8 @@ function fixture(t) {
   const nativeLinks = save('links.json', config), identities = { iosBundleIdentifier: config.ios.bundleIdentifier, androidPackageName: config.android.packageName };
   const privacyPolicy = save('privacy-policy.json', { schemaVersion: 1, kind: 'caseops-mobile-privacy-policy', nativeLinkConfigSha256: nativeLinks.sha256,
     url: 'https://auth.contract-fixture.org/app-privacy', version: 'synthetic-contract-only' });
-  const syntheticPasswords = save('synthetic-passwords.json', { storePassword: 'synthetic-only', keyPassword: 'synthetic-only' });
+  const credentialInput = { path: path.join(base, 'synthetic-passwords.json') };
+  fs.writeFileSync(credentialInput.path, JSON.stringify({ storePassword: 'synthetic-only', keyPassword: 'synthetic-only' }), { flag: 'wx', mode: 0o600 });
   const baseline = save('baseline.json', { schemaVersion: 1, kind: 'caseops-declared-store-build-baseline', syntheticDataOnly: true, identities,
     marketingVersion: '0.9.0', iosBuildNumber: '0', androidVersionCode: 0, scope: 'operator-declared-not-store-verified' });
   const storeBuild = save('build.json', { schemaVersion: 1, kind: 'caseops-store-build', syntheticDataOnly: true, nativeLinkConfigSha256: nativeLinks.sha256,
@@ -32,7 +35,7 @@ function fixture(t) {
   const gateValue = { schemaVersion: 1, kind: 'caseops-reviewed-store-gates', sourceSha: source.sourceSha, tree: source.tree,
     sourceFingerprint: sourceContract.sourceFingerprint, inputFileCount: 100, reviewedAt: new Date().toISOString(), reservationDirectory: reservations,
     inputBindings: null, results: Object.fromEntries(GATES.map(name => [name, 'passed'])), evidence: GATES.map((name, i) => save('evidence-' + i + '.json', { kind: 'SYNTHETIC_GATE_ONLY', name })) };
-  const gates = save('gates.json', gateValue), historyValue = { kind: 'caseops-reviewed-actual-store-history', identities, observedAt: new Date().toISOString(),
+  const historyValue = { kind: 'caseops-reviewed-actual-store-history', identities, observedAt: new Date().toISOString(),
     iosBuildNumber: '0', androidVersionCode: 0, evidence: [save('history-evidence.json', { synthetic: true })] };
   const history = save('history.json', historyValue);
   const names = ['node', 'python', 'git', 'pod', 'xcodebuild', 'codesign', 'security', 'xcrun', 'java', 'keytool', 'jarsigner', 'bundletool'];
@@ -70,7 +73,7 @@ function fixture(t) {
     const boundGates = save('bound-gates-' + n + '.json', structuredClone(gateValue));
     const q = { ...pendingStoreExecution(platform), readyForLocalBuild: true, syntheticDataOnly: true, recipe: save('recipe-' + n + '.json', recipe),
       sourceTree: source.tree, gates: boundGates, tools: toolsRef, storeHistory: history,
-      reservationDirectory: reservations, outputDirectory: path.join(outputs, 'attempt-' + n), signingSecrets: platform === 'android' ? syntheticPasswords : null, privacyPolicy };
+      reservationDirectory: reservations, outputDirectory: path.join(outputs, 'attempt-' + n), signingSecrets: platform === 'android' ? credentialInput : null, privacyPolicy };
     return { q, recipe, ref: () => save('execute-' + sequence + '-' + Math.random().toString(16).slice(2) + '.json', q) };
   };
   const answer = (status = 0, stderr = '') => ({ exitCode: status, timedOut: false, outputExceeded: false, failureClass: null,
@@ -231,4 +234,48 @@ test('real isolated Git source capture reconciles all tracked bytes and refuses 
   assert.deepEqual(before, after); assert.equal(before.sourceFileCount, 7); assert.equal(budget.entries, 40);
   fs.appendFileSync(path.join(f.root, 'apps/mobile/BUILD_TOOL_NOTICES.txt'), 'changed');
   assert.throws(() => gitSource(f.root, git, budget), /STORE_CLEAN_SOURCE_REQUIRED/);
+});
+
+test('actual exclusive Podfile lock writer preserves existing bytes and refuses before signing',async t=>{
+ const f=fixture(t),a=f.make(),command=f.adapter.command,retained=Buffer.from('RETAINED_EXISTING_LOCK');
+ f.adapter.command=async value=>{const result=await command(value);if(value.args.includes('prebuild')){fs.chmodSync(path.join(f.root,'apps/mobile/ios'),0o755);fs.writeFileSync(path.join(f.root,'apps/mobile/ios/Podfile.lock'),retained,{mode:0o600,flag:'wx'});}return result;};
+ const result=await executeStorePackaging(a.ref(),{root:f.root,adapter:f.adapter});assert.equal(result.observed,false);assert.equal(result.originalFailure.code,'STORE_EXISTING_POD_LOCK_REFUSED');assert.deepEqual(fs.readFileSync(path.join(f.root,'apps/mobile/ios/Podfile.lock')),retained);assert.equal(f.reads().signingReads,0);assert.ok(fs.readdirSync(f.reservations).some(x=>x.endsWith('.claim')));assert.equal(result.phases.find(x=>x.name==='artifact-postflight').status,'unreached');
+});
+test('complete synthetic iOS graph admits normal0755 generated directory without changing private output policy', async t => {
+  const f = fixture(t), a = f.make(), command = f.adapter.command, parent = path.join(f.root, 'apps/mobile/ios');
+  f.adapter.command = async value => { const result = await command(value); if (value.args.includes('prebuild')) fs.chmodSync(parent, 0o755); return result; };
+  const result = await executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter });
+  assert.equal(result.observed, true, JSON.stringify(result.originalFailure)); assert.equal(result.contractOnly, true); assert.equal(result.distributionSigningVerified, false);
+  assert.equal(fs.statSync(parent).mode & 0o777, 0o755); assert.equal(fs.statSync(path.join(parent, 'Podfile.lock')).mode & 0o777, 0o600);
+  assert.equal(fs.readFileSync(path.join(parent, 'Podfile.lock'), 'utf8'), 'PUBLIC SYNTHETIC LOCK');
+  assert.equal(fs.statSync(a.q.outputDirectory).mode & 0o777, 0o700); assert.equal(f.reads().signingReads, 1);
+});
+test('public lock rejects shared-write and symlink generated parents before signing or embed', async t => {
+  for (const unsafe of ['shared-write', 'symlink']) {
+    const f = fixture(t), a = f.make(), command = f.adapter.command, parent = path.join(f.root, 'apps/mobile/ios');
+    f.adapter.command = async value => { const result = await command(value); if (value.args.includes('prebuild')) {
+      if (unsafe === 'shared-write') fs.chmodSync(parent, 0o775);
+      else { fs.renameSync(parent, parent + '-retained'); fs.symlinkSync(parent + '-retained', parent, 'dir'); }
+    } return result; };
+    const result = await executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter });
+    assert.equal(result.observed, false); assert.equal(result.originalFailure.code, unsafe === 'symlink' ? 'STORE_NAMESPACE_REQUIRED' : 'STORE_PUBLIC_LOCK_PARENT_REQUIRED');
+    assert.equal(f.reads().signingReads, 0); assert.equal(f.calls.some(value => value.role === 'embed'), false); assert.equal(fs.existsSync(path.join(parent, 'Podfile.lock')), false);
+    assert.ok(fs.readdirSync(f.reservations).some(name => name.endsWith('.claim'))); assert.equal(result.phases.find(value => value.name === 'artifact-postflight').status, 'unreached');
+  }
+});
+test('legacy hashed private descriptor and failed public gate never open a private password file',async t=>{
+ const f=fixture(t),a=f.make('android');a.q.signingSecrets={...a.q.signingSecrets,sha256:'a'.repeat(64)};await assert.rejects(executeStorePackaging(a.ref(),{root:f.root,adapter:f.adapter}),/STORE_PRIVATE_CREDENTIAL_PATH_REQUIRED/);assert.equal(f.calls.length,0);assert.deepEqual(fs.readdirSync(f.reservations),[]);
+ delete a.q.signingSecrets.sha256;a.q.signingSecrets={path:path.join(f.base,'ABSENT_PRIVATE_PASSWORD_FILE')};const gates=JSON.parse(fs.readFileSync(a.q.gates.path));gates.results.apiCommon='failed';a.q.gates=f.save('failed-public-gates.json',gates);const open=fs.openSync;let reads=0;fs.openSync=(file,...args)=>{if(file===a.q.signingSecrets.path)reads++;return open(file,...args);};
+ try{await assert.rejects(executeStorePackaging(a.ref(),{root:f.root,adapter:f.adapter}),/STORE_REQUIRED_GATE_FAILED/);}finally{fs.openSync=open;}
+ assert.equal(reads,0);assert.equal(f.calls.length,0);assert.deepEqual(fs.readdirSync(f.reservations),[]);
+});
+test('actual private reader follows public gates with no secret digest leak or replay after unknown signer ACK',async t=>{
+ const f=fixture(t),a=f.make('android'),command=f.adapter.command;a.recipe.signing.uploadKeystoreEvidence=f.save('synthetic-encrypted-keystore','PUBLIC_ENCRYPTED_KEYSTORE_CONTRACT_NO_REAL_KEY');a.q.recipe=f.save('recipe-private-boundary.json',a.recipe);const gates=JSON.parse(fs.readFileSync(a.q.gates.path));gates.inputBindings.signingPublicInputs=a.recipe.signing;a.q.gates=f.save('private-boundary-gates.json',gates);f.adapter.signingAdmission=undefined;
+ let signerCalls=0,environment,privateReads=0,secretHashCalls=0;const open=fs.openSync,create=crypto.createHash;
+ fs.openSync=(file,...args)=>{if(file===a.q.signingSecrets.path)privateReads++;return open(file,...args);};
+ crypto.createHash=(...args)=>{const hash=create(...args),update=hash.update;hash.update=function(data,...rest){if((typeof data==='string'?data:Buffer.from(data).toString()).includes('synthetic-only'))secretHashCalls++;return update.call(this,data,...rest);};return hash;};syncBuiltinESMExports();
+ f.adapter.command=async(value,env)=>{if(value.tool==='keytool'){signerCalls++;environment=env;assert.equal(env.CASEOPS_UPLOAD_STORE_PASSWORD,'synthetic-only');assert.equal(env.CASEOPS_UPLOAD_KEY_PASSWORD,'synthetic-only');assert.ok(!JSON.stringify(value.args).includes('synthetic-only'));throw Error('SYNTHETIC_SIGNER_ACK_UNKNOWN');}return command(value,env);};
+ let result;try{result=await executeStorePackaging(a.ref(),{root:f.root,adapter:f.adapter});}finally{fs.openSync=open;crypto.createHash=create;syncBuiltinESMExports();}
+ assert.equal(result.observed,false);assert.equal(result.cleanup.complete,false);assert.equal(privateReads,1);assert.equal(signerCalls,1);assert.equal(secretHashCalls,0);assert.equal(environment.CASEOPS_UPLOAD_STORE_PASSWORD,undefined);assert.equal(environment.CASEOPS_UPLOAD_KEY_PASSWORD,undefined);assert.ok(!JSON.stringify(result).includes('synthetic-only'));assert.ok(!fs.readFileSync(path.join(a.q.outputDirectory,'events.jsonl'),'utf8').includes('synthetic-only'));assert.ok(fs.readdirSync(f.reservations).some(x=>x.endsWith('.claim')));
+ await assert.rejects(executeStorePackaging(a.ref(),{root:f.root,adapter:f.adapter}));assert.equal(privateReads,1);assert.equal(signerCalls,1);
 });
