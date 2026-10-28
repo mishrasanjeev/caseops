@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, opendirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, opendirSync, readSync, realpathSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
+import { observeIosCameraDirectory } from './camera-files-privacy.mjs';
 
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const require = createRequire(new URL('../../apps/mobile/package.json', import.meta.url));
@@ -22,15 +23,40 @@ const inside = (root, file) => { const relative = path.relative(root, file); ret
 const jsonRef = (value) => JSON.parse(verifiedFile(value?.path, value?.sha256));
 
 function bytes(file, limit, expected) {
-  const before = lstatSync(file);
-  assert.ok(before.isFile() && !before.isSymbolicLink(), 'REGULAR_FILES_EVIDENCE_REQUIRED');
-  const fd = openSync(file, 'r');
+  const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
+  const identity = value => fields.map(key => String(value[key]));
+  const namespace = () => {
+    assert.ok(path.isAbsolute(file) && path.resolve(file) === file && realpathSync(file) === file, 'FILES_EVIDENCE_NAMESPACE');
+    const values = []; let parent = path.dirname(file);
+    while (true) {
+      const stat = lstatSync(parent, { bigint: true });
+      assert.ok(stat.isDirectory() && !stat.isSymbolicLink(), 'FILES_EVIDENCE_NAMESPACE');
+      // Bind parent identities/canonical paths, not unrelated sibling-entry
+      // timestamps. The opened file retains its complete nine-field fence.
+      values.push([parent, ['dev', 'ino', 'mode', 'uid', 'gid'].map(key => String(stat[key]))]);
+      if (path.dirname(parent) === parent) break;
+      parent = path.dirname(parent);
+    }
+    return values;
+  };
+  const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
-    const opened = fstatSync(fd);
-    assert.ok(opened.isFile() && opened.size >= 0 && opened.size <= limit, 'FILES_EVIDENCE_BYTE_BOUND');
-    assert.ok(before.dev === opened.dev && before.ino === opened.ino, 'FILES_EVIDENCE_REPLACED');
-    const data = readFileSync(fd), after = fstatSync(fd);
-    assert.ok(opened.size === after.size && opened.mtimeMs === after.mtimeMs && data.length === opened.size, 'FILES_EVIDENCE_CHANGED');
+    const opened = fstatSync(fd, { bigint: true });
+    const ancestors = namespace(), before = lstatSync(file, { bigint: true });
+    assert.ok(before.isFile() && !before.isSymbolicLink(), 'REGULAR_FILES_EVIDENCE_REQUIRED');
+    assert.ok(opened.isFile() && opened.size >= 0n && opened.size <= BigInt(limit), 'FILES_EVIDENCE_BYTE_BOUND');
+    assert.deepEqual(identity(before), identity(opened), 'FILES_EVIDENCE_REPLACED');
+    const buffer = Buffer.alloc(limit + 1); let length = 0;
+    while (length < buffer.length) {
+      const count = readSync(fd, buffer, length, buffer.length - length, null);
+      if (!count) break;
+      length += count;
+    }
+    assert.ok(length <= limit && BigInt(length) === opened.size, 'FILES_EVIDENCE_BYTE_BOUND');
+    const data = buffer.subarray(0, length);
+    assert.deepEqual(identity(opened), identity(fstatSync(fd, { bigint: true })), 'FILES_EVIDENCE_CHANGED');
+    assert.deepEqual(identity(opened), identity(lstatSync(file, { bigint: true })), 'FILES_EVIDENCE_CHANGED');
+    assert.deepEqual(namespace(), ancestors, 'FILES_EVIDENCE_NAMESPACE');
     if (expected) assert.equal(sha(data), expected, 'FILES_ASSET_HASH_MISMATCH');
     return data;
   } finally { closeSync(fd); }
@@ -251,4 +277,13 @@ export function assertIosFilesPrivacy(snapshot, { boundary } = {}) {
   assert.equal(snapshot.counts.ownedStagingFiles, 0, 'OWNED_UPLOAD_STAGING_REMAINS');
   assert.equal(snapshot.findings.filter(({ classification }) => classification !== 'owned-upload-staging').length, 0, 'PRIVATE_PICKED_ASSET_COPY_REMAINS');
   return { boundary, status: 'passed', providerOriginalsPreserved: true, nativeUiExecuted: false };
+}
+
+// Separate scope: old Files snapshots/findings do not establish that arbitrary
+// UUID-named camera images are gone. No provider asset is opened by this scan.
+export function snapshotIosCameraPrivacy({ containers, output }, dependencies) {
+  validateContainers(containers); outputPath(output, containers);
+  const observation = { ...observeIosCameraDirectory(containers.appData.path, dependencies),
+    udid: containers.udid, appId: containers.appId, appMetadataEvidence: containers.appData.metadataEvidence };
+  return { observation, evidence: writeReceipt(output, observation) };
 }

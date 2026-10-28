@@ -76,7 +76,19 @@ def _read_bound(path, *, limit=1048576, expected=None):
         or not 0 < named.st_size <= limit
         or (hasattr(os, "getuid") and named.st_uid != os.getuid())
     ):
-        raise ValueError("OWNED_REGULAR_FILE_REQUIRED")
+        # Preserve the actual refusal boundary in hosted artifacts without
+        # disclosing file contents or an environment-dependent pathname.
+        facts = {
+            "regular": stat.S_ISREG(named.st_mode),
+            "symlink": stat.S_ISLNK(named.st_mode),
+            "mode": stat.S_IMODE(named.st_mode),
+            "uid": named.st_uid,
+            "expected_uid": os.getuid() if hasattr(os, "getuid") else None,
+            "nlink": named.st_nlink,
+            "size": named.st_size,
+            "limit": limit,
+        }
+        raise ValueError("OWNED_REGULAR_FILE_REQUIRED:" + json.dumps(facts, sort_keys=True))
     descriptor = os.open(
         path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
     )
@@ -246,6 +258,48 @@ def test_reviewed_notice_bytes_are_pinned_across_checkout_platforms():
     for name in ("LICENSE", "NOTICE.txt", "provenance.json"):
         assert "apps/api/vendor/dnspython-2.9.0/" + name + " text eol=lf" in attributes
         assert b"\r\n" not in _read_bound(VENDOR / name)
+
+
+@pytest.mark.parametrize("reason", ["hardlink", "empty", "oversize", "foreign-owner"])
+def test_owned_file_refusal_preserves_actual_stat_facts_without_opening_bytes(
+    tmp_path, monkeypatch, reason,
+):
+    file = tmp_path / "private-name-must-not-be-reflected"
+    file.write_bytes(b"private-body-must-not-be-reflected")
+    if reason == "hardlink":
+        os.link(file, tmp_path / "second-link")
+    elif reason == "empty":
+        file.write_bytes(b"")
+    info = file.lstat()
+    if reason == "foreign-owner":
+        monkeypatch.setattr(os, "getuid", lambda: info.st_uid + 1)
+    limit = 1 if reason == "oversize" else 128
+    opened = []
+    original_open = os.open
+
+    def observe_open(*args, **kwargs):
+        opened.append(args[0])
+        return original_open(*args, **kwargs)
+
+    monkeypatch.setattr(os, "open", observe_open)
+    with pytest.raises(ValueError, match="^OWNED_REGULAR_FILE_REQUIRED:") as failure:
+        _read_bound(file, limit=limit)
+    diagnostic = str(failure.value)
+    facts = json.loads(diagnostic.partition(":")[2])
+    assert facts == {
+        "regular": True,
+        "symlink": False,
+        "mode": stat.S_IMODE(info.st_mode),
+        "uid": info.st_uid,
+        "expected_uid": os.getuid() if hasattr(os, "getuid") else None,
+        "nlink": info.st_nlink,
+        "size": info.st_size,
+        "limit": limit,
+    }
+    assert opened == []
+    assert file.name not in diagnostic and "private-body" not in diagnostic
+    if reason == "hardlink":
+        assert facts["nlink"] == 2
 
 
 @pytest.mark.parametrize("change", ["growth", "replacement", "namespace", "read-error"])

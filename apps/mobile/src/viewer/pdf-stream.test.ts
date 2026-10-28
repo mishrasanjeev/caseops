@@ -72,6 +72,7 @@ function start(
     cleanup() {},
   };
   const window = {
+    location: { origin: "null" },
     innerWidth: 402,
     devicePixelRatio: 2,
     pdfjsLib: {
@@ -92,6 +93,7 @@ function start(
       listeners[name] = callback;
     },
   };
+  Object.assign(window, { self: window });
   const nodes: Record<string, any> = {
     content,
     "page-text": text,
@@ -119,7 +121,9 @@ function start(
     atob: (value: string) => Buffer.from(value, "base64").toString("binary"),
   });
   const receive = (value: object) =>
-    listeners.message({ data: JSON.stringify({ id, ...value }) });
+    listeners.message(
+      new MessageEvent("message", { data: JSON.stringify({ id, ...value }) }),
+    );
   return {
     events,
     text,

@@ -303,6 +303,33 @@ test('gateway cannot start with a wildcard or external upstream', () => {
   assert.throws(() => createGateway({ upstream: 'http://127.0.0.1', routes: ['GET /api/*'], runId: 'unit' }));
 });
 
+test('gateway rejects absolute and authority-like targets before any upstream request', async (t) => {
+  let trustedCalls = 0, otherCalls = 0;
+  const trusted = http.createServer((_request, response) => { trustedCalls++; response.end('{"ok":true}'); });
+  const other = http.createServer((_request, response) => { otherCalls++; response.end('{}'); });
+  t.after(() => trusted.close());
+  t.after(() => other.close());
+  const gateway = createGateway({ upstream: await listen(trusted), routes: ['GET /api/build'], runId: 'target-unit' });
+  t.after(() => gateway.close());
+  const origin = new URL(await listen(gateway));
+  const otherOrigin = await listen(other);
+  const raw = (target) => new Promise((resolve, reject) => {
+    const request = http.request({ hostname: origin.hostname, port: origin.port, path: target,
+      headers: { [MARKER_HEADER]: MARKER }, timeout: 2000 }, response => {
+      response.resume(); response.on('end', () => resolve(response.statusCode));
+    });
+    request.on('error', reject); request.on('timeout', () => request.destroy(new Error('Synthetic request deadline'))); request.end();
+  });
+  for (const target of [`${otherOrigin}/api/build`, `//${new URL(otherOrigin).host}/api/build`, '/\\other.invalid/api/build']) {
+    assert.equal(await raw(target), 403);
+  }
+  assert.equal(trustedCalls, 0);
+  assert.equal(otherCalls, 0);
+  assert.equal(await raw('/api/build?value=%2F'), 200);
+  assert.equal(trustedCalls, 1);
+  assert.equal(otherCalls, 0);
+});
+
 // Deterministic harness doubles only; these are not Android/iOS acceptance.
 function matterDriver(platform, initialDepth, backAvailable = true) {
   let depth = initialDepth;

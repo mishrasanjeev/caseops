@@ -182,7 +182,10 @@ def roundtrip(client):
     for _ in range(2):
         replay = client.post(BASE, headers=auth["headers"], json=data)
         assert replay.status_code == 202 and replay.json() == receipt
-        read = client.get(BASE + "/" + receipt["id"], headers=auth["headers"])
+        read = client.get(
+            "/api/account/deletion-requests/{request_id}".format(request_id=receipt["id"]),
+            headers=auth["headers"],
+        )
         assert read.status_code == 200 and read.json() == receipt
         assert read.headers["cache-control"] == "no-store"
         assert client.get(BASE, headers=auth["headers"]).json() == {"request": receipt}

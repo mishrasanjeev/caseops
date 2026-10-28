@@ -584,7 +584,8 @@ def _assert_new_shape(engine, role_evidence_path):
         encoded = (json.dumps(public_evidence, indent=2, sort_keys=True) + "\n").encode()
         assert len(encoded) <= 16384
         with role_evidence_path.open("xb") as output:
-            assert output.write(encoded) == len(encoded)
+            written = output.write(encoded)
+            assert written == len(encoded)
 
 
 @pytest.mark.parametrize("kind", KINDS)

@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
+import { CAMERA_COPY_NAME, CAMERA_PRIVACY_LIMITS } from './camera-files-privacy.mjs';
 
 const APP = 'ai.caseops.mobile.dev.localacceptance', SERIAL = 'emulator-5584';
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
@@ -189,19 +190,29 @@ export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, o
   return { receipt, evidence: save(output, receipt) };
 }
 
-function openedBytes(io, file, expected, maxBytes) {
-  const source = 'p=$1; [ ! -L "$p" ] && [ -f "$p" ] || exit 41; exec 3<"$p" || exit 42; '
+function openedBytes(io, file, expected, maxBytes, singleLink = false) {
+  assert.ok(Number.isSafeInteger(maxBytes) && maxBytes > 0, 'ANDROID_FILES_READ_BOUND_REQUIRED');
+  const admitted = [expected.uid, expected.device, expected.inode, expected.sizeBytes, expected.modified, expected.changed].join('|');
+  const source = 'expected=$1; p=$2; [ ! -L "$p" ] && [ -f "$p" ] || exit 41; exec 3<"$p" || exit 42; '
+    + 'trap \'exec 3<&-\' EXIT; [ "$(readlink -f "$p")" = "$p" ] || exit 40; '
     + 'before=$(stat -Lc "%F|%u|%d|%i|%s|%y|%z" /proc/$$/fd/3) || exit 43; '
+    + 'case "$before" in "regular file|"*|"regular empty file|"*) ;; *) exit 38;; esac; '
+    + '[ "$(stat -Lc "%u|%d|%i|%s|%y|%z" /proc/$$/fd/3)" = "$expected" ] || exit 37; '
     + 'named=$(stat -c "%F|%u|%d|%i|%s|%y|%z" "$p") || exit 44; [ "$before" = "$named" ] || exit 45; '
-    + 'printf "%s\\n" "$before"; cat <&3 || exit 46; '
+    + (singleLink ? '[ "$(stat -Lc %h /proc/$$/fd/3)" = 1 ] || exit 39; ' : '')
+    + `size=$(stat -Lc %s /proc/$$/fd/3) || exit 43; [ "$size" -le ${maxBytes} ] || exit 46; `
+    + `printf "%s\\n" "$before"; head -c ${maxBytes + 1} <&3 || exit 46; `
     + 'after=$(stat -Lc "%F|%u|%d|%i|%s|%y|%z" /proc/$$/fd/3) || exit 47; '
     + 'named=$(stat -c "%F|%u|%d|%i|%s|%y|%z" "$p") || exit 48; exec 3<&-; '
+    + (singleLink ? '[ "$(stat -c %h "$p")" = 1 ] || exit 39; ' : '')
+    + '[ "$(readlink -f "$p")" = "$p" ] || exit 40; '
     + '[ "$before" = "$after" ] && [ "$before" = "$named" ] || exit 49; printf "\\n%s\\n" "$after"';
-  const result = Buffer.from(io.script('CASEOPS_ANDROID_READ_FD_V1', source, [file], { maxBuffer: maxBytes + 2048 }));
+  const result = Buffer.from(io.script('CASEOPS_ANDROID_READ_FD_V1', source, [admitted, file], { maxBuffer: maxBytes + 2048 }));
   const line = result.indexOf(10); assert.ok(line > 0 && line <= 1024, 'ANDROID_FILES_READ_FRAME_REQUIRED');
   const header = result.subarray(0, line).toString('utf8'), fields = header.split('|');
   assert.ok(fields.length === 7 && ['regular file', 'regular empty file'].includes(fields[0]) && /^\d+$/.test(fields[4]), 'ANDROID_FILES_READ_FRAME_REQUIRED');
   assert.equal(Number(fields[4]), expected.sizeBytes, 'ANDROID_FILES_FILE_CHANGED');
+  assert.equal(Number(fields[1]), expected.uid, 'ANDROID_FILES_FILE_CHANGED');
   assert.equal(fields[2], expected.device, 'ANDROID_FILES_FILE_CHANGED'); assert.equal(fields[3], expected.inode, 'ANDROID_FILES_FILE_CHANGED');
   assert.equal(fields[5], expected.modified, 'ANDROID_FILES_FILE_CHANGED'); assert.equal(fields[6], expected.changed, 'ANDROID_FILES_FILE_CHANGED');
   const bytes = result.subarray(line + 1, line + 1 + expected.sizeBytes);
@@ -313,4 +324,75 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
     counts: { entries, files, bytesRead, observationBytes: budget.bytes, ownedStagingFiles, privateAssetMatchCount: findings.length }, inventories, findings, issues,
     fileContentsRetained: false, credentialValuesPrinted: false, deviceFilesDeleted: false };
   return { snapshot, evidence: save(output, snapshot) };
+}
+
+// New, separately reported SDK scope. A legacy known-fixture match count of
+// zero cannot certify cleanup of a camera image with previously unknown bytes.
+export function snapshotAndroidCameraPrivacy({ containers, output, ...options }) {
+  absoluteOutput(output);
+  const limits = CAMERA_PRIVACY_LIMITS, deadline = Date.now() + limits.milliseconds;
+  const budget = { bytes: 0, limit: limits.totalBytes }, scanOptions = { ...options, deadline, budget };
+  const io = current(containers, scanOptions), root = `${containers.appData.path}/cache/ImagePicker`;
+  const issues = [], copies = [], namespaces = [], pathsByObservation = [];
+  let entries = 0, bytesRead = 0, paths = [], readBytesComplete = true;
+  const namespace = () => [containers.appData.path, `${containers.appData.path}/cache`, root].map(file => {
+    assert.ok(Date.now() <= deadline && ++entries <= limits.entries, 'CAMERA_OBSERVATION_BOUND');
+    const metadata = io.stat(file);
+    if (metadata) {
+      assert.ok(metadata.kind === 'directory' && metadata.uid === containers.packageUid
+        && metadata.device === containers.appData.metadata.device, 'CAMERA_DIRECTORY_OWNER_REQUIRED');
+      assert.equal(io.text(['shell', 'readlink', '-f', file]), file, 'CAMERA_DIRECTORY_NAMESPACE_REQUIRED');
+    }
+    return { path: file, metadata };
+  });
+  const initialNamespace = namespace(), present = initialNamespace.at(-1).metadata !== null;
+  const inventory = () => {
+    if (!present) return [];
+    const raw = Buffer.from(io.script('CASEOPS_ANDROID_LIST_V1', 'find "$1" -xdev -maxdepth 2 -print0', [root], { maxBuffer: 65536 }));
+    assert.ok(raw.length > 0 && raw.at(-1) === 0, 'CAMERA_DIRECTORY_LIST_FRAME_REQUIRED');
+    const found = new TextDecoder('utf-8', { fatal: true }).decode(raw).split('\0'); found.pop(); entries += found.length;
+    assert.ok(entries <= limits.entries && found.length <= limits.copies + 1
+      && found.filter(file => file === root).length === 1 && new Set(found).size === found.length, 'CAMERA_DIRECTORY_ENTRY_BOUND');
+    for (const file of found) assert.ok(file === root || file.startsWith(`${root}/`) && path.posix.dirname(file) === root,
+      'CAMERA_DIRECT_CHILD_REQUIRED');
+    return found.filter(file => file !== root).sort();
+  };
+  const observedMetadata = new Map();
+  try {
+    paths = inventory(); pathsByObservation.push(paths);
+    for (const file of paths) {
+      assert.ok(Date.now() <= deadline, 'CAMERA_OBSERVATION_BOUND');
+      const name = path.posix.basename(file), metadata = io.stat(file);
+      observedMetadata.set(file, metadata);
+      if (!CAMERA_COPY_NAME.test(name)) { issues.push({ reason: 'unreviewed-camera-entry' }); continue; }
+      if (metadata?.kind !== 'file' || metadata.uid !== containers.packageUid || metadata.device !== containers.appData.metadata.device) {
+        issues.push({ reason: 'camera-copy-owner-or-kind' }); continue;
+      }
+      if (metadata.sizeBytes > limits.fileBytes || bytesRead + metadata.sizeBytes > limits.totalBytes) {
+        issues.push({ reason: 'camera-copy-byte-bound' }); continue;
+      }
+      try {
+        // Count successful body reads; reserve framing in the independently
+        // charged device-output budget. After any uncertain read stop, so its
+        // max+1 extent cannot be consumed again by another file.
+        const remaining = Math.min(limits.fileBytes, limits.totalBytes - bytesRead, budget.limit - budget.bytes - 2048);
+        assert.ok(remaining > 0 && metadata.sizeBytes <= remaining, 'CAMERA_OBSERVATION_BYTE_BOUND');
+        const bytes = openedBytes(io, file, metadata, remaining, true); bytesRead += bytes.length;
+        copies.push({ nameSha256: hash(name), sizeBytes: bytes.length, sha256: hash(bytes), classification: 'owned-camera-sdk-copy' });
+      } catch { readBytesComplete = false; issues.push({ reason: 'camera-copy-read-or-identity-failed' }); break; }
+    }
+    const finalPaths = inventory(); pathsByObservation.push(finalPaths);
+    assert.deepEqual(finalPaths, paths, 'CAMERA_DIRECTORY_CHANGED');
+    for (const file of finalPaths) assert.deepEqual(io.stat(file), observedMetadata.get(file), 'CAMERA_COPY_CHANGED');
+  } catch { issues.push({ reason: 'camera-directory-incomplete-or-changed' }); }
+  try { namespaces.push(initialNamespace, namespace()); assert.deepEqual(namespaces[1], initialNamespace, 'CAMERA_NAMESPACE_CHANGED'); }
+  catch { issues.push({ reason: 'camera-final-namespace-changed' }); }
+  current(containers, scanOptions);
+  const observation = { schemaVersion: 1, kind: 'camera-sdk-private-copies', platform: 'android', udid: containers.udid,
+    appId: containers.appId, bootId: containers.bootId, packageUid: containers.packageUid, root, complete: issues.length === 0,
+    directoryPresent: present, limits, counts: { copies: paths.length, bytesRead, observationBytes: budget.bytes, entries }, readBytesComplete, copies, issues,
+    inventory: pathsByObservation.map(values => ({ count: values.length, sha256: hash(JSON.stringify(values)) })),
+    legacyKnownFixtureCountsIncluded: false, providerOriginalsRead: false, fileContentsRecorded: false,
+    filesDeleted: false, encodedMetadataInspected: false, physicalCameraAcceptance: false };
+  return { observation, evidence: save(output, observation) };
 }

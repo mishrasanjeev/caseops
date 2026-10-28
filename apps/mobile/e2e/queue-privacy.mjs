@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { QP, collectQP, decodeQueuePage, decodeAccountDeletionReceipt, expectedQueue, hash } from './queue-privacy-contract.mjs';
+import { collectQP, decodeQueuePage, decodeAccountDeletionReceipt, expectedQueue, hash } from './queue-privacy-contract.mjs';
 import { find, findQuery, read, visible, selector, dispatchNativeClick, home } from './native-ui.mjs';
 import { traffic,delta,readOnlyTraffic } from './journeys.mjs';
 import { displayDay } from '../src/domain/contracts.ts';

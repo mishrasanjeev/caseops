@@ -249,6 +249,7 @@ def admit(args):
 
 def tls_get(root, receipt, ca_pem, path, authorization=None, byte_range=None, maximum=MAX_STATUS_BYTES):
     context = ssl.create_default_context(cadata=ca_pem.decode("ascii"))
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     port = urlsplit(receipt["apiOrigin"]).port
     # Compose publishes the configurable host port to the gateway's fixed 8443
     # listener. The API container reaches that listener over its internal net.

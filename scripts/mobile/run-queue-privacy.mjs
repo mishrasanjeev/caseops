@@ -4,7 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash,randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { fileURLToPath,pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { QP,requireRequest,validateDataset,collectQP,readReference,readBytes,reference ,ownerRecipes } from '../../apps/mobile/e2e/queue-privacy-contract.mjs';
 import { queuePrivacyScenarios } from '../../apps/mobile/e2e/queue-privacy.mjs';
 import { readV1Member } from '../../apps/mobile/e2e/v1-workflows-credentials.mjs';
@@ -111,7 +111,7 @@ export async function runQueuePrivacy(q){
   const remote=createRequire(path.join(process.env.CASEOPS_MOBILE_TOOLING_HOME||path.join(os.homedir(),'.cache/caseops-mobile/tooling'),'package.json'))('webdriverio').remote;
   const transport=androidSessionTransport(a.fixture,q.platform),url=transport.appiumUrl;
   journal.write({type:'preflight_result',status:'passed',source:a.source,installed:a.actual});preflight=true;
-  for(const scenario of queuePrivacyScenarios){const id=q.platform+':'+scenario.id;let driver,c,setup=false,call=false,requested=false;let sessionId;
+  for(const scenario of queuePrivacyScenarios){const id=q.platform+':'+scenario.id;let driver,c,setup=false,requested=false;let sessionId;
    journal.write({type:'phase_started',id,phase:'setup'});
    try{
     assert.equal(cleanupUncertain,false);assert.deepEqual(sourceSnapshot(ROOT),a.source);assert.equal(qpHarnessFingerprint(),q.expectedHarnessFingerprint);assert.deepEqual(observeInstalled(a.fixture,q.platform,q.expectedBinaryHash,process.env),a.actual);
@@ -123,7 +123,7 @@ export async function runQueuePrivacy(q){
     c.switchActor=async actor=>{await logout(c);const member=a.members[actor==='second-company'?1:0];c.fixture={...member.fixture,qp:a.fixture.qp};await withQPActor(member,()=>authenticate(c,{fresh:true}));state.actor=member;};
     await withQPActor(a.members[0],()=>authenticate(c,{fresh:true}));state.actor=a.members[0];setup=true;journal.write({type:'phase_result',id,phase:'setup',status:'passed'});
    }catch(e){cleanupUncertain=true;journal.write({type:'phase_result',id,phase:'setup',status:'failed',reason:safeFailure(e,'QP_SETUP_FAILED')});}
-   journal.write({type:'phase_started',id,phase:'call'});if(setup)try{await scenario.run(c);call=true;journal.write({type:'phase_result',id,phase:'call',status:'passed'});}catch(e){journal.write({type:'phase_result',id,phase:'call',status:'failed',reason:safeFailure(e,'QP_CALL_FAILED')});}else journal.write({type:'phase_result',id,phase:'call',status:'not-run',reason:'SETUP_FAILED'});
+   journal.write({type:'phase_started',id,phase:'call'});if(setup)try{await scenario.run(c);journal.write({type:'phase_result',id,phase:'call',status:'passed'});}catch(e){journal.write({type:'phase_result',id,phase:'call',status:'failed',reason:safeFailure(e,'QP_CALL_FAILED')});}else journal.write({type:'phase_result',id,phase:'call',status:'not-run',reason:'SETUP_FAILED'});
    journal.write({type:'phase_started',id,phase:'teardown'});let clean=true;
    try{const r=await controls.closeCaseControls({caseId:scenario.id});assert.equal(r.allOwnedControlsClosed,true);}catch{clean=false;}
    if(driver){try{if(setup)await logout(c);}catch{clean=false;}try{await driver.deleteSession();journal.write({...appiumSessionEvent(sessionId,'deleted'),id});}catch{clean=false;}}

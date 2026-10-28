@@ -3,9 +3,11 @@
 import hashlib
 import json
 import os
+import stat
 import sys
 from datetime import datetime, timedelta
 from enum import Enum
+from pathlib import Path
 
 import pytest
 from sqlalchemy import event
@@ -130,6 +132,25 @@ INDEXES = (
     ),
     ("hearing_pack_items", "ix_hearing_pack_item_parent_rank_id", "pack_id,rank,id", None),
 )
+
+
+def _plan_evidence_root(tmp_path, cohort_order, index_timing):
+    assert cohort_order in {"visible_first", "competing_first"}
+    assert index_timing in {"before_seed", "after_seed"}
+    configured = os.environ.get("CASEOPS_READTHROUGH_EVIDENCE_DIR")
+    if configured is None:
+        return tmp_path
+    root = Path(configured)
+    assert root.is_absolute(), "Absolute retained readthrough evidence root required"
+    root.mkdir(mode=0o700, exist_ok=True)
+    observed = root.lstat()
+    assert stat.S_ISDIR(observed.st_mode) and not stat.S_ISLNK(observed.st_mode)
+    assert observed.st_uid == os.getuid() and root.resolve(strict=True) == root
+    # A repeated attempt needs a fresh run root, never replacement of the
+    # original failure's plans. Each of the four layouts owns a separate leaf.
+    retained = root / (cohort_order + "-" + index_timing)
+    retained.mkdir(mode=0o700, exist_ok=False)
+    return retained
 
 
 def _nodes(node, owner=None):
@@ -441,6 +462,7 @@ def test_pg_named_get_policy_and_continuation_plan_matrix(
     cohort_order,
     tmp_path,
 ):
+    tmp_path = _plan_evidence_root(tmp_path, cohort_order, index_timing)
     control_work, _ = _plan_work(
         {
             "Plan": {

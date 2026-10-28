@@ -203,14 +203,16 @@ def admit(args):
 
 def tls_get(root, receipt, ca_pem, path, authorization=None, byte_range=None, maximum=MAX_STATUS_BYTES):
     context = ssl.create_default_context(cadata=ca_pem.decode("ascii"))
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     port = urlsplit(receipt["apiOrigin"]).port
-    raw = socket.create_connection(("gateway", port), timeout=3)
+    # The configurable public port maps to the gateway's fixed Compose listener.
+    raw = socket.create_connection(("gateway", 8443), timeout=3)
     try:
         secured = context.wrap_socket(raw, server_hostname="localhost")
     except BaseException:
         raw.close()
         raise
-    connection = http.client.HTTPConnection("localhost", port, timeout=3)
+    connection = http.client.HTTPConnection("localhost", 8443, timeout=3)
     connection.sock = secured
     headers = {**MARKER, "Host": f"localhost:{port}"}
     if authorization:

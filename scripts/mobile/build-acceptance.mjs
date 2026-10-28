@@ -2,13 +2,54 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { binaryHash } from '../../apps/mobile/e2e/support.mjs';
 
 const appRoot = fileURLToPath(new URL('../../apps/mobile/', import.meta.url));
+
+/** Read the checked descriptor, with one excess byte detecting growth. */
+export function readBuildInput(file, maxBytes, io = { openSync, closeSync, fstatSync, lstatSync, readSync }) {
+  assert.ok(Number.isSafeInteger(maxBytes) && maxBytes > 0 && maxBytes <= 512 * 1024 * 1024, 'BUILD_INPUT_BOUND_REQUIRED');
+  file = path.resolve(file);
+  const fd = io.openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  try {
+    const opened = io.fstatSync(fd, { bigint: true });
+    const named = io.lstatSync(file, { bigint: true });
+    const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
+    const same = (a, b, cross = false) => fields.every(key => cross && key === 'dev' && process.platform === 'win32' || a[key] === b[key]);
+    assert.ok(opened.isFile() && named.isFile() && !named.isSymbolicLink() && opened.nlink === 1n
+      && (typeof process.getuid !== 'function' || opened.uid === BigInt(process.getuid()))
+      && opened.size > 0n && opened.size <= BigInt(maxBytes) && same(opened, named, true), 'OWNED_BOUNDED_BUILD_INPUT_REQUIRED');
+    const namespace = () => {
+      const canonical = realpathSync(file);
+      assert.ok(same(opened, io.lstatSync(canonical, { bigint: true }), true), 'BUILD_INPUT_NAMESPACE_CHANGED');
+      const rows = [canonical];
+      for (let parent = path.dirname(canonical);;) {
+        const value = io.lstatSync(parent, { bigint: true });
+        assert.ok(value.isDirectory() && !value.isSymbolicLink() && rows.length <= 128, 'BUILD_INPUT_NAMESPACE_CHANGED');
+        rows.push([parent, ...['dev', 'ino', 'mode', 'uid', 'gid'].map(key => String(value[key]))]);
+        if (path.dirname(parent) === parent) break;
+        parent = path.dirname(parent);
+      }
+      return rows;
+    };
+    const parents = namespace();
+    const bytes = Buffer.alloc(Number(opened.size) + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = io.readSync(fd, bytes, length, bytes.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    assert.ok(BigInt(length) === opened.size && same(opened, io.fstatSync(fd, { bigint: true }))
+      && same(named, io.lstatSync(file, { bigint: true })), 'BUILD_INPUT_CHANGED');
+    assert.deepEqual(namespace(), parents, 'BUILD_INPUT_NAMESPACE_CHANGED');
+    return bytes.subarray(0, length);
+  } finally { io.closeSync(fd); }
+}
 const require = createRequire(path.join(appRoot, 'package.json'));
 const { getConfig } = require('@expo/config');
 const { parse: parsePlist } = require('@expo/plist').default;
@@ -202,8 +243,7 @@ export function verifyAndroidZipEvidence(resources, entries, caBytes, expectedSh
 }
 
 export function inspectAndroidAcceptanceResources(apk, sdk, before, directory) {
-  assert.ok(statSync(apk).size <= 512 * 1024 * 1024, 'APK_FILE_SIZE_BOUND');
-  const hash = binaryHash(apk);
+  const hash = createHash('sha256').update(readBuildInput(apk, 512 * 1024 * 1024)).digest('hex');
   const run = (args, name) => {
     const result = spawnSync(sdk, args, { encoding: 'utf8', timeout: 20000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
     writeFileSync(path.join(directory, name), result.stdout || '', { flag: 'wx' });
@@ -220,7 +260,7 @@ export function inspectAndroidAcceptanceResources(apk, sdk, before, directory) {
     return url.hostname;
   }))];
   const compiledSecurity = verifyAndroidCompiledSecurity(resources, manifest, network, hosts);
-  assert.equal(binaryHash(apk), hash, 'APK_CHANGED_DURING_SDK_INSPECTION');
+  assert.equal(createHash('sha256').update(readBuildInput(apk, 512 * 1024 * 1024)).digest('hex'), hash, 'APK_CHANGED_DURING_SDK_INSPECTION');
   return { ...resources, compiledSecurity, apkSha256: hash };
 }
 
@@ -372,10 +412,7 @@ export function finishBuild(platform, before, artifact, embeddedConfig, nativeSe
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [command, ...args] = process.argv.slice(2);
-  const readJson = (file) => {
-    assert.ok(statSync(file).size <= 16 * 1024 * 1024, 'BUILD_JSON_SIZE_BOUND');
-    return JSON.parse(readFileSync(file, 'utf8'));
-  };
+  const readJson = (file) => JSON.parse(readBuildInput(file, 16 * 1024 * 1024).toString('utf8'));
   if (command === 'android-resources' || command === 'android-zip') {
     let result, output;
     if (command === 'android-resources') {
@@ -387,9 +424,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       assert.equal(args.length, 6, 'ANDROID_ZIP_ARGUMENTS_REQUIRED');
       const [planFile, inventory, caFile, before, apk, destination] = args;
       const plan = readJson(planFile);
-      assert.ok(statSync(caFile).size <= 16384, 'APK_CA_SIZE_BOUND');
       assert.equal(binaryHash(apk), plan.apkSha256, 'APK_CHANGED_DURING_ZIP_INSPECTION');
-      result = { ...plan, ...verifyAndroidZipEvidence(plan, readJson(inventory), readFileSync(caFile), readJson(before).publicCaSha256),
+      result = { ...plan, ...verifyAndroidZipEvidence(plan, readJson(inventory), readBuildInput(caFile, 16384), readJson(before).publicCaSha256),
         kind: 'compiled-android-acceptance-security', nativeExecution: 'not-run-by-verifier' };
       output = destination;
     }
@@ -405,10 +441,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   else {
     assert.equal(command, 'finish', 'UNKNOWN_BUILD_COMMAND');
     if (platform === 'android') assert.ok(androidProofFile, 'COMPILED_ANDROID_SECURITY_PROOF_REQUIRED');
-    const before = JSON.parse(readFileSync(beforeFile, 'utf8'));
+    const before = readJson(beforeFile);
     const nativeSecurity = platform === 'ios' ? inspectIosSimulatorSigning(artifact, before.appId, path.dirname(outputFile))
       : androidProofFile ? readJson(androidProofFile) : undefined;
-    result = finishBuild(platform, before, artifact, JSON.parse(readFileSync(configFile, 'utf8')), nativeSecurity);
+    result = finishBuild(platform, before, artifact, readJson(configFile), nativeSecurity);
   }
   const json = `${JSON.stringify(result, null, 2)}\n`;
   const destination = command === 'check' ? beforeFile : outputFile;

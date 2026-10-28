@@ -12,7 +12,7 @@ import threading
 import time
 
 PROFILE = "queue-privacy-v1"
-BASE_SHA256 = "e762d80f89ead187e4255402f2320582f390a63dff629a07b0ef235db6fcdad2"
+BASE_SHA256 = "a03af49be43afd3618688c64e0f7ac7938b8fa3e5e30b05bff00aeeb629ec4fc"
 CASES = {"QUEUE-01": 24, "PRIVACY-01": 24}
 CAPABILITIES = ("readQueue", "readOwnPrivacy", "changeAnchor", "armPrivacyAckLoss",
                 "readControlReceipt", "readNativeRequest", "closeCaseControls", "closeRunControls")
@@ -223,5 +223,12 @@ def from_environment(root,run_id,*,environment=None,verified_implementation_sha2
     persist,close=base_module.create_journal(root,v["registrationId"])
     def claim(identity):
         with (root/("qp-attempt-"+sha(identity.encode())+".json")).open("x",encoding="utf-8")as f:f.write(json.dumps({"identitySha256":sha(identity.encode()),"noReplay":True}))
-    owner.claim=claim
-    return Controls(v,sha(verified_registration_bytes),authority,base=base_module,owner=owner,persist=persist,claim=claim,close_journal=close,principal=principal,http_count=lambda:calls["count"])
+    try:
+        owner.claim=claim
+        return Controls(v,sha(verified_registration_bytes),authority,base=base_module,owner=owner,persist=persist,claim=claim,close_journal=close,principal=principal,http_count=lambda:calls["count"])
+    except BaseException as error:
+        try:owner.close()
+        except BaseException:error.add_note("QP_OWNER_CLEANUP_UNVERIFIED_DURING_SETUP")
+        try:close()
+        except BaseException:error.add_note("QP_JOURNAL_CLEANUP_UNVERIFIED_DURING_SETUP")
+        raise

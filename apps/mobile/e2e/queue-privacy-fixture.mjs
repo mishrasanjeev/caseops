@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readV1Member } from './v1-workflows-credentials.mjs';
 const ROOT=path.resolve(fileURLToPath(new URL('../../../',import.meta.url)));
-import { QP,expectedQueue,validateDataset,hash,reference } from './queue-privacy-contract.mjs';
+import { QP,validateDataset,hash,reference } from './queue-privacy-contract.mjs';
 import { randomBytes } from 'node:crypto';
 import { v1Identity } from './v1-workflows-contract.mjs';
 // This fixed producer creates business data only through the normal APIs. Its

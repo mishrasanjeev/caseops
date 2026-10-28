@@ -191,3 +191,9 @@ e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/android-native-proof.tes
 e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acceptance.test.mjs:generic-api-key:30
 e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acceptance.test.mjs:generic-api-key:31
 e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acceptance.test.mjs:generic-api-key:32
+
+# 2026-10-28: reviewed public synthetic fixture receipt protocol labels.
+# Exact immutable origins in the retained local and API-published histories;
+# changed spans, new origins and new rules remain blocking.
+f43c10e3eed509ea2240f5add52e09aea5c4857a:apps/mobile/e2e/v1-workflows-fixture.mjs:generic-api-key:225
+a52e43caa57d1253271f581b347841e855112a29:apps/mobile/e2e/v1-workflows-fixture.mjs:generic-api-key:225

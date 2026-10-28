@@ -254,7 +254,7 @@ def walk(client, case, suffix, *, token=None):
         response = request(
             client,
             "GET",
-            BASE + "/" + case["matter"]["id"] + suffix,
+            suffix if suffix.startswith(BASE + "/") else BASE + "/" + case["matter"]["id"] + suffix,
             token or case["token"],
             params=params,
         )
@@ -279,7 +279,10 @@ def walk(client, case, suffix, *, token=None):
 
 def exercise_pages(client, reverse):
     case = setup(client, reverse=reverse)
-    rows, pages = walk(client, case, "/recommendations")
+    rows, pages = walk(
+        client, case,
+        "/api/matter-readthrough/{matter_id}/recommendations".format(matter_id=case["matter"]["id"]),
+    )
     expected = [uid(case["start"] + n) for n in list(reversed(range(30))) + [30, 31]]
     assert [row["id"] for row in rows] == expected and len(pages) == 2
     assert rows[0]["record"] == {
@@ -293,10 +296,24 @@ def exercise_pages(client, reverse):
         row["read_state"] == "available" and row["created_at"].endswith(("Z", "+00:00"))
         for row in rows
     )
-    target = "/recommendations/" + case["recommendation"]
-    options, _ = walk(client, case, target + "/options")
-    decisions, _ = walk(client, case, target + "/decisions")
-    items, _ = walk(client, case, "/hearing-packs/" + case["pack"] + "/items")
+    options, _ = walk(
+        client, case,
+        "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}/options".format(
+            matter_id=case["matter"]["id"], recommendation_id=case["recommendation"],
+        ),
+    )
+    decisions, _ = walk(
+        client, case,
+        "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}/decisions".format(
+            matter_id=case["matter"]["id"], recommendation_id=case["recommendation"],
+        ),
+    )
+    items, _ = walk(
+        client, case,
+        "/api/matter-readthrough/{matter_id}/hearing-packs/{pack_id}/items".format(
+            matter_id=case["matter"]["id"], pack_id=case["pack"],
+        ),
+    )
     assert [r["id"] for r in options] == [uid(case["start"] + 1000 + n) for n in range(32)]
     assert [r["id"] for r in decisions] == [
         uid(case["start"] + 2000 + n) for n in reversed(range(32))
@@ -321,7 +338,9 @@ def exercise_pages(client, reverse):
         "body": "Exact stored body",
         "source_ref": "opaque:recorded/ref-1",
     }
-    url = BASE + "/" + case["matter"]["id"] + target
+    url = "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}".format(
+        matter_id=case["matter"]["id"], recommendation_id=case["recommendation"],
+    )
     first = request(client, "GET", url, case["token"])
     reload = request(client, "GET", url, case["token"])
     assert first.status_code == reload.status_code == 200 and first.content == reload.content
@@ -424,7 +443,9 @@ def test_fixture_role_admission_rejects_unknown_before_any_http():
 
 def exercise_latest(client):
     case = setup(client, count=1)
-    url = BASE + "/" + case["matter"]["id"] + "/hearings/" + case["hearing"]["id"] + "/pack"
+    url = "/api/matter-readthrough/{matter_id}/hearings/{hearing_id}/pack".format(
+        matter_id=case["matter"]["id"], hearing_id=case["hearing"]["id"],
+    )
     response = request(client, "GET", url, case["token"])
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
@@ -811,7 +832,9 @@ def exercise_foreign(client):
     wrong_pack = request(
         client,
         "GET",
-        BASE + "/" + own["matter"]["id"] + "/hearing-packs/" + other["pack"],
+        "/api/matter-readthrough/{matter_id}/hearing-packs/{pack_id}".format(
+            matter_id=own["matter"]["id"], pack_id=other["pack"],
+        ),
         own["token"],
     )
     assert wrong_pack.status_code == 404
@@ -821,38 +844,44 @@ def test_foreign_tenant_matter_parent_and_child_ids_never_authorize_reads(client
     exercise_foreign(client)
 
 
+def _create_live_policy_source(session, case, boundary, membership):
+    if type(boundary) is not str or boundary not in {"grant_revoke", "team_remove"}:
+        raise ValueError("Unsupported live policy source")
+    matter = session.get(Matter, case["matter"]["id"])
+    if boundary == "grant_revoke":
+        matter.restricted_access = True
+        grant = MatterAccessGrant(
+            company_id=case["auth"]["company"]["id"],
+            matter_id=matter.id,
+            membership_id=membership,
+            access_level="viewer",
+            effective_from=STAMP - timedelta(days=10),
+        )
+        session.add(grant)
+        session.flush()
+        return grant.id
+    company = session.get(Company, case["auth"]["company"]["id"])
+    company.team_scoping_enabled = True
+    team = Team(company_id=company.id, name="Synthetic current team", slug="current-team")
+    session.add(team)
+    session.flush()
+    matter.team_id = team.id
+    assignment = TeamMembership(team_id=team.id, membership_id=membership)
+    session.add(assignment)
+    session.flush()
+    return assignment.id
+
+
 def exercise_policy_change(client, boundary):
-    if boundary not in {"grant_revoke", "team_remove", "role_downgrade"}:
+    if type(boundary) is not str or boundary not in {
+        "grant_revoke",
+        "team_remove",
+        "role_downgrade",
+    }:
         raise ValueError("Unsupported live policy fixture")
     case = setup(client, count=32)
     membership, token = member(client, case, "viewer")
     factory = get_session_factory()
-    with factory() as session:
-        matter = session.get(Matter, case["matter"]["id"])
-        if boundary == "grant_revoke":
-            matter.restricted_access = True
-            grant = MatterAccessGrant(
-                company_id=case["auth"]["company"]["id"],
-                matter_id=matter.id,
-                membership_id=membership,
-                access_level="viewer",
-                effective_from=STAMP - timedelta(days=10),
-            )
-            session.add(grant)
-            session.flush()
-            source_id = grant.id
-        elif boundary == "team_remove":
-            company = session.get(Company, case["auth"]["company"]["id"])
-            company.team_scoping_enabled = True
-            team = Team(company_id=company.id, name="Synthetic current team", slug="current-team")
-            session.add(team)
-            session.flush()
-            matter.team_id = team.id
-            assignment = TeamMembership(team_id=team.id, membership_id=membership)
-            session.add(assignment)
-            session.flush()
-            source_id = assignment.id
-        session.commit()
     if boundary == "role_downgrade":
         with factory() as session:
             ctx = context(session, case)
@@ -877,6 +906,9 @@ def exercise_policy_change(client, boundary):
         )
         assert fresh.status_code == 200 and fresh.json()["items"], fresh.text
         return
+    with factory() as session:
+        source_id = _create_live_policy_source(session, case, boundary, membership)
+        session.commit()
     url = BASE + "/" + case["matter"]["id"] + "/recommendations"
     before = request(client, "GET", url, token)
     assert before.status_code == 200, before.text
@@ -892,6 +924,16 @@ def exercise_policy_change(client, boundary):
 
 @pytest.mark.parametrize("boundary", ["grant_revoke", "team_remove", "role_downgrade"])
 def test_live_grant_team_and_retained_actor_changes_fail_closed(client, boundary):
+    class UnadmittedClient:
+        def request(self, *_args, **_kwargs):
+            raise AssertionError("Unsupported fixture target must not enter HTTP admission")
+
+        post = request
+        get = request
+
+    for unsupported in ("unsupported", None, False, []):
+        with pytest.raises(ValueError, match="^Unsupported live policy fixture$"):
+            exercise_policy_change(UnadmittedClient(), unsupported)
     exercise_policy_change(client, boundary)
 
 

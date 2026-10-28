@@ -51,7 +51,7 @@ async function scopedAction(c, scopeId, label) {
     assert.ok(['type', 'class', 'className'].includes(pattern.typeAttribute) && typeof pattern.expectedType === 'string' && pattern.expectedType);
     recipe = { ...pattern, scopeId, label, query: pattern.queryTemplate.replaceAll('{LABEL_JSON}', JSON.stringify(label)) };
   }
-  assert.ok(recipe && recipe.scopeId === scopeId && recipe.label === label, 'OBSERVED_SCOPED_NATIVE_ACTION_REQUIRED');
+  assert.ok(recipe.scopeId === scopeId && recipe.label === label, 'OBSERVED_SCOPED_NATIVE_ACTION_REQUIRED');
   assert.ok(['label', 'name', 'text'].includes(recipe.labelAttribute));
   assert.ok(typeof recipe.query === 'string' && recipe.query.startsWith(c.platform === 'ios' ? '-ios predicate string:' : 'android='));
   const scopes = await c.driver.$$(selector(c.platform, 'id', scopeId)); assert.equal(scopes.length, 1, 'UNIQUE_NATIVE_ACTION_SCOPE_REQUIRED');
@@ -390,7 +390,7 @@ export const v1WorkflowScenarios = Object.freeze([
     if (spec.retainedPreview) {
       const preview = spec.retainedPreview; assert.equal(preview.observed, true);
       const page = spec.pages.findIndex(value => value.obligations.some(record => record.id === preview.record.id));
-      if (page !== selectedPage) { await tap(c, page === 0 ? 'obligations-first' : 'obligations-next'); await waitFact(c, 'obligation-page', `Page ${page + 1}`); selectedPage = page; }
+      if (page !== selectedPage) { await tap(c, page === 0 ? 'obligations-first' : 'obligations-next'); await waitFact(c, 'obligation-page', `Page ${page + 1}`); }
       const element = await row(c, `obligation-row-${preview.record.id}`, spec.rowFacts[preview.record.id]); await dispatchNativeClick(c, element);
       await scopedFact(c, `obligation-detail-${preview.record.id}`, 'Description preview · first 4,000 characters');
       await scopedIdFact(c, `obligation-detail-${preview.record.id}`, 'obligation-description', preview.record.description);

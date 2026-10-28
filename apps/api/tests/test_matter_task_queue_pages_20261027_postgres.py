@@ -284,9 +284,9 @@ def assert_queue_ddl_transport(engine, tmp_path):
         finally:
             connection.rollback()
         after = connection.execute(catalog).all()
-        assert after == before
         after_triggers = connection.execute(trigger_catalog).all()
-        assert after_triggers == before_triggers
+        function_catalog_restored = after == before
+        trigger_catalog_restored = after_triggers == before_triggers
     (tmp_path / "queue-ddl-same-connection-transport.json").write_text(
         json.dumps(
             {
@@ -294,13 +294,15 @@ def assert_queue_ddl_transport(engine, tmp_path):
                 "sameDbapiConnectionAfterRollbackAndInstall": True,
                 "literalModuloResult": result,
                 "installedFunctions": len(installed),
-                "originalFunctionCatalogRestoredAfterRollback": after == before,
-                "originalTriggerCatalogRestoredAfterRollback": after_triggers == before_triggers,
+                "originalFunctionCatalogRestoredAfterRollback": function_catalog_restored,
+                "originalTriggerCatalogRestoredAfterRollback": trigger_catalog_restored,
             },
             indent=2,
         )
         + "\n"
     )
+    assert function_catalog_restored
+    assert trigger_catalog_restored
 
 
 def test_deferred_finalizer_does_not_lock_group_before_last_source_write(

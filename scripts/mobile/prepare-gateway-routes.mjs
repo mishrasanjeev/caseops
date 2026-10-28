@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, writeFileSync } from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,7 +13,7 @@ const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const SOURCE = fileURLToPath(new URL('./local-gateway.py', import.meta.url));
 // Reviewed with the actual Python Gateway regressions, including the 64-event boundary.
 // A changed implementation requires another review; runtime hashes alone cannot admit it.
-export const REVIEWED_GATEWAY_IMPLEMENTATION_SHA256 = '0e58c0fb1dfd294fea399c9e8b0716fbbf50ee46a996f5fd421935d24ad249b6';
+export const REVIEWED_GATEWAY_IMPLEMENTATION_SHA256 = '039993615f5ca638434b74f1d68ebe1c7d5738815d3d6dc2657cfd1611fc4ebb';
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const inside = (root, file) => {
   const relative = path.relative(root, file);
@@ -22,17 +22,47 @@ const inside = (root, file) => {
 
 export function gatewayEvidenceReference(file, maxBytes = 1048576) {
   assert.ok(path.isAbsolute(file || ''), 'ABSOLUTE_FIXTURE_EVIDENCE_REQUIRED');
-  const before = lstatSync(file);
-  assert.ok(before.isFile() && !before.isSymbolicLink(), 'BOUNDED_FIXTURE_EVIDENCE_REQUIRED');
-  const fd = openSync(file, 'r');
+  assert.ok(Number.isSafeInteger(maxBytes) && maxBytes > 0 && maxBytes <= 16 * 1024 * 1024, 'BOUNDED_FIXTURE_EVIDENCE_REQUIRED');
+  let fd;
+  try { fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0)); }
+  catch (error) {
+    if (error.code === 'ELOOP') throw new Error('BOUNDED_FIXTURE_EVIDENCE_REQUIRED');
+    throw error;
+  }
   let bytes;
   try {
-    const opened = fstatSync(fd);
-    assert.ok(opened.isFile() && opened.size > 0 && opened.size <= maxBytes, 'BOUNDED_FIXTURE_EVIDENCE_REQUIRED');
-    assert.ok(before.dev === opened.dev && before.ino === opened.ino, 'FIXTURE_EVIDENCE_REPLACED');
-    bytes = readFileSync(fd);
-    const after = fstatSync(fd);
-    assert.ok(opened.size === after.size && opened.mtimeMs === after.mtimeMs && bytes.length === opened.size, 'FIXTURE_EVIDENCE_CHANGED');
+    const opened = fstatSync(fd, { bigint: true }), named = lstatSync(file, { bigint: true });
+    const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
+    const same = (a, b, cross = false) => fields.every(key => cross && key === 'dev' && process.platform === 'win32' || a[key] === b[key]);
+    assert.ok(opened.isFile() && named.isFile() && !named.isSymbolicLink() && opened.nlink === 1n
+      && (typeof process.getuid !== 'function' || opened.uid === BigInt(process.getuid()))
+      && opened.size > 0n && opened.size <= BigInt(maxBytes), 'BOUNDED_FIXTURE_EVIDENCE_REQUIRED');
+    assert.ok(same(named, opened, true), 'FIXTURE_EVIDENCE_REPLACED');
+    const namespace = () => {
+      const canonical = realpathSync(file);
+      assert.ok(same(opened, lstatSync(canonical, { bigint: true }), true), 'FIXTURE_EVIDENCE_NAMESPACE_CHANGED');
+      const rows = [canonical];
+      for (let parent = path.dirname(canonical);;) {
+        const value = lstatSync(parent, { bigint: true });
+        assert.ok(value.isDirectory() && !value.isSymbolicLink() && rows.length <= 128, 'FIXTURE_EVIDENCE_NAMESPACE_CHANGED');
+        rows.push([parent, ...['dev', 'ino', 'mode', 'uid', 'gid'].map(key => String(value[key]))]);
+        if (path.dirname(parent) === parent) break;
+        parent = path.dirname(parent);
+      }
+      return rows;
+    };
+    const parents = namespace();
+    const buffer = Buffer.alloc(Number(opened.size) + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const count = readSync(fd, buffer, length, buffer.length - length, null);
+      if (!count) break;
+      length += count;
+    }
+    assert.ok(BigInt(length) === opened.size && same(opened, fstatSync(fd, { bigint: true }))
+      && same(named, lstatSync(file, { bigint: true })), 'FIXTURE_EVIDENCE_CHANGED');
+    assert.deepEqual(namespace(), parents, 'FIXTURE_EVIDENCE_NAMESPACE_CHANGED');
+    bytes = buffer.subarray(0, length);
   } finally { closeSync(fd); }
   return { path: file, sha256: sha256(bytes) };
 }
@@ -107,20 +137,24 @@ export function prepareGatewayRoutes({ cache, dockerReceipt, statusEvidence, out
   // The admission source changes when a later fixture is extended. Preserve the
   // exact bytes for this run; source provenance must not become a live dependency.
   for (const reference of [dockerReceipt, statusEvidence, implementationEvidence, routeInventorySourceEvidence]) verifiedFile(reference.path, reference.sha256);
-  if (existsSync(output) || existsSync(routeInventoryEvidence.path)) {
-    throw Object.assign(new Error('OUTPUT_ALREADY_EXISTS'), { code: 'EEXIST' });
-  }
-  writeFileSync(routeInventoryEvidence.path, routeInventoryBytes, { flag: 'wx', mode: 0o600 });
-  const descriptor = { schemaVersion: 2, routes, routeInventoryEvidence, routeInventorySourceEvidence,
-    dynamicAdmissions: { nativeCurrentSessionDelete: policy } };
-  const bytes = Buffer.from(`${JSON.stringify(descriptor, null, 2)}\n`);
-  const gatewayRoutes = { path: output, sha256: sha256(bytes) };
-  validateSessionDeletePolicy(descriptor, gatewayRoutes, dockerReceipt, receipt);
-  for (const reference of [dockerReceipt, statusEvidence, implementationEvidence, routeInventoryEvidence]) verifiedFile(reference.path, reference.sha256);
-  writeFileSync(output, bytes, { flag: 'wx', mode: 0o600 });
-  return { gatewayRoutes, statusEvidence, isolationEvidence: dockerReceipt, routeInventoryEvidence, routeInventorySourceEvidence,
-    gatewayRunId: receipt.gatewayRunId, implementationSha256: implementationEvidence.sha256,
-    nativeExecution: 'not-run', servicesChanged: false, credentialFilesRead: false };
+  // Each destination is created exclusively by the filesystem. Validation
+  // finishes before the authority descriptor is opened; a failed admission
+  // may retain its sidecar but never creates an authority descriptor.
+    const routesFd = openSync(routeInventoryEvidence.path, 'wx', 0o600);
+    try { writeFileSync(routesFd, routeInventoryBytes); }
+    finally { closeSync(routesFd); }
+    const descriptor = { schemaVersion: 2, routes, routeInventoryEvidence, routeInventorySourceEvidence,
+      dynamicAdmissions: { nativeCurrentSessionDelete: policy } };
+    const bytes = Buffer.from(`${JSON.stringify(descriptor, null, 2)}\n`);
+    const gatewayRoutes = { path: output, sha256: sha256(bytes) };
+    validateSessionDeletePolicy(descriptor, gatewayRoutes, dockerReceipt, receipt);
+    for (const reference of [dockerReceipt, statusEvidence, implementationEvidence, routeInventoryEvidence]) verifiedFile(reference.path, reference.sha256);
+    const outputFd = openSync(output, 'wx', 0o600);
+    try { writeFileSync(outputFd, bytes); }
+    finally { closeSync(outputFd); }
+    return { gatewayRoutes, statusEvidence, isolationEvidence: dockerReceipt, routeInventoryEvidence, routeInventorySourceEvidence,
+      gatewayRunId: receipt.gatewayRunId, implementationSha256: implementationEvidence.sha256,
+      nativeExecution: 'not-run', servicesChanged: false, credentialFilesRead: false };
 }
 
 async function readGatewayStatus(receipt, publicCa) {

@@ -2,9 +2,11 @@
 import importlib.util
 import json
 import os
+import sys
 from pathlib import Path
 import tempfile
 import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -417,6 +419,39 @@ class ControlTests(unittest.TestCase):
             finally:
                 close()
             self.assertEqual(target.read_bytes(), b"replacement")
+            with self.assertRaises(OSError): os.fstat(descriptors[0])
+
+    def test_journal_initial_fstat_failure_closes_the_new_owned_fd(self):
+        with tempfile.TemporaryDirectory() as directory:
+            descriptors = []; original_open = M.os.open
+            def opened(*args, **kwargs):
+                descriptor = original_open(*args, **kwargs); descriptors.append(descriptor); return descriptor
+            with patch.object(M.os, "open", side_effect=opened), patch.object(M.os, "fstat", side_effect=OSError("synthetic initial stat failure")):
+                with self.assertRaises(OSError): M.create_journal(Path(directory), "d" * 32)
+            self.assertEqual(len(descriptors), 1)
+            with self.assertRaises(OSError): os.fstat(descriptors[0])
+
+    def test_failed_manager_construction_closes_journal_and_owner_independently(self):
+        value = registration(); value["implementationSha256"] = "c" * 64
+        value.update(backendRevision="api", webRevision="web")
+        raw = json.dumps(value).encode(); closed = []; descriptors = []; original_open = M.os.open
+        env = {"CASEOPS_MOBILE_V1_CONTROLS": "1", "CASEOPS_ENV": "local", "CASEOPS_RELEASE_SHA": "a" * 40,
+               "CASEOPS_MOBILE_V1_REGISTRATION": "/not-read/registration.json", "CASEOPS_MOBILE_V1_REGISTRATION_SHA256": M.sha(raw)}
+        class Client:
+            def __init__(self, **_kwargs): pass
+            def __enter__(self): return self
+            def __exit__(self, *_args): pass
+        def opened(*args, **kwargs):
+            fd = original_open(*args, **kwargs); descriptors.append(fd); return fd
+        owner = SimpleNamespace(close=lambda: closed.append("owner"))
+        responses = [SimpleNamespace(status_code=200, json=lambda: {"release_sha": "a" * 40, "revision": revision}) for revision in ("api", "web")]
+        # Bind each literal response rather than the loop's last revision.
+        responses[0].json = lambda: {"release_sha": "a" * 40, "revision": "api"}
+        with tempfile.TemporaryDirectory() as directory, patch.dict(sys.modules, {"httpx": SimpleNamespace(Client=Client)}), patch.object(M.time, "time", return_value=1000), patch.object(M, "checked_json", return_value={"control_secret": "b" * 64}), patch.object(M, "bounded_http", side_effect=responses), patch.object(M, "readonly_notification_observer", return_value=lambda _value: None), patch.object(M.os, "open", side_effect=opened), patch.object(M, "V1Controls", side_effect=RuntimeError("synthetic constructor failure")):
+            with self.assertRaises(RuntimeError):
+                M.from_environment(Path(directory), "synthetic-run", environment=env, factory=lambda *_args: owner,
+                                   verified_implementation_sha256="c" * 64, verified_registration_bytes=raw)
+            self.assertEqual(closed, ["owner"]); self.assertEqual(len(descriptors), 1)
             with self.assertRaises(OSError): os.fstat(descriptors[0])
 
     def test_owner_http_consumption_is_bounded_and_response_always_closed(self):

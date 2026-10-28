@@ -91,7 +91,7 @@ function fixture(t, extra = {}) {
   file('repo/package.json', '{"type":"module"}\n'); file('repo/.gitignore', 'node_modules/\napps/mobile/android/\n');
   mkdirSync(path.join(checkout, 'apps/mobile/node_modules'), { recursive: true });
   symlinkSync(path.join(repo, 'apps/mobile/node_modules/@expo'), path.join(checkout, 'apps/mobile/node_modules/@expo'), 'dir');
-  for (const module of ['expo-secure-store', 'expo-web-browser', 'pdfjs-dist'])
+  for (const module of ['expo-secure-store', 'expo-web-browser', 'expo-image-picker', 'pdfjs-dist'])
     symlinkSync(path.join(repo, 'apps/mobile/node_modules', module), path.join(checkout, 'apps/mobile/node_modules', module), 'dir');
   file('repo/apps/mobile/node_modules/expo/package.json', '{"name":"expo","version":"58.0.19"}');
   file('repo/apps/mobile/node_modules/expo/bin/cli', `const fs=require('fs'),path=require('path');

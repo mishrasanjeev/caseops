@@ -39,6 +39,7 @@ function descriptorProof(file, action, { failAt } = {}) {
   const opened = [], closed = [], reads = [], stages = [];
   let thrown;
   let result;
+  let readFileDepth = 0;
   withFs({
     openSync: (original, name, flags, ...rest) => {
       const fd = original(name, flags, ...rest);
@@ -55,6 +56,15 @@ function descriptorProof(file, action, { failAt } = {}) {
     },
     readFileSync: (original, argument, ...rest) => {
       if (argument === file || opened.includes(argument)) {
+        reads.push(argument); stages.push('read');
+        if (failAt === 'read') throw new Error('UNIT_READ_FAILURE');
+      }
+      readFileDepth++;
+      try { return original(argument, ...rest); }
+      finally { readFileDepth--; }
+    },
+    readSync: (original, argument, ...rest) => {
+      if (readFileDepth === 0 && opened.includes(argument)) {
         reads.push(argument); stages.push('read');
         if (failAt === 'read') throw new Error('UNIT_READ_FAILURE');
       }
@@ -116,7 +126,7 @@ test('evidence opens before path checks and checks/reads/closes one descriptor',
   assert.equal(proof.thrown, undefined);
   assert.equal(proof.result.toString(), value.data);
   assert.equal(proof.stages[0], 'open');
-  assert.equal(proof.reads.length, 1);
+  assert.ok(proof.reads.length >= 1);
 });
 
 test('evidence descriptor closes on metadata, read, size and digest failures', (t) => {

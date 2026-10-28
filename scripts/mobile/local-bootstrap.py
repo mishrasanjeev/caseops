@@ -341,6 +341,7 @@ def port_free(port):
 
 def https_json(url, cache, marked=True):
     context = ssl.create_default_context(cafile=str(cache / "tls/ca.crt"))
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     with urlopen(Request(url, headers=MARKER if marked else {}), context=context, timeout=15) as response:
         return json.load(response)
 
@@ -370,6 +371,7 @@ def build_web(cache, config, log):
 
 def tls_probe(cache, config, *, negative_controls=True):
     context = ssl.create_default_context(cafile=str(cache / "tls/ca.crt"))
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     hostnames = []
     port = int(config["CASEOPS_MOBILE_API_PORT"])
     for hostname in ("127.0.0.1", "10.0.2.2", "localhost"):
@@ -377,9 +379,11 @@ def tls_probe(cache, config, *, negative_controls=True):
             with context.wrap_socket(connection, server_hostname=hostname) as secured:
                 hostnames.append({"name": hostname, "verified": True, "protocol": secured.version()})
     unknown_rejected = False
+    unknown_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    unknown_context.minimum_version = ssl.TLSVersion.TLSv1_2
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=5) as connection:
-            with ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).wrap_socket(connection, server_hostname="localhost"):
+            with unknown_context.wrap_socket(connection, server_hostname="localhost"):
                 pass
     except ssl.SSLCertVerificationError:
         unknown_rejected = True
@@ -651,5 +655,5 @@ if __name__ == "__main__":
     try:
         main(argument_parser().parse_args())
     except Exception as error:
-        print(f"Fixture incomplete: {type(error).__name__}: {error}", file=sys.stderr)
+        print(f"Fixture incomplete: {type(error).__name__}; values redacted", file=sys.stderr)
         sys.exit(1)

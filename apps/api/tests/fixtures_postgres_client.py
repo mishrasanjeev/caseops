@@ -50,7 +50,6 @@ def _database_ownership_journal(event, database_name, source_database, sql, conn
     target = os.environ.get("CASEOPS_TEST_DATABASE_OWNERSHIP_JOURNAL")
     if not target:
         return
-    fd = source_fd = None
     try:
         run_id = os.environ["CASEOPS_TEST_DATABASE_OWNERSHIP_RUN_ID"]
         assert str(UUID(run_id)) == run_id
@@ -84,65 +83,73 @@ def _database_ownership_journal(event, database_name, source_database, sql, conn
             # An unrelated replacement after this observation is never accepted.
             named = path.lstat()
             flags = getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
-            source_fd = os.open(source, os.O_RDONLY | flags)
-            source_opened = os.fstat(source_fd)
-            assert named_matches(source_named, source_opened)
-            chunks, size = [], 0
-            while size <= 65536:
-                chunk = os.read(source_fd, min(65537 - size, 16384))
-                if not chunk:
-                    break
-                size += len(chunk)
-                chunks.append(chunk)
-            assert size == source_opened.st_size and size <= 65536
-            assert meta(source_opened) == meta(os.fstat(source_fd))
-            assert named_matches(source.lstat(), source_opened)
-            row = {
-                "schema": 1,
-                "runId": run_id,
-                "event": event,
-                "pid": os.getpid(),
-                "backendPid": backend_pid,
-                "timestampNs": str(time.time_ns()),
-                "databaseName": database_name,
-                "sourceDatabase": source_database,
-                "canonicalCreateSqlSha256": hashlib.sha256(sql.encode()).hexdigest(),
-                "fixtureSourceSha256": hashlib.sha256(b"".join(chunks)).hexdigest(),
-            }
-            payload = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
-            assert len(payload) <= 2048
-            fd = os.open(path, os.O_WRONLY | os.O_APPEND | flags)
-            before = os.fstat(fd)
-            assert named_matches(named, before) and named_matches(path.lstat(), before)
-            assert stat.S_ISREG(before.st_mode) and before.st_nlink == 1
-            assert 0 <= before.st_size <= 1024**2 - len(payload)
-            if os.name != "nt":
-                assert before.st_uid == os.getuid() and stat.S_IMODE(before.st_mode) == 0o600
-            offset = 0
-            while offset < len(payload):
-                written = os.write(fd, payload[offset:])
-                assert written > 0
-                offset += written
-            os.fsync(fd)
-            after = os.fstat(fd)
-            stable = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink")
-            assert all(getattr(before, key) == getattr(after, key) for key in stable)
-            assert after.st_size == before.st_size + len(payload)
-            assert named_matches(path.lstat(), after)
-            assert path.resolve(strict=True) == path and source.resolve(strict=True) == source
-            assert parents == {p: meta(p.lstat()) for p in parents}
+            with open(
+                source,
+                "rb",
+                buffering=0,
+                opener=lambda filename, _open_flags: os.open(filename, os.O_RDONLY | flags),
+            ) as source_file:
+                source_fd = source_file.fileno()
+                source_opened = os.fstat(source_fd)
+                assert named_matches(source_named, source_opened)
+                chunks, size = [], 0
+                while size <= 65536:
+                    chunk = os.read(source_fd, min(65537 - size, 16384))
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    chunks.append(chunk)
+                assert size == source_opened.st_size and size <= 65536
+                assert meta(source_opened) == meta(os.fstat(source_fd))
+                assert named_matches(source.lstat(), source_opened)
+                row = {
+                    "schema": 1,
+                    "runId": run_id,
+                    "event": event,
+                    "pid": os.getpid(),
+                    "backendPid": backend_pid,
+                    "timestampNs": str(time.time_ns()),
+                    "databaseName": database_name,
+                    "sourceDatabase": source_database,
+                    "canonicalCreateSqlSha256": hashlib.sha256(sql.encode()).hexdigest(),
+                    "fixtureSourceSha256": hashlib.sha256(b"".join(chunks)).hexdigest(),
+                }
+                payload = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+                assert len(payload) <= 2048
+                with open(
+                    path,
+                    "ab",
+                    buffering=0,
+                    opener=lambda filename, _open_flags: os.open(
+                        filename, os.O_WRONLY | os.O_APPEND | flags
+                    ),
+                ) as journal_file:
+                    fd = journal_file.fileno()
+                    before = os.fstat(fd)
+                    assert named_matches(named, before) and named_matches(path.lstat(), before)
+                    assert stat.S_ISREG(before.st_mode) and before.st_nlink == 1
+                    assert 0 <= before.st_size <= 1024**2 - len(payload)
+                    if os.name != "nt":
+                        assert (
+                            before.st_uid == os.getuid() and stat.S_IMODE(before.st_mode) == 0o600
+                        )
+                    offset = 0
+                    while offset < len(payload):
+                        written = os.write(fd, payload[offset:])
+                        assert written > 0
+                        offset += written
+                    os.fsync(fd)
+                    after = os.fstat(fd)
+                    stable = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink")
+                    assert all(getattr(before, key) == getattr(after, key) for key in stable)
+                    assert after.st_size == before.st_size + len(payload)
+                    assert named_matches(path.lstat(), after)
+                    assert (
+                        path.resolve(strict=True) == path and source.resolve(strict=True) == source
+                    )
+                    assert parents == {p: meta(p.lstat()) for p in parents}
     except Exception:
         raise RuntimeError("POSTGRES_DATABASE_OWNERSHIP_JOURNAL_INVALID") from None
-    finally:
-        close_failed = False
-        for opened in (fd, source_fd):
-            if opened is not None:
-                try:
-                    os.close(opened)
-                except OSError:
-                    close_failed = True
-        if close_failed:
-            raise RuntimeError("POSTGRES_DATABASE_OWNERSHIP_JOURNAL_INVALID") from None
 
 
 @contextmanager

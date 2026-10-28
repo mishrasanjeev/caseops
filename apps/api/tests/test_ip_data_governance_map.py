@@ -169,8 +169,20 @@ def test_hold_release_evidence_is_registered_without_disposition_admission() -> 
 def test_private_projection_is_the_only_runtime_disposition_override() -> None:
     data = _map()
     assert data["table_disposition_handler_overrides"] == {
-        "private_index_projections": "private_retrieval_disposition"
+        "private_index_projections": "private_retrieval_disposition",
+        "counsel_read_page_dirty": "registry_fail_closed",
+        "counsel_read_page_members": "registry_fail_closed",
+        "counsel_read_pages": "registry_fail_closed",
+        "matter_task_queue_dirty": "registry_fail_closed",
+        "matter_task_queue_groups": "registry_fail_closed",
+        "matter_task_queue_pages": "registry_fail_closed",
     }
+    # Derived read pages/dirty markers add no disposition authority. Only the
+    # private retrieval projection has a non-fail-closed runtime handler.
+    assert {
+        name: handler for name, handler in data["table_disposition_handler_overrides"].items()
+        if handler != "registry_fail_closed"
+    } == {"private_index_projections": "private_retrieval_disposition"}
     private_projection = next(
         row for row in data["sql_tables"] if row["table_name"] == "private_index_projections"
     )

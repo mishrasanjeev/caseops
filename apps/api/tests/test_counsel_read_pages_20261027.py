@@ -294,7 +294,8 @@ def exercise_rollback(client):
     before = snapshot((OutsideCounsel, *MODELS, *PROJECTIONS))
     effects = immutable_side_effects()
     body = get(case).json()
-    with pytest.raises(RuntimeError, match="owned rollback"):
+    rollback_errors = []
+    try:
         with get_engine().begin() as connection:
             connection.execute(
                 update(MatterOutsideCounselAssignment)
@@ -307,6 +308,9 @@ def exercise_rollback(client):
                 .values(name="Must roll back counsel")
             )
             raise RuntimeError("owned rollback")
+    except RuntimeError as error:
+        rollback_errors.append(str(error))
+    assert rollback_errors == ["owned rollback"]
     assert snapshot((OutsideCounsel, *MODELS, *PROJECTIONS)) == before
     assert immutable_side_effects() == effects and get(case).json() == body
 

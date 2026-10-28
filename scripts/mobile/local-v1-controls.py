@@ -103,7 +103,12 @@ def create_journal(root, identity):
     assert re.fullmatch(r"[a-f0-9]{16,64}", identity)
     target = root / f"v1-control-events-{identity}.jsonl"
     descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    expected, count, closed = os.fstat(descriptor), 0, False
+    try:
+        expected = os.fstat(descriptor)
+    except BaseException:
+        os.close(descriptor)
+        raise
+    count, closed = 0, False
     def metadata(value):
         return tuple(getattr(value, key) for key in ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns"))
     def persist(record):
@@ -750,4 +755,15 @@ def from_environment(root, run_id, *, environment=None, factory=None, verified_i
         with (root / f"v1-control-attempt-{sha(identity.encode())}.json").open("x", encoding="utf-8") as output:
             output.write(json.dumps({"operationId": identity, "automaticRetry": False}))
     owner.claim = claim
-    return V1Controls(value, reference["sha256"], secret, owner=owner, observer=observer, persist=persist, claim=claim, close_journal=close_journal)
+    try:
+        return V1Controls(value, reference["sha256"], secret, owner=owner, observer=observer, persist=persist, claim=claim, close_journal=close_journal)
+    except BaseException as error:
+        try:
+            owner.close()
+        except BaseException:
+            error.add_note("V1_OWNER_CLEANUP_UNVERIFIED_DURING_SETUP")
+        try:
+            close_journal()
+        except BaseException:
+            error.add_note("V1_JOURNAL_CLEANUP_UNVERIFIED_DURING_SETUP")
+        raise

@@ -347,6 +347,13 @@ export function rendererMain(config: {
     }
   };
   const receive = (event: MessageEvent) => {
+    // The pinned Android and iOS bridges construct MessageEvent with only
+    // data, giving it the standard empty origin and null source. Browser
+    // messages must additionally come from this exact window and origin.
+    const nativeBridgeEvent = event.origin === "" && event.source === null;
+    const ownWindowEvent =
+      event.origin === window.location.origin && event.source === window;
+    if (!nativeBridgeEvent && !ownWindowEvent) return;
     if (seenEvents.has(event)) return;
     seenEvents.add(event);
     try {

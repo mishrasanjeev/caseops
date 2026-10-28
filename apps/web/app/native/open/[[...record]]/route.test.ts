@@ -17,10 +17,10 @@ describe('native record link browser fallback', () => {
   it('scrubs the URL with one fixed hash-authorized script without reading it', async () => {
     const response = GET();
     const html = await response.text();
-    const scripts = [...html.matchAll(/<script>(.*?)<\/script>/g)];
+    const scripts = [...new DOMParser().parseFromString(html, 'text/html').querySelectorAll('script')];
     expect(scripts).toHaveLength(1);
-    expect(scripts[0][1]).toBe("window.history.replaceState(null,'','/native/open');");
-    const hash = createHash('sha256').update(scripts[0][1]).digest('base64');
+    expect(scripts[0].textContent).toBe("window.history.replaceState(null,'','/native/open');");
+    const hash = createHash('sha256').update(scripts[0].textContent || '').digest('base64');
     expect(response.headers.get('content-security-policy')).toBe(`default-src 'none'; script-src 'sha256-${hash}'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`);
     expect(html).not.toMatch(/location\.|document\.|URLSearchParams|innerHTML|eval\(/);
   });

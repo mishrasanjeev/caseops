@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { QP,hash,requireRequest,validateDataset,readReference,reference,readBytes,ownerRecipes } from '../../apps/mobile/e2e/queue-privacy-contract.mjs';
+import { QP,hash,requireRequest,validateDataset,readReference,reference,ownerRecipes } from '../../apps/mobile/e2e/queue-privacy-contract.mjs';
 import { pendingProducer } from '../../apps/mobile/e2e/queue-privacy-fixture.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { pendingQPRequest } from './run-queue-privacy.mjs';

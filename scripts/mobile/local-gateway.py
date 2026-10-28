@@ -26,6 +26,52 @@ BROWSER_ROUTES = {
     "POST /api/auth/native/authorize",
 }
 HOP = {"connection", "keep-alive", "transfer-encoding", "upgrade", "proxy-authorization", "proxy-authenticate"}
+HEADER_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+\Z")
+REQUEST_SINGLETONS = ("Authorization", MARKER_HEADER, "Cookie", "Origin", "Host", "Content-Length",
+                      "Content-Type", "X-CSRF-Token", "X-CaseOps-V1-Control", "X-Forwarded-Proto")
+
+
+def upstream_destination(web):
+    # Request Host, absolute URLs and redirect responses never select a socket.
+    assert type(web) is bool
+    return ("web", 3000) if web else ("api", 8000)
+
+
+def upstream_target(value):
+    assert isinstance(value, str) and 0 < len(value) <= 16384
+    assert value.startswith("/") and not value.startswith("//"), "ORIGIN_FORM_REQUIRED"
+    assert not any(ord(char) <= 32 or ord(char) == 127 or char == "\\" for char in value), "INVALID_REQUEST_TARGET"
+    parsed = urlsplit(value)
+    assert not parsed.scheme and not parsed.netloc and not parsed.fragment, "ORIGIN_FORM_REQUIRED"
+    assert not re.search(r"%(?:0[0ad]|2f|5c)", parsed.path, re.IGNORECASE), "INVALID_REQUEST_PATH"
+    # Preserve the already encoded query byte-for-byte, including signed cursors.
+    return parsed.path + ("?" + parsed.query if "?" in value else "")
+
+
+def forwarded_headers(values):
+    result = []
+    for key, value in values:
+        assert isinstance(key, str) and HEADER_NAME.fullmatch(key), "INVALID_UPSTREAM_HEADER"
+        assert isinstance(value, str) and not re.search(r"[\x00-\x08\x0a-\x1f\x7f]", value), "INVALID_UPSTREAM_HEADER"
+        if key.lower() not in HOP and key.lower() != "content-length":
+            result.append((key, value))
+    return result
+
+
+def request_headers(values):
+    values = list(values)
+    canonical = {key.lower(): key for key in REQUEST_SINGLETONS}
+    counts = {key: 0 for key in canonical}
+    for key, _value in values:
+        lowered = key.lower()
+        # The bounded local protocol never accepts transfer coding, including
+        # an empty first value or a control request that returns before body parsing.
+        assert lowered != "transfer-encoding", "TRANSFER_ENCODING_NOT_ADMITTED"
+        if lowered in counts:
+            counts[lowered] += 1
+            assert counts[lowered] == 1, "DUPLICATE_SECURITY_HEADER"
+    # Classification and forwarding consume the same unambiguous values.
+    return {canonical.get(key.lower(), key): value for key, value in forwarded_headers(values)}
 
 
 _SOURCE_METADATA = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
@@ -104,7 +150,7 @@ def verified_v1_controls(root, run_id, environment=None):
     extra = {}
     if profile == "queue-privacy-v1":
         base_path = Path(__file__).resolve().with_name("local-v1-controls.py")
-        base_bytes = runtime_source_bytes(base_path, "e762d80f89ead187e4255402f2320582f390a63dff629a07b0ef235db6fcdad2")
+        base_bytes = runtime_source_bytes(base_path, "a03af49be43afd3618688c64e0f7ac7938b8fa3e5e30b05bff00aeeb629ec4fc")
         base = ModuleType("caseops_queue_privacy_verified_helpers")
         base.__file__ = str(base_path)
         exec(compile(base_bytes, str(base_path), "exec"), base.__dict__)
@@ -185,10 +231,16 @@ class Gateway:
                 self.close_connection = True
 
             def handle_request(self):
-                path = urlsplit(self.path).path
-                if self.path.startswith("//") or path.startswith("//"):
+                try:
+                    target = upstream_target(self.path)
+                except (ValueError, AssertionError):
                     return self.reply(400, {"code": "ORIGIN_FORM_REQUIRED"})
-                marked = self.headers.get(MARKER_HEADER) == MARKER
+                path = urlsplit(target).path
+                try:
+                    incoming_headers = request_headers(self.headers.items())
+                except AssertionError:
+                    return self.reply(400, {"code": "INVALID_REQUEST_HEADERS"})
+                marked = incoming_headers.get(MARKER_HEADER) == MARKER
                 if not web and path == "/__caseops_e2e/v1-control":
                     if not marked or self.command != "POST" or not gateway.v1 or self.path != path:
                         return self.reply(403, {"code": "V1_CONTROLS_NOT_ADMITTED"})
@@ -198,7 +250,7 @@ class Gateway:
                         self.connection.settimeout(5)
                         raw = self.rfile.read(size)
                         assert len(raw) == size
-                        result = gateway.v1.handle(raw, marker=self.headers.get(MARKER_HEADER), authority=self.headers.get("X-CaseOps-V1-Control"))
+                        result = gateway.v1.handle(raw, marker=incoming_headers.get(MARKER_HEADER), authority=incoming_headers.get("X-CaseOps-V1-Control"))
                     except Exception:
                         return self.reply(409, {"code": "V1_CONTROL_REFUSED_OR_UNKNOWN_NO_REPLAY"})
                     return self.reply(200, result)
@@ -211,9 +263,9 @@ class Gateway:
                         return self.reply(200, gateway.state)
                 route = f"{self.command} {path}"
                 request_id = secrets.token_hex(8)
-                native_bearer = self.headers.get("Authorization", "").startswith("Bearer cnat_") and not self.headers.get("Cookie")
+                native_bearer = incoming_headers.get("Authorization", "").startswith("Bearer cnat_") and not incoming_headers.get("Cookie")
                 # Browser handoff has cookie/CSRF authority, never native bearer authority.
-                browser_origin = self.headers.get("Origin", "")
+                browser_origin = incoming_headers.get("Origin", "")
                 local_origins = {
                     f"https://{host}:{os.environ.get('CASEOPS_MOBILE_WEB_PORT', '3443')}"
                     for host in ("10.0.2.2", "127.0.0.1", "localhost")
@@ -225,8 +277,8 @@ class Gateway:
                 )
                 browser = browser_route and (
                     browser_origin in local_origins or
-                    (self.command == "GET" and bool(self.headers.get("Cookie")))
-                ) and not self.headers.get("Authorization")
+                    (self.command == "GET" and bool(incoming_headers.get("Cookie")))
+                ) and not incoming_headers.get("Authorization")
                 preflight = browser and self.command == "OPTIONS"
                 if not web and not marked and not preflight and route != "GET /api/build":
                     with gateway.lock:
@@ -249,6 +301,8 @@ class Gateway:
                         gateway.state["overflow"] = True
                         return self.reply(503, {"code": "REQUEST_EVIDENCE_BOUND"})
                 try:
+                    if len(self.headers.get_all("Content-Length", [])) > 1:
+                        return self.reply(400, {"code": "INVALID_BODY"})
                     length = int(self.headers.get("Content-Length", "0"))
                     if length < 0 or length > 1048576 or self.headers.get("Transfer-Encoding"):
                         return self.reply(413, {"code": "BOUNDED_BODY_REQUIRED"})
@@ -258,10 +312,16 @@ class Gateway:
                         return self.reply(400, {"code": "INCOMPLETE_BODY"})
                 except (ValueError, TimeoutError):
                     return self.reply(400, {"code": "INVALID_BODY"})
-                headers = {key: value for key, value in self.headers.items() if key.lower() not in HOP}
+                try:
+                    headers = dict(incoming_headers)
+                except AssertionError:
+                    return self.reply(400, {"code": "INVALID_REQUEST_HEADERS"})
                 headers["Connection"] = "close"
                 headers["X-Forwarded-Proto"] = "https"
-                upstream = http.client.HTTPConnection("web" if web else "api", 3000 if web else 8000, timeout=15)
+                if body or self.headers.get("Content-Length") is not None:
+                    headers["Content-Length"] = str(len(body))
+                host, port = upstream_destination(web)
+                upstream = http.client.HTTPConnection(host, port, timeout=15)
                 status = 502
                 response_started = False
                 intercept = None
@@ -297,8 +357,8 @@ class Gateway:
                     if gateway.v1:
                         if hasattr(gateway.v1, "validate_native_request"):
                             gateway.v1.validate_native_request(self.command, path, native=native_bearer, body=body,
-                                query=urlsplit(self.path).query, authorization=self.headers.get("Authorization"),
-                                cookie_present=self.headers.get("Cookie") is not None)
+                                query=urlsplit(self.path).query, authorization=incoming_headers.get("Authorization"),
+                                cookie_present=incoming_headers.get("Cookie") is not None)
                         intercept = gateway.v1.before_native(self.command, path, native=native_bearer, request_id=request_id)
                         if intercept and intercept.get("fault"):
                             fault = intercept["fault"]
@@ -310,9 +370,10 @@ class Gateway:
                             data = b'{}'
                             record_request()
                             return self.reply(status, {})
-                    upstream.request(self.command, self.path, body=body, headers=headers)
+                    upstream.request(self.command, target, body=body, headers=headers)
                     response = upstream.getresponse()
                     status = response.status
+                    response_headers = forwarded_headers(response.getheaders())
                     # No native redirect following; browser product navigation remains real.
                     if not web and not browser and 300 <= status < 400:
                         return self.reply(502, {"code": "UPSTREAM_REDIRECT_REQUIRES_REVIEW"})
@@ -331,9 +392,8 @@ class Gateway:
                         return
                     response_started = True
                     self.send_response(status)
-                    for key, value in response.getheaders():
-                        if key.lower() not in HOP and key.lower() != "content-length":
-                            self.send_header(key, value)
+                    for key, value in response_headers:
+                        self.send_header(key, value)
                     self.send_header("Content-Length", str(len(data)))
                     self.send_header("Connection", "close")
                     self.end_headers()

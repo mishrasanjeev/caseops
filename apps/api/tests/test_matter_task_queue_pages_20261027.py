@@ -1,5 +1,6 @@
 """Real source-writer composition controls; DB execution separately authorized."""
 
+from contextlib import ExitStack
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
@@ -674,9 +675,11 @@ def test_database_journal_invalid_file_refuses_before_create(
     else:
         target.write_bytes(b"x" * (1024**2))
     effects, _ = fake_database_admin(fixtures, target, connection, monkeypatch)
-    with pytest.raises(RuntimeError, match="^POSTGRES_DATABASE_OWNERSHIP_JOURNAL_INVALID$"):
-        with fixtures.temporary_http_database(make_url("postgresql+psycopg://localhost/caseops")):
-            raise AssertionError("Private database body must be unreached")
+    with ExitStack() as entered:
+        with pytest.raises(RuntimeError, match="^POSTGRES_DATABASE_OWNERSHIP_JOURNAL_INVALID$"):
+            entered.enter_context(
+                fixtures.temporary_http_database(make_url("postgresql+psycopg://localhost/caseops"))
+            )
     assert effects == ["admin_disposed"]
 
 
@@ -695,9 +698,11 @@ def test_database_journal_ack_write_failure_keeps_normal_owned_cleanup(
         original(event, *args)
 
     monkeypatch.setattr(fixtures, "_database_ownership_journal", fail_ack)
-    with pytest.raises(RuntimeError, match="^POSTGRES_DATABASE_OWNERSHIP_JOURNAL_INVALID$"):
-        with fixtures.temporary_http_database(make_url("postgresql+psycopg://localhost/caseops")):
-            raise AssertionError("Body must not follow missing durable ACK")
+    with ExitStack() as entered:
+        with pytest.raises(RuntimeError, match="^POSTGRES_DATABASE_OWNERSHIP_JOURNAL_INVALID$"):
+            entered.enter_context(
+                fixtures.temporary_http_database(make_url("postgresql+psycopg://localhost/caseops"))
+            )
     assert [row["event"] for row in journal_rows(target)] == ["create_intent"]
     assert effects == ["create_dispatched", "drop_ack", "admin_disposed"]
 
@@ -709,9 +714,11 @@ def test_database_journal_lost_create_ack_retains_intent_without_retry(
 
     fixtures, target, connection = database_journal
     effects, _ = fake_database_admin(fixtures, target, connection, monkeypatch, unknown_create=True)
-    with pytest.raises(OSError, match="^synthetic lost create acknowledgement$"):
-        with fixtures.temporary_http_database(make_url("postgresql+psycopg://localhost/caseops")):
-            raise AssertionError("Unknown create must not yield a body")
+    with ExitStack() as entered:
+        with pytest.raises(OSError, match="^synthetic lost create acknowledgement$"):
+            entered.enter_context(
+                fixtures.temporary_http_database(make_url("postgresql+psycopg://localhost/caseops"))
+            )
     assert [row["event"] for row in journal_rows(target)] == ["create_intent"]
     assert effects == ["create_dispatched", "admin_disposed"]
 

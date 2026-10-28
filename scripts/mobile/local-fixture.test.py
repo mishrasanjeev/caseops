@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 import stat
 import subprocess
+import ssl
+import socket
 import tempfile
 import threading
 from types import SimpleNamespace
@@ -823,6 +825,77 @@ class PortabilityTests(unittest.TestCase):
                 tls.assert_called_once_with(root, config, negative_controls=True)
 
 
+class TlsPolicyTests(unittest.TestCase):
+    def test_seed_mfa_status_cannot_log_or_consume_an_arbitrary_argument_value(self):
+        for value in ("SYNTHETIC_PASSWORD_SENTINEL", 1, None, {"password": "SYNTHETIC_PASSWORD_SENTINEL"}):
+            with self.subTest(kind=type(value).__name__), patch.object(Path, "read_text") as read, patch.object(fixture_module, "client") as transport:
+                with self.assertRaisesRegex(AssertionError, "Explicit MFA Boolean required"):
+                    fixture_module.seed(argparse.Namespace(mfa=value))
+                read.assert_not_called(); transport.assert_not_called()
+
+    def test_real_default_client_tls12_exact_ca_hostname_and_both_source_readers(self):
+        observed = []
+        class Handler(gateway_module.BaseHTTPRequestHandler):
+            def log_message(self, *_args): pass
+            def do_GET(self):
+                observed.append(self.connection.version())
+                self.send_response(200); self.send_header("Content-Length", "11"); self.end_headers(); self.wfile.write(b'{"ok":true}')
+        class Server(gateway_module.ThreadingHTTPServer):
+            daemon_threads = True
+            def get_request(self):
+                raw, peer = super().get_request(); raw.settimeout(3)
+                try: return self.context.wrap_socket(raw, server_side=True), peer
+                except BaseException: raw.close(); raise
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(fixture_module, "ROOT", root), redirect_stdout(io.StringIO()):
+                fixture_module.prepare(argparse.Namespace())
+            server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            server_context.minimum_version = ssl.TLSVersion.TLSv1_2
+            server_context.maximum_version = ssl.TLSVersion.TLSv1_2
+            server_context.load_cert_chain(root / "tls/server.crt", root / "tls/server.key")
+            server = Server(("127.0.0.1", 0), Handler); server.context = server_context
+            thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+            try:
+                self.assertEqual(bootstrap_module.https_json("https://localhost:" + str(server.server_port), root), {"ok": True})
+                original_connect = socket.create_connection
+                for file in ("admit-ios-file-source.py", "admit-android-file-source.py"):
+                    admission = load("tls_" + file.replace("-", "_"), file)
+                    calls = []
+                    def connect(address, **kwargs):
+                        calls.append(address); self.assertEqual(address, ("gateway", 8443))
+                        return original_connect(("127.0.0.1", server.server_port), **kwargs)
+                    with patch.object(admission.socket, "create_connection", side_effect=connect):
+                        status, body, _headers = admission.tls_get(root, {"apiOrigin": "https://localhost:" + str(server.server_port)}, (root / "tls/ca.crt").read_bytes(), "/")
+                    self.assertEqual(status, 200); self.assertEqual(body, b'{"ok":true}'); self.assertEqual(len(calls), 1)
+                self.assertEqual(observed, ["TLSv1.2"] * 3)
+                for trusted, hostname in ((False, "localhost"), (True, "wrong.localhost")):
+                    client = ssl.create_default_context(cafile=str(root / "tls/ca.crt")) if trusted else ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                    client.minimum_version = ssl.TLSVersion.TLSv1_2
+                    self.assertEqual(client.verify_mode, ssl.CERT_REQUIRED); self.assertTrue(client.check_hostname)
+                    with socket.create_connection(("127.0.0.1", server.server_port), timeout=3) as raw:
+                        with self.assertRaises(ssl.SSLCertVerificationError): client.wrap_socket(raw, server_hostname=hostname)
+                self.assertEqual(observed, ["TLSv1.2"] * 3)
+            finally:
+                server.shutdown(); server.server_close(); thread.join(3); self.assertFalse(thread.is_alive())
+
+    def test_all_client_contexts_explicitly_keep_tls12_before_network_and_diagnostics_hide_assertion_values(self):
+        import ast
+        for file in ("local-bootstrap.py", "local-fixture.py", "admit-ios-file-source.py", "admit-android-file-source.py", "local-gateway.py"):
+            tree = ast.parse(Path(__file__).with_name(file).read_text())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Attribute) and node.value.func.attr in ("create_default_context", "SSLContext"):
+                    self.assertIsInstance(node.targets[0], ast.Name)
+                    name = node.targets[0].id
+                    assignments = [item for item in ast.walk(tree) if isinstance(item, ast.Assign) and any(isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == name and target.attr == "minimum_version" for target in item.targets) and item.lineno > node.lineno]
+                    self.assertTrue(assignments, file)
+                    self.assertEqual(ast.unparse(min(assignments, key=lambda item: item.lineno).value), "ssl.TLSVersion.TLSv1_2")
+        try: raise AssertionError("SYNTHETIC_PASSWORD_SENTINEL\nSYNTHETIC_TOTP_SENTINEL")
+        except AssertionError as error: output = json.dumps(fixture_module.failure_diagnostic(error, "seed"))
+        self.assertNotIn("SYNTHETIC_PASSWORD_SENTINEL", output); self.assertNotIn("SYNTHETIC_TOTP_SENTINEL", output)
+        self.assertIn("AssertionError", output)
+
+
 class GatewayTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -849,6 +922,142 @@ class GatewayTests(unittest.TestCase):
             client.request(method, path, body=body, headers=headers or {})
             response = client.getresponse()
             return response.status, response.read()
+
+    def test_initial_fixture_route_inventory_adds_only_exact_compatibility_get(self):
+        retained = {"GET /api/build", "GET /api/health", "GET /api/auth/me", "GET /api/auth/security",
+                    "POST /api/auth/native/token", "POST /api/auth/native/refresh", "POST /api/auth/native/logout",
+                    "GET /api/me/today", "GET /api/matters/", "GET /api/calendar/events",
+                    "GET /api/auth/native/sessions", "GET /api/matters/unit-matter",
+                    "GET /api/matters/unit-matter/workspace", "POST /api/matters/unit-matter/notes",
+                    "GET /api/matters/unit-matter/drafts", "GET /api/matters/unit-matter/drafts/unit-draft"}
+        actual = fixture_module.initial_gateway_routes("unit-matter", "unit-draft")
+        self.assertEqual(actual, retained | {"GET /api/auth/native/compatibility"})
+        (self.root / "gateway-routes.json").write_text(json.dumps({"routes": sorted(actual)}))
+        self.assertEqual(self.gateway.allowed(), actual)
+
+    def test_absolute_authorities_fragments_and_encoded_request_line_injection_never_open_upstream(self):
+        headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
+        for target in ("http://synthetic.invalid/api/build", "https://synthetic.invalid/api/build", "/api/build#fragment", "/api/%0d%0aInjected/build", "/api/%2f%2fsynthetic.invalid", "/api/\\synthetic.invalid"):
+            with self.subTest(target=target), patch.object(gateway_module.http.client, "HTTPConnection") as upstream:
+                self.assertEqual(self.request("GET", target, headers)[0], 400)
+                upstream.assert_not_called()
+        self.assertEqual(gateway_module.upstream_destination(False), ("api", 8000))
+        self.assertEqual(gateway_module.upstream_destination(True), ("web", 3000))
+        with self.assertRaises(AssertionError): gateway_module.upstream_destination("web")
+
+    def test_response_splitting_is_refused_before_headers_and_cookies_remain_separate(self):
+        self.assertEqual(gateway_module.forwarded_headers([("Set-Cookie", "a=one; Secure; HttpOnly"), ("Set-Cookie", "b=two; Secure; SameSite=Lax")]),
+                         [("Set-Cookie", "a=one; Secure; HttpOnly"), ("Set-Cookie", "b=two; Secure; SameSite=Lax")])
+        for pair in (("X-Synthetic", "safe\r\nInjected: private"), ("X-Synthetic", "safe\nInjected: private"), ("Bad:Name", "value"), ("X-Synthetic", "NUL\0value")):
+            with self.subTest(pair=pair[0]):
+                with self.assertRaises(AssertionError): gateway_module.forwarded_headers([pair])
+        class Upstream:
+            def __init__(self, *args, **kwargs): pass
+            def request(self, *args, **kwargs): pass
+            def getresponse(self): return SimpleNamespace(status=200, getheaders=lambda: [("Set-Cookie", "safe\r\nInjected: private")])
+            def close(self): pass
+        with patch.object(gateway_module.http.client, "HTTPConnection", Upstream):
+            status, body = self.request("GET", "/api/build", {gateway_module.MARKER_HEADER: gateway_module.MARKER})
+        self.assertEqual(status, 502); self.assertEqual(json.loads(body), {"code": "UPSTREAM_TRANSPORT_FAILED"})
+        self.assertNotIn("private", body.decode())
+
+    def test_folded_client_header_and_duplicate_content_lengths_never_forward(self):
+        for raw in (b"GET /api/build HTTP/1.1\r\nHost: localhost\r\nX-Synthetic: first\r\n folded\r\n\r\n",
+                    b"POST /api/auth/native/token HTTP/1.1\r\nHost: localhost\r\nX-CaseOps-Automated-Test: no-paid-providers\r\nContent-Length: 0\r\nContent-Length: 2\r\n\r\n"):
+            with patch.object(gateway_module.http.client, "HTTPConnection") as upstream:
+                with socket.create_connection(("127.0.0.1", self.server.server_port), timeout=3) as client:
+                    client.sendall(raw); response = client.recv(4096)
+                self.assertIn(b" 400 ", response); upstream.assert_not_called()
+
+    def test_duplicate_authority_headers_are_rejected_before_classification_or_control_dispatch(self):
+        controls = []
+        headers = (("Authorization", "Bearer cnat_SYNTHETIC", "Bearer web_SYNTHETIC"),
+                   (gateway_module.MARKER_HEADER, gateway_module.MARKER, "wrong"),
+                   ("Cookie", "first=one", "second=two"), ("Origin", "https://localhost:3443", "https://synthetic.invalid"),
+                   ("Host", "localhost", "synthetic.invalid"), ("Content-Length", "0", "2"),
+                   ("X-CaseOps-V1-Control", "synthetic-one", "synthetic-two"))
+        for name, first, second in headers:
+            for duplicate_name in (name, name.lower()):
+                path = "/__caseops_e2e/v1-control" if name == "X-CaseOps-V1-Control" else "/api/matters/"
+                control = name == "X-CaseOps-V1-Control"
+                self.gateway.v1 = SimpleNamespace(handle=lambda *_args, **_kwargs: controls.append("dispatched"), closed=False) if control else None
+                lines = [("POST " if control else "GET ") + path + " HTTP/1.1"]
+                if name != "Host": lines.append("Host: localhost")
+                if name != gateway_module.MARKER_HEADER: lines.append(gateway_module.MARKER_HEADER + ": " + gateway_module.MARKER)
+                if control: lines.append("Content-Length: 2")
+                lines.extend((name + ": " + first, duplicate_name + ": " + second, "", ""))
+                with self.subTest(name=name, duplicate=duplicate_name), patch.object(gateway_module.http.client, "HTTPConnection") as upstream:
+                    with socket.create_connection(("127.0.0.1", self.server.server_port), timeout=3) as client:
+                        client.sendall("\r\n".join(lines).encode() + (b"{}" if control else b"")); response = client.recv(4096)
+                    self.assertIn(b" 400 ", response); upstream.assert_not_called()
+        for transfer_headers in (("Transfer-Encoding: ",), ("Transfer-Encoding: chunked",),
+                                 ("Transfer-Encoding: ", "transfer-encoding: chunked")):
+            for control in (False, True):
+                self.gateway.v1 = SimpleNamespace(handle=lambda *_args, **_kwargs: controls.append("dispatched"), closed=False) if control else None
+                lines = [("POST /__caseops_e2e/v1-control" if control else "GET /api/matters/") + " HTTP/1.1",
+                         "Host: localhost", gateway_module.MARKER_HEADER + ": " + gateway_module.MARKER,
+                         "Content-Length: 2", *transfer_headers, "", ""]
+                with self.subTest(transfer_headers=transfer_headers, control=control), patch.object(gateway_module.http.client, "HTTPConnection") as upstream:
+                    with socket.create_connection(("127.0.0.1", self.server.server_port), timeout=3) as client:
+                        client.sendall("\r\n".join(lines).encode() + b"{}"); response = client.recv(4096)
+                    self.assertIn(b" 400 ", response); upstream.assert_not_called()
+        self.assertEqual(controls, []); self.assertEqual(self.gateway.state["requests"], [])
+        self.gateway.v1 = None
+
+    def test_canonical_authority_values_are_identical_for_classification_and_forwarding(self):
+        forwarded = []
+        class Upstream:
+            def __init__(self, *_args, **_kwargs): pass
+            def request(self, method, path, **kwargs): forwarded.append((method, path, kwargs["headers"]))
+            def getresponse(self): return SimpleNamespace(status=200, getheaders=lambda: [], read=lambda _limit: b"{}")
+            def close(self): pass
+        for authority in ({"authorization": "Bearer cnat_SYNTHETIC"}, {"cookie": "synthetic=one", "origin": "https://127.0.0.1:3443"}):
+            with patch.object(gateway_module.http.client, "HTTPConnection", Upstream):
+                status, _body = self.request("GET", "/api/auth/me" if "cookie" in authority else "/api/matters/", {
+                    "x-caseops-automated-test": gateway_module.MARKER, "x-forwarded-proto": "http", **authority})
+            self.assertEqual(status, 200)
+            actual = forwarded[-1][2]
+            self.assertEqual(actual[gateway_module.MARKER_HEADER], gateway_module.MARKER)
+            self.assertEqual(actual["X-Forwarded-Proto"], "https")
+            self.assertEqual(sum(key.lower() == "x-forwarded-proto" for key in actual), 1)
+            for name, value in authority.items(): self.assertEqual(actual[name.title()], value)
+
+    def test_compatibility_get_forwards_exact_query_once_and_preserves_marker_and_all_path_refusals(self):
+        routes = fixture_module.initial_gateway_routes("unit-matter", "unit-draft")
+        (self.root / "gateway-routes.json").write_text(json.dumps({"routes": sorted(routes)}))
+        observed = []
+
+        class Upstream:
+            def __init__(self, *_args, **_kwargs):
+                pass
+            def request(self, *args, **kwargs):
+                observed.append((args, kwargs))
+            def getresponse(self):
+                return SimpleNamespace(status=200, getheaders=lambda: [("content-type", "application/json")],
+                                       read=lambda _limit: b'{"status":"supported"}')
+            def close(self):
+                pass
+
+        headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
+        target = "/api/auth/native/compatibility?platform=ios&client_version=1.0.0"
+        with patch.object(gateway_module.http.client, "HTTPConnection", Upstream):
+            self.assertEqual(self.request("GET", target, headers), (200, b'{"status":"supported"}'))
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(observed[0][0], ("GET", target))
+        self.assertEqual(observed[0][1]["headers"][gateway_module.MARKER_HEADER], gateway_module.MARKER)
+        for method, target in [("GET", target), ("POST", target), ("PATCH", target), ("DELETE", target),
+                               ("GET", "/api/auth/native/compatibility/"), ("GET", "/api/auth/native/compatibility/extra"),
+                               ("GET", "/api/auth/native/Compatibility"), ("GET", "/api/auth/native/%63ompatibility"),
+                               ("GET", "/api/auth/native/authorize"), ("POST", "/api/case-tracking/search")]:
+            with self.subTest(method=method, target=target), patch.object(gateway_module.http.client, "HTTPConnection") as transport:
+                selected = {} if method == "GET" and "?" in target else headers
+                self.assertEqual(self.request(method, target, selected)[0], 403)
+                transport.assert_not_called()
+        record = self.gateway.state["requests"][0]
+        self.assertEqual(record["method"], "GET")
+        self.assertEqual(record["route"], "/api/auth/native/compatibility")
+        self.assertEqual(record["trafficClass"], "api")
+        self.assertNotIn("client_version", json.dumps(record))
 
     def test_disabled_v1_manager_is_neither_opened_nor_executed(self):
         with patch.object(gateway_module, "runtime_source_bytes") as source, patch.object(gateway_module, "ModuleType") as execute:

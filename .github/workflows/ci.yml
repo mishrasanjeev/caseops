@@ -87,6 +87,9 @@ jobs:
     # tests select and mock each backend explicitly.
     env:
       CASEOPS_OCR_PROVIDER: none
+      # Integrity-sensitive installed files must be independently owned,
+      # rather than hardlinked to uv's mutable shared cache.
+      UV_LINK_MODE: copy
     # Keep shards comfortably within the hosted-runner window under coverage.
     # Every test file is still selected exactly once and the aggregate
     # coverage gate combines every shard artifact. On 2026-08-16, comparable
@@ -294,6 +297,8 @@ jobs:
     # See apps/api/tests/test_postgres_validation.py for what's covered.
     name: Postgres + pgvector shard ${{ matrix.shard }}/${{ matrix.total_shards }}
     runs-on: ubuntu-latest
+    env:
+      UV_LINK_MODE: copy
     timeout-minutes: 12
     strategy:
       fail-fast: false
@@ -382,6 +387,7 @@ jobs:
           CASEOPS_AUTH_SECRET: pg-validation-secret-at-least-32-bytes
           CASEOPS_TEST_RESULT_JOURNAL: postgres-shard-${{ matrix.shard }}.jsonl
           CASEOPS_FINALIZER_EVIDENCE_DIR: postgres-shard-${{ matrix.shard }}-native
+          CASEOPS_READTHROUGH_EVIDENCE_DIR: ${{ github.workspace }}/apps/api/postgres-shard-${{ matrix.shard }}-readthrough
           PYTEST_ADDOPTS: >-
             -p tests.postgres_sharding --postgres-shard=${{ matrix.shard }} --postgres-shards=${{ matrix.total_shards }}
             --postgres-inventory=postgres-shard-${{ matrix.shard }}.json
@@ -398,6 +404,7 @@ jobs:
             apps/api/postgres-shard-${{ matrix.shard }}.xml
             apps/api/postgres-shard-${{ matrix.shard }}.jsonl
             apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl
+            apps/api/postgres-shard-${{ matrix.shard }}-readthrough/
           if-no-files-found: error
           retention-days: 14
 

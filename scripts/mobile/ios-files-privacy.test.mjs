@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { attestIosFilesContainers, stageIosFilesAssets, snapshotIosFilesPrivacy, assertIosFilesPrivacy } from './ios-files-privacy.mjs';
+import { attestIosFilesContainers, stageIosFilesAssets, snapshotIosFilesPrivacy, assertIosFilesPrivacy, snapshotIosCameraPrivacy } from './ios-files-privacy.mjs';
 const require = createRequire(new URL('../../apps/mobile/package.json', import.meta.url));
 const plist = require('@expo/plist').default;
 const sha = (data) => createHash('sha256').update(data).digest('hex');
@@ -94,6 +94,21 @@ test('clean app-data scan proves scoped absence while provider originals remain 
   assert.equal(assertIosFilesPrivacy(result.snapshotEvidence, { boundary: 'upload' }).status, 'passed');
   const raw = readFileSync(result.snapshotEvidence.path, 'utf8');
   assert.ok(!raw.includes(f.assets[0].marker)); assert.ok(!raw.includes('Public synthetic fixture'));
+});
+
+test('camera SDK copies have separate attested-container evidence from legacy Files fixture counts', t => {
+  const f = fixture(t), { stagingEvidence } = stageIosFilesAssets(f.options);
+  const sdk = path.join(f.app, 'Library/Caches/ImagePicker'); mkdirSync(sdk, { recursive: true });
+  const body = 'CAMERA_BYTES_UNKNOWN_TO_SYNTHETIC_FILES';
+  writeFileSync(path.join(sdk, '11111111-2222-4333-8444-555555555555.jpg'), body);
+  const legacy = f.snapshot(stagingEvidence, 'legacy-camera.json');
+  assert.equal(legacy.snapshot.counts.privateAssetMatchCount, 0);
+  const current = snapshotIosCameraPrivacy({ containers: f.containers, output: path.join(f.root, 'camera.json') });
+  assert.equal(current.observation.complete, true); assert.equal(current.observation.counts.copies, 1);
+  assert.equal(current.observation.udid, UDID); assert.equal(current.observation.appId, APP);
+  assert.equal(current.observation.providerOriginalsRead, false);
+  assert.equal(readFileSync(current.evidence.path, 'utf8').includes(body), false);
+  for (const asset of f.assets) assert.equal(sha(readFileSync(asset.path)), asset.sha256);
 });
 
 test('OS Inbox/tmp copies and marker-only renderer cache remnants are detected separately from provider originals', (t) => {

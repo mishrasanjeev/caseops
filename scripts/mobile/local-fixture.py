@@ -19,6 +19,18 @@ CLEAN = b"Synthetic CaseOps mobile source. No legal authority or customer data.\
 EICAR = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
 
 
+def initial_gateway_routes(matter_id, draft_id):
+    # Exact method/path admission only. Query validation and native authority
+    # remain API contracts; this public policy GET still needs the no-paid marker.
+    return {"GET /api/build", "GET /api/health", "GET /api/auth/me", "GET /api/auth/security",
+            "GET /api/auth/native/compatibility",
+            "POST /api/auth/native/token", "POST /api/auth/native/refresh", "POST /api/auth/native/logout",
+            "GET /api/me/today", "GET /api/matters/", "GET /api/calendar/events",
+            "GET /api/auth/native/sessions", f"GET /api/matters/{matter_id}",
+            f"GET /api/matters/{matter_id}/workspace", f"POST /api/matters/{matter_id}/notes",
+            f"GET /api/matters/{matter_id}/drafts", f"GET /api/matters/{matter_id}/drafts/{draft_id}"}
+
+
 def private_name(name):
     leaf = Path(name).name if isinstance(name, (str, os.PathLike)) else None
     return leaf in ("credentials.json", "compose-secrets.json", "supplied-credentials.json") or bool(
@@ -289,6 +301,8 @@ def login(http, credentials):
 
 
 def seed(args):
+    assert type(args.mfa) is bool, "Explicit MFA Boolean required"
+    mfa_enabled = args.mfa is True
     assert not (ROOT / "seed.json").exists(), "Existing fixture must never be reseeded"
     credentials = json.loads((ROOT / "credentials.json").read_text())
     with client() as http:
@@ -351,19 +365,14 @@ def seed(args):
         workspace = expect(http.get(f"/api/matters/{mid}/workspace"))
         assert not workspace["notes"], "Native note fixture must start empty"
         # Enroll through actual endpoints. The operator browser still has to perform its own MFA step-up.
-        if args.mfa and not credentials.get("totp_secret"):
+        if mfa_enabled and not credentials.get("totp_secret"):
             from caseops_api.services.security import TOTP_PERIOD_SECONDS, _hotp
             enrollment = expect(http.post("/api/auth/mfa/enroll"))
             secret = enrollment["secret"]
             expect(http.post("/api/auth/mfa/enroll/verify", json={"code": _hotp(secret, int(time.time()) // TOTP_PERIOD_SECONDS)}))
             credentials["totp_secret"] = secret
             update_private("credentials.json", credentials)
-        routes = {"GET /api/build", "GET /api/health", "GET /api/auth/me", "GET /api/auth/security",
-                  "POST /api/auth/native/token", "POST /api/auth/native/refresh", "POST /api/auth/native/logout",
-                  "GET /api/me/today", "GET /api/matters/", "GET /api/calendar/events",
-                  "GET /api/auth/native/sessions", f"GET /api/matters/{mid}",
-                  f"GET /api/matters/{mid}/workspace", f"POST /api/matters/{mid}/notes",
-                  f"GET /api/matters/{mid}/drafts", f"GET /api/matters/{mid}/drafts/{draft['id']}"}
+        routes = initial_gateway_routes(mid, draft["id"])
         (ROOT / "gateway-routes.json").write_text(json.dumps({"routes": sorted(routes)}), encoding="utf-8")
         save("seed.json", {
             "environment": "docker-integration", "syntheticDataOnly": True,
@@ -374,12 +383,12 @@ def seed(args):
             "draftId": draft["id"], "sourceId": clean["id"],
             "sourceSha256": hashlib.sha256(CLEAN).hexdigest(),
             "closedMatterId": closed["id"], "otherCompanyId": other["company"]["id"],
-            "otherMatterId": other_matter["id"], "mfaEnrolled": args.mfa,
+            "otherMatterId": other_matter["id"], "mfaEnrolled": mfa_enabled,
             "nativeNotesBeforeRun": 0, "crossTenantWorkspaceDenied": True,
             "terminalNoteDenied": True, "cleanUploadAndDownload": True, "eicarRejected": True,
         })
     print(json.dumps({"seeded": True, "syntheticTenants": 2, "nativeNoteCount": 0,
-                      "realScannerCleanAndEicar": True, "mfaEnrolled": args.mfa}))
+                      "realScannerCleanAndEicar": True, "mfaEnrolled": mfa_enabled}))
 
 
 def probe(args):
@@ -569,6 +578,7 @@ def admit_source(args):
         observations = []
         for byte_range, expected_status in ((None, 200), ("bytes=0-15", 206)):
             context = ssl.create_default_context(cafile=str(ROOT / "tls/ca.crt"))
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
             # Docker DNS maps the logical localhost origin to the dedicated TLS gateway.
             # Hostname and CA verification remain enabled for that exact logical origin.
             raw = socket.create_connection(("gateway", 8443), timeout=3)
@@ -601,6 +611,14 @@ def admit_source(args):
         print(json.dumps({"sourceRouteAdmitted": True, "rangeGET": 206, "receipt": name}))
 
 
+def failure_diagnostic(error, mode):
+    import traceback
+    return {"failed": mode, "errorType": type(error).__name__,
+            "frames": [{"file": Path(frame.filename).name, "line": frame.lineno, "function": frame.name}
+                       for frame in traceback.extract_tb(error.__traceback__)],
+            "detail": "See owned container diagnostics; values redacted"}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("prepare", "repair-tls", "seed", "prepare-reviews", "probe", "auth-probe", "scanner-probe", "admit-upload", "admit-source"))
@@ -612,10 +630,6 @@ if __name__ == "__main__":
          "auth-probe": auth_probe, "scanner-probe": scanner_probe,
          "prepare-reviews": prepare_reviews, "admit-upload": admit_upload, "admit-source": admit_source}[options.mode](options)
     except Exception as error:
-        import traceback
-        # Exceptions from transport/auth can include secrets. Retain only type and explicit safe assertions.
-        print(json.dumps({"failed": options.mode, "errorType": type(error).__name__,
-                          "frames": [{"file": Path(frame.filename).name, "line": frame.lineno,
-                                      "function": frame.name} for frame in traceback.extract_tb(error.__traceback__)],
-                          "detail": str(error) if isinstance(error, AssertionError) else "See owned container diagnostics; values redacted"}), file=sys.stderr)
+        # Assertion messages can include response/request secrets too.
+        print(json.dumps(failure_diagnostic(error, options.mode)), file=sys.stderr)
         sys.exit(1)

@@ -231,7 +231,10 @@ def roundtrip(client, monkeypatch, kind):
     ).utcoffset() == timedelta(0)
     for old, new in [("unread", "read"), ("read", "dismissed"), ("dismissed", "unread")]:
         payload = {"expected_status": old, "status": new}
-        response = client.patch(f"{BASE}/{record['id']}", headers=actor["headers"], json=payload)
+        response = client.patch(
+            "/api/recipient-inbox/{notification_id}".format(notification_id=record["id"]),
+            headers=actor["headers"], json=payload,
+        )
         assert response.status_code == 200 and response.json()["status"] == new, response.text
         replay = client.patch(f"{BASE}/{record['id']}", headers=actor["headers"], json=payload)
         assert replay.status_code == 200 and replay.json() == response.json()

@@ -18,8 +18,8 @@ import { traffic, delta } from '../../apps/mobile/e2e/journeys.mjs';
 import { find, visible, selector, dispatchNativeClick, restart } from '../../apps/mobile/e2e/native-ui.mjs';
 import { appiumSessionEvent, configureNativeDriver } from '../../apps/mobile/e2e/run-state.mjs';
 import { readV1Member } from '../../apps/mobile/e2e/v1-workflows-credentials.mjs';
-import { requirePreparedV1, v1PrivateReference, readV1Reference, readV1Bytes, validateV1ExecutionFixture, validateV1FixtureAggregate, strictV1Routes, V1_CONTROL_CAPABILITIES, v1Hash, reconcileV1Sessions, reconcileV1ControlIdentities } from '../../apps/mobile/e2e/v1-workflows-contract.mjs';
-import { v1Inventory, V1_BUDGETS, V1_CASE_CONTROL_LIMITS } from '../../apps/mobile/e2e/v1-workflows-inventory.mjs';
+import { requirePreparedV1, v1PrivateReference, readV1Reference, readV1Bytes, validateV1ExecutionFixture, validateV1FixtureAggregate, strictV1Routes, V1_CONTROL_CAPABILITIES, reconcileV1Sessions, reconcileV1ControlIdentities } from '../../apps/mobile/e2e/v1-workflows-contract.mjs';
+import { V1_BUDGETS, V1_CASE_CONTROL_LIMITS } from '../../apps/mobile/e2e/v1-workflows-inventory.mjs';
 import { collectV1Workflows, v1WorkflowScenarios, prepareV1Context } from '../../apps/mobile/e2e/v1-workflows.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));

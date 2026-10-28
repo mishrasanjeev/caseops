@@ -171,6 +171,37 @@ class Protocol(unittest.TestCase):
             v=registration();edit(v)
             with self.assertRaises(AssertionError):p.validate_registration(v,source='a'*40,run=v['runId'],now=time.time())
 class Loader(unittest.TestCase):
+    def test_actual_constructor_failure_closes_owned_journal_even_if_owner_close_fails(self):
+        for fail_owner in (False, True):
+            with self.subTest(ownerFailure=fail_owner), tempfile.TemporaryDirectory() as raw:
+                root=Path(raw).resolve();v=registration();base=load('qp_constructor_base','local-v1-controls.py')
+                secret=root/'authority.json';secret.write_text(json.dumps({'control_secret':'b'*64}));secret.chmod(0o600)
+                v['authorityEvidence']={'path':str(secret),'sha256':hashlib.sha256(secret.read_bytes()).hexdigest(),'uid':os.getuid()}
+                v['implementationSha256']='c'*64;encoded=json.dumps(v).encode()
+                env={'CASEOPS_ENV':'local','CASEOPS_RELEASE_SHA':'a'*40,'CASEOPS_MOBILE_V1_CONTROLS':'1','CASEOPS_MOBILE_V1_PROFILE':p.PROFILE,
+                     'CASEOPS_MOBILE_V1_REGISTRATION_SHA256':hashlib.sha256(encoded).hexdigest()}
+                class Http:
+                    def __init__(self,*_args,**_kwargs):pass
+                    def __enter__(self):return self
+                    def __exit__(self,*_args):pass
+                def http(_client,_method,url):
+                    return SimpleNamespace(status_code=200,json=lambda:{'release_sha':'a'*40,'revision':'api-rev'if url.endswith('/api/build')else'web-rev'})
+                closed=[];descriptors=[];opened=base.os.open
+                def capture(*args,**kwargs):
+                    fd=opened(*args,**kwargs);descriptors.append(fd);return fd
+                def close_owner(_self):
+                    closed.append('owner')
+                    if fail_owner:raise RuntimeError('synthetic owner close failure')
+                original=RuntimeError('synthetic QP constructor failure')
+                with patch.dict(sys.modules,{'httpx':SimpleNamespace(Client=Http)}),patch.object(base,'bounded_http',side_effect=http),patch.object(base.RegisteredOwner,'close',close_owner),patch.object(base.os,'open',side_effect=capture),patch.object(p,'Controls',side_effect=original):
+                    with self.assertRaises(RuntimeError)as error:
+                        p.from_environment(root,v['runId'],environment=env,verified_implementation_sha256='c'*64,verified_registration_bytes=encoded,base_module=base)
+                    self.assertIs(error.exception,original)
+                self.assertEqual(closed,['owner']);self.assertEqual(len(descriptors),2)
+                for fd in descriptors:
+                    with self.assertRaises(OSError):os.fstat(fd)
+                if fail_owner:self.assertIn('QP_OWNER_CLEANUP_UNVERIFIED_DURING_SETUP',original.__notes__)
+
     def test_disabled_profile_never_reads_any_source(self):
         with patch.object(g,'runtime_source_bytes',side_effect=AssertionError('must not read'))as r:self.assertEqual(g.verified_v1_controls(Path('/none'),'r',{}),(None,None));r.assert_not_called()
     def test_unknown_profile_and_cloud_refuse_before_source_or_secret(self):

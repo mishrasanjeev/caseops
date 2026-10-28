@@ -4,7 +4,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { ANDROID_FILES_SCAN_LIMITS, attestAndroidFilesContainers, snapshotAndroidFilesPrivacy, stageAndroidFilesAssets } from './android-files-privacy.mjs';
+import { ANDROID_FILES_SCAN_LIMITS, attestAndroidFilesContainers, snapshotAndroidFilesPrivacy, stageAndroidFilesAssets, snapshotAndroidCameraPrivacy } from './android-files-privacy.mjs';
+import { assertCameraCopiesRemoved, CAMERA_PRIVACY_LIMITS } from './camera-files-privacy.mjs';
 
 const APP = 'ai.caseops.mobile.dev.localacceptance', SERIAL = 'emulator-5584';
 const PRIVATE = `/data/user/0/${APP}`, PUBLIC = '/storage/emulated/0/Download';
@@ -56,10 +57,21 @@ function fixture(t) {
         if (state.listMode === 'duplicate') selected.push(file);
         value = state.listMode === 'empty' ? Buffer.alloc(0) : Buffer.from(selected.join('\0') + '\0');
         if (state.listCalls === 1 && state.lateBytes) add(`${PRIVATE}/cache/late-known-copy`, state.lateBytes);
+        if (state.listCalls === 1 && state.cameraLateBytes) add(`${file}/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.png`, state.cameraLateBytes);
       }
       else if (script.includes('CASEOPS_ANDROID_READ_FD_V1')) {
-        const node = nodes.get(file), header = line(node);
-        value = Buffer.concat([Buffer.from(`${header}\n`), node.bytes, Buffer.from(`\n${state.brokenRead ? header + '-changed' : header}\n`)]);
+        const node = nodes.get(file);
+        if (state.replacementBeforeRead) node[state.replacementBeforeRead] = state.replacementBeforeRead === 'inode' ? '999999' : 10088;
+        const header = line(state.readOwner ? { ...node, uid: state.readOwner } : node);
+        const admitted = /'([^']*)' '[^']*'$/.exec(script)?.[1];
+        assert.ok(script.includes('"$expected" ] || exit 37') && admitted, 'ADMITTED_METADATA_PRE_READ_REQUIRED');
+        if (header.split('|').slice(1).join('|') !== admitted) throw Error('synthetic pre-read metadata refusal');
+        assert.ok(script.includes('head -c ') && !script.includes('cat <&3'), 'ACTUAL_DEVICE_READ_MUST_BE_BOUNDED');
+        assert.ok(script.includes('trap') && script.includes('readlink -f'), 'DESCRIPTOR_CLOSE_AND_NAMESPACE_REQUIRED');
+        if (script.includes('stat -Lc %h') && node.links === 2) throw Error('synthetic remote single-link refusal');
+        state.bodyReads = (state.bodyReads || 0) + 1;
+        const body = state.corruptSecondCameraRead && file.endsWith('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.png') ? Buffer.from('yy') : node.bytes;
+        value = Buffer.concat([Buffer.from(`${header}\n`), body, Buffer.from(`\n${state.brokenRead ? header + '-changed' : header}\n`)]);
         if (state.afterReadBytes) { node.bytes = state.afterReadBytes; node.sizeBytes = node.bytes.length;
           node.modified = '2026-10-26 00:00:01.123456789 +0000'; }
       } else if (script.includes('CASEOPS_ANDROID_WRITE_ASSET_V1')) {
@@ -97,7 +109,8 @@ function fixture(t) {
     manifestEvidence: selectedManifest, runId: `unit-run-${suffix}`, output: path.join(root, `provider-${suffix}.json`) });
   const snapshot = (stagingEvidence, extra = {}) => snapshotAndroidFilesPrivacy({ ...options, containers, stagingEvidence,
     output: path.join(root, `snapshot-${Math.random().toString(16).slice(2)}.json`), ...extra });
-  return { root, nodes, calls, add, state, command, options, save, manifest, manifestEvidence, containers, stage, snapshot };
+  const camera = () => snapshotAndroidCameraPrivacy({ ...options, containers, output: path.join(root, `camera-${Math.random().toString(16).slice(2)}.json`) });
+  return { root, nodes, calls, add, state, command, options, save, manifest, manifestEvidence, containers, stage, snapshot, camera };
 }
 
 test('actual attestation contract binds isolated AVD boot/API/ABI/root/package UID and canonical private/provider roots without mutation', t => {
@@ -282,4 +295,91 @@ test('a file replaced with known bytes after its descriptor read fails the final
   const result = f.snapshot(stage.evidence);
   assert.equal(result.snapshot.complete, false);
   assert.ok(result.snapshot.issues.some(value => value.reason === 'directory-or-file-metadata-changed'));
+});
+
+test('camera zero-copy scope distinguishes absent and empty exact SDK directory without opening provider assets', t => {
+  for (const present of [false, true]) {
+    const f = fixture(t);
+    if (present) f.add(`${PRIVATE}/cache/ImagePicker`);
+    const value = f.camera().observation;
+    assert.equal(value.complete, true); assert.equal(value.directoryPresent, present); assert.equal(value.counts.copies, 0);
+    assert.equal(assertCameraCopiesRemoved(value).status, 'passed');
+    assert.equal(f.calls.some(args => args.includes('sha256sum')), false);
+    assert.equal(value.providerOriginalsRead, false);
+  }
+});
+
+test('unknown camera bytes are separate from legacy Files counts and have bounded UID-verified descriptor evidence', t => {
+  const f = fixture(t), stage = f.stage(), sdk = `${PRIVATE}/cache/ImagePicker`;
+  f.add(sdk); f.add(`${sdk}/11111111-2222-4333-8444-555555555555.jpg`, 'UNKNOWN_SYNTHETIC_CAMERA_MEDIA');
+  assert.equal(f.snapshot(stage.evidence).snapshot.counts.privateAssetMatchCount, 0);
+  f.state.listCalls = 0;
+  const value = f.camera().observation;
+  assert.equal(value.complete, true); assert.equal(value.counts.copies, 1); assert.equal(value.copies.length, 1);
+  assert.equal(value.legacyKnownFixtureCountsIncluded, false); assert.equal(value.packageUid, 10087);
+  assert.equal(JSON.stringify(value).includes('UNKNOWN_SYNTHETIC_CAMERA_MEDIA'), false);
+  assert.throws(() => assertCameraCopiesRemoved(value), /OWNED_CAMERA_SDK_COPY_REMAINS/);
+  assert.ok(f.calls.some(args => args.at(-1)?.includes(`head -c ${CAMERA_PRIVACY_LIMITS.fileBytes + 1}`)));
+});
+
+test('camera malformed names, nesting, foreign UID/device, hardlinks and oversized copies remain incomplete', t => {
+  for (const kind of ['name', 'nested', 'uid', 'mount', 'hardlink', 'oversize']) {
+    const f = fixture(t), sdk = `${PRIVATE}/cache/ImagePicker`; f.add(sdk);
+    const target = `${sdk}/${kind === 'name' ? 'unreviewed-private-name' : kind === 'nested' ? 'nested/copy.jpg' : '11111111-2222-4333-8444-555555555555.jpg'}`;
+    const node = f.add(target, 'synthetic');
+    if (kind === 'uid') node.uid = 10088;
+    if (kind === 'mount') node.device = '99999';
+    if (kind === 'hardlink') node.links = 2;
+    if (kind === 'oversize') node.sizeBytes = CAMERA_PRIVACY_LIMITS.fileBytes + 1;
+    const value = f.camera().observation;
+    assert.equal(value.complete, false, kind); assert.equal(value.copies.length, 0, kind);
+    assert.equal(JSON.stringify(value).includes('unreviewed-private-name'), false);
+  }
+});
+
+test('camera owner change in the opened descriptor and late copy insertion are never clean', t => {
+  for (const kind of ['read-owner', 'late-copy']) {
+    const f = fixture(t), sdk = `${PRIVATE}/cache/ImagePicker`; f.add(sdk);
+    f.add(`${sdk}/11111111-2222-4333-8444-555555555555.jpg`, 'synthetic');
+    if (kind === 'read-owner') f.state.readOwner = 10088;
+    else f.state.cameraLateBytes = 'late-camera-copy';
+    const value = f.camera().observation;
+    assert.equal(value.complete, false); assert.ok(value.issues.length > 0);
+    assert.throws(() => assertCameraCopiesRemoved(value), /COMPLETE_CAMERA_SDK_OBSERVATION_REQUIRED/);
+  }
+});
+
+test('camera directory owner or boot mismatch refuses instead of scanning another identity', t => {
+  for (const kind of ['owner', 'boot']) {
+    const f = fixture(t), sdk = `${PRIVATE}/cache/ImagePicker`; const node = f.add(sdk);
+    if (kind === 'owner') node.uid = 10088;
+    else f.state.bootId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    assert.throws(() => f.camera(), kind === 'owner' ? /CAMERA_DIRECTORY_OWNER_REQUIRED/ : /ANDROID_FILES_CONTAINER_IDENTITY_CHANGED/);
+    assert.equal(f.calls.some(args => args.at(-1)?.includes('CASEOPS_ANDROID_READ_FD_V1')), false);
+  }
+});
+
+test('changed camera inode or UID is refused by admitted descriptor metadata before any media body read', t => {
+  for (const field of ['inode', 'uid']) {
+    const f = fixture(t), sdk = `${PRIVATE}/cache/ImagePicker`; f.add(sdk);
+    f.add(`${sdk}/11111111-2222-4333-8444-555555555555.jpg`, 'REPLACEMENT_MEDIA_MUST_NOT_BE_READ');
+    f.state.replacementBeforeRead = field;
+    const value = f.camera().observation;
+    assert.equal(value.complete, false); assert.equal(value.readBytesComplete, false);
+    assert.equal(f.state.bodyReads || 0, 0); assert.equal(value.counts.bytesRead, 0);
+  }
+});
+
+test('camera body budget shrinks after earlier copies and an uncertain body read stops all later copies', t => {
+  const f = fixture(t), sdk = `${PRIVATE}/cache/ImagePicker`; f.add(sdk);
+  f.add(`${sdk}/11111111-2222-4333-8444-555555555555.jpg`, Buffer.alloc(17 * 1024 * 1024 + 17));
+  f.add(`${sdk}/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.png`, 'y');
+  f.add(`${sdk}/bbbbbbbb-cccc-4ddd-8eee-ffffffffffff.jpg`, 'MUST_NOT_READ_THIRD_COPY');
+  f.state.corruptSecondCameraRead = true;
+  const value = f.camera().observation;
+  assert.equal(value.complete, false); assert.equal(value.readBytesComplete, false); assert.equal(f.state.bodyReads, 2);
+  const reads = f.calls.map(args => args.at(-1)).filter(value => value?.includes('CASEOPS_ANDROID_READ_FD_V1'));
+  assert.equal(reads.length, 2);
+  const first = Number(/head -c (\d+)/.exec(reads[0])[1]), second = Number(/head -c (\d+)/.exec(reads[1])[1]);
+  assert.ok(second < first && second <= CAMERA_PRIVACY_LIMITS.totalBytes - value.counts.bytesRead + 1);
 });

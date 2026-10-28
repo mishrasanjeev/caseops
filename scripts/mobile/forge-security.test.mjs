@@ -11,7 +11,7 @@ const require = createRequire(new URL('../../apps/mobile/package.json', import.m
 const forge = require('node-forge');
 const app = fileURLToPath(new URL('../../apps/mobile/', import.meta.url));
 // Ephemeral public test key; no private key material is written or retained.
-const generated = generateKeyPairSync('rsa', { modulusLength: 1024, publicExponent: 3 });
+const generated = generateKeyPairSync('rsa', { modulusLength: 2048, publicExponent: 3 });
 const privateKey = forge.pki.privateKeyFromPem(generated.privateKey.export({ type: 'pkcs1', format: 'pem' }));
 const publicKey = forge.pki.publicKeyFromPem(generated.publicKey.export({ type: 'pkcs1', format: 'pem' }));
 const messageDigest = forge.md.sha256.create().update('CaseOps public dependency regression fixture');

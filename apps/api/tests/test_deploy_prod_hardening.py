@@ -1023,6 +1023,10 @@ def test_api_release_image_uses_frozen_dependencies_before_source_layers() -> No
     image = _read_repo_text("apps/api/Dockerfile")
 
     assert "COPY pyproject.toml uv.lock README.md ./" in image
+    # Installed integrity checks require independent single-link files on Linux
+    # as well as macOS, rather than UV's shared-cache hardlink default.
+    assert "    UV_LINK_MODE=copy \\" in image
+    assert image.index("UV_LINK_MODE=copy") < image.index("RUN pip install")
     assert "uv export \\" in image
     assert "--frozen" in image
     assert "--no-emit-project" in image

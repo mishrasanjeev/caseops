@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, X509Certificate } from 'node:crypto';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, fstatSync, lstatSync, mkdtempSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +9,7 @@ import { rootCertificates } from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { sourceSnapshot } from './source-snapshot.mjs';
+import { readBuildInput } from './build-acceptance.mjs';
 
 const app = fileURLToPath(new URL('../../apps/mobile/', import.meta.url));
 const repo = path.resolve(app, '../..');
@@ -24,6 +25,38 @@ const certificate = `${rootCertificates.find((pem) => {
     && Date.parse(cert.validFrom) < Date.now() && Date.now() < Date.parse(cert.validTo);
 }).trim()}\n`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
+
+for (const change of ['none', 'growth', 'replacement', 'parent-replacement', 'read-error']) {
+  test(`bounded build inputs retain descriptor bytes and close it: ${change}`, (t) => {
+    const folder = mkdtempSync(path.join(os.tmpdir(), 'caseops-build-input-'));
+    const retained = `${folder}-retained`;
+    t.after(() => { rmSync(folder, { recursive: true, force: true }); rmSync(retained, { recursive: true, force: true }); });
+    const file = path.join(folder, 'public.json');
+    writeFileSync(file, '{"public":true}');
+    let descriptor, changed = false;
+    const io = { openSync: (...args) => { descriptor = openSync(...args); return descriptor; }, closeSync, fstatSync, lstatSync,
+      readSync: (...args) => {
+        if (!changed) {
+          changed = true;
+          if (change === 'growth') appendFileSync(file, ' excess');
+          if (change === 'replacement') {
+            renameSync(file, path.join(folder, 'retained-original.json'));
+            writeFileSync(file, '{"public":false}');
+          }
+          if (change === 'parent-replacement') {
+            renameSync(folder, retained);
+            symlinkSync(retained, folder, process.platform === 'win32' ? 'junction' : 'dir');
+          }
+          if (change === 'read-error') throw new Error('Synthetic bounded read failure');
+        }
+        return readSync(...args);
+      } };
+    if (change === 'none') assert.equal(readBuildInput(file, 64, io).toString(), '{"public":true}');
+    else assert.throws(() => readBuildInput(file, 64, io), /BUILD_INPUT_(?:CHANGED|NAMESPACE_CHANGED)|Synthetic bounded read failure/);
+    assert.ok(Number.isInteger(descriptor));
+    assert.throws(() => fstatSync(descriptor), { code: 'EBADF' });
+  });
+}
 
 test('mobile dependency closure installs and audits actual Linux and Windows graphs', () => {
   const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
@@ -88,8 +121,10 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/ios-simulator-signing.test.mjs',
     'scripts/mobile/prepare-gateway-routes.test.mjs',
     'scripts/mobile/prepare-ios-local-run.test.mjs', 'scripts/mobile/ios-files-privacy.test.mjs',
+    'scripts/mobile/camera-files-privacy.test.mjs',
     'scripts/mobile/run-ios-files.test.mjs',
-    'scripts/mobile/filesystem-security.test.mjs', 'scripts/mobile/build-android-local-acceptance.test.mjs',
+    'scripts/mobile/filesystem-security.test.mjs', 'apps/mobile/e2e/evidence.test.mjs',
+    'scripts/mobile/build-android-local-acceptance.test.mjs',
     'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs',
     'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
     'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/forge-security.test.mjs',
