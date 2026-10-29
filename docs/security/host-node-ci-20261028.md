@@ -109,3 +109,20 @@ body fault. Cleanup never attaches properties to that fault, including a frozen
 Error or a primitive, and never retries an uncertain close. Every other held
 descriptor still receives its one close attempt. A close failure after an
 otherwise successful body refuses the result and purges the retained buffer.
+
+The subsequent `376a6cf5` hosted job refused the six-object ACL response protocol
+in 2.451 seconds, before dependency installation. The complete log contains no
+response shape or failing object/predicate. That boundary remains unknown. The
+JavaScript-evaluated PowerShell row/emitter was separately retained and executed
+with six fixed public boolean/hash rows under PowerShell7: its actual output is
+valid JSON with the expected types. This is formatter evidence on that host,
+not a Windows ACL observation or proof of the hosted refusal's cause.
+
+The CI decoder now reports one fixed object role and one fixed failure class:
+JSON/array/row/field/type shape, unsafe writer, missing token user or invalid hash
+format. Unknown keys, values, raw PowerShell output, paths and SIDs stay private.
+The same six rows, exact keys, boolean predicates, hash format and owner rules
+remain mandatory. A false writer/token predicate remains refused; it is no
+longer indistinguishable from malformed JSON. Source pins, query5s, helper20s
+and CI30s limits remain unchanged. Fresh hosted execution must identify the
+actual condition before any further ownership remediation.

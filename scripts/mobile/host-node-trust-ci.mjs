@@ -152,15 +152,42 @@ function sourceAclFrames(objects, check) {
     env: environment, encoding: 'utf8', timeout: Math.min(5000, remaining), maxBuffer: 4096, windowsHide: true,
   });
   assert.ok(!proof.error && proof.status === 0 && proof.stderr === '', 'CI_TRUST_RUNTIME_SOURCE_ACL_COMMAND');
-  let values; try { values = JSON.parse(proof.stdout); } catch { assert.fail('CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL'); }
-  assert.ok(Array.isArray(values) && values.length === 6, 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL');
+  const values = reviewCIHostSourceAclOutput(proof.stdout);
   values.forEach((value, index) => {
-    assert.ok(value && equal(Object.keys(value).sort(), ['aclSha256', 'reviewedAdminSource', 'runtimeOwner', 'tokenUserPresent', 'writeScopeSafe'])
-      && typeof value.runtimeOwner === 'boolean' && typeof value.reviewedAdminSource === 'boolean' && value.writeScopeSafe === true && value.tokenUserPresent === true
-      && typeof value.aclSha256 === 'string' && /^[a-f0-9]{64}$/.test(value.aclSha256), 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL');
-    assert.ok(value.runtimeOwner === true || objects[index].data === true && value.reviewedAdminSource === true, 'CI_TRUST_RUNTIME_SOURCE_OWNER_' + ['HELPER_INPUT', 'BOOTSTRAP_INPUT', 'PARENT_DIRECTORY', 'RUNTIME_DIRECTORY', 'HELPER_COPY', 'BOOTSTRAP_COPY'][index]);
+    assert.ok(value.runtimeOwner === true || objects[index].data === true && value.reviewedAdminSource === true, 'CI_TRUST_RUNTIME_SOURCE_OWNER_' + SOURCE_ROLES[index]);
   });
   check(); return values;
+}
+const SOURCE_ROLES = Object.freeze(['HELPER_INPUT', 'BOOTSTRAP_INPUT', 'PARENT_DIRECTORY', 'RUNTIME_DIRECTORY', 'HELPER_COPY', 'BOOTSTRAP_COPY']);
+const SOURCE_PROTOCOL_REASONS = Object.freeze(['JSON_TYPE', 'JSON_EMPTY', 'JSON_SIZE', 'JSON_INVALID', 'ARRAY_TYPE', 'ARRAY_COUNT', 'ROW_TYPE', 'FIELDS', 'OWNER_TYPE', 'ADMIN_TYPE', 'WRITE_TYPE', 'WRITE_UNSAFE', 'USER_TYPE', 'USER_MISSING', 'HASH_TYPE', 'HASH_FORMAT']);
+function sourceProtocolFailure(role, reason) {
+  assert.ok((role === 'OUTPUT' || SOURCE_ROLES.includes(role)) && SOURCE_PROTOCOL_REASONS.includes(reason));
+  assert.fail('CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_' + role + '_' + reason);
+}
+/** Only fixed classes identify a refusal. Raw ACL response bytes and unknown
+ * property names never enter diagnostics. Every prior predicate stays strict. */
+export function reviewCIHostSourceAclOutput(output) {
+  if (typeof output !== 'string') sourceProtocolFailure('OUTPUT', 'JSON_TYPE');
+  if (output.length > 4096 || Buffer.byteLength(output) > 4096) sourceProtocolFailure('OUTPUT', 'JSON_SIZE');
+  if (output.trim().length === 0) sourceProtocolFailure('OUTPUT', 'JSON_EMPTY');
+  let values;
+  try { values = JSON.parse(output); } catch { sourceProtocolFailure('OUTPUT', 'JSON_INVALID'); }
+  if (!Array.isArray(values)) sourceProtocolFailure('OUTPUT', 'ARRAY_TYPE');
+  if (values.length !== 6) sourceProtocolFailure('OUTPUT', 'ARRAY_COUNT');
+  values.forEach((value, index) => {
+    const role = SOURCE_ROLES[index];
+    if (!value || typeof value !== 'object' || Array.isArray(value)) sourceProtocolFailure(role, 'ROW_TYPE');
+    if (!equal(Object.keys(value).sort(), ['aclSha256', 'reviewedAdminSource', 'runtimeOwner', 'tokenUserPresent', 'writeScopeSafe'])) sourceProtocolFailure(role, 'FIELDS');
+    if (typeof value.runtimeOwner !== 'boolean') sourceProtocolFailure(role, 'OWNER_TYPE');
+    if (typeof value.reviewedAdminSource !== 'boolean') sourceProtocolFailure(role, 'ADMIN_TYPE');
+    if (typeof value.writeScopeSafe !== 'boolean') sourceProtocolFailure(role, 'WRITE_TYPE');
+    if (value.writeScopeSafe !== true) sourceProtocolFailure(role, 'WRITE_UNSAFE');
+    if (typeof value.tokenUserPresent !== 'boolean') sourceProtocolFailure(role, 'USER_TYPE');
+    if (value.tokenUserPresent !== true) sourceProtocolFailure(role, 'USER_MISSING');
+    if (typeof value.aclSha256 !== 'string') sourceProtocolFailure(role, 'HASH_TYPE');
+    if (!/^[a-f0-9]{64}$/.test(value.aclSha256)) sourceProtocolFailure(role, 'HASH_FORMAT');
+  });
+  return values;
 }
 function directoryFrame(directory, check) {
   check(); assert.ok(path.isAbsolute(directory) && canonical(directory) === directory, 'CI_TRUST_RUNTIME_SOURCE_NAMESPACE');
@@ -320,7 +347,7 @@ const DIAGNOSTICS = new Set([
 ]);
 export function ciTrustFailureCode(error) {
   const first = typeof error?.message === 'string' ? error.message.split('\n', 1)[0] : '';
-  return DIAGNOSTICS.has(first) || (first.length <= 160 && /^HOST_TRUST_CURRENT_OWNER_REQUIRED_(?:PUBLIC_INPUT|PUBLIC_SOURCE|SOURCE_HELPER|SOURCE_BOOTSTRAP|FIXTURE_INPUT|PARENT_DIRECTORY|POLICY_DIRECTORY|OUTPUT_DIRECTORY|EMPTY_DIRECTORY|DIRECTORY|ROOTS_OUTPUT|POLICY_OUTPUT|PUBLIC_OUTPUT|POLICY_INPUT|ROOTS_INPUT)_OWNER_(?:SYSTEM|ADMINISTRATORS|TOKEN_OTHER|OTHER|MISSING)_TOKEN_(?:CURRENT_USER|SYSTEM|ADMINISTRATORS|OTHER|MISSING)_WRITE_(?:SAFE|UNSAFE)$/.test(first)) ? first : 'CI_TRUST_PREPARATION_REFUSED';
+  return DIAGNOSTICS.has(first) || (first.length <= 160 && /^CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_(?:OUTPUT|HELPER_INPUT|BOOTSTRAP_INPUT|PARENT_DIRECTORY|RUNTIME_DIRECTORY|HELPER_COPY|BOOTSTRAP_COPY)_(?:JSON_TYPE|JSON_EMPTY|JSON_SIZE|JSON_INVALID|ARRAY_TYPE|ARRAY_COUNT|ROW_TYPE|FIELDS|OWNER_TYPE|ADMIN_TYPE|WRITE_TYPE|WRITE_UNSAFE|USER_TYPE|USER_MISSING|HASH_TYPE|HASH_FORMAT)$/.test(first)) || (first.length <= 160 && /^HOST_TRUST_CURRENT_OWNER_REQUIRED_(?:PUBLIC_INPUT|PUBLIC_SOURCE|SOURCE_HELPER|SOURCE_BOOTSTRAP|FIXTURE_INPUT|PARENT_DIRECTORY|POLICY_DIRECTORY|OUTPUT_DIRECTORY|EMPTY_DIRECTORY|DIRECTORY|ROOTS_OUTPUT|POLICY_OUTPUT|PUBLIC_OUTPUT|POLICY_INPUT|ROOTS_INPUT)_OWNER_(?:SYSTEM|ADMINISTRATORS|TOKEN_OTHER|OTHER|MISSING)_TOKEN_(?:CURRENT_USER|SYSTEM|ADMINISTRATORS|OTHER|MISSING)_WRITE_(?:SAFE|UNSAFE)$/.test(first)) ? first : 'CI_TRUST_PREPARATION_REFUSED';
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

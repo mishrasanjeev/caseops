@@ -2906,7 +2906,7 @@ test('unknown and modified import URIs refuse before preload or application entr
 
 
 import { createRequire as ciTrustCreateRequire, syncBuiltinESMExports } from 'node:module';
-import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, stageCIHostNodeRuntimeSources, ciTrustFailureCode } from './host-node-trust-ci.mjs';
+import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, ciTrustFailureCode, reviewCIHostSourceAclOutput } from './host-node-trust-ci.mjs';
 const ciTrustYaml = ciTrustCreateRequire(new URL('../../apps/mobile/package.json', import.meta.url))('js-yaml');
 const ciTrustKeys = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY'];
 const ciTrustValues = Object.fromEntries(ciTrustKeys.map(key => [key, 'public-fixture-' + key]));
@@ -3772,14 +3772,67 @@ function ciSourceWindowsProofs(change) {
 }
 
 test('CI runtime copies retain exact reviewed Git blobs with independent readonly owned files', async () => ciSourceFixture(async ({ source, parent, api }) => {
-  const original = fs.readFileSync(path.join(source, 'host-node-trust.mjs')), staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck());
+  const check = ciSourceCheck(), staged = api.stageCIHostNodeRuntimeSources(parent, check);
+  const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
+  const identity = value => fields.map(key => value[key]);
+  const namedMatches = (named, descriptor) => {
+    for (const key of fields) {
+      if (key === 'dev' && process.platform === 'win32' && named.dev === 0n) continue;
+      assert.equal(named[key], descriptor[key]);
+    }
+  };
+  const namespace = file => {
+    check(); assert.ok(path.isAbsolute(file)); assert.equal(path.resolve(file), file); assert.equal(fs.realpathSync.native(file), file);
+    const rows = []; let directory = path.dirname(file);
+    while (true) {
+      check(); assert.ok(rows.length < 128);
+      const value = fs.lstatSync(directory, { bigint: true });
+      assert.ok(value.isDirectory() && !value.isSymbolicLink()); assert.equal(fs.realpathSync.native(directory), directory);
+      rows.push([directory, value.dev, value.ino, value.mode, value.uid, value.gid]);
+      if (path.dirname(directory) === directory) return rows;
+      directory = path.dirname(directory);
+    }
+  };
+  const read = (fd, expected) => {
+    const bytes = Buffer.alloc(Number(expected) + 1); let used = 0;
+    while (used < bytes.length) {
+      check(); const count = fs.readSync(fd, bytes, used, bytes.length - used, null);
+      if (!count) break;
+      used += count;
+    }
+    assert.equal(used, Number(expected)); return bytes.subarray(0, used);
+  };
   try {
-    assert.deepEqual(staged.retainedHelper, original);
     assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'c4d2ae68f4c9b0233e6246a8fe3ac504bec43b99'], ['100644', 'c7fba8c4c768e3f63a4ced2a496f06c226b5fad9']]);
-    for (const [role, name] of [['helper', 'host-node-trust.mjs'], ['bootstrap', 'host-node-trust-start.mjs']]) {
+    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29498n], ['bootstrap', 'host-node-trust-start.mjs', 6043n]]) {
       const input = path.join(source, name), output = staged.sourceRefs[role].path;
-      assert.notEqual(fs.statSync(input).ino, fs.statSync(output).ino); assert.deepEqual(fs.readFileSync(input), fs.readFileSync(output));
-      assert.equal(fs.statSync(output).mode & 0o777, 0o400); assert.equal(fs.statSync(input).mode & 0o777, 0o600);
+      const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
+      let inputFd, outputFd, originalFailure; let bodyFailed = false; const closeFailures = [];
+      try {
+        inputFd = fs.openSync(input, flags); outputFd = fs.openSync(output, flags);
+        const inputOpened = fs.fstatSync(inputFd, { bigint: true }), outputOpened = fs.fstatSync(outputFd, { bigint: true });
+        for (const value of [inputOpened, outputOpened]) {
+          assert.ok(value.isFile()); assert.equal(value.nlink, 1n); assert.equal(value.size, expected);
+          if (typeof process.getuid === 'function') assert.equal(value.uid, BigInt(process.getuid()));
+        }
+        assert.notEqual(inputOpened.ino, outputOpened.ino); assert.equal(outputOpened.mode & 0o777n, 0o400n); assert.equal(inputOpened.mode & 0o777n, 0o600n);
+        const inputNamespace = namespace(input), outputNamespace = namespace(output);
+        const inputNamed = fs.lstatSync(input, { bigint: true }), outputNamed = fs.lstatSync(output, { bigint: true });
+        assert.ok(inputNamed.isFile() && !inputNamed.isSymbolicLink()); assert.ok(outputNamed.isFile() && !outputNamed.isSymbolicLink());
+        namedMatches(inputNamed, inputOpened); namedMatches(outputNamed, outputOpened);
+        const inputBytes = read(inputFd, expected), outputBytes = read(outputFd, expected);
+        assert.deepEqual(inputBytes, outputBytes); if (role === 'helper') assert.deepEqual(staged.retainedHelper, inputBytes);
+        assert.deepEqual(inputNamespace, namespace(input)); assert.deepEqual(outputNamespace, namespace(output));
+        assert.deepEqual(identity(inputOpened), identity(fs.fstatSync(inputFd, { bigint: true }))); assert.deepEqual(identity(outputOpened), identity(fs.fstatSync(outputFd, { bigint: true })));
+        assert.deepEqual(identity(inputNamed), identity(fs.lstatSync(input, { bigint: true }))); assert.deepEqual(identity(outputNamed), identity(fs.lstatSync(output, { bigint: true })));
+      } catch (error) { bodyFailed = true; originalFailure = error; }
+      finally {
+        for (const fd of [outputFd, inputFd]) if (fd !== undefined) {
+          try { fs.closeSync(fd); } catch (error) { closeFailures.push(error); }
+        }
+      }
+      if (bodyFailed) throw originalFailure;
+      if (closeFailures.length) throw new AggregateError(closeFailures, 'CI source pair descriptor close failed');
     }
   } finally { staged.retainedHelper.fill(0); }
 }));
@@ -3940,3 +3993,48 @@ test('CI source successful body with a close failure returns no retained source 
   try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_CLOSE' }); assert.equal(closed.length, 4); assert.equal(new Set(closed).size, 4); assert.deepEqual(diagnostics, ['CI_TRUST_RUNTIME_SOURCE_CLOSE\n']); }
   finally { process.stderr.write = stderr; fs.closeSync = close; trace.restore(); } trace.closed();
 }));
+
+const ciAclProtocolRoles = ['HELPER_INPUT', 'BOOTSTRAP_INPUT', 'PARENT_DIRECTORY', 'RUNTIME_DIRECTORY', 'HELPER_COPY', 'BOOTSTRAP_COPY'];
+const ciAclProtocolRows = () => Array.from({ length: 6 }, (_, index) => ({ runtimeOwner: index >= 2, reviewedAdminSource: index < 2, writeScopeSafe: true, tokenUserPresent: true, aclSha256: 'a'.repeat(64) }));
+test('CI six-object ACL decoder preserves the exact valid response and does not promote source ownership', () => {
+  const rows = ciAclProtocolRows(), parsed = reviewCIHostSourceAclOutput(JSON.stringify(rows)); assert.deepEqual(parsed, rows);
+  assert.equal(parsed[0].runtimeOwner, false); assert.equal(parsed[0].reviewedAdminSource, true); assert.ok(parsed.slice(2).every(row => row.runtimeOwner));
+});
+test('CI ACL protocol diagnostics distinguish bounded output and array shapes without reflecting raw values', () => {
+  for (const [value, reason] of [[undefined, 'JSON_TYPE'], ['', 'JSON_EMPTY'], ['  \r\n', 'JSON_EMPTY'], ['x'.repeat(4097), 'JSON_SIZE'], ['界'.repeat(1400), 'JSON_SIZE'], ['S-1-5-21-SYNTHETIC_PRIVATE_PATH', 'JSON_INVALID'], ['\ufeff[]', 'JSON_INVALID'], ['null', 'ARRAY_TYPE'], ['{}', 'ARRAY_TYPE'], ['[]', 'ARRAY_COUNT'], [JSON.stringify(ciAclProtocolRows().slice(0, 5)), 'ARRAY_COUNT'], [JSON.stringify([...ciAclProtocolRows(), {}]), 'ARRAY_COUNT']]) {
+    const expected = 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_OUTPUT_' + reason;
+    assert.throws(() => reviewCIHostSourceAclOutput(value), error => { assert.equal(error.message, expected); assert.equal(ciTrustFailureCode(error), expected); assert.ok(!error.message.includes('SYNTHETIC_PRIVATE')); return true; });
+  }
+});
+test('CI ACL decoder identifies only the fixed object role and failing field class for every row', () => {
+  const changes = [
+    [row => null, 'ROW_TYPE'], [row => [], 'ROW_TYPE'], [row => 'SYNTHETIC_PRIVATE', 'ROW_TYPE'],
+    [row => ({ ...row, SYNTHETIC_PRIVATE: 'S-1-5-21-SYNTHETIC' }), 'FIELDS'],
+    [row => ({ ...row, runtimeOwner: 'SYNTHETIC_PRIVATE' }), 'OWNER_TYPE'],
+    [row => ({ ...row, reviewedAdminSource: 1 }), 'ADMIN_TYPE'],
+    [row => ({ ...row, writeScopeSafe: 'true' }), 'WRITE_TYPE'], [row => ({ ...row, writeScopeSafe: false }), 'WRITE_UNSAFE'],
+    [row => ({ ...row, tokenUserPresent: 'SYNTHETIC_PRIVATE' }), 'USER_TYPE'], [row => ({ ...row, tokenUserPresent: false }), 'USER_MISSING'],
+    [row => ({ ...row, aclSha256: null }), 'HASH_TYPE'], [row => ({ ...row, aclSha256: 'SYNTHETIC_PRIVATE' }), 'HASH_FORMAT'],
+  ];
+  for (let index = 0; index < 6; index++) for (const [change, reason] of changes) {
+    const rows = ciAclProtocolRows(); rows[index] = change(rows[index]); const expected = 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_' + ciAclProtocolRoles[index] + '_' + reason;
+    assert.throws(() => reviewCIHostSourceAclOutput(JSON.stringify(rows)), error => { assert.equal(error.message, expected); assert.equal(ciTrustFailureCode(error), expected); assert.ok(!error.message.includes('SYNTHETIC_PRIVATE')); return true; });
+  }
+});
+test('CI actual staged-source unsafe-writer or missing-user refusal reads zero payload for each object role', async () => {
+  for (let index = 0; index < 6; index++) for (const [key, reason] of [['writeScopeSafe', 'WRITE_UNSAFE'], ['tokenUserPresent', 'USER_MISSING']]) await ciSourceFixture(async ({ parent, api }) => {
+    const proof = ciSourceWindowsProofs(rows => { rows[index][key] = false; }), trace = ciSourceTrace();
+    try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_' + ciAclProtocolRoles[index] + '_' + reason }); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); assert.equal(proof.calls, 1); }
+    finally { trace.restore(); proof.restore(); } trace.closed();
+  });
+});
+test('CI late malformed ACL hash refuses the staged result and purges all retained source buffers', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs((rows, call) => { if (call === 2) rows[5].aclSha256 = 'SYNTHETIC_PRIVATE'; }), trace = ciSourceTrace(), buffers = new Set();
+  fs.readSync = (...args) => { buffers.add(args[1]); return trace.read(...args); };
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_BOOTSTRAP_COPY_HASH_FORMAT' }); assert.equal(proof.calls, 2); assert.ok(buffers.size >= 4); assert.ok([...buffers].every(buffer => buffer.every(value => value === 0))); }
+  finally { trace.restore(); proof.restore(); } trace.closed();
+}));
+test('CI ACL protocol diagnostics reject forged roles reasons and appended private detail', () => {
+  for (const value of ['CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_SYNTHETIC_PRIVATE_WRITE_UNSAFE', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_INPUT_SYNTHETIC_PRIVATE', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_INPUT_HASH_FORMAT_S-1-5-21-SYNTHETIC', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_OUTPUT_JSON_INVALID'.repeat(5)]) assert.equal(ciTrustFailureCode(new Error(value)), 'CI_TRUST_PREPARATION_REFUSED');
+  assert.equal(ciTrustFailureCode(new Error('CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_COPY_WRITE_UNSAFE\nSYNTHETIC_PRIVATE')), 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_COPY_WRITE_UNSAFE');
+});
