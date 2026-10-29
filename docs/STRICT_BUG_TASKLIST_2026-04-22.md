@@ -1,5 +1,24 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 29 Provenance Seek: Partially Fixed, Not Deployed
+
+IPLF-030B/037, UJ-04, IP15-018, NFT-005: actual13D CI PostgreSQL20 retains
+144P/1F,145cases/435phases. The only assertion is81600recorded provenance
+visits against820; the aggregate failure is the expected shard guard. No
+browser job ran. Adding the full index and retiring one prefix did not prevent
+the alternative company-only scan. Local fresh/stale RED reproduces the same
+bound with successful setup/teardown and an analyzed passing control.
+
+An ordered five-key candidate plus outside exact match preserves every source,
+tenant/action/type/row/docket predicate and the unchanged Python oracle. No
+index drop, planner setting, production ANALYZE or raised limit is introduced.
+Full new5/parity4/export8 component passes17/17 with51phases, including SQLite,
+null/missing/duplicate/mixed proofs and all original export cases. Six actual
+plan receipts reconcile; fresh/stale/analyzed and the failed journey use400
+visits below820. Do not mark Properly fixed until the complete new Docker/CI
+and production browser workflow pass on the exact serving source. The original
+15second,51-row CSV contract and all external/legal holds remain authoritative.
+
 ## October 29 Matter Response: Inconclusive Pending Release
 
 J04/M03/US-007..009/FT-011..015/NFT-005: BFF's complete Docker17 is3482P/1F,

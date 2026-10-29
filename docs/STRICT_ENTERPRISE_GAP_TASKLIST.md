@@ -1,5 +1,21 @@
 # Strict Enterprise Gap Tasklist
 
+## October 29 Alternative Prefix Plan
+
+**Partially implemented / NO-GO pending full replacement release.** The earlier
+index repair covered the company/action competitor, not every physical path.
+13D CI selected the still-valid company-only index and repeatedly filtered406
+unrelated rows per candidate. Complete shard/native plans preserve81600>820;
+no timing, legal-data or host/GC explanation substitutes for that measurement.
+
+The exact-key seek retains both indexes and rechecks all five fields outside
+the bounded candidate. Local controlled fresh/stale RED and independently
+migrated full17-case cross-dialect GREEN establish400recorded visits for the
+same200-row proof, not a production latency guarantee. Existing semantic and
+export modules remain unchanged. Full current-source CI, Docker and guarded
+exact-serving production/cadence acceptance remain open. Preserve all prior
+failed/interrupted evidence and legal/provider/owner-consent gaps.
+
 ## October 29 Committed Response Hydration
 
 **Partially implemented / NO-GO pending replacement release.** Complete BFF

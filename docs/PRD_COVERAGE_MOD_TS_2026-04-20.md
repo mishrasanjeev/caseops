@@ -1,5 +1,19 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 29 Full-Key Provenance Coverage
+
+IPLF-030B/037/UJ-04/IP15-018/NFT-005/SEC-003/004 map to the new
+test_ip_provenance_seek_20261029.py: two SQLite/PG full-predicate cases and three
+PostgreSQL fresh/stale-empty/analyzed work-bound cases. The full existing
+test_ip_provenance_proof_20261028.py and
+test_ip_portfolio_export_projection_20261026.py remain unchanged and are
+included completely:17cases/51phases, all passed, six actual plan receipts.
+The helper's final empty mark expression explicitly includes all three SQLite
+cases; collection/phase/JUnit identities agree. Old-product RED is2failed/
+1passed over3cases/9phases, not a passing gate. Record400/820 visits as local
+work evidence only. Full current Docker/CI/live browser and15second CSV proof
+remain pending. Daily SEO is still an ACTIVE release deferral, not a GSC audit.
+
 ## October 29 Matter Response Acceptance
 
 J04/M03/US-007..009/FT-011..015/NFT-005 map to MRH-01..16 in the dated

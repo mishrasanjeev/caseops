@@ -1,5 +1,13 @@
 # CaseOps agent instructions
 
+- Removing one redundant index does not bound a correlated provenance read.
+  A different tenant-only prefix may still win under fresh or stale statistics.
+  Retain the real catalogue and statistics, then prove actual work with every
+  competitor present. An ordered full-key seek must check every exact identity
+  outside its LIMIT fence so unrelated successors, nulls and mixed duplicates
+  remain fail-closed. Preserve the canonical source oracle and cross-database
+  parity; a LIMIT or index name alone is never physical-work acceptance.
+
 - A committed write is not a completed response within its latency budget.
   A refresh can replay a previously explicit workspace eager-load profile even
   when commit expiry is disabled. Reload only the DTO-owned graph with pinned

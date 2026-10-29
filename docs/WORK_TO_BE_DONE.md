@@ -1,5 +1,26 @@
 # CaseOps  - Work To Be Done
 
+## October 29 Exact Provenance Seek Replacement
+
+Release remains **NO-GO**. Source13D CI40823363939 has one actual PostgreSQL
+failure: the 200-row export proof performs81600recorded visits against820.
+The retained company-only index wins despite the composite index and earlier
+company/action-prefix retirement. A controlled local RED reproduces both fresh
+and stale-empty failures; analyzed success cannot close those failures.
+
+The replacement orders/seeks the complete audit key and rechecks all five
+exact predicates outside LIMIT1. Both indexes, source-row guards and the
+canonical Python reader stay unchanged. Fresh independent GREEN passes17cases/
+51phases: new5, unchanged cross-database proof4 and original export8. All three
+statistics states and the original failed case now record400visits, below820;
+retained-width controls also pass. This is component evidence only. Docker18
+was deliberately stopped after438native passes/1314phases, with3061native and
+640browser cases unexecuted; outerexit0 is not acceptance. Both originals are
+actually INTERIM07/NO-GO with36/7/1verdicts, not final certification. See
+bugfix-provenance-seek-2026-10-29.md. Require complete replacement Docker/CI,
+canonical main, guarded routing, exact-release E2E and private cadence before
+#561/#564/IP15-018 closure. Legal/provider/consent/MFA/Mac holds remain separate.
+
 ## October 29 Matter Response Work Bound
 
 Current release remains **NO-GO**. Complete BFF Docker17 retained3483 native
