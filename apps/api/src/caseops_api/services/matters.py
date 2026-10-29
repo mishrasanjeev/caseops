@@ -1447,6 +1447,7 @@ def _lock_matter_assignment_fence(
     required_capability: str,
     team_ids_to_lock: set[str | None] | None = None,
     commit_access_denial: bool = True,
+    load_locked_children: bool = True,
 ) -> tuple[Matter, dict[str, CompanyMembership], list[IpDocketRecord]]:
     """Lock principals, Matter, and active linked dockets in canonical order."""
 
@@ -1491,6 +1492,7 @@ def _lock_matter_assignment_fence(
         matter_id=matter_id,
         lock_for_update=True,
         commit_access_denial=commit_access_denial,
+        load_locked_children=load_locked_children,
     )
     current_roles = _matter_role_snapshot_from_model(matter)
     if current_roles != matter_roles:
@@ -2691,7 +2693,21 @@ def update_matter(
         required_capability=MATTER_MUTATION_CAPABILITIES["update_matter"],
         team_ids_to_lock={matter_roles.team_id, resulting_team_id},
         commit_access_denial=commit_access_denial,
+        load_locked_children=False,
     )
+    # Metadata responses do not need the workspace graph under the tenant lock.
+    matter = session.scalar(
+        select(Matter)
+        .options(
+            raiseload("*"),
+            selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+            selectinload(Matter.court_orders),
+        )
+        .where(Matter.id == matter_id, Matter.company_id == context.company.id)
+        .execution_options(populate_existing=True)
+    )
+    if matter is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     if (
         team_access_changing
         and _linked_docket_role_snapshot(

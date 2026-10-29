@@ -1,5 +1,18 @@
 # CaseOps  - Work To Be Done
 
+## October 29 Precommit Metadata Continuation
+
+**NO-GO pending full replacement release.** AFBC Docker19 retains1313P/1F
+over three complete groups, not acceptance. A separate deterministic RED shows
+a14-query precommit graph containing unrelated work. The metadata-only profile now
+passes all206affected cases/618phases (new6 plus unchanged16/32/122/30), with
+six3-query profiles and177retained files verified using extended Windows paths.
+The failed post-test verifier and both earlier incomplete/setup attempts remain
+preserved. No historical lock/barrier timing cause or production fix is claimed.
+See the precommit continuation in the dated Matter hydration brief. Full fresh
+Docker/CI/main/deploy/live/private cadence and both actual summaries remain
+required; app work belongs to the MacBook and external holds remain separate.
+
 ## October 29 Exact Provenance Seek Replacement
 
 Release remains **NO-GO**. Source13D CI40823363939 has one actual PostgreSQL

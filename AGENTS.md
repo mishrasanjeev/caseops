@@ -1,5 +1,14 @@
 # CaseOps agent instructions
 
+- A narrow postcommit response does not bound work while a writer owns tenant
+  admission. Measure the first transaction too: metadata DTOs must not hydrate
+  unrelated workspace history under Company/parent locks. Preserve fresh ACL,
+  assignment and lifecycle checks, current scalar/tag/order values, no-op and
+  caller-owned commit semantics, and subsequent full workspace reads. Keep
+  original lock/deadline race oracles; removing unused queries does not invent
+  missing historical barrier timings. Use extended-path IO for every retained
+  Windows artifact before mistaking verifier path failure for a failed test.
+
 - Removing one redundant index does not bound a correlated provenance read.
   A different tenant-only prefix may still win under fresh or stale statistics.
   Retain the real catalogue and statistics, then prove actual work with every

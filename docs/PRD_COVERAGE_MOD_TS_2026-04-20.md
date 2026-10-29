@@ -1,5 +1,17 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 29 First-Transaction Metadata Coverage
+
+J04/M03/US-007..009/FT-011..015/NFT-005 map PML-01..06 to the discoverable
+test_matter_metadata_load_profile_20261029_postgres.py. Exact five-file inventory
+is6new/16response/32upload/122writer/30finalizer=206cases/618phases, all passed
+without skip/retry. Six bounded precommit receipts show3graph SELECTs versus
+the valid old-product14-query RED; complete DTO/current values, caller-owned
+transaction and later workspace assertions are retained. All177files/17long
+paths verify after a separately preserved Windows verifier failure. This is
+source-bound component evidence only, not full Docker or production acceptance.
+J19/M21/US-063 continues to record ACTIVE SEO deferral, not invented GSC data.
+
 ## October 29 Full-Key Provenance Coverage
 
 IPLF-030B/037/UJ-04/IP15-018/NFT-005/SEC-003/004 map to the new

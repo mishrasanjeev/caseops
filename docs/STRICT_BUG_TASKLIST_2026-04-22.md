@@ -1,5 +1,18 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 29 Precommit Metadata: Inconclusive Pending Release
+
+J04/M03/US-007..009/FT-011..015/NFT-005: Docker19's actual matter-first upload
+Company timeout remains retained; three complete groups1313P/1F do not certify
+the gate. PML-01..06 proves first-transaction graph work14->3 while preserving
+current values, tenant/assignment/lifecycle/ACL locks, no-op/caller transaction
+and later full workspace. Complete new6 plus unchanged response16/upload32/
+writer122/finalizer30 pass206/206/618phases without skip/retry or deadline change.
+All177retained files verify; supervisor1was a separate long-path verifier error,
+not an erased result. Prior failed/incomplete attempts remain open evidence.
+Require fresh whole-source Docker/CI and exact-serving browser/private cadence;
+no workbook verdict, legal/provider/consent/MFA/reopening hold is promoted here.
+
 ## October 29 Provenance Seek: Partially Fixed, Not Deployed
 
 IPLF-030B/037, UJ-04, IP15-018, NFT-005: actual13D CI PostgreSQL20 retains

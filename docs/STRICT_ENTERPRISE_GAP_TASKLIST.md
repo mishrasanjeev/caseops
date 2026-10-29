@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 29 Tenant Lock Work
+
+**Partially implemented / NO-GO pending replacement release.** Postcommit-only
+hydration did not bound the first transaction. Preserve Docker19's Company-wait
+failure and missing historical timings. Metadata alone now omits ten unrelated
+workspace collections under admission locks; the required fresh graph14->3 is
+measured by six bounded receipts. All206affected native cases/618phases pass,
+including unchanged original races, without weaker locks or larger budgets.
+Retained177files/17long paths reconcile independently after a preserved verifier
+failure. Complete fresh Docker/CI/main/exact-live/cadence evidence is still open;
+native MacBook, legal/provider and owner-consent dependencies remain separate.
+
 ## October 29 Alternative Prefix Plan
 
 **Partially implemented / NO-GO pending full replacement release.** The earlier

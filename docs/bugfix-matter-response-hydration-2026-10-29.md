@@ -97,6 +97,64 @@ The independent post-GREEN01 review found no actionable code defect; postcommit
 ACL-revocation and missing-row404 branches were noted as coverage gaps, not
 demonstrated bugs or completed acceptance. No host/GC cause is inferred.
 
+## Precommit Continuation
+
+The earlier postcommit-only scope did not bound metadata work before commit.
+AFBC Docker19 retained three complete groups:1314cases/3942phases,1313passed/
+1failed/0skipped, with2189native and640browser cases unexecuted after guarded
+owned interruption. All383 retained files were verified before edits. Its
+matter-metadata-False upload-order call failed a10second Company lock wait.
+The actor trace proves one-way contention, not deadlock; it lacks ordinary
+SELECT durations and release clocks. Do not infer a historical host/GC cause.
+
+The assignment fence explicitly populated the full workspace after its parent
+lock, including ten collections unused by MatterRecord. New PML-01..06 in
+test_matter_metadata_load_profile_20261029_postgres.py measure product work in
+the FIRST transaction, not the later response transaction. A valid one-case
+RED on unchanged70bc product has successful setup/teardown and a call failure
+at the unused-work assertion:14graph/23product SELECTs,11unrelated paths
+including attachment chunks,69events, no capture/overflow/pairing errors.
+
+The extension gives the assignment helper an optional child-load flag whose
+default preserves other callers. Only update_matter opts out and reselects
+exact tenant/ID with populate_existing, raiseload, tags/tag and orders. Keep
+all Company/principal/parent/IP locks, current ACL and stale/lifecycle fences,
+events/audits, no-op behavior and caller-owned commitFalse semantics. The old
+postcommit narrow reload and full workspace loader remain unchanged.
+
+PML-01..06 cross commit/defer/no-op with autoflush off/on. Bounded passive
+ORM/SQL receipts check exactly3graph queries before commit, no unused paths,
+current previously cached scalar/tag/order values, additional tag membership,
+all DTO fields, observer visibility, rollback and later complete same-session
+workspace access. They do not cap all authorization/discovery SQL or establish
+historical timing causality. The unchanged real upload/writer/finalizer oracles
+remain mandatory, not substitutes for this deterministic work assertion.
+
+Fresh GREEN03 genuinely completes all206cases/618phases:6new,16unchanged
+response,32upload,122writer and30finalizer cases. No skips/retries/nonpasses.
+Native process exited0 naturally/reaped at11:48:28UTC; source-before/after
+agree. All six profiles measure3graph queries; four caller-owned modes have
+zero commits and two normal modes one. All177 retained files/hash verified.
+The supervisor still exited1 because a separate post-test verifier used an
+ordinary Windows path for a long retained filename. Its failed logs/result
+remain intact. Canonical extended-path replay verifies17long paths without
+editing/rerunning tests; this is actual component proof, not an outer0 claim.
+
+Product SHA6121ec270d5bb351fb9631b17f58fdccfa22bb81a48349088f289bdcaff55aac;
+new test SHAcec9a071abb6e75981e2518573555d1cc300e93f5a0444dc056ee06d86a00caa.
+Evidence: primary outputs/fix-561-20261026/portfolio-export-worker/
+docker19-upload-company-lock-failure-20261029-01/profile-green-03/
+reconciliation-native-path-01.json
+SHA1580e1ef422cef4867f27498bd604bb144d0b996809c13884aed5dbc228945eb.
+Independent static review found no blocking change; it is not release approval.
+
+Preserve GREEN01's pre-test Docker address-pool failure and GREEN02's incomplete
+206collection/80phase tail (26complete passes, one failed call missing teardown,
+179unexecuted). The later container exit255 cannot explain the earlier missed
+barrier retroactively. Neither run is acceptance. No unowned resource was pruned,
+OS/daemon policy changed, timeout raised or original assertion weakened.
+The complete new canonical Docker, CI/main and production gates remain open.
+
 ## Closure Gates
 
 Retain the full original RED journals, fixture terminal hash and failed Docker
