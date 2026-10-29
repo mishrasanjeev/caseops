@@ -4278,11 +4278,11 @@ test('CI native runner late directory insertion refuses with unchanged command b
 
 test('CI runner final callback refuses a same-inode edit after verified payload readback', async t => {
   await ciNativeRunnerFixture(async f => {
-    const trace = ciSourceTrace(), read = fs.readSync, write = fs.writeSync, native = fs.realpathSync.native, open = fs.openSync, close = fs.closeSync;
+    const trace = ciSourceTrace(), read = fs.readSync, write = fs.writeSync, native = fs.realpathSync.native;
     let written = false, readback = false, changed = false, observedError; const inode = fs.lstatSync(f.command, { bigint: true }).ino;
     fs.writeSync = (fd, ...args) => { if (trace.descriptors.get(fd) === f.command) written = true; return write(fd, ...args); };
     fs.readSync = (fd, ...args) => { const count = read(fd, ...args); if (written && count === 0 && trace.descriptors.get(fd) === f.command) readback = true; return count; };
-    fs.realpathSync.native = (file, ...args) => { const result = native(file, ...args); if (!changed && readback && file === f.command) { changed = true; const fd = open(file, 'r+'); try { trace.write(fd, Buffer.from('X'), 0, 1, 0); } finally { close(fd); } } return result; };
+    fs.realpathSync.native = (file, ...args) => { const result = native(file, ...args); if (!changed && readback && file === f.command) { changed = true; const matches = [...trace.descriptors].filter(([, name]) => name === file); assert.equal(matches.length, 1); const fd = matches[0][0]; assert.equal(fs.fstatSync(fd, { bigint: true }).ino, inode); trace.write(fd, Buffer.from('X'), 0, 1, 0); } return result; };
     try { try { await prepareCIHostNodeTrustWindows(f.environment); } catch (error) { observedError = error; } }
     finally { fs.realpathSync.native = native; trace.restore(); } trace.closed();
     const sameInode = fs.lstatSync(f.command, { bigint: true }).ino === inode;
