@@ -140,7 +140,9 @@ def test_uvicorn_connection_close_is_advertised_and_body_completes(tmp_path: Pat
                 with socket.create_connection(("127.0.0.1", port), timeout=1) as client:
                     client.settimeout(2)
                     client.sendall(
-                        b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nX-CaseOps-Automated-Test: no-paid-providers\r\nConnection: keep-alive\r\n\r\n"
+                        b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                        b"X-CaseOps-Automated-Test: no-paid-providers\r\n"
+                        b"Connection: keep-alive\r\n\r\n"
                     )
                     while chunk := client.recv(4096):
                         response += chunk
@@ -1288,7 +1290,10 @@ def test_web_fixture_dependency_inventory_follows_transitive_literal_forms(tmp_p
     files = {
         "apps/web/lib/fixture.test.ts": 'import { value } from "../../../tests/e2e/support/first";',
         "tests/e2e/support/first.ts": 'export { value } from "./second";',
-        "tests/e2e/support/second.ts": 'import("./third"); require("./fourth"); new URL("./native.cjs", import.meta.url);',
+        "tests/e2e/support/second.ts": (
+            'import("./third"); require("./fourth"); '
+            'new URL("./native.cjs", import.meta.url);'
+        ),
         "tests/e2e/support/native.cjs": 'require("./leaf.json");',
         "tests/e2e/support/third.ts": 'import "./leaf.json";',
         "tests/e2e/support/fourth.ts": 'import { value } from "./first";',

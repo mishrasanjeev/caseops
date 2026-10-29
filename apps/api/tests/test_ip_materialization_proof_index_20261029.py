@@ -5,15 +5,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
+from alembic import command
 from caseops_api.db.models import AuditEvent, BulkImportJob, IpDocketRecord, IpImportRow
 from tests.migration_index_catalog import (
-    require_index_additions, require_revision, schema_catalog, write_catalog,
+    require_index_additions,
+    require_revision,
+    schema_catalog,
+    write_catalog,
 )
 from tests.test_counsel_page_migration_20261027 import _rows
 from tests.test_matter_readthrough_indexes_20261028 import PRESERVED as OTHER_PRESERVED
@@ -29,7 +32,10 @@ EXPECTED = (("audit_events", NAME, COLUMNS),)
 PRESERVED = tuple(sorted(set(OTHER_PRESERVED) | {
     "bulk_import_jobs", "ip_import_rows", "ip_docket_records",
 }))
-PATH = Path(__file__).resolve().parents[1] / "alembic/versions/20261029_0001_audit_source_proof_seek.py"
+PATH = (
+    Path(__file__).resolve().parents[1]
+    / "alembic/versions/20261029_0001_audit_source_proof_seek.py"
+)
 STAMP = datetime(2026, 10, 29, 1, 2, 3, 123456, tzinfo=UTC)
 
 
@@ -142,10 +148,14 @@ def test_source_proof_conflicting_index_refuses_without_mutation(
         columns = "company_id" if conflict == "wrong_columns" else ", ".join(COLUMNS)
         predicate = "" if conflict == "wrong_columns" else " WHERE company_id IS NOT NULL"
         with engine.begin() as connection:
-            connection.exec_driver_sql(f'CREATE INDEX "{NAME}" ON audit_events ({columns}){predicate}')
+            connection.exec_driver_sql(
+                f'CREATE INDEX "{NAME}" ON audit_events ({columns}){predicate}'
+            )
         before = _rows(engine, PRESERVED)
         catalog = schema_catalog(engine)
-        with pytest.raises(RuntimeError, match="Audit source-proof seek index has a conflicting shape"):
+        with pytest.raises(
+            RuntimeError, match="Audit source-proof seek index has a conflicting shape"
+        ):
             apply(engine)
         assert _rows(engine, PRESERVED) == before and schema_catalog(engine) == catalog
         require_revision(engine, PARENT)

@@ -5,16 +5,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
+from alembic import command
 from caseops_api.db.models import AuditEvent, BulkImportJob, IpDocketRecord, IpImportRow
 from tests.migration_index_catalog import (
-    interrupted_index_catalog, require_index_additions, require_revision, schema_catalog, write_catalog,
+    interrupted_index_catalog,
+    require_index_additions,
+    require_revision,
+    schema_catalog,
+    write_catalog,
 )
 from tests.test_counsel_page_migration_20261027 import _rows
 from tests.test_matter_readthrough_indexes_20261028 import PRESERVED as OTHER_PRESERVED
@@ -30,7 +34,10 @@ EXPECTED = (("audit_events", NAME, COLUMNS),)
 PRESERVED = tuple(sorted(set(OTHER_PRESERVED) | {
     "bulk_import_jobs", "ip_import_rows", "ip_docket_records",
 }))
-PATH = Path(__file__).resolve().parents[1] / "alembic/versions/20261029_0002_audit_typed_source_proof_seek.py"
+PATH = (
+    Path(__file__).resolve().parents[1]
+    / "alembic/versions/20261029_0002_audit_typed_source_proof_seek.py"
+)
 STAMP = datetime(2026, 10, 29, 1, 2, 3, 123456, tzinfo=UTC)
 
 
@@ -132,7 +139,9 @@ def test_dated_typed_source_proof_index_roundtrip_preserves_every_retained_colum
             # owned pre-existing writer makes the build time out after catalog
             # admission. Never fabricate pg_index flags or widen lock budgets.
             with engine.connect() as connection:
-                audit_id = connection.scalar(text("SELECT id FROM audit_events ORDER BY id LIMIT 1"))
+                audit_id = connection.scalar(
+                    text("SELECT id FROM audit_events ORDER BY id LIMIT 1")
+                )
             assert audit_id is not None
             original_create = module().op.create_index
             interrupted = []
@@ -228,10 +237,14 @@ def test_typed_source_proof_conflicting_index_refuses_without_mutation(
         columns = "company_id" if conflict == "wrong_columns" else ", ".join(COLUMNS)
         predicate = "" if conflict == "wrong_columns" else " WHERE company_id IS NOT NULL"
         with engine.begin() as connection:
-            connection.exec_driver_sql(f'CREATE INDEX "{NAME}" ON audit_events ({columns}){predicate}')
+            connection.exec_driver_sql(
+                f'CREATE INDEX "{NAME}" ON audit_events ({columns}){predicate}'
+            )
         before = _rows(engine, PRESERVED)
         catalog = schema_catalog(engine)
-        with pytest.raises(RuntimeError, match="Audit typed source-proof seek index has a conflicting shape"):
+        with pytest.raises(
+            RuntimeError, match="Audit typed source-proof seek index has a conflicting shape"
+        ):
             apply(engine)
         retained_rows, retained_catalog = _rows(engine, PRESERVED), schema_catalog(engine)
         assert retained_rows == before and retained_catalog == catalog
@@ -262,7 +275,9 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
             connection.exec_driver_sql(f'DROP INDEX "{NAME}"')
             connection.exec_driver_sql(f'CREATE INDEX "{NAME}" ON audit_events (company_id)')
         conflicting = schema_catalog(engine)
-        with pytest.raises(RuntimeError, match="Audit typed source-proof seek index has a conflicting shape"):
+        with pytest.raises(
+            RuntimeError, match="Audit typed source-proof seek index has a conflicting shape"
+        ):
             command.downgrade(config, PARENT)
         retained_rows, retained_catalog = _rows(engine, PRESERVED), schema_catalog(engine)
         assert retained_rows == preserved and retained_catalog == conflicting

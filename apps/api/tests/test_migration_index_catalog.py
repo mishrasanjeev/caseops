@@ -6,7 +6,9 @@ import pytest
 from sqlalchemy import create_engine
 
 from tests.migration_index_catalog import (
-    interrupted_index_catalog, require_index_additions, schema_catalog,
+    interrupted_index_catalog,
+    require_index_additions,
+    schema_catalog,
 )
 
 
@@ -108,7 +110,15 @@ def test_interrupted_catalog_preserves_healthy_default_and_exact_full_snapshot()
 
 @pytest.mark.parametrize(
     "change",
-    ["wrong_name", "wrong_definition", "wrong_flags", "healthy_target", "missing", "extra_invalid", "descriptor_flags"],
+    [
+        "wrong_name",
+        "wrong_definition",
+        "wrong_flags",
+        "healthy_target",
+        "missing",
+        "extra_invalid",
+        "descriptor_flags",
+    ],
 )
 def test_interrupted_catalog_rejects_every_unreviewed_index_state(change):
     interrupted = ("audit_events", _INTERRUPTED_KEY[2], *_INTERRUPTED_DEFINITION)
@@ -117,7 +127,11 @@ def test_interrupted_catalog_rejects_every_unreviewed_index_state(change):
     if change == "wrong_name":
         rows[1] = ("audit_events", "unreviewed_index", *interrupted[2:])
     elif change == "wrong_definition":
-        rows[1] = (*interrupted[:2], interrupted[2].replace("target_type, target_id", "target_id, target_type"), *interrupted[3:])
+        rows[1] = (
+            *interrupted[:2],
+            interrupted[2].replace("target_type, target_id", "target_id, target_type"),
+            *interrupted[3:],
+        )
     elif change == "wrong_flags":
         rows[1] = (*interrupted[:4], True, *interrupted[5:])
     elif change == "healthy_target":
@@ -125,9 +139,24 @@ def test_interrupted_catalog_rejects_every_unreviewed_index_state(change):
     elif change == "missing":
         rows.pop()
     elif change == "extra_invalid":
-        rows.append(("audit_events", "unreviewed_index", "CREATE INDEX unreviewed_index ON public.audit_events USING btree (id)", False, False, True, False, False, False))
+        rows.append(
+            (
+                "audit_events",
+                "unreviewed_index",
+                "CREATE INDEX unreviewed_index ON public.audit_events USING btree (id)",
+                False,
+                False,
+                True,
+                False,
+                False,
+                False,
+            )
+        )
     elif change == "descriptor_flags":
-        descriptor = (_INTERRUPTED_KEY, (*_INTERRUPTED_DEFINITION[:2], True, *_INTERRUPTED_DEFINITION[3:]))
+        descriptor = (
+            _INTERRUPTED_KEY,
+            (*_INTERRUPTED_DEFINITION[:2], True, *_INTERRUPTED_DEFINITION[3:]),
+        )
     engine = _CatalogEngine(rows)
     with pytest.raises(AssertionError):
         interrupted_index_catalog(engine, expected_index=descriptor)

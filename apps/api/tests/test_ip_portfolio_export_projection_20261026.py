@@ -12,8 +12,8 @@ from time import perf_counter
 from uuid import uuid4
 
 import pytest
-from psycopg import sql as pg_sql
 from fastapi import HTTPException
+from psycopg import sql as pg_sql
 from sqlalchemy import delete, event, func, insert, select
 
 from caseops_api.db.models import (
@@ -43,51 +43,65 @@ COLUMNS = ["mark", "application_date", "renewal_due_date"]
 
 # Reuse the exact catalog projection previously executed by the owned PG17
 # diagnostic, now on the same live case connection as the measured query.
-_PROVENANCE_INDEX_CATALOG_SQL = """
-SELECT json_build_object('database',current_database(),'user',current_user,'schema',current_schema(),'transactionReadOnly',current_setting('transaction_read_only'),'defaultReadOnly',current_setting('default_transaction_read_only'),'version',(SELECT version_num FROM alembic_version),'systemIdentifier',(SELECT system_identifier::text FROM pg_control_system()),'indexState',(SELECT row_to_json(q)FROM(
-    SELECT c.relkind, t.relname AS owner, tn.nspname AS owner_schema,
-           am.amname AS method, i.indisvalid, i.indisready, i.indisunique,
-           i.indexprs IS NULL AS expression_free,
-           pg_get_expr(i.indpred, i.indrelid) AS predicate,
-           i.indnkeyatts = i.indnatts AS no_includes,
-           ARRAY(SELECT a.attname FROM unnest(i.indkey) WITH ORDINALITY k(attnum, pos)
-                 JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
-                 ORDER BY k.pos) AS columns,
-           (SELECT bool_and(opc.opcdefault AND i.indcollation[k] = a.attcollation
-                            AND i.indoption[k] = 0)
-            FROM generate_series(0, i.indnkeyatts - 1) k
-            JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[k]
-            JOIN pg_opclass opc ON opc.oid = i.indclass[k]) AS standard_keys,
-           current_schema() AS schema
-    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-    LEFT JOIN pg_index i ON i.indexrelid = c.oid
-    LEFT JOIN pg_class t ON t.oid = i.indrelid
-    LEFT JOIN pg_namespace tn ON tn.oid = t.relnamespace
-    LEFT JOIN pg_am am ON am.oid = c.relam
-    WHERE n.nspname = current_schema() AND c.relname = 'ix_audit_events_source_proof_seek'
-)q),'typedIndexState',(SELECT row_to_json(q)FROM(
-    SELECT c.relkind, t.relname AS owner, tn.nspname AS owner_schema,
-           am.amname AS method, i.indisvalid, i.indisready, i.indisunique,
-           i.indexprs IS NULL AS expression_free,
-           pg_get_expr(i.indpred, i.indrelid) AS predicate,
-           i.indnkeyatts = i.indnatts AS no_includes,
-           ARRAY(SELECT a.attname FROM unnest(i.indkey) WITH ORDINALITY k(attnum, pos)
-                 JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
-                 ORDER BY k.pos) AS columns,
-           (SELECT bool_and(opc.opcdefault AND i.indcollation[k] = a.attcollation
-                            AND i.indoption[k] = 0)
-            FROM generate_series(0, i.indnkeyatts - 1) k
-            JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[k]
-            JOIN pg_opclass opc ON opc.oid = i.indclass[k]) AS standard_keys,
-           current_schema() AS schema
-    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-    LEFT JOIN pg_index i ON i.indexrelid = c.oid
-    LEFT JOIN pg_class t ON t.oid = i.indrelid
-    LEFT JOIN pg_namespace tn ON tn.oid = t.relnamespace
-    LEFT JOIN pg_am am ON am.oid = c.relam
-    WHERE n.nspname = current_schema() AND c.relname = 'ix_audit_events_typed_source_proof_seek'
-)q),'indexDefinitions',(SELECT json_agg(json_build_object('name',c.relname,'valid',i.indisvalid,'ready',i.indisready,'definition',pg_get_indexdef(c.oid)))FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid WHERE i.indrelid='audit_events'::regclass),'keyDetails',(SELECT json_agg(json_build_object('position',k,'column',a.attname,'opclass',opc.opcname,'defaultOpclass',opc.opcdefault,'collation',co.collname,'indoption',i.indoption[k]))FROM pg_class c JOIN pg_index i ON i.indexrelid=c.oid CROSS JOIN generate_series(0,i.indnkeyatts-1)k JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=i.indkey[k] JOIN pg_opclass opc ON opc.oid=i.indclass[k] LEFT JOIN pg_collation co ON co.oid=i.indcollation[k] WHERE c.relname='ix_audit_events_source_proof_seek'),'typedKeyDetails',(SELECT json_agg(json_build_object('position',k,'column',a.attname,'opclass',opc.opcname,'defaultOpclass',opc.opcdefault,'collation',co.collname,'indoption',i.indoption[k]))FROM pg_class c JOIN pg_index i ON i.indexrelid=c.oid CROSS JOIN generate_series(0,i.indnkeyatts-1)k JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=i.indkey[k] JOIN pg_opclass opc ON opc.oid=i.indclass[k] LEFT JOIN pg_collation co ON co.oid=i.indcollation[k] WHERE c.relname='ix_audit_events_typed_source_proof_seek'),'auditStats',(SELECT json_build_object('estimatedRows',reltuples::bigint,'pages',relpages)FROM pg_class WHERE oid='audit_events'::regclass))
-"""
+_PROVENANCE_INDEX_CATALOG_SQL = (
+    "\nSELECT json_build_object('database',current_database(),'user',current_user,'s"
+    "chema',current_schema(),'transactionReadOnly',current_setting('transaction_rea"
+    "d_only'),'defaultReadOnly',current_setting('default_transaction_read_only'),'v"
+    "ersion',(SELECT version_num FROM alembic_version),'systemIdentifier',(SELECT s"
+    "ystem_identifier::text FROM pg_control_system()),'indexState',(SELECT row_to_j"
+    "son(q)FROM(\n    SELECT c.relkind, t.relname AS owner, tn.nspname AS owner_sche"
+    "ma,\n           am.amname AS method, i.indisvalid, i.indisready, i.indisunique,"
+    "\n           i.indexprs IS NULL AS expression_free,\n           pg_get_expr(i.in"
+    "dpred, i.indrelid) AS predicate,\n           i.indnkeyatts = i.indnatts AS no_i"
+    "ncludes,\n           ARRAY(SELECT a.attname FROM unnest(i.indkey) WITH ORDINALI"
+    "TY k(attnum, pos)\n                 JOIN pg_attribute a ON a.attrelid = i.indre"
+    "lid AND a.attnum = k.attnum\n                 ORDER BY k.pos) AS columns,\n     "
+    "      (SELECT bool_and(opc.opcdefault AND i.indcollation[k] = a.attcollation\n "
+    "                           AND i.indoption[k] = 0)\n            FROM generate_s"
+    "eries(0, i.indnkeyatts - 1) k\n            JOIN pg_attribute a ON a.attrelid = "
+    "i.indrelid AND a.attnum = i.indkey[k]\n            JOIN pg_opclass opc ON opc.o"
+    "id = i.indclass[k]) AS standard_keys,\n           current_schema() AS schema\n  "
+    "  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace\n    LEFT JOIN "
+    "pg_index i ON i.indexrelid = c.oid\n    LEFT JOIN pg_class t ON t.oid = i.indre"
+    "lid\n    LEFT JOIN pg_namespace tn ON tn.oid = t.relnamespace\n    LEFT JOIN pg_"
+    "am am ON am.oid = c.relam\n    WHERE n.nspname = current_schema() AND c.relname"
+    " = 'ix_audit_events_source_proof_seek'\n)q),'typedIndexState',(SELECT row_to_js"
+    "on(q)FROM(\n    SELECT c.relkind, t.relname AS owner, tn.nspname AS owner_schem"
+    "a,\n           am.amname AS method, i.indisvalid, i.indisready, i.indisunique,\n"
+    "           i.indexprs IS NULL AS expression_free,\n           pg_get_expr(i.ind"
+    "pred, i.indrelid) AS predicate,\n           i.indnkeyatts = i.indnatts AS no_in"
+    "cludes,\n           ARRAY(SELECT a.attname FROM unnest(i.indkey) WITH ORDINALIT"
+    "Y k(attnum, pos)\n                 JOIN pg_attribute a ON a.attrelid = i.indrel"
+    "id AND a.attnum = k.attnum\n                 ORDER BY k.pos) AS columns,\n      "
+    "     (SELECT bool_and(opc.opcdefault AND i.indcollation[k] = a.attcollation\n  "
+    "                          AND i.indoption[k] = 0)\n            FROM generate_se"
+    "ries(0, i.indnkeyatts - 1) k\n            JOIN pg_attribute a ON a.attrelid = i"
+    ".indrelid AND a.attnum = i.indkey[k]\n            JOIN pg_opclass opc ON opc.oi"
+    "d = i.indclass[k]) AS standard_keys,\n           current_schema() AS schema\n   "
+    " FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace\n    LEFT JOIN p"
+    "g_index i ON i.indexrelid = c.oid\n    LEFT JOIN pg_class t ON t.oid = i.indrel"
+    "id\n    LEFT JOIN pg_namespace tn ON tn.oid = t.relnamespace\n    LEFT JOIN pg_a"
+    "m am ON am.oid = c.relam\n    WHERE n.nspname = current_schema() AND c.relname "
+    "= 'ix_audit_events_typed_source_proof_seek'\n)q),'indexDefinitions',(SELECT jso"
+    "n_agg(json_build_object('name',c.relname,'valid',i.indisvalid,'ready',i.indisr"
+    "eady,'definition',pg_get_indexdef(c.oid)))FROM pg_index i JOIN pg_class c ON c"
+    ".oid=i.indexrelid WHERE i.indrelid='audit_events'::regclass),'keyDetails',(SEL"
+    "ECT json_agg(json_build_object('position',k,'column',a.attname,'opclass',opc.o"
+    "pcname,'defaultOpclass',opc.opcdefault,'collation',co.collname,'indoption',i.i"
+    "ndoption[k]))FROM pg_class c JOIN pg_index i ON i.indexrelid=c.oid CROSS JOIN "
+    "generate_series(0,i.indnkeyatts-1)k JOIN pg_attribute a ON a.attrelid=i.indrel"
+    "id AND a.attnum=i.indkey[k] JOIN pg_opclass opc ON opc.oid=i.indclass[k] LEFT "
+    "JOIN pg_collation co ON co.oid=i.indcollation[k] WHERE c.relname='ix_audit_eve"
+    "nts_source_proof_seek'),'typedKeyDetails',(SELECT json_agg(json_build_object('"
+    "position',k,'column',a.attname,'opclass',opc.opcname,'defaultOpclass',opc.opcd"
+    "efault,'collation',co.collname,'indoption',i.indoption[k]))FROM pg_class c JOI"
+    "N pg_index i ON i.indexrelid=c.oid CROSS JOIN generate_series(0,i.indnkeyatts-"
+    "1)k JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=i.indkey[k] JOIN"
+    " pg_opclass opc ON opc.oid=i.indclass[k] LEFT JOIN pg_collation co ON co.oid=i"
+    ".indcollation[k] WHERE c.relname='ix_audit_events_typed_source_proof_seek'),'a"
+    "uditStats',(SELECT json_build_object('estimatedRows',reltuples::bigint,'pages'"
+    ",relpages)FROM pg_class WHERE oid='audit_events'::regclass))\n"
+)
 
 
 def _context(session, actor):
@@ -196,8 +210,13 @@ def _audit_relation_buffers(node, *, covered=False):
         observed = _audit_relation_buffers(child, covered=covered or audit)
         total += observed["accesses"]
         nodes.extend(observed["nodes"])
-    return {"accesses": total, "nodes": nodes,
-            "counter_scope": "inclusive Audit relation buffers; no loop multiplication or child duplication"}
+    return {
+        "accesses": total,
+        "nodes": nodes,
+        "counter_scope": (
+            "inclusive Audit relation buffers; no loop multiplication or child duplication"
+        ),
+    }
 
 
 def _audit_buffer_budget_exceeded(observed, bound):
@@ -249,7 +268,9 @@ def _generic_plan(connection, record, entry, *, index):
         cursor.execute("SELECT name FROM pg_prepared_statements", prepare=False)
         existing = {row[0] for row in cursor.fetchall()}
         assert name not in existing
-        prepare = pg_sql.SQL("PREPARE {} AS ").format(pg_sql.Identifier(name)) + pg_sql.SQL(statement)
+        prepare = pg_sql.SQL("PREPARE {} AS ").format(pg_sql.Identifier(name)) + pg_sql.SQL(
+            statement
+        )
         cursor.execute(prepare, prepare=False)
         failure = None
         try:
@@ -378,8 +399,12 @@ def _plans(records, *, directory, candidate_bound, audit_buffer_bound=None):
                     if any(sql.lower().count(f"from {table}") > 2
                            for table in ("audit_events", "ip_import_rows")):
                         problems.append("Source-proof bodies exceed the existing two-body bound")
-                    if audit_buffer_bound is not None and _audit_buffer_budget_exceeded(audit_buffers, audit_buffer_bound):
-                        problems.append("Audit physical buffer accesses exceed the independent seek budget")
+                    if audit_buffer_bound is not None and _audit_buffer_budget_exceeded(
+                        audit_buffers, audit_buffer_bound
+                    ):
+                        problems.append(
+                            "Audit physical buffer accesses exceed the independent seek budget"
+                        )
                     if relation_work > bound or provenance_work > bound:
                         problems.append("Provenance work exceeds the existing candidate bound")
                     if any(node["work"] > bound for node in materialized_proof):
