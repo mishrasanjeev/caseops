@@ -3920,8 +3920,8 @@ test('CI source late extra namespace entry is independently refused with unchang
   finally { trace.restore(); proof.restore(); } trace.closed();
 }));
 
-test('CI pinned input exception rejects foreign owner missing user and unsafe writers before any payload', async () => {
-  for (const change of [rows => { rows[0].reviewedAdminSource = false; }, rows => { rows[0].tokenUserPresent = false; }, rows => { rows[1].writeScopeSafe = false; }]) {
+test('CI pinned input exception rejects foreign input owner missing user and unsafe copied writer before payload', async () => {
+  for (const change of [rows => { rows[0].reviewedAdminSource = false; }, rows => { rows[0].tokenUserPresent = false; }, rows => { rows[5].writeScopeSafe = false; }]) {
     await ciSourceFixture(async ({ parent, api }) => {
       const proof = ciSourceWindowsProofs(change), trace = ciSourceTrace();
       try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_(?:OWNER_HELPER_INPUT|ACL_PROTOCOL)/); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
@@ -3943,7 +3943,7 @@ test('CI source parent alias refuses before source payload and never changes exi
   finally { trace.restore(); }
 }));
 
-test('CI Windows entry never loads original H by pathname before or after staging retained copies', async () => ciSourceFixture(async ({ root, source }) => {
+test('CI Windows entry executes only copied bytes when exact public inputs have nonexclusive writer observations', async () => ciSourceFixture(async ({ root, source }) => {
   const workspace = path.join(root, 'workspace'), commands = path.join(root, 'commands'); fs.mkdirSync(workspace, { mode: 0o700 }); fs.writeFileSync(commands, '', { flag: 'wx', mode: 0o600 });
   const script = `import fs from 'node:fs'; import { createRequire, registerHooks, syncBuiltinESMExports } from 'node:module'; import { pathToFileURL } from 'node:url';
     const root=process.env.OWNED_FIXTURE_ROOT, source=process.env.OWNED_FIXTURE_SOURCE; let originalLoads=0, batches=0;
@@ -3951,7 +3951,7 @@ test('CI Windows entry never loads original H by pathname before or after stagin
     Object.defineProperty(process,'platform',{value:'win32'}); Object.defineProperty(process,'getuid',{value:undefined}); process.env.SystemRoot='/owned-public-windows-system';
     const cp=createRequire(import.meta.url)('node:child_process'); cp.spawnSync=(_exe,args,options)=>{
       if(options.env.CASEOPS_PARENT_CREATED_PATH){const p=options.env.CASEOPS_PARENT_CREATED_PATH;fs.mkdirSync(p,{mode:0o700});const f=fs.lstatSync(p,{bigint:true});return{status:0,stdout:JSON.stringify({created:true,ownerCurrent:true,protected:true,writersExact:true,ino:String(f.ino),volume:String(f.dev),birthtimeNs:String(f.birthtimeNs)}),stderr:[0,1,2,3,4].map(n=>'COPS_PARENT'+n).join(String.fromCharCode(10))+String.fromCharCode(10)}};
-      if(options.env.CASEOPS_SOURCE_0){batches++;return {status:0,stdout:JSON.stringify(Array.from({length:6},(_,i)=>({runtimeOwner:i>=2,reviewedAdminSource:i<2,writeScopeSafe:true,tokenUserPresent:true,aclSha256:'a'.repeat(64)}))),stderr:''}};
+      if(options.env.CASEOPS_SOURCE_0){batches++;return {status:0,stdout:JSON.stringify(Array.from({length:6},(_,i)=>({runtimeOwner:i>=2,reviewedAdminSource:i<2,writeScopeSafe:i>=2,tokenUserPresent:true,aclSha256:'a'.repeat(64)}))),stderr:''}};
       if(args.at(-1).includes("[Console]::Out.Write('SAFE')"))return{status:0,stdout:'SAFE',stderr:'COPS_ACL0\\nCOPS_ACL1\\nCOPS_ACL2\\nCOPS_ACL3\\n'.replaceAll('\\\\n','\\n')};
       return{status:0,stdout:'{"ownerMatches":true,"writeScopeSafe":true}',stderr:'COPS_ACL0\\nCOPS_ACL1\\nCOPS_ACL2\\nCOPS_ACL3\\n'.replaceAll('\\\\n','\\n')};
     }; syncBuiltinESMExports();
@@ -4022,8 +4022,8 @@ test('CI ACL decoder identifies only the fixed object role and failing field cla
     assert.throws(() => reviewCIHostSourceAclOutput(JSON.stringify(rows)), error => { assert.equal(error.message, expected); assert.equal(ciTrustFailureCode(error), expected); assert.ok(!error.message.includes('SYNTHETIC_PRIVATE')); return true; });
   }
 });
-test('CI actual staged-source unsafe-writer or missing-user refusal reads zero payload for each object role', async () => {
-  for (let index = 0; index < 6; index++) for (const [key, reason] of [['writeScopeSafe', 'WRITE_UNSAFE'], ['tokenUserPresent', 'USER_MISSING']]) await ciSourceFixture(async ({ parent, api }) => {
+test('CI actual staged-source strict runtime writers and every token-user refusal read zero payload', async () => {
+  for (let index = 0; index < 6; index++) for (const [key, reason] of (index < 2 ? [['tokenUserPresent', 'USER_MISSING']] : [['writeScopeSafe', 'WRITE_UNSAFE'], ['tokenUserPresent', 'USER_MISSING']])) await ciSourceFixture(async ({ parent, api }) => {
     const proof = ciSourceWindowsProofs(rows => { rows[index][key] = false; }), trace = ciSourceTrace();
     try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_' + ciAclProtocolRoles[index] + '_' + reason }); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); assert.equal(proof.calls, 1); }
     finally { trace.restore(); proof.restore(); } trace.closed();
@@ -4178,3 +4178,46 @@ async function ciCommandConfigRefusal(name, role) {
 }
 test('actual Windows-entry composition distinguishes new NPM_USER_CONFIG before its first write', () => ciCommandConfigRefusal('user.npmrc', 'NPM_USER_CONFIG'));
 test('actual Windows-entry composition distinguishes new NPM_GLOBAL_CONFIG and retains earlier anonymous config', () => ciCommandConfigRefusal('global.npmrc', 'NPM_GLOBAL_CONFIG'));
+
+
+test('CI exact reviewed public inputs retain nonexclusive ACL observations while only strict copied bytes execute', async () => ciSourceFixture(async ({ source, parent, api }) => {
+  const proof = ciSourceWindowsProofs(rows => { rows[0].writeScopeSafe = false; rows[1].writeScopeSafe = false; }), trace = ciSourceTrace(); let staged;
+  try {
+    staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(proof.calls, 2); assert.equal(staged.provenance.length, 2);
+    for (const row of staged.provenance) { assert.equal(row.originalAcl.writeScopeSafe, false); assert.equal(row.originalWriteScope, 'nonexclusive-public-input-data'); assert.equal(row.inputAuthority, 'literal-sha256-gitblob-extent-retained-bytes'); assert.equal(row.copiedAcl.writeScopeSafe, true); assert.equal(row.copiedAcl.runtimeOwner, true); const original = fs.readFileSync(path.join(source, row.name)); assert.equal(createHash('sha256').update(original).digest('hex'), row.originalSha256); assert.equal(createHash('sha256').update(fs.readFileSync(row.copied.path)).digest('hex'), row.originalSha256); if (row.name === 'host-node-trust.mjs') assert.deepEqual(staged.retainedHelper, original); }
+  } finally { trace.restore(); proof.restore(); staged?.retainedHelper.fill(0); } trace.closed();
+}));
+test('CI public-input admission token cannot be forged through the exported strict decoder', () => {
+  const rows = ciAclProtocolRows(); rows[0].writeScopeSafe = false;
+  for (const attempted of [undefined, true, 1, 'literal-reviewed-public-input-data', {}, { reviewed: true }, Symbol('literal-reviewed-public-input-data')]) assert.throws(() => reviewCIHostSourceAclOutput(JSON.stringify(rows), attempted), { message: 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_INPUT_WRITE_UNSAFE' });
+});
+test('CI nonexclusive public inputs still require the original reviewed owner admission before all payload reads', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs(rows => { rows[0].writeScopeSafe = false; rows[0].runtimeOwner = false; rows[0].reviewedAdminSource = false; }), trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_OWNER_HELPER_INPUT' }); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+  finally { trace.restore(); proof.restore(); } trace.closed();
+}));
+test('CI corrupt nonexclusive helper or bootstrap inputs cannot write either staging payload', async () => {
+  for (const name of ['host-node-trust.mjs', 'host-node-trust-start.mjs']) await ciSourceFixture(async ({ source, parent, api }) => {
+    const file = path.join(source, name), data = fs.readFileSync(file); data[0] ^= 1; fs.writeFileSync(file, data);
+    const proof = ciSourceWindowsProofs(rows => { rows[0].writeScopeSafe = false; rows[1].writeScopeSafe = false; }), trace = ciSourceTrace(), buffers = new Set();
+    fs.readSync = (...args) => { buffers.add(args[1]); return trace.read(...args); };
+    try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES' }); assert.equal(trace.writes, 0); }
+    finally { trace.restore(); proof.restore(); } trace.closed(); assert.ok([...buffers].every(buffer => buffer.every(value => value === 0)));
+  });
+});
+test('CI both input full frames reconcile after immutable byte verification before the first staging write', async () => {
+  for (const name of ['host-node-trust.mjs', 'host-node-trust-start.mjs']) await ciSourceFixture(async ({ source, parent, api }) => {
+    const proof = ciSourceWindowsProofs(rows => { rows[0].writeScopeSafe = false; rows[1].writeScopeSafe = false; }), trace = ciSourceTrace(), read = fs.readSync, write = fs.writeSync; let changed = false, stagingWrites = 0;
+    fs.readSync = (fd, ...args) => { const n = read(fd, ...args); if (!changed && n === 0 && trace.descriptors.get(fd) === path.join(source, 'host-node-trust-start.mjs')) { changed = true; fs.appendFileSync(path.join(source, name), ' '); } return n; };
+    fs.writeSync = (fd, ...args) => { if (trace.descriptors.get(fd)?.includes('/runtime-source/')) stagingWrites++; return write(fd, ...args); };
+    try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_WRITE' }); assert.equal(changed, true); assert.equal(stagingWrites, 0); }
+    finally { trace.restore(); proof.restore(); } trace.closed();
+  });
+});
+test('CI public-data writer admission never extends to parent runtime directory or either copied executable', async () => {
+  for (let index = 2; index < 6; index++) await ciSourceFixture(async ({ parent, api }) => {
+    const proof = ciSourceWindowsProofs(rows => { rows[0].writeScopeSafe = false; rows[1].writeScopeSafe = false; rows[index].writeScopeSafe = false; }), trace = ciSourceTrace();
+    try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_' + ciAclProtocolRoles[index] + '_WRITE_UNSAFE' }); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+    finally { trace.restore(); proof.restore(); } trace.closed();
+  });
+});

@@ -186,3 +186,27 @@ Framework Access/Owner read, four-second child deadline, owner predicate, writer
 mask and trusted principals remain mandatory. No existing or newly created
 object's ACL/owner is changed by this diagnostic. Fresh hosted Windows execution
 is required to identify the next concrete condition before remediation.
+
+The following `301a0d5e` run refused
+`CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_INPUT_WRITE_UNSAFE` before npm.
+That identifies a nonexclusive writer observation on the original public helper
+input; it says nothing about the protected new parent, runtime copies or command
+files. The prior a16 command-file failure remains a separate unknown condition.
+
+Only the two fixed colocated public H/B INPUTS may now carry that observation as
+public-data provenance. A private producer token is available only for the exact
+literal pin records/paths; the exported decoder remains strict by default.
+Original owner admission and every full descriptor/named/namespace/ACL frame are
+unchanged. Both held inputs must satisfy their literal SHA-256, Git-blob SHA-1
+and extent before any staging payload write. Both complete input frames are
+reconciled again after those byte proofs and before the first payload write.
+Only the retained reviewed buffers enter new exclusive copies; neither original
+pathname is imported or reopened for execution. Final input/ACL checks remain.
+
+Parent/runtime directories, copied executables, npm config files and
+GITHUB_OUTPUT keep every strict owner/writer rule. No public-input class applies
+to them or to arbitrary source paths/digests. Returned provenance distinguishes
+the observed nonexclusive input ACL from immutable-byte authority; it never
+reports that unsafe source ACL as safe. Unix behavior and deadlines are unchanged.
+Fresh Windows execution remains required, and no result rewrites the earlier
+failed runs or proves the still-unobserved command-file condition.

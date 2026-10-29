@@ -174,12 +174,17 @@ function sourceAclFrames(objects, check) {
     env: environment, encoding: 'utf8', timeout: Math.min(5000, remaining), maxBuffer: 4096, windowsHide: true,
   });
   assert.ok(!proof.error && proof.status === 0 && proof.stderr === '', 'CI_TRUST_RUNTIME_SOURCE_ACL_COMMAND');
-  const values = reviewCIHostSourceAclOutput(proof.stdout);
+  // This token is available only after the fixed code-only producer constructs
+  // these exact two colocated literal pin records. It grants no runtime owner
+  // or output-write authority and is never accepted from environment/input.
+  for (let index = 0; index < 2; index++) assert.ok(objects[index].data === true && objects[index].pin === REVIEWED_RUNTIME_SOURCES[index] && objects[index].path === fileURLToPath(new URL('./' + REVIEWED_RUNTIME_SOURCES[index].name, import.meta.url)), 'CI_TRUST_RUNTIME_SOURCE_PUBLIC_INPUT_REQUIRED');
+  const values = reviewCIHostSourceAclOutput(proof.stdout, REVIEWED_PUBLIC_INPUT_DATA);
   values.forEach((value, index) => {
     assert.ok(value.runtimeOwner === true || objects[index].data === true && value.reviewedAdminSource === true, 'CI_TRUST_RUNTIME_SOURCE_OWNER_' + SOURCE_ROLES[index]);
   });
   check(); return values;
 }
+const REVIEWED_PUBLIC_INPUT_DATA = Symbol('literal-reviewed-public-input-data');
 const SOURCE_ROLES = Object.freeze(['HELPER_INPUT', 'BOOTSTRAP_INPUT', 'PARENT_DIRECTORY', 'RUNTIME_DIRECTORY', 'HELPER_COPY', 'BOOTSTRAP_COPY']);
 const SOURCE_PROTOCOL_REASONS = Object.freeze(['JSON_TYPE', 'JSON_EMPTY', 'JSON_SIZE', 'JSON_INVALID', 'ARRAY_TYPE', 'ARRAY_COUNT', 'ROW_TYPE', 'FIELDS', 'OWNER_TYPE', 'ADMIN_TYPE', 'WRITE_TYPE', 'WRITE_UNSAFE', 'USER_TYPE', 'USER_MISSING', 'HASH_TYPE', 'HASH_FORMAT']);
 function sourceProtocolFailure(role, reason) {
@@ -187,8 +192,10 @@ function sourceProtocolFailure(role, reason) {
   assert.fail('CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_' + role + '_' + reason);
 }
 /** Only fixed classes identify a refusal. Raw ACL response bytes and unknown
- * property names never enter diagnostics. Every prior predicate stays strict. */
-export function reviewCIHostSourceAclOutput(output) {
+ * property names never enter diagnostics. The exported decoder stays strict by
+ * default. Only the private producer token admits a nonexclusive writer flag
+ * on the two literal public INPUT rows, pending both immutable byte proofs. */
+export function reviewCIHostSourceAclOutput(output, admission = undefined) {
   if (typeof output !== 'string') sourceProtocolFailure('OUTPUT', 'JSON_TYPE');
   if (output.length > 4096 || Buffer.byteLength(output) > 4096) sourceProtocolFailure('OUTPUT', 'JSON_SIZE');
   if (output.trim().length === 0) sourceProtocolFailure('OUTPUT', 'JSON_EMPTY');
@@ -203,7 +210,7 @@ export function reviewCIHostSourceAclOutput(output) {
     if (typeof value.runtimeOwner !== 'boolean') sourceProtocolFailure(role, 'OWNER_TYPE');
     if (typeof value.reviewedAdminSource !== 'boolean') sourceProtocolFailure(role, 'ADMIN_TYPE');
     if (typeof value.writeScopeSafe !== 'boolean') sourceProtocolFailure(role, 'WRITE_TYPE');
-    if (value.writeScopeSafe !== true) sourceProtocolFailure(role, 'WRITE_UNSAFE');
+    if (value.writeScopeSafe !== true && !(admission === REVIEWED_PUBLIC_INPUT_DATA && index < 2)) sourceProtocolFailure(role, 'WRITE_UNSAFE');
     if (typeof value.tokenUserPresent !== 'boolean') sourceProtocolFailure(role, 'USER_TYPE');
     if (value.tokenUserPresent !== true) sourceProtocolFailure(role, 'USER_MISSING');
     if (typeof value.aclSha256 !== 'string') sourceProtocolFailure(role, 'HASH_TYPE');
@@ -260,6 +267,10 @@ export function stageCIHostNodeRuntimeSources(parent, incomingCheck) {
       assert.ok(count === input.pin.sizeBytes && sha(input.bytes.subarray(0, count)) === input.pin.sha256
         && createHash('sha1').update(Buffer.from('blob ' + count + '\0')).update(input.bytes.subarray(0, count)).digest('hex') === input.pin.gitBlobSha1, 'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES');
     }
+    // Reconcile BOTH immutable inputs after their complete byte proofs and
+    // before the first output payload write. Source ACL observations remain
+    // provenance; only these retained reviewed bytes can become executable.
+    for (const input of inputs) assert.ok(equal(frame(input.opened), frame(fs.fstatSync(input.fd, { bigint: true }))) && equal(frame(input.state), frame(fs.lstatSync(input.path, { bigint: true }))) && equal(input.namespace, parents(input.path, check)) && canonical(input.path) === input.path, 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_WRITE');
     for (let index = 0; index < 2; index++) {
       const input = inputs[index], copy = copies[index], data = input.bytes.subarray(0, input.pin.sizeBytes); let count = 0;
       while (count < data.length) { check(); const n = fs.writeSync(copy.fd, data, count, data.length - count, count); assert.ok(n > 0 && n <= data.length - count, 'CI_TRUST_RUNTIME_SOURCE_WRITE_PROGRESS'); count += n; }
@@ -278,7 +289,7 @@ export function stageCIHostNodeRuntimeSources(parent, incomingCheck) {
     for (const copy of copies) assert.ok(equal(frame(copy.final), frame(fs.fstatSync(copy.fd, { bigint: true }))) && equal(frame(copy.named), frame(fs.lstatSync(copy.path, { bigint: true }))) && equal(copy.namespace, parents(copy.path, check)) && canonical(copy.path) === copy.path, 'CI_TRUST_RUNTIME_SOURCE_OUTPUT_FINAL_CHANGED');
     sourceNames(directory, check);
     const refs = Object.fromEntries(copies.map(value => [value.pin.role, value.reference])); retainedHelper = copies[0].bytes.subarray(0, copies[0].pin.sizeBytes);
-    return { sourceRefs: refs, retainedHelper, provenance: inputs.map((value, index) => ({ name: value.pin.name, gitMode: value.pin.gitMode, gitBlobSha1: value.pin.gitBlobSha1, originalSha256: value.pin.sha256, originalMetadata: frame(value.state), originalAcl: before[index], copied: copies[index].reference, copiedMetadata: frame(copies[index].named), copiedAcl: after[index + 4] })) };
+    return { sourceRefs: refs, retainedHelper, provenance: inputs.map((value, index) => ({ name: value.pin.name, gitMode: value.pin.gitMode, gitBlobSha1: value.pin.gitBlobSha1, originalSha256: value.pin.sha256, originalMetadata: frame(value.state), originalAcl: before[index], inputAuthority: 'literal-sha256-gitblob-extent-retained-bytes', originalWriteScope: before[index].writeScopeSafe ? 'reviewed-writers' : 'nonexclusive-public-input-data', copied: copies[index].reference, copiedMetadata: frame(copies[index].named), copiedAcl: after[index + 4] })) };
   } catch (error) { bodyFailed = true; throw error; }
   finally {
     for (const value of [...inputs, ...copies]) {
@@ -478,7 +489,7 @@ const DIAGNOSTICS = new Set([
   'CI_TRUST_COMMAND_OWNER', 'CI_TRUST_COMMAND_OWNER_PROTOCOL', 'CI_TRUST_NAMESPACE', 'CI_TRUST_CONFIG_DEADLINE',
   'CI_TRUST_APPEND_DEADLINE', 'CI_TRUST_PREPARATION_DEADLINE',
   'CI_TRUST_RUNTIME_SOURCE_ACL_COMMAND', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL', 'CI_TRUST_RUNTIME_SOURCE_OWNER',
-  'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES', 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_READ',
+  'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES', 'CI_TRUST_RUNTIME_SOURCE_PUBLIC_INPUT_REQUIRED', 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_WRITE', 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_READ',
   'CI_TRUST_RUNTIME_SOURCE_INPUT_CHANGED', 'CI_TRUST_RUNTIME_SOURCE_ACL_CHANGED',
   'CI_TRUST_RUNTIME_SOURCE_OUTPUT_CHANGED', 'CI_TRUST_RUNTIME_SOURCE_OUTPUT_IDENTITY',
   'CI_TRUST_RUNTIME_SOURCE_OUTPUT_FINAL_CHANGED', 'CI_TRUST_RUNTIME_SOURCE_OUTPUT_ACL_CHANGED',
