@@ -547,6 +547,14 @@ def test_actual_current_head_restore_refusal_preserves_rows_classifications_cata
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current = ScriptDirectory.from_config(config).get_current_head()
+        assert current == "20261029_0002"
+        # SQLite refuses the non-immediate destination at the new seek index.
+        # PostgreSQL reaches the Matter guard inside its rollback transaction.
+        expected_refusal = (
+            "SQLite seek index downgrade requires exact immediate parent."
+            if engine.dialect.name == "sqlite"
+            else "Matter retained-read projection is restore-forward; restore the reviewed backup."
+        )
         command.upgrade(config, "head")
         scope, _, rows, _ = seed_old(engine)
         require_physical(engine, scope, rows)
@@ -560,10 +568,7 @@ def test_actual_current_head_restore_refusal_preserves_rows_classifications_cata
             command.downgrade(config, PREVIOUS)
         except RuntimeError as error:
             refusal = str(error)
-        assert (
-            refusal
-            == "Matter retained-read projection is restore-forward; restore the reviewed backup."
-        )
+        assert refusal == expected_refusal
         after_rows, after_catalog = _rows(engine, names), _catalog(engine)
         after = _artifact(tmp_path / "current-after-refusal-all-rows.json", after_rows)
         _artifact(tmp_path / "current-after-refusal-catalog.json", after_catalog)

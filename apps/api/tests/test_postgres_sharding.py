@@ -70,6 +70,7 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     ] + [
         "apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl",
         "apps/api/postgres-shard-${{ matrix.shard }}-readthrough/",
+        "apps/api/postgres-shard-${{ matrix.shard }}-query-plans/",
     ]
     aggregate = workflow["jobs"]["postgres-validation"]
     assert aggregate["needs"] == ["postgres-validation-shards"]
