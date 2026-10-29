@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- A set-based update can still allocate one ORM identity and returned Row per
+  retained chunk. Bound client-side result consumption as well as SQL work;
+  preserve exact atomic predicates, source membership and loaded-object state.
+  Core-update synchronization must also register changed resident objects for
+  savepoint rollback, before and after flush. Retain real SQL/GC timing; do not
+  disable GC, move the measurement, or raise the original lock budget.
+
 - A shared-writer extraction must update source-inspection security inventories
   as well as runtime callers. Keep capability and membership-before-parent
   assertions on the canonical writer, and prove the public wrapper's complete

@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 30 Private Invalidation Allocations
+
+**Partially fixed / NO-GO pending full release.** A set-based UPDATE still
+buffered per-chunk ORM/source identities and failed its5s Docker24 lock budget.
+Narrow Core updates/batched metadata preserve atomic scope and output closure.
+Returned resident objects retain exact values plus nested rollback tracking;
+global database/driver memory is not claimed bounded. Full10-module mixed-
+dialect component passes275/275,825phases,167retained files; large invalidation
+1.8983929s. See bugfix-private-invalidation-allocations-2026-10-30.md. Preserve
+all RED/interrupted evidence; whole Docker/new CI/main/live/cadence gates and
+external holds remain unclosed.
+
 ## October 29 Import Writer Work
 
 **Partially fixed / NO-GO pending full replacement release.** Reusing the

@@ -1,5 +1,18 @@
 # CaseOps  - Work To Be Done
 
+## October 30 Private Invalidation Continuation
+
+**NO-GO pending complete replacement release.** Docker24 EB10 child02 is439P/
+1F, private invalidation6.7003345s against5s; child03 is explicitly interrupted
+and retained, no browser execution. Bounded Core results/resident rollback
+tracking now pass all275focused cases/825phases,0S/0F,167retained files. Large
+case1.8983929s preserves original counts/bounds/persistence/replay. Earlier
+invalid fixture/setup and failed/interrupted evidence remain preserved. Follow
+bugfix-private-invalidation-allocations-2026-10-30.md: full frozen Docker, new
+green committed CI, main/tree proof, guarded deploy, exact-live QA/D29, later
+clean cadences/scheduler recovery and actual paired Excel publication. App
+belongs to the MacBook; external legal/provider/consent/MFA holds stay separate.
+
 ## October 29 Shared Writer CI Continuation
 
 **NO-GO pending full replacement release.** Complete540E CI has two source

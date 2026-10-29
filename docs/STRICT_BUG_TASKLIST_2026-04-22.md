@@ -1,5 +1,19 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 30 Private Invalidation: Partially Fixed, Not Deployed
+
+Docker24 EB10 has a real6.7003345s five-second private invalidation failure;
+439P/1F child02 and interrupted child03 are not full acceptance. Passive timing
+records4.7826358s GC overlap, not allocation provenance or a server-wait cause.
+Atomic Core updates now consume narrow metadata in bounded Row batches and
+synchronize returned resident IDs with savepoint rollback tracking. No predicate,
+source closure, GC policy or original bound changes. Complete fresh10-module
+replacement passes275cases/825phases/0S/0F,167retained files verified; large
+invalidation1.8983929s. Earlier fixture/setup errors remain retained, not product
+proofs. See bugfix-private-invalidation-allocations-2026-10-30.md. Whole Docker,
+new committed CI/main/live/D29/cadence and both actual workbooks remain required.
+External legal/provider/consent/MFA and MacBook holds are not closed.
+
 ## October 29 Shared Writer CI: Partially Fixed, Not Deployed
 
 Complete540E CI40897543335 is38successful/3failed/2skipped jobs. Two call-phase

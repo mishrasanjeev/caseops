@@ -1,5 +1,16 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 30 Private Invalidation Coverage
+
+Existing private retrieval/IPLF-066, M02/M08/M13/M14, NFT-005 and tenant/access
+fences gain5streaming contracts and4SQLite/PG pre/post-flush rollback cases.
+The original10,001projection/10,000output case adds expired-output, retained
+prior-lock and untouched resident-row assertions without changing5s, one-UPDATE
+or18-SQL bounds. Full10-module component275P/825phases/0S/0F,167retained files;
+large invalidation1.8983929s. Row batches are not a global driver/database cap.
+Docker24 and its partial later group remain failed/incomplete evidence. See
+the dated allocation brief; no whole Docker, live, legal or native closure.
+
 ## October 29 Shared Writer Security Inventory
 
 IPLF-032/UJ-02/UJ-57/NFT-005: current540E hosted CI failed two exact source
