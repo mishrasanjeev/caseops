@@ -1,5 +1,24 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 29 Shared Writer CI: Partially Fixed, Not Deployed
+
+Complete540E CI40897543335 is38successful/3failed/2skipped jobs. Two call-phase
+source-inspection tests still examined the public inline writer; the third
+failure is their prerequisite aggregate. Security8/8 and Advanced3/3 pass;
+five independent reviewed annotations remain explicit, not zero findings.
+Both unchanged security predicates now inspect the shared canonical writer.
+A full-definition AST oracle additionally pins the public synchronous signature,
+defaults, decorators and exact writer/serializer forwarding. No product code,
+capability, lock order or transaction boundary changed in this correction.
+
+Fresh affected-module Docker-PG run passes50cases/150phases with no skips or
+failures,13retained files verified. The earlier pre-test connection failure
+and its stopped owned database remain retained as infrastructure failure.
+After static review identified a body-only guard gap, the stronger definition
+guard passes both original CI identities again:2cases/6phases,6retained files.
+Require new committed full CI/Docker and actual production replay; no workbook
+promotion, external legal/provider/consent/MFA hold or automatic closure follows.
+
 ## October 29 Web Fixture Preflight: Partially Fixed
 
 Docker21 on82C8 stopped before images/main native/browser execution:18process

@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- A shared-writer extraction must update source-inspection security inventories
+  as well as runtime callers. Keep capability and membership-before-parent
+  assertions on the canonical writer, and prove the public wrapper's complete
+  synchronous signature and exact delegation. A body-only comparison can miss
+  async functions, decorators or unforwarded arguments. Do not add duplicate
+  authorization or serialization work merely to satisfy stale inline checks.
+
 - A narrow postcommit response does not bound work while a writer owns tenant
   admission. Measure the first transaction too: metadata DTOs must not hydrate
   unrelated workspace history under Company/parent locks. Preserve fresh ACL,

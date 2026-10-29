@@ -1,5 +1,20 @@
 # CaseOps  - Work To Be Done
 
+## October 29 Shared Writer CI Continuation
+
+**NO-GO pending full replacement release.** Complete540E CI has two source
+contract failures and a downstream aggregate failure, not a security waiver.
+Canonical actor/capability/lock-order assertions now follow the extracted writer;
+the public wrapper is pinned by its full synchronous definition/delegation.
+Fresh complete three-module Docker-PG component passes50/150phases; later
+definition-level tightening separately passes both exact original failures2/6.
+No product implementation changes. Docker22's pre-build storage timeout and
+Docker23's intentional pre-build interruption remain failed/incomplete, not
+application acceptance. A separate owned measurement passed2.414s with169GB
+available; it does not establish a permanent historical timeout cause. Fresh
+whole Docker/CI/main/tree/deploy/live/private-cadence and original workbook
+publication remain required. MacBook owns both app PRs; external holds stay.
+
 ## October 29 Web Fixture Preflight Continuation
 
 **NO-GO pending new full acceptance.** Docker21 failed before images/main

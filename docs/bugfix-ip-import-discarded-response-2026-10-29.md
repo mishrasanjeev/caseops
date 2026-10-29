@@ -73,6 +73,40 @@ Evidence:green-01/green-reconciliation.json,
 SHA25647fe2d4452a0efad51c987dfcfd9f59801a84ad16c993c4a5191b70f4d61ffb1.
 This selected component does not certify the whole candidate or production.
 
+## Source-Inspection CI Continuation
+
+Committed540E CI40897543335 completed with38successful/3failed/2skipped jobs.
+Both actual test failures inspected the old public inline writer rather than
+its extracted canonical writer; the third failure is their prerequisite gate.
+Security8/8, Advanced3/3 and the five reviewed independent annotations are
+separate component observations, not whole-release approval.
+
+The corrected inventories retain exact ip:write and actor-membership-before-
+parent assertions on the canonical writer. The public wrapper's complete AST
+pins synchronous definition, signature/defaults/decorators and every forwarded
+argument, then serialization of that returned record. No duplicate authorization,
+product edit, response/transaction change, or relaxed assertion is introduced.
+
+Actual complete three-module fresh Docker-PG component:10core/35transfer/
+5materialization=50passed/150phases,0skips/failures,13retained files verified.
+After static review exposed a body-only guard gap, the full-definition guard
+separately passes both original failed identities2/2,6phases,6retained files.
+Do not reassign the prior50-case evidence to those later test bytes. Receipts
+under outputs/fix-561-20261026/portfolio-export-worker/ci-writer-contract-20261029-01:
+results02/reconciliation.json SHA256
+9eae44dfdc3972e98d32f8960828e5290d08844ef9053975cdf941163a14da96;
+definition-oracles/reconciliation.json SHA256
+414c56fb767f6e2a3a3d463e2d446b31744dff20f94e546880c7af5606d071dd.
+The first attempt's pre-test connection timeout, unchanged original harness
+and failed migration are retained; no product defect or passing test is inferred.
+
+Docker22 passed fixture76/discovered640browser but timed out on storage
+measurement before image/main execution. A same-image owned diagnostic later
+completed2.414s and measured169376714752available bytes/47606095inodes, then
+verified removal. Historical cause remains unknown; floors/deadlines unchanged.
+Docker23 was intentionally stopped before build once hosted failures were fully
+read; its install/typecheck/fixture76 successes do not certify main regression.
+
 ## Remaining Gates
 
 Commit current source and updated ledgers, run complete canonical fresh Docker

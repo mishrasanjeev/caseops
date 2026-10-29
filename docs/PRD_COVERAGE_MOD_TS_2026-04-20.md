@@ -1,5 +1,18 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 29 Shared Writer Security Inventory
+
+IPLF-032/UJ-02/UJ-57/NFT-005: current540E hosted CI failed two exact source
+contracts after the shared writer extraction; the aggregate failure is not a
+third test failure. Both capability and membership-before-parent assertions
+now inspect the canonical writer, without weakening either oracle. Full mixed
+Docker-PG component is10core/35transfer/5materialization=50P/150phases,0S/0F,
+13retained files verified. A later strengthened full-definition AST guard also
+pins the synchronous signature/defaults/decorators and exact forwarding; both
+original failing identities then pass2/2 with6phases and6retained files verified.
+The earlier body-only50-case result is not reassigned to the later test bytes.
+New full committed Docker/CI/main/production evidence remains required.
+
 ## October 29 Web Fixture Cleanup Coverage
 
 NFT-005 and local-only QA/security isolation retain the original10s child and
