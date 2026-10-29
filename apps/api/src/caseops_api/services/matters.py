@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select, text
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload, raiseload, selectinload
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
@@ -3089,8 +3089,25 @@ def update_matter(
             metadata={"before": forum_before, "after": forum_after},
         )
     if commit:
+        # Reload the response graph without replaying the workspace's eager loaders.
+        response_matter_id = matter.id
+        response_company_id = context.company.id
         session.commit()
-        session.refresh(matter)
+        matter = session.scalar(
+            select(Matter)
+            .options(
+                raiseload("*"),
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(
+                Matter.id == response_matter_id,
+                Matter.company_id == response_company_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if matter is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     else:
         session.flush()
     return _matter_record(matter)

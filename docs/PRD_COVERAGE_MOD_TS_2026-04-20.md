@@ -1,5 +1,19 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 29 Matter Response Acceptance
+
+J04/M03/US-007..009/FT-011..015/NFT-005 map to MRH-01..16 in the dated
+response-hydration brief. Preserve the complete MatterRecord contract and
+current authorization/lifecycle/assignment/private-source fences while bounding
+postcommit response work. The valid native RED observes13SELECTs; fresh GREEN
+passes16new plus30unchanged finalizer cases (46P/138phases), with all eleven
+positive response receipts showing3queries. Both retained/expiring sessions,
+separate-writer freshness, tenant denial, commitFalse ownership and subsequent
+same-session full workspace parity are covered.
+BFF's complete Docker17 remains3482P/1F/0S with0browserexecution; no whole-source
+acceptance, main merge, deployment or production closure is implied. J19/M21/
+US-063 records only the active daily automation's release deferral, not GSC data.
+
 ## October 29 Administrator Race Evidence
 
 J14/M14/US-040/042/FT-060/061/PRA-10..12 retain the original native lock-edge,

@@ -1,5 +1,25 @@
 # Strict Enterprise Gap Tasklist
 
+## October 29 Committed Response Hydration
+
+**Partially implemented / NO-GO pending replacement release.** Complete BFF
+Docker17 contains3483nativecases/10449phases and one actual5second response
+completion failure; its640browsercases were not executed. Transaction evidence
+shows a successful write before slow postcommit work, not a proved deadlock.
+An explicit workspace loader profile is reapplied by refresh although both
+factories disable commit expiry. Ten queried collections are unused by this DTO.
+
+A tenant/ID-scoped, populate-existing response reload keeps only scalars,
+tags/tag and court orders. A valid13-query RED and fresh3-query GREEN retain
+complete structured evidence; all16new plus30unchanged original cases pass,
+including current-data replacement, full DTO parity, cross-tenant denial and
+caller-owned commitFalse work and a later complete same-session workspace read.
+Product/Oracle hashes and limitations are in
+the dated response-hydration brief. Do not shrink shared workspace/lifecycle
+contracts or cache mutable ACLs. Fresh whole-source Docker/CI, main routing,
+exact-serving browser and private cadence gates are still required. Existing
+provider, legal and owner-consent gaps remain open; no blanket enterprise GO.
+
 ## October 29 Hosted Green Is Not Local Acceptance
 
 **NO-GO.** The historical `36a56e77` hosted CI, Security and independent

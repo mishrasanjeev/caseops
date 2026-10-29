@@ -1,5 +1,22 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 29 Matter Response: Inconclusive Pending Release
+
+J04/M03/US-007..009/FT-011..015/NFT-005: BFF's complete Docker17 is3482P/1F,
+not acceptance. The only failed call is the metadata-IP finalizer overlap's
+writer.result(timeout=5); eventual commit/return does not satisfy that oracle.
+The original closed fixture and all10449phases/3483identities are retained.
+No browser cases ran. Historical Docker16 invitation evidence remains separate.
+
+MRH-01..16 adds deterministic response-query and full DTO/freshness/tenant/
+transaction regressions. The valid RED observes13queries; narrow reload GREEN
+observes3 and passes all46selected cases/138phases, including the complete,
+byte-identical30-case original finalizer file with unchanged timing and security
+assertions. Component verdict only: production remains unverified. No timeout,
+GC policy, lock, schema field or lifecycle protection is weakened. No existing
+legal/provider/MFA/old-calendar/unknown-reopen hold is closed. See the dated
+response-hydration brief; require fresh canonical Docker, CI and exact-live proof.
+
 ## October 29 Invitation Race: Inconclusive
 
 PRA-10..12 / J14/M14: Docker16 on `36a56e77` has one preserved accept-first

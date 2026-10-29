@@ -1,5 +1,26 @@
 # CaseOps  - Work To Be Done
 
+## October 29 Matter Response Work Bound
+
+Current release remains **NO-GO**. Complete BFF Docker17 retained3483 native
+cases:3482passed/1failed/0skipped and10449phases; no640browsercases ran.
+The metadata-IP finalizer overlap failed its unchanged5second writer-result
+oracle after a successful durable commit. Complete transaction/phase evidence
+separates commit from response hydration; it does not establish a host/GC cause.
+The response repeated a workspace graph with ten unused collections.
+
+The narrow update_matter commitTrue-only candidate replaces13response queries
+with3, preserving all scalar/tag/stay/interim data. Independently migrated RED
+proves the original13queries with valid setup/teardown; fresh GREEN passes all
+16newMRH cases plus30unchanged original finalizer cases (46P/138phases, no skips).
+The added same-session follow-up also preserves the full workspace DTO.
+This is dirty-source component evidence, not a clean committed Docker result.
+Keep shared workspace/lifecycle loaders, locks, private revocation, audit and
+all original timeouts unchanged. See bugfix-matter-response-hydration-2026-10-29.md.
+Fresh full Docker/CI/main/deploy/live/cadence and actual workbook publication
+remain required; #561/#564 and IP15-018 stay open. DailySEO is ACTIVE but today's
+critical-path deferral is not a completed Google audit. Mac/native work is separate.
+
 ## October 29 Local Invitation Race Evidence Hold
 
 Historical source `36a56e77` has green CI40733874352 (42 passed jobs and one

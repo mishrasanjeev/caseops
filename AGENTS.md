@@ -1,5 +1,13 @@
 # CaseOps agent instructions
 
+- A committed write is not a completed response within its latency budget.
+  A refresh can replay a previously explicit workspace eager-load profile even
+  when commit expiry is disabled. Reload only the DTO-owned graph with pinned
+  tenant/record IDs and fresh values; preserve required children, authorization
+  and later workspace reads. Prove query/row work and DTO parity with retained
+  and expiring sessions, then replay the unchanged real concurrency oracle.
+  Eventual actor completion or a passing sibling cannot erase a deadline failure.
+
 - Validate the complete CI contract step, including branch-diff check-change
   commands, before an expensive freeze. A valid rendered governance map does
   not prove that each new migration has its required updated-map declaration.
