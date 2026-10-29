@@ -14,7 +14,7 @@ import pytest
 ROOT = Path(os.environ.get("CASEOPS_IP_FIXTURE_SOURCE_ROOT", str(Path(__file__).resolve().parents[3])))
 SQLITE_MODULE = "tests/e2e/fixture-tests/test_ip_entitlement_fixture.py"
 CONTROLLER_MODULE = "tests/e2e/fixture-tests/test_fixture_regression_completion.py"
-PASSED_PHASES = [{"phase": "process", "passed": 18}, {"phase": "sqlite", "passed": 51},
+PASSED_PHASES = [{"phase": "process", "passed": 19}, {"phase": "sqlite", "passed": 51},
                  {"phase": "controller", "passed": 6}]
 
 
@@ -54,8 +54,8 @@ def controller(tmp_path, monkeypatch):
 
     def reconcile_node(directory):
         assert directory.name == "process"
-        case.reconciled.append(("process", 18, None))
-        return [f"process-{index}" for index in range(18)]
+        case.reconciled.append(("process", 19, None))
+        return [f"process-{index}" for index in range(19)]
 
     def reconcile_python(directory, count=51, module=SQLITE_MODULE):
         assert (directory.name, count, module) in {
@@ -83,15 +83,15 @@ def assert_incomplete(case, error, *, source_failure=False):
     events = read_journal(case.results / "supervisor.jsonl")
     assert state["complete"] is False
     assert state["passed"] is False
-    assert state["expected"] == {"controller": 6, "process": 18, "sqlite": 51}
-    assert sum(state["expected"].values()) == 75
+    assert state["expected"] == {"controller": 6, "process": 19, "sqlite": 51}
+    assert sum(state["expected"].values()) == 76
     assert events[-1] == {"event": "incomplete_final", "passed": False}
     assert not any(item["event"] == "complete" for item in events)
     assert json.loads((case.results / "source-before.json").read_text(encoding="utf-8")) == case.source
     assert case.phases == ["process", "sqlite", "controller"]
     assert case.snapshots == 4
     assert state["phases"] == (PASSED_PHASES if source_failure else PASSED_PHASES[:2])
-    assert case.reconciled == [("process", 18, None), ("sqlite", 51, SQLITE_MODULE)] + (
+    assert case.reconciled == [("process", 19, None), ("sqlite", 51, SQLITE_MODULE)] + (
         [("controller", 6, CONTROLLER_MODULE)] if source_failure else [])
     assert (case.results / "sqlite/reconciled.json").is_file()
     if source_failure:

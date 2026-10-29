@@ -1,5 +1,19 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 29 Web Fixture Preflight: Partially Fixed
+
+Docker21 on82C8 stopped before images/main native/browser execution:18process
+cases16P/2F. The isolated driver probe exceeded the unchanged10s deadline and
+owned oversized-line cleanup hit EBUSY. Both complete TAP failures, source
+snapshots and failed scratch bytes are retained; no historical timing cause
+or lock holder is established. Later driver observations do not erase them.
+Awaited native bounded filesystem removal now propagates exhausted errors and
+keeps one application child. New control plus all original cases passes the
+complete76-case role (19process/51SQLite/6controller),0skip/retry/failure, three
+owned phase trees reaped, source equality and pinned Node22.14 typecheck.
+Main regression, new committed CI, guarded release and exact-live acceptance
+remain pending. No product/oracle/driver/timeout or shared native tool changed.
+
 ## October 29 Bulk DTO: Partially Fixed, Not Deployed
 
 IPLF-032/UJ-02/NFT-005: Docker20's fresh resume148.586s and stale-empty initial

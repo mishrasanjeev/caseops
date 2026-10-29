@@ -1,5 +1,17 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 29 Web Fixture Cleanup Coverage
+
+NFT-005 and local-only QA/security isolation retain the original10s child and
+15s deadline-test bounds. Docker21 preflight is16P/2F over18process cases;
+the57remaining fixture and all main native/browser cases were unexecuted.
+The new cleanup control in ip-entitlement-fixture.test.ts proves actual close,
+owned-root/options, awaited removal, exhausted-error propagation and no child
+retry. All original18identities remain, plus that one control. Actual canonical
+replacement passes19process/51SQLite/6controller=76cases with0skip/retry/failure,
+all three owned phase trees reaped and source snapshots equal. Pinned Node22.14
+typecheck passes. This is a fixture role, not whole Docker or production proof.
+
 ## October 29 Import Response Coverage
 
 IPLF-032/UJ-02/NFT-005 map IMP-MAT-01..04 to the discoverable

@@ -13,8 +13,8 @@ The results directory must not already exist. All reports, exact inventories,
 phase journals, invocation arguments and before/after source hashes go there.
 Runtime scratch is retained separately; its path is in `completion.json`.
 
-The serial standard runner requires exactly 18 process tests, 51 SQLite tests
-and 6 controller tests (75 total), zero skips/retries, complete Python phases
+The serial standard runner requires exactly 19 process tests, 51 SQLite tests
+and 6 controller tests (76 total), zero skips/retries, complete Python phases
 and matching JUnit identities. The controller cases mock only phase execution,
 reconciliation and source snapshots; they exercise interruption propagation and
 completion evidence without child processes, cloud calls or database access.

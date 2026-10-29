@@ -1,5 +1,19 @@
 # CaseOps  - Work To Be Done
 
+## October 29 Web Fixture Preflight Continuation
+
+**NO-GO pending new full acceptance.** Docker21 failed before images/main
+regression: process18has16P/2F, remaining57fixture checks and all expected
+3514native/640browser cases unexecuted. The old10s isolated driver timeout
+and EBUSY cleanup are preserved separately. Async bounded owned-root removal,
+exhaustion/no-child-retry control and exact19/51/6 inventories now pass all76
+fixture cases on Node22.14 with source equality and three owned trees reaped.
+Pinned browser typecheck passes. The unchanged product writer remains covered
+by GREEN46/138; neither component certifies a release. No driver/root-cause
+claim, timeout extension, App/native/readthrough0008 or shared supervisor edit.
+Require fresh committed full Docker/CI/main/deploy/live/private-cadence evidence
+and both actual workbook publications. External owner/provider/legal holds stay.
+
 ## October 29 Import Materialization Continuation
 
 **NO-GO pending full replacement release.** Docker20 retains437P/2F over its

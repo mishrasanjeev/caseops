@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile as realExecFile, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, promises as fsPromises, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
@@ -94,7 +94,7 @@ function fixture(body: string, overrides: Record<string, string> = {}, injectStd
       }
       assert.equal(process.listenerCount("exit"), listenerCount, "Fixture leaked its exit hook.");
       assert.equal(path.dirname(root), path.resolve(scratchRoot));
-      rmSync(root, { recursive: true, force: true });
+      await fsPromises.rm(root, { recursive: true, force: true, maxRetries: 4, retryDelay: 100 });
     } };
 }
 
@@ -107,6 +107,54 @@ async function assertFailure(f: ReturnType<typeof fixture>) {
   assert.doesNotMatch(String(error) + f.logs.join(""), /secret-password|postgresql:\/\/|PRIVATE_PROVIDER_SECRET/);
   return error;
 }
+
+test("cleanup awaits bounded owned-root removal after close and propagates exhausted EBUSY", async (t) => {
+  const f = fixture("print('x'*9000, flush=True)");
+  try {
+    await assertFailure(f);
+    const realRm = fsPromises.rm;
+    const busy = Object.assign(new Error("Owned-root removal retries exhausted."), { code: "EBUSY" });
+    let rejectBusy = true;
+    let calls = 0;
+    let releaseRemoval!: () => void;
+    const removalGate = new Promise<void>((resolve) => { releaseRemoval = resolve; });
+    const remove = t.mock.method(fsPromises, "rm", async (...args: Parameters<typeof realRm>) => {
+      const [target, options] = args;
+      calls++;
+      assert.equal(target, f.root);
+      assert.equal(path.dirname(f.root), path.resolve(scratchRoot));
+      assert.deepEqual(options, { recursive: true, force: true, maxRetries: 4, retryDelay: 100 });
+      assert.equal(f.children.length, 1, "Cleanup must not retry the application child.");
+      assert.equal(f.children[0].closed, true, "Removal started before actual child close.");
+      if (rejectBusy) throw busy;
+      await removalGate;
+      await realRm(target, options);
+    });
+    try {
+      await assert.rejects(f.cleanup(), (error) => error === busy);
+      assert.equal(calls, 1, "Exhausted filesystem retries must propagate without an outer retry.");
+      assert.equal(existsSync(f.root), true);
+      rejectBusy = false;
+      let settled = false;
+      const cleanup = f.cleanup().then(() => { settled = true; });
+      try {
+        await Promise.resolve();
+        assert.equal(calls, 2);
+        assert.equal(settled, false, "Cleanup returned before the removal promise settled.");
+        assert.equal(existsSync(f.root), true);
+      } finally {
+        releaseRemoval();
+        await cleanup;
+      }
+      assert.equal(existsSync(f.root), false);
+      assert.equal(f.children.length, 1);
+      assert.equal(f.children[0].closed, true);
+    } finally {
+      releaseRemoval();
+      remove.mock.restore();
+    }
+  } finally { await f.cleanup(); }
+});
 
 test("full helper is asynchronous, preserves Windows argv, and accepts ordered complete evidence", async () => {
   const f = fixture("time.sleep(0.35)\n" + successPython);

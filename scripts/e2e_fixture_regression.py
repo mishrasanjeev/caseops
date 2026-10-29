@@ -1,4 +1,4 @@
-"""Run the fixed 6-controller/18-process/51-SQLite fixture inventory without installs."""
+"""Run the fixed 6-controller/19-process/51-SQLite fixture inventory without installs."""
 from __future__ import annotations
 
 import argparse
@@ -169,9 +169,9 @@ def junit_names(path: Path, count: int) -> list[str]:
 
 def reconcile_node(directory: Path):
     inventory = read_json(directory / "inventory.json")
-    if not isinstance(inventory, list) or len(inventory) != 18 or any(not isinstance(item, str) for item in inventory):
-        raise ValueError("Expected exactly 18 registered Node test identities")
-    if len(set(inventory)) != 18 or set(inventory) != set(junit_names(directory / "junit.xml", 18)):
+    if not isinstance(inventory, list) or len(inventory) != 19 or any(not isinstance(item, str) for item in inventory):
+        raise ValueError("Expected exactly 19 registered Node test identities")
+    if len(set(inventory)) != 19 or set(inventory) != set(junit_names(directory / "junit.xml", 19)):
         raise ValueError("Node registered/JUnit identities disagree")
     return inventory
 
@@ -211,7 +211,7 @@ def main() -> int:
     results.mkdir(parents=True, exist_ok=False)
     journal = results / "supervisor.jsonl"
     state = {"complete": False, "passed": False,
-             "expected": {"controller": 6, "process": 18, "sqlite": 51}, "phases": []}
+             "expected": {"controller": 6, "process": 19, "sqlite": 51}, "phases": []}
     before = None
     run_deadline = time.monotonic() + RUN_TIMEOUT_SECONDS
     try:
@@ -243,8 +243,8 @@ def main() -> int:
                   str(TESTS / "run-node-tests.cjs")], node_env, node, journal, run_deadline, supervisor)
         inventory = reconcile_node(node)
         save(node / "reconciled.json", {"complete": True, "ids": inventory})
-        state["phases"].append({"phase": "process", "passed": 18})
-        record(journal, event="verified", phase="process", count=18)
+        state["phases"].append({"phase": "process", "passed": 19})
+        record(journal, event="verified", phase="process", count=19)
         if snapshot() != before:
             raise ValueError("Fixture source changed before SQLite execution")
         sqlite = results / "sqlite"

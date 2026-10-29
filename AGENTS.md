@@ -3515,3 +3515,9 @@ requirements when using the fallback.
   persisted facts, rollback, partial success and replay. A later passing import
   or an incomplete diagnostic profiler cannot establish an old timing cause;
   keep original deadlines and require full replacement release acceptance.
+- Observing child close does not guarantee an owned Windows temp directory can
+  be removed immediately. Await bounded native filesystem cleanup retries after
+  the ownership check, propagate exhaustion and prove no application-child or
+  mutation retry occurs. Preserve all original process deadlines and reconcile
+  the added cleanup case with exact process/SQLite/controller inventories. A
+  later fast isolated driver import is not the cause of an earlier timeout.
