@@ -99,3 +99,13 @@ scripts/mobile/source-gate-observer.mjs text eol=lf
 scripts/mobile/host-node-trust-start.source.mjs text eol=lf
 scripts/mobile/rebuild-host-node-bootstrap.mjs text eol=lf
 scripts/mobile/host-node-trust-start.provenance.json text eol=lf
+
+# Android host role source and exact marked HTTP init input.
+scripts/mobile/android-host-launch.mjs text eol=lf
+scripts/mobile/android-no-paid.gradle text eol=lf
+
+# Preserve the reviewed Vitest constructor and native TLS fixture bytes.
+apps/web/vitest.config.ts text eol=lf
+apps/web/lib/vitest-host-pool*.ts text eol=lf
+apps/web/lib/__fixtures__/vitest-host-trust/*.mjs text eol=lf
+scripts/mobile/fixtures/vitest-host-trust/*.mjs text eol=lf

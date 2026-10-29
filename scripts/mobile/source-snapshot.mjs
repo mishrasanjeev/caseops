@@ -79,6 +79,8 @@ export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.met
   const paths = ['apps/mobile', 'package.json', 'package-lock.json',
     'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/build-android-local-acceptance.ps1',
     'scripts/mobile/build-android-local-acceptance.sh',
+    'scripts/mobile/android-host-launch.mjs', 'scripts/mobile/android-no-paid.gradle',
+    'scripts/mobile/host-platform-trust.py', 'scripts/mobile/fixtures/host-platform-trust/HostPlatformTrust.java',
     'scripts/mobile/generate-app-icons.mjs',
     'scripts/mobile/build-ios-simulator-acceptance.sh', 'scripts/mobile/source-snapshot.mjs',
     'scripts/mobile/windows-native-paths.gradle', 'scripts/mobile/use-android-env.ps1',

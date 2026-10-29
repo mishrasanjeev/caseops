@@ -1,0 +1,104 @@
+// Invocation-owned init.d input, loaded for the root and each included build.
+// Only public Gradle APIs configure the actual HTTP constructors.
+import org.gradle.api.artifacts.repositories.MavenArtifactRepository
+import org.gradle.api.artifacts.repositories.IvyArtifactRepository
+import org.gradle.api.credentials.HttpHeaderCredentials
+import org.gradle.authentication.http.HttpHeaderAuthentication
+import groovy.json.JsonOutput
+
+final String markerName = 'X-CaseOps-Automated-Test'
+final String markerValue = 'no-paid-providers'
+final Set<String> repositoryBases = [
+    'https://repo.maven.apache.org/maven2',
+    'https://repo1.maven.org/maven2',
+    'https://dl.google.com/dl/android/maven2',
+    'https://maven.google.com',
+    'https://plugins.gradle.org/m2',
+    'https://repo.reactnative.dev/maven2',
+    'https://central.sonatype.com/repository/maven-snapshots',
+    'https://www.jitpack.io',
+] as Set
+final Set<Object> configured = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>())
+final Set<Object> watched = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>())
+// These roots are set by the freshly admitted role helper, not an arbitrary
+// repository URL or an operator's ~/.m2 repository.
+final File sourceRoot = new File(System.getenv('CASEOPS_ANDROID_MARKED_SOURCE_ROOT') ?: '').canonicalFile
+final File gradleHome = gradle.gradleUserHomeDir.canonicalFile
+if (!sourceRoot.isDirectory() || !new File(sourceRoot, 'apps/mobile/node_modules').isDirectory()) {
+    throw new GradleException('ANDROID_MARKED_SOURCE_ROOT_REQUIRED')
+}
+final List<File> localRoots = [new File(sourceRoot, 'apps/mobile/node_modules').canonicalFile, gradleHome]
+def inside = { File child, File parent -> child.toPath().startsWith(parent.toPath()) }
+def checkedRepository = { repository ->
+    if (!(repository instanceof MavenArtifactRepository) && !(repository instanceof IvyArtifactRepository)) {
+        throw new GradleException('ANDROID_UNREVIEWED_REPOSITORY_TYPE')
+    }
+    URI uri = repository.url
+    if (uri == null || uri.userInfo != null || uri.rawQuery != null || uri.rawFragment != null) {
+        throw new GradleException('ANDROID_REPOSITORY_AUTHORITY_REFUSED')
+    }
+    if (uri.scheme == 'file') {
+        File local = new File(uri).canonicalFile
+        if (!localRoots.any { inside(local, it) }) throw new GradleException('ANDROID_LOCAL_REPOSITORY_SCOPE')
+        return false
+    }
+    String base = uri.toASCIIString().replaceAll('/+$', '')
+    if (uri.scheme != 'https' || (uri.port != -1 && uri.port != 443) || !repositoryBases.contains(base)) {
+        throw new GradleException('ANDROID_UNREVIEWED_PUBLIC_REPOSITORY')
+    }
+    return true
+}
+def verify = { repository ->
+    if (checkedRepository(repository)) {
+        def credentials = repository.getCredentials(HttpHeaderCredentials)
+        if (credentials.name != markerName || credentials.value != markerValue || repository.authentication.size() != 1 || !repository.authentication.every { it instanceof HttpHeaderAuthentication }) {
+            throw new GradleException('ANDROID_MAVEN_MARKER_CHANGED')
+        }
+    }
+}
+def mark = { repository ->
+    if (!checkedRepository(repository)) return
+    if (!configured.add(repository)) { verify(repository); return }
+    // A different explicitly configured credential type fails in Gradle's typed
+    // API. Existing non-header authentication is refused rather than replaced.
+    if (!repository.authentication.empty) throw new GradleException('ANDROID_REPOSITORY_AUTHENTICATION_UNREVIEWED')
+    repository.credentials(HttpHeaderCredentials) { name = markerName; value = markerValue }
+    repository.authentication { header(HttpHeaderAuthentication) }
+    verify(repository)
+}
+def watch = { handler ->
+    if (watched.add(handler)) handler.all { repository -> mark(repository) }
+}
+gradle.beforeSettings { settings ->
+    watch(settings.pluginManagement.repositories)
+    watch(settings.dependencyResolutionManagement.repositories)
+    settings.buildscript.repositories.all { repository -> mark(repository) }
+    settings.buildscript.configurations.configureEach { configuration -> configuration.incoming.beforeResolve { settings.buildscript.repositories.each { verify(it) } } }
+}
+gradle.settingsEvaluated { settings ->
+    settings.pluginManagement.repositories.each { verify(it) }
+    settings.dependencyResolutionManagement.repositories.each { verify(it) }
+}
+gradle.projectsLoaded { instance ->
+    instance.rootProject.allprojects { project ->
+        watch(project.repositories)
+        watch(project.buildscript.repositories)
+        project.configurations.configureEach { configuration -> configuration.incoming.beforeResolve { project.repositories.each { verify(it) } } }
+        project.buildscript.configurations.configureEach { configuration -> configuration.incoming.beforeResolve { project.buildscript.repositories.each { verify(it) } } }
+        // This hook does not make RN source-build tasks reachable. If such a
+        // task exists, use its public Download.header API and verify before IO.
+        project.tasks.configureEach { task ->
+            if (task.class.name.startsWith('de.undercouch.gradle.tasks.download.Download')) {
+                task.header(markerName, markerValue)
+                task.doFirst {
+                    if (task.isAcceptAnyCertificate() || task.headers[markerName] != markerValue || task.headers.keySet().count { it.equalsIgnoreCase(markerName) } != 1) {
+                        throw new GradleException('ANDROID_DOWNLOAD_TLS_OR_MARKER_CHANGED')
+                    }
+                }
+            }
+        }
+    }
+}
+gradle.projectsEvaluated {
+    logger.lifecycle('CASEOPS_MARKED_REPOSITORY_GRAPH ' + JsonOutput.toJson([buildPath: gradle.buildPath, configuredHttpRepositories: configured.size(), includedBuilds: gradle.includedBuilds.collect { it.name }.sort()]))
+}

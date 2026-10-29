@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, X509Certificate } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -7,6 +8,8 @@ import path from 'node:path';
 import { rootCertificates } from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { androidGradleArguments, androidSharedJavaOptions, assertAndroidNodePath, bindAndroidJavaHome, neutralAndroidGradleEnvironment, prepareAndroidGradleEnvironment, renderAndroidNodeShim, readAndroidHostInput, writeAndroidHostOutput } from './android-host-launch.mjs';
+import { prepareHostNodeTrust } from './host-node-trust.mjs';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -74,7 +77,10 @@ function fixture(t, extra = {}) {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const file = (name, data, executable = false) => { const p = path.join(root, name); mkdirSync(path.dirname(p), { recursive: true });
     writeFileSync(p, data); if (executable) chmodSync(p, 0o700); return p; };
-  const files = ['scripts/mobile/build-android-local-acceptance.sh', 'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/source-snapshot.mjs',
+  const files = ['scripts/mobile/android-host-launch.mjs', 'scripts/mobile/android-no-paid.gradle',
+    'scripts/mobile/host-platform-trust.py', 'scripts/mobile/fixtures/host-platform-trust/HostPlatformTrust.java',
+    'scripts/mobile/host-node-trust.mjs', 'scripts/mobile/host-node-trust-start.mjs',
+    'scripts/mobile/build-android-local-acceptance.sh', 'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/source-snapshot.mjs',
     'scripts/mobile/prepare-native-links.mjs', 'scripts/mobile/prepare-store-packaging.mjs', 'apps/mobile/metro.config.js',
     'apps/web/lib/native-link-policy.cjs', 'apps/web/lib/native-link-policy.d.cts',
     'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts',
@@ -274,4 +280,214 @@ test('missing transitive AGP Build Tools36 fails before prebuild despite root Bu
   const failed = f.run(); assert.notEqual(failed.status, 0);
   assert.match(failed.stderr, /PINNED_ANDROID_SDK_PACKAGE_REQUIRED: build-tools\/36\.0\.0/);
   assert.equal(readFileSync(f.trace, 'utf8'), ''); assert.equal(f.outputs().length, 0);
+});
+
+
+function androidRoleInput(t) {
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-android-role-'))); chmodSync(root, 0o700); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'public-input'), data = Buffer.from('finite owned public role input'); writeFileSync(file, data, { flag: 'wx', mode: 0o600 });
+  return { root, file, data, ref: { path: file, sha256: hash(data), sizeBytes: data.length } };
+}
+const androidNodeRecipe = () => ({ NODE_OPTIONS: '--use-openssl-ca --import=data:text/javascript;base64,REVIEWED', SSL_CERT_FILE: '/owned/node144/roots.pem', SSL_CERT_DIR: '/owned/node144/empty', CASEOPS_HOST_NODE_TRUST_POLICY_FILE: '/owned/node144/policy.json', CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: 'a'.repeat(64) });
+test('Android Gradle role keeps exact canonical argv and rejects alternate toolchain homes', () => {
+  assert.deepEqual(androidGradleArguments(), ['./gradlew', ':app:assembleLocalAcceptance', '-PreactNativeArchitectures=arm64-v8a', '-Pandroid.compileSdkVersion=37', '-Pandroid.buildToolsVersion=37.0.0', '-Pandroid.ndkVersion=27.1.12297006', '-Pandroid.cmakeVersion=3.30.5', '-Pandroid.builder.sdkDownload=false', '-Dorg.gradle.java.installations.paths=/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-17.0.20.1+1/Contents/Home,/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-21.0.12.1+1/Contents/Home', '-Dorg.gradle.java.installations.auto-download=false', '--no-daemon', '--max-workers=2', '--console=plain']);
+  assert.throws(() => androidGradleArguments('/unadmitted/JDK21'), /ANDROID_HOST_JAVA21/);
+});
+test('Android Java-neutral environment removes only the fully matched Node recipe before JDK admission', () => {
+  const node = androidNodeRecipe(), original = { HOME: '/owned/home', PATH: '/owned/shim:/usr/bin:/bin', ...node, EXPO_PUBLIC_API_ORIGIN: 'https://10.0.2.2:9443' }, result = neutralAndroidGradleEnvironment(original, node);
+  assert.deepEqual(result, { HOME: '/owned/home', PATH: '/owned/shim:/usr/bin:/bin', EXPO_PUBLIC_API_ORIGIN: 'https://10.0.2.2:9443' }); assert.equal(original.SSL_CERT_FILE, '/owned/node144/roots.pem');
+});
+test('Android role rebinding refuses mismatched missing lowercase additive Java proxy and CMake trust fields', () => {
+  const node = androidNodeRecipe();
+  for (const extra of [{ SSL_CERT_FILE: '/unadmitted/roots.pem' }, { NODE_OPTIONS: '--use-bundled-ca' }, { JAVA_TOOL_OPTIONS: '-Dunadmitted=true' }, { CASEOPS_HOST_PLATFORM_TRUST_POLICY_FILE: '/foreign/policy' }, { NODE_PATH: '/foreign/modules' }, { JAVA_OPTS: '-Dforeign=true' }, { GRADLE_OPTS: '-Dforeign=true' }, { CLASSPATH: '/foreign/code' }, { NODE_EXTRA_CA_CERTS: '/foreign/ca' }, { ssl_cert_file: '/foreign/ca' }, { HTTPS_PROXY: 'http://127.0.0.1:1' }, { CMAKE_TLS_VERIFY: '0' }, { CMAKE_TLS_CAINFO: '/foreign/ca' }, { CURL_SSL_BACKEND: 'foreign' }]) assert.throws(() => neutralAndroidGradleEnvironment({ ...node, ...extra }, node), /ANDROID_HOST_CROSS_ROLE_OVERRIDE/);
+  const missing = { ...node }; delete missing.SSL_CERT_DIR; assert.throws(() => neutralAndroidGradleEnvironment(missing, node), /ANDROID_HOST_NODE_RECIPE_REQUIRED/);
+});
+test('Android role PATH binding rejects dropped shadowed duplicated and relative shim scopes', () => {
+  const shim = '/owned/role/node', sourcePath = '/usr/bin:/bin';
+  assertAndroidNodePath({ PATH: '/owned/role:/usr/bin:/bin' }, shim, sourcePath);
+  for (const actual of ['/usr/bin:/bin', '/foreign:/owned/role:/usr/bin:/bin', '/owned/role:/usr/bin:/bin:/foreign']) assert.throws(() => assertAndroidNodePath({ PATH: actual }, shim, sourcePath), /ANDROID_HOST_NODE_SHIM_PATH_REQUIRED/);
+  for (const invalid of ['/owned/role:/usr/bin', '.:/usr/bin', '/usr/bin::/bin', '/usr/bin\n/bin']) assert.throws(() => assertAndroidNodePath({ PATH: '/owned/role:' + invalid }, shim, invalid), /ANDROID_HOST_SOURCE_PATH/);
+});
+test('Android public role reader binds both reference shapes to the same owned descriptor and closes it', t => {
+  const f = androidRoleInput(t); if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_REFERENCE/); return; }
+  const open = fs.openSync, descriptors = []; fs.openSync = (...args) => { const fd = open(...args); descriptors.push(fd); return fd; };
+  try { assert.deepEqual(readAndroidHostInput(f.ref), f.data); assert.deepEqual(readAndroidHostInput({ path: f.file, sha256: f.ref.sha256 }), f.data); }
+  finally { fs.openSync = open; } for (const fd of descriptors) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+test('Android role reader rejects owned hardlinks and symlinks with zero payload reads', t => {
+  const f = androidRoleInput(t); if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_REFERENCE/); return; }
+  const read = fs.readSync, link = path.join(f.root, 'alias'); let reads = 0; fs.readSync = (...args) => { reads++; return read(...args); };
+  try { fs.linkSync(f.file, link); assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_FILE/); fs.unlinkSync(link); fs.symlinkSync(f.file, link); assert.throws(() => readAndroidHostInput({ ...f.ref, path: link })); assert.equal(reads, 0); }
+  finally { fs.readSync = read; }
+});
+test('Android role reader refuses same-owner replacement between opened and named admission before bytes', t => {
+  const f = androidRoleInput(t); if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_REFERENCE/); return; }
+  const fstat = fs.fstatSync, read = fs.readSync, open = fs.openSync; let changed = false, reads = 0, descriptor;
+  fs.openSync = (...args) => descriptor = open(...args); fs.fstatSync = (...args) => { const state = fstat(...args); if (!changed) { changed = true; fs.renameSync(f.file, f.file + '-original'); writeFileSync(f.file, f.data, { flag: 'wx', mode: 0o600 }); } return state; }; fs.readSync = (...args) => { reads++; return read(...args); };
+  try { assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_FILE/); assert.equal(reads, 0); }
+  finally { fs.fstatSync = fstat; fs.readSync = read; fs.openSync = open; } assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
+test('Android role reader bounds a growing file at admitted size plus one and refuses changed content', t => {
+  const f = androidRoleInput(t); if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_REFERENCE/); return; }
+  const read = fs.readSync; let bytes = 0, changed = false;
+  fs.readSync = (...args) => { if (!changed) { changed = true; fs.appendFileSync(f.file, Buffer.alloc(65536)); } const n = read(...args); bytes += n; return n; };
+  try { assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_INPUT_CHANGED/); assert.equal(bytes, f.data.length + 1); }
+  finally { fs.readSync = read; }
+});
+test('Android role reader refuses a late parent link even when it still names the same inode and bytes', t => {
+  const f = androidRoleInput(t); if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_REFERENCE/); return; }
+  const child = path.join(f.root, 'child'), saved = path.join(f.root, 'saved'); mkdirSync(child, { mode: 0o700 }); fs.renameSync(f.file, path.join(child, 'input')); const reference = { ...f.ref, path: path.join(child, 'input') }, read = fs.readSync; let changed = false;
+  fs.readSync = (...args) => { const n = read(...args); if (!changed) { changed = true; fs.renameSync(child, saved); fs.symlinkSync(saved, child, 'dir'); } return n; };
+  try { assert.throws(() => readAndroidHostInput(reference), /ANDROID_HOST_INPUT_CHANGED/); }
+  finally { fs.readSync = read; }
+});
+test('Android role input bounds and expired deadline refuse before reading payload', t => {
+  const f = androidRoleInput(t), read = fs.readSync; let reads = 0; fs.readSync = (...args) => { reads++; return read(...args); };
+  try { assert.throws(() => readAndroidHostInput(f.ref, { limit: 1 })); assert.throws(() => readAndroidHostInput(f.ref, { end: performance.now() - 1 })); assert.equal(reads, 0); }
+  finally { fs.readSync = read; }
+});
+function actualAndroidNodeShim(t) {
+  const f = androidRoleInput(t), prepared = prepareHostNodeTrust({ directory: path.join(f.root, 'node-policy'), environment: {} }), sharedRef = { path: path.join(f.root, 'shared-policy.json'), sha256: 'b'.repeat(64), sizeBytes: 1 }, javaOptions = '-Djavax.net.ssl.trustStore=/owned/shared117 -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit -Duser.home=' + f.root, shim = path.join(f.root, 'node');
+  writeFileSync(shim, renderAndroidNodeShim(process.execPath, prepared.environment, sharedRef, javaOptions), { flag: 'wx', mode: 0o500 });
+  const environment = { HOME: f.root, TMPDIR: f.root, PATH: '/usr/bin:/bin', JAVA_TOOL_OPTIONS: javaOptions, CASEOPS_HOST_PLATFORM_TRUST_POLICY_FILE: sharedRef.path, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: sharedRef.sha256 };
+  return { ...f, prepared, sharedRef, javaOptions, shim, environment };
+}
+function actualAndroidNodeEntries(f) {
+  const bytes = readAndroidHostInput(f.prepared.descriptor.runtimeSource.helper), helper = 'data:text/javascript;base64,' + bytes.toString('base64'); bytes.fill(0);
+  const policy = JSON.stringify({ policyRef: f.prepared.policyRef, role: 'base' });
+  const verification = `let verification;try{const value=assertHostNodeTrust(${policy});verification={expected:value.expectedDefaultCount,verified:value.defaultEnumerationVerified};}catch(error){verification={refusal:error.message};}const facts={count:tls.getCACertificates('default').length,java:process.env.JAVA_TOOL_OPTIONS??null,...verification};`;
+  const report = `import tls from 'node:tls';import {assertHostNodeTrust} from ${JSON.stringify(helper)};` + verification;
+  writeFileSync(path.join(f.root, 'worker.mjs'), report + "import {parentPort} from 'node:worker_threads';parentPort.postMessage(facts);", { flag: 'wx', mode: 0o600 });
+  writeFileSync(path.join(f.root, 'fork.mjs'), report + 'console.log(JSON.stringify(facts));', { flag: 'wx', mode: 0o600 });
+  const cjs = `const tls=require('node:tls');const {parentPort}=require('node:worker_threads');(async()=>{const {assertHostNodeTrust}=await import(${JSON.stringify(helper)});${verification}parentPort.postMessage(facts);})().catch(error=>{throw error;});`;
+  writeFileSync(path.join(f.root, 'worker.cjs'), cjs, { flag: 'wx', mode: 0o600 });
+  const parent = report + `import {Worker} from 'node:worker_threads';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';const execute=(entry,options)=>new Promise((resolve,reject)=>{const w=new Worker(entry,options);w.once('message',resolve);w.once('error',reject)});const worker=await execute(new URL('./worker.mjs',import.meta.url),{});const fileEmpty=await execute(new URL('./worker.mjs',import.meta.url),{execArgv:[]});const cjsFile=await execute(new URL('./worker.cjs',import.meta.url),{eval:false});const cjsEval=await execute(${JSON.stringify(cjs)},{eval:true,execArgv:[]});const child=spawnSync(process.execPath,[fileURLToPath(new URL('./fork.mjs',import.meta.url))],{encoding:'utf8',timeout:5000,maxBuffer:8192});if(child.status!==0)throw Error('FORK_REFUSED');console.log(JSON.stringify({...facts,worker,fileEmpty,cjsFile,cjsEval,fork:JSON.parse(child.stdout)}));`;
+  const entry = path.join(f.root, 'parent.mjs'); writeFileSync(entry, parent, { flag: 'wx', mode: 0o600 }); return entry;
+}
+let androidWorkerComposition;
+function actualAndroidWorkerFacts(t) {
+  // One bounded actual composition exercises every named constructor once.
+  // Retain public immutable facts for the distinct assertions, not live files.
+  if (androidWorkerComposition) { if (Object.hasOwn(androidWorkerComposition, 'error')) throw androidWorkerComposition.error; return androidWorkerComposition.facts; }
+  androidWorkerComposition = {};
+  try {
+    const f = actualAndroidNodeShim(t), entry = actualAndroidNodeEntries(f), result = spawnSync(f.shim, [entry], { env: f.environment, encoding: 'utf8', timeout: 15000, maxBuffer: 65536 }); assert.equal(result.status, 0, result.stderr);
+    const facts = JSON.parse(result.stdout); for (const value of Object.values(facts)) if (value && typeof value === 'object') Object.freeze(value); Object.freeze(facts);
+    androidWorkerComposition.facts = facts; return facts;
+  } catch (error) { androidWorkerComposition.error = error; throw error; }
+}
+test('actual Android Node shim rebinds Node144 for Workers and process.execPath forks while removing Java fields', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
+  const result = actualAndroidWorkerFacts(t);
+  const expected = { count: 144, java: null, expected: 144, verified: true };
+  assert.deepEqual({ count: result.count, java: result.java, expected: result.expected, verified: result.verified, worker: result.worker, fork: result.fork }, { ...expected, worker: expected, fork: expected });
+});
+test('actual Android file Worker retains the effective Node144 default with empty execArgv', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
+  const result = actualAndroidWorkerFacts(t);
+  const expected = { count: 144, java: null, expected: 144, verified: true };
+  assert.deepEqual(result.fileEmpty, expected);
+});
+test('actual Android CJS file Worker retains the effective Node144 default with eval false', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
+  assert.deepEqual(actualAndroidWorkerFacts(t).cjsFile, { count: 144, java: null, expected: 144, verified: true });
+});
+test('actual Android CJS eval Worker with empty execArgv refuses the required effective Node144 default', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
+  // An empty OpenSSL enumeration is not a claim that TLS verification is off.
+  // It fails this exact selected-default requirement before any HTTP request.
+  assert.deepEqual(actualAndroidWorkerFacts(t).cjsEval, { count: 0, java: null, refusal: 'HOST_TRUST_EFFECTIVE_DEFAULT_MISMATCH' });
+});
+test('actual Android Node shim rejects conflicting Node Java CMake and extra CA state before target execution', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
+  const f = actualAndroidNodeShim(t), sentinel = path.join(f.root, 'unreached');
+  for (const extra of [{ NODE_OPTIONS: '--use-bundled-ca' }, { JAVA_TOOL_OPTIONS: '-Dforeign=true' }, { JAVA_TOOL_OPTIONS: f.javaOptions.replace(' -Duser.home=' + f.root, '') }, { NODE_PATH: '/foreign/modules' }, { JAVA_OPTS: '-Dforeign=true' }, { GRADLE_OPTS: '-Dforeign=true' }, { CLASSPATH: '/foreign/code' }, { CMAKE_TLS_VERIFY: '0' }, { NODE_EXTRA_CA_CERTS: '/unadmitted/ca' }]) {
+    const result = spawnSync(f.shim, ['--eval', `require('node:fs').writeFileSync(${JSON.stringify(sentinel)},'unexpected')`], { env: { ...f.environment, ...extra }, timeout: 5000, encoding: 'utf8', maxBuffer: 8192 }); assert.equal(result.status, 37); assert.equal(existsSync(sentinel), false);
+  }
+});
+test('Android role helper and marked init inputs are in the actual wrapper source and fixture-copy closure', () => {
+  const source = readFileSync(new URL('./source-snapshot.mjs', import.meta.url), 'utf8'), wrapper = readFileSync(new URL('./build-android-local-acceptance.sh', import.meta.url), 'utf8');
+  for (const file of ['android-host-launch.mjs', 'android-no-paid.gradle', 'host-platform-trust.py', 'fixtures/host-platform-trust/HostPlatformTrust.java']) assert.ok(source.includes('scripts/mobile/' + file));
+  assert.match(wrapper, /node "\$repo\/scripts\/mobile\/android-host-launch\.mjs" gradle -- "\$\{gradle_command\[@\]\}"/);
+  assert.doesNotMatch(wrapper, /gradlew\.original|sed .*gradlew|mv .*gradlew/);
+});
+
+
+test('Android public reader preserves frozen and primitive body faults when close acknowledgement also fails', t => {
+  const f = androidRoleInput(t); if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_REFERENCE/); return; }
+  for (const original of [Object.freeze(new Error('synthetic body fault')), undefined]) {
+    const read = fs.readSync, close = fs.closeSync, stderr = process.stderr.write; let closed = 0, seen = false; const diagnostics = [];
+    fs.readSync = () => { throw original; }; fs.closeSync = fd => { closed++; close(fd); throw new Error('synthetic close acknowledgement failure'); }; process.stderr.write = text => { diagnostics.push(text); return true; };
+    try { try { readAndroidHostInput(f.ref); } catch (error) { seen = true; assert.equal(error, original); } assert.equal(seen, true); assert.equal(closed, 1); assert.deepEqual(diagnostics, ['ANDROID_HOST_DESCRIPTOR_CLOSE\n']); }
+    finally { fs.readSync = read; fs.closeSync = close; process.stderr.write = stderr; }
+  }
+});
+test('Android role output binds the newly opened file and parent namespace before any payload write', t => {
+  const f = androidRoleInput(t); if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_REFERENCE/); return; }
+  const child = path.join(f.root, 'child'), moved = path.join(f.root, 'moved'); mkdirSync(child, { mode: 0o700 });
+  const fstat = fs.fstatSync, write = fs.writeSync, open = fs.openSync; let changed = false, writes = 0, descriptor;
+  fs.openSync = (...args) => descriptor = open(...args);
+  fs.fstatSync = (...args) => { const value = fstat(...args); if (!changed) { changed = true; fs.renameSync(child, moved); fs.symlinkSync(moved, child, 'dir'); } return value; };
+  fs.writeSync = (...args) => { writes++; return write(...args); };
+  try { assert.throws(() => writeAndroidHostOutput(path.join(child, 'output'), f.data), /ANDROID_HOST_OUTPUT_PREWRITE_BINDING|ANDROID_HOST_OUTPUT_PREWRITE_NAMESPACE/); assert.equal(writes, 0); }
+  finally { fs.fstatSync = fstat; fs.writeSync = write; fs.openSync = open; }
+  assert.equal(changed, true); assert.equal(fs.lstatSync(path.join(moved, 'output')).size, 0); assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
+test('Android role output handles real partial writes and refuses same-descriptor readback corruption with closure', t => {
+  const f = androidRoleInput(t); if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_REFERENCE/); return; }
+  const write = fs.writeSync, read = fs.readSync, open = fs.openSync; const descriptors = []; let writes = 0;
+  fs.openSync = (...args) => { const fd = open(...args); descriptors.push(fd); return fd; };
+  fs.writeSync = (fd, data, offset, length, position) => { writes++; return write(fd, data, offset, Math.min(length, 2), position); };
+  let reference;
+  try { reference = writeAndroidHostOutput(path.join(f.root, 'partial'), f.data); }
+  finally { fs.writeSync = write; fs.openSync = open; }
+  assert.ok(writes > 1); assert.equal(reference.sha256, f.ref.sha256); assert.deepEqual(readAndroidHostInput(reference), f.data);
+  fs.openSync = (...args) => { const fd = open(...args); descriptors.push(fd); return fd; }; let changed = false;
+  fs.readSync = (fd, ...args) => { if (!changed) { changed = true; assert.ok(fs.fstatSync(fd).isFile()); write(fd, Buffer.from('X'), 0, 1, 0); } return read(fd, ...args); };
+  try { assert.throws(() => writeAndroidHostOutput(path.join(f.root, 'corrupt'), f.data), /ANDROID_HOST_OUTPUT_CHANGED/); }
+  finally { fs.openSync = open; fs.readSync = read; }
+  assert.equal(changed, true); for (const fd of descriptors) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+function androidJavaHomeBinding(t) {
+  const f = androidRoleInput(t), sharedJavaOptions = '-Djavax.net.ssl.trustStore=/owned/shared117 -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit';
+  const gradlePolicyReference = { path: path.join(f.root, 'policy.json'), sha256: 'a'.repeat(64), sizeBytes: 1 }, binding = { privateJavaHome: f.root, sharedJavaOptions, javaOptions: sharedJavaOptions + ' -Duser.home=' + f.root, gradlePolicyReference };
+  const environment = { HOME: f.root, JAVA_TOOL_OPTIONS: sharedJavaOptions, CASEOPS_HOST_PLATFORM_TRUST_POLICY_FILE: gradlePolicyReference.path, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: gradlePolicyReference.sha256 };
+  return { ...f, binding, environment };
+}
+test('Android Java home binding first requires the exact shared TLS3 recipe then adds only the owned property', t => {
+  const f = androidJavaHomeBinding(t); if (typeof process.getuid !== 'function') { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding)); return; }
+  const result = bindAndroidJavaHome(f.environment, f.binding);
+  assert.deepEqual(result, { ...f.environment, JAVA_TOOL_OPTIONS: f.binding.sharedJavaOptions + ' -Duser.home=' + f.root });
+  assert.equal(f.environment.JAVA_TOOL_OPTIONS, f.binding.sharedJavaOptions); assert.equal(Object.keys(result).length, Object.keys(f.environment).length);
+});
+test('Android Java home binding refuses changed extra missing or previously home-extended shared TLS options', t => {
+  const f = androidJavaHomeBinding(t); if (typeof process.getuid !== 'function') { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding)); return; }
+  for (const options of [undefined, '', f.binding.javaOptions, f.binding.sharedJavaOptions + ' -Dforeign=true', f.binding.sharedJavaOptions.replace('PKCS12', 'JKS')]) assert.throws(() => bindAndroidJavaHome({ ...f.environment, JAVA_TOOL_OPTIONS: options }, f.binding), /ANDROID_GRADLE_JAVA117_RECIPE/);
+  assert.throws(() => bindAndroidJavaHome(f.environment, { ...f.binding, javaOptions: f.binding.javaOptions + ' -Duser.home=/foreign' }), /ANDROID_HOST_BOUND_JAVA_OPTIONS/);
+  assert.throws(() => bindAndroidJavaHome(f.environment, { ...f.binding, sharedJavaOptions: f.binding.sharedJavaOptions.replace('PKCS12', 'JKS') }), /ANDROID_HOST_SHARED_JAVA_OPTIONS/);
+});
+test('Android Java home binding refuses foreign HOME aliases cross-role fields and foreign policy recipes', t => {
+  const f = androidJavaHomeBinding(t); if (typeof process.getuid !== 'function') { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding)); return; }
+  assert.throws(() => bindAndroidJavaHome({ ...f.environment, HOME: path.dirname(f.root) }, f.binding), /ANDROID_HOST_PRIVATE_JAVA_HOME/);
+  const alias = path.join(f.root, 'alias'); fs.symlinkSync(f.root, alias, 'dir'); assert.throws(() => bindAndroidJavaHome({ ...f.environment, HOME: alias }, { ...f.binding, privateJavaHome: alias, javaOptions: f.binding.sharedJavaOptions + ' -Duser.home=' + alias }), /ANDROID_HOST_OWNED_DIRECTORY/);
+  for (const extra of [{ SSL_CERT_FILE: '/foreign/roots' }, { NODE_OPTIONS: '--use-bundled-ca' }, { JAVA_OPTS: '-Dforeign=true' }, { java_tool_options: f.binding.sharedJavaOptions }]) assert.throws(() => bindAndroidJavaHome({ ...f.environment, ...extra }, f.binding), /ANDROID_HOST_CROSS_ROLE_OVERRIDE/);
+  assert.throws(() => bindAndroidJavaHome({ ...f.environment, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: 'b'.repeat(64) }, f.binding), /ANDROID_GRADLE_POLICY_RECIPE/);
+});
+test('Android prepare-only Gradle composition applies the strict policy reader before any output or JVM work', async t => {
+  const f = androidRoleInput(t), open = fs.openSync, opened = []; fs.openSync = (...args) => { opened.push(args[0]); return open(...args); };
+  try { await assert.rejects(prepareAndroidGradleEnvironment(f.ref)); }
+  finally { fs.openSync = open; }
+  assert.ok(opened.length <= 1 && opened.every(file => file === f.file)); assert.deepEqual(readdirSync(f.root), ['public-input']);
+});
+const sharedGradleDeclaration = () => ({ schemaVersion: 1, kind: 'caseops-host-gradle-jdks-trust-v1', runtimeScope: 'gradle-java21-java17', qaOnly: false, type: 'PKCS12', aliases: Object.fromEntries(Array.from({ length: 117 }, (_, i) => ['synthetic-root-' + i, i.toString(16).padStart(64, '0')])), store: { path: path.resolve(os.tmpdir(), 'owned-shared117.truststore'), sha256: 'a'.repeat(64), sizeBytes: 1000 } });
+test('Android shared policy projection accepts the real DTO alias-map shape without claiming runtime admission', () => {
+  const value = sharedGradleDeclaration();
+  assert.equal(androidSharedJavaOptions(value), '-Djavax.net.ssl.trustStore=' + value.store.path + ' -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit');
+  assert.equal(Object.keys(value.aliases).length, 117); assert.equal(Object.hasOwn(value, 'runtimeVerification'), false);
+});
+test('Android shared policy projection refuses array aliases and malformed required production types', () => {
+  const value = sharedGradleDeclaration();
+  for (const aliases of [Object.values(value.aliases), null, true, Object.fromEntries(Object.entries(value.aliases).slice(1)), { ...value.aliases, 'synthetic-root-0': false }, { ...value.aliases, 'synthetic-root-0': value.aliases['synthetic-root-1'] }]) assert.throws(() => androidSharedJavaOptions({ ...value, aliases }), /ANDROID_HOST_PRODUCTION_JAVA117_ALIASES/);
+  for (const extra of [{ schemaVersion: '1' }, { schemaVersion: true }, { qaOnly: 0 }, { qaOnly: true }, { runtimeScope: 'java21' }, { type: 'JKS' }]) assert.throws(() => androidSharedJavaOptions({ ...value, ...extra }), /ANDROID_HOST_PRODUCTION_JAVA117_REQUIRED/);
+  for (const store of [{ ...value.store, sizeBytes: true }, { ...value.store, sha256: 1 }, { ...value.store, sha256: ['a'.repeat(64)] }, { ...value.store, path: '/unadmitted store' }]) assert.throws(() => androidSharedJavaOptions({ ...value, store }), /ANDROID_HOST_SHARED_STORE_REFERENCE/);
 });
