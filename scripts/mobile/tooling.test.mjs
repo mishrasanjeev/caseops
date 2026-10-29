@@ -2625,7 +2625,7 @@ async function trustChild(args, environment) {
   const consume = name => value => { if (stdout.length + stderr.length + value.length > 32768) { exceeded = true; child.kill(); } else if (name === 'stdout') stdout += value; else stderr += value; };
   child.stdout.on('data', consume('stdout')); child.stderr.on('data', consume('stderr'));
   const timer = setTimeout(() => child.kill(), 12000);
-  try { const [code, signal] = await once(child, 'close'); return { code, signal, stdout, stderr, exceeded }; }
+  try { const [code, signal] = await once(child, 'close'); return { code, signal, stdout, stderr, exceeded, pid: child.pid }; }
   finally { clearTimeout(timer); }
 }
 let tlsMaterials;
@@ -2687,6 +2687,12 @@ test('actual inherited bootstrap activates the exact Node24 default store before
     delete standalone.NODE_TEST_CONTEXT;
     const forwarded = await trustChild(['--test', '--test-reporter=tap', trustFixture], standalone);
     assert.equal(forwarded.code, 0, forwarded.stderr || forwarded.stdout); assert.match(forwarded.stdout, /# tests 1\n/); assert.match(forwarded.stdout, /# pass 1\n/); assert.match(forwarded.stdout, /# fail 0\n/);
+    if (process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE) {
+      const records = observerOuterRecords(process.pid).filter(row => row.event === 'child-spawned' && row.pid === forwarded.pid);
+      assert.equal(records.length, 1); assert.equal(records[0].nestedDriver?.role, 'source-audited-nested-intrinsic-driver');
+      assert.equal(records[0].nestedDriver.scriptCompleteClaim, false); assert.equal(records[0].nestedDriver.workerWitnessRequired, true);
+      assert.deepEqual(records[0].nestedDriver.argv, [process.execPath, '--test', '--test-reporter=tap', trustFixture]);
+    }
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 test('native-QA default HTTPS and fetch preserve certificate and hostname rejection', async () => {
@@ -3660,7 +3666,7 @@ test('iOS role projection drops only the typed pinned-worker status descriptor m
 test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
   const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
   assert.ok(helper.includes("const NODE_HELPER = '13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787'"));
-  assert.ok(helper.includes("const NODE_BOOTSTRAP = '5aa448fb66bcbaec5127df7e7876a8b967eee3a005d045659f8141149f82a54b'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = '265cdc00128762bb3b06a94c21f0f199693a29de309283ef1ee86ab0c212bbcc'"));
   const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
   const pin = createHash('sha256').update(input).digest('hex');
   assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
@@ -3803,8 +3809,8 @@ test('CI runtime copies retain exact reviewed Git blobs with independent readonl
     assert.equal(used, Number(expected)); return bytes.subarray(0, used);
   };
   try {
-    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'c4d2ae68f4c9b0233e6246a8fe3ac504bec43b99'], ['100644', 'c7fba8c4c768e3f63a4ced2a496f06c226b5fad9']]);
-    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29498n], ['bootstrap', 'host-node-trust-start.mjs', 6043n]]) {
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'c4d2ae68f4c9b0233e6246a8fe3ac504bec43b99'], ['100644', '11bc2acdadfd1234203ba27a9a00a310133a53a3']]);
+    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29498n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
       const input = path.join(source, name), output = staged.sourceRefs[role].path;
       const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
       let inputFd, outputFd, originalFailure; let bodyFailed = false; const closeFailures = [];
@@ -4278,15 +4284,401 @@ test('CI native runner late directory insertion refuses with unchanged command b
 
 test('CI runner final callback refuses a same-inode edit after verified payload readback', async t => {
   await ciNativeRunnerFixture(async f => {
-    const trace = ciSourceTrace(), read = fs.readSync, write = fs.writeSync, native = fs.realpathSync.native;
-    let written = false, readback = false, changed = false, observedError; const inode = fs.lstatSync(f.command, { bigint: true }).ino;
+    const trace = ciSourceTrace(), read = fs.readSync, write = fs.writeSync, native = fs.realpathSync.native, lstat = fs.lstatSync;
+    // Qualified capability simulation: only this owned command leaf's named
+    // Windows dev field is zero; real inode/type/owner and other frames stay.
+    fs.lstatSync = (file, ...args) => { const state = lstat(file, ...args); return file === f.command && args[0]?.bigint ? new Proxy(state, { get(value, key) { return key === 'dev' ? 0n : Reflect.get(value, key); } }) : state; };
+    let written = false, readback = false, changed = false, observedError, verifiedEditedByte; const original = fs.lstatSync(f.command, { bigint: true }), inode = original.ino;
     fs.writeSync = (fd, ...args) => { if (trace.descriptors.get(fd) === f.command) written = true; return write(fd, ...args); };
     fs.readSync = (fd, ...args) => { const count = read(fd, ...args); if (written && count === 0 && trace.descriptors.get(fd) === f.command) readback = true; return count; };
-    fs.realpathSync.native = (file, ...args) => { const result = native(file, ...args); if (!changed && readback && file === f.command) { changed = true; const matches = [...trace.descriptors].filter(([, name]) => name === file); assert.equal(matches.length, 1); const fd = matches[0][0]; assert.equal(fs.fstatSync(fd, { bigint: true }).ino, inode); trace.write(fd, Buffer.from('X'), 0, 1, 0); } return result; };
+    fs.realpathSync.native = (file, ...args) => { const result = native(file, ...args); if (!changed && readback && file === f.command) { changed = true; const matches = [...trace.descriptors].filter(([, name]) => name === file); assert.equal(matches.length, 1); const fd = matches[0][0]; assert.equal(fs.fstatSync(fd, { bigint: true }).ino, inode); trace.write(fd, Buffer.from('X'), 0, 1, 0);
+      const frame = value => ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'].map(key => value[key]), end = performance.now() + 5000;
+      const namespace = () => { const rows = []; for (let parent = path.dirname(file);;) { assert.ok(performance.now() < end && rows.length < 64); const state = fs.lstatSync(parent, { bigint: true }); assert.ok(state.isDirectory() && !state.isSymbolicLink()); rows.push([parent, ...['dev', 'ino', 'uid', 'gid', 'mode'].map(key => state[key])]); if (parent === path.dirname(parent)) return rows; parent = path.dirname(parent); } }; const parents = namespace();
+      const edited = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true }); assert.ok(edited.isFile() && edited.nlink === 1n && edited.uid === original.uid && edited.ino === inode && edited.size > 0n && edited.size <= 1048576n); assert.ok(named.isFile() && !named.isSymbolicLink()); for (const key of ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs']) if (!(process.platform === 'win32' && key === 'dev' && named.dev === 0n)) assert.equal(edited[key], named[key]);
+      const bytes = Buffer.alloc(Number(edited.size) + 1); let length = 0;
+      try { while (length < bytes.length) { assert.ok(performance.now() < end); const width = trace.read(fd, bytes, length, bytes.length - length, length); if (!width) break; length += width; } assert.equal(BigInt(length), edited.size); assert.deepEqual(frame(fs.fstatSync(fd, { bigint: true })), frame(edited)); assert.deepEqual(frame(fs.lstatSync(file, { bigint: true })), frame(named)); assert.deepEqual(namespace(), parents); verifiedEditedByte = bytes[0]; }
+      finally { bytes.fill(0); } } return result; };
     try { try { await prepareCIHostNodeTrustWindows(f.environment); } catch (error) { observedError = error; } }
-    finally { fs.realpathSync.native = native; trace.restore(); } trace.closed();
+    finally { fs.realpathSync.native = native; fs.lstatSync = lstat; trace.restore(); } trace.closed();
     const sameInode = fs.lstatSync(f.command, { bigint: true }).ino === inode;
-    t.diagnostic(JSON.stringify({ injectedAfterReadback: changed && readback, sameInode, commandQueries: f.commandCalls, outcome: observedError ? 'refused' : 'returned' }));
-    assert.equal(changed && readback && sameInode, true); assert.equal(f.commandCalls, 1); assert.equal(fs.readFileSync(f.command)[0], 88); assert.equal(observedError?.message, 'CI_TRUST_RUNNER_COMMAND_CHANGED');
+    t.diagnostic(JSON.stringify({ injectedAfterReadback: changed && readback, sameInode, commandQueries: f.commandCalls, outcome: observedError ? 'refused' : 'returned', verifiedEditedByte, namedDevZeroSimulation: true }));
+    assert.equal(changed && readback && sameInode, true); assert.equal(f.commandCalls, 1); assert.equal(verifiedEditedByte, 88); assert.equal(observedError?.message, 'CI_TRUST_RUNNER_COMMAND_CHANGED');
   });
+});
+
+// Optional source-gate observer contracts. These never authorize native actions.
+import { createObserverSink, selectCompactInvocation, nativeActionEntry, SOURCE_GATE_WORKER_PATHS, reviewNestedDriverEvidence, reviewCapturedBasePolicy } from './source-gate-observer.mjs';
+const observerNow = () => new Date().getTime();
+const observerRoot = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const observerNames = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
+const observerHash = value => createHash('sha256').update(value).digest('hex');
+const observerFrame = value => observerNames.map(key => String(value[key]));
+function observerRead(file, maximum = 65536) {
+  const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  try {
+    const first = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true });
+    assert.equal(first.isFile() && named.isFile() && !named.isSymbolicLink() && first.nlink === 1n, true);
+    assert.equal(first.uid, BigInt(process.getuid())); assert.ok(first.size > 0n && first.size <= BigInt(maximum));
+    assert.deepEqual(observerFrame(first), observerFrame(named)); assert.equal(fs.realpathSync(file), file);
+    const bytes = Buffer.alloc(Number(first.size) + 1); let count = 0;
+    while (count < bytes.length) { const n = fs.readSync(fd, bytes, count, Math.min(65536, bytes.length - count), null); if (!n) break; count += n; }
+    assert.equal(count, Number(first.size)); assert.deepEqual(observerFrame(first), observerFrame(fs.fstatSync(fd, { bigint: true })));
+    assert.deepEqual(observerFrame(named), observerFrame(fs.lstatSync(file, { bigint: true })));
+    return Buffer.from(bytes.subarray(0, count));
+  } finally { fs.closeSync(fd); }
+}
+const observerRef = (file, max) => { const bytes = observerRead(file, max); return { path: file, sha256: observerHash(bytes), sizeBytes: bytes.length }; };
+let observerBinary;
+const observerBinaryRef = () => observerBinary ??= observerRef(process.execPath, 134217728);
+function observerSave(file, value) {
+  const bytes = Buffer.from(JSON.stringify(value) + '\n'); fs.writeFileSync(file, bytes, { mode: 0o600, flag: 'wx' });
+  return { path: file, sha256: observerHash(bytes), sizeBytes: bytes.length };
+}
+async function withObserverFixture(callback) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-observer-contract-')));
+  fs.chmodSync(root, 0o700);
+  try {
+    for (const name of ['home', 'tmp', 'mode', 'output', 'coverage']) fs.mkdirSync(path.join(root, name), { mode: 0o700 });
+    const base = { PATH: `${path.dirname(process.execPath)}${path.delimiter}/usr/bin${path.delimiter}/bin`, HOME: path.join(root, 'home'), TMPDIR: path.join(root, 'tmp'), LANG: 'C', LC_ALL: 'C', TZ: 'UTC' };
+    const H = observerRef(path.join(observerRoot, 'scripts/mobile/host-node-trust.mjs'));
+    const B = observerRef(path.join(observerRoot, 'scripts/mobile/host-node-trust-start.mjs'));
+    const A = observerRef(path.join(observerRoot, 'scripts/mobile/source-gate-observer.mjs'));
+    const observerTrust = await import('data:text/javascript;base64,' + observerRead(H.path).toString('base64'));
+    const prepared = observerTrust.prepareHostNodeTrust({ directory: path.join(root, 'policy'), sourceRefs: { helper: H, bootstrap: B }, environment: base });
+    const selection = { schemaVersion: 1, kind: 'caseops-source-gate-selection', workerCwd: observerRoot,
+      workerTargets: [observerRef(path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs'))], expoConfigTarget: null, nestedDriver: null };
+    const stat = fs.lstatSync(path.join(root, 'output'), { bigint: true });
+    const manifest = { schemaVersion: 1, kind: 'caseops-source-gate-observer', role: 'source-gate-only', runId: 'c'.repeat(32),
+      source: { repo: observerRoot, sha: 'a'.repeat(40), tree: 'b'.repeat(40) }, phase: 'node33', primaryNode: observerBinaryRef(),
+      knownFallbackNodes: [], recorder: A, selection: null, output: { path: path.join(root, 'output'), identity: observerNames.slice(0, 5).map(key => String(stat[key])) }, deadlineEpochMs: observerNow() + 60000 };
+    const inheritedCoverage = process.env.NODE_V8_COVERAGE;
+    const outerMode = process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE && process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256
+      ? { CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE: process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE,
+        CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256: process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256 } : null;
+    let invocation = 0;
+    const run = async ({ args = ['-e', 'console.log("ENTRY_RAN")'], change = () => {}, environment = {}, mode = true, context = false, useOuterMode = false } = {}) => {
+      const current = JSON.parse(JSON.stringify(manifest)), selected = JSON.parse(JSON.stringify(selection));
+      const dir = path.join(root, `mode-${++invocation}`); fs.mkdirSync(dir, { mode: 0o700 });
+      const selectedFile = path.join(dir, 'selection.json'); change(current, selected, dir);
+      current.selection = observerSave(selectedFile, selected);
+      if (environment.selectionBytes) { fs.writeFileSync(selectedFile, environment.selectionBytes); current.selection.sha256 = observerHash(environment.selectionBytes); current.selection.sizeBytes = environment.selectionBytes.length; }
+      const descriptor = observerSave(path.join(dir, 'manifest.json'), current);
+      if (environment.manifestBytes) { const raw = typeof environment.manifestBytes === 'function' ? environment.manifestBytes(current) : environment.manifestBytes; fs.writeFileSync(descriptor.path, raw); descriptor.sha256 = observerHash(raw); }
+      const env = { ...base, ...prepared.environment, NODE_V8_COVERAGE: inheritedCoverage ?? path.join(root, 'coverage'),
+        ...(useOuterMode && outerMode ? outerMode : mode ? { CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE: descriptor.path, CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256: descriptor.sha256 } : {}),
+        ...(context ? { NODE_TEST_CONTEXT: 'child-v8' } : {}), ...environment };
+      delete env.selectionBytes; delete env.manifestBytes;
+      return await new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, args, { cwd: observerRoot, env, stdio: ['ignore', 'pipe', 'pipe'] });
+        let stdout = Buffer.alloc(0), stderr = Buffer.alloc(0), overflow = false;
+        const consume = stream => data => { if (stdout.length + stderr.length + data.length > 1048576) { overflow = true; child.kill(); } else if (stream === 'out') stdout = Buffer.concat([stdout, data]); else stderr = Buffer.concat([stderr, data]); };
+        child.stdout.on('data', consume('out')); child.stderr.on('data', consume('err'));
+        const timer = setTimeout(() => child.kill(), 10000);
+        child.once('error', error => { clearTimeout(timer); reject(error); });
+        child.once('close', (code, signal) => { clearTimeout(timer); resolve({ code, signal, stdout, stderr, overflow, descriptor, current, pid: child.pid, coverageDirectory: inheritedCoverage ?? path.join(root, 'coverage'), outerMode: useOuterMode ? outerMode : null }); });
+      });
+    };
+    return await callback({ root, base, prepared, A, B, H, manifest, selection, run, observerTrust });
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+function observerFiles(directory) {
+  const files = [], seen = new Set(), opened = fs.opendirSync(directory), end = performance.now() + 5000;
+  try { while (true) {
+    assert.ok(performance.now() < end); const entry = opened.readSync(); if (!entry) break;
+    assert.ok(files.length < 128 && !seen.has(entry.name)); seen.add(entry.name); files.push(entry.name);
+  } } finally { opened.closeSync(); }
+  return files;
+}
+function observerOuterRecords(pid) {
+  const file = process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE, raw = observerRead(file, 16384);
+  assert.equal(observerHash(raw), process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256);
+  const directory = JSON.parse(raw).output.path, files = observerFiles(directory).filter(name => name.startsWith(`compact-${pid}-0-`));
+  assert.equal(files.length, 1);
+  return observerRead(path.join(directory, files[0]), 2097152).toString('utf8').trim().split('\n').map(line => JSON.parse(line));
+}
+function observerRefused(result) {
+  assert.equal(result.code, 1); assert.equal(result.signal, null); assert.equal(result.overflow, false);
+  assert.equal(result.stdout.length, 0); assert.match(result.stderr.toString(), /^(?:SOURCE_GATE|HOST_TRUST)_[A-Z_]+\n$/);
+}
+function observerSinkFixture(callback) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-observer-sink-'))); fs.chmodSync(root, 0o700);
+  const directory = path.join(root, 'output'); fs.mkdirSync(directory, { mode: 0o700 });
+  const stat = fs.lstatSync(directory, { bigint: true }), output = { path: directory, identity: observerNames.slice(0, 5).map(key => String(stat[key])) };
+  const io = Object.fromEntries(['openSync', 'closeSync', 'readSync', 'writeSync', 'fstatSync', 'lstatSync', 'realpathSync'].map(key => [key, fs[key].bind(fs)]));
+  try { return callback({ root, output, io }); } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+
+test('source observer import is inert and the worker allowlist is literal and unique', () => {
+  assert.equal(SOURCE_GATE_WORKER_PATHS.length, 33); assert.equal(new Set(SOURCE_GATE_WORKER_PATHS).size, 33);
+  assert.ok(SOURCE_GATE_WORKER_PATHS.every(name => !name.includes('..') && name.endsWith('.test.mjs')));
+});
+test('source observer absent mode preserves BASE144 and creates no compact witness', async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    const result = await run({ mode: false, args: ['-e', 'console.log(require("node:tls").getCACertificates("default").length)'] });
+    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stdout.toString(), '144\n'); assert.equal(result.stderr.length, 0);
+    assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+  });
+});
+test('source observer unselected eval retains detailed fallback and zero Session output', async () => {
+  await withObserverFixture(async ({ root, A, run }) => {
+    const uri = 'data:text/javascript;base64,' + observerRead(A.path).toString('base64');
+    const result = await run({ args: ['-e', `import(${JSON.stringify(uri)}).then(m=>console.log(JSON.stringify(m.sourceGateObserverStatus())))`] });
+    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stderr.length, 0);
+    assert.equal(JSON.parse(result.stdout).mode, 'unchanged-detailed-fallback'); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+    assert.ok(observerFiles(result.coverageDirectory).some(name => name.startsWith(`coverage-${result.pid}-`) && name.endsWith('.json')));
+  });
+});
+for (const [name, environment] of [
+  ['missing SHA', { CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256: undefined }],
+  ['unknown reserved key', { CASEOPS_SOURCE_GATE_OBSERVER_OTHER: '1' }],
+  ['case-folded reserved key', { caseops_source_gate_observer_manifest_file: '/unadmitted' }],
+]) test(`source observer refuses ${name} before the application`, async () => {
+  await withObserverFixture(async ({ run }) => observerRefused(await run({ environment })));
+});
+for (const [name, change] of [
+  ['non-source role', m => { m.role = 'native-qa'; }],
+  ['expired descriptor', m => { m.deadlineEpochMs = observerNow() - 1; }],
+  ['extended deadline', m => { m.deadlineEpochMs = observerNow() + 600000; }],
+  ['unknown descriptor key', m => { m.extra = true; }],
+  ['recorder digest redirect', m => { m.recorder.sha256 = '0'.repeat(64); }],
+  ['recorder extent redirect', m => { m.recorder.sizeBytes++; }],
+  ['duplicate target', (_m, s) => { s.workerTargets.push(s.workerTargets[0]); }],
+  ['unreviewed target', (_m, s) => { s.workerTargets[0].path = path.join(observerRoot, 'scripts/mobile/host-node-trust.mjs'); }],
+  ['unreviewed working directory', (_m, s) => { s.workerCwd = path.dirname(observerRoot); }],
+]) test(`source observer refuses ${name} with no application or compact output`, async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    observerRefused(await run({ change })); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+  });
+});
+test('source observer refuses noncanonical duplicate-key JSON and oversized selection before application', async () => {
+  await withObserverFixture(async ({ root, run, manifest }) => {
+    const duplicate = current => Buffer.from(JSON.stringify(current).replace('"schemaVersion":1', '"schemaVersion":1,"schemaVersion":1') + '\n');
+    observerRefused(await run({ environment: { manifestBytes: duplicate } }));
+    observerRefused(await run({ environment: { selectionBytes: Buffer.alloc(65537, 32) } }));
+    assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+  });
+});
+test('source observer forged hash-correct recorder never executes its sentinel', async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    const foreign = path.join(root, 'source'); fs.mkdirSync(foreign, { mode: 0o700 });
+    fs.mkdirSync(path.join(foreign, 'scripts'), { mode: 0o700 }); fs.mkdirSync(path.join(foreign, 'scripts/mobile'), { mode: 0o700 });
+    const file = path.join(foreign, 'scripts/mobile/source-gate-observer.mjs'), sentinel = path.join(root, 'SENTINEL');
+    const bytes = Buffer.from(`import fs from 'node:fs';fs.writeFileSync(${JSON.stringify(sentinel)},'executed');export function activateSourceGateObserver(){}\n`);
+    fs.writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
+    const result = await run({ change: m => { m.source.repo = foreign; m.recorder = { path: file, sha256: observerHash(bytes), sizeBytes: bytes.length }; } });
+    observerRefused(result); assert.equal(fs.existsSync(sentinel), false);
+  });
+});
+for (const [name, args] of [
+  ['core', ['scripts/mobile/run-native.mjs', 'ios']], ['iOS Files', ['scripts/mobile/run-ios-files.mjs']],
+  ['Android Files', ['scripts/mobile/run-android-files.mjs']], ['V1', ['scripts/mobile/run-v1-workflows.mjs', 'ios', '--request', '/NEVER_READ_PRIVATE_REQUEST']],
+  ['queue/privacy', ['scripts/mobile/run-queue-privacy.mjs', 'ios', '--request', '/NEVER_READ_PRIVATE_REQUEST']],
+  ['client extensions', ['scripts/mobile/run-client-extensions.mjs', 'ios', '--request', '/NEVER_READ_PRIVATE_REQUEST']],
+  ['store execution', ['scripts/mobile/run-store-packaging.mjs', '--execute', '/NEVER_READ_PRIVATE_REQUEST']],
+]) test(`source observer valid mode refuses ${name} before its actual entry`, async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    const result = await run({ args: [path.join(observerRoot, args[0]), ...args.slice(1)] }); observerRefused(result);
+    assert.equal(result.stderr.toString(), 'SOURCE_GATE_OBSERVER_NATIVE_REFUSED\n'); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+  });
+});
+test('source observer native recipe rejects the pair and pure inventory forms remain non-native', () => {
+  assert.throws(() => neutralIosEnvironment({ CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE: '/not-read', CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256: 'a'.repeat(64) }), /IOS_HOST_/);
+  for (const args of [['scripts/mobile/run-native.mjs', '--collect'], ['scripts/mobile/run-v1-workflows.mjs', '--collect'], ['scripts/mobile/run-store-packaging.mjs', '--plan']])
+    assert.equal(nativeActionEntry(observerRoot, [process.execPath, path.join(observerRoot, args[0]), ...args.slice(1)]), false);
+});
+test('source observer exact selector keeps Node22, Worker, unknown argv and changed source in rich fallback', () => {
+  const ref = { path: '/approved/test.mjs', sha256: 'a'.repeat(64), sizeBytes: 3 };
+  const admitted = { admissionComplete: true, primaryNode: { path: '/node24', version: '24.15.0' }, workerCwd: '/approved', workerTargets: [ref], startupFlags: ['--use-openssl-ca'], expoConfigTarget: null };
+  const actual = { isMainThread: true, executable: '/node24', nodeVersion: '24.15.0', execArgv: ['--use-openssl-ca'], argv: ['/node24', ref.path], cwd: '/approved', testContext: 'child-v8', entryReference: ref };
+  assert.equal(selectCompactInvocation(actual, admitted).mode, 'compact');
+  for (const delta of [{ isMainThread: false }, { executable: '/node22', nodeVersion: '22.14.0' }, { argv: ['/node24', ref.path, 'extra'] }, { entryReference: { ...ref, sha256: 'b'.repeat(64) } }, { execArgv: ['--inspect'] }])
+    assert.deepEqual(selectCompactInvocation({ ...actual, ...delta }, admitted).sessionAllowed, false);
+});
+test('source observer sink uses its one FD, exact partial writes and same-FD readback', t => observerSinkFixture(({ output, io }) => {
+  t.mock.method(Date, 'now', () => 0); assert.equal(Date.now(), 0); assert.ok(observerNow() > 1000000000000);
+  let opens = 0, closes = 0; const originalOpen = io.openSync, originalClose = io.closeSync, originalWrite = io.writeSync;
+  io.openSync = (...args) => { opens++; return originalOpen(...args); }; io.closeSync = fd => { closes++; return originalClose(fd); };
+  io.writeSync = (fd, bytes, offset, length, position) => originalWrite(fd, bytes, offset, Math.min(7, length), position);
+  const sink = createObserverSink(output, observerNow() + 5000, io); sink.emit({ event: 'unit', value: 'partial'.repeat(8) }); sink.close();
+  const bytes = fs.readFileSync(sink.file); assert.equal(JSON.parse(bytes).value, 'partial'.repeat(8)); assert.equal(bytes.length, sink.bytes); assert.equal(sink.readbackBytes, sink.bytes);
+  assert.equal(opens, 1); assert.equal(closes, 1);
+}));
+for (const [name, kind] of [['zero write', 'zero'], ['partial then EIO', 'partial'], ['readback failure', 'read']])
+  test(`source observer sink closes after ${name} and preserves its actual successful extent`, () => observerSinkFixture(({ output, io }) => {
+    let closes = 0, writes = 0; const close = io.closeSync, write = io.writeSync;
+    io.closeSync = fd => { closes++; return close(fd); };
+    if (kind === 'read') io.readSync = () => { throw Object.assign(new Error('synthetic read error'), { code: 'EIO' }); };
+    else io.writeSync = (fd, bytes, offset, length, position) => { if (kind === 'zero') return 0; if (writes++) throw Object.assign(new Error('synthetic write error'), { code: 'EIO' }); return write(fd, bytes, offset, Math.min(5, length), position); };
+    const sink = createObserverSink(output, observerNow() + 5000, io); let failure;
+    try { sink.emit({ event: 'unit' }); } catch (error) { failure = error; } finally { sink.close(); }
+    assert.ok(failure); assert.equal(closes, 1); assert.equal(fs.statSync(sink.file).size, sink.bytes);
+    assert.equal(sink.bytes, kind === 'zero' ? 0 : kind === 'partial' ? 5 : Buffer.byteLength('{"ordinal":0,"event":"unit"}\n'));
+  }));
+test('source observer sink refuses late parent rename to a symlink to the same leaf inode', () => observerSinkFixture(({ root, output, io }) => {
+  const sink = createObserverSink(output, observerNow() + 5000, io), moved = path.join(root, 'moved');
+  fs.renameSync(output.path, moved); fs.symlinkSync(moved, output.path, 'dir');
+  try { assert.throws(() => sink.emit({ event: 'unit' }), /SOURCE_GATE_/); assert.equal(sink.bytes, 0); }
+  finally { sink.close(); }
+}));
+test('source observer real selected worker retains exact engine hashes and the unfiltered native exit diagnostic', async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    const result = await run({ args: [path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs')], context: true, useOuterMode: true });
+    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.signal, null); assert.equal(result.overflow, false);
+    assert.equal(result.stderr.toString(), 'Failed to get \'result\' from coverage profile response:\n{"id":4,"error":{"code":-32000,"message":"Precise coverage has not been started."}}\n');
+    let directory = path.join(root, 'output');
+    if (result.outerMode) {
+      const raw = observerRead(result.outerMode.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE, 16384);
+      assert.equal(observerHash(raw), result.outerMode.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256);
+      directory = JSON.parse(raw).output.path;
+    }
+    const files = observerFiles(directory).filter(name => name.startsWith(`compact-${result.pid}-0-`)); assert.equal(files.length, 1);
+    const rows = observerRead(path.join(directory, files[0]), 2097152).toString('utf8').trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(rows[0].event, 'header'); assert.equal(rows[0].selection, 'exact-declared-test-worker');
+    assert.ok(rows.some(row => row.event === 'live')); assert.ok(rows.some(row => row.event === 'detailed-coverage-stopped'));
+    const entry = pathToFileURL(path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs')).href;
+    const script = rows.find(row => row.event === 'script' && row.url === entry); assert.ok(script);
+    assert.equal(script.engineSha256, observerHash(fs.readFileSync(new URL(entry))));
+    assert.ok(rows.some(row => row.event === 'exit-marker' && row.code === 0)); assert.ok(fs.statSync(path.join(directory, files[0])).size < 2097152);
+    assert.deepEqual(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${result.pid}-`)), []);
+  });
+});
+test('source observer inherited normal ESM Worker remains rich without a Session or exit diagnostic', async () => {
+  await withObserverFixture(async ({ root, A, run }) => {
+    const uri = 'data:text/javascript;base64,' + observerRead(A.path).toString('base64');
+    const worker = `import{parentPort}from'node:worker_threads';import tls from'node:tls';const m=await import(${JSON.stringify(uri)});parentPort.postMessage({status:m.sourceGateObserverStatus(),roots:tls.getCACertificates('default').length})`;
+    const code = `const{Worker}=require('node:worker_threads');const w=new Worker(new URL(${JSON.stringify('data:text/javascript;base64,')}+Buffer.from(${JSON.stringify(worker)}).toString('base64')));w.once('message',r=>console.log(JSON.stringify(r)));w.once('exit',c=>{if(c)process.exitCode=c})`;
+    const result = await run({ args: ['-e', code] }); assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stderr.length, 0);
+    const report = JSON.parse(result.stdout); assert.equal(report.roots, 144, JSON.stringify(report)); assert.equal(report.status.reason, 'worker-thread');
+    assert.equal(report.status.sessionAllowed, false); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+    assert.ok(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${result.pid}-`)).length >= 2);
+  });
+});
+test('source observer async and synchronous unselected children retain their exact output and detailed fallback', async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    const code = `const{spawn,spawnSync}=require('node:child_process');const args=['-e','console.log(require("node:tls").getCACertificates("default").length)'];const c=spawn(process.execPath,args,{stdio:['ignore','pipe','pipe']});let o='',e='';c.stdout.on('data',b=>o+=b);c.stderr.on('data',b=>e+=b);c.once('close',n=>{const s=spawnSync(process.execPath,args,{encoding:'utf8'});console.log(JSON.stringify({async:{code:n,stdout:o,stderr:e,pid:c.pid},sync:{code:s.status,stdout:s.stdout,stderr:s.stderr,pid:s.pid}}))})`;
+    const result = await run({ args: ['-e', code] }); assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stderr.length, 0);
+    const report = JSON.parse(result.stdout); for (const value of Object.values(report)) { const { pid, ...output } = value; assert.ok(Number.isSafeInteger(pid) && pid > 0); assert.deepEqual(output, { code: 0, stdout: '144\n', stderr: '' }); }
+    assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []); for (const pid of [result.pid, report.async.pid, report.sync.pid]) assert.equal(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${pid}-`)).length, 1);
+  });
+});
+test('source observer Expo selector requires the exact pinned public or introspect argv and current ref', () => {
+  const ref = { path: '/approved/apps/mobile/node_modules/expo/bin/cli', sha256: 'a'.repeat(64), sizeBytes: 43 };
+  const target = { entry: ref, cwd: '/approved/apps/mobile', argvSuffixes: [['config', '--type', 'public', '--json'], ['config', '--type', 'introspect', '--json']] };
+  const admitted = { admissionComplete: true, primaryNode: { path: '/node24', version: '24.15.0' }, workerCwd: '/approved', workerTargets: [], startupFlags: [], expoConfigTarget: target };
+  const actual = { isMainThread: true, executable: '/node24', nodeVersion: '24.15.0', execArgv: [], argv: ['/node24', ref.path, ...target.argvSuffixes[0]], cwd: target.cwd, entryReference: ref };
+  assert.equal(selectCompactInvocation(actual, admitted).reason, 'exact-pinned-expo-config');
+  assert.equal(selectCompactInvocation({ ...actual, argv: ['/node24', ref.path, ...target.argvSuffixes[1]] }, admitted).mode, 'compact');
+  for (const delta of [{ argv: [...actual.argv, '--unsafe'] }, { cwd: '/approved' }, { entryReference: { ...ref, sha256: 'b'.repeat(64) } }, { argv: ['/node24', ref.path, 'start'] }])
+    assert.equal(selectCompactInvocation({ ...actual, ...delta }, admitted).sessionAllowed, false);
+});
+function observerNestedEvidence() {
+  const ref = path => ({ path, sha256: 'a'.repeat(64), sizeBytes: 10 });
+  const rule = { constructorSource: ref('/owned/Q/scripts/mobile/tooling.test.mjs'), fixture: ref('/owned/Q/scripts/mobile/host-node-trust-fixture.mjs'), cwd: '/owned/Q' };
+  const environment = { HOME: '/owned/home', NODE_OPTIONS: 'held-B', SSL_CERT_FILE: '/owned/roots.pem', SSL_CERT_DIR: '/owned/empty',
+    CASEOPS_HOST_NODE_TRUST_POLICY_FILE: '/owned/policy.json', CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: 'b'.repeat(64) };
+  const start = { file: '/node24', args: ['/node24', '--test', '--test-reporter=tap', rule.fixture.path], cwd: rule.cwd,
+    options: { detached: false, windowsHide: true, windowsVerbatimArguments: false },
+    stdio: [{ type: 'ignore' }, { type: 'pipe', readable: false, writable: true }, { type: 'pipe', readable: false, writable: true }],
+    envPairs: Object.entries({ ...environment, CASEOPS_HOST_NODE_BOOTSTRAP_TEST: '1' }).map(([k, v]) => `${k}=${v}`) };
+  return { actual: { start, end: JSON.parse(JSON.stringify(start)), pid: 123, parentEntryReference: rule.constructorSource },
+    manifest: { primaryNode: { path: '/node24' } }, selection: { nestedDriver: rule }, context: {
+      initialEnvironment: { ...environment, NODE_TEST_CONTEXT: 'child-v8' }, nodeEnvironmentKeys: ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256'],
+      bootstrapReference: ref('/owned/B.mjs'), reviewNestedEnvironment: () => ({ scopedPolicyVerified: true, childEffectiveDefaultClaim: false, expectedDefaultCount: 144, policyRef: ref('/owned/policy.json') }) } };
+}
+test('source observer nested evidence keeps the intrinsic role distinct from a worker witness', () => {
+  const { actual, manifest, selection, context } = observerNestedEvidence(), result = reviewNestedDriverEvidence(actual, manifest, selection, context);
+  assert.equal(result.scriptCompleteClaim, false); assert.equal(result.workerWitnessRequired, true); assert.deepEqual(result.argv, actual.start.args);
+  assert.deepEqual(result.environment.NODE_OPTIONS.exactHeldBootstrap, context.bootstrapReference);
+});
+for (const [name, change] of [
+  ['missing PID', a => { a.pid = undefined; }], ['wrong constructor source', a => { a.parentEntryReference.sha256 = 'c'.repeat(64); }],
+  ['changed snapshot', a => { a.end.cwd = '/changed'; }], ['wrong cwd', a => { a.start.cwd = a.end.cwd = '/changed'; }],
+  ['detached group', a => { a.start.options.detached = a.end.options.detached = true; }],
+  ['custom reporter', a => { a.start.args[2] = a.end.args[2] = '--test-reporter=custom'; }],
+  ['unknown environment', a => { a.start.envPairs.push('UNKNOWN_PRIVATE=unretained'); a.end.envPairs.push('UNKNOWN_PRIVATE=unretained'); }],
+  ['duplicate environment', a => { a.start.envPairs.push(a.start.envPairs[0]); a.end.envPairs.push(a.end.envPairs[0]); }],
+  ['missing curated environment', a => { a.start.envPairs.shift(); a.end.envPairs.shift(); }],
+]) test(`source observer nested evidence refuses ${name} without transferring a workload claim`, () => {
+  const { actual, manifest, selection, context } = observerNestedEvidence();
+  actual.parentEntryReference = { ...actual.parentEntryReference }; change(actual);
+  assert.throws(() => reviewNestedDriverEvidence(actual, manifest, selection, context), /SOURCE_GATE_NESTED_/);
+});
+for (const [label, emptyExecArgv] of [['default', false], ['explicit empty execArgv', true]])
+  test(`source observer classic CJS eval Worker ${label} preserves pre-existing startup and no observer Session`, async () => {
+    await withObserverFixture(async ({ root, A, run }) => {
+      const uri = 'data:text/javascript;base64,' + observerRead(A.path).toString('base64');
+      const worker = `import(${JSON.stringify(uri)}).then(m=>require('node:worker_threads').parentPort.postMessage({status:m.sourceGateObserverStatus(),roots:require('node:tls').getCACertificates('default').length}))`;
+      const code = `const{Worker}=require('node:worker_threads');const w=new Worker(${JSON.stringify(worker)},{eval:true${emptyExecArgv ? ',execArgv:[]' : ''}});w.once('message',r=>console.log(JSON.stringify({mainRoots:require('node:tls').getCACertificates('default').length,worker:r})));w.once('exit',c=>{if(c)process.exitCode=c})`;
+      const baseline = await run({ args: ['-e', code], mode: false }), observed = await run({ args: ['-e', code] });
+      for (const result of [baseline, observed]) {
+        assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.signal, null); assert.equal(result.stderr.length, 0);
+        // This enumeration is a constructor fact, not an HTTPS or TLS-clean verdict.
+        assert.deepEqual(JSON.parse(result.stdout), { mainRoots: 144, worker: { status: { mode: 'not-activated' }, roots: 0 } });
+        assert.ok(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${result.pid}-`)).length >= 2);
+      }
+      assert.deepEqual(JSON.parse(observed.stdout), JSON.parse(baseline.stdout)); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+    });
+  });
+async function observerChildPolicy(callback) {
+  return await withObserverFixture(async fixture => {
+    const child = fixture.observerTrust.prepareHostNodeTrust({ directory: path.join(fixture.root, 'child-policy'), environment: fixture.base, sourceRefs: { helper: fixture.H, bootstrap: fixture.B } });
+    const environment = { ...child.environment }, descriptor = JSON.parse(fs.readFileSync(child.policyRef.path));
+    const commit = () => { const raw = Buffer.from(JSON.stringify(descriptor, null, 2) + '\n'); fs.writeFileSync(child.policyRef.path, raw); environment.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 = observerHash(raw); };
+    const context = { parentPolicy: fixture.prepared.descriptor, parentReport: { defaultEnumerationVerified: true, expectedDefaultCount: 144 },
+      sourceRepo: observerRoot, bootstrapBytes: observerRead(fixture.B.path), deadlineEpochMs: observerNow() + 5000 };
+    // This helper supplies an explicit parent-admission double. The runtime B
+    // must obtain that admission from H's actual CURRENT process; this unit is
+    // a real-FS public-policy contract, not another process's TLS proof.
+    return callback({ ...fixture, child, environment, descriptor, commit, context });
+  });
+}
+test('source observer captured child BASE policy matches the retained approved PEM and never claims its TLS default', async () => {
+  await observerChildPolicy(({ environment, context, child }) => {
+    const result = reviewCapturedBasePolicy(environment, context);
+    assert.equal(result.scopedPolicyVerified, true); assert.equal(result.childEffectiveDefaultClaim, false);
+    assert.equal(result.policyRef.path, child.policyRef.path); assert.equal(result.parentApprovedBundleSha256, context.parentPolicy.bundle.sha256);
+  });
+});
+for (const [name, change] of [
+  ['root fields', f => { f.descriptor.outputSetSha256 = '0'.repeat(64); f.commit(); }],
+  ['helper source path', f => { f.descriptor.runtimeSource.helper.path = path.join(f.root, 'foreign-helper.mjs'); f.commit(); }],
+  ['bootstrap source hash', f => { f.descriptor.runtimeSource.bootstrap.sha256 = '0'.repeat(64); f.commit(); }],
+  ['policy extra field', f => { f.descriptor.unknown = true; f.commit(); }],
+  ['native-QA role', f => { f.descriptor.role = 'native-qa'; f.commit(); }],
+  ['bundle bytes', f => { const b = Buffer.from('different public bundle\n'); fs.writeFileSync(f.descriptor.bundle.path, b); f.descriptor.bundle.sha256 = observerHash(b); f.descriptor.bundle.sizeBytes = b.length; f.commit(); }],
+  ['Node options', f => { f.environment.NODE_OPTIONS += ' --require=unreviewed'; }],
+  ['additional CA', f => { f.environment.NODE_EXTRA_CA_CERTS = '/not-read'; }],
+  ['proxy', f => { f.environment.HTTPS_PROXY = 'https://not-read.invalid'; }],
+  ['case-folded tuple', f => { f.environment.ssl_cert_file = f.environment.SSL_CERT_FILE; }],
+  ['nonempty private directory', f => { fs.writeFileSync(f.descriptor.emptyDirectory + '/late', 'x', { flag: 'wx', mode: 0o600 }); }],
+]) test(`source observer captured child policy refuses changed ${name}`, async () => {
+  await observerChildPolicy(fixture => { change(fixture); assert.throws(() => reviewCapturedBasePolicy(fixture.environment, fixture.context), /SOURCE_GATE_/); });
+});
+
+import { rebuildHostNodeBootstrap, readBootstrapGeneratorInput } from './rebuild-host-node-bootstrap.mjs';
+test('source observer bootstrap generator preserves exact tokens and AST within the original Windows bound', t => {
+  const folder = path.dirname(trustHelper), input = readBootstrapGeneratorInput(path.join(folder, 'host-node-trust-start.source.mjs'));
+  const actual = readBootstrapGeneratorInput(path.join(folder, 'host-node-trust-start.mjs'));
+  const declared = JSON.parse(readBootstrapGeneratorInput(path.join(folder, 'host-node-trust-start.provenance.json')));
+  const pins = JSON.parse(fs.readFileSync(path.join(folder, 'tooling.json'))).sourceGateObserver;
+  assert.deepEqual(Object.keys(pins).sort(), ['bootstrapReadable', 'generator', 'provenance', 'recorder']);
+  for (const ref of Object.values(pins)) {
+    const raw = observerRead(path.join(folder, ref.file), 65536);
+    assert.equal(raw.length, ref.sizeBytes); assert.equal(observerHash(raw), ref.sha256);
+  }
+  const first = rebuildHostNodeBootstrap(input), second = rebuildHostNodeBootstrap(input);
+  assert.ok(first.bytes.equals(actual) && second.bytes.equals(actual)); assert.deepEqual(first.provenance, declared);
+  assert.equal(first.provenance.exactAstEqual, true); assert.ok(first.provenance.optionWithSourceMapsBytes <= 8191);
+  assert.throws(() => rebuildHostNodeBootstrap(Buffer.alloc(16385)), /BOOTSTRAP_GENERATOR_INPUT/);
+  assert.throws(() => rebuildHostNodeBootstrap(Buffer.from([0xff])), /encoded data|UTF-8/);
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const alias = path.join(root, 'alias'); fs.symlinkSync(path.join(folder, 'host-node-trust-start.source.mjs'), alias);
+  assert.throws(() => readBootstrapGeneratorInput(alias), /BOOTSTRAP_GENERATOR_PATH/);
+  const file = path.join(root, 'input'); fs.writeFileSync(file, input, { flag: 'wx', mode: 0o600 });
+  const open = fs.openSync, read = fs.readSync; let descriptor;
+  fs.openSync = (...args) => { descriptor = open(...args); return descriptor; };
+  fs.readSync = () => { throw new Error('SYNTHETIC_GENERATOR_READ'); };
+  try { assert.throws(() => readBootstrapGeneratorInput(file), /SYNTHETIC_GENERATOR_READ/); }
+  finally { fs.openSync = open; fs.readSync = read; }
+  assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
 });

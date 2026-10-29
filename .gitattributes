@@ -92,3 +92,10 @@ scripts/mobile/ios-host-pods.rb text eol=lf
 scripts/mobile/ios-local-qa-host.py text eol=lf
 scripts/mobile/ios-node-build-env.json text eol=lf
 scripts/mobile/ios-git-readonly.py text eol=lf
+
+# Exact source-gate recorder bytes are authorized by the inherited bootstrap.
+scripts/mobile/source-gate-observer.mjs text eol=lf
+
+scripts/mobile/host-node-trust-start.source.mjs text eol=lf
+scripts/mobile/rebuild-host-node-bootstrap.mjs text eol=lf
+scripts/mobile/host-node-trust-start.provenance.json text eol=lf
