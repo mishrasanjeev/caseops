@@ -1385,6 +1385,7 @@ class ProvenanceTests(GitFixture):
         names = []
         acknowledged = []
         timed_out = []
+        timeout_errors = []
         self.addCleanup(self.cleanup_test_containers, names)
 
         def sleeping(args, **kwargs):
@@ -1417,24 +1418,32 @@ class ProvenanceTests(GitFixture):
                     args, ["docker", "start", "--attach", acknowledged[0]]
                 )
                 self.assertGreater(kwargs["timeout"], 0)
+                # Cap only the real attached client, within the remaining budget.
+                kwargs["timeout"] = min(kwargs["timeout"], 1)
                 self.assertLessEqual(kwargs["timeout"], 1)
                 try:
                     return REAL_RUN(args, **kwargs)
-                except subprocess.TimeoutExpired:
+                except subprocess.TimeoutExpired as exc:
                     timed_out.append(list(args))
+                    timeout_errors.append(exc)
                     raise
             return REAL_RUN(args, **kwargs)
 
         with (
             patch.object(scan.subprocess, "run", side_effect=sleeping),
-            self.assertRaises(subprocess.TimeoutExpired),
+            self.assertRaises(subprocess.TimeoutExpired) as caught,
         ):
-            self.run_scan(head, timeout=1)
+            self.run_scan(head, timeout=10)
         self.assert_incomplete()
         self.assertEqual(len(acknowledged), 1)
         self.assertEqual(
             timed_out, [["docker", "start", "--attach", acknowledged[0]]]
         )
+        self.assertEqual(len(timeout_errors), 1)
+        self.assertIs(caught.exception, timeout_errors[0])
+        self.assertEqual(caught.exception.cmd, timed_out[0])
+        self.assertGreater(caught.exception.timeout, 0)
+        self.assertLessEqual(caught.exception.timeout, 1)
         cleanup = json.loads((self.root / "evidence/tree-cleanup.json").read_text())
         self.assertTrue(cleanup["create_acknowledged"])
         self.assertEqual(cleanup["container_id"], acknowledged[0])

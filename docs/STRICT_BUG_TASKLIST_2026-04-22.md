@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 30 Scanner Fixture: Partially Fixed Pending New Gates
+
+E968 Security's one-of75error is an actual unacknowledged Docker-create timeout,
+not a secret leak or scanner fence failure. The positive known-create fixture
+now separates bounded setup from its unchanged <=1s real attached transport,
+and asserts exact error identity, acknowledged ID and real absence. Product,
+cleanup and all negative deadline/unknown-ack controls are unchanged. Full local
+Linux Docker replacement75P/0S/0F and source equality pass; old failed log and
+prebuild-interrupted Docker25 remain retained. See the dated scanner fixture
+brief. New full Docker/hosted gates and exact production release remain open.
+
 ## October 30 Private Invalidation: Partially Fixed, Not Deployed
 
 Docker24 EB10 has a real6.7003345s five-second private invalidation failure;

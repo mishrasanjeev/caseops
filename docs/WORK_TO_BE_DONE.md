@@ -1,5 +1,17 @@
 # CaseOps  - Work To Be Done
 
+## October 30 Scanner Fixture Continuation
+
+**NO-GO pending complete replacement release.** E968's Security gate fails one
+positive real-container fixture at unacknowledged creation; the scanner's
+fail-closed response is correct. Bounded setup plus original <=1s attached
+transport and stronger exact-error/cleanup assertions pass all75local Docker
+cases with no skips. No product deadline/security policy changed. Preserve
+failed hosted evidence and interrupted prebuild Docker25; commit the corrected
+fixture, run full fresh Docker/hosted Security including tree/history scan,
+then main/deploy/live/cadence and actual workbook publication. See the dated
+scanner fixture brief. MacBook App work and external holds remain separate.
+
 ## October 30 Private Invalidation Continuation
 
 **NO-GO pending complete replacement release.** Docker24 EB10 child02 is439P/

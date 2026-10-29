@@ -1,5 +1,14 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 30 Scanner Acceptance Coverage
+
+Existing release/security isolation retains all75offline scanner identities.
+The known-created positive fixture now proves its exact real <=1s attached
+timeout after bounded acknowledged setup, without weakening total-budget or
+unknown-create controls. Local isolated Docker75P/0S/0F and source equality
+pass; this does not certify a new hosted scan or full release. See the dated
+scanner fixture brief; interrupted Docker25 remains incomplete.
+
 ## October 30 Private Invalidation Coverage
 
 Existing private retrieval/IPLF-066, M02/M08/M13/M14, NFT-005 and tenant/access

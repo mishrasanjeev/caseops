@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- A known-created-container cleanup test must actually reach acknowledged
+  creation before testing attached-client timeout. Keep setup bounded and cap
+  that real transport within the remaining total budget; assert the exact
+  propagated exception, ID and absence. Unknown create outcomes must retain
+  their fail-closed cleanup error. Do not turn setup latency into a scanner
+  defect, fabricate acknowledgements, reset deadlines or add blind retries.
+
 - A set-based update can still allocate one ORM identity and returned Row per
   retained chunk. Bound client-side result consumption as well as SQL work;
   preserve exact atomic predicates, source membership and loaded-object state.

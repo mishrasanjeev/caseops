@@ -8,6 +8,12 @@ traffic, a backlink, or a conversion.
 
 ## 2026-10-30 IST - Continuing Human Release Gate
 
+20:22UTC continuation: a separate positive scanner fixture reached an unknown
+create outcome in fresh hosted Security; fail-closed cleanup remained correct.
+Its narrow stage-boundary correction passes all75local native Docker cases.
+Docker25 was stopped before builds and must be replaced completely. This is
+still engineering deferral, not GSC/SEO acceptance or production certification.
+
 At2026-10-29T19:56UTC, owner-directed #561/#564/PR567 work remains active.
 Docker24 found a real private-invalidation timing failure; failed/interrupted
 evidence remains retained. The bounded-allocation repair has a complete275-case

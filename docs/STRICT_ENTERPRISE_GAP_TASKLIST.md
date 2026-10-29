@@ -1,5 +1,15 @@
 # Strict Enterprise Gap Tasklist
 
+## October 30 Security Fixture Stage Separation
+
+**Partially fixed / NO-GO pending new committed release gates.** E968's real
+unknown-create cleanup rejection is correct, while its positive one-second
+fixture failed before acknowledged creation. Bounded setup plus <=1s real
+attached-client transport now retains exact timeout/ID/absence assertions;
+all75local native Docker cases pass. No product/security deadline or unknown-
+ack fence changed. See bugfix-scanner-timeout-fixture-2026-10-30.md; full new
+Docker/CI/tree-history scanner/main/live acceptance remains mandatory.
+
 ## October 30 Private Invalidation Allocations
 
 **Partially fixed / NO-GO pending full release.** A set-based UPDATE still
