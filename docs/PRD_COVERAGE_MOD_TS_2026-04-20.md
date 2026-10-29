@@ -1,5 +1,18 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 29 Import Response Coverage
+
+IPLF-032/UJ-02/NFT-005 map IMP-MAT-01..04 to the discoverable
+test_ip_import_materialization_profile_20261029.py:5actual native cases prove
+zero bulk rich loads, complete public DTO, caller commit/rollback and real
+partial-row failure/replay. Baseline RED is4P/1F/15phases with27discarded
+SELECTs. Full seven-file mixed-dialect GREEN is5new/11bulk/4recovery/5seek/
+4parity/8export/9filing=46P/138phases,0S/0retry,37retained files verified.
+Collection-only XML is explicitly not execution. Original201-row deadlines
+and all prior export/source oracles remain unchanged. Docker20's437P/2F and
+unexecuted3070native/640browser inventory remain failed/incomplete evidence;
+full new release and live15second desktop/mobile CSV acceptance remain open.
+
 ## October 29 First-Transaction Metadata Coverage
 
 J04/M03/US-007..009/FT-011..015/NFT-005 map PML-01..06 to the discoverable

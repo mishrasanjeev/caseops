@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## October 29 Import Writer Work
+
+**Partially fixed / NO-GO pending full replacement release.** Reusing the
+canonical import writer also built a rich response discarded by its ID-only
+caller: controlled3row RED records27SELECTs. Shared private write logic now
+returns the ORM record; the public wrapper retains the original full response,
+authorization, locks, source events and commit behavior. All46affected cases/
+138phases pass, including public/caller-transaction/recovery controls and the
+unchanged201-row deadline cases. Full37file retention verifies. Docker20's
+actual437P/2F is not erased; its historical timing cause remains unproven.
+Diagnostic profile02 is explicitly INCOMPLETE, not green SQL evidence. Require
+complete new Docker/CI/main/exact-live/cadence and actual workbook publication.
+
 ## October 29 Tenant Lock Work
 
 **Partially implemented / NO-GO pending replacement release.** Postcommit-only

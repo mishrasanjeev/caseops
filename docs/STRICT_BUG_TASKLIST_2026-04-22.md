@@ -1,5 +1,20 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 29 Bulk DTO: Partially Fixed, Not Deployed
+
+IPLF-032/UJ-02/NFT-005: Docker20's fresh resume148.586s and stale-empty initial
+commit143.540s violate unchanged90s bounds before export measurement. Its one
+complete group is437P/2F/1317phases, not whole acceptance;3070native/640browser
+cases were unexecuted after guarded interruption. No host/GC/planner cause is
+established. A separate deterministic RED proves27discarded rich queries for
+three imported rows, with all public/transaction/partial-success controls passed.
+Shared writer/public serializer separation now passes all46selected cases/
+138phases/0S, including the three original201-row cases and original export
+and provenance modules. Bulk rich queries0/public9;37retained files verify.
+Keep profile02's SQL-capture failure and process/journal mismatch preserved as
+INCOMPLETE. Fresh full Docker/CI/current-main/production and unchanged15second
+desktop/mobile CSV proof are still required. No external hold is promoted.
+
 ## October 29 Precommit Metadata: Inconclusive Pending Release
 
 J04/M03/US-007..009/FT-011..015/NFT-005: Docker19's actual matter-first upload

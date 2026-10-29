@@ -1,5 +1,20 @@
 # CaseOps  - Work To Be Done
 
+## October 29 Import Materialization Continuation
+
+**NO-GO pending full replacement release.** Docker20 retains437P/2F over its
+complete439case group;3070native and640browser cases remain unexecuted. Both
+failures are original import90s deadline assertions, not export plan failures.
+The historical timing cause remains unknown. A deterministic3row RED separately
+proves27discarded rich DTO SELECTs. Shared canonical writer/public response
+separation now passes a complete46case/138phase seven-module replacement,
+including public DTO/transaction/recovery and unchanged201-row/source/export
+controls. All37retained files verify; no deadline or safety fence changed.
+Profile02's diagnostic failure remains INCOMPLETE. Full current-source Docker,
+new CI/Security/CodeQL, main/tree proof, guarded deployment, live CSV/private
+cadence and both original Excel publications remain required. The MacBook owns
+app work. Legal/provider/consent/owner-MFA and old Calendar holds stay separate.
+
 ## October 29 Precommit Metadata Continuation
 
 **NO-GO pending full replacement release.** AFBC Docker19 retains1313P/1F

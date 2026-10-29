@@ -3508,3 +3508,10 @@ requirements when using the fallback.
   assertion failure. Never infer KDF, database or scheduling causality from the
   whole call duration or a later passing replay. Keep actual lock-edge checks,
   real hashing, original deadlines and the original failure authoritative.
+- Reusing a canonical writer does not require building a discarded rich reader
+  response for every bulk row. Share the unchanged authorized writer, return
+  its internal record to ID-only orchestration, and preserve the public full
+  DTO plus caller-owned transaction semantics. Regress actual loader work,
+  persisted facts, rollback, partial success and replay. A later passing import
+  or an incomplete diagnostic profiler cannot establish an old timing cause;
+  keep original deadlines and require full replacement release acceptance.

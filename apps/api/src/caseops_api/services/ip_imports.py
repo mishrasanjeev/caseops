@@ -69,7 +69,7 @@ from caseops_api.services.ip_import_files import (
     normalize_header,
     source_value,
 )
-from caseops_api.services.ip_operations import create_ip_docket
+from caseops_api.services.ip_operations import _create_ip_docket_record as create_ip_docket
 from caseops_api.services.ip_records import create_ip_asset, create_trademark_application
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.session_context import SessionContext
