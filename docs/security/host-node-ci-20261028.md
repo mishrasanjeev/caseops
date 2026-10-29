@@ -210,3 +210,37 @@ the observed nonexclusive input ACL from immutable-byte authority; it never
 reports that unsafe source ACL as safe. Unix behavior and deadlines are unchanged.
 Fresh Windows execution remains required, and no result rewrites the earlier
 failed runs or proves the still-unobserved command-file condition.
+
+The subsequent `c7b` Windows run identified only GITHUB_OUTPUT:
+`OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE`. The original
+inputs, protected parent, runtime copies and anonymous npm config checks had
+advanced. This is a safe writer set with a different owner; it does not authorize
+new writers or a generic Administrators-owned file exception.
+
+The observed runner v2.338.0 official implementation is pinned to
+[commit197ca027](https://github.com/actions/runner/blob/197ca027b90de199464dee3bb9ff198a1db60967/src/Runner.Worker/FileCommandManager.cs),
+Git blob `9d8bbebb42b037781456ec467693e019138f1b95`. It creates
+`Temp/_runner_file_commands/set_output_<Guid.NewGuid().ToString()>` for the output
+context. Only the private CI preparation context can admit that exact canonical
+direct-child filename shape under the captured RUNNER_TEMP. An exported append
+call, environment-selected unrelated path or fabricated context cannot obtain
+the class. Regular single-link held/named frames, a real nonlink parent, full
+parent metadata and namespace identity are bound before the ACL query and
+reconciled before any command-file payload read/write and after append.
+
+Only the precise observed false-owner/true-writer result with Administrators
+owner and current-user token owner is admitted there. Administrators are already
+trusted by the unchanged writer predicate; no additional principal is permitted.
+Returned evidence retains `ownerMatches=false` internally and records the distinct
+`native-runner-command-safe-administrators-owner` authority, rather than claiming
+current-user ownership. Configs, copied executables, arbitrary files and the
+exported default decoder remain strict. No owner or ACL is modified, and all
+query/append/CI bounds remain unchanged. Fresh Windows execution is still needed
+for complete dependency-installation/audit acceptance.
+
+The added final runner callback uses the complete descriptor/named frames bound
+to the last verified payload readback, rather than merely the initial inode
+identity. A retained negative control edits the same inode after the prior final
+check; the old identity-only callback returned, while the replacement refuses
+that edit without retrying the append. Earlier 316-case evidence retains that
+original callback limitation.

@@ -4221,3 +4221,72 @@ test('CI public-data writer admission never extends to parent runtime directory 
     finally { trace.restore(); proof.restore(); } trace.closed();
   });
 });
+
+
+const ciRunnerOutputName = 'set_output_01234567-89ab-cdef-0123-456789abcdef';
+async function ciNativeRunnerFixture(callback, { name = ciRunnerOutputName, nested = false, alias = false, proof = () => ciCommandFalse() } = {}) {
+  await ciFreshParentFixture(async f => {
+    const directory = path.join(f.root, '_runner_file_commands'); fs.mkdirSync(directory, { mode: 0o700 });
+    if (alias) { const retained = path.join(f.root, 'retained-runner-directory'); fs.renameSync(directory, retained); fs.symlinkSync(retained, directory, 'dir'); }
+    const destination = nested ? path.join(directory, 'nested') : directory; if (nested) fs.mkdirSync(destination, { mode: 0o700 });
+    const command = path.join(destination, name); fs.writeFileSync(command, 'EARLIER=retained\n', { flag: 'wx', mode: 0o600 }); f.environment.GITHUB_OUTPUT = command;
+    const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), original = cp.spawnSync; let calls = 0;
+    cp.spawnSync = (exe, args, options) => { if (options.env.CASEOPS_TRUST_ACL_PATH === command) { calls++; return proof({ ...f, directory, command }, args, options); } return original(exe, args, options); }; syncBuiltinESMExports();
+    try { await callback({ ...f, directory, command, get commandCalls() { return calls; } }); }
+    finally { cp.spawnSync = original; syncBuiltinESMExports(); }
+  });
+}
+test('CI native runner output admits only its observed safe Administrators owner and preserves distinct authority', async () => ciNativeRunnerFixture(async ({ environment, command }) => {
+  const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.commandFileAuthority, 'native-runner-command-safe-administrators-owner'); assert.equal(result.appendedKeys, 9); assert.equal(result.runtimeSourceCopies.length, 2);
+  const rows = fs.readFileSync(command, 'utf8').split('\n'); assert.equal(rows.shift(), 'EARLIER=retained'); assert.equal(rows.pop(), ''); assert.deepEqual(rows.map(row => row.slice(0, row.indexOf('='))), ciTrustKeys);
+  assert.ok(result.runtimeSourceCopies.every(row => row.copiedAcl.runtimeOwner && row.copiedAcl.writeScopeSafe));
+}));
+test('CI exported append and result decoder cannot forge native runner command authority', async () => ciNativeRunnerFixture(async ({ root, environment, command }) => {
+  const trace = ciSourceTrace();
+  try {
+    for (const context of [undefined, {}, { token: Symbol('native-ci-preparation'), file: command, root, environment }]) assert.throws(() => appendCITrustOutputs(command, root, ciTrustValues, context), { message: 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE' });
+    for (const token of [undefined, true, {}, Symbol('native-runner-output-command')]) assert.throws(() => reviewCICommandOwnerResult(ciCommandFalse(), 'GITHUB_OUTPUT', token), { message: 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE' });
+    assert.equal(trace.reads, 0); assert.equal(trace.writes, 0);
+  } finally { trace.restore(); } trace.closed(); assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+}));
+test('CI native runner class refuses unrelated command prefixes malformed UUID nested paths and parent aliases', async () => {
+  for (const options of [{ name: 'set_env_01234567-89ab-cdef-0123-456789abcdef' }, { name: 'set_output_01234567-89ab-cdef-0123-456789abcdef-extra' }, { name: 'set_output_0123456789abcdef0123456789abcdef' }, { nested: true }, { alias: true }]) await ciNativeRunnerFixture(async ({ environment, command }) => {
+    await assert.rejects(prepareCIHostNodeTrustWindows(environment), /CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE|CI_TRUST_CANONICAL_PATH/); assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+  }, options);
+});
+test('CI native runner class cannot admit another owner token or any unsafe writer and keeps timeout refusal', async () => {
+  for (const [result, expected] of [[ciCommandFalse({ ownerClass: 'OTHER' }), 'OWNER_OTHER_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE'], [ciCommandFalse({ tokenOwnerClass: 'OTHER' }), 'OWNER_ADMINISTRATORS_TOKEN_OTHER_MATCH_NO_WRITE_SAFE'], [ciCommandFalse({ writeScopeSafe: false }), 'OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_UNSAFE'], [{ status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: 'COPS_ACL0\n' }, 'TIMEOUT_SCRIPT_ENTERED']]) await ciNativeRunnerFixture(async ({ environment, command }) => {
+    await assert.rejects(prepareCIHostNodeTrustWindows(environment), { message: 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_' + expected }); assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+  }, { proof: () => result });
+});
+test('CI native runner held command-file replacement during ACL read refuses before appending any bytes', async () => {
+  let commandWrites = 0, injectedWrites = 0, trace;
+  await ciNativeRunnerFixture(async ({ environment, command, directory }) => {
+    trace = ciSourceTrace(); const write = fs.writeSync; fs.writeSync = (fd, ...args) => { if (trace.descriptors.get(fd) === command) commandWrites++; return write(fd, ...args); };
+    try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), /CI_TRUST_NAMED_DESCRIPTOR_CHANGED|CI_TRUST_RUNNER_COMMAND_CHANGED/); assert.equal(commandWrites, injectedWrites); }
+    finally { trace.restore(); } trace.closed(); assert.equal(fs.readFileSync(command, 'utf8'), 'REPLACEMENT=retained\n'); assert.equal(fs.readFileSync(path.join(directory, 'original-command'), 'utf8'), 'EARLIER=retained\n');
+  }, { proof: ({ command, directory }) => { fs.renameSync(command, path.join(directory, 'original-command')); fs.writeFileSync(command, 'REPLACEMENT=retained\n', { flag: 'wx', mode: 0o600 }); injectedWrites = commandWrites; return ciCommandFalse(); } });
+});
+test('CI native runner late directory insertion refuses with unchanged command bytes and closes descriptors', async () => {
+  let trace, commandWrites = 0;
+  await ciNativeRunnerFixture(async ({ environment, command }) => {
+    trace = ciSourceTrace(); const write = fs.writeSync; fs.writeSync = (fd, ...args) => { if (trace.descriptors.get(fd) === command) commandWrites++; return write(fd, ...args); };
+    try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), { message: 'CI_TRUST_RUNNER_COMMAND_CHANGED' }); assert.equal(commandWrites, 0); }
+    finally { trace.restore(); } trace.closed(); assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+  }, { proof: ({ directory }) => { fs.writeFileSync(path.join(directory, 'late'), 'owned synthetic entry', { flag: 'wx', mode: 0o600 }); return ciCommandFalse(); } });
+});
+
+test('CI runner final callback refuses a same-inode edit after verified payload readback', async t => {
+  await ciNativeRunnerFixture(async f => {
+    const trace = ciSourceTrace(), read = fs.readSync, write = fs.writeSync, native = fs.realpathSync.native, open = fs.openSync, close = fs.closeSync;
+    let written = false, readback = false, changed = false, observedError; const inode = fs.lstatSync(f.command, { bigint: true }).ino;
+    fs.writeSync = (fd, ...args) => { if (trace.descriptors.get(fd) === f.command) written = true; return write(fd, ...args); };
+    fs.readSync = (fd, ...args) => { const count = read(fd, ...args); if (written && count === 0 && trace.descriptors.get(fd) === f.command) readback = true; return count; };
+    fs.realpathSync.native = (file, ...args) => { const result = native(file, ...args); if (!changed && readback && file === f.command) { changed = true; const fd = open(file, 'r+'); try { trace.write(fd, Buffer.from('X'), 0, 1, 0); } finally { close(fd); } } return result; };
+    try { try { await prepareCIHostNodeTrustWindows(f.environment); } catch (error) { observedError = error; } }
+    finally { fs.realpathSync.native = native; trace.restore(); } trace.closed();
+    const sameInode = fs.lstatSync(f.command, { bigint: true }).ino === inode;
+    t.diagnostic(JSON.stringify({ injectedAfterReadback: changed && readback, sameInode, commandQueries: f.commandCalls, outcome: observedError ? 'refused' : 'returned' }));
+    assert.equal(changed && readback && sameInode, true); assert.equal(f.commandCalls, 1); assert.equal(fs.readFileSync(f.command)[0], 88); assert.equal(observedError?.message, 'CI_TRUST_RUNNER_COMMAND_CHANGED');
+  });
+});

@@ -33,6 +33,8 @@ function neutralConfig(file, role) {
     return file;
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
+const CI_INVOCATION = Symbol('native-ci-preparation');
+const RUNNER_COMMAND = Symbol('native-runner-output-command');
 const COMMAND_OWNER_ROLES = new Set(['GITHUB_OUTPUT', 'NPM_USER_CONFIG', 'NPM_GLOBAL_CONFIG']);
 function commandOwnerPhase(stderr) {
   if (typeof stderr !== 'string' || Buffer.byteLength(stderr) > 4096) return 'UNCLASSIFIED';
@@ -43,7 +45,7 @@ function commandOwnerPhase(stderr) {
   return ['NO_MARKER', 'SCRIPT_ENTERED', 'ACL_READ', 'IDENTITY_READ', 'RULES_READ'][lines.length];
 }
 /** Fixed public classifications only; arbitrary subprocess output is never reflected. */
-export function reviewCICommandOwnerResult(result, role) {
+export function reviewCICommandOwnerResult(result, role, admission = undefined) {
   assert.ok(COMMAND_OWNER_ROLES.has(role), 'CI_TRUST_COMMAND_OWNER_PROTOCOL');
   const prefix = 'CI_TRUST_COMMAND_OWNER_' + role + '_', phase = commandOwnerPhase(result?.stderr);
   if (result?.error?.code === 'ETIMEDOUT') throw new Error(prefix + 'TIMEOUT_' + phase);
@@ -53,9 +55,10 @@ export function reviewCICommandOwnerResult(result, role) {
   let parsed; try { parsed = JSON.parse(result.stdout); } catch { throw new Error(prefix + 'PROTOCOL_' + phase); }
   const owners = new Set(['CURRENT_USER', 'SYSTEM', 'ADMINISTRATORS', 'TOKEN_OTHER', 'OTHER', 'MISSING']), tokens = new Set(['CURRENT_USER', 'SYSTEM', 'ADMINISTRATORS', 'OTHER', 'MISSING']);
   assert.ok(parsed && !Array.isArray(parsed) && equal(Object.keys(parsed).sort(), ['ownerClass', 'ownerMatches', 'tokenOwnerClass', 'writeScopeSafe']) && typeof parsed.ownerMatches === 'boolean' && typeof parsed.writeScopeSafe === 'boolean' && (!parsed.ownerMatches || !parsed.writeScopeSafe) && owners.has(parsed.ownerClass) && tokens.has(parsed.tokenOwnerClass), prefix + 'PROTOCOL_' + phase);
+  if (admission === RUNNER_COMMAND && role === 'GITHUB_OUTPUT' && parsed.ownerMatches === false && parsed.writeScopeSafe === true && parsed.ownerClass === 'ADMINISTRATORS' && parsed.tokenOwnerClass === 'CURRENT_USER') return { ownerMatches: false, writeScopeSafe: true, authority: 'native-runner-command-safe-administrators-owner' };
   throw new Error(prefix + 'OWNER_' + parsed.ownerClass + '_TOKEN_' + parsed.tokenOwnerClass + '_MATCH_' + (parsed.ownerMatches ? 'YES' : 'NO') + '_WRITE_' + (parsed.writeScopeSafe ? 'SAFE' : 'UNSAFE'));
 }
-function commandOwner(file, state, role) {
+function commandOwner(file, state, role, runnerCommand = null) {
   assert.ok(COMMAND_OWNER_ROLES.has(role), 'CI_TRUST_COMMAND_OWNER_PROTOCOL');
   if (typeof process.getuid === 'function') {
     assert.ok(state.uid === BigInt(process.getuid()) && (state.mode & 0o022n) === 0n, 'CI_TRUST_COMMAND_OWNER');
@@ -66,7 +69,8 @@ function commandOwner(file, state, role) {
   const proof = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], {
     env: { SystemRoot: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file }, encoding: 'utf8', timeout: 4000, maxBuffer: 4096, windowsHide: true,
   });
-  reviewCICommandOwnerResult(proof, role);
+  const result = reviewCICommandOwnerResult(proof, role, runnerCommand?.token);
+  runnerCommand?.reconcile(); return result;
 }
 function checkNamed(named, opened) {
   for (const key of fields) if (!(process.platform === 'win32' && key === 'dev' && named.dev === 0n)) assert.equal(named[key], opened[key], 'CI_TRUST_NAMED_DESCRIPTOR_CHANGED');
@@ -109,10 +113,29 @@ function projectConfigsAbsent(workspace, check) {
   return rows;
 }
 
+/** The observed native runner v2.338.0 creates this one direct-child UUID
+ * command file. This private context grants no authority to an arbitrary
+ * exported append call, npm config or other existing path. No ACL is modified. */
+function nativeRunnerCommand(file, root, fd, initial, named, context, check) {
+  if (process.platform !== 'win32' || context?.token !== CI_INVOCATION) return null;
+  if (context.file !== file || context.root !== root || context.environment.GITHUB_ACTIONS !== 'true' || context.environment.CI !== 'true' || context.environment.RUNNER_TEMP !== root || context.environment.GITHUB_OUTPUT !== file) return null;
+  const directory = path.join(root, '_runner_file_commands');
+  if (path.dirname(file) !== directory || !/^set_output_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path.basename(file))) return null;
+  check(); checkNamed(named, initial);
+  const parent = fs.lstatSync(directory, { bigint: true }), namespace = parents(file, check);
+  assert.ok(parent.isDirectory() && !parent.isSymbolicLink() && canonical(directory) === directory && canonical(file) === file, 'CI_TRUST_RUNNER_COMMAND_NAMESPACE');
+  const reconcile = (expectedOpened = initial, expectedNamed = named) => {
+    check(); const openedNow = fs.fstatSync(fd, { bigint: true }), namedNow = fs.lstatSync(file, { bigint: true });
+    checkNamed(namedNow, openedNow);
+    assert.ok(equal(frame(expectedOpened), frame(openedNow)) && equal(frame(expectedNamed), frame(namedNow)) && equal(frame(parent), frame(fs.lstatSync(directory, { bigint: true }))) && equal(namespace, parents(file, check)) && canonical(directory) === directory && canonical(file) === file, 'CI_TRUST_RUNNER_COMMAND_CHANGED');
+  };
+  reconcile(); return { token: RUNNER_COMMAND, reconcile };
+}
+
 /** The GitHub runner owns the command file. Append through one retained FD and
  * reconcile the old bytes, exact appended bytes, full metadata and namespace.
  * Values stay in RAM; neither the existing file nor the policy is printed. */
-export function appendCITrustOutputs(file, root, environment) {
+export function appendCITrustOutputs(file, root, environment, context = undefined) {
   const end = performance.now() + 5000;
   const check = () => assert.ok(performance.now() < end, 'CI_TRUST_APPEND_DEADLINE');
   check(); admittedFile(file, root);
@@ -127,7 +150,8 @@ export function appendCITrustOutputs(file, root, environment) {
     fd = fs.openSync(file, fs.constants.O_RDWR | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
     const initial = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true });
     assert.ok(initial.isFile() && named.isFile() && !named.isSymbolicLink() && initial.nlink === 1n && initial.size >= 0n && initial.size <= BigInt(MAX), 'CI_TRUST_COMMAND_FILE');
-    commandOwner(file, initial, 'GITHUB_OUTPUT'); check();
+    const runnerCommand = nativeRunnerCommand(file, root, fd, initial, named, context, check);
+    const ownerProof = commandOwner(file, initial, 'GITHUB_OUTPUT', runnerCommand); check();
     checkNamed(named, initial); const namespace = parents(file, check);
     const before = Buffer.alloc(Number(initial.size) + 1); let count = 0;
     while (count < before.length) { check(); const n = fs.readSync(fd, before, count, before.length - count, count); if (!n) break; count += n; }
@@ -145,7 +169,8 @@ export function appendCITrustOutputs(file, root, environment) {
     while (count < actual.length) { check(); const n = fs.readSync(fd, actual, count, actual.length - count, count); if (!n) break; count += n; }
     assert.ok(count === expected.length && actual.subarray(0, count).equals(expected), 'CI_TRUST_SAME_DESCRIPTOR_READBACK');
     assert.ok(equal(frame(final), frame(fs.fstatSync(fd, { bigint: true }))) && equal(frame(finalNamed), frame(fs.lstatSync(file, { bigint: true }))) && equal(namespace, parents(file, check)) && canonical(file) === file, 'CI_TRUST_FINAL_COMMAND_CHANGED');
-    check(); return { appendedKeys: KEYS.length, previousBytes: prefix.length, finalBytes: expected.length };
+    runnerCommand?.reconcile(final, finalNamed);
+    check(); return { appendedKeys: KEYS.length, previousBytes: prefix.length, finalBytes: expected.length, ...(ownerProof?.authority ? { commandFileAuthority: ownerProof.authority } : {}) };
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 
@@ -442,7 +467,7 @@ function ciContext(environment, createProtectedWindowsParent = false) {
       createdParent = { token: FRESH_PARENT, path: parent, namespace, absent: true };
     } else { fs.mkdirSync(parent, { mode: 0o700 }); createdParent = freshParentClaim(parent, check); }
   } else parent = fs.mkdtempSync(path.join(root, 'caseops-node-trust-'));
-  return { environment, check, root, file, workspace, projects, parent, createdParent };
+  return { token: CI_INVOCATION, environment, check, root, file, workspace, projects, parent, createdParent };
 }
 function finishCI(context, prepared) {
   const { check, root, file, workspace, projects, parent } = context;
@@ -452,7 +477,7 @@ function finishCI(context, prepared) {
     NPM_CONFIG_STRICT_SSL: 'true', NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/',
   };
   assert.ok(equal(projects, projectConfigsAbsent(workspace, check)), 'CI_TRUST_PROJECT_CHANGED');
-  const result = appendCITrustOutputs(file, root, scoped);
+  const result = appendCITrustOutputs(file, root, scoped, context);
   assert.ok(equal(projects, projectConfigsAbsent(workspace, check)), 'CI_TRUST_PROJECT_CHANGED');
   check();
   return { nodeVersion: prepared.descriptor.nodeVersion, approvedRoots: prepared.descriptor.outputCount, ...result };
@@ -486,7 +511,7 @@ const DIAGNOSTICS = new Set([
   'HOST_TRUST_WINDOWS_ACL_TIMEOUT_RULES_READ', 'HOST_TRUST_WINDOWS_ACL_TIMEOUT_UNCLASSIFIED',
   'HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED', 'HOST_TRUST_DEADLINE',
   'HOST_TRUST_NAMED_FD_CHANGED', 'HOST_TRUST_DIRECTORY_PATH',
-  'CI_TRUST_COMMAND_OWNER', 'CI_TRUST_COMMAND_OWNER_PROTOCOL', 'CI_TRUST_NAMESPACE', 'CI_TRUST_CONFIG_DEADLINE',
+  'CI_TRUST_COMMAND_OWNER', 'CI_TRUST_COMMAND_OWNER_PROTOCOL', 'CI_TRUST_RUNNER_COMMAND_NAMESPACE', 'CI_TRUST_RUNNER_COMMAND_CHANGED', 'CI_TRUST_NAMESPACE', 'CI_TRUST_CONFIG_DEADLINE',
   'CI_TRUST_APPEND_DEADLINE', 'CI_TRUST_PREPARATION_DEADLINE',
   'CI_TRUST_RUNTIME_SOURCE_ACL_COMMAND', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL', 'CI_TRUST_RUNTIME_SOURCE_OWNER',
   'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES', 'CI_TRUST_RUNTIME_SOURCE_PUBLIC_INPUT_REQUIRED', 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_WRITE', 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_READ',
