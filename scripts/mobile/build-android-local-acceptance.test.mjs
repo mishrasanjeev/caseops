@@ -354,14 +354,28 @@ function actualAndroidNodeShim(t) {
 }
 function actualAndroidNodeEntries(f) {
   const bytes = readAndroidHostInput(f.prepared.descriptor.runtimeSource.helper), helper = 'data:text/javascript;base64,' + bytes.toString('base64'); bytes.fill(0);
-  const policy = JSON.stringify({ policyRef: f.prepared.policyRef, role: 'base' });
-  const verification = `let verification;try{const value=assertHostNodeTrust(${policy});verification={expected:value.expectedDefaultCount,verified:value.defaultEnumerationVerified};}catch(error){verification={refusal:error.message};}const facts={count:tls.getCACertificates('default').length,java:process.env.JAVA_TOOL_OPTIONS??null,...verification};`;
-  const report = `import tls from 'node:tls';import {assertHostNodeTrust} from ${JSON.stringify(helper)};` + verification;
+  // Public fixture data travels as data, never as JSON interpolated into code.
+  f.environment.CASEOPS_ANDROID_TEST_HELPER = helper;
+  f.environment.CASEOPS_ANDROID_TEST_POLICY = JSON.stringify({ policyRef: f.prepared.policyRef, role: 'base' });
+  const verification = "let verification;try{const value=assertHostNodeTrust(JSON.parse(process.env.CASEOPS_ANDROID_TEST_POLICY));verification={expected:value.expectedDefaultCount,verified:value.defaultEnumerationVerified};}catch(error){verification={refusal:error.message};}const facts={count:tls.getCACertificates('default').length,java:process.env.JAVA_TOOL_OPTIONS??null,...verification};";
+  const report = "import tls from 'node:tls';const {assertHostNodeTrust}=await import(process.env.CASEOPS_ANDROID_TEST_HELPER);" + verification;
   writeFileSync(path.join(f.root, 'worker.mjs'), report + "import {parentPort} from 'node:worker_threads';parentPort.postMessage(facts);", { flag: 'wx', mode: 0o600 });
   writeFileSync(path.join(f.root, 'fork.mjs'), report + 'console.log(JSON.stringify(facts));', { flag: 'wx', mode: 0o600 });
-  const cjs = `const tls=require('node:tls');const {parentPort}=require('node:worker_threads');(async()=>{const {assertHostNodeTrust}=await import(${JSON.stringify(helper)});${verification}parentPort.postMessage(facts);})().catch(error=>{throw error;});`;
+  function cjsWorker(require) {
+    const tls = require('node:tls'), { parentPort } = require('node:worker_threads');
+    import(process.env.CASEOPS_ANDROID_TEST_HELPER).then(({ assertHostNodeTrust }) => {
+      let verification;
+      try {
+        const value = assertHostNodeTrust(JSON.parse(process.env.CASEOPS_ANDROID_TEST_POLICY));
+        verification = { expected: value.expectedDefaultCount, verified: value.defaultEnumerationVerified };
+      } catch (error) { verification = { refusal: error.message }; }
+      parentPort.postMessage({ count: tls.getCACertificates('default').length, java: process.env.JAVA_TOOL_OPTIONS ?? null, ...verification });
+    }).catch(error => { throw error; });
+  }
+  // Only this fixed function body becomes code; both Worker forms share it.
+  const cjs = '(' + cjsWorker.toString() + ')(require);';
   writeFileSync(path.join(f.root, 'worker.cjs'), cjs, { flag: 'wx', mode: 0o600 });
-  const parent = report + `import {Worker} from 'node:worker_threads';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';const execute=(entry,options)=>new Promise((resolve,reject)=>{const w=new Worker(entry,options);w.once('message',resolve);w.once('error',reject)});const worker=await execute(new URL('./worker.mjs',import.meta.url),{});const fileEmpty=await execute(new URL('./worker.mjs',import.meta.url),{execArgv:[]});const cjsFile=await execute(new URL('./worker.cjs',import.meta.url),{eval:false});const cjsEval=await execute(${JSON.stringify(cjs)},{eval:true,execArgv:[]});const child=spawnSync(process.execPath,[fileURLToPath(new URL('./fork.mjs',import.meta.url))],{encoding:'utf8',timeout:5000,maxBuffer:8192});if(child.status!==0)throw Error('FORK_REFUSED');console.log(JSON.stringify({...facts,worker,fileEmpty,cjsFile,cjsEval,fork:JSON.parse(child.stdout)}));`;
+  const parent = report + `import {Worker} from 'node:worker_threads';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';const execute=(entry,options)=>new Promise((resolve,reject)=>{const w=new Worker(entry,options);w.once('message',resolve);w.once('error',reject)});const worker=await execute(new URL('./worker.mjs',import.meta.url),{});const fileEmpty=await execute(new URL('./worker.mjs',import.meta.url),{execArgv:[]});const cjsFile=await execute(new URL('./worker.cjs',import.meta.url),{eval:false});const evalMain=(${cjsWorker.toString()});const cjsEval=await execute('('+evalMain.toString()+')(require);',{eval:true,execArgv:[]});const child=spawnSync(process.execPath,[fileURLToPath(new URL('./fork.mjs',import.meta.url))],{encoding:'utf8',timeout:5000,maxBuffer:8192});if(child.status!==0)throw Error('FORK_REFUSED');console.log(JSON.stringify({...facts,worker,fileEmpty,cjsFile,cjsEval,fork:JSON.parse(child.stdout)}));`;
   const entry = path.join(f.root, 'parent.mjs'); writeFileSync(entry, parent, { flag: 'wx', mode: 0o600 }); return entry;
 }
 let androidWorkerComposition;
