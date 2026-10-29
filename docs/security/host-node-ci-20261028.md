@@ -170,3 +170,19 @@ new leaf does not claim an atomic whole-namespace snapshot or lifetime process
 observation. Mac filesystem controls and PowerShell7 grammar/binding controls
 remain scoped evidence; actual Windows creation and inherited DACL acceptance
 still require a fresh hosted run.
+
+The later `a16a6e37` hosted attempt refused `CI_TRUST_COMMAND_OWNER` in
+6.171 seconds before installation. That diagnostic conflates newly created
+anonymous npm configs and the existing GITHUB_OUTPUT file, as well as subprocess,
+protocol and owner/writer failures. Total preparation duration does not identify
+a four-second child timeout. No specific owner class or ACE can be inferred.
+
+The CI command-file query now retains fixed GITHUB_OUTPUT, NPM_USER_CONFIG or
+NPM_GLOBAL_CONFIG roles and fixed progress/cause classifications. A negative
+owner/writer result contains only bounded owner/default-owner classes and Boolean
+predicates; no SID, path, account, environment value or arbitrary stderr is
+reflected. Successful proof remains the original SAFE acknowledgement. The same
+Framework Access/Owner read, four-second child deadline, owner predicate, writer
+mask and trusted principals remain mandatory. No existing or newly created
+object's ACL/owner is changed by this diagnostic. Fresh hosted Windows execution
+is required to identify the next concrete condition before remediation.

@@ -14,13 +14,13 @@ const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const canonical = file => (fs.realpathSync.native ?? fs.realpathSync)(file);
 const MAX = 1048576;
 const KEYS = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY'];
-function neutralConfig(file) {
+function neutralConfig(file, role) {
   const bytes = Buffer.from('; CaseOps isolated public npm configuration.\n'), end = performance.now() + 5000;
   const check = () => assert.ok(performance.now() < end, 'CI_TRUST_CONFIG_DEADLINE');
   const namespace = parents(file, check); let fd;
   try {
     fd = fs.openSync(file, fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
-    const initial = fs.fstatSync(fd, { bigint: true }); commandOwner(file, initial);
+    const initial = fs.fstatSync(fd, { bigint: true }); commandOwner(file, initial, role);
     assert.ok(initial.isFile() && initial.nlink === 1n && initial.size === 0n, 'CI_TRUST_EXCLUSIVE_CONFIG');
     let n = 0;
     while (n < bytes.length) { check(); const width = fs.writeSync(fd, bytes, n, bytes.length - n, n); assert.ok(width > 0); n += width; }
@@ -33,18 +33,40 @@ function neutralConfig(file) {
     return file;
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
-function commandOwner(file, state) {
+const COMMAND_OWNER_ROLES = new Set(['GITHUB_OUTPUT', 'NPM_USER_CONFIG', 'NPM_GLOBAL_CONFIG']);
+function commandOwnerPhase(stderr) {
+  if (typeof stderr !== 'string' || Buffer.byteLength(stderr) > 4096) return 'UNCLASSIFIED';
+  const lines = stderr.replaceAll('\r', '').split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  if (lines.at(-1) === 'COPS_ACL_FAIL') lines.pop();
+  if (lines.length > 4 || lines.some((line, index) => line !== 'COPS_ACL' + index)) return 'UNCLASSIFIED';
+  return ['NO_MARKER', 'SCRIPT_ENTERED', 'ACL_READ', 'IDENTITY_READ', 'RULES_READ'][lines.length];
+}
+/** Fixed public classifications only; arbitrary subprocess output is never reflected. */
+export function reviewCICommandOwnerResult(result, role) {
+  assert.ok(COMMAND_OWNER_ROLES.has(role), 'CI_TRUST_COMMAND_OWNER_PROTOCOL');
+  const prefix = 'CI_TRUST_COMMAND_OWNER_' + role + '_', phase = commandOwnerPhase(result?.stderr);
+  if (result?.error?.code === 'ETIMEDOUT') throw new Error(prefix + 'TIMEOUT_' + phase);
+  if (!result || result.error || result.status !== 0) throw new Error(prefix + 'COMMAND_FAILED_' + phase);
+  assert.ok(typeof result.stdout === 'string' && Buffer.byteLength(result.stdout) <= 4096 && typeof result.stderr === 'string' && result.stderr.replaceAll('\r', '') === 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n', prefix + 'PROTOCOL_' + phase);
+  if (result.stdout.trim() === 'SAFE') return { ownerMatches: true, writeScopeSafe: true };
+  let parsed; try { parsed = JSON.parse(result.stdout); } catch { throw new Error(prefix + 'PROTOCOL_' + phase); }
+  const owners = new Set(['CURRENT_USER', 'SYSTEM', 'ADMINISTRATORS', 'TOKEN_OTHER', 'OTHER', 'MISSING']), tokens = new Set(['CURRENT_USER', 'SYSTEM', 'ADMINISTRATORS', 'OTHER', 'MISSING']);
+  assert.ok(parsed && !Array.isArray(parsed) && equal(Object.keys(parsed).sort(), ['ownerClass', 'ownerMatches', 'tokenOwnerClass', 'writeScopeSafe']) && typeof parsed.ownerMatches === 'boolean' && typeof parsed.writeScopeSafe === 'boolean' && (!parsed.ownerMatches || !parsed.writeScopeSafe) && owners.has(parsed.ownerClass) && tokens.has(parsed.tokenOwnerClass), prefix + 'PROTOCOL_' + phase);
+  throw new Error(prefix + 'OWNER_' + parsed.ownerClass + '_TOKEN_' + parsed.tokenOwnerClass + '_MATCH_' + (parsed.ownerMatches ? 'YES' : 'NO') + '_WRITE_' + (parsed.writeScopeSafe ? 'SAFE' : 'UNSAFE'));
+}
+function commandOwner(file, state, role) {
+  assert.ok(COMMAND_OWNER_ROLES.has(role), 'CI_TRUST_COMMAND_OWNER_PROTOCOL');
   if (typeof process.getuid === 'function') {
     assert.ok(state.uid === BigInt(process.getuid()) && (state.mode & 0o022n) === 0n, 'CI_TRUST_COMMAND_OWNER');
     return;
   }
   assert.ok(process.platform === 'win32' && path.isAbsolute(process.env.SystemRoot || ''), 'CI_TRUST_OWNER_UNAVAILABLE');
-  const code = "$ErrorActionPreference='Stop';[Console]::Error.WriteLine('COPS_ACL0');try{$s=[Security.AccessControl.AccessControlSections]'Access,Owner';$a=[IO.File]::GetAccessControl($env:CASEOPS_TRUST_ACL_PATH,$s);[Console]::Error.WriteLine('COPS_ACL1');$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;[Console]::Error.WriteLine('COPS_ACL2');$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$ok=$false}};[Console]::Error.WriteLine('COPS_ACL3');if($ok){[Console]::Out.Write('SAFE')}else{exit 1}}catch{[Console]::Error.WriteLine('COPS_ACL_FAIL');exit 1}";
+  const code = "$ErrorActionPreference='Stop';[Console]::Error.WriteLine('COPS_ACL0');try{$s=[Security.AccessControl.AccessControlSections]'Access,Owner';$a=[IO.File]::GetAccessControl($env:CASEOPS_TRUST_ACL_PATH,$s);[Console]::Error.WriteLine('COPS_ACL1');$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;[Console]::Error.WriteLine('COPS_ACL2');$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));$safe=$true;foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$safe=$false}};[Console]::Error.WriteLine('COPS_ACL3');if($ok -and $safe){[Console]::Out.Write('SAFE')}else{$oc=if([string]::IsNullOrEmpty($o)){'MISSING'}elseif($o -eq $u){'CURRENT_USER'}elseif($o -eq 'S-1-5-18'){'SYSTEM'}elseif($o -eq 'S-1-5-32-544'){'ADMINISTRATORS'}elseif($o -eq $t){'TOKEN_OTHER'}else{'OTHER'};$tc=if([string]::IsNullOrEmpty($t)){'MISSING'}elseif($t -eq $u){'CURRENT_USER'}elseif($t -eq 'S-1-5-18'){'SYSTEM'}elseif($t -eq 'S-1-5-32-544'){'ADMINISTRATORS'}else{'OTHER'};[Console]::Out.Write(('{\"ownerMatches\":'+$ok.ToString().ToLowerInvariant()+',\"writeScopeSafe\":'+$safe.ToString().ToLowerInvariant()+',\"ownerClass\":\"'+$oc+'\",\"tokenOwnerClass\":\"'+$tc+'\"}'))}}catch{[Console]::Error.WriteLine('COPS_ACL_FAIL');exit 1}";
   const proof = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], {
     env: { SystemRoot: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file }, encoding: 'utf8', timeout: 4000, maxBuffer: 4096, windowsHide: true,
   });
-  assert.ok(!proof.error && proof.status === 0 && proof.stdout.trim() === 'SAFE'
-    && proof.stderr.replaceAll('\r', '') === 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n', 'CI_TRUST_COMMAND_OWNER');
+  reviewCICommandOwnerResult(proof, role);
 }
 function checkNamed(named, opened) {
   for (const key of fields) if (!(process.platform === 'win32' && key === 'dev' && named.dev === 0n)) assert.equal(named[key], opened[key], 'CI_TRUST_NAMED_DESCRIPTOR_CHANGED');
@@ -105,7 +127,7 @@ export function appendCITrustOutputs(file, root, environment) {
     fd = fs.openSync(file, fs.constants.O_RDWR | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
     const initial = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true });
     assert.ok(initial.isFile() && named.isFile() && !named.isSymbolicLink() && initial.nlink === 1n && initial.size >= 0n && initial.size <= BigInt(MAX), 'CI_TRUST_COMMAND_FILE');
-    commandOwner(file, initial); check();
+    commandOwner(file, initial, 'GITHUB_OUTPUT'); check();
     checkNamed(named, initial); const namespace = parents(file, check);
     const before = Buffer.alloc(Number(initial.size) + 1); let count = 0;
     while (count < before.length) { check(); const n = fs.readSync(fd, before, count, before.length - count, count); if (!n) break; count += n; }
@@ -414,8 +436,8 @@ function ciContext(environment, createProtectedWindowsParent = false) {
 function finishCI(context, prepared) {
   const { check, root, file, workspace, projects, parent } = context;
   const scoped = { ...prepared.environment,
-    NPM_CONFIG_USERCONFIG: neutralConfig(path.join(parent, 'user.npmrc')),
-    NPM_CONFIG_GLOBALCONFIG: neutralConfig(path.join(parent, 'global.npmrc')),
+    NPM_CONFIG_USERCONFIG: neutralConfig(path.join(parent, 'user.npmrc'), 'NPM_USER_CONFIG'),
+    NPM_CONFIG_GLOBALCONFIG: neutralConfig(path.join(parent, 'global.npmrc'), 'NPM_GLOBAL_CONFIG'),
     NPM_CONFIG_STRICT_SSL: 'true', NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/',
   };
   assert.ok(equal(projects, projectConfigsAbsent(workspace, check)), 'CI_TRUST_PROJECT_CHANGED');
@@ -453,7 +475,7 @@ const DIAGNOSTICS = new Set([
   'HOST_TRUST_WINDOWS_ACL_TIMEOUT_RULES_READ', 'HOST_TRUST_WINDOWS_ACL_TIMEOUT_UNCLASSIFIED',
   'HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED', 'HOST_TRUST_DEADLINE',
   'HOST_TRUST_NAMED_FD_CHANGED', 'HOST_TRUST_DIRECTORY_PATH',
-  'CI_TRUST_COMMAND_OWNER', 'CI_TRUST_NAMESPACE', 'CI_TRUST_CONFIG_DEADLINE',
+  'CI_TRUST_COMMAND_OWNER', 'CI_TRUST_COMMAND_OWNER_PROTOCOL', 'CI_TRUST_NAMESPACE', 'CI_TRUST_CONFIG_DEADLINE',
   'CI_TRUST_APPEND_DEADLINE', 'CI_TRUST_PREPARATION_DEADLINE',
   'CI_TRUST_RUNTIME_SOURCE_ACL_COMMAND', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL', 'CI_TRUST_RUNTIME_SOURCE_OWNER',
   'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES', 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_READ',
@@ -473,7 +495,7 @@ const DIAGNOSTICS = new Set([
 ]);
 export function ciTrustFailureCode(error) {
   const first = typeof error?.message === 'string' ? error.message.split('\n', 1)[0] : '';
-  return DIAGNOSTICS.has(first) || (first.length <= 160 && /^CI_TRUST_PRIVATE_PARENT_SETUP_(?:TIMEOUT|REFUSED|PROTOCOL)_(?:NO_MARKER|UNCLASSIFIED|STAGE_[0-4])$/.test(first)) || (first.length <= 160 && /^CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_(?:OUTPUT|HELPER_INPUT|BOOTSTRAP_INPUT|PARENT_DIRECTORY|RUNTIME_DIRECTORY|HELPER_COPY|BOOTSTRAP_COPY)_(?:JSON_TYPE|JSON_EMPTY|JSON_SIZE|JSON_INVALID|ARRAY_TYPE|ARRAY_COUNT|ROW_TYPE|FIELDS|OWNER_TYPE|ADMIN_TYPE|WRITE_TYPE|WRITE_UNSAFE|USER_TYPE|USER_MISSING|HASH_TYPE|HASH_FORMAT)$/.test(first)) || (first.length <= 160 && /^HOST_TRUST_CURRENT_OWNER_REQUIRED_(?:PUBLIC_INPUT|PUBLIC_SOURCE|SOURCE_HELPER|SOURCE_BOOTSTRAP|FIXTURE_INPUT|PARENT_DIRECTORY|POLICY_DIRECTORY|OUTPUT_DIRECTORY|EMPTY_DIRECTORY|DIRECTORY|ROOTS_OUTPUT|POLICY_OUTPUT|PUBLIC_OUTPUT|POLICY_INPUT|ROOTS_INPUT)_OWNER_(?:SYSTEM|ADMINISTRATORS|TOKEN_OTHER|OTHER|MISSING)_TOKEN_(?:CURRENT_USER|SYSTEM|ADMINISTRATORS|OTHER|MISSING)_WRITE_(?:SAFE|UNSAFE)$/.test(first)) ? first : 'CI_TRUST_PREPARATION_REFUSED';
+  return DIAGNOSTICS.has(first) || (first.length <= 160 && /^CI_TRUST_COMMAND_OWNER_(?:GITHUB_OUTPUT|NPM_USER_CONFIG|NPM_GLOBAL_CONFIG)_(?:(?:TIMEOUT|COMMAND_FAILED|PROTOCOL)_(?:NO_MARKER|SCRIPT_ENTERED|ACL_READ|IDENTITY_READ|RULES_READ|UNCLASSIFIED)|OWNER_(?:CURRENT_USER|SYSTEM|ADMINISTRATORS|TOKEN_OTHER|OTHER|MISSING)_TOKEN_(?:CURRENT_USER|SYSTEM|ADMINISTRATORS|OTHER|MISSING)_MATCH_(?:YES|NO)_WRITE_(?:SAFE|UNSAFE))$/.test(first)) || (first.length <= 160 && /^CI_TRUST_PRIVATE_PARENT_SETUP_(?:TIMEOUT|REFUSED|PROTOCOL)_(?:NO_MARKER|UNCLASSIFIED|STAGE_[0-4])$/.test(first)) || (first.length <= 160 && /^CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_(?:OUTPUT|HELPER_INPUT|BOOTSTRAP_INPUT|PARENT_DIRECTORY|RUNTIME_DIRECTORY|HELPER_COPY|BOOTSTRAP_COPY)_(?:JSON_TYPE|JSON_EMPTY|JSON_SIZE|JSON_INVALID|ARRAY_TYPE|ARRAY_COUNT|ROW_TYPE|FIELDS|OWNER_TYPE|ADMIN_TYPE|WRITE_TYPE|WRITE_UNSAFE|USER_TYPE|USER_MISSING|HASH_TYPE|HASH_FORMAT)$/.test(first)) || (first.length <= 160 && /^HOST_TRUST_CURRENT_OWNER_REQUIRED_(?:PUBLIC_INPUT|PUBLIC_SOURCE|SOURCE_HELPER|SOURCE_BOOTSTRAP|FIXTURE_INPUT|PARENT_DIRECTORY|POLICY_DIRECTORY|OUTPUT_DIRECTORY|EMPTY_DIRECTORY|DIRECTORY|ROOTS_OUTPUT|POLICY_OUTPUT|PUBLIC_OUTPUT|POLICY_INPUT|ROOTS_INPUT)_OWNER_(?:SYSTEM|ADMINISTRATORS|TOKEN_OTHER|OTHER|MISSING)_TOKEN_(?:CURRENT_USER|SYSTEM|ADMINISTRATORS|OTHER|MISSING)_WRITE_(?:SAFE|UNSAFE)$/.test(first)) ? first : 'CI_TRUST_PREPARATION_REFUSED';
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

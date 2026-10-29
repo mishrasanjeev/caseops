@@ -2906,7 +2906,7 @@ test('unknown and modified import URIs refuse before preload or application entr
 
 
 import { createRequire as ciTrustCreateRequire, syncBuiltinESMExports } from 'node:module';
-import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, ciTrustFailureCode, reviewCIHostSourceAclOutput } from './host-node-trust-ci.mjs';
+import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, ciTrustFailureCode, reviewCIHostSourceAclOutput, reviewCICommandOwnerResult } from './host-node-trust-ci.mjs';
 const ciTrustYaml = ciTrustCreateRequire(new URL('../../apps/mobile/package.json', import.meta.url))('js-yaml');
 const ciTrustKeys = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY'];
 const ciTrustValues = Object.fromEntries(ciTrustKeys.map(key => [key, 'public-fixture-' + key]));
@@ -4139,3 +4139,42 @@ test('CI atomic readback rejects false protection owner writers creation and mal
     finally { trace.restore(); } trace.closed();
   }, (_options, _code, create) => { const result = create(); return { ...result, stdout: JSON.stringify(change(JSON.parse(result.stdout))) }; });
 });
+
+
+const ciCommandMarkers = 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n';
+const ciCommandFalse = (change = {}) => ({ status: 0, stderr: ciCommandMarkers, stdout: JSON.stringify({ ownerMatches: false, writeScopeSafe: true, ownerClass: 'ADMINISTRATORS', tokenOwnerClass: 'CURRENT_USER', ...change }) });
+test('CI command-owner decoder retains SAFE and the exact three internal object roles', () => {
+  for (const role of ['GITHUB_OUTPUT', 'NPM_USER_CONFIG', 'NPM_GLOBAL_CONFIG']) assert.deepEqual(reviewCICommandOwnerResult({ status: 0, stdout: 'SAFE', stderr: ciCommandMarkers }, role), { ownerMatches: true, writeScopeSafe: true });
+  assert.throws(() => reviewCICommandOwnerResult({ status: 0, stdout: 'SAFE', stderr: ciCommandMarkers }, 'SYNTHETIC_PRIVATE'), { message: 'CI_TRUST_COMMAND_OWNER_PROTOCOL' });
+});
+test('CI command-owner decoder separates bounded timeout command and protocol phases without reflecting output', () => {
+  for (const [result, expected] of [[{ error: { code: 'ETIMEDOUT', message: 'SYNTHETIC_PRIVATE' }, status: null, stdout: '', stderr: 'COPS_ACL0\nCOPS_ACL1\n' }, 'TIMEOUT_ACL_READ'], [{ status: 1, stdout: 'SYNTHETIC_PRIVATE', stderr: 'COPS_ACL0\nCOPS_ACL_FAIL\n' }, 'COMMAND_FAILED_SCRIPT_ENTERED'], [{ status: 0, stdout: 'SAFE', stderr: 'COPS_ACL0\n' }, 'PROTOCOL_SCRIPT_ENTERED'], [{ status: 0, stdout: 'SYNTHETIC_PRIVATE', stderr: ciCommandMarkers }, 'PROTOCOL_RULES_READ'], [{ status: 0, stdout: 'SAFE', stderr: 'SYNTHETIC_PRIVATE' }, 'PROTOCOL_UNCLASSIFIED']]) {
+    const message = 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_' + expected; assert.throws(() => reviewCICommandOwnerResult(result, 'GITHUB_OUTPUT'), error => error.message === message && ciTrustFailureCode(error) === message && !error.message.includes('SYNTHETIC_PRIVATE'));
+  }
+});
+test('CI command-owner negative classifications remain refusal and reject malformed or forged predicate fields', () => {
+  for (const [change, suffix] of [[{}, 'OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE'], [{ ownerMatches: true, writeScopeSafe: false, ownerClass: 'CURRENT_USER' }, 'OWNER_CURRENT_USER_TOKEN_CURRENT_USER_MATCH_YES_WRITE_UNSAFE'], [{ ownerClass: 'OTHER', tokenOwnerClass: 'OTHER', writeScopeSafe: false }, 'OWNER_OTHER_TOKEN_OTHER_MATCH_NO_WRITE_UNSAFE']]) {
+    const message = 'CI_TRUST_COMMAND_OWNER_NPM_USER_CONFIG_' + suffix; assert.throws(() => reviewCICommandOwnerResult(ciCommandFalse(change), 'NPM_USER_CONFIG'), error => error.message === message && ciTrustFailureCode(error) === message);
+  }
+  for (const change of [{ ownerMatches: true }, { ownerMatches: 0 }, { writeScopeSafe: 1 }, { ownerClass: 'S-1-5-21-SYNTHETIC_PRIVATE' }, { tokenOwnerClass: 'SYNTHETIC_PRIVATE' }, { unknown: 'SYNTHETIC_PRIVATE' }]) assert.throws(() => reviewCICommandOwnerResult(ciCommandFalse(change), 'NPM_GLOBAL_CONFIG'), { message: 'CI_TRUST_COMMAND_OWNER_NPM_GLOBAL_CONFIG_PROTOCOL_RULES_READ' });
+  for (const text of ['CI_TRUST_COMMAND_OWNER_PRIVATE_TIMEOUT_NO_MARKER', 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_PRIVATE_TOKEN_OTHER_MATCH_NO_WRITE_SAFE', 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_TIMEOUT_NO_MARKER' + 'SYNTHETIC_PRIVATE']) assert.equal(ciTrustFailureCode(new Error(text)), 'CI_TRUST_PREPARATION_REFUSED');
+});
+test('actual retained command-file append identifies GITHUB_OUTPUT refusal before bytes and closes its descriptor', async () => ciFreshParentFixture(async ({ root, output }) => {
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), original = cp.spawnSync, trace = ciSourceTrace(); let observed = 0;
+  cp.spawnSync = (_exe, args, options) => { observed++; assert.equal(options.timeout, 4000); assert.equal(options.maxBuffer, 4096); assert.equal(options.env.CASEOPS_TRUST_ACL_PATH, output); assert.doesNotMatch(args.at(-1), /Get-Acl|SetAccessControl|SetOwner|Add-Type/); return ciCommandFalse(); }; syncBuiltinESMExports();
+  try { assert.throws(() => appendCITrustOutputs(output, root, Object.fromEntries(ciTrustKeys.map(key => [key, key === 'NPM_CONFIG_STRICT_SSL' ? 'true' : 'synthetic-public']))), { message: 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE' }); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); assert.equal(observed, 1); }
+  finally { cp.spawnSync = original; syncBuiltinESMExports(); trace.restore(); } trace.closed(); assert.equal(fs.readFileSync(output, 'utf8'), 'EARLIER=retained\n');
+}));
+async function ciCommandConfigRefusal(name, role) {
+  await ciFreshParentFixture(async ({ environment, output }) => {
+    const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), original = cp.spawnSync, trace = ciSourceTrace(); let observed = null;
+    cp.spawnSync = (exe, args, options) => { if (options.env.CASEOPS_TRUST_ACL_PATH?.endsWith('/' + name)) { observed = options.env.CASEOPS_TRUST_ACL_PATH; return ciCommandFalse(); } return original(exe, args, options); }; syncBuiltinESMExports();
+    try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), { message: 'CI_TRUST_COMMAND_OWNER_' + role + '_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE' }); }
+    finally { cp.spawnSync = original; syncBuiltinESMExports(); trace.restore(); } trace.closed();
+    assert.ok(observed); assert.equal(fs.lstatSync(observed).size, 0); assert.equal(fs.readFileSync(output, 'utf8'), 'EARLIER=retained\n');
+    if (name === 'user.npmrc') assert.equal(fs.existsSync(path.join(path.dirname(observed), 'global.npmrc')), false);
+    else assert.equal(fs.readFileSync(path.join(path.dirname(observed), 'user.npmrc'), 'utf8'), '; CaseOps isolated public npm configuration.\n');
+  });
+}
+test('actual Windows-entry composition distinguishes new NPM_USER_CONFIG before its first write', () => ciCommandConfigRefusal('user.npmrc', 'NPM_USER_CONFIG'));
+test('actual Windows-entry composition distinguishes new NPM_GLOBAL_CONFIG and retains earlier anonymous config', () => ciCommandConfigRefusal('global.npmrc', 'NPM_GLOBAL_CONFIG'));
