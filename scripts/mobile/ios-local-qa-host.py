@@ -4,7 +4,6 @@ The persistent worker is admitted before dispatch. The body uses bounded natural
 wait; unchanged eaa cleanup then proves current group/recorded identity absence.
 Detached or short-lived unobserved descendants are explicitly outside that proof.
 """
-import base64
 import hashlib
 import json
 import math

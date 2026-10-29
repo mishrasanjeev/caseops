@@ -126,3 +126,47 @@ remain mandatory. A false writer/token predicate remains refused; it is no
 longer indistinguishable from malformed JSON. Source pins, query5s, helper20s
 and CI30s limits remain unchanged. Fresh hosted execution must identify the
 actual condition before any further ownership remediation.
+
+The fresh `2dead9c8` Windows job identified the actual refusal:
+`CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_PARENT_DIRECTORY_WRITE_UNSAFE` in
+2.724 seconds. The parent directory's writer predicate was false. The public
+diagnostic does not identify the foreign SID or say that the original source
+files were unsafe; no broader owner/ACE permission follows from this result.
+
+The first local repair used a path-based ACL setter after exclusive mkdir. Its
+controls are retained, but source review rejected that mutation window: replacing
+the pathname could change another directory before a later identity refusal.
+Those controls do not certify the replacement below.
+
+Before source staging, the Windows entry chooses an absent random final leaf
+under the admitted runner temporary root. A fixed in-process Reflection.Emit
+binding invokes documented CreateDirectoryW with SECURITY_ATTRIBUTES containing
+the complete protected descriptor. FALSE always refuses, including an existing
+leaf; it never opens an existing directory to change its ACL. No path-based ACL
+setter is present. The descriptor sets the current user as owner and exactly
+current-user, SYSTEM and Builtin Administrators inheritable FullControl entries.
+There is no Users, AuthenticatedUsers or arbitrary default-owner exception.
+
+After exclusive creation, a reparse-aware read-only directory handle binds its
+normalized local path, volume/file identity and creation time. GetSecurityInfo
+reads owner and DACL through that handle. Protection, current owner and exact
+explicit rules are mandatory, with bounded descriptor/path buffers. Every handle,
+unmanaged allocation and pinned buffer has an independent final cleanup attempt;
+no acknowledgement is emitted if cleanup fails. The public result contains only
+fixed booleans and bounded numeric identity strings. Five fixed progress markers
+contain no path, SID or arbitrary exception. This uses WindowsPowerShell5.1
+without module autoload, Add-Type or a compiler child.
+
+Node compares that readback identity to the fresh canonical nonlink directory,
+including the qualified Windows named-dev-zero rule, then checks its empty
+namespace and full metadata. Staging still applies the unchanged strict six-object
+owner/ACE checks before reading or writing source payload. Original checkout,
+ancestors, command files and existing owner trees are untouched. The Unix entry
+is unchanged. Each new name is attempted once; uncertain creation is never retried.
+
+The query remains bounded to five seconds inside the existing thirty-second CI
+deadline and twenty-second helper reserve. Atomic descriptor application to the
+new leaf does not claim an atomic whole-namespace snapshot or lifetime process
+observation. Mac filesystem controls and PowerShell7 grammar/binding controls
+remain scoped evidence; actual Windows creation and inherited DACL acceptance
+still require a fresh hosted run.

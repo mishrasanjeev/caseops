@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 // Windows must stage exact reviewed bytes before loading any H code.
 const unixTrust = process.platform === 'win32' ? null : await import('./host-node-trust.mjs');
@@ -273,7 +273,121 @@ export function stageCIHostNodeRuntimeSources(parent, incomingCheck) {
   }
 }
 
-function ciContext(environment) {
+const FRESH_PARENT = Symbol('exclusive-invocation-parent');
+function freshParentClaim(parent, check) {
+  check(); const state = fs.lstatSync(parent, { bigint: true });
+  assert.ok(state.isDirectory() && !state.isSymbolicLink() && canonical(parent) === parent && state.birthtimeNs > 0n, 'CI_TRUST_PRIVATE_PARENT_IDENTITY');
+  const namespace = parents(parent, check); let directory;
+  try { directory = fs.opendirSync(parent, { bufferSize: 1 }); check(); assert.equal(directory.readSync(), null, 'CI_TRUST_PRIVATE_PARENT_NOT_EMPTY'); }
+  finally { directory?.closeSync(); }
+  assert.ok(equal(frame(state), frame(fs.lstatSync(parent, { bigint: true }))) && equal(namespace, parents(parent, check)), 'CI_TRUST_PRIVATE_PARENT_CHANGED');
+  return { token: FRESH_PARENT, path: parent, state, namespace };
+}
+function privateParentSetupFailure(proof) {
+  let lines = typeof proof?.stderr === 'string' ? proof.stderr.replaceAll('\r', '').split('\n') : null;
+  if (lines?.at(-1) === '') lines.pop();
+  if (lines?.at(-1) === 'COPS_PARENT_REFUSED') lines.pop();
+  const ordered = lines && lines.length <= 5 && lines.every((line, index) => line === 'COPS_PARENT' + index);
+  const stage = ordered ? lines.length ? 'STAGE_' + (lines.length - 1) : 'NO_MARKER' : 'UNCLASSIFIED';
+  const reason = proof?.error?.code === 'ETIMEDOUT' ? 'TIMEOUT' : proof?.error || proof?.status !== 0 ? 'REFUSED' : 'PROTOCOL';
+  return 'CI_TRUST_PRIVATE_PARENT_SETUP_' + reason + '_' + stage;
+}
+function protectFreshWindowsParent(context) {
+  const { createdParent: claim, parent, check } = context;
+  assert.ok(claim?.token === FRESH_PARENT && claim.path === parent && path.dirname(parent) === context.root && /^caseops-node-trust-[a-f0-9-]{36}$/.test(path.basename(parent)), 'CI_TRUST_PRIVATE_PARENT_CREATION_REQUIRED');
+  if (process.platform !== 'win32') {
+    const before = fs.lstatSync(parent, { bigint: true });
+    assert.ok(equal(frame(before), frame(claim.state)) && before.birthtimeNs === claim.state.birthtimeNs && canonical(parent) === parent && equal(claim.namespace, parents(parent, check)), 'CI_TRUST_PRIVATE_PARENT_CHANGED');
+    assert.ok(typeof process.getuid === 'function' && before.uid === BigInt(process.getuid()) && (before.mode & 0o777n) === 0o700n, 'CI_TRUST_PRIVATE_PARENT_POSIX_MODE');
+    return { kind: 'posix-private-new-parent', modified: false };
+  }
+  assert.ok(claim.absent === true && equal(claim.namespace, parents(parent, check)), 'CI_TRUST_PRIVATE_PARENT_CHANGED');
+  assert.ok(typeof process.env.SystemRoot === 'string' && path.isAbsolute(process.env.SystemRoot), 'CI_TRUST_OWNER_UNAVAILABLE');
+  // CreateDirectoryW applies the descriptor ONLY to a newly created final leaf.
+  // No path-based ownership/DACL setter ever touches an existing object. The
+  // subsequent reparse-aware handle is used only for identity/security reads.
+  const parentSetupCode = String.raw`$ErrorActionPreference='Stop';[Console]::Error.WriteLine('COPS_PARENT0');
+$handle=[IntPtr]::Zero;$sd=[IntPtr]::Zero;$sa=[IntPtr]::Zero;$info=[IntPtr]::Zero;$pin=$null;$descriptor=$null;$readback=$null;$bodyFailed=$false;$cleanupFailed=$false;$answer=$null;$native=$null;
+try{
+$p=$env:CASEOPS_PARENT_CREATED_PATH;
+if($p.Length -gt 240 -or $p -notmatch '^[A-Za-z]:\\' -or $p.Contains('/') -or $p.Contains([char]0)){throw 'LOCAL_SHORT_PATH_REQUIRED'};
+$u=[Security.Principal.WindowsIdentity]::GetCurrent().User;if($null -eq $u -or [string]::IsNullOrEmpty($u.Value)){throw 'CURRENT_USER_REQUIRED'};
+$expected=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal);[void]$expected.Add($u.Value);[void]$expected.Add('S-1-5-18');[void]$expected.Add('S-1-5-32-544');
+$inherit=[Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit;
+$rights=[Security.AccessControl.FileSystemRights]::FullControl;$propagation=[Security.AccessControl.PropagationFlags]::None;$allow=[Security.AccessControl.AccessControlType]::Allow;
+$security=[Security.AccessControl.DirectorySecurity]::new();$security.SetAccessRuleProtection($true,$false);$security.SetOwner($u);
+foreach($identity in $expected){$sid=[Security.Principal.SecurityIdentifier]::new($identity);$rule=[Security.AccessControl.FileSystemAccessRule]::new($sid,$rights,$inherit,$propagation,$allow);$security.AddAccessRule($rule)};
+$descriptor=$security.GetSecurityDescriptorBinaryForm();if($descriptor.Length -lt 20 -or $descriptor.Length -gt 65536){throw 'DESCRIPTOR_BOUND'};
+$assembly=[AppDomain]::CurrentDomain.DefineDynamicAssembly([Reflection.AssemblyName]::new('CaseOpsExclusiveDirectory'),[Reflection.Emit.AssemblyBuilderAccess]::Run);
+$type=$assembly.DefineDynamicModule('Native').DefineType('CaseOpsExclusiveDirectory.Native',[Reflection.TypeAttributes]::Public);
+$ptr=[IntPtr];$refptr=$ptr.MakeByRefType();$specs=@(
+@{name='CreateDirectoryW';dll='kernel32.dll';result=[bool];args=[Type[]]@([string],$ptr)},
+@{name='CreateFileW';dll='kernel32.dll';result=$ptr;args=[Type[]]@([string],[uint32],[uint32],$ptr,[uint32],[uint32],$ptr)},
+@{name='GetFileInformationByHandle';dll='kernel32.dll';result=[bool];args=[Type[]]@($ptr,$ptr)},
+@{name='GetFinalPathNameByHandleW';dll='kernel32.dll';result=[uint32];args=[Type[]]@($ptr,[Text.StringBuilder],[uint32],[uint32])},
+@{name='GetSecurityInfo';dll='advapi32.dll';result=[uint32];args=[Type[]]@($ptr,[int],[uint32],$refptr,$refptr,$refptr,$refptr,$refptr)},
+@{name='GetSecurityDescriptorLength';dll='advapi32.dll';result=[uint32];args=[Type[]]@($ptr)},
+@{name='LocalFree';dll='kernel32.dll';result=$ptr;args=[Type[]]@($ptr)},
+@{name='CloseHandle';dll='kernel32.dll';result=[bool];args=[Type[]]@($ptr)});
+foreach($spec in $specs){$method=$type.DefinePInvokeMethod($spec.name,$spec.dll,$spec.name,[Reflection.MethodAttributes]'Public,Static,PinvokeImpl',[Reflection.CallingConventions]::Standard,$spec.result,$spec.args,[Runtime.InteropServices.CallingConvention]::Winapi,[Runtime.InteropServices.CharSet]::Unicode);$method.SetImplementationFlags($method.GetMethodImplementationFlags() -bor [Reflection.MethodImplAttributes]::PreserveSig)};
+$native=$type.CreateType();
+$pin=[Runtime.InteropServices.GCHandle]::Alloc($descriptor,[Runtime.InteropServices.GCHandleType]::Pinned);
+$saSize=if([IntPtr]::Size -eq 8){24}else{12};$pointerOffset=if([IntPtr]::Size -eq 8){8}else{4};$inheritOffset=if([IntPtr]::Size -eq 8){16}else{8};
+$sa=[Runtime.InteropServices.Marshal]::AllocHGlobal($saSize);for($offset=0;$offset -lt $saSize;$offset++){[Runtime.InteropServices.Marshal]::WriteByte($sa,$offset,0)};
+[Runtime.InteropServices.Marshal]::WriteInt32($sa,0,$saSize);[Runtime.InteropServices.Marshal]::WriteIntPtr($sa,$pointerOffset,$pin.AddrOfPinnedObject());[Runtime.InteropServices.Marshal]::WriteInt32($sa,$inheritOffset,0);
+[Console]::Error.WriteLine('COPS_PARENT1');
+if(!$native::CreateDirectoryW($p,$sa)){throw 'EXCLUSIVE_CREATION_REQUIRED'};
+[Console]::Error.WriteLine('COPS_PARENT2');
+$handle=$native::CreateFileW($p,131200,3,[IntPtr]::Zero,3,35651584,[IntPtr]::Zero);
+if($handle -eq [IntPtr]::Zero -or $handle -eq [IntPtr]::new(-1)){throw 'DIRECTORY_HANDLE_REQUIRED'};
+$info=[Runtime.InteropServices.Marshal]::AllocHGlobal(52);if(!$native::GetFileInformationByHandle($handle,$info)){throw 'HANDLE_INFORMATION_REQUIRED'};
+$first=[byte[]]::new(52);[Runtime.InteropServices.Marshal]::Copy($info,$first,0,52);
+$attributes=[BitConverter]::ToUInt32($first,0);if(($attributes -band 16) -eq 0 -or ($attributes -band 1024) -ne 0){throw 'REAL_DIRECTORY_REQUIRED'};
+$finalName=[Text.StringBuilder]::new(1024);$nameLength=$native::GetFinalPathNameByHandleW($handle,$finalName,1024,0);
+if($nameLength -eq 0 -or $nameLength -ge 1024 -or !$finalName.ToString().StartsWith('\\?\',[StringComparison]::Ordinal) -or $finalName.ToString().Substring(4) -cne $p){throw 'HANDLE_PATH_REQUIRED'};
+$owner=[IntPtr]::Zero;$group=[IntPtr]::Zero;$dacl=[IntPtr]::Zero;$sacl=[IntPtr]::Zero;
+if($native::GetSecurityInfo($handle,1,5,[ref]$owner,[ref]$group,[ref]$dacl,[ref]$sacl,[ref]$sd) -ne 0 -or $sd -eq [IntPtr]::Zero){throw 'HANDLE_SECURITY_REQUIRED'};
+$length=$native::GetSecurityDescriptorLength($sd);if($length -lt 20 -or $length -gt 65536){throw 'HANDLE_DESCRIPTOR_BOUND'};
+$readback=[byte[]]::new($length);[Runtime.InteropServices.Marshal]::Copy($sd,$readback,0,$length);
+$actual=[Security.AccessControl.DirectorySecurity]::new();$actual.SetSecurityDescriptorBinaryForm($readback,[Security.AccessControl.AccessControlSections]'Access,Owner');
+if(!$actual.AreAccessRulesProtected -or $actual.GetOwner([Security.Principal.SecurityIdentifier]).Value -cne $u.Value){throw 'PROTECTED_CURRENT_OWNER_REQUIRED'};
+$seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal);
+foreach($r in $actual.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.IsInherited -or $r.AccessControlType -ne $allow -or $r.FileSystemRights -ne $rights -or $r.InheritanceFlags -ne $inherit -or $r.PropagationFlags -ne $propagation -or !$expected.Contains($r.IdentityReference.Value) -or !$seen.Add($r.IdentityReference.Value)){throw 'EXACT_NEW_DACL_REQUIRED'}};
+if(!$seen.SetEquals($expected)){throw 'COMPLETE_NEW_DACL_REQUIRED'};
+if(!$native::GetFileInformationByHandle($handle,$info)){throw 'FINAL_HANDLE_INFORMATION_REQUIRED'};
+$last=[byte[]]::new(52);[Runtime.InteropServices.Marshal]::Copy($info,$last,0,52);foreach($offset in @(0,4,8,28,40,44,48)){if([BitConverter]::ToUInt32($first,$offset) -ne [BitConverter]::ToUInt32($last,$offset)){throw 'HANDLE_CHANGED'}};
+$fileIndex=([uint64][BitConverter]::ToUInt32($first,44) -shl 32) -bor [uint64][BitConverter]::ToUInt32($first,48);
+$birth=([uint64][BitConverter]::ToUInt32($first,8) -shl 32) -bor [uint64][BitConverter]::ToUInt32($first,4);
+if($fileIndex -eq 0 -or $birth -le 116444736000000000){throw 'HANDLE_IDENTITY_REQUIRED'};
+$birthNs=($birth - [uint64]116444736000000000) * [uint64]100;$volume=[BitConverter]::ToUInt32($first,28);
+$answer='{"created":true,"ownerCurrent":true,"protected":true,"writersExact":true,"ino":"'+$fileIndex.ToString([Globalization.CultureInfo]::InvariantCulture)+'","volume":"'+$volume.ToString([Globalization.CultureInfo]::InvariantCulture)+'","birthtimeNs":"'+$birthNs.ToString([Globalization.CultureInfo]::InvariantCulture)+'"}';
+[Console]::Error.WriteLine('COPS_PARENT3');
+}catch{$bodyFailed=$true}
+finally{
+try{if($handle -ne [IntPtr]::Zero -and $handle -ne [IntPtr]::new(-1)){if(!$native::CloseHandle($handle)){$cleanupFailed=$true}}}catch{$cleanupFailed=$true};
+try{if($sd -ne [IntPtr]::Zero){if($native::LocalFree($sd) -ne [IntPtr]::Zero){$cleanupFailed=$true}}}catch{$cleanupFailed=$true};
+try{if($info -ne [IntPtr]::Zero){[Runtime.InteropServices.Marshal]::FreeHGlobal($info)}}catch{$cleanupFailed=$true};
+try{if($sa -ne [IntPtr]::Zero){[Runtime.InteropServices.Marshal]::FreeHGlobal($sa)}}catch{$cleanupFailed=$true};
+try{if($null -ne $pin -and $pin.IsAllocated){$pin.Free()}}catch{$cleanupFailed=$true};
+try{if($null -ne $descriptor){[Array]::Clear($descriptor,0,$descriptor.Length)};if($null -ne $readback){[Array]::Clear($readback,0,$readback.Length)}}catch{$cleanupFailed=$true};
+};
+if($bodyFailed -or $cleanupFailed){[Console]::Error.WriteLine('COPS_PARENT_REFUSED');exit 1};
+[Console]::Error.WriteLine('COPS_PARENT4');[Console]::Out.Write($answer)`;
+  const remaining = Math.floor(check.deadline - performance.now()); assert.ok(remaining > 0, 'CI_TRUST_PREPARATION_DEADLINE');
+  const proof = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', parentSetupCode], {
+    env: { SystemRoot: process.env.SystemRoot, WINDIR: process.env.SystemRoot, CASEOPS_PARENT_CREATED_PATH: parent },
+    encoding: 'utf8', timeout: Math.min(5000, remaining), maxBuffer: 4096, windowsHide: true,
+  });
+  if (proof.error || proof.status !== 0 || typeof proof.stdout !== 'string' || proof.stdout.length > 1024 || typeof proof.stderr !== 'string' || proof.stderr.replaceAll('\r', '') !== 'COPS_PARENT0\nCOPS_PARENT1\nCOPS_PARENT2\nCOPS_PARENT3\nCOPS_PARENT4\n') throw new Error(privateParentSetupFailure(proof));
+  let result;
+  try { result = JSON.parse(proof.stdout); } catch { throw new Error('CI_TRUST_PRIVATE_PARENT_SETUP_PROTOCOL_STAGE_4'); }
+  assert.ok(result && !Array.isArray(result) && equal(Object.keys(result).sort(), ['birthtimeNs', 'created', 'ino', 'ownerCurrent', 'protected', 'volume', 'writersExact']) && ['created', 'ownerCurrent', 'protected', 'writersExact'].every(key => result[key] === true) && ['ino', 'volume', 'birthtimeNs'].every(key => typeof result[key] === 'string' && /^(?:0|[1-9][0-9]{0,19})$/.test(result[key])) && BigInt(result.ino) > 0n && BigInt(result.ino) <= 18446744073709551615n && BigInt(result.volume) <= 4294967295n && BigInt(result.birthtimeNs) > 0n && BigInt(result.birthtimeNs) <= 18446744073709551615n, 'CI_TRUST_PRIVATE_PARENT_SETUP_PROTOCOL_STAGE_4');
+  check(); const after = fs.lstatSync(parent, { bigint: true });
+  assert.ok(after.isDirectory() && !after.isSymbolicLink() && after.ino === BigInt(result.ino) && (after.dev === 0n || after.dev === BigInt(result.volume)) && after.birthtimeNs === BigInt(result.birthtimeNs) && canonical(parent) === parent && equal(claim.namespace, parents(parent, check)), 'CI_TRUST_PRIVATE_PARENT_CHANGED');
+  freshParentClaim(parent, check);
+  return { kind: 'windows-protected-new-parent', owner: 'current-user', writers: ['current-user', 'system', 'administrators'], protected: true, identityBound: true, childrenCreatedAfterSetup: true, creation: 'exclusive-native-security-descriptor' };
+}
+function ciContext(environment, createProtectedWindowsParent = false) {
   const end = performance.now() + 30000;
   const check = () => assert.ok(performance.now() < end, 'CI_TRUST_PREPARATION_DEADLINE');
   Object.defineProperty(check, 'deadline', { value: end });
@@ -286,8 +400,16 @@ function ciContext(environment) {
   // These are the three actual npm working directories in the reviewed jobs.
   // Never inspect an owner's npmrc. A project configuration needs fresh review.
   const projects = projectConfigsAbsent(workspace, check);
-  const parent = fs.mkdtempSync(path.join(root, 'caseops-node-trust-'));
-  return { environment, check, root, file, workspace, projects, parent };
+  let parent, createdParent;
+  if (createProtectedWindowsParent) {
+    parent = path.join(root, 'caseops-node-trust-' + randomUUID());
+    if (process.platform === 'win32') {
+      check(); const namespace = parents(parent, check);
+      try { fs.lstatSync(parent); throw Object.assign(new Error('CI_TRUST_PRIVATE_PARENT_EXCLUSIVE'), { code: 'EEXIST' }); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      createdParent = { token: FRESH_PARENT, path: parent, namespace, absent: true };
+    } else { fs.mkdirSync(parent, { mode: 0o700 }); createdParent = freshParentClaim(parent, check); }
+  } else parent = fs.mkdtempSync(path.join(root, 'caseops-node-trust-'));
+  return { environment, check, root, file, workspace, projects, parent, createdParent };
 }
 function finishCI(context, prepared) {
   const { check, root, file, workspace, projects, parent } = context;
@@ -309,16 +431,20 @@ export function prepareCIHostNodeTrust(environment = process.env) {
   return finishCI(context, prepared);
 }
 export async function prepareCIHostNodeTrustWindows(environment = process.env) {
-  const context = ciContext(environment), staged = stageCIHostNodeRuntimeSources(context.parent, context.check);
+  const context = ciContext(environment, true), privateParentSetup = protectFreshWindowsParent(context);
+  const staged = stageCIHostNodeRuntimeSources(context.parent, context.check);
   try {
     const helper = await import('data:text/javascript;base64,' + staged.retainedHelper.toString('base64'));
     context.check(); assert.ok(context.check.deadline - performance.now() >= 20000, 'CI_TRUST_RUNTIME_SOURCE_PREPARE_BUDGET');
     const prepared = helper.prepareHostNodeTrust({ directory: path.join(context.parent, 'policy'), environment, sourceRefs: staged.sourceRefs });
-    return { ...finishCI(context, prepared), runtimeSourceCopies: staged.provenance };
+    return { ...finishCI(context, prepared), runtimeSourceCopies: staged.provenance, privateParentSetup };
   } finally { staged.retainedHelper.fill(0); }
 }
 
 const DIAGNOSTICS = new Set([
+  'CI_TRUST_PRIVATE_PARENT_IDENTITY', 'CI_TRUST_PRIVATE_PARENT_NOT_EMPTY',
+  'CI_TRUST_PRIVATE_PARENT_CHANGED', 'CI_TRUST_PRIVATE_PARENT_CREATION_REQUIRED',
+  'CI_TRUST_PRIVATE_PARENT_POSIX_MODE', 'CI_TRUST_PRIVATE_PARENT_SETUP_REFUSED',
   'HOST_TRUST_WINDOWS_ACL_TIMEOUT', 'HOST_TRUST_WINDOWS_ACL_COMMAND_FAILED',
   'HOST_TRUST_WINDOWS_ACL_PROTOCOL', 'HOST_TRUST_CURRENT_OWNER_REQUIRED',
   'HOST_TRUST_OVERRIDE_REFUSED', 'HOST_TRUST_CLI_OVERRIDE_REFUSED',
@@ -347,7 +473,7 @@ const DIAGNOSTICS = new Set([
 ]);
 export function ciTrustFailureCode(error) {
   const first = typeof error?.message === 'string' ? error.message.split('\n', 1)[0] : '';
-  return DIAGNOSTICS.has(first) || (first.length <= 160 && /^CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_(?:OUTPUT|HELPER_INPUT|BOOTSTRAP_INPUT|PARENT_DIRECTORY|RUNTIME_DIRECTORY|HELPER_COPY|BOOTSTRAP_COPY)_(?:JSON_TYPE|JSON_EMPTY|JSON_SIZE|JSON_INVALID|ARRAY_TYPE|ARRAY_COUNT|ROW_TYPE|FIELDS|OWNER_TYPE|ADMIN_TYPE|WRITE_TYPE|WRITE_UNSAFE|USER_TYPE|USER_MISSING|HASH_TYPE|HASH_FORMAT)$/.test(first)) || (first.length <= 160 && /^HOST_TRUST_CURRENT_OWNER_REQUIRED_(?:PUBLIC_INPUT|PUBLIC_SOURCE|SOURCE_HELPER|SOURCE_BOOTSTRAP|FIXTURE_INPUT|PARENT_DIRECTORY|POLICY_DIRECTORY|OUTPUT_DIRECTORY|EMPTY_DIRECTORY|DIRECTORY|ROOTS_OUTPUT|POLICY_OUTPUT|PUBLIC_OUTPUT|POLICY_INPUT|ROOTS_INPUT)_OWNER_(?:SYSTEM|ADMINISTRATORS|TOKEN_OTHER|OTHER|MISSING)_TOKEN_(?:CURRENT_USER|SYSTEM|ADMINISTRATORS|OTHER|MISSING)_WRITE_(?:SAFE|UNSAFE)$/.test(first)) ? first : 'CI_TRUST_PREPARATION_REFUSED';
+  return DIAGNOSTICS.has(first) || (first.length <= 160 && /^CI_TRUST_PRIVATE_PARENT_SETUP_(?:TIMEOUT|REFUSED|PROTOCOL)_(?:NO_MARKER|UNCLASSIFIED|STAGE_[0-4])$/.test(first)) || (first.length <= 160 && /^CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_(?:OUTPUT|HELPER_INPUT|BOOTSTRAP_INPUT|PARENT_DIRECTORY|RUNTIME_DIRECTORY|HELPER_COPY|BOOTSTRAP_COPY)_(?:JSON_TYPE|JSON_EMPTY|JSON_SIZE|JSON_INVALID|ARRAY_TYPE|ARRAY_COUNT|ROW_TYPE|FIELDS|OWNER_TYPE|ADMIN_TYPE|WRITE_TYPE|WRITE_UNSAFE|USER_TYPE|USER_MISSING|HASH_TYPE|HASH_FORMAT)$/.test(first)) || (first.length <= 160 && /^HOST_TRUST_CURRENT_OWNER_REQUIRED_(?:PUBLIC_INPUT|PUBLIC_SOURCE|SOURCE_HELPER|SOURCE_BOOTSTRAP|FIXTURE_INPUT|PARENT_DIRECTORY|POLICY_DIRECTORY|OUTPUT_DIRECTORY|EMPTY_DIRECTORY|DIRECTORY|ROOTS_OUTPUT|POLICY_OUTPUT|PUBLIC_OUTPUT|POLICY_INPUT|ROOTS_INPUT)_OWNER_(?:SYSTEM|ADMINISTRATORS|TOKEN_OTHER|OTHER|MISSING)_TOKEN_(?:CURRENT_USER|SYSTEM|ADMINISTRATORS|OTHER|MISSING)_WRITE_(?:SAFE|UNSAFE)$/.test(first)) ? first : 'CI_TRUST_PREPARATION_REFUSED';
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

@@ -72,7 +72,10 @@ class OwnerImportTests(unittest.TestCase):
         self.transition = Mock(side_effect=self.dispose)
         self.remove = Mock(side_effect=self.revoke)
         self.can_access = Mock(side_effect=lambda *_args, **_kwargs: self.access)
-        self.schema = Mock(side_effect=lambda **values: SimpleNamespace(**values))
+        def schema_values(**values):
+            return SimpleNamespace(**values)
+
+        self.schema = Mock(side_effect=schema_values)
         self.mappers = Mock()
         self.company_model = type("Company", (), {"id": Column()})
         self.member_model = type("CompanyMembership", (), {"id": Column(), "company_id": Column()})

@@ -383,7 +383,7 @@ class Gateway:
                             response_started = True
                             if fault == "offline":
                                 self.close_connection = True
-                                return
+                                return None
                             status = 404 if fault == "missing" else 200
                             data = b'{}'
                             record_request()
@@ -412,7 +412,7 @@ class Gateway:
                     if gateway.v1 and gateway.v1.should_withhold(intercept, status):
                         response_started = True
                         self.close_connection = True
-                        return
+                        return None
                     response_started = True
                     self.send_response(status)
                     for key, value in response_headers:

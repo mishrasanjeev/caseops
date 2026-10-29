@@ -16,7 +16,7 @@ const SOURCE_PINS = Object.freeze({ 'ios-host-pods.rb': IOS_PODS_SOURCE_SHA256,
   'ios-simulator-build.sh': '93e748e4993eb19b992e7f1f6d480368070b5e1423467640bf8d8908b083e72e',
   'ios-node-build-env.json': '050bd27cab9480e208d17141e5df2d5f98d8f7cdbadc73c31b085ff3be5f0ba6',
   'ios-git-readonly.py': '17b09505fbf0d95e71386d0bfe0f685c2f4c0802b1ddcd9443d1d8042ea207a9',
-  'ios-local-qa-host.py': 'c8989dc55d30d7a95ba4847d0fbb477e2a6110d759700b861810c2d7e19e68d8',
+  'ios-local-qa-host.py': 'c79fedf8f144a311dbcf591d51bf10b6905ae7cc2351fa9ec972dbd0917f783d',
   'store-packaging-host.py': 'a7c9d00f7e9c87a3e2a27ce758b49464fa4c50da92001aac02ebb20ee2dc71bb',
   'store_process_owner.py': 'eaa036bea90b08ba721deb4ece7286bd93315e8d64d128b646d27b78fa2176cf' });
 const sha = b => createHash('sha256').update(b).digest('hex');

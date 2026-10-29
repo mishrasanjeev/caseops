@@ -3950,6 +3950,7 @@ test('CI Windows entry never loads original H by pathname before or after stagin
     registerHooks({load(url,context,next){if(url===pathToFileURL(source+'/host-node-trust.mjs').href){originalLoads++;throw Error('ORIGINAL_H_FILE_IMPORT_REFUSED')}return next(url,context)}});
     Object.defineProperty(process,'platform',{value:'win32'}); Object.defineProperty(process,'getuid',{value:undefined}); process.env.SystemRoot='/owned-public-windows-system';
     const cp=createRequire(import.meta.url)('node:child_process'); cp.spawnSync=(_exe,args,options)=>{
+      if(options.env.CASEOPS_PARENT_CREATED_PATH){const p=options.env.CASEOPS_PARENT_CREATED_PATH;fs.mkdirSync(p,{mode:0o700});const f=fs.lstatSync(p,{bigint:true});return{status:0,stdout:JSON.stringify({created:true,ownerCurrent:true,protected:true,writersExact:true,ino:String(f.ino),volume:String(f.dev),birthtimeNs:String(f.birthtimeNs)}),stderr:[0,1,2,3,4].map(n=>'COPS_PARENT'+n).join(String.fromCharCode(10))+String.fromCharCode(10)}};
       if(options.env.CASEOPS_SOURCE_0){batches++;return {status:0,stdout:JSON.stringify(Array.from({length:6},(_,i)=>({runtimeOwner:i>=2,reviewedAdminSource:i<2,writeScopeSafe:true,tokenUserPresent:true,aclSha256:'a'.repeat(64)}))),stderr:''}};
       if(args.at(-1).includes("[Console]::Out.Write('SAFE')"))return{status:0,stdout:'SAFE',stderr:'COPS_ACL0\\nCOPS_ACL1\\nCOPS_ACL2\\nCOPS_ACL3\\n'.replaceAll('\\\\n','\\n')};
       return{status:0,stdout:'{"ownerMatches":true,"writeScopeSafe":true}',stderr:'COPS_ACL0\\nCOPS_ACL1\\nCOPS_ACL2\\nCOPS_ACL3\\n'.replaceAll('\\\\n','\\n')};
@@ -4037,4 +4038,104 @@ test('CI late malformed ACL hash refuses the staged result and purges all retain
 test('CI ACL protocol diagnostics reject forged roles reasons and appended private detail', () => {
   for (const value of ['CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_SYNTHETIC_PRIVATE_WRITE_UNSAFE', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_INPUT_SYNTHETIC_PRIVATE', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_INPUT_HASH_FORMAT_S-1-5-21-SYNTHETIC', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_OUTPUT_JSON_INVALID'.repeat(5)]) assert.equal(ciTrustFailureCode(new Error(value)), 'CI_TRUST_PREPARATION_REFUSED');
   assert.equal(ciTrustFailureCode(new Error('CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_COPY_WRITE_UNSAFE\nSYNTHETIC_PRIVATE')), 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_COPY_WRITE_UNSAFE');
+});
+
+
+async function ciFreshParentFixture(callback, setup = null) {
+  const root = trustRoot(), workspace = path.join(root, 'workspace'), output = path.join(root, 'commands'); fs.mkdirSync(workspace, { mode: 0o700 }); fs.writeFileSync(output, 'EARLIER=retained\n', { flag: 'wx', mode: 0o600 });
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), originalSpawn = cp.spawnSync, uid = Object.getOwnPropertyDescriptor(process, 'getuid'), platform = Object.getOwnPropertyDescriptor(process, 'platform'), systemRoot = process.env.SystemRoot;
+  const environment = { ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: workspace, GITHUB_OUTPUT: output, CASEOPS_PARENT_CREATED_PATH: path.join(root, 'UNADMITTED') }, calls = [];
+  Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' }); process.env.SystemRoot = '/owned-public-windows-system';
+  const parentResult = parent => {
+    assert.equal(fs.existsSync(parent), false, 'native creation must receive an absent leaf'); fs.mkdirSync(parent, { mode: 0o700 }); const state = fs.lstatSync(parent, { bigint: true });
+    return { status: 0, stdout: JSON.stringify({ created: true, ownerCurrent: true, protected: true, writersExact: true, ino: String(state.ino), volume: String(state.dev), birthtimeNs: String(state.birthtimeNs) }), stderr: [0, 1, 2, 3, 4].map(n => 'COPS_PARENT' + n).join('\n') + '\n' };
+  };
+  cp.spawnSync = (_exe, args, options) => {
+    if (options.env.CASEOPS_PARENT_CREATED_PATH) { calls.push({ kind: 'setup', args, options }); return setup ? setup(options, args.at(-1), () => parentResult(options.env.CASEOPS_PARENT_CREATED_PATH)) : parentResult(options.env.CASEOPS_PARENT_CREATED_PATH); }
+    if (options.env.CASEOPS_SOURCE_0) { calls.push({ kind: 'source', args, options }); return { status: 0, stdout: JSON.stringify(ciAclProtocolRows().map(row => ({ ...row, runtimeOwner: true, reviewedAdminSource: false }))), stderr: '' }; }
+    calls.push({ kind: 'strict-owner', args, options });
+    const stderr = [0, 1, 2, 3].map(n => 'COPS_ACL' + n).join('\n') + '\n';
+    return args.at(-1).includes("[Console]::Out.Write('SAFE')") ? { status: 0, stdout: 'SAFE', stderr } : { status: 0, stdout: '{"ownerMatches":true,"writeScopeSafe":true}', stderr };
+  }; syncBuiltinESMExports();
+  try { return await callback({ root, workspace, output, environment, calls }); }
+  finally { cp.spawnSync = originalSpawn; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; fs.rmSync(root, { recursive: true, force: true }); }
+}
+test('CI fresh-parent setup precedes every staged child and payload without using an environment-selected path', async () => {
+  let observed = false;
+  await ciFreshParentFixture(async ({ environment, calls }) => {
+    const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(observed, true); assert.equal(calls[0].kind, 'setup'); assert.equal(calls.filter(row => row.kind === 'setup').length, 1); assert.equal(calls.filter(row => row.kind === 'source').length, 2);
+    assert.deepEqual(result.privateParentSetup, { kind: 'windows-protected-new-parent', owner: 'current-user', writers: ['current-user', 'system', 'administrators'], protected: true, identityBound: true, childrenCreatedAfterSetup: true, creation: 'exclusive-native-security-descriptor' });
+  }, (options, code, create) => {
+    const parent = options.env.CASEOPS_PARENT_CREATED_PATH; assert.equal(fs.existsSync(parent), false); const success = create(); observed = true; assert.match(path.basename(parent), /^caseops-node-trust-[a-f0-9-]{36}$/); assert.ok(!parent.endsWith('UNADMITTED'));
+    const iterator = fs.opendirSync(parent, { bufferSize: 1 }); try { assert.equal(iterator.readSync(), null); } finally { iterator.closeSync(); }
+    assert.ok(Number.isInteger(options.timeout) && options.timeout > 0 && options.timeout <= 5000); assert.equal(options.maxBuffer, 4096); assert.deepEqual(Object.keys(options.env).sort(), ['CASEOPS_PARENT_CREATED_PATH', 'SystemRoot', 'WINDIR']);
+    assert.doesNotMatch(code, /Get-Acl|Set-Acl|Add-Type|ConvertTo-Json|New-Object/); assert.match(code, /SetAccessRuleProtection\(\$true,\$false\)/); assert.match(code, /SetOwner\(\$u\)/); assert.doesNotMatch(code, /SetAccessControl|SetSecurityInfo|Directory\]::CreateDirectory/); assert.match(code, /if\(!\$native::CreateDirectoryW\(\$p,\$sa\)\)\{throw 'EXCLUSIVE_CREATION_REQUIRED'\}/); assert.match(code, /GetSecurityInfo\(\$handle,1,5/); assert.match(code, /CloseHandle\(\$handle\)/); return success;
+  });
+});
+test('CI fresh-parent failed empty unknown or timed-out setup never admits source payload or policy output', async () => {
+  for (const [failure, reason] of [[{ status: 0, stdout: '', stderr: '' }, 'PROTOCOL_NO_MARKER'], [{ status: 0, stdout: 'SYNTHETIC_PRIVATE', stderr: '' }, 'PROTOCOL_NO_MARKER'], [{ status: 1, stdout: '', stderr: 'COPS_PARENT_REFUSED\n' }, 'REFUSED_NO_MARKER'], [{ status: null, stdout: '', stderr: '', error: { code: 'ETIMEDOUT' } }, 'TIMEOUT_NO_MARKER']]) await ciFreshParentFixture(async ({ environment, output, calls }) => {
+    const trace = ciSourceTrace();
+    try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), { message: 'CI_TRUST_PRIVATE_PARENT_SETUP_' + reason }); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); assert.equal(calls.length, 1); assert.equal(calls[0].kind, 'setup'); assert.equal(fs.readFileSync(output, 'utf8'), 'EARLIER=retained\n'); }
+    finally { trace.restore(); } trace.closed();
+  }, () => failure);
+});
+test('CI private-parent exclusive creation refuses a collision without touching an existing directory or its contents', async () => {
+  const crypto = ciTrustCreateRequire(import.meta.url)('node:crypto'), random = crypto.randomUUID, fixed = '01234567-89ab-cdef-0123-456789abcdef';
+  try {
+    crypto.randomUUID = () => fixed; syncBuiltinESMExports();
+    await ciFreshParentFixture(async ({ root, environment, calls }) => {
+      const existing = path.join(root, 'caseops-node-trust-' + fixed); fs.mkdirSync(existing, { mode: 0o700 }); const file = path.join(existing, 'retained'), data = 'SYNTHETIC_EXISTING_CONTENT'; fs.writeFileSync(file, data, { flag: 'wx', mode: 0o600 }); const before = fs.lstatSync(existing, { bigint: true });
+      await assert.rejects(prepareCIHostNodeTrustWindows(environment), { code: 'EEXIST' }); assert.equal(calls.length, 0); assert.equal(fs.readFileSync(file, 'utf8'), data); const after = fs.lstatSync(existing, { bigint: true });
+      for (const key of ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs']) assert.equal(after[key], before[key]);
+    });
+  } finally { crypto.randomUUID = random; syncBuiltinESMExports(); }
+});
+test('CI changed or aliased fresh parent refuses after setup acknowledgement and before any staged source', async () => {
+  for (const alias of [false, true]) await ciFreshParentFixture(async ({ root, environment, calls }) => {
+    const trace = ciSourceTrace(); try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), /CI_TRUST_PRIVATE_PARENT_CHANGED/); assert.equal(trace.reads, 0); assert.equal(calls.length, 1); }
+    finally { trace.restore(); } trace.closed();
+  }, (options, _code, create) => {
+    const success = create(), parent = options.env.CASEOPS_PARENT_CREATED_PATH, saved = parent + '-retained'; fs.renameSync(parent, saved); if (alias) fs.symlinkSync(saved, parent, 'dir'); else fs.mkdirSync(parent, { mode: 0o700 }); return success;
+  });
+});
+test('CI late fresh-parent entry is refused rather than accepted as an empty setup success', async () => ciFreshParentFixture(async ({ environment, calls }) => {
+  const trace = ciSourceTrace(); try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), /CI_TRUST_PRIVATE_PARENT_CHANGED|CI_TRUST_PRIVATE_PARENT_NOT_EMPTY/); assert.equal(trace.reads, 0); assert.equal(calls.length, 1); }
+  finally { trace.restore(); } trace.closed();
+}, (options, _code, create) => { const success = create(); fs.writeFileSync(path.join(options.env.CASEOPS_PARENT_CREATED_PATH, 'late'), 'owned synthetic entry', { flag: 'wx', mode: 0o600 }); return success; }));
+test('CI atomic-parent readback binds inode birth type and namespace before unchanged full-frame admission', async () => {
+  const lstat = fs.lstatSync; let parent = null;
+  fs.lstatSync = (name, ...args) => { const state = lstat(name, ...args); return String(name) === parent && args[0]?.bigint ? new Proxy(state, { get(value, key) { return key === 'ctimeNs' ? value.ctimeNs + 100n : Reflect.get(value, key); } }) : state; };
+  try { await ciFreshParentFixture(async ({ environment }) => { const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.privateParentSetup.identityBound, true); }, (options, _code, create) => { parent = options.env.CASEOPS_PARENT_CREATED_PATH; return create(); }); }
+  finally { fs.lstatSync = lstat; }
+});
+test('CI parent-setup refusals retain only fixed diagnostics and never reflect subprocess details', async () => ciFreshParentFixture(async ({ environment }) => {
+  await assert.rejects(prepareCIHostNodeTrustWindows(environment), error => { assert.equal(ciTrustFailureCode(error), 'CI_TRUST_PRIVATE_PARENT_SETUP_REFUSED_UNCLASSIFIED'); assert.ok(!error.message.includes('SYNTHETIC_PRIVATE')); return true; });
+}, () => ({ status: 1, stdout: 'S-1-5-21-SYNTHETIC_PRIVATE', stderr: '/SYNTHETIC_PRIVATE/PATH', error: { message: 'SYNTHETIC_PRIVATE' } })));
+
+
+test('CI atomic creation collision after absence admission never changes the existing directory or stages bytes', async () => {
+  let trace, fixtureReads = 0, fixtureWrites = 0;
+  await ciFreshParentFixture(async ({ environment, calls }) => {
+    trace = ciSourceTrace(); try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), { message: 'CI_TRUST_PRIVATE_PARENT_SETUP_REFUSED_STAGE_1' }); assert.equal(trace.reads, fixtureReads); assert.equal(trace.writes, fixtureWrites); assert.equal(calls.length, 1); }
+    finally { trace.restore(); } trace.closed();
+  }, (options, code) => {
+    const parent = options.env.CASEOPS_PARENT_CREATED_PATH; assert.equal(fs.existsSync(parent), false); fs.mkdirSync(parent, { mode: 0o755 }); const retained = path.join(parent, 'existing'); fs.writeFileSync(retained, 'SYNTHETIC_EXISTING', { flag: 'wx', mode: 0o600 }); const before = fs.lstatSync(parent, { bigint: true });
+    assert.doesNotMatch(code, /SetAccessControl|SetSecurityInfo/); assert.ok(code.indexOf("throw 'EXCLUSIVE_CREATION_REQUIRED'") < code.indexOf('$handle=$native::CreateFileW'));
+    const after = fs.lstatSync(parent, { bigint: true }); for (const key of ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs']) assert.equal(after[key], before[key]); assert.equal(fs.readFileSync(retained, 'utf8'), 'SYNTHETIC_EXISTING');
+    fixtureReads = trace.reads; fixtureWrites = trace.writes;
+    return { status: 1, stdout: '', stderr: 'COPS_PARENT0\nCOPS_PARENT1\nCOPS_PARENT_REFUSED\n' };
+  });
+});
+
+test('CI atomic handle identity and qualified Windows volume bind before any source byte read', async () => {
+  for (const [key, value] of [['ino', '0'], ['ino', '18446744073709551616'], ['volume', '4294967296'], ['volume', '1'], ['birthtimeNs', '1']]) await ciFreshParentFixture(async ({ environment }) => {
+    const trace = ciSourceTrace(); try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), /CI_TRUST_PRIVATE_PARENT_SETUP_PROTOCOL_STAGE_4|CI_TRUST_PRIVATE_PARENT_CHANGED/); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+    finally { trace.restore(); } trace.closed();
+  }, (_options, _code, create) => { const result = create(), row = JSON.parse(result.stdout); row[key] = value; return { ...result, stdout: JSON.stringify(row) }; });
+});
+test('CI atomic readback rejects false protection owner writers creation and malformed protocol without reflecting output', async () => {
+  for (const change of [row => ({ ...row, created: false }), row => ({ ...row, ownerCurrent: false }), row => ({ ...row, protected: false }), row => ({ ...row, writersExact: false }), row => ({ ...row, unknown: 'SYNTHETIC_PRIVATE' }), row => ({ ...row, ino: 1 }), () => []]) await ciFreshParentFixture(async ({ environment }) => {
+    const trace = ciSourceTrace(); try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), error => error.message === 'CI_TRUST_PRIVATE_PARENT_SETUP_PROTOCOL_STAGE_4' && !error.message.includes('SYNTHETIC_PRIVATE')); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+    finally { trace.restore(); } trace.closed();
+  }, (_options, _code, create) => { const result = create(); return { ...result, stdout: JSON.stringify(change(JSON.parse(result.stdout))) }; });
 });

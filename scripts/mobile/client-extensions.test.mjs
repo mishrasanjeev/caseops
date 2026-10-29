@@ -117,7 +117,7 @@ test('failed teardown cannot be hidden by passing call or admit another setup',a
 });
 test('bounded owner ACK consumes exact request and terminal unknown is never replayed',async()=>{
  const root=temp(),binding={sourceSha:'a'.repeat(40),binaryHash:'b'.repeat(64),udid:'owned',runId:'epoch'};let sleeps=0;
- try{const result=await waitForClientOperator({root,operation:'policyCheckpoint',caseId:'CX28-VERSION-02',args:{phase:'floor'},binding},{now:()=>0,sleep:async()=>{
+ try{const result=await waitForClientOperator({root,operation:'policyCheckpoint',caseId:'CX28-VERSION-02',args:{phase:'floor'},binding},{now:()=>0,readPublic:(file,options)=>isolatedFixtureAncestors(root,()=>readClientPublicInput(file,options)),sleep:async()=>{
    sleeps++;const file=fs.readdirSync(root).find(x=>x.endsWith('.request.json'));const bytes=fs.readFileSync(path.join(root,file)),q=JSON.parse(bytes);
    fs.writeFileSync(path.join(root,file.replace('.request.','.result.')),JSON.stringify({kind:'native-client-extension-owner-ack',requestEvidence:{path:path.join(root,file),sha256:sha(bytes)},operation:q.operation,caseId:q.caseId,binding:q.binding,observed:true,acknowledged:true,noPaidMarker:'no-paid-providers',mutationUncertain:false,replayed:false,value:{actual:true}}),{mode:0o600,flag:'wx'});
   }});assert.deepEqual(result,{actual:true});assert.equal(sleeps,1);
@@ -279,7 +279,7 @@ function withInstrumentedFile(reader, { replace = false } = {}) {
  fs.fstatSync=(value,...args)=>{const result=original.stat(value,...args);if(value===fd){order.push('fstat');if(replace&&!replaced){replaced=true;fs.renameSync(file,path.join(root,'retained'));fs.writeFileSync(file,'{}',{mode:0o600});}}return result;};
  fs.lstatSync=(name,...args)=>{if(name===file)order.push('named');return original.named(name,...args);};
  fs.readSync=(value,...args)=>{if(value===fd){reads++;order.push('read');}return original.read(value,...args);};
- let error,result;try{result=reader(file);}catch(value){error=value;}finally{Object.assign(fs,{openSync:original.open,fstatSync:original.stat,lstatSync:original.named,readSync:original.read});}
+ let error,result;try{result=isolatedFixtureAncestors(root,()=>reader(file));}catch(value){error=value;}finally{Object.assign(fs,{openSync:original.open,fstatSync:original.stat,lstatSync:original.named,readSync:original.read});}
  try{assert.notEqual(fd,undefined);assert.throws(()=>fs.fstatSync(fd),{code:'EBADF'});return{order,reads,error,result,replaced};}finally{fs.rmSync(root,{recursive:true,force:true});}
 }
 test('public reader admits opened descriptor before named leaf or body',()=>{
