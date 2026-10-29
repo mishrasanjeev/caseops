@@ -7,8 +7,8 @@ import { spawnSync } from 'node:child_process';
 
 // Public reviewed source identity, not a policy-supplied code authority.
 const APPROVED_HELPER_SHA256 = '13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787';
-const A_SHA = 'a0a02624aee143b2ea647711d43bf04c0161f4bb5c7e7d9e915540b0187710df';
-const A_SIZE = 39421;
+const A_SHA = 'e81d846c9a7b1e829104216cf5b9fe33501eba6e9451154a6880e6b8d854d3ae';
+const A_SIZE = 40506;
 const F = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
 const end = performance.now() + 20000;
 const check = () => { if (performance.now() >= end) throw new Error('HOST_TRUST_BOOTSTRAP_DEADLINE'); };

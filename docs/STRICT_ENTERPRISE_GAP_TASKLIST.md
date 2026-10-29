@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 29 Mobile Source Instrumentation #558
+
+J20/M22 remains partially implemented and release NO-GO. Published 4e021605 has
+green CI, Security, CodeQL and mobile source workflows; this does not certify
+native execution. A local exact-default observer repair has 1,262 functional
+passes/two existing Windows skips and actual CLI regressions, with regenerated
+source pins. Its retained eight measured failures and output-budget refusal
+still require complete replacement evidence. Android prebuild is verified on
+A8; fresh APK, Simulator builds, both complete 83-case native inventories,
+image/runtime security, signed distribution and organization enrollment remain
+open. See [scoped observer evidence](mobile/SOURCE_OBSERVER_REPAIR_2026-10-29.md).
+
 ## October 26 Portfolio Export Execution #564
 
 NO-GO for whole-release closure at f49b274e. Exact QA40323857026's IP18 1280px

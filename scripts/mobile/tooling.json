@@ -12,17 +12,17 @@
   "npm": "11.12.1",
   "hostNodeTrust": {
     "helperSha256": "13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787",
-    "bootstrapSha256": "265cdc00128762bb3b06a94c21f0f199693a29de309283ef1ee86ab0c212bbcc"
+    "bootstrapSha256": "9f490e9666a5052cc1c378ee703eef462a876440a01a041a6b73609cc49e5a35"
   },
   "sourceGateObserver": {
     "recorder": {
       "file": "source-gate-observer.mjs",
-      "sha256": "a0a02624aee143b2ea647711d43bf04c0161f4bb5c7e7d9e915540b0187710df",
-      "sizeBytes": 39421
+      "sha256": "e81d846c9a7b1e829104216cf5b9fe33501eba6e9451154a6880e6b8d854d3ae",
+      "sizeBytes": 40506
     },
     "bootstrapReadable": {
       "file": "host-node-trust-start.source.mjs",
-      "sha256": "92d0bd172c0307e301f6bfbc26b35f39ae50fb13ad4f6fc783cffc9572a314b2",
+      "sha256": "c1a286325e1ade81769767e8022c9a780a657825ea333277c1401496dd00df47",
       "sizeBytes": 7096
     },
     "generator": {
@@ -32,7 +32,7 @@
     },
     "provenance": {
       "file": "host-node-trust-start.provenance.json",
-      "sha256": "460afd9f2b41289adf3ecb4b5a7414d2c533200c888095abf80aba3fc8d8b867",
+      "sha256": "8de1f04640cab3a9a0be499e627a302ebc6881644294cd67cc412c1c9dd94a75",
       "sizeBytes": 778
     }
   }

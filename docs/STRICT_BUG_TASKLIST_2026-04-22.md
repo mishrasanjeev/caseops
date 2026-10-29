@@ -1,5 +1,18 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 29 Native Source Observer #558
+
+Partially fixed; measured/native acceptance remains open. The retained 1,262-case
+measured run has eight failures and exceeds its raw-output limits. Actual Node24
+controller defaults were absent from the exact startup allowlist. An isolated
+real-CLI baseline/candidate/changed-flag reproduction passes; the repair retains
+unknown-flag fallback and native entry refusal. Reconcile every dependent source
+pin and regenerate the bootstrap with exact AST/byte proof. The complete updated
+functional inventory passes 1,262/1,264 with exactly two existing Windows skips,
+zero failures/cancellations/todos and owned closure. This is not replacement
+measured or native evidence. See
+[the scoped reproduction and remaining gates](mobile/SOURCE_OBSERVER_REPAIR_2026-10-29.md).
+
 ## October 27 Export Release Projection Stop
 
 Dependabot65 separately reports GHSA-xcq7-p3pf-p88h in the optional

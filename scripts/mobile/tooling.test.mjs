@@ -3666,7 +3666,7 @@ test('iOS role projection drops only the typed pinned-worker status descriptor m
 test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
   const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
   assert.ok(helper.includes("const NODE_HELPER = '13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787'"));
-  assert.ok(helper.includes("const NODE_BOOTSTRAP = '265cdc00128762bb3b06a94c21f0f199693a29de309283ef1ee86ab0c212bbcc'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = '9f490e9666a5052cc1c378ee703eef462a876440a01a041a6b73609cc49e5a35'"));
   const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
   const pin = createHash('sha256').update(input).digest('hex');
   assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
@@ -3809,7 +3809,7 @@ test('CI runtime copies retain exact reviewed Git blobs with independent readonl
     assert.equal(used, Number(expected)); return bytes.subarray(0, used);
   };
   try {
-    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'c4d2ae68f4c9b0233e6246a8fe3ac504bec43b99'], ['100644', '11bc2acdadfd1234203ba27a9a00a310133a53a3']]);
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'c4d2ae68f4c9b0233e6246a8fe3ac504bec43b99'], ['100644', '5e4de3be2a85251bf14d136a79c47cf9b1fdca6b']]);
     for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29498n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
       const input = path.join(source, name), output = staged.sourceRefs[role].path;
       const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
@@ -4540,6 +4540,33 @@ test('source observer real selected worker retains exact engine hashes and the u
     assert.equal(script.engineSha256, observerHash(fs.readFileSync(new URL(entry))));
     assert.ok(rows.some(row => row.event === 'exit-marker' && row.code === 0)); assert.ok(fs.statSync(path.join(directory, files[0])).size < 2097152);
     assert.deepEqual(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${result.pid}-`)), []);
+  });
+});
+for (const [label, extra, compactCount] of [
+  ['captured Node24 defaults', [], 1],
+  ['changed stack trace default', ['--stack-trace-limit=11'], 0],
+]) test(`source observer actual intrinsic CLI ${label} preserves all evidence cases`, async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    // Exercise Node's real controller-to-worker argv serialization. A synthetic
+    // NODE_TEST_CONTEXT with direct entry execution does not reproduce it.
+    const result = await run({ args: [...extra, '--test', '--test-reporter=tap', path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs')] });
+    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.signal, null); assert.equal(result.overflow, false);
+    const output = result.stdout.toString();
+    for (const [name, value] of [['tests', 12], ['pass', 12], ['fail', 0], ['cancelled', 0], ['skipped', 0], ['todo', 0]])
+      assert.match(output, new RegExp(`^# ${name} ${value}$`, 'm'));
+    const directory = path.join(root, 'output'), files = observerFiles(directory);
+    assert.equal(files.length, compactCount);
+    if (compactCount) {
+      const rows = observerRead(path.join(directory, files[0]), 2097152).toString('utf8').trim().split('\n').map(line => JSON.parse(line));
+      assert.equal(rows[0].event, 'header'); assert.equal(rows[0].selection, 'exact-declared-test-worker');
+      assert.ok(rows.some(row => row.event === 'live'));
+      assert.ok(rows.some(row => row.event === 'exit-marker' && row.code === 0));
+      const entry = pathToFileURL(path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs')).href;
+      assert.equal(rows.find(row => row.event === 'script' && row.url === entry)?.engineSha256,
+        observerHash(fs.readFileSync(new URL(entry))));
+    } else {
+      assert.ok(observerFiles(result.coverageDirectory).some(name => name.startsWith('coverage-')));
+    }
   });
 });
 test('source observer inherited normal ESM Worker remains rich without a Session or exit diagnostic', async () => {

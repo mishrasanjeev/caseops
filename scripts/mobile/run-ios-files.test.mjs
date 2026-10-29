@@ -166,7 +166,14 @@ test('Files CLI independently collects its complete ordered 17-case inventory wi
 
 test('a real failed-preflight invocation retains every setup/call/teardown outcome and completion while executing no native call/session', (t) => {
   const { reportRoot, env } = environment(t);
-  const child = spawnSync(process.execPath, [RUNNER], { cwd: ROOT, env, encoding: 'utf8', timeout: 20000 });
+  // This deliberately absent-fixture unit must reach the controller's own
+  // preflight. The optional source observer correctly refuses native entry
+  // forms before that boundary; its refusal is covered separately.
+  const preflightEnv = { ...env };
+  for (const key of Object.keys(preflightEnv)) if (/^CASEOPS_SOURCE_GATE_/i.test(key)) delete preflightEnv[key];
+  for (const key of ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_V8_COVERAGE',
+    'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256']) assert.equal(preflightEnv[key], env[key]);
+  const child = spawnSync(process.execPath, [RUNNER], { cwd: ROOT, env: preflightEnv, encoding: 'utf8', timeout: 20000 });
   assert.equal(child.error, undefined); assert.equal(child.status, 1, child.stderr);
   const runs = readdirSync(reportRoot); assert.equal(runs.length, 1);
   const report = path.join(reportRoot, runs[0]); assert.equal(existsSync(path.join(report, 'summary.json')), true);
