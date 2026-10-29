@@ -210,3 +210,16 @@ df4b299a660e9ab00655054f7f4caf1b28a1f340:scripts/mobile/host-platform-trust.py:g
 # Its exact historical span is reviewed separately; current-tree proof above
 # does not confer a history waiver.
 2fe2d37cc8623fe91d9e463244a2880469939612:scripts/mobile/host-platform-trust.py:generic-api-key:35
+
+# 2026-10-29: exact public Vitest4.1.12 cli-api chunk SHA256, verified
+# against package/dist/chunks/cli-api.B0Pz1_R7.js in the official archive:
+# https://registry.npmjs.org/vitest/-/vitest-4.1.12.tgz
+# The archive matches the unchanged package-lock SHA512; its SHA256 is
+# ac79c9561c99eabc1cc29e0a839cbd03d1ff0e45bbecb5a2edfa6c3827c823d1.
+# The complete immutable source-line SHA256 is
+# 571a3a818d58fb5c9897e4594e97bb563dc31d4c602d68db8f122f0e8413de5a.
+# Local integration and the separately published object have distinct origins.
+# Only these historical spans are reviewed; changed bytes, future origins and
+# newly introduced credentials still fail. No path/rule/value-wide exclusion.
+a5052a0f417cfd0514f0f612a2b359b88b1653e3:apps/web/lib/vitest-host-pool.ts:generic-api-key:15
+f7d2d92206b78f3aed31c2af5bf37e459de9a1f7:apps/web/lib/vitest-host-pool.ts:generic-api-key:15
