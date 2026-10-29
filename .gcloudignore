@@ -18,6 +18,7 @@ docs/security/*
 !tests/fixtures/
 !tests/fixtures/statutes/
 !tests/fixtures/statutes/structured-schedule-api.json
+!tests/fixtures/node-default-tls-probe.cjs
 !tests/e2e/
 !tests/e2e/support/
 !tests/e2e/support/prod-failure-diagnostics.ts

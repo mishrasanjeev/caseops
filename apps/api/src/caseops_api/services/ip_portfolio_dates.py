@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from sqlalchemy import Integer, and_, case, cast, func, literal, select
+from sqlalchemy import Integer, and_, case, cast, func, literal, select, tuple_
 
 from caseops_api.db.models import (
     AuditEvent,
@@ -64,30 +64,70 @@ def current_dates(session, *, version, docket_id, imported_proven=None):
     return result
 
 
-def imported_proof_expression():
+def imported_proof_expression(*, company_id=None):
     source_id = IpTrademarkParticularVersion.representation_json["portfolio_import"][
         "source_row_id"
     ].as_string()
-    return (
+    tenant_id = IpDocketRecord.company_id if company_id is None else company_id
+    # The import ID is a primary key, so its scalar read already selects at
+    # most one row. Keep this a scalar rather than a hashable EXISTS.
+    source_row = (
         select(IpImportRow.id)
+        .where(IpImportRow.id == source_id, IpImportRow.company_id == tenant_id)
+        .correlate(IpDocketRecord, IpTrademarkParticularVersion)
+        .scalar_subquery()
+        .is_not(None)
+    )
+    seek_keys = (
+        AuditEvent.target_type,
+        AuditEvent.target_id,
+        AuditEvent.company_id,
+        AuditEvent.ip_docket_id,
+        AuditEvent.action,
+        AuditEvent.id,
+    )
+    # Position at the upper edge of the full five-field proof identity, then take
+    # one predecessor. Omitting the ID from the bound includes every duplicate
+    # proof ID without a UUID sentinel. A forward miss can walk a high NULL
+    # suffix; the reverse start stays below it. Reject every wrong predecessor
+    # through the complete identity policy outside the LIMIT.
+    candidate = (
+        select(
+            AuditEvent.id,
+            AuditEvent.company_id,
+            AuditEvent.target_id,
+            AuditEvent.ip_docket_id,
+            AuditEvent.action,
+            AuditEvent.target_type,
+        )
         .where(
-            func.length(source_id) == 36,
-            IpImportRow.id == source_id,
-            IpImportRow.company_id == IpDocketRecord.company_id,
-            select(AuditEvent.id)
-            .where(
-                AuditEvent.company_id == IpDocketRecord.company_id,
-                AuditEvent.action == "ip_docket.source_materialized",
-                AuditEvent.target_type == "ip_import_row",
-                AuditEvent.target_id == IpImportRow.id,
-                AuditEvent.ip_docket_id == IpDocketRecord.id,
-            )
-            .correlate(IpDocketRecord, IpImportRow)
-            .exists(),
+            tuple_(*seek_keys[:5]) <= tuple_(
+                case((source_id.is_not(None), "ip_import_row"), else_=None),
+                source_id,
+                tenant_id,
+                IpDocketRecord.id,
+                "ip_docket.source_materialized",
+            ),
         )
         .correlate(IpDocketRecord, IpTrademarkParticularVersion)
-        .exists()
+        .order_by(*(column.desc() for column in seek_keys))
+        .limit(1)
+        .subquery("ip_materialized_proof_seek")
     )
+    materialized = (
+        select(candidate.c.id)
+        .where(
+            candidate.c.company_id == tenant_id,
+            candidate.c.target_id == source_id,
+            candidate.c.ip_docket_id == IpDocketRecord.id,
+            candidate.c.action == "ip_docket.source_materialized",
+            candidate.c.target_type == "ip_import_row",
+        )
+        .correlate(IpDocketRecord, IpTrademarkParticularVersion)
+        .scalar_subquery()
+        .is_not(None)
+    )
+    return and_(func.length(source_id) == 36, source_row, materialized)
 
 
 def valid_iso_date_expression(raw):
@@ -150,7 +190,7 @@ def current_date_facts(candidates, *, company_id):
             IpDocketRecord.id.label("docket_id"),
             IpTrademarkParticularVersion.id.label("version_id"),
             IpTrademarkParticularVersion.representation_json.label("data"),
-            imported_proof_expression().label("import_proven"),
+            imported_proof_expression(company_id=company_id).label("import_proven"),
         )
         .select_from(IpDocketRecord)
         .join(scoped, scoped.c.docket_id == IpDocketRecord.id)
@@ -195,7 +235,7 @@ def page_date_details(session, *, company_id, docket_ids):
     if not docket_ids:
         return {}
     rows = session.execute(
-        select(IpTrademarkParticularVersion, imported_proof_expression())
+        select(IpTrademarkParticularVersion, imported_proof_expression(company_id=company_id))
         .join(
             IpDocketRecord,
             and_(

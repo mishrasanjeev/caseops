@@ -156,7 +156,7 @@ jobs:
         if: steps.shard-files.outputs.requires_playwright == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "22.14.0"
+          node-version: "22.23.4"
           cache: npm
 
       - uses: ./.github/actions/node-trust
@@ -401,6 +401,7 @@ jobs:
           CASEOPS_TEST_RESULT_JOURNAL: postgres-shard-${{ matrix.shard }}.jsonl
           CASEOPS_FINALIZER_EVIDENCE_DIR: postgres-shard-${{ matrix.shard }}-native
           CASEOPS_READTHROUGH_EVIDENCE_DIR: ${{ github.workspace }}/apps/api/postgres-shard-${{ matrix.shard }}-readthrough
+          CASEOPS_POSTGRES_QUERY_EVIDENCE_DIR: ${{ github.workspace }}/apps/api/postgres-shard-${{ matrix.shard }}-query-plans
           PYTEST_ADDOPTS: >-
             -p tests.postgres_sharding --postgres-shard=${{ matrix.shard }} --postgres-shards=${{ matrix.total_shards }}
             --postgres-inventory=postgres-shard-${{ matrix.shard }}.json
@@ -418,6 +419,7 @@ jobs:
             apps/api/postgres-shard-${{ matrix.shard }}.jsonl
             apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl
             apps/api/postgres-shard-${{ matrix.shard }}-readthrough/
+            apps/api/postgres-shard-${{ matrix.shard }}-query-plans/
           if-no-files-found: error
           retention-days: 14
 
@@ -453,7 +455,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.14.0"
+          node-version: "22.23.4"
           cache: "npm"
           cache-dependency-path: package-lock.json
 
@@ -587,7 +589,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.14.0"
+          node-version: "22.23.4"
           cache: "npm"
           cache-dependency-path: package-lock.json
 

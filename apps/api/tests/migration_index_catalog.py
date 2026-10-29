@@ -6,12 +6,32 @@ from sqlalchemy import text
 
 
 def schema_catalog(engine):
+    """Capture the complete catalog with every historical index healthy."""
+    return _schema_catalog(engine)
+
+
+def interrupted_index_catalog(engine, *, expected_index):
+    """Capture one exactly described interrupted build; keep all others healthy."""
+    return _schema_catalog(engine, expected_interrupted_index=expected_index)
+
+
+def _schema_catalog(engine, *, expected_interrupted_index=None):
     """Capture complete SQLite DDL or PostgreSQL public schema definitions/state.
 
     Row data is retained separately by each journey. PostgreSQL physical OIDs
     and mutable sequence values are deliberately not schema definitions; each
     owned index's restart identity is checked independently by the journey.
     """
+    expected_key = None
+    if expected_interrupted_index is not None:
+        assert engine.dialect.name == "postgresql"
+        assert type(expected_interrupted_index) is tuple and len(expected_interrupted_index) == 2
+        expected_key, expected_definition = expected_interrupted_index
+        assert type(expected_key) is tuple and len(expected_key) == 3
+        assert expected_key[0] == "index" and all(type(value) is str for value in expected_key)
+        assert type(expected_definition) is tuple and len(expected_definition) == 7
+        assert type(expected_definition[0]) is str
+        assert expected_definition[1:] == (False, False, True, False, False, False)
     with engine.connect() as connection:
         if engine.dialect.name == "sqlite":
             rows = connection.execute(
@@ -81,9 +101,15 @@ def schema_catalog(engine):
                 key = (kind, *row[:2])
                 assert key not in result, ("DUPLICATE_SCHEMA_OBJECT", key)
                 if kind == "index":
-                    assert all(row[3:6]), ("INVALID_OR_UNREADY_HISTORICAL_INDEX", key)
+                    if key == expected_key:
+                        assert tuple(row[2:]) == expected_definition, (
+                            "INTERRUPTED_INDEX_CATALOG_MISMATCH", key
+                        )
+                    else:
+                        assert all(row[3:6]), ("INVALID_OR_UNREADY_HISTORICAL_INDEX", key)
                 result[key] = tuple(row[2:])
         assert result and any(key[0] == "index" for key in result)
+        assert expected_key is None or expected_key in result, "EXPECTED_INTERRUPTED_INDEX_MISSING"
         return result
 
 

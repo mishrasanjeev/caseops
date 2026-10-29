@@ -8,7 +8,7 @@
 
 # Keep the pinned Node root set except the compromised emSign ECC G3 root.
 # This store also applies to npm/build processes, before any package download.
-FROM node:22.14.0-alpine AS trusted-base
+FROM node:22.23.4-alpine AS trusted-base
 COPY apps/web/scripts/node-trust.cjs apps/web/scripts/node-trust-start.cjs /opt/caseops/trust/
 RUN node /opt/caseops/trust/node-trust.cjs --generate \
   && chmod 0444 /opt/caseops/trust/*.cjs \
@@ -52,6 +52,7 @@ COPY apps/web ./
 # One colocated page test imports this canonical fixture during Next's type
 # check. Keep it in the builder context only; the runner copies no test files.
 COPY tests/fixtures/statutes/structured-schedule-api.json /app/tests/fixtures/statutes/structured-schedule-api.json
+COPY tests/fixtures/node-default-tls-probe.cjs /app/tests/fixtures/node-default-tls-probe.cjs
 # Colocated diagnostic units require their direct and transitive support imports.
 # Admit this explicit closure in both root ignore files; keep it out of the runner.
 COPY tests/e2e/support/prod-failure-diagnostics.ts /app/tests/e2e/support/prod-failure-diagnostics.ts

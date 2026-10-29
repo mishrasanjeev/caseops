@@ -183,7 +183,7 @@ def test_offline_playwright_evidence_dependencies_follow_the_resolved_shard():
         == "steps.shard-files.outputs.requires_playwright == 'true'"
     )
     assert node["uses"] == "actions/setup-node@v4"
-    assert node["with"]["node-version"] == "22.14.0"
+    assert node["with"]["node-version"] == "22.23.4"
     assert trust["uses"] == "./.github/actions/node-trust"
     for key in (
         "NODE_OPTIONS", "SSL_CERT_FILE", "SSL_CERT_DIR",

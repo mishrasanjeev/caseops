@@ -6,8 +6,8 @@ const path = require("node:path");
 const { rootCertificates } = require("node:tls");
 
 const DENIED_ROOT = "86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b";
-const INPUT_ROOTS_SHA256 = "8679e032ebe303c8fc30036873fabda30ded10de2dc72aea982a4cb2808f1456";
-const BUNDLE_SHA256 = "553a980a0de1e9e7fd65bcea308db009f4e2269f08475227d6f6b04beeab2554";
+const INPUT_ROOTS_SHA256 = "f5c557f94fddcecbd61b66da4634ca2537f1b153cccf581170b4b25e29b084cb";
+const BUNDLE_SHA256 = "c2929361a5be0afcf231461fa8b4b00e4454d49cfea9592c12089d8efdc8c64f";
 const bundlePath = path.join(__dirname, "ca-bundle.pem");
 const emptyDirectory = path.join(__dirname, "empty");
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
@@ -17,15 +17,16 @@ function refuse() {
 }
 
 function checkNodeBuild() {
-  // v22.14 configure records a nonempty override; node.gyp otherwise uses "".
-  if (process.version !== "v22.14.0" || process.config.variables.openssl_system_ca_path) refuse();
+  // Reject a build-time system CA override; the pinned store must be selected.
+  if (process.version !== "v22.23.4" || process.config.variables.openssl_system_ca_path) refuse();
 }
 
+// v22.23.4 already removed G3. Preserve every other root in this exact upstream set.
 function createBundle(roots) {
   checkNodeBuild();
   const fingerprints = roots.map((pem) => sha256(new X509Certificate(pem).raw));
-  if (roots.length !== 149 || new Set(fingerprints).size !== 149
-      || fingerprints.filter((value) => value === DENIED_ROOT).length !== 1
+  if (roots.length !== 116 || new Set(fingerprints).size !== 116
+      || fingerprints.includes(DENIED_ROOT)
       || sha256([...fingerprints].sort().join("\n") + "\n") !== INPUT_ROOTS_SHA256) refuse();
   const bundle = roots.filter((_pem, index) => fingerprints[index] !== DENIED_ROOT)
     .map((pem) => pem.trim()).join("\n") + "\n";

@@ -1,5 +1,61 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 29 PostgreSQL Provenance Work #558
+
+Not fixed. The unchanged API reproduced
+CI shard22's820-work failure: the200-record page inspected20,400 provenance
+rows under both ordinary and adverse plans. Split its required import/audit
+EXISTS into independently correlated lookups, preserving exact tenant/source/
+docket proof and manual-date behavior. Original bounds remain unchanged;
+supplemental bitmap/proof-branch work and future per-shard full-plan retention
+are included. The first candidate still failed both provenance scale checks:
+20,400 versus820 and1,396 versus228 (2,741 including bitmap ownership). Its
+nineteen-case run completed12passes/two failures, interrupted retained-scale
+and leftfour cases unreached. No complete replacement or native pass is inferred.
+A second unverified candidate adds the full tenant/source/docket proof index
+and scalar point lookups; actual generic plans and eight cross-dialect migration
+cases join the unchanged original bounds in the replacement proof closure.
+That second candidate still failed the200-row path in allthreeprofiles, while
+the retained-width/date-category case passed. The later retained-scale call
+timed out before its post-fixture artifact, and sourcefacts remainedunreached.
+Candidate three's actual focused run failed all three profiles: 40,400 relation
+work and 41,000 owning proof work versus820. Allthreecasephases and the strict
+source/runtime/cleanup/output audits completed; the product remains Not fixed.
+Candidate four uses a tenant-fixed ordered tuple seek with exact policy outside
+the one-row barrier, retaining the unique import-row scalar without its redundant
+limit. Candidate four also failed all three actual profiles: 162,400 relation /
+163,000 proof work versus820; continuation812/815 stayed within820. Source,
+cleanup and typed output audits passed, with33ownedgroups closed. A diagnostic
+test change now captures the exact live case's index catalog and separately
+estimates index eligibility with transaction-local sort disabled. That is not
+a production planner change or a repair. The completed same-case diagnostic
+proved the new index present and eligible, with stale estimates choosing the
+old scan/sort at8.20 over the ordered index at8.29. Candidate six subsequently failed all three profiles; candidate seven remains
+unverified. Two new PostgreSQL/SQLite
+wrong-successor/foreign-source cases
+extend the required original27identities to29cases/87phases. Actual plans and
+the complete same-source replacement remain pending; no limits are increased.
+See [actual diagnosis, source scope and open verification](mobile/PG22_PROVENANCE_PLAN_REPAIR_2026-10-29.md).
+
+## October 29 iOS Autolinking Environment #558
+
+Partially fixed; actual Pods/native replay remains pending. Real A8 Expo
+prebuild succeeded, but CocoaPods-to-Node autolinking hit four unreviewed Expo
+switches. A read-only actual-constructor stop captured their names; the repaired
+host admits only their finite source-defined values, preserving all trust,
+owner and deadline fences. Focused2/2, tooling381/381 and the full33-module
+functional inventory1,264 passed/two existing Windows skips are complete, with
+zero failures/cancellations/todos and owned closure. No native pass is inferred.
+See [scoped evidence and remaining work](mobile/IOS_POD_ENVIRONMENT_REPAIR_2026-10-29.md).
+
+Current `108a2215` CI separately failed PostgreSQL shard22: the minimal portfolio
+export's provenance work exceeded its unchanged `4 * 201 + 16` bound. Retain
+116 passes/one failure and the complete uploaded artifact; the test wrote its
+EXPLAIN plans outside that artifact's paths, so its exact historical plan was
+not recovered. Reproduce the original query and retain default/adverse plans
+before accepting a bounded repair. No rerun, index assumption or raised budget
+closes this failure.
+
 ## October 29 Native Source Observer #558
 
 Partially fixed; measured/native acceptance remains open. The retained 1,262-case
@@ -3565,3 +3621,133 @@ remains Inconclusive; no backend legal-safety predicate is weakened.
 October28 installer follow-up: uv0.13.4 already has clean120 roots, but its
 separate0.103.14 verifier is affected. The current uv0.13.5 pin uses0.103.16
 without replacing Requests/HTTPX roots; Linux image acceptance stays pending.
+
+
+## October 29 exact-case planner-cost diagnosis and tenant-band candidate
+
+The expected-failing diagnostic on clean 8e78eaef retained the actual same-case
+index catalog: the six-column source-proof index is valid, ready, expression-free,
+full and eligible, with standard text operator classes and ordering. Audit table
+estimates remained -1 rows / 0 pages. All three actual profiles still failed at
+162,400 relation / 163,000 provenance work versus the unchanged 820 bound. The
+ordinary old index plus sort cost 8.20 at PlanRows=1; the separate sort-disabled
+estimate chose the new covering index at 8.29. That estimate did not execute
+the query or prove bounded work. No production planner setting is introduced.
+
+The original run remains failed. Its source/runtime, known owned-container
+absence and command closures are separate passed components. A separately
+timed post-run strict paired output audit retained every one of the 33 full
+cleanup records and passed in 0.1993 seconds; it does not repair the original
+clock or acceptance. Hash-bound evidence is retained in the task cache under
+pg05-index-catalog-diagnostic-06/actual-diagnostic-receipt.json.
+
+Candidate six (subsequently failed as recorded below) used a full six-key lower tuple bound and an
+upper bound on company before the ordered single-candidate limit. Together
+they select only the trusted tenant without an equality whose stale estimate
+collapses the row count; complete exact policy stays outside the barrier.
+The two cross-dialect semantic cases now establish three real tenants, sort
+them by database order, select the middle owner and reject both lower and
+higher foreign audit candidates. Wrong successors, foreign import ownership,
+prebuilt-statement freshness and independent direct/page/staged dates remain
+required. The original 29 identities / 87 phases and all 820/228, two-body,
+64 KiB, query-count and timeout limits remain unchanged. Verdict: Not fixed
+until actual ordinary, adverse, generic and full same-source workflows pass.
+
+
+## October 29 additive type-leading candidate (private, unverified)
+
+The six-key tenant-band candidate also failed all ordinary, adverse and generic
+profiles: 162,400 relation / 163,000 provenance work versus820. Its old company
+index used derived company lower/upper conditions plus an Incremental Sort;
+all 811 tenant audit rows were still inspected per candidate. The sort-disabled
+estimate retained that incremental sort, so it did not establish a new-index
+choice. The original failed run, all33closures and a separate strict paired
+post-run audit remain preserved; no failure is reclassified as acceptance.
+
+Actual catalogs also contain the legacy target_id index. A target-first rewrite
+would therefore still permit a target-prefix incremental sort over foreign
+same-target history. Candidate07 instead adds revision20261029_0002 with a
+full type-leading (target_type,target_id,company_id,ip_docket_id,action,id) index.
+Revision0001 and its company-leading index remain unchanged. The query uses
+full lower and three-column prefix upper ROW bounds before its one-candidate
+limit, then retains the complete exact policy outside. No production planner
+setting, ANALYZE waiver, old-index removal or larger work limit is introduced.
+
+The intended complete inventory is38cases/114phases: all original29 identities,
+eight new cross-dialect migration cases and one PostgreSQL history-work case.
+The new roundtrip starts at named0001, includes a real interrupted concurrent
+build/recovery on PostgreSQL, and proves downgrade preserves the old index,
+raw rows, catalog and revision. Current-head0002 health and conflicting-name
+downgrade refusal remain distinct from that historical boundary.
+
+The work case seeds25,728 foreign same-target audit rows across both tenant
+sides, plus12,864 owned NULL-docket and12,864 NULL-target rows and type/source
+neighbors. Positive and missing-owned-proof phases each retain every actual
+default/adverse/generic plan, original820relation/proof/materialized limits,
+64KiB SQL, two-body and query-count assertions. NULL SQL comparison behavior
+and B-tree work must be observed; no nullable key is assumed safe by sorting.
+The two existing dialect semantics cases additionally retain before/after
+prefix neighbors, actual selected-candidate identities, independent direct/page/
+staged dates, and NULL/missing source JSON controls. Any unreached later phase
+remains unverified. Six separate419+30component windows report aggregate time
+separately. Verdict remains Not fixed until those actual workflows pass.
+
+
+### 2026-10-29 — Source07 focused provenance result and fixture correction
+
+The committed source07 `3b6130a5` passed the original PostgreSQL minimal-page case under default, adverse and actual generic prepared plans: date-query relation work 400 and attributable proof work 800 remained within the unchanged 820 bound; continuation work was 2/4. All five plans per profile, source/runtime stability, known container absence and all 33 owned process closures are retained. This is a scoped original-case pass, not complete release acceptance.
+
+The independent stress case failed before history staging or query acceptance: its second fixed company bootstrap returned 409 instead of 200. Positive/missing-proof phases and their plans were unreached. Both new semantic dialect cases shared that fixture defect and remain unverified. The test-only actor helper now accepts the existing normal-API unique bootstrap for these three multi-actor cases while preserving original callers, cookie clearing, authentication, complete workspace configuration and acknowledgements. The iOS shell companion is regenerated to bind the current helper bytes. Neither correction changes product SQL, indexes, work bounds or the full 38-case/114-phase inventory. Replacement focused/full verification and both native platforms remain pending.
+
+Evidence: `X/pg07-typed-prefix-verification-08/actual-focused-results.json` SHA256 `8ee4aa2920e85571d77ca733ca1197f1d00a6fa98f55c29df1c918039f77a20e`. The stress run and its separate audit01 stale-count refusal are preserved; audit02 reconciles all 34 actual contiguous dispatch/closure pairs under the original audit limits.
+
+
+### 2026-10-29 — Source08 physical-work gap and reverse-prefix candidate09
+
+Source08 `9505e0ea` completed the corrected stress case (99.090964s; one case, three passed phases, 16 marked HTTP requests), retaining all five plans for each default/adverse/generic profile in both positive and missing-proof phases. Positive Audit access used 1000 shared-hit blocks, while missing-proof access used 244302 despite zero returned/removed Audit rows. The original row-work checks passed (400/800 and 200/200 against 820); that pass does not establish bounded internal index work. Source/runtime/output and all 33 actual owned process groups closed cleanly.
+
+Candidate09 is a minimal unverified reverse seek: one upper comparison over the five complete identity fields, all six index keys descending, LIMIT 1, no lower prefix and no ID sentinel; a source-NULL gate avoids an invalid comparison bound. Complete exact policy and ImportRow primary-key ownership remain outside that barrier. Existing wrong-successor policy denials stay covered, with selected wrong predecessors, lower/higher tenants, nullable histories and duplicate proof IDs added to the same cross-dialect cases. No model, migration or index changes are proposed.
+
+The independent physical oracle counts inclusive Audit relation buffer accesses once, without multiplying counters by loops or charging bitmap children twice. Its fixed 201-seek contract is 16*201+64=3280 accesses: a conservative six-level descent plus metadata/VM, leaf/heap boundaries and slack per seek, with fixed overhead. It is a bounded-fixture contract, not a universal index-height guarantee or a value fitted to the failed measurement. The retained positive1000 baseline must pass and missing244302 baseline must fail. Original820/228 row-work, SQL/body/count/deadline bounds remain unchanged. All38caseIDs/114phases, migration journeys and native acceptance remain pending until actual complete replacement evidence.
+
+Evidence: `X/pg08-fixture-verification-09/actual-stress-results.json` SHA256 `a148175da44fe66b83da264ebd3d943aaf3abadd579ef9fa13d63476a82f0bcc`. Successful fixture teardown normally drops the case database; no cold volume reopening or retained-data claim was made.
+
+
+### 2026-10-29 — Candidate09 Result-node failure and CASE-bound candidate10
+
+Both source09 `e819b84d` focused runs failed their unchanged supplemental820 work assertion in all three retained positive profiles. The reverse typed IndexOnlyScan was actualBackward and bounded at the relation/physical layer (relation400; MIN600 and stress1000 buffer accesses). The separate source-NULL predicate introduced an attributable Result One-TimeFilter node, adding200 work and raising the complete proof count to1000. That node remains charged; no observer, assertion or bound is relaxed. Stress missing-owned-proof remained unreached. Both source/runtime/cleanup/known-absence checks and separate complete output audits passed (MIN33, stress34 actual command groups).
+
+Candidate10 moves only that existing source-NULL condition into a CASE expression in the first upper-row value. Valid sources retain the identical five-field reverse bound. Missing sources produce a NULL first key, retaining the no-candidate contract without a separate constant WHERE filter. All complete outside-policy, ImportRow primary-key, date, predecessor/successor, foreign-tenant, nullable and duplicate-ID checks remain unchanged. The compile contract now pins the one CASE guard, exact NULL refusal and sole upper comparison. Original820/228 row-work,3280 physical-work,64KiB/two-body/query-count/deadline bounds and all38caseIDs/114phases are unchanged. Actual replacement focused/full and native verification remain unexecuted.
+
+Evidence: `X/pg09-reverse-prefix-verification-10/actual-focused-failure.json` SHA256 `8684f1d0e327f75d4e1861af54e18af8b82915e74c1328046c29d34793d5b250`; fullplans `ab8c0094a546f517532c67e5bdc736b257259e495f19f508a438ecbca9cf3c37`. No unchanged retry or historical failure reclassification.
+
+
+### 2026-10-29 — Complete attempted38 inventory: observer failure and capacity refusal
+
+The complete frozen source7033 replacement attempted all six admitted components, with at most two active. Thirty cases executed:29passed and one compile-only observer failed;89passed/1failed phase reports account for90of114planned phases. The eight new0002migration cases and their24phases were unreached because Docker refused network creation after all predefined address pools were allocated. No database or pytest body began for that component; it is infrastructure-incomplete, not eight migration failures or a green prefix. Aggregate observed537s is separate from each unchanged419+30window. Every component completed source/runtime postflight and strict owned command/output closure.
+
+The sole executed failure was test_five_stage_names_preserve_pg_materialization_acl_and_current_source: its raw substring count found13 occurrences, including repeated ip_materialized_proof_seek aliases, while the preceding actual typed graph still contained exactly six unique nested CTEs. The corrected oracle retains six, requiring six PostgreSQL TextClause MATERIALIZED prefixes and six rendered AS MATERIALIZED declarations; an alias-only decoy contributes three substrings but zero declarations. All stage, ACL/source, actor/tenant parameter, warm read, category/date, postcommit and count assertions remain unchanged. No production query, model, migration or limit changes are involved.
+
+Source7033 actualfocused plans retain the repaired missing-proof physical work1045 versus prior244302, within fixed3280, and all original row-work bounds. Both dialect semantic cases passed within the attempted inventory. Exact-owned network capacity recovery is separately planned for seven receipt-bound closed networks; no broad prune, data-volume removal, foreign/live-network cleanup or unchanged replay is authorized by this observer correction. A fresh coherent complete38/114 run and native Android/iOS acceptance remain pending.
+
+Evidence: `X/pg10-case-upper-verification-11/full38-unarmed/actual-attempt-results.json` SHA256 `7aa737576880b7e8f3e2d92bf14ad3976b156137b10db89b07e678b8a23fc285`; all original reports and unreached phases are retained.
+
+
+### QA12: interrupted typed-index catalog fixture, 2026-10-29
+
+The complete source-bound run on `4bc5c7dc` executed all 38 cases and all 114 setup/call/teardown reports: 37 cases passed and one failed (113 passed phases, one failed phase). The original failed result remains at `pg11-materialized-observer-verification-12/full38-unarmed/actual-attempt-results.json` (SHA256 `98e80df89a38f2cc90ba2eebab647239796eabdf6a54d328798db9f708c46c34`). All six source/runtime postflights, owned process groups, container absence checks and later complete output audits closed. The aggregate observed 497 seconds is separate from each original 419-second body plus 30-second cleanup bound.
+
+The PostgreSQL typed-index roundtrip stopped while recording its deliberately canceled concurrent index build: the ordinary catalog helper correctly rejected `ix_audit_events_typed_source_proof_seek` as invalid/unready. The repair continuation, restart, downgrade and reupgrade in that failed case remain unverified. The historical intermediate catalog/individual flags were not persisted before that assertion; a new exact expected descriptor is prospective proof, not a historical observation.
+
+The proposed fixture uses a separate interrupted-index catalog observer with one exact key, complete six-column PostgreSQL index definition and explicit flags `(false,false,true,false,false,false)`. The ordinary `schema_catalog(engine)` remains healthy-only. Every other index must remain healthy, the expected interrupted index must exist, and the complete intermediate catalog must equal the parent plus that one index. The real fixture first proves the default helper rejects its actual invalid index. All existing repair, full-health, identity, row preservation, downgrade and reupgrade assertions remain required.
+
+Independent observer regressions cover the exact snapshot/default rejection and wrong name, definition, flags, a healthy target, a missing target, an extra invalid index and an invalid descriptor. Eight private source controls passed with zero database/network calls. The complete adjacent unit inventory is 13 cases (the original five real SQLite DDL cases plus eight observer controls); the affected migration inventory remains eight. Neither private controls nor a future scoped eight-case pass make the failed complete-38 run green. Full native Android/iOS build and device acceptance remain open.
+
+
+### C23 — offline deployment loopback marker source repair
+
+Verdict: **Inconclusive**; the complete affected deployment rehearsal and platform release acceptance remain pending. On clean source e58130f870bfe332a04d5c79099164cc490b9373, source review found that test_uvicorn_connection_close_is_advertised_and_body_completes sent its raw loopback GET without the required X-CaseOps-Automated-Test: no-paid-providers marker. This was a verification protocol deviation against an invocation-owned temporary ASGI application, not evidence of a product or billable provider request. No actual HTTP constructor was dispatched during this source preparation.
+
+The narrow candidate adds the marker to the existing request literal, so every existing retry carries it, and makes that actual temporary ASGI app assert the received header before responding. Method, Host, Connection behavior, exact caseops-ok body, readiness/read/cleanup deadlines and the complete 102 base-function inventory are preserved. AST comparison proves the other101 test functions and all other module statements unchanged. Six offline controls passed, including the exact request, the synthetic app marked response, and missing/wrong marker refusal before any response. These controls do not replace the complete offline rehearsal. The first malformed inline Python control invocation failed at syntax parsing before controls and remains retained separately.
+
+Evidence: /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/web-node-security-20261029-01/source-draft-01/offline-deploy-marker-proposal-01/source-controls-result-02.json SHA256 6e272f8b178e3becbfb42cfe3bd957493c195da08be949f4900514283fc84ca3 (1331bytes); writer-preflight.json SHA256972d0f654367f3fdcbdfa582ee68619cfa7a13387cd4fec902f0456b5eb8ab1c. Original failed pure invocation is in source-proposal.json SHA256242decbb79dc7d7d8f82c819ac3dd9c5532b09bc04e40172c15c53db643956ef. Full frontend coverage, deployment/upload/image gates and Android/iOS native/store acceptance remain open.

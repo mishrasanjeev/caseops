@@ -12021,6 +12021,16 @@ class AuditEvent(Base):
     """
 
     __tablename__ = "audit_events"
+    __table_args__ = (
+        Index(
+            "ix_audit_events_source_proof_seek",
+            "company_id", "target_id", "ip_docket_id", "action", "target_type", "id",
+        ),
+        Index(
+            "ix_audit_events_typed_source_proof_seek",
+            "target_type", "target_id", "company_id", "ip_docket_id", "action", "id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(

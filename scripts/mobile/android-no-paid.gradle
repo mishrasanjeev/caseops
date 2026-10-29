@@ -1,10 +1,112 @@
 // Invocation-owned init.d input, loaded for the root and each included build.
-// Only public Gradle APIs configure the actual HTTP constructors.
+// Public repository APIs set credentials; pinned Gradle internals enforce transport and redirect isolation.
+// Inspect only Gradle 9.4.1's exact repository wrapper to recover its already
+// admitted delegate; the delegate receives every original transport guard.
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository
 import org.gradle.api.artifacts.repositories.IvyArtifactRepository
 import org.gradle.api.credentials.HttpHeaderCredentials
 import org.gradle.authentication.http.HttpHeaderAuthentication
 import groovy.json.JsonOutput
+import java.lang.reflect.Modifier
+import org.gradle.api.internal.artifacts.repositories.ArtifactRepositoryInternal
+
+import org.gradle.authentication.Authentication
+import org.gradle.internal.authentication.AuthenticationInternal
+import org.gradle.internal.authentication.DefaultHttpHeaderAuthentication
+import org.gradle.internal.credentials.DefaultHttpHeaderCredentials
+import org.gradle.internal.resource.connector.ResourceConnectorFactory
+import org.gradle.internal.resource.connector.ResourceConnectorSpecification
+import org.gradle.internal.resource.transfer.ExternalResourceConnector
+import org.gradle.internal.resource.transport.http.HttpConnectorFactory
+import org.gradle.api.internal.artifacts.repositories.transport.RepositoryTransportFactory
+import org.gradle.internal.verifier.HttpRedirectVerifier
+
+final class CaseOpsReviewedRedirectPolicy {
+    private final List<URI> bases
+    private final List<Map<String,Object>> scopes
+    final String digest
+    private final String markerName
+    private final String markerValue
+    static void require(boolean ok, String code) { if (!ok) throw new GradleException(code) }
+    static int effectivePort(URI uri) { uri.port == -1 ? 443 : uri.port }
+    static boolean canonicalHttps(URI uri) {
+        if (uri == null || !uri.absolute || uri.opaque || uri.scheme != 'https' || uri.host == null || uri.host != uri.host.toLowerCase(Locale.ROOT) || uri.userInfo != null || uri.rawQuery != null || uri.rawFragment != null || uri.normalize() != uri) return false
+        if (effectivePort(uri) < 1 || effectivePort(uri) > 65535 || uri.path.contains('\\')) return false
+        URI decodedPath = new URI(null, null, uri.path, null)
+        return decodedPath.normalize().path == uri.path
+    }
+    CaseOpsReviewedRedirectPolicy(Collection<String> configuredBases, String markerName, String markerValue) {
+        require(configuredBases != null && configuredBases.size() >= 1 && configuredBases.size() <= 10, 'ANDROID_REVIEWED_BASE_COUNT')
+        List<URI> parsed = configuredBases.toList().sort().collect { String text ->
+            URI uri = new URI(text)
+            require(canonicalHttps(uri) && uri.toASCIIString() == text && !uri.rawPath.endsWith('/'), 'ANDROID_REVIEWED_BASE_CANONICAL')
+            return uri
+        }
+        require(parsed.toSet().size() == parsed.size(), 'ANDROID_DUPLICATE_REVIEWED_BASE')
+        this.bases = Collections.unmodifiableList(parsed)
+        List<Map<String,Object>> exactScopes = parsed.collect { URI uri -> Collections.unmodifiableMap([host:uri.host, port:effectivePort(uri)]) }.unique().sort { a,b -> a.host <=> b.host ?: a.port <=> b.port }
+        require(exactScopes.size() >= 1 && exactScopes.size() <= 8 && exactScopes.every { it.host != null && it.port > 0 }, 'ANDROID_EXACT_AUTHORITY_SCOPES')
+        this.scopes = Collections.unmodifiableList(exactScopes)
+        this.markerName = markerName; this.markerValue = markerValue
+        this.digest = java.security.MessageDigest.getInstance('SHA-256').digest(parsed.collect { it.toASCIIString() }.join('\n').getBytes('UTF-8')).encodeHex().toString()
+    }
+    boolean approves(URI uri) {
+        if (!canonicalHttps(uri)) return false
+        return bases.any { URI base -> uri.host == base.host && effectivePort(uri) == effectivePort(base) && (base.rawPath == '' || uri.rawPath == base.rawPath || uri.rawPath.startsWith(base.rawPath + '/')) }
+    }
+    void assertRedirect(URI uri) { require(approves(uri), 'ANDROID_REDIRECT_OUTSIDE_REVIEWED_BASES') }
+    List<Authentication> scopedAuthentication(Collection<Authentication> originals) {
+        require(originals != null && originals.size() == 1, 'ANDROID_CONNECTOR_AUTH_COUNT')
+        Authentication authentication = originals.iterator().next()
+        require(authentication instanceof HttpHeaderAuthentication && authentication instanceof AuthenticationInternal, 'ANDROID_CONNECTOR_AUTH_TYPE')
+        def credentials = ((AuthenticationInternal)authentication).credentials
+        require(credentials instanceof HttpHeaderCredentials && credentials.name == markerName && credentials.value == markerValue, 'ANDROID_CONNECTOR_FIXED_MARKER')
+        def originalScopes = ((AuthenticationInternal)authentication).hostsForAuthentication.toList()
+        require(originalScopes.size() >= 1 && originalScopes.size() <= 8 && originalScopes.every { host -> host.host != null && scopes.any { it.host == host.host && it.port == (host.port == -1 ? 443 : host.port) } }, 'ANDROID_CONNECTOR_UNREVIEWED_AUTH_SCOPE')
+        // A private per-constructor copy prevents later repository -1 additions
+        // from widening this client's provider, including concurrent resolution.
+        def fixed = new DefaultHttpHeaderCredentials() { }
+        fixed.name = markerName; fixed.value = markerValue
+        DefaultHttpHeaderAuthentication scoped = new DefaultHttpHeaderAuthentication(authentication.name)
+        scoped.credentials = fixed
+        scopes.each { scope -> scoped.addHost((String)scope.host, (int)scope.port) }
+        def actual = scoped.hostsForAuthentication.collect { [host:it.host, port:it.port] }.toSet()
+        require(actual == scopes.toSet() && actual.every { it.host != null && it.port > 0 }, 'ANDROID_CONNECTOR_SCOPE_COPY')
+        return Collections.singletonList((Authentication)scoped)
+    }
+}
+final class CaseOpsMarkedConnectorSpecification implements ResourceConnectorSpecification {
+    private final Collection<Authentication> authentications
+    private final HttpRedirectVerifier verifier
+    CaseOpsMarkedConnectorSpecification(ResourceConnectorSpecification original, CaseOpsReviewedRedirectPolicy policy) {
+        this.authentications = policy.scopedAuthentication(original.authentications)
+        HttpRedirectVerifier originalVerifier = original.redirectVerifier
+        CaseOpsReviewedRedirectPolicy.require(originalVerifier != null, 'ANDROID_ORIGINAL_REDIRECT_VERIFIER_REQUIRED')
+        this.verifier = { Collection<URI> locations ->
+            CaseOpsReviewedRedirectPolicy.require(locations != null, 'ANDROID_REDIRECT_CALLBACK_SHAPE')
+            originalVerifier.validateRedirects(locations)
+            locations.each { URI uri -> policy.assertRedirect(uri) }
+        } as HttpRedirectVerifier
+    }
+    @Override public <T> T getCredentials(Class<T> type) {
+        def credentials = ((AuthenticationInternal)authentications.iterator().next()).credentials
+        CaseOpsReviewedRedirectPolicy.require(type != null && type.isInstance(credentials), 'ANDROID_CONNECTOR_CREDENTIAL_TYPE')
+        return type.cast(credentials)
+    }
+    @Override Collection<Authentication> getAuthentications() { authentications }
+    @Override HttpRedirectVerifier getRedirectVerifier() { verifier }
+}
+final class CaseOpsMarkedHttpConnectorFactory implements ResourceConnectorFactory {
+    private final ResourceConnectorFactory delegate
+    private final CaseOpsReviewedRedirectPolicy policy
+    CaseOpsMarkedHttpConnectorFactory(ResourceConnectorFactory delegate, CaseOpsReviewedRedirectPolicy policy) { this.delegate = delegate; this.policy = policy }
+    @Override Set<String> getSupportedProtocols() { delegate.supportedProtocols }
+    @Override Set<Class<? extends Authentication>> getSupportedAuthentication() { delegate.supportedAuthentication }
+    @Override ExternalResourceConnector createResourceConnector(ResourceConnectorSpecification original) { delegate.createResourceConnector(new CaseOpsMarkedConnectorSpecification(original, policy)) }
+    boolean matches(ResourceConnectorFactory expectedDelegate, String expectedDigest) { delegate.is(expectedDelegate) && policy.digest == expectedDigest }
+    ResourceConnectorFactory originalDelegate() { delegate }
+    String policyDigest() { policy.digest }
+}
 
 final String markerName = 'X-CaseOps-Automated-Test'
 final String markerValue = 'no-paid-providers'
@@ -18,7 +120,58 @@ final Set<String> repositoryBases = [
     'https://central.sonatype.com/repository/maven-snapshots',
     'https://www.jitpack.io',
 ] as Set
+final Set<String> reviewedRedirectBases = [] as Set
+final CaseOpsReviewedRedirectPolicy markedRedirectPolicy = new CaseOpsReviewedRedirectPolicy((repositoryBases + reviewedRedirectBases).toList(), markerName, markerValue)
+def installMarkedHttpConstructor = {
+    if (gradle.gradleVersion != '9.4.1') throw new GradleException('ANDROID_REVIEWED_HTTP_GRADLE_VERSION')
+    File expectedHome = gradle.gradleHomeDir.canonicalFile
+    Map<Class,String> origins = [
+        (RepositoryTransportFactory):'lib/plugins/gradle-dependency-management-9.4.1.jar',
+        (HttpConnectorFactory):'lib/gradle-resources-http-9.4.1.jar',
+        (ResourceConnectorFactory):'lib/gradle-resources-9.4.1.jar',
+        (ResourceConnectorSpecification):'lib/gradle-resources-9.4.1.jar',
+        (HttpRedirectVerifier):'lib/gradle-resources-9.4.1.jar',
+        (AuthenticationInternal):'lib/gradle-core-9.4.1.jar',
+        (HttpHeaderCredentials):'lib/gradle-core-api-9.4.1.jar',
+        (HttpHeaderAuthentication):'lib/gradle-resources-http-9.4.1.jar',
+        (DefaultHttpHeaderAuthentication):'lib/gradle-resources-http-9.4.1.jar',
+        (DefaultHttpHeaderCredentials):'lib/gradle-model-core-9.4.1.jar'
+    ]
+    origins.each { Class type, String relative ->
+        def location = type.protectionDomain?.codeSource?.location
+        if (location == null || location.protocol != 'file' || new File(location.toURI()).canonicalFile != new File(expectedHome, relative).canonicalFile) throw new GradleException('ANDROID_HTTP_CLASS_CODE_ORIGIN')
+    }
+    [ResourceConnectorFactory,ResourceConnectorSpecification,HttpRedirectVerifier,AuthenticationInternal,HttpHeaderCredentials,HttpHeaderAuthentication,DefaultHttpHeaderAuthentication,DefaultHttpHeaderCredentials].each { Class contract ->
+        if (Class.forName(contract.name, false, HttpConnectorFactory.classLoader) != contract || Class.forName(contract.name, false, RepositoryTransportFactory.classLoader) != contract) throw new GradleException('ANDROID_HTTP_CLASSLOADER_CONTRACT')
+    }
+    RepositoryTransportFactory transport = gradle.services.get(RepositoryTransportFactory)
+    if (transport.getClass() != RepositoryTransportFactory) throw new GradleException('ANDROID_UNREVIEWED_TRANSPORT_FACTORY_CLASS')
+    def field = RepositoryTransportFactory.getDeclaredField('registeredProtocols')
+    if (field.type != List || !Modifier.isPrivate(field.modifiers) || !Modifier.isFinal(field.modifiers) || Modifier.isStatic(field.modifiers) || !field.trySetAccessible()) throw new GradleException('ANDROID_HTTP_FACTORY_REGISTRY_SCHEMA')
+    synchronized (transport) {
+        def factories = field.get(transport)
+        if (factories.getClass() != ArrayList || factories.size() < 1 || factories.size() > 16) throw new GradleException('ANDROID_HTTP_FACTORY_REGISTRY_SHAPE')
+        List before = new ArrayList(factories)
+        List<Integer> indices = []
+        before.eachWithIndex { factory, int index ->
+            if (factory instanceof CaseOpsMarkedHttpConnectorFactory || factory.getClass() == HttpConnectorFactory) indices.add(index)
+            else if (factory.supportedProtocols.any { it in ['http','https'] }) throw new GradleException('ANDROID_UNREVIEWED_HTTP_FACTORY')
+        }
+        if (indices.size() != 1) throw new GradleException('ANDROID_EXACT_ONE_HTTP_FACTORY')
+        int index = indices[0]
+        def current = before[index]
+        def original = current instanceof CaseOpsMarkedHttpConnectorFactory ? current.originalDelegate() : current
+        if (original.getClass() != HttpConnectorFactory || original.supportedProtocols != (['http','https'] as Set)) throw new GradleException('ANDROID_PINNED_HTTP_FACTORY_REQUIRED')
+        if (current instanceof CaseOpsMarkedHttpConnectorFactory) {
+            if (!current.matches(original, markedRedirectPolicy.digest)) throw new GradleException('ANDROID_HTTP_FACTORY_POLICY_DRIFT')
+        } else factories.set(index, new CaseOpsMarkedHttpConnectorFactory(original, markedRedirectPolicy))
+        if (factories.size() != before.size() || !before.indices.every { int i -> i == index || factories[i].is(before[i]) } || factories[index].supportedProtocols != before[index].supportedProtocols || factories[index].supportedAuthentication != before[index].supportedAuthentication) throw new GradleException('ANDROID_HTTP_FACTORY_ORDER_OR_PROTOCOL_DRIFT')
+        logger.lifecycle('CASEOPS_MARKED_HTTP_CONSTRUCTOR ' + JsonOutput.toJson([gradle:'9.4.1',policySha256:markedRedirectPolicy.digest,factoryIndex:index,factoryCount:before.size(),protocolOrderPreserved:true,httpCodeOrigin:new File(HttpConnectorFactory.protectionDomain.codeSource.location.toURI()).canonicalPath,httpClassLoader:HttpConnectorFactory.classLoader.class.name,httpClassLoaderIdentity:System.identityHashCode(HttpConnectorFactory.classLoader),transportClassLoader:RepositoryTransportFactory.classLoader.class.name,transportClassLoaderIdentity:System.identityHashCode(RepositoryTransportFactory.classLoader)]))
+    }
+}
+
 final Set<Object> configured = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>())
+final Set<Object> admittedDirect = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>())
 final Set<Object> watched = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>())
 // These roots are set by the freshly admitted role helper, not an arbitrary
 // repository URL or an operator's ~/.m2 repository.
@@ -29,6 +182,25 @@ if (!sourceRoot.isDirectory() || !new File(sourceRoot, 'apps/mobile/node_modules
 }
 final List<File> localRoots = [new File(sourceRoot, 'apps/mobile/node_modules').canonicalFile, gradleHome]
 def inside = { File child, File parent -> child.toPath().startsWith(parent.toPath()) }
+def effectiveRepository = { repository ->
+    if (repository instanceof MavenArtifactRepository || repository instanceof IvyArtifactRepository) return repository
+    final String wrapperName = 'org.gradle.plugin.use.internal.PluginArtifactRepository'
+    if (gradle.gradleVersion != '9.4.1' || repository.getClass().getName() != wrapperName) {
+        throw new GradleException('ANDROID_UNREVIEWED_REPOSITORY_TYPE')
+    }
+    Class reviewedClass = Class.forName(wrapperName, false, this.getClass().getClassLoader())
+    if (repository.getClass() != reviewedClass) throw new GradleException('ANDROID_UNREVIEWED_REPOSITORY_WRAPPER_CLASS')
+    def field = reviewedClass.getDeclaredField('delegate')
+    if (field.type != ArtifactRepositoryInternal || !Modifier.isPrivate(field.modifiers) || !Modifier.isFinal(field.modifiers) || Modifier.isStatic(field.modifiers) || !field.trySetAccessible()) {
+        throw new GradleException('ANDROID_UNREVIEWED_REPOSITORY_WRAPPER_SCHEMA')
+    }
+    def delegate = field.get(repository)
+    if (!(delegate instanceof MavenArtifactRepository) && !(delegate instanceof IvyArtifactRepository)) {
+        throw new GradleException('ANDROID_UNREVIEWED_REPOSITORY_TYPE')
+    }
+    if (!admittedDirect.contains(delegate)) throw new GradleException('ANDROID_UNADMITTED_REPOSITORY_WRAPPER_DELEGATE')
+    return delegate
+}
 def checkedRepository = { repository ->
     if (!(repository instanceof MavenArtifactRepository) && !(repository instanceof IvyArtifactRepository)) {
         throw new GradleException('ANDROID_UNREVIEWED_REPOSITORY_TYPE')
@@ -40,15 +212,18 @@ def checkedRepository = { repository ->
     if (uri.scheme == 'file') {
         File local = new File(uri).canonicalFile
         if (!localRoots.any { inside(local, it) }) throw new GradleException('ANDROID_LOCAL_REPOSITORY_SCOPE')
+        admittedDirect.add(repository)
         return false
     }
     String base = uri.toASCIIString().replaceAll('/+$', '')
     if (uri.scheme != 'https' || (uri.port != -1 && uri.port != 443) || !repositoryBases.contains(base)) {
         throw new GradleException('ANDROID_UNREVIEWED_PUBLIC_REPOSITORY')
     }
+    admittedDirect.add(repository)
     return true
 }
-def verify = { repository ->
+def verify = { input ->
+    def repository = effectiveRepository(input)
     if (checkedRepository(repository)) {
         def credentials = repository.getCredentials(HttpHeaderCredentials)
         if (credentials.name != markerName || credentials.value != markerValue || repository.authentication.size() != 1 || !repository.authentication.every { it instanceof HttpHeaderAuthentication }) {
@@ -56,7 +231,8 @@ def verify = { repository ->
         }
     }
 }
-def mark = { repository ->
+def mark = { input ->
+    def repository = effectiveRepository(input)
     if (!checkedRepository(repository)) return
     if (!configured.add(repository)) { verify(repository); return }
     // A different explicitly configured credential type fails in Gradle's typed
@@ -69,6 +245,9 @@ def mark = { repository ->
 def watch = { handler ->
     if (watched.add(handler)) handler.all { repository -> mark(repository) }
 }
+installMarkedHttpConstructor()
+if (System.getenv('CASEOPS_QA_PHASE') in ['trusted','refresh','untrusted','wronghost','blocked-buildscript','blocked-plugin','blocked-included','blocked-transitive']) gradle.ext.caseopsMarkedRedirectPolicy = markedRedirectPolicy
+
 gradle.beforeSettings { settings ->
     watch(settings.pluginManagement.repositories)
     watch(settings.dependencyResolutionManagement.repositories)

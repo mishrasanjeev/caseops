@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const SOURCE_SNAPSHOT_LIMITS = Object.freeze({ entries: 5000, bytes: 67108864,
   fileBytes: 16777216, milliseconds: 5000, gitBytes: 1048576 });
-// Selected Node 22.14.0/24.15.0 spawn_sync uses one aggregate output counter,
+// Selected Node 22.14.0/22.23.4/24.15.0 spawn_sync uses one aggregate output counter,
 // checked after each native 65536-byte read; overflow closes both stdio pipes.
 // Reserve that whole chunk before spawning, rather than claiming maxBuffer+1.
 const GIT_NATIVE_READ_RESERVE = 65536;
@@ -30,7 +30,7 @@ function boundedLimits(requested = {}) {
 /** The optional limits can only make the fixed resource contract stricter. */
 export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.meta.url)), { limits: requested } = {}) {
   const limits = boundedLimits(requested), end = performance.now() + limits.milliseconds;
-  insist(['22.14.0', '24.15.0'].includes(process.versions.node), 'SOURCE_GIT_RUNTIME_REQUIRED');
+  insist(['22.14.0', '22.23.4', '24.15.0'].includes(process.versions.node), 'SOURCE_GIT_RUNTIME_REQUIRED');
   let bytes = 0; const charged = new Set();
   const check = () => insist(performance.now() < end, 'SOURCE_DEADLINE');
   const charge = (observation, file) => {

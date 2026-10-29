@@ -238,6 +238,7 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   "scripts/portfolio_export_release.py" "infra/cloudrun/scheduler-inventory.json" \
   ".github/workflows/security.yml" \
   "tests/fixtures/statutes/structured-schedule-api.json" \
+  "tests/fixtures/node-default-tls-probe.cjs" \
   "tests/e2e/support/prod-failure-diagnostics.ts" \
   "tests/e2e/support/bounded-network-evidence.ts" \
   "tests/e2e/support/prod-api-response-evidence.ts" \

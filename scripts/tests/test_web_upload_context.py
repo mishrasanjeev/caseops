@@ -19,9 +19,14 @@ QR_MATERIALS = {
     "apps/web/public/third-party-notices/qrcode.react-4.2.0-Nayuki-MIT-LICENSE.txt",
     "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt",
 }
+NODE_MATERIALS = {
+    "apps/web/public/third-party-notices/node-22.23.4-LICENSE.txt",
+    "license-policy/upstream/node_22.23.4/LICENSE",
+}
 BUILDER_INPUTS = {
     "package.json", "package-lock.json", "apps/web/Dockerfile", "apps/web/package.json",
     "tests/fixtures/statutes/structured-schedule-api.json",
+    "tests/fixtures/node-default-tls-probe.cjs",
     *(f"tests/e2e/support/{name}.ts" for name in (
         "prod-failure-diagnostics", "bounded-network-evidence",
         "prod-api-response-evidence", "cost-controls",
@@ -64,10 +69,10 @@ class NativeUploadTests(unittest.TestCase):
         if self.evidence:
             self.evidence.mkdir(parents=True, exist_ok=False)
         record = json.loads((ROOT / REGISTRY).read_text(encoding="utf-8"))
-        self.required = {REGISTRY, REVIEW, *QR_MATERIALS, *(
+        self.required = {REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *(
             value["path"] for entry in record["packages"] for value in entry["materials"]
         )}
-        self.assertEqual(len(self.required), 65)
+        self.assertEqual(len(self.required), 67)
 
     def files(self, paths):
         for relative in paths:
@@ -106,7 +111,7 @@ class NativeUploadTests(unittest.TestCase):
         operator = {name for name in present if name.startswith("license-policy/")}
         required_operator = {name for name in self.required if name.startswith("license-policy/")}
         self.assertEqual(operator, required_operator)
-        self.assertEqual(len(operator), 56)
+        self.assertEqual(len(operator), 57)
         self.assertTrue(
             BUILDER_INPUTS <= present,
             f"Missing builder inputs: {sorted(BUILDER_INPUTS - present)}",

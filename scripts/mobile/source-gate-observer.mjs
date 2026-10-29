@@ -143,7 +143,7 @@ export function reviewCapturedBasePolicy(environment, context) {
     const h = descriptor.runtimeSource.helper, b = descriptor.runtimeSource.bootstrap;
     reference(h, MAX_SOURCE); reference(b, MAX_SOURCE);
     need(h.path === path.join(context.sourceRepo, 'scripts/mobile/host-node-trust.mjs')
-      && h.sha256 === '13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787' && h.sizeBytes === 29498
+      && h.sha256 === '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18' && h.sizeBytes === 29741
       && b.path === path.join(context.sourceRepo, 'scripts/mobile/host-node-trust-start.mjs')
       && b.sha256 === sha(context.bootstrapBytes) && b.sizeBytes === context.bootstrapBytes.length, 'SOURCE_GATE_CHILD_SOURCE');
     helperBytes = held(h, MAX_SOURCE, end); bootstrapBytes = held(b, MAX_SOURCE, end);

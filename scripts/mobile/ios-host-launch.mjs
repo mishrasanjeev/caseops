@@ -9,8 +9,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const IOS_HOST_ENV = Object.freeze({ file: 'CASEOPS_IOS_HOST_POLICY_FILE', sha256: 'CASEOPS_IOS_HOST_POLICY_SHA256' });
 export const RUBY_ROOT_SET = '105453e7eeeb26f9778e22b4212b7a6725079827b4de684784eacde93845787a';
 const DENIED_CA = '86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b';
-const NODE_HELPER = '13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787';
-const NODE_BOOTSTRAP = '9f490e9666a5052cc1c378ee703eef462a876440a01a041a6b73609cc49e5a35';
+const NODE_HELPER = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18';
+const NODE_BOOTSTRAP = '2fb386b772aecfcc5c18aacf5d6c77aa934fa90d895adf2adf8baf42a9b6d6a5';
 export const IOS_PODS_SOURCE_SHA256 = '912cc0402fab48369afbf700088c8753505f3217f97ef0852a5c25031a7e3d3d';
 const SOURCE_PINS = Object.freeze({ 'ios-host-pods.rb': IOS_PODS_SOURCE_SHA256,
   'ios-simulator-build.sh': '93e748e4993eb19b992e7f1f6d480368070b5e1423467640bf8d8908b083e72e',
@@ -139,6 +139,14 @@ export function reviewRubyRootBundle(bytes) {
 const nodeKeys = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256'];
 const unsafe = /^(?:DYLD_.*|LD_(?:PRELOAD|LIBRARY_PATH|AUDIT|DEBUG|PROFILE|ASSUME_KERNEL|BIND_NOW)|NODE_OPTIONS|NODE_EXTRA_CA_CERTS|NODE_USE_SYSTEM_CA|NODE_TLS_REJECT_UNAUTHORIZED|OPENSSL_CONF|OPENSSL_CONF_INCLUDE|SSL_CERT_FILE|SSL_CERT_DIR|CURL_CA_BUNDLE|REQUESTS_CA_BUNDLE|RUBYOPT|RUBYLIB|GEM_HOME|GEM_PATH|BUNDLE_.*|[Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_.*|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy|CURL_HOME|CP_HOME_DIR|CP_CACHE_DIR|CP_REPOS_DIR|HOME|XDG_CONFIG_HOME|NODE_BINARY)$/;
 const publicKeys = /^(?:PATH|LANG|LC_ALL|TZ|TMPDIR|CI|NODE_ENV|__EXPO_CONFIG_MODE|EXPO_NO_DOTENV|EXPO_NO_TELEMETRY|EXPO_OFFLINE|EXPO_PUBLIC_API_ORIGIN|EXPO_PUBLIC_WEB_ORIGIN|SIMULATOR_UDID|CASEOPS_MOBILE_(?:BUILD_PROFILE|AUTOMATED_TEST|RELEASE_SHA|ANDROID_CA_FILE|ANDROID_CA_SHA256|PRIVACY_POLICY_FILE|PRIVACY_POLICY_SHA256)|CASEOPS_(?:NATIVE_LINK_CONFIG|STORE_BUILD)_(?:FILE|SHA256)|DEVELOPER_DIR|SDKROOT|ARCHS|CODE_SIGN_(?:IDENTITY|STYLE|ENTITLEMENTS)|GIT_(?:CONFIG_GLOBAL|CONFIG_NOSYSTEM|OPTIONAL_LOCKS|TERMINAL_PROMPT))$/;
+// Expo's generated Podfile sets these before its Node autolinking subprocess.
+// Keep their finite public build values across the Ruby/Node/tool boundary.
+const podBuildValues = Object.freeze({
+  EXPO_USE_PRECOMPILED_MODULES: Object.freeze(['0', '1']),
+  EX_DEV_CLIENT_NETWORK_INSPECTOR: Object.freeze(['true', 'false']),
+  RCT_USE_PREBUILT_RNCORE: Object.freeze(['0', '1']),
+  RCT_USE_RN_DEP: Object.freeze(['0', '1']),
+});
 export function neutralIosEnvironment(environment, { buildNames = [] } = {}) {
   assert.ok(environment && typeof environment === 'object' && !Array.isArray(environment), 'IOS_HOST_ENVIRONMENT');
   const result = {}; let bytes = 0;
@@ -159,6 +167,9 @@ export function neutralIosEnvironment(environment, { buildNames = [] } = {}) {
     }
     if (unsafe.test(key) || key.startsWith('CASEOPS_HOST_') || key.startsWith('CASEOPS_IOS_HOST_')
       || ['PWD', 'OLDPWD', 'SHLVL', '_', 'COCOAPODS_DISABLE_STATS', 'COCOAPODS_SKIP_UPDATE_MESSAGE', 'CASEOPS_IOS_PODS_TLS_POLICY', 'CASEOPS_IOS_POD_SOURCE_BASE64'].includes(key)) continue;
+    if (Object.hasOwn(podBuildValues, key)) {
+      assert.ok(podBuildValues[key].includes(value), 'IOS_HOST_POD_BUILD_VALUE'); result[key] = value; continue;
+    }
     assert.ok(publicKeys.test(key) || buildNames.includes(key), 'IOS_HOST_UNREVIEWED_ENVIRONMENT'); result[key] = value;
   }
   return result;

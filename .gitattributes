@@ -109,3 +109,10 @@ apps/web/vitest.config.ts text eol=lf
 apps/web/lib/vitest-host-pool*.ts text eol=lf
 apps/web/lib/__fixtures__/vitest-host-trust/*.mjs text eol=lf
 scripts/mobile/fixtures/vitest-host-trust/*.mjs text eol=lf
+
+# Native default-client TLS fixture retained by web units.
+tests/fixtures/node-default-tls-probe.cjs text eol=lf
+
+# Upstream Node licence bytes include intentional space-before-tab indentation.
+license-policy/upstream/node_22.23.4/LICENSE -text whitespace=-space-before-tab
+apps/web/public/third-party-notices/node-22.23.4-LICENSE.txt -text whitespace=-space-before-tab

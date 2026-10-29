@@ -168,7 +168,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.14.0"
+          node-version: "22.23.4"
 
       - uses: ./.github/actions/node-trust
         id: node_trust
@@ -856,7 +856,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.14.0"
+          node-version: "22.23.4"
 
       - uses: ./.github/actions/node-trust
         id: node_trust

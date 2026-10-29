@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { rootCertificates } from "node:tls";
+import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, expect, test } from "vitest";
 
@@ -57,7 +58,7 @@ afterAll(() => fs.rmSync(temp, { recursive: true, force: true }));
 
 test("Docker generates trust before npm and inherits it into build and runtime", () => {
   const docker = fs.readFileSync(path.join(web, "Dockerfile"), "utf8");
-  expect(docker).toMatch(/FROM node:22\.14\.0-alpine AS trusted-base/);
+  expect(docker).toMatch(/FROM node:22\.23\.4-alpine AS trusted-base/);
   expect(docker.indexOf("node-trust.cjs --generate")).toBeLessThan(docker.indexOf("npm ci"));
   expect(docker).toMatch(/FROM trusted-base AS deps/);
   expect(docker).toMatch(/FROM trusted-base AS runner/);
@@ -75,20 +76,37 @@ function policy() {
   };
 }
 
-test("removes only exact G3 and preserves every other bundled root", () => {
+test("preserves every current upstream root when G3 is already absent", () => {
   const bundle = policy().createBundle(rootCertificates);
   const before = rootCertificates.map(fingerprint);
   const after = (bundle.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) ?? []).map(fingerprint);
-  expect(before).toHaveLength(149);
-  expect(before.filter((value) => value === denied)).toHaveLength(1);
-  expect(after).toHaveLength(148);
+  expect(before).toHaveLength(116);
+  expect(before.filter((value) => value === denied)).toHaveLength(0);
+  expect(after).toHaveLength(116);
   expect(after.sort()).toEqual(before.filter((value) => value !== denied).sort());
-  expect(createHash("sha256").update(bundle).digest("hex")).toBe("553a980a0de1e9e7fd65bcea308db009f4e2269f08475227d6f6b04beeab2554");
+  expect(createHash("sha256").update(bundle).digest("hex")).toBe("c2929361a5be0afcf231461fa8b4b00e4454d49cfea9592c12089d8efdc8c64f");
+});
+
+test("requires the exact shipping Node runtime for positive trust acceptance", () => {
+  expect(process.versions.node).toBe("22.23.4");
+});
+
+test("already-removed G3 trust filtering is idempotent", () => {
+  const once = policy().createBundle(rootCertificates);
+  const roots = once.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) ?? [];
+  expect(policy().createBundle(roots)).toBe(once);
+});
+
+test("reintroduced compromised root is rejected at the exact root boundary", () => {
+  const compromised = "-----BEGIN CERTIFICATE-----\nMIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQDAzBrMQswCQYDVQQG\nEwJJTjETMBEGA1UECxMKZW1TaWduIFBLSTElMCMGA1UEChMcZU11ZGhyYSBUZWNo\nbm9sb2dpZXMgTGltaXRlZDEgMB4GA1UEAxMXZW1TaWduIEVDQyBSb290IENBIC0g\nRzMwHhcNMTgwMjE4MTgzMDAwWhcNNDMwMjE4MTgzMDAwWjBrMQswCQYDVQQGEwJJ\nTjETMBEGA1UECxMKZW1TaWduIFBLSTElMCMGA1UEChMcZU11ZGhyYSBUZWNobm9s\nb2dpZXMgTGltaXRlZDEgMB4GA1UEAxMXZW1TaWduIEVDQyBSb290IENBIC0gRzMw\ndjAQBgcqhkjOPQIBBgUrgQQAIgNiAAQjpQy4LRL1KPOxst3iAhKAnjlfSU2fySU0\nWXTsuwYc58Byr+iuL+FBVIcUqEqy6HyC5ltqtdyzdc6LBtCGI79G1Y4PPwT01xyS\nfvalY8L1X44uT6EYGQIrMgqCZH0Wk9GjQjBAMB0GA1UdDgQWBBR8XQKEE9TMipuB\nzhccLikenEhjQjAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAKBggq\nhkjOPQQDAwNpADBmAjEAvvNhzwIQHWSVB7gYboiFBS+DCBeQyh+KTOgNG3qxrdWB\nCUfvO6wIBHxcmbHtRwfSAjEAnbpV/KlK6O3t5nYBQnvI+GDZjVGLVTv7jHvrZQnD\n+JbNR6iC8hZVdyR+EhCVBCyj\n-----END CERTIFICATE-----\n";
+  expect(fingerprint(compromised)).toBe(denied);
+  expect(() => policy().createBundle([...rootCertificates, compromised])).toThrow();
+  expect(() => policy().createBundle([...rootCertificates.slice(1), compromised])).toThrow();
 });
 
 test("missing, duplicate or changed input roots cannot create a bundle", () => {
   const roots = [...rootCertificates];
-  expect(() => policy().createBundle(roots.filter((pem) => fingerprint(pem) !== denied))).toThrow();
+  expect(() => policy().createBundle(roots.slice(1))).toThrow();
   expect(() => policy().createBundle([...roots, roots[0]])).toThrow();
   expect(() => policy().createBundle([...roots.slice(1), roots[1]])).toThrow();
   expect(() => policy().createBundle(["not a certificate", ...roots.slice(1)])).toThrow();
@@ -216,7 +234,7 @@ test("extra or competing trust settings fail before app", async () => {
 });
 
 test("actual fetch and https enforce selected CA and hostname verification offline", async () => {
-  const probe = path.resolve(web, "..", "..", "tests", "fixtures", "node-default-tls-probe.cjs");
+  const probe = fileURLToPath(new URL("../../../tests/fixtures/node-default-tls-probe.cjs", import.meta.url));
   for (const target of ["https://example.com:443/", "http://127.0.0.1:443/", "https://127.0.0.1/", "https://user@127.0.0.1:443/", "https://127.0.0.1:443/other"]) {
     const rejected = await child([probe, target]);
     expect(rejected.code, target).not.toBe(0);
@@ -237,7 +255,15 @@ test("actual fetch and https enforce selected CA and hostname verification offli
   fs.mkdirSync(empty);
   const env = { ...cleanEnv(), NODE_OPTIONS: "--use-openssl-ca", SSL_CERT_FILE: path.join(fixture, "trusted.pem"), SSL_CERT_DIR: empty };
   for (const name of ["trusted", "untrusted", "wrong-host"]) {
-    const server = https.createServer({ key: fs.readFileSync(path.join(fixture, `${name}.key`)), cert: fs.readFileSync(path.join(fixture, `${name}.pem`)) }, (_request, response) => response.end("local-only"));
+    const receivedMarkers: string[][] = [];
+    const server = https.createServer({ key: fs.readFileSync(path.join(fixture, `${name}.key`)), cert: fs.readFileSync(path.join(fixture, `${name}.pem`)) }, (request, response) => {
+      const markers: string[] = [];
+      for (let index = 0; index < request.rawHeaders.length; index += 2) {
+        if (request.rawHeaders[index].toLowerCase() === "x-caseops-automated-test") markers.push(request.rawHeaders[index + 1]);
+      }
+      receivedMarkers.push(markers);
+      response.end("local-only");
+    });
     const sockets = new Set<import("node:net").Socket>();
     server.on("connection", (socket) => { sockets.add(socket); socket.once("close", () => sockets.delete(socket)); });
     server.listen(0, "127.0.0.1");
@@ -249,6 +275,7 @@ test("actual fetch and https enforce selected CA and hostname verification offli
       expect(result.code, result.stderr).toBe(0);
       const expected = name === "trusted" ? "local-only" : name === "untrusted" ? "DEPTH_ZERO_SELF_SIGNED_CERT" : "ERR_TLS_CERT_ALTNAME_INVALID";
       expect(JSON.parse(result.stdout)).toEqual([expected, expected]);
+      expect(receivedMarkers).toEqual(name === "trusted" ? [["no-paid-providers"], ["no-paid-providers"]] : []);
     } finally {
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

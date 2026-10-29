@@ -22,6 +22,7 @@ tests/fixtures/**
 !tests/fixtures/statutes/
 tests/fixtures/statutes/**
 !tests/fixtures/statutes/structured-schedule-api.json
+!tests/fixtures/node-default-tls-probe.cjs
 !tests/e2e/
 tests/e2e/**
 !tests/e2e/support/

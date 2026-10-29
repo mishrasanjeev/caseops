@@ -97,6 +97,7 @@ def test_uvicorn_connection_close_is_advertised_and_body_completes(tmp_path: Pat
     app_path.write_text(
         """async def app(scope, receive, send):
     assert scope[\"type\"] == \"http\"
+    assert (b\"x-caseops-automated-test\", b\"no-paid-providers\") in scope[\"headers\"]
     await send({
         \"type\": \"http.response.start\",
         \"status\": 200,
@@ -139,7 +140,7 @@ def test_uvicorn_connection_close_is_advertised_and_body_completes(tmp_path: Pat
                 with socket.create_connection(("127.0.0.1", port), timeout=1) as client:
                     client.settimeout(2)
                     client.sendall(
-                        b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n"
+                        b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nX-CaseOps-Automated-Test: no-paid-providers\r\nConnection: keep-alive\r\n\r\n"
                     )
                     while chunk := client.recv(4096):
                         response += chunk
@@ -1190,6 +1191,7 @@ def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str)
     required = _web_external_unit_dependencies(REPO_ROOT)
     assert {
         "tests/fixtures/statutes/structured-schedule-api.json",
+        "tests/fixtures/node-default-tls-probe.cjs",
         "tests/e2e/support/prod-failure-diagnostics.ts",
         "tests/e2e/support/bounded-network-evidence.ts",
         "tests/e2e/support/prod-api-response-evidence.ts",
@@ -1219,12 +1221,16 @@ def _web_external_unit_dependencies(root: Path) -> set[str]:
     references = re.compile(
         r"\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)[\"'](\.[^\"']+)[\"']",
     )
+    fixture_urls = re.compile(
+        r"\bnew\s+URL\(\s*[\"'](\.[^\"']+)[\"']\s*,\s*import\.meta\.url\s*\)",
+    )
     while pending:
         importer = pending.pop()
         if importer in visited:
             continue
         visited.add(importer)
-        for reference in references.findall(importer.read_text(encoding="utf-8")):
+        source = importer.read_text(encoding="utf-8")
+        for reference in [*references.findall(source), *fixture_urls.findall(source)]:
             base = (importer.parent / reference).resolve()
             assert base.is_relative_to(root.resolve()), "Fixture import escapes repository"
             candidates = [base, *(Path(str(base) + suffix) for suffix in (".ts", ".tsx", ".json")),
@@ -1234,13 +1240,13 @@ def _web_external_unit_dependencies(root: Path) -> set[str]:
             if dependency.is_relative_to(web.resolve()):
                 continue
             required.add(dependency.relative_to(root.resolve()).as_posix())
-            if dependency.suffix in {".ts", ".tsx", ".js", ".mjs"}:
+            if dependency.suffix in {".ts", ".tsx", ".js", ".mjs", ".cjs"}:
                 pending.append(dependency)
     return required
 
 
 def _assert_web_builder_inputs(dockerfile: str, ignore: str, required: set[str]) -> None:
-    assert "FROM node:22.14.0-alpine AS trusted-base" in dockerfile
+    assert "FROM node:22.23.4-alpine AS trusted-base" in dockerfile
     builder, runner = dockerfile.split("FROM trusted-base AS runner", 1)
     builder = builder.split("FROM deps AS builder", 1)[1]
     lines = set(builder.splitlines())
@@ -1261,11 +1267,29 @@ def _assert_web_builder_inputs(dockerfile: str, ignore: str, required: set[str])
     assert "/app/tests" not in runner and "COPY tests/" not in runner
 
 
+@pytest.mark.parametrize("boundary", ["copy", ".dockerignore", ".gcloudignore"])
+def test_web_native_tls_fixture_closure_rejects_omission(boundary: str) -> None:
+    path = "tests/fixtures/node-default-tls-probe.cjs"
+    required = _web_external_unit_dependencies(REPO_ROOT)
+    assert path in required
+    dockerfile = _read_repo_text("apps/web/Dockerfile")
+    ignore = _read_repo_text(".dockerignore" if boundary == "copy" else boundary)
+    if boundary == "copy":
+        dockerfile = dockerfile.replace(f"COPY {path} /app/{path}", "")
+        message = f"Missing builder input: {re.escape(path)}"
+    else:
+        ignore = ignore.replace(f"!{path}", "")
+        message = f"Missing context input: {re.escape(path)}"
+    with pytest.raises(AssertionError, match=message):
+        _assert_web_builder_inputs(dockerfile, ignore, required)
+
+
 def test_web_fixture_dependency_inventory_follows_transitive_literal_forms(tmp_path: Path) -> None:
     files = {
         "apps/web/lib/fixture.test.ts": 'import { value } from "../../../tests/e2e/support/first";',
         "tests/e2e/support/first.ts": 'export { value } from "./second";',
-        "tests/e2e/support/second.ts": 'import("./third"); require("./fourth");',
+        "tests/e2e/support/second.ts": 'import("./third"); require("./fourth"); new URL("./native.cjs", import.meta.url);',
+        "tests/e2e/support/native.cjs": 'require("./leaf.json");',
         "tests/e2e/support/third.ts": 'import "./leaf.json";',
         "tests/e2e/support/fourth.ts": 'import { value } from "./first";',
         "tests/e2e/support/leaf.json": '{}',
@@ -3857,6 +3881,7 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
          "modify", True),
         ("statute-fixture", "tests/fixtures/statutes/structured-schedule-api.json",
          "modify", True),
+        ("native-tls-probe", "tests/fixtures/node-default-tls-probe.cjs", "modify", True),
         ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts", "modify", True),
         ("network-evidence", "tests/e2e/support/bounded-network-evidence.ts", "modify", True),
         ("api-evidence", "tests/e2e/support/prod-api-response-evidence.ts", "modify", True),
@@ -3914,6 +3939,7 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
             ("upstream", "license-policy/upstream/fake-package/LICENSE.txt"),
             ("review", "docs/security/js-license-compliance-review-2026-10-12.md"),
             ("fixture", "tests/fixtures/statutes/structured-schedule-api.json"),
+            ("native-tls-probe", "tests/fixtures/node-default-tls-probe.cjs"),
             ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts"),
             ("network", "tests/e2e/support/bounded-network-evidence.ts"),
             ("api", "tests/e2e/support/prod-api-response-evidence.ts"),

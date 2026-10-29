@@ -3021,7 +3021,7 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
       assert.ok(ciTrustKeys.every(key => !Object.hasOwn(job.env ?? {}, key)));
       let setup, trust;
       for (const step of job.steps ?? []) {
-        if (step.uses === 'actions/setup-node@v4') { setup = step; trust = null; assert.ok(['22.14.0', '24.15.0'].includes(step.with['node-version'])); setupCount++; }
+        if (step.uses === 'actions/setup-node@v4') { setup = step; trust = null; assert.ok(['22.23.4', '24.15.0'].includes(step.with['node-version'])); setupCount++; }
         if (step.uses === './.github/actions/node-trust') { assert.ok(setup && !trust); assert.equal(step.id, 'node_trust'); assert.equal(step.if, setup.if); trust = step; }
         const isNode = typeof step.run === 'string' && /\b(?:npm|npx|node)\s|bash\s+"\$RUNNER_TEMP\/caseops-prod-playwright"/.test(step.run);
         if (isNode) { assert.ok(trust, 'Node command requires prepared policy: ' + name); commandCount++; }
@@ -3235,6 +3235,55 @@ test('iOS cross-role rebind permits only the exact admitted previous recipe and 
   for (const name of ['CASEOPS_MOBILE_PASSWORD', 'CASEOPS_MOBILE_EMAIL', 'CASEOPS_STORE_BUILD_PRIVATE_KEY', 'CODE_SIGN_PASSWORD'])
     assert.throws(() => neutralIosEnvironment({ [name]: 'SYNTHETIC_UNADMITTED' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
   const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { GIT_CONFIG_GLOBAL: '/operator/config' }), /IOS_HOST_OWNER_GIT_CONFIG_REFUSED/);
+});
+test('iOS actual Podfile flags survive the Pods to Node autolinking constructor with scoped trust and deadline', () => {
+  const args = ['--no-warnings', '--eval', "require('expo/bin/autolinking')", 'expo-modules-autolinking', 'resolve', '--platform', 'apple', '--json'];
+  for (let bits = 0; bits < 16; bits++) {
+    const f = iosProjectionFixture(), deadline = String(Date.now() + 5000);
+    f.policy.fixtureCA = { path: f.policy.paths.home + '/public-fixture.pem', sha256: '4'.repeat(64), certificateSha256: '5'.repeat(64) };
+    f.environment.NODE_EXTRA_CA_CERTS = f.policy.fixtureCA.path;
+    const flags = { EXPO_USE_PRECOMPILED_MODULES: String(bits & 1), EX_DEV_CLIENT_NETWORK_INSPECTOR: bits & 2 ? 'true' : 'false',
+      RCT_USE_PREBUILT_RNCORE: String((bits >> 2) & 1), RCT_USE_RN_DEP: String((bits >> 3) & 1) };
+    const pod = iosHostCommandProjection(f.admitted, f.ref, 'pod', ['install'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: deadline });
+    const inherited = { ...pod.environment, ...flags }, before = { ...inherited };
+    const node = iosHostCommandProjection(f.admitted, f.ref, 'node', args, inherited);
+    assert.deepEqual(node.args, args); assert.equal(node.executable, f.policy.tools.node.path);
+    for (const [name, value] of Object.entries(flags)) assert.equal(node.environment[name], value, name);
+    assert.equal(node.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS);
+    assert.equal(node.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE); assert.equal(node.environment.SSL_CERT_DIR, f.environment.SSL_CERT_DIR);
+    assert.equal(node.environment.NODE_EXTRA_CA_CERTS, f.policy.fixtureCA.path);
+    assert.equal(node.environment.CASEOPS_HOST_NODE_TRUST_POLICY_FILE, f.environment.CASEOPS_HOST_NODE_TRUST_POLICY_FILE);
+    assert.equal(node.environment.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256, f.environment.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256);
+    assert.equal(node.environment.CASEOPS_IOS_HOST_OUTER_DEADLINE, deadline); assert.deepEqual(inherited, before);
+    // CocoaPods downloaders and build helpers inherit the same public switches.
+    for (const role of ['ruby', 'pod', 'curl', 'git', 'xcodebuild', 'neutral']) {
+      const childFixture = iosProjectionFixture(); childFixture.policy.fixtureCA = f.policy.fixtureCA;
+      childFixture.environment.NODE_EXTRA_CA_CERTS = f.policy.fixtureCA.path;
+      const childArgs = role === 'curl' ? curlDownloaderArgs() : role === 'git' ? ['--version'] : [];
+      const child = iosHostCommandProjection(childFixture.admitted, childFixture.ref, role, childArgs, inherited);
+      for (const [name, value] of Object.entries(flags)) assert.equal(child.environment[name], value, role + ':' + name);
+      child.input?.fill(0);
+    }
+    pod.input.fill(0);
+  }
+});
+test('iOS Podfile flags reject other values names and trust overrides before child dispatch', () => {
+  const valid = { EXPO_USE_PRECOMPILED_MODULES: '1', EX_DEV_CLIENT_NETWORK_INSPECTOR: 'true', RCT_USE_PREBUILT_RNCORE: '1', RCT_USE_RN_DEP: '1' };
+  for (const name of Object.keys(valid)) {
+    for (const value of ['', '2', '-1', 'TRUE', 'yes', '1 ', '0\n', 'SYNTHETIC_UNADMITTED']) {
+      const f = iosProjectionFixture(); f.admitted.nodeBuildNames = [name];
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [name]: value }), /IOS_HOST_POD_BUILD_VALUE/);
+    }
+    const f = iosProjectionFixture();
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [name]: name === 'EX_DEV_CLIENT_NETWORK_INSPECTOR' ? '1' : 'true' }), /IOS_HOST_POD_BUILD_VALUE/);
+    for (const value of [false, 1, null, {}, 'bad\0value']) assert.throws(() => neutralIosEnvironment({ [name]: value }), /IOS_HOST_ENVIRONMENT/);
+  }
+  for (const name of ['RCT_UNREVIEWED_FLAG', 'EXPO_USE_UNREVIEWED_MODULES', 'EX_DEV_CLIENT_UNREVIEWED', 'ex_dev_client_network_inspector']) {
+    const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [name]: '1' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+  for (const name of ['NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'HTTPS_PROXY', 'RUBYOPT', 'HOME']) {
+    const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [name]: 'SYNTHETIC_UNADMITTED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
 });
 test('CocoaPods curl constructor preserves exact payload and headers while using held CA FD and required marker', () => {
   const f = iosProjectionFixture(), input = [...curlDownloaderArgs(), "-A 'CocoaPods/1.17.0 cocoapods-downloader/2.1'", '-H', 'If-None-Match: SYNTHETIC-ETAG'];
@@ -3665,8 +3714,8 @@ test('iOS role projection drops only the typed pinned-worker status descriptor m
 
 test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
   const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
-  assert.ok(helper.includes("const NODE_HELPER = '13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787'"));
-  assert.ok(helper.includes("const NODE_BOOTSTRAP = '9f490e9666a5052cc1c378ee703eef462a876440a01a041a6b73609cc49e5a35'"));
+  assert.ok(helper.includes("const NODE_HELPER = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = '2fb386b772aecfcc5c18aacf5d6c77aa934fa90d895adf2adf8baf42a9b6d6a5'"));
   const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
   const pin = createHash('sha256').update(input).digest('hex');
   assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
@@ -3809,8 +3858,8 @@ test('CI runtime copies retain exact reviewed Git blobs with independent readonl
     assert.equal(used, Number(expected)); return bytes.subarray(0, used);
   };
   try {
-    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'c4d2ae68f4c9b0233e6246a8fe3ac504bec43b99'], ['100644', '5e4de3be2a85251bf14d136a79c47cf9b1fdca6b']]);
-    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29498n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'b659d65faca119a0cc78ab12c8d41a224bf6d112'], ['100644', '4c18c81d7c0ed28e7188c4335f0922eb024d6dff']]);
+    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29741n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
       const input = path.join(source, name), output = staged.sourceRefs[role].path;
       const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
       let inputFd, outputFd, originalFailure; let bodyFailed = false; const closeFailures = [];
@@ -3891,7 +3940,7 @@ test('CI source copy replacement changes no existing replacement mode and closes
 test('CI source partial writes progress fully and zero writes refuse without losing descriptors', async () => ciSourceFixture(async ({ root, parent, api }) => {
   const trace = ciSourceTrace(); let staged;
   fs.writeSync = (fd, data, offset, length, position) => trace.write(fd, data, offset, Math.min(length, 7), position);
-  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(staged.retainedHelper.length, 29498); }
+  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(staged.retainedHelper.length, 29741); }
   finally { staged?.retainedHelper.fill(0); trace.restore(); } trace.closed();
   const second = path.join(root, 'second-parent'); fs.mkdirSync(second, { mode: 0o700 }); const refused = ciSourceTrace(); fs.writeSync = () => 0;
   try { assert.throws(() => api.stageCIHostNodeRuntimeSources(second, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_WRITE_PROGRESS/); }
@@ -3911,7 +3960,7 @@ test('CI explicit Windows preparation imports copied bytes and scopes child poli
     const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.appendedKeys, 9); assert.equal(result.runtimeSourceCopies.length, 2);
     const scoped = Object.fromEntries(fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(1).map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
     const policy = JSON.parse(fs.readFileSync(scoped.CASEOPS_HOST_NODE_TRUST_POLICY_FILE));
-    assert.ok(policy.runtimeSource.helper.path.startsWith(root + path.sep)); assert.match(policy.runtimeSource.helper.path, /runtime-source[/\\]host-node-trust\.mjs$/); assert.equal(policy.runtimeSource.helper.sha256, '13576eb5d2a4aed86b38f6dbae240ba290d08e653107c9ffeed060fa2e048787');
+    assert.ok(policy.runtimeSource.helper.path.startsWith(root + path.sep)); assert.match(policy.runtimeSource.helper.path, /runtime-source[/\\]host-node-trust\.mjs$/); assert.equal(policy.runtimeSource.helper.sha256, '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18');
     const text = execFileSync(process.execPath, ['--input-type=module', '-e', 'import tls from "node:tls"; console.log(JSON.stringify({count:tls.getCACertificates("default").length}));'], { env: { ...neutralTrustEnv(), ...scoped }, timeout: 12000, encoding: 'utf8', maxBuffer: 16384 }); assert.equal(JSON.parse(text).count, 144);
     const unixFile = path.join(root, 'unix-commands'); fs.writeFileSync(unixFile, '', { flag: 'wx', mode: 0o600 }); prepareCIHostNodeTrust({ ...environment, GITHUB_OUTPUT: unixFile });
     const rows = Object.fromEntries(fs.readFileSync(unixFile, 'utf8').trim().split('\n').map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));

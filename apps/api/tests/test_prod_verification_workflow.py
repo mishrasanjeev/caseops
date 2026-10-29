@@ -278,11 +278,11 @@ def test_scheduled_prod_verification_is_read_only() -> None:
         json.dumps(scheduled["steps"], sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     # Reviewed 28 October against the retained 15 October step projection:
-    # Node is pinned to22.14.0; one trust preparation and nine scoped outputs
+    # Node is pinned to22.23.4; one trust preparation and nine scoped outputs
     # cover npm, Chromium, wrapper preparation and its actual Node invocation.
     # Removing exactly that reviewed delta reproduces the original7667cd82
     # projection. Every original read-only step, argument and bound remains.
-    assert steps_digest == "65c9969ca01983c7dae22529cb1c19a3d8f86a8374eaf2fedff730180667a492"
+    assert steps_digest == "9cb14295f2fe2118958676830220a8c734272f7f233bc12a6e77918f2e39f19f"
     config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
     assert (
         'name: "statute-source-prod-chromium",\n'
