@@ -1,5 +1,23 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 30 Compliance Continuation
+
+Attachment/workspace corrections: **Partially fixed**, not deployed. Exact
+baseline readers reproduce stale orders/assignee eligibility; clean-entry
+refresh preserves pending work and caller transactions. All39new cases pass
+inside the failed351-case run. Recorder ownership and notification-decision
+roles pass15/45phases. GREEN03 completes392/1176phases with384P/8failures,
+all eight caused by the recorder misclassifying structured recipient UNIONs;
+all26SQLite/PostgreSQL parity cases and original concurrency variants passed.
+Corrected GREEN05 passes41profile plus5original variants:46/138phases,0F/0S,
+source unchanged. The historical inbound-peer cause remains **Inconclusive**;
+neither focused acceptance nor old hosted green closes production claims.
+Keep the complete Docker26 and GREEN02 failures, including the latter's
+call/teardown duplicate JUnit diagnosis. Require full PostgreSQL/Docker/current
+CI/main/deploy/production replay and original15second51-row export before
+closing#561/#564/IP15-018 or promoting either workbook. The dated compliance
+work brief records exact scope and external holds. App belongs to the MacBook.
+
 ## October 30 Scanner Fixture: Partially Fixed Pending New Gates
 
 E968 Security's one-of75error is an actual unacknowledged Docker-create timeout,

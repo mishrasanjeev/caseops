@@ -3542,3 +3542,16 @@ requirements when using the fallback.
   mutation retry occurs. Preserve all original process deadlines and reconcile
   the added cleanup case with exact process/SQLite/controller inventories. A
   later fast isolated driver import is not the cause of an earlier timeout.
+- A stopped diagnostic recorder must release its large buffers after workers
+  join and evidence is flushed, including failure paths. Avoid retained bound-
+  callback self-cycles; prove strong active registration and stopped-recorder/
+  native-cell release without forcing GC or changing its policy. An ownership
+  defect or a process-wide GC overlap alone is not historical latency causation.
+- A fresh workspace read must not overwrite caller-owned pending objects.
+  Capture new/dirty/deleted state before any query autoflush; refresh retained
+  graphs and eligibility only on a clean entry, and prove pending collection,
+  scalar, explicit commit and nested-savepoint rollback behavior separately.
+- A smaller query count does not justify a wider predicate or active-first
+  cap. Preserve bounded source arms and original raw inactive/overlap limits,
+  charge duplicate UNION rows, and verify actual expanded native bind positions
+  on both databases before trusting a LIMIT observer or tightening its oracle.

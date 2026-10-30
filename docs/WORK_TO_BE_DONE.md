@@ -1,5 +1,24 @@
 # CaseOps  - Work To Be Done
 
+## October 30 Compliance Work And Workspace Freshness
+
+**Partially implemented / NO-GO pending full replacement release.** Docker26
+completed3516native cases with2failures and no browser execution. The next
+351-case affected run still has3call failures plus1teardown error; all39new
+workspace/metadata cases pass, but that is not Company-lock acceptance.
+Bounded metadata reads, clean-entry workspace refresh, stopped-observer
+ownership cleanup and one fresh notification decision now retain the original
+security/transaction contracts. Both pure roles pass15/45phases. GREEN03 ran
+392cases/1176phases:384P/8recorder failures; all26dual-database recipient and
+original concurrency cases passed. After correcting structured UNION inventory
+without relaxing work bounds, GREEN05 passes the complete41case profile and
+five exact original failing variants:46/138phases,0F/0S,unchanged source.
+Complete Docker/CI, protected main merge, guarded deployment,
+exact-live D29/whole QA/private cadence and actual paired Excel publication
+remain required. See bugfix-compliance-lock-work-2026-10-30.md. Preserve old
+failures and unknown historical causes; no deadline, GC or authority waiver.
+MacBook App work and all external legal/provider/consent/MFA holds stay separate.
+
 ## October 30 Scanner Fixture Continuation
 
 **NO-GO pending complete replacement release.** E968's Security gate fails one

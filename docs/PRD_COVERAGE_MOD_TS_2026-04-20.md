@@ -1,5 +1,20 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 30 Compliance And Workspace Coverage
+
+J04/M03/US-007..009/FT-011..015/NFT-005 map to CWF-01..41 in the dated
+attachment profile; all41pass in GREEN05 with five original variants,46cases/
+138phases/0F/0S/source unchanged. Earlier GREEN02 remains failed.
+OBS-01..09 and NTF-01..06 are standard-discoverable pure modules with15actual
+passes/45phases. REC-01..26 are standard-discoverable dual-database cases;
+all26pass within completed GREEN03, whose eight structured-query recorder
+failures remain retained (384P/8F,392cases/1176phases).
+Raw1000-row overlap and1001-row rejection are charged, not distinct-ID counts.
+Existing five PG freshness/query assertions tighten2/3to1/2, without changing
+authority or the original Company wait. Full new Docker/CI/main/live evidence
+remains required; see the compliance work brief. J19/M21/US-063 remains an
+ACTIVE release deferral, not a new GSC audit; App/Mac work is separate.
+
 ## October 30 Scanner Acceptance Coverage
 
 Existing release/security isolation retains all75offline scanner identities.

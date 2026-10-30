@@ -1,5 +1,24 @@
 # Strict Enterprise Gap Tasklist
 
+## October 30 Compliance Critical Work
+
+**Partially implemented / NO-GO pending complete replacement release.** A
+safe parent/participant fence still needs bounded work while held. Preserve
+two actual Company2s failures with83/104mutation-labelled SELECTs and no
+generation2GC; do not invent a GC/allocation cause. A separate stopped test
+recorder self-cycle has deterministic RED/9-case GREEN ownership proof.
+One fresh notification fence returns context and recipients, and the bounded
+recipient UNION preserves inactive/raw-union caps and duplicates. Full pure
+15/45 and all26dual-database recipient cases pass. GREEN03 remains failed
+384P/8recorder failures over392cases/1176phases. Its structured UNION observer
+is corrected without weakening budgets; GREEN05 passes41profile+5exact
+original variants,46cases/138phases,0F/0S/source unchanged. These are focused
+components, not complete Docker or production proof.
+All authorization, lifecycle, source, delivery and original timing checks
+remain. Complete Docker/current hosted security/main/exact-serving QA/cadence
+and actual workbook publication are open. See the dated compliance work brief;
+no blanket enterprise or App/Mac acceptance follows.
+
 ## October 30 Security Fixture Stage Separation
 
 **Partially fixed / NO-GO pending new committed release gates.** E968's real

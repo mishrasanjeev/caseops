@@ -256,7 +256,6 @@ class _PassiveOverlapTiming:
         self.sql_overflow = self.gc_overflow = self.invalid = False
         self.enabled = False
         self.critical_pools = 0
-        self.callback = self._gc_callback
         # PyDLL retains the GIL; native clocks fill cells allocated before registration.
         # No Python timestamp objects, record containers or counters are built in GC.
         if os.name == "nt":
@@ -287,6 +286,11 @@ class _PassiveOverlapTiming:
         self.mono_clock(self.next_gc.mono_pointer)
         self.utc_clock(self.next_gc.utc_pointer)
         assert self._gc_ns(self.next_gc)[0] > 0 and self._gc_ns(self.next_gc)[1] > 0
+
+    @property
+    def callback(self):
+        # The registered bound method owns us only until stop removes it.
+        return self._gc_callback
 
     def _gc_callback(self, phase, info):
         if not self.enabled:
@@ -421,6 +425,18 @@ class _FinalizerAudit:
         self.factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
         self.hooks = [("before_cursor_execute", self.before),
                       ("after_cursor_execute", self.after), ("handle_error", self.error)]
+
+    def flush_passive_evidence(self):
+        timing = self.passive
+        assert timing is not None
+        assert not timing.enabled and timing.callback not in gc.callbacks, (
+            "Passive capture is active"
+        )
+        assert not timing.critical_pools, "Passive evidence cannot flush during owned worker timing"
+        try:
+            timing.flush(self.record)
+        finally:
+            self.passive = None
 
     def session(self, role):
         session = self.factory()
@@ -1099,7 +1115,7 @@ def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
             finally:
                 engine.dispose()
                 try:
-                    audit.passive.flush(record)
+                    audit.flush_passive_evidence()
                 finally:
                     journal.complete()
             assert not remaining, "Owned labelled PostgreSQL transaction leaked"

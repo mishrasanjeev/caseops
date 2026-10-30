@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select, text
-from sqlalchemy.orm import Session, joinedload, raiseload, selectinload
+from sqlalchemy.orm import Session, joinedload, lazyload, raiseload, selectinload
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
@@ -1825,6 +1825,7 @@ def _get_matter_model(
     lock_for_share: bool = False,
     commit_access_denial: bool = True,
     load_locked_children: bool = True,
+    refresh_existing: bool = False,
 ) -> Matter:
     if lock_for_update and lock_for_share:
         raise ValueError("Matter lock cannot be both exclusive and shared.")
@@ -1841,6 +1842,7 @@ def _get_matter_model(
             select(Matter)
             .options(*(_matter_loader_options() if load_locked_children else ()))
             .where(Matter.id == matter_id, Matter.company_id == context.company.id)
+            .execution_options(populate_existing=refresh_existing)
         )
     if not matter:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
@@ -3645,13 +3647,21 @@ def get_matter_workspace(
     context: SessionContext,
     matter_id: str,
 ) -> MatterWorkspaceResponse:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    # Refresh retained reads without discarding the caller's unflushed work.
+    refresh_existing = not (session.new or session.dirty or session.deleted)
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        refresh_existing=refresh_existing,
+    )
     memberships = list(
         session.scalars(
             select(CompanyMembership)
             .options(joinedload(CompanyMembership.user))
             .where(CompanyMembership.company_id == context.company.id)
             .order_by(CompanyMembership.created_at.asc())
+            .execution_options(populate_existing=refresh_existing)
         )
     )
     available_assignees = [
@@ -5937,6 +5947,7 @@ def update_matter_attachment_metadata(
         context=context,
         matter_id=matter_id,
         lock_for_update=True,
+        load_locked_children=False,
     )
     _assert_matter_not_disposed(matter, operation="update attachment metadata")
     attachment = session.scalar(
@@ -5944,11 +5955,13 @@ def update_matter_attachment_metadata(
         .options(
             joinedload(MatterAttachment.uploaded_by_membership).joinedload(CompanyMembership.user),
             joinedload(MatterAttachment.linked_court_order),
+            lazyload(MatterAttachment.chunks),
         )
         .where(
             MatterAttachment.id == attachment_id,
             MatterAttachment.matter_id == matter.id,
         )
+        .execution_options(populate_existing=True)
     )
     if attachment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found.")

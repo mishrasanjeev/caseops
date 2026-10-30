@@ -454,7 +454,7 @@ def test_review_and_failure_selection_share_fresh_bounded_membership_read(
             tuple(sorted(failure_ids - {fixture["actor_id"]})),
         )
         second_count = audit.statement_counts["mutation"] - before
-        assert first_count == second_count == (3 if selection == "team" else 2)
+        assert first_count == second_count == (2 if selection == "team" else 1)
         audit.record(
             "recipient_selection_work", selection=selection,
             first_sql_count=first_count, fresh_sql_count=second_count,
