@@ -3555,3 +3555,16 @@ requirements when using the fallback.
   cap. Preserve bounded source arms and original raw inactive/overlap limits,
   charge duplicate UNION rows, and verify actual expanded native bind positions
   on both databases before trusting a LIMIT observer or tightening its oracle.
+- A bounded import batch does not bound its retained-claim preflight. Charge
+  every pending-row read on every resume, preserve ordered errors and the exact
+  provenance predicate, and discard batched facts before writer commits. Prove
+  all 1,000 rows and physical default-plan work, not only 201-row throughput.
+- Historical-schema ORM observers must inspect every grouped/compound SELECT
+  leaf without dropping duplicate arms or accepting unsupported branches.
+  Replay actual current manual and worker callers through the old-schema fence;
+  current-schema query parity alone does not cover that boundary.
+- A callback property returns a fresh bound-method object. Audit identity-
+  sensitive consumers when replacing stored callbacks, retain the exact active
+  registration for unraisable evidence, and replay existing interruption tests
+  as well as new ownership tests. Stopped servers restore only their own
+  unchanged dependency override after workers join; never discard active owners.

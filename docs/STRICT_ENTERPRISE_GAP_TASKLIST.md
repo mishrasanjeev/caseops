@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## October 30 Remaining Work And Test Boundaries
+
+**Partially implemented / NO-GO.** Full D060 CI evidence is57terminalchecks,
+42success/12failure/3skips, with one independent product CodeQL error. New scalar
+import preflight removes an independently reproduced1,000reads/resume boundary
+without caching facts across row commits. Physical raw work still needs three
+default-statistics plans. Historical SELECT traversal and exact callback
+registration repair missed test consumers; worker failures now retain persisted
+outcome before downstream counts. Partial93/321 component is not replacement
+acceptance. See the dated import/CI observer brief. Full current Docker/hosted
+checks/main/exact production/private cadence and actual workbooks stay required;
+no blanket legal/provider/native/MFA acceptance follows.
+
 ## October 30 Compliance Critical Work
 
 **Partially implemented / NO-GO pending complete replacement release.** A

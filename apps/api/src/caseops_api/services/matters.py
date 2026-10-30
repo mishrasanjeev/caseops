@@ -3648,7 +3648,9 @@ def get_matter_workspace(
     matter_id: str,
 ) -> MatterWorkspaceResponse:
     # Refresh retained reads without discarding the caller's unflushed work.
-    refresh_existing = not (session.new or session.dirty or session.deleted)
+    refresh_existing = False
+    if not session.new and not session.dirty and not session.deleted:
+        refresh_existing = True
     matter = _get_matter_model(
         session,
         context=context,

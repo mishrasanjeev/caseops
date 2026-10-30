@@ -1,5 +1,17 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 30 Preflight And Observer Coverage
+
+IPLF-032/UJ-02/NFT-005 maps IP-PF-01..09 to48 actual dual-database passes
+inside incomplete green02; original90s/1,000-materialization still pending.
+Three new default physical-plan cases are intended, not passed. Historical
+observer18 has9actual passes,9unexecuted; stopped ownership27 and original
+observer9 pass. The complete selection321 was interrupted at93/279phases,
+228unexecuted, not certified. Exact registered-callback and worker-status
+corrections require new execution. Existing J04/M03/J08/M08/J14/M14 and
+source/ACL/lifecycle contracts stay unchanged. Full canonical Docker/CI/main/
+production/cadence remain required; see the dated import/CI observer brief.
+
 ## October 30 Compliance And Workspace Coverage
 
 J04/M03/US-007..009/FT-011..015/NFT-005 map to CWF-01..41 in the dated

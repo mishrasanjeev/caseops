@@ -1,5 +1,19 @@
 # CaseOps  - Work To Be Done
 
+## October 30 Consolidated Remaining Failures
+
+**Partially fixed / NO-GO.** D060 CI has57terminalchecks:42success/12failure/
+3skips. Complete shard reconciliation identifies seven historical UNION-hook
+failures, one worker outcome with missing underlying error, four callback-
+identity observer failures and independent CodeQL's one product error. Current
+repairs retain all original safety/timing assertions. Dual preflight RED proves
+1,000reads per resume; all48 new IP cases and27 ownership cases pass in the
+owned interrupted93/321 component (228unexecuted, no natural completion).
+Three physical-plan cases and consolidated new source remain unverified. Use
+bugfix-import-preflight-and-ci-observers-2026-10-30.md and the full canonical
+replacement, not these partial results, for release and workbook decisions.
+MacBook App and external legal/provider/consent/MFA holds remain separate.
+
 ## October 30 Compliance Work And Workspace Freshness
 
 **Partially implemented / NO-GO pending full replacement release.** Docker26

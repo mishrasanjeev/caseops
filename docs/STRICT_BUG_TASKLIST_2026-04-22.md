@@ -1,5 +1,19 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 30 Consolidated CI And Import: Partially Fixed
+
+Retained-claim resume repeatedly read every pending docket. Valid SQLite/PG
+RED2/6phases proves1,000scalar reads, correct409/unchanged history and no ORM
+hydration. Scalar batched facts preserve exact provenance/ordered rejection and
+fresh actual row recovery. IP48 and ownership27 pass in interrupted93/321
+green02, not complete release. Historical UNION9/18 passes are incomplete;
+original callback interruption and worker-status fixes plus three physical
+plans remain unexecuted. Preserve D060's complete12failedchecks and Docker27's
+three failures. Unknown historical worker/latency causes stay Inconclusive.
+See bugfix-import-preflight-and-ci-observers-2026-10-30.md. Require complete
+new Docker/current CI/CodeQL/main/live/D29/cadence and actual paired workbooks
+before closing#561/#564/IP15-018. MacBook/native and external holds stay open.
+
 ## October 30 Compliance Continuation
 
 Attachment/workspace corrections: **Partially fixed**, not deployed. Exact

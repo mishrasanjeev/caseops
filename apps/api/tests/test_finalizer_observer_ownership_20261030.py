@@ -21,13 +21,19 @@ def test_detached_stopped_observer_releases_native_cells_without_collecting(capt
     owner.passive = timing
     observer_ref = ref(timing)
     native_cell_ref = ref(timing.gc_slots[0].mono)
+
+    def capture_once(observer):
+        with observer.capture():
+            if capture == "body-failed":
+                raise ValueError("Controlled observer body failure")
+        return "completed"
+
     if capture != "never-started":
-        try:
-            with timing.capture():
-                if capture == "body-failed":
-                    raise ValueError("Controlled observer body failure")
-        except ValueError:
-            assert capture == "body-failed"
+        if capture == "body-failed":
+            with pytest.raises(ValueError, match="^Controlled observer body failure$"):
+                capture_once(timing)
+        else:
+            assert capture_once(timing) == "completed"
     assert not timing.enabled and timing.callback not in gc.callbacks
     del timing
     assert observer_ref() is owner.passive and native_cell_ref() is not None

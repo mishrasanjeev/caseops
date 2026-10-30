@@ -176,13 +176,14 @@ def test_gc_callback_interrupt_is_ignored_by_cpython_but_latched_and_removed(
     policy = (gc.isenabled(), gc.get_threshold())
     hook = sys.unraisablehook
     observed = []
+    registered_callback = None
     failure = error_type("FAKE_GC_INTERRUPTION")
 
     def fail_clock(_pointer):
         raise failure
 
     def retain_unraisable(args):
-        if args.object is timing.callback:
+        if args.object is registered_callback:
             observed.append((args.exc_type, args.exc_value))
         else:
             hook(args)
@@ -194,6 +195,9 @@ def test_gc_callback_interrupt_is_ignored_by_cpython_but_latched_and_removed(
             patch.setattr(sys, "unraisablehook", retain_unraisable)
             with timing.capture():
                 assert gc.callbacks == callbacks + [timing.callback]
+                registered_callback = gc.callbacks[-1]
+                assert registered_callback.__self__ is timing
+                assert registered_callback.__func__ is type(timing)._gc_callback
                 gc.collect(0)
                 assert timing.invalid is True
     finally:
