@@ -6,8 +6,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
 import { CAMERA_COPY_NAME, CAMERA_PRIVACY_LIMITS } from './camera-files-privacy.mjs';
+import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile.mjs';
 
-const APP = 'ai.caseops.mobile.dev.localacceptance', SERIAL = 'emulator-5584';
+const APP = 'ai.caseops.mobile.dev.localacceptance';
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const SHA = /^[a-f0-9]{64}$/, UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -28,12 +29,14 @@ function save(file, value) {
   writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 }); return { path: file, sha256: hash(bytes) };
 }
 function device({ udid, appId, environment = process.env, command = execFileSync, deadline = Date.now() + 30000, budget }) {
-  assert.equal(udid, SERIAL, 'DEDICATED_ANDROID_FILES_DEVICE_REQUIRED');
+  const profile = androidLocalProfile(udid, 'DEDICATED_ANDROID_FILES_DEVICE_REQUIRED');
   assert.equal(appId, APP, 'DEDICATED_ANDROID_FILES_APP_REQUIRED');
-  assert.equal(environment.ADB_SERVER_SOCKET, 'tcp:127.0.0.1:5038', 'ISOLATED_ANDROID_FILES_ADB_REQUIRED');
+  assert.equal(environment.ADB_SERVER_SOCKET, `tcp:127.0.0.1:${profile.adbPort}`, 'ISOLATED_ANDROID_FILES_ADB_REQUIRED');
+  if (environment.ANDROID_ADB_SERVER_PORT !== undefined) assert.equal(environment.ANDROID_ADB_SERVER_PORT, String(profile.adbPort), 'ISOLATED_ANDROID_FILES_ADB_REQUIRED');
+  if (environment.ANDROID_SERIAL !== undefined) assert.equal(environment.ANDROID_SERIAL, udid, 'DEDICATED_ANDROID_FILES_DEVICE_REQUIRED');
   const env = Object.fromEntries(['PATH', 'HOME', 'ANDROID_USER_HOME', 'LANG', 'LC_ALL', 'TMPDIR']
     .filter(key => typeof environment[key] === 'string').map(key => [key, environment[key]]));
-  Object.assign(env, { ADB_SERVER_SOCKET: environment.ADB_SERVER_SOCKET, ANDROID_ADB_SERVER_PORT: '5038' });
+  Object.assign(env, { ADB_SERVER_SOCKET: environment.ADB_SERVER_SOCKET, ANDROID_ADB_SERVER_PORT: String(profile.adbPort) });
   const run = (args, options = {}) => {
     const remaining = deadline - Date.now(); assert.ok(remaining > 0, 'ANDROID_FILES_OBSERVATION_DEADLINE');
     const byteRoom = budget ? budget.limit - budget.bytes : Infinity;
@@ -59,17 +62,17 @@ function device({ udid, appId, environment = process.env, command = execFileSync
     return { kind: fields[0] === 'directory' ? 'directory' : 'file', uid: Number(fields[1]), device: fields[2], inode: fields[3],
       sizeBytes: Number(fields[4]), modified: fields[5], changed: fields[6] };
   };
-  return { text, script, stat, run };
+  return { text, script, stat, run, profile };
 }
 function identity(containers) {
   assert.equal(containers?.schemaVersion, 1, 'ATTESTED_ANDROID_FILES_CONTAINERS_REQUIRED');
   assert.equal(containers.kind, 'android-files-containers', 'ATTESTED_ANDROID_FILES_CONTAINERS_REQUIRED');
   assert.equal(containers.platform, 'android', 'ATTESTED_ANDROID_FILES_PLATFORM_REQUIRED');
-  assert.equal(containers.udid, SERIAL, 'DEDICATED_ANDROID_FILES_DEVICE_REQUIRED');
+  const profile = androidLocalProfile(containers.udid, 'DEDICATED_ANDROID_FILES_DEVICE_REQUIRED');
   assert.equal(containers.appId, APP, 'DEDICATED_ANDROID_FILES_APP_REQUIRED');
   assert.equal(containers.rootUid, 0, 'ANDROID_FILES_ROOT_ACCESS_REQUIRED');
   assert.match(containers.bootId || '', UUID, 'ANDROID_FILES_BOOT_ID_REQUIRED');
-  assert.equal(containers.avdName, 'CaseOps_Pixel9_API36_arm64', 'OWNED_ANDROID_AVD_REQUIRED');
+  assert.equal(containers.avdName, profile.avdName, 'OWNED_ANDROID_AVD_REQUIRED');
   assert.equal(containers.appData.path, `/data/user/0/${APP}`, 'ANDROID_FILES_PRIVATE_ROOT_REQUIRED');
   assert.ok(Number.isSafeInteger(containers.packageUid) && containers.packageUid >= 10000, 'ANDROID_FILES_PACKAGE_UID_REQUIRED');
   assert.equal(containers.appData.metadata.uid, containers.packageUid, 'ANDROID_FILES_PRIVATE_OWNER_MISMATCH');
@@ -86,7 +89,7 @@ export function attestAndroidFilesContainers(options) {
   assert.equal(io.text(['shell', 'getprop', 'ro.build.version.sdk']), '36', 'ANDROID_FILES_API36_REQUIRED');
   assert.equal(io.text(['shell', 'getprop', 'ro.product.cpu.abi']), 'arm64-v8a', 'ANDROID_FILES_ARM64_REQUIRED');
   const avd = io.text(['emu', 'avd', 'name']).split(/\r?\n/);
-  assert.deepEqual(avd, ['CaseOps_Pixel9_API36_arm64', 'OK'], 'OWNED_ANDROID_AVD_REQUIRED');
+  assert.deepEqual(avd, [io.profile.avdName, 'OK'], 'OWNED_ANDROID_AVD_REQUIRED');
   const bootId = io.text(['shell', 'cat', '/proc/sys/kernel/random/boot_id']); assert.match(bootId, UUID, 'ANDROID_FILES_BOOT_ID_REQUIRED');
   const packageLine = io.text(['shell', 'cmd', 'package', 'list', 'packages', '-U', APP]);
   const match = new RegExp(`^package:${APP.replaceAll('.', '\\.')} uid:(\\d+)$`).exec(packageLine);
@@ -102,7 +105,7 @@ export function attestAndroidFilesContainers(options) {
   const externalPath = `/storage/emulated/0/Android/data/${APP}`, externalMetadata = io.stat(externalPath);
   if (externalMetadata) assert.equal(externalMetadata.kind, 'directory', 'ANDROID_FILES_EXTERNAL_DIRECTORY_REQUIRED');
   const result = { schemaVersion: 1, kind: 'android-files-containers', observed: true, platform: 'android',
-    udid: SERIAL, appId: APP, rootUid: 0, packageUid: Number(match[1]), bootId, avdName: avd[0],
+    udid: options.udid, appId: APP, rootUid: 0, packageUid: Number(match[1]), bootId, avdName: avd[0],
     appData, provider, externalAppData: externalMetadata ? { path: externalPath, metadata: externalMetadata } : null };
   identity(result); return result;
 }

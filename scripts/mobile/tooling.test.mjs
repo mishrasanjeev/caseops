@@ -29,7 +29,7 @@ import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFai
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA } from './host-node-trust.mjs';
 import { localCertificates } from './host-node-trust-fixture.mjs';
-import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, composeIosHostCommand, validateIosHostArguments, reviewIosPodBuildPaths, validatePodsCurlArguments, validateIosCurlArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments } from './ios-host-launch.mjs';
+import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, composeIosHostCommand, validateIosHostArguments, reviewIosPodBuildPaths, validatePodsCurlArguments, validateIosCurlArguments, validateIosLocalArchiveArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments } from './ios-host-launch.mjs';
 
 const installedHash = 'a'.repeat(64);
 const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
@@ -4963,4 +4963,97 @@ test('IOS-RUBY-02 actual retained Ruby policy bytes reach bounded pod stdin and 
   const stale = iosProjectionFixture(); stale.admitted.podsSource = Buffer.from(before); stale.policy.source['ios-host-pods.rb'].sha256 = '0'.repeat(64);
   assert.throws(() => iosHostCommandProjection(stale.admitted, stale.ref, 'pod', ['install'], stale.environment), /IOS_HOST_PODS_SOURCE_UNREVIEWED/);
   bytes.fill(0); before.fill(0); stale.admitted.podsSource.fill(0);
+});
+
+
+test('ANDROID-CDN-01 keeps eight repositories and admits only the official artifact CDN as ninth authority', () => {
+  const source = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
+  const repositories = source.split('final Set<String> repositoryBases = [')[1]?.split('] as Set')[0];
+  assert.ok(repositories);
+  assert.deepEqual([...repositories.matchAll(/'([^']+)'/g)].map((match) => match[1]), [
+    'https://repo.maven.apache.org/maven2',
+    'https://repo1.maven.org/maven2',
+    'https://dl.google.com/dl/android/maven2',
+    'https://maven.google.com',
+    'https://plugins.gradle.org/m2',
+    'https://repo.reactnative.dev/maven2',
+    'https://central.sonatype.com/repository/maven-snapshots',
+    'https://www.jitpack.io',
+  ]);
+  const redirects = source.split('final Set<String> reviewedRedirectBases = ')[1]?.split('\n')[0];
+  assert.equal(redirects, "Collections.singleton('https://plugins-artifacts.gradle.org')");
+  for (const fragment of ['configuredBases.size() <= 9', 'exactScopes.size() <= 9', 'originalScopes.size() <= 9']) {
+    assert.equal(source.split(fragment).length - 1, 1);
+  }
+});
+
+test('ANDROID-CDN-02 preserves every original URI, marker, TLS, factory and Download fence byte', () => {
+  let restored = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
+  const replacements = [
+    ['configuredBases.size() <= 9', 'configuredBases.size() <= 10'],
+    ['exactScopes.size() <= 9', 'exactScopes.size() <= 8'],
+    ['originalScopes.size() <= 9', 'originalScopes.size() <= 8'],
+    ["final Set<String> reviewedRedirectBases = Collections.singleton('https://plugins-artifacts.gradle.org')", 'final Set<String> reviewedRedirectBases = [] as Set'],
+  ];
+  for (const [before, after] of replacements) {
+    assert.equal(restored.split(before).length - 1, 1);
+    restored = restored.replace(before, after);
+  }
+  assert.equal(createHash('sha256').update(restored).digest('hex'), '482d2c658f9a0c34c7b351b41f3583edc8bfae0935649e12d2bbbf506dc65694');
+});
+
+const iosArchiveFixtureRows = Object.freeze([["apps/mobile/node_modules/expo/node_modules/expo-font/prebuilds/output/debug/xcframeworks/ExpoFont.tar.gz","49334bfec7c0c87913499c1694e5e00d78fe87e8f18d0497fcfffe24cc5fe4e8",1317476],["apps/mobile/node_modules/expo/node_modules/expo-font/prebuilds/output/release/xcframeworks/ExpoFont.tar.gz","290797137e75ad1edb793ab3019577a0295a4d0196c3684a1737a2d0c2999f92",1265246],["apps/mobile/node_modules/expo-file-system/prebuilds/output/debug/xcframeworks/ExpoFileSystem.tar.gz","3b10e581b292a4550fa940b2d0bcfe2c5274f1a88e974c0af2386ad26fda3f2e",4431085],["apps/mobile/node_modules/expo-file-system/prebuilds/output/release/xcframeworks/ExpoFileSystem.tar.gz","ff79f423af91eafd8b8a3607d2d64b3bed9d3f6098035d3fbd9c94fe910a6766",3235468],["apps/mobile/node_modules/expo-font/prebuilds/output/debug/xcframeworks/ExpoFont.tar.gz","86f51373e8e401513ba873f48f2ae00c1a9cb8df57d5a894842bc940b9eb9639",1229343],["apps/mobile/node_modules/expo-font/prebuilds/output/release/xcframeworks/ExpoFont.tar.gz","b1cdfbaeefca5dfe219743dbce305924158b91569cc3ecf8d5ece0445a2d601a",1173496],["apps/mobile/node_modules/expo-modules-core/prebuilds/output/debug/xcframeworks/ExpoModulesCore.tar.gz","bc3dcb318b342ca373b5149e64989b7e40decd848da6f4931ff817e37d6df639",16127814],["apps/mobile/node_modules/expo-modules-core/prebuilds/output/debug/xcframeworks/ExpoModulesWorklets.tar.gz","581e17eaf29bfbdb1d7e07b5832cc4314bfe89aeddfe9d2fced19ec2b00daff0",1030869],["apps/mobile/node_modules/expo-modules-core/prebuilds/output/release/xcframeworks/ExpoModulesCore.tar.gz","e67a98002c67327a13bba00f645a192799327e57276ce3b1d625e09937bf036c",14239057],["apps/mobile/node_modules/expo-modules-core/prebuilds/output/release/xcframeworks/ExpoModulesWorklets.tar.gz","12f3c6a36d914b1a72e5dd516f541aa71a6fc0feeb770de4f6967a778670d646",975452]]);
+function iosArchiveUnitArgs(relative, output = '/reviewed/temporary/file.tgz') {
+  return ['-f', '-L', '-o', output, pathToFileURL('/reviewed/source/' + relative).href,
+    '--create-dirs', '--netrc-optional', '--retry', '2', "-A 'CocoaPods/1.17.0 cocoapods-downloader/2.1'"];
+}
+test('IOS-ARCHIVE-01 finite official SDK archive catalog preserves the exact CocoaPods argument array', () => {
+  if (typeof process.getuid !== 'function') {
+    assert.throws(() => validateIosLocalArchiveArguments([], '/reviewed/source'), /IOS_HOST_POSIX_OWNER_REQUIRED/);
+    return;
+  }
+  assert.equal(iosArchiveFixtureRows.length, 10); const seen = new Set();
+  for (const [relative, digest, size] of iosArchiveFixtureRows) {
+    const args = iosArchiveUnitArgs(relative), before = [...args];
+    const actual = validateIosLocalArchiveArguments(args, '/reviewed/source');
+    assert.deepEqual(args, before); assert.deepEqual(actual.args, before);
+    assert.notEqual(actual.args, args); assert.equal(actual.archive.path, relative);
+    assert.equal(actual.archive.sha256, digest); assert.equal(actual.archive.sizeBytes, size);
+    assert.ok(Object.isFrozen(actual.archive)); seen.add(actual.archive.path);
+  }
+  assert.equal(seen.size, 10);
+});
+test('IOS-ARCHIVE-02 file URI aliases and unreviewed curl options refuse before any source read', () => {
+  const good = iosArchiveUnitArgs(iosArchiveFixtureRows[0][0]);
+  if (typeof process.getuid !== 'function') {
+    assert.throws(() => validateIosLocalArchiveArguments(good, '/reviewed/source'), /IOS_HOST_POSIX_OWNER_REQUIRED/);
+    return;
+  }
+  for (const change of [args => { args[4] = args[4].replace('file:///', 'file://localhost/'); },
+    args => { args[4] = args[4].replace('file:///', 'file://foreign/'); },
+    args => { args[4] = args[4].replace('/prebuilds/', '/%70rebuilds/'); },
+    args => { args[4] = args[4].replace('/debug/', '/other/../debug/'); },
+    args => { args[4] += '?query=1'; }, args => { args[4] += '#fragment'; },
+    args => { args[4] = args[4].replace('ExpoFont.tar.gz', 'Unknown.tar.gz'); },
+    args => { args[1] = '--location'; }, args => { args.push('-H', 'Authorization: SYNTHETIC'); },
+    args => { args[3] += '\n'; }]) {
+    const args = [...good]; change(args);
+    assert.throws(() => validateIosLocalArchiveArguments(args, '/reviewed/source'), /IOS_HOST_LOCAL_ARCHIVE_/);
+  }
+  assert.throws(() => validateIosCurlArguments(good), /IOS_HOST_HTTPS_DOWNLOAD/);
+});
+test('IOS-ARCHIVE-03 a JSON-shaped local-transfer receipt cannot authorize a command projection', () => {
+  const f = iosProjectionFixture(); f.admitted.localArchive = { args: ['-f'], bytes: Buffer.from('SYNTHETIC'), consumed: false };
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'curl', ['-f'], f.environment), /IOS_HOST_LOCAL_ARCHIVE_RECEIPT/);
+  f.admitted.localArchive.bytes.fill(0);
+});
+test('IOS-ARCHIVE-04 the separately executed actual CLI fixture retains every local-transfer case and phase', () => {
+  const source = fs.readFileSync(new URL('./fixtures/ios-local-archive/runner.mjs', import.meta.url), 'utf8');
+  const match = source.match(/archiveControlCases = Object\.freeze\((\[[^\n]+\])\);/);
+  assert.ok(match); const actual = JSON.parse(match[1]);
+  assert.deepEqual(actual, ["ARCHIVE-01-absent-and-empty-targets","ARCHIVE-02-original-filesystem-archive","ARCHIVE-03-unsafe-uri-and-argv","ARCHIVE-04-changed-manifest-and-archive","ARCHIVE-05-source-replacement-keeps-reviewed-bytes","ARCHIVE-06-target-link-content-and-replacement","ARCHIVE-07-original-write-error-identity","ARCHIVE-08-https-path-and-marker-unchanged"]); assert.equal(new Set(actual).size, 8);
+  assert.match(source, /m\.iosHostCli\(\['curl',\.\.\.args\]\)/);
+  assert.match(source, /phases:24/); assert.match(source, /actualChildren:0,httpRequests:0/);
+  assert.match(source, /assert\.equal\(r\.error,sentinel\)/);
+  assert.match(source, /assert\.equal\(sourceOpens,1\)/);
 });

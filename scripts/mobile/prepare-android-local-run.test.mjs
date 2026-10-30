@@ -7,7 +7,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createAndroidLocalRun, prepareAndroidLocalRun, validateObservedAndroidAuthTraffic } from './prepare-android-local-run.mjs';
-import { androidSessionTransport, inspectLocalPlan, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
+import { androidSessionTransport, inspectLocalPlan, validateAndroidTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
+import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile.mjs';
 
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const reference = (file) => ({ path: file, sha256: hash(readFileSync(file)) });
@@ -15,7 +16,9 @@ const APP = 'ai.caseops.mobile.dev.localacceptance', SERIAL = 'emulator-5584';
 const OPERATIONS = ['disposeMatter', 'readMatterState', 'revokeMatterAccess', 'readNoteState'];
 // Every service, artifact, observation and signature below is explicitly an
 // offline synthetic fixture. No tool, VM, TLS connection or auth is executed.
-function fixture(t, stage = 'consent') {
+function fixture(t, stage = 'consent', selectedProfile = null) {
+  const profile = selectedProfile ?? { udid: 'emulator-5584', adbPort: 5038, appiumUrl: 'http://127.0.0.1:4725', systemPort: 8202, avdName: 'CaseOps_Pixel9_API36_arm64' };
+  const SERIAL = profile.udid;
   const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-android-export-unit-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const save = (name, value) => {
@@ -101,7 +104,7 @@ function fixture(t, stage = 'consent') {
   const deviceObservation = save('device-observation.json', { schemaVersion: 1, kind: 'observed-android-local-device', observed: true,
     platform: 'android', udid: SERIAL, state: 'device', bootCompleted: true, deviceName: 'Explicit synthetic unit model',
     platformVersion: '16.2', apiLevel: 36, architecture: 'arm64-v8a', appId: APP, versionName: '0.1.0-unit', versionCode: 7,
-    installedApkSha256: artifact.sha256, buildReceipt, adbPort: 5038, appiumUrl: 'http://127.0.0.1:4725', systemPort: 8202,
+    installedApkSha256: artifact.sha256, buildReceipt, adbPort: profile.adbPort, appiumUrl: profile.appiumUrl, systemPort: profile.systemPort, avdName: profile.avdName,
     evidence: [save('explicit-synthetic-device-command-evidence.log', 'Offline unit fixture only; this is not an actual Android observation.')] });
   const locators = Object.fromEntries(['urlOpen', 'urlValue', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact',
     'workspace', 'connect', 'urlClose'].map(key => [key, { kind: 'id', value: `synthetic-${key}` }]));
@@ -386,3 +389,87 @@ test('CLI refuses unsafe requests with bounded secret-free diagnostics and no ou
   assert.equal(failure.failed, 'prepare-android-local-run'); assert.equal(failure.reason, 'EMBEDDED_SECRET_FORBIDDEN');
   for (const key of ['outputSeed', 'outputPlan', 'outputFixture']) assert.equal(existsSync(f.request[key]), false);
 });
+
+
+test('owned 16K profile producer and real plan/session consumers agree on the exact complete tuple', t => {
+  const profile = { udid: 'emulator-5580', adbPort: 5040, appiumUrl: 'http://127.0.0.1:4727', systemPort: 8204, avdName: 'CaseOps_PR558_16K_20261028_03' };
+  const f = fixture(t, 'consent', profile), result = prepareAndroidLocalRun(f.request);
+  const plan = JSON.parse(readFileSync(result.plan.path));
+  assert.equal(plan.device.udid, profile.udid);
+  assert.deepEqual(plan.androidTransport, { adbPort: 5040, appiumUrl: 'http://127.0.0.1:4727', systemPort: 8204 });
+  const actual = inspectLocalPlan(plan, 'android', { CASEOPS_MOBILE_CORE_EMAIL: 'unit@example.test', CASEOPS_MOBILE_CORE_PASSWORD: 'synthetic-unit-only', CASEOPS_MOBILE_CORE_TOTP_SECRET: 'JBSWY3DPEHPK3PXP' });
+  assert.deepEqual(actual.readiness.blockers, []);
+  const env = { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5040', ANDROID_ADB_SERVER_PORT: '5040', ANDROID_SERIAL: 'emulator-5580', CASEOPS_MOBILE_APPIUM_URL: 'http://127.0.0.1:4727' };
+  assert.equal(androidSessionTransport(actual.fixture, 'android', env).appiumUrl.href, 'http://127.0.0.1:4727/');
+});
+
+test('new profile producer refuses cross-profile ports, old or missing AVD and mismatched serial before outputs', t => {
+  for (const patch of [{ adbPort: 5038 }, { appiumUrl: 'http://127.0.0.1:4725' }, { systemPort: 8202 },
+    { avdName: 'CaseOps_Pixel9_API36_arm64' }, { avdName: undefined }, { avdName: 'foreign-avd' }, { udid: 'emulator-5584' }]) {
+    const f = fixture(t, 'consent', { udid: 'emulator-5580', adbPort: 5040, appiumUrl: 'http://127.0.0.1:4727', systemPort: 8204, avdName: 'CaseOps_PR558_16K_20261028_03' });
+    f.replace('deviceObservation', value => Object.assign(value, patch)); f.rebindAuth();
+    assert.throws(() => prepareAndroidLocalRun(f.request), /ISOLATED_ANDROID_TRANSPORT_REQUIRED|OBSERVED_ANDROID_AVD_MISMATCH|ACTUAL_READY_ANDROID_DEVICE_REQUIRED/);
+    assert.equal(existsSync(f.request.outputPlan), false); assert.equal(existsSync(f.request.outputFixture), false);
+  }
+});
+
+// Complete profile cases stay in the canonical selected producer module.
+{
+const old = { udid: 'emulator-5584', adbPort: 5038, appiumUrl: 'http://127.0.0.1:4725', systemPort: 8202,
+  avdName: 'CaseOps_Pixel9_API36_arm64', requiresAvdName: false };
+const current = { udid: 'emulator-5580', adbPort: 5040, appiumUrl: 'http://127.0.0.1:4727', systemPort: 8204,
+  avdName: 'CaseOps_PR558_16K_20261028_03', requiresAvdName: true };
+const transport = profile => ({ adbPort: profile.adbPort, appiumUrl: profile.appiumUrl, systemPort: profile.systemPort });
+const fixture = profile => ({ udid: profile.udid, appId: 'ai.caseops.mobile.dev.localacceptance', platformVersion: '16', androidTransport: transport(profile) });
+const environment = profile => ({ ADB_SERVER_SOCKET: `tcp:127.0.0.1:${profile.adbPort}`,
+  ANDROID_ADB_SERVER_PORT: String(profile.adbPort), ANDROID_SERIAL: profile.udid, CASEOPS_MOBILE_APPIUM_URL: profile.appiumUrl });
+
+test('finite Android profiles preserve the complete historical tuple and exact selected owned 16K tuple', () => {
+  for (const expected of [old, current]) {
+    const actual = androidLocalProfile(expected.udid);
+    assert.deepEqual(actual, expected); assert.equal(Object.isFrozen(actual), true);
+    assert.throws(() => { actual.adbPort = 5037; }, TypeError);
+    const value = fixture(expected);
+    assert.deepEqual(validateAndroidTransport(value, 'android'), transport(expected));
+    assert.deepEqual(androidSessionTransport(value, 'android', environment(expected)), {
+      appiumUrl: new URL(expected.appiumUrl), capabilities: { 'appium:adbPort': expected.adbPort, 'appium:systemPort': expected.systemPort },
+    });
+  }
+});
+
+test('finite Android transport rejects cross-profile ports, global defaults, unknown serials and mutated schemas before session dispatch', () => {
+  for (const [selected, other] of [[old, current], [current, old]]) {
+    for (const key of ['adbPort', 'appiumUrl', 'systemPort']) {
+      const value = fixture(selected); value.androidTransport[key] = other[key];
+      assert.throws(() => validateAndroidTransport(value, 'android'), /ANDROID_TRANSPORT_/);
+    }
+    for (const patch of [{ adbPort: 5037 }, { adbPort: '5040' }, { appiumUrl: 'http://127.0.0.1:4723' },
+      { appiumUrl: selected.appiumUrl + '/?unreviewed=1' }, { systemPort: 8200 }, { unexpected: true }]) {
+      const value = fixture(selected); Object.assign(value.androidTransport, patch);
+      assert.throws(() => validateAndroidTransport(value, 'android'), /ANDROID_TRANSPORT_/);
+    }
+    for (const udid of ['emulator-5554', '__proto__', '', 5580, null]) {
+      const value = fixture(selected); value.udid = udid;
+      assert.throws(() => validateAndroidTransport(value, 'android'), /ANDROID_TRANSPORT_DEVICE_MISMATCH/);
+    }
+  }
+});
+
+test('Android session constructors and returned capabilities retain one whole selected profile without mixed aliases', () => {
+  for (const [selected, other] of [[old, current], [current, old]]) {
+    const value = fixture(selected);
+    for (const patch of [{ ADB_SERVER_SOCKET: `tcp:127.0.0.1:${other.adbPort}` }, { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5037' },
+      { ANDROID_ADB_SERVER_PORT: String(other.adbPort) }, { ANDROID_SERIAL: other.udid }, { CASEOPS_MOBILE_APPIUM_URL: other.appiumUrl }]) {
+      assert.throws(() => androidSessionTransport(value, 'android', { ...environment(selected), ...patch }), /ANDROID_TRANSPORT_/);
+    }
+    const capabilities = { platformName: 'Android', automationName: 'UiAutomator2', udid: selected.udid,
+      appPackage: value.appId, platformVersion: value.platformVersion, adbPort: selected.adbPort, systemPort: selected.systemPort };
+    assert.deepEqual(verifyAndroidSessionTransport(value, 'android', capabilities), { type: 'android_transport_verified',
+      source: 'new-session-response', udid: selected.udid, appId: value.appId, ...transport(selected) });
+    for (const patch of [{ udid: other.udid }, { adbPort: other.adbPort }, { systemPort: other.systemPort },
+      { 'appium:adbPort': other.adbPort }, { 'appium:systemPort': other.systemPort }]) {
+      assert.throws(() => verifyAndroidSessionTransport(value, 'android', { ...capabilities, ...patch }), /ANDROID_SESSION_CAPABILITY_MISMATCH/);
+    }
+  }
+});
+}

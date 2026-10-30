@@ -15,7 +15,10 @@ const environment = { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5038', PATH: '/unit/bin'
 
 // Explicit protocol/filesystem doubles only. No adb, VM, appdata, root command
 // or production operation is invoked by these source-contract tests.
-function fixture(t) {
+function fixture(t, selectedProfile = null) {
+  const profile = selectedProfile ?? { udid: 'emulator-5584', adbPort: 5038, appiumUrl: 'http://127.0.0.1:4725', systemPort: 8202, avdName: 'CaseOps_Pixel9_API36_arm64' };
+  const SERIAL = profile.udid;
+  const selectedEnvironment = { ...environment, ADB_SERVER_SOCKET: `tcp:127.0.0.1:${profile.adbPort}` };
   const root = mkdtempSync(path.join(os.tmpdir(), 'caseops-android-files-fs-unit-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const nodes = new Map(), calls = []; let inode = 10;
@@ -28,11 +31,11 @@ function fixture(t) {
   add(PRIVATE); add(PUBLIC); add(`${PRIVATE}/cache`);
   const line = node => [node.kind === 'directory' ? 'directory' : 'regular file', node.uid, node.device, node.inode,
     node.sizeBytes, node.modified, node.changed].join('|');
-  const state = { uid: '0', bootId: '11111111-2222-4333-8444-555555555555', avd: 'CaseOps_Pixel9_API36_arm64', brokenRead: false, listCalls: 0 };
+  const state = { uid: '0', bootId: '11111111-2222-4333-8444-555555555555', avd: profile.avdName, brokenRead: false, listCalls: 0 };
   const command = (binary, args, options) => {
     assert.equal(binary, 'adb'); assert.deepEqual(args.slice(0, 2), ['-s', SERIAL]);
     assert.equal(options.shell, false); assert.ok(options.timeout > 0 && options.timeout <= 15000);
-    assert.equal(options.env.ADB_SERVER_SOCKET, 'tcp:127.0.0.1:5038');
+    assert.equal(options.env.ADB_SERVER_SOCKET, `tcp:127.0.0.1:${profile.adbPort}`);
     assert.equal(Object.hasOwn(options.env, 'CASEOPS_MOBILE_CORE_PASSWORD'), false);
     const argv = args.slice(2); calls.push(argv);
     let value;
@@ -90,7 +93,7 @@ function fixture(t) {
     else assert.fail(`UNEXPECTED_OFFLINE_DEVICE_COMMAND: ${argv[0]}`);
     return options.encoding === 'utf8' ? Buffer.isBuffer(value) ? value.toString() : value : Buffer.from(value);
   };
-  const options = { udid: SERIAL, appId: APP, command, environment };
+  const options = { udid: SERIAL, appId: APP, command, environment: selectedEnvironment };
   const save = (name, value) => {
     const file = path.join(root, name), bytes = Buffer.from(typeof value === 'string' ? value : JSON.stringify(value));
     writeFileSync(file, bytes); return { path: file, sha256: sha(bytes) };
@@ -423,4 +426,24 @@ test('camera body budget shrinks after earlier copies and an uncertain body read
   assert.equal(reads.length, 2);
   const first = Number(/head -c (\d+)/.exec(reads[0])[1]), second = Number(/head -c (\d+)/.exec(reads[1])[1]);
   assert.ok(second < first && second <= CAMERA_PRIVACY_LIMITS.totalBytes - value.counts.bytesRead + 1);
+});
+
+
+test('owned 16K Files attestation binds actual AVD and uses only its exact isolated device/ADB tuple', t => {
+  const f = fixture(t, { udid: 'emulator-5580', adbPort: 5040, appiumUrl: 'http://127.0.0.1:4727', systemPort: 8204, avdName: 'CaseOps_PR558_16K_20261028_03' });
+  assert.equal(f.containers.udid, 'emulator-5580'); assert.equal(f.containers.avdName, 'CaseOps_PR558_16K_20261028_03');
+  assert.equal(f.containers.bootId, '11111111-2222-4333-8444-555555555555'); assert.equal(f.containers.packageUid, 10087);
+  assert.ok(f.calls.length > 0); assert.equal(f.calls.some(args => ['root', 'install', 'push', 'rm'].includes(args[0])), false);
+});
+
+test('owned 16K Files constructor refuses mixed ADB/serial before command and old AVD after read-only identity', t => {
+  const f = fixture(t, { udid: 'emulator-5580', adbPort: 5040, appiumUrl: 'http://127.0.0.1:4727', systemPort: 8204, avdName: 'CaseOps_PR558_16K_20261028_03' });
+  for (const patch of [{ ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5038' }, { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5037' },
+    { ANDROID_ADB_SERVER_PORT: '5038' }, { ANDROID_SERIAL: 'emulator-5584' }]) {
+    let calls = 0;
+    assert.throws(() => attestAndroidFilesContainers({ ...f.options, environment: { ...f.options.environment, ...patch }, command: () => { calls++; } }), /ISOLATED_ANDROID_FILES_ADB_REQUIRED|DEDICATED_ANDROID_FILES_DEVICE_REQUIRED/);
+    assert.equal(calls, 0);
+  }
+  f.state.avd = 'CaseOps_Pixel9_API36_arm64';
+  assert.throws(() => attestAndroidFilesContainers(f.options), /OWNED_ANDROID_AVD_REQUIRED/);
 });

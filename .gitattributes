@@ -118,3 +118,6 @@ tests/fixtures/node-default-tls-probe.cjs text eol=lf
 # Upstream Node licence bytes include intentional space-before-tab indentation.
 license-policy/upstream/node_22.23.4/LICENSE -text whitespace=-space-before-tab
 apps/web/public/third-party-notices/node-22.23.4-LICENSE.txt -text whitespace=-space-before-tab
+
+apps/mobile/e2e/android-local-profile.mjs text eol=lf
+scripts/mobile/fixtures/ios-local-archive/runner.mjs text eol=lf

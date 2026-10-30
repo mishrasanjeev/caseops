@@ -11,10 +11,10 @@ import { validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { binaryHash } from '../../apps/mobile/e2e/support.mjs';
 import { validateSessionDeletePolicy } from '../../apps/mobile/e2e/session-admission.mjs';
+import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile.mjs';
 
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const QA_ID = 'ai.caseops.mobile.dev.localacceptance';
-const SERIAL = 'emulator-5584';
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const encoded = (value) => `${JSON.stringify(value, null, 2)}\n`;
 function reference(value) {
@@ -53,7 +53,7 @@ function identity(left, right, keys, code) {
 function sameReference(actual, expected, code) { assert.deepEqual(reference(actual), expected, code); }
 
 function observedDevice(observation, request, build, buildRef) {
-  assert.equal(request.udid, SERIAL, 'DEDICATED_ANDROID_SERIAL_REQUIRED');
+  const profile = androidLocalProfile(request.udid, 'DEDICATED_ANDROID_SERIAL_REQUIRED');
   identity(observation, { schemaVersion: 1, kind: 'observed-android-local-device', observed: true,
     platform: 'android', udid: request.udid, state: 'device', bootCompleted: true,
     apiLevel: 36, architecture: 'arm64-v8a', appId: QA_ID },
@@ -64,8 +64,11 @@ function observedDevice(observation, request, build, buildRef) {
   nonempty(observation.versionName, 'OBSERVED_ANDROID_APP_VERSION_REQUIRED');
   assert.equal(observation.installedApkSha256, build.binaryHash, 'OBSERVED_INSTALLED_APK_MISMATCH');
   sameReference(observation.buildReceipt, buildRef, 'DEVICE_BUILD_REFERENCE_MISMATCH');
-  identity(observation, { adbPort: 5038, appiumUrl: 'http://127.0.0.1:4725', systemPort: 8202 },
+  identity(observation, profile,
     ['adbPort', 'appiumUrl', 'systemPort'], 'ISOLATED_ANDROID_TRANSPORT_REQUIRED');
+  if (profile.requiresAvdName || Object.hasOwn(observation, 'avdName')) {
+    assert.equal(observation.avdName, profile.avdName, 'OBSERVED_ANDROID_AVD_MISMATCH');
+  }
   assert.ok(Array.isArray(observation.evidence) && observation.evidence.length > 0 && observation.evidence.length <= 16,
     'ACTUAL_ANDROID_DEVICE_EVIDENCE_REQUIRED');
   const paths = new Set();

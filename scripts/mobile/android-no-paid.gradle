@@ -36,7 +36,7 @@ final class CaseOpsReviewedRedirectPolicy {
         return decodedPath.normalize().path == uri.path
     }
     CaseOpsReviewedRedirectPolicy(Collection<String> configuredBases, String markerName, String markerValue) {
-        require(configuredBases != null && configuredBases.size() >= 1 && configuredBases.size() <= 10, 'ANDROID_REVIEWED_BASE_COUNT')
+        require(configuredBases != null && configuredBases.size() >= 1 && configuredBases.size() <= 9, 'ANDROID_REVIEWED_BASE_COUNT')
         List<URI> parsed = configuredBases.toList().sort().collect { String text ->
             URI uri = new URI(text)
             require(canonicalHttps(uri) && uri.toASCIIString() == text && !uri.rawPath.endsWith('/'), 'ANDROID_REVIEWED_BASE_CANONICAL')
@@ -45,7 +45,7 @@ final class CaseOpsReviewedRedirectPolicy {
         require(parsed.toSet().size() == parsed.size(), 'ANDROID_DUPLICATE_REVIEWED_BASE')
         this.bases = Collections.unmodifiableList(parsed)
         List<Map<String,Object>> exactScopes = parsed.collect { URI uri -> Collections.unmodifiableMap([host:uri.host, port:effectivePort(uri)]) }.unique().sort { a,b -> a.host <=> b.host ?: a.port <=> b.port }
-        require(exactScopes.size() >= 1 && exactScopes.size() <= 8 && exactScopes.every { it.host != null && it.port > 0 }, 'ANDROID_EXACT_AUTHORITY_SCOPES')
+        require(exactScopes.size() >= 1 && exactScopes.size() <= 9 && exactScopes.every { it.host != null && it.port > 0 }, 'ANDROID_EXACT_AUTHORITY_SCOPES')
         this.scopes = Collections.unmodifiableList(exactScopes)
         this.markerName = markerName; this.markerValue = markerValue
         this.digest = java.security.MessageDigest.getInstance('SHA-256').digest(parsed.collect { it.toASCIIString() }.join('\n').getBytes('UTF-8')).encodeHex().toString()
@@ -62,7 +62,7 @@ final class CaseOpsReviewedRedirectPolicy {
         def credentials = ((AuthenticationInternal)authentication).credentials
         require(credentials instanceof HttpHeaderCredentials && credentials.name == markerName && credentials.value == markerValue, 'ANDROID_CONNECTOR_FIXED_MARKER')
         def originalScopes = ((AuthenticationInternal)authentication).hostsForAuthentication.toList()
-        require(originalScopes.size() >= 1 && originalScopes.size() <= 8 && originalScopes.every { host -> host.host != null && scopes.any { it.host == host.host && it.port == (host.port == -1 ? 443 : host.port) } }, 'ANDROID_CONNECTOR_UNREVIEWED_AUTH_SCOPE')
+        require(originalScopes.size() >= 1 && originalScopes.size() <= 9 && originalScopes.every { host -> host.host != null && scopes.any { it.host == host.host && it.port == (host.port == -1 ? 443 : host.port) } }, 'ANDROID_CONNECTOR_UNREVIEWED_AUTH_SCOPE')
         // A private per-constructor copy prevents later repository -1 additions
         // from widening this client's provider, including concurrent resolution.
         def fixed = new DefaultHttpHeaderCredentials() { }
@@ -120,7 +120,7 @@ final Set<String> repositoryBases = [
     'https://central.sonatype.com/repository/maven-snapshots',
     'https://www.jitpack.io',
 ] as Set
-final Set<String> reviewedRedirectBases = [] as Set
+final Set<String> reviewedRedirectBases = Collections.singleton('https://plugins-artifacts.gradle.org')
 final CaseOpsReviewedRedirectPolicy markedRedirectPolicy = new CaseOpsReviewedRedirectPolicy((repositoryBases + reviewedRedirectBases).toList(), markerName, markerValue)
 def installMarkedHttpConstructor = {
     if (gradle.gradleVersion != '9.4.1') throw new GradleException('ANDROID_REVIEWED_HTTP_GRADLE_VERSION')

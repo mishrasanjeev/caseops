@@ -7,6 +7,7 @@ import { admitApplication, SEARCH_KINDS, validateBuildReceipt, validateCoreFixtu
 import { binaryHash, localUrl, safeFailure } from './support.mjs';
 import { collect } from './suite.mjs';
 import { validateSessionDeletePolicy } from './session-admission.mjs';
+import { androidLocalProfile } from './android-local-profile.mjs';
 
 const allCases = collect('android').intended.map((id) => id.split(':')[1]);
 function noEmbeddedSecrets(value) {
@@ -35,10 +36,10 @@ export function validateAndroidTransport(fixture, platform, build) {
   assert.ok(value && typeof value === 'object' && !Array.isArray(value)
     && Object.keys(value).length === 3 && ['adbPort', 'appiumUrl', 'systemPort'].every(key => Object.hasOwn(value, key)),
   'ANDROID_TRANSPORT_SCHEMA_REQUIRED');
-  assert.equal(fixture.udid, 'emulator-5584', 'ANDROID_TRANSPORT_DEVICE_MISMATCH');
-  assert.equal(value.adbPort, 5038, 'ANDROID_TRANSPORT_ADB_PORT_MISMATCH');
-  assert.equal(value.appiumUrl, 'http://127.0.0.1:4725', 'ANDROID_TRANSPORT_APPIUM_URL_MISMATCH');
-  assert.equal(value.systemPort, 8202, 'ANDROID_TRANSPORT_SYSTEM_PORT_MISMATCH');
+  const profile = androidLocalProfile(fixture.udid, 'ANDROID_TRANSPORT_DEVICE_MISMATCH');
+  assert.equal(value.adbPort, profile.adbPort, 'ANDROID_TRANSPORT_ADB_PORT_MISMATCH');
+  assert.equal(value.appiumUrl, profile.appiumUrl, 'ANDROID_TRANSPORT_APPIUM_URL_MISMATCH');
+  assert.equal(value.systemPort, profile.systemPort, 'ANDROID_TRANSPORT_SYSTEM_PORT_MISMATCH');
   return { adbPort: value.adbPort, appiumUrl: value.appiumUrl, systemPort: value.systemPort };
 }
 
@@ -49,7 +50,7 @@ export function androidSessionTransport(fixture, platform, environment = process
     transport.appiumUrl, 'ANDROID_TRANSPORT_APPIUM_ENVIRONMENT_MISMATCH');
   // attestAndroidBinary invokes plain adb; its server must be the same one the
   // UiAutomator2 driver receives, not the inherited global5037 server.
-  assert.equal(environment.ADB_SERVER_SOCKET, 'tcp:127.0.0.1:5038', 'ANDROID_TRANSPORT_ADB_SOCKET_REQUIRED');
+  assert.equal(environment.ADB_SERVER_SOCKET, `tcp:127.0.0.1:${transport.adbPort}`, 'ANDROID_TRANSPORT_ADB_SOCKET_REQUIRED');
   if (environment.ANDROID_ADB_SERVER_PORT !== undefined) assert.equal(environment.ANDROID_ADB_SERVER_PORT,
     String(transport.adbPort), 'ANDROID_TRANSPORT_ADB_ENVIRONMENT_MISMATCH');
   if (environment.ANDROID_SERIAL !== undefined) assert.equal(environment.ANDROID_SERIAL,

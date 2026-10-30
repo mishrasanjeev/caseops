@@ -40,6 +40,7 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     total = strategy["matrix"]["total_shards"][0]
     assert job["name"] == "Postgres + pgvector shard ${{ matrix.shard }}/${{ matrix.total_shards }}"
     step = next(item for item in job["steps"] if item.get("name") == "Pytest -m postgres")
+    assert step["timeout-minutes"] == 9 < job["timeout-minutes"]
     assert shlex.split(step["run"]) == [
         "uv", "run", "python", "-m", "pytest", "-q", "-m", "postgres",
     ]
@@ -53,6 +54,7 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
             "-p", "tests.postgres_sharding", f"--postgres-shard={shard}",
             f"--postgres-shards={total}", f"--postgres-inventory=postgres-shard-{shard}.json",
             f"--junitxml=postgres-shard-{shard}.xml",
+            "-o", "faulthandler_timeout=60",
         ]
         journal = _render_postgres_matrix(step["env"]["CASEOPS_TEST_RESULT_JOURNAL"], shard, total)
         assert journal == f"postgres-shard-{shard}.jsonl"

@@ -470,6 +470,96 @@ export function validateIosCurlArguments(args) {
   } else assert.fail('IOS_HOST_EXACT_SDK_CURL_FORM');
   return { args: [...args, '-H', 'X-CaseOps-Automated-Test: no-paid-providers'], output, family };
 }
+
+const IOS_LOCAL_ARCHIVES = (() => { const value = {"schemaVersion":1,"lock":{"path":"apps/mobile/package-lock.json","sha256":"8a9b0e636a7444477d1c3cc26a21b80a808529e59ba88f269a3a1bf89ab3cec0","sizeBytes":266987},"producer":{"path":"apps/mobile/node_modules/expo-modules-autolinking/scripts/ios/precompiled_modules.rb","sha256":"480dc0e74b8712833cace4087c9ab16cd3115caa2849786432eb2c387e2f743e","sizeBytes":128827},"packages":{"node_modules/expo/node_modules/expo-font":{"name":"expo-font","version":"58.0.11","manifestSha256":"a39a111996fb3549857ce64b59fee0900af9d953f9b8581e5f116ae647041220","manifestSizeBytes":2260,"integrity":"sha512-6r7s6xk2L2orvum+x+TY1fzEcMtuCBRQTLgC/Su2uLzNPpT4L+E+S4IAGy8ZIjeVvwk2j2pj+HiZ23O7eh1PGQ==","resolved":"https://registry.npmjs.org/expo-font/-/expo-font-58.0.11.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"},"node_modules/expo-file-system":{"name":"expo-file-system","version":"58.0.13","manifestSha256":"7a5f05dffbdfb6071054dc164f44be739b25397f846845a38989686ef7b32cac","manifestSizeBytes":2254,"integrity":"sha512-+/1aFErkawyky5UdWI06zYeO2DeHUnfaWnYHeiI8M8Z/sB6L66gI3WUxqtvUvKJoaM0Ti1CximD3x3JwteLYIg==","resolved":"https://registry.npmjs.org/expo-file-system/-/expo-file-system-58.0.13.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"},"node_modules/expo-font":{"name":"expo-font","version":"58.0.10","manifestSha256":"c5e1bb077f5a2193b58e5942ce0713398d08afa1cd0cf2372e196bce47d5e9c4","manifestSizeBytes":2260,"integrity":"sha512-13orvRCiXg3EuirjMznWTKwFzhKHvtHRkUdgbvolbkyA1+EAbYDpp7LJMnvDnbTFU/m8Kb5awvOiaGzPYQ/ojg==","resolved":"https://registry.npmjs.org/expo-font/-/expo-font-58.0.10.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"},"node_modules/expo-modules-core":{"name":"expo-modules-core","version":"58.0.28","manifestSha256":"47517f4ef32b3d385516b939e99800b0a816481682ecb94c409eae9720827373","manifestSizeBytes":2846,"integrity":"sha512-2FCnT8mIubdQAHVtX9fVMN9qajF7hGDC3CjxxBG0HlyK7NEsxUDKkukiNVzqQpwiI+jJx7ysG0YvATwKKlu1sw==","resolved":"https://registry.npmjs.org/expo-modules-core/-/expo-modules-core-58.0.28.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"}},"archives":[{"path":"apps/mobile/node_modules/expo/node_modules/expo-font/prebuilds/output/debug/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo/node_modules/expo-font","flavor":"debug","product":"ExpoFont","sha256":"49334bfec7c0c87913499c1694e5e00d78fe87e8f18d0497fcfffe24cc5fe4e8","sizeBytes":1317476},{"path":"apps/mobile/node_modules/expo/node_modules/expo-font/prebuilds/output/release/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo/node_modules/expo-font","flavor":"release","product":"ExpoFont","sha256":"290797137e75ad1edb793ab3019577a0295a4d0196c3684a1737a2d0c2999f92","sizeBytes":1265246},{"path":"apps/mobile/node_modules/expo-file-system/prebuilds/output/debug/xcframeworks/ExpoFileSystem.tar.gz","packageRelative":"node_modules/expo-file-system","flavor":"debug","product":"ExpoFileSystem","sha256":"3b10e581b292a4550fa940b2d0bcfe2c5274f1a88e974c0af2386ad26fda3f2e","sizeBytes":4431085},{"path":"apps/mobile/node_modules/expo-file-system/prebuilds/output/release/xcframeworks/ExpoFileSystem.tar.gz","packageRelative":"node_modules/expo-file-system","flavor":"release","product":"ExpoFileSystem","sha256":"ff79f423af91eafd8b8a3607d2d64b3bed9d3f6098035d3fbd9c94fe910a6766","sizeBytes":3235468},{"path":"apps/mobile/node_modules/expo-font/prebuilds/output/debug/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo-font","flavor":"debug","product":"ExpoFont","sha256":"86f51373e8e401513ba873f48f2ae00c1a9cb8df57d5a894842bc940b9eb9639","sizeBytes":1229343},{"path":"apps/mobile/node_modules/expo-font/prebuilds/output/release/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo-font","flavor":"release","product":"ExpoFont","sha256":"b1cdfbaeefca5dfe219743dbce305924158b91569cc3ecf8d5ece0445a2d601a","sizeBytes":1173496},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/debug/xcframeworks/ExpoModulesCore.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"debug","product":"ExpoModulesCore","sha256":"bc3dcb318b342ca373b5149e64989b7e40decd848da6f4931ff817e37d6df639","sizeBytes":16127814},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/debug/xcframeworks/ExpoModulesWorklets.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"debug","product":"ExpoModulesWorklets","sha256":"581e17eaf29bfbdb1d7e07b5832cc4314bfe89aeddfe9d2fced19ec2b00daff0","sizeBytes":1030869},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/release/xcframeworks/ExpoModulesCore.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"release","product":"ExpoModulesCore","sha256":"e67a98002c67327a13bba00f645a192799327e57276ce3b1d625e09937bf036c","sizeBytes":14239057},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/release/xcframeworks/ExpoModulesWorklets.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"release","product":"ExpoModulesWorklets","sha256":"12f3c6a36d914b1a72e5dd516f541aa71a6fc0feeb770de4f6967a778670d646","sizeBytes":975452}]}; Object.freeze(value.lock); Object.freeze(value.producer); Object.values(value.packages).forEach(Object.freeze); Object.freeze(value.packages); value.archives.forEach(Object.freeze); Object.freeze(value.archives); return Object.freeze(value); })();
+const localArchiveReceipts = new WeakSet();
+export function validateIosLocalArchiveArguments(args, sourceRoot) {
+  assert.ok(typeof process.getuid === 'function', 'IOS_HOST_POSIX_OWNER_REQUIRED');
+  assert.ok(absolute(sourceRoot) && cleanText(sourceRoot), 'IOS_HOST_LOCAL_ARCHIVE_ROOT');
+  assert.ok(Array.isArray(args) && [10, 12].includes(args.length), 'IOS_HOST_LOCAL_ARCHIVE_FORM');
+  assert.deepEqual(args.slice(0, 3), ['-f', '-L', '-o'], 'IOS_HOST_LOCAL_ARCHIVE_FORM');
+  assert.deepEqual(args.slice(5, 9), ['--create-dirs', '--netrc-optional', '--retry', '2'], 'IOS_HOST_LOCAL_ARCHIVE_FORM');
+  assert.equal(args[9], "-A 'CocoaPods/1.17.0 cocoapods-downloader/2.1'", 'IOS_HOST_LOCAL_ARCHIVE_FORM');
+  if (args.length === 12) assert.deepEqual(args.slice(10), ['-H', 'X-CaseOps-Automated-Test: no-paid-providers'], 'IOS_HOST_LOCAL_ARCHIVE_FORM');
+  assert.ok(args.every(v => cleanText(v)) && absolute(args[3]) && path.basename(args[3]) === 'file.tgz', 'IOS_HOST_LOCAL_ARCHIVE_FORM');
+  assert.ok(args[4].startsWith('file:///'), 'IOS_HOST_LOCAL_ARCHIVE_URI');
+  const url = new URL(args[4]);
+  assert.ok(url.protocol === 'file:' && !url.hostname && !url.username && !url.password && !url.search && !url.hash, 'IOS_HOST_LOCAL_ARCHIVE_URI');
+  const matches = IOS_LOCAL_ARCHIVES.archives.filter(row => args[4] === pathToFileURL(path.join(sourceRoot, row.path)).href);
+  assert.equal(matches.length, 1, 'IOS_HOST_LOCAL_ARCHIVE_UNKNOWN');
+  return { args: [...args], output: args[3], archive: matches[0], sourceRoot };
+}
+function reviewIosLocalArchive(p, args, end) {
+  const root = path.resolve(path.dirname(p.helper.path), '../..');
+  directory(root, end, false); assert.equal(fs.lstatSync(root, { bigint: true }).uid, BigInt(process.getuid()), 'IOS_HOST_LOCAL_ARCHIVE_ROOT');
+  const form = validateIosLocalArchiveArguments(args, root), table = IOS_LOCAL_ARCHIVES;
+  assert.equal(table.schemaVersion, 1, 'IOS_HOST_LOCAL_ARCHIVE_CATALOG');
+  assert.ok(table.archives.length === 10 && Object.keys(table.packages).length === 4 && table.archives.reduce((n, x) => n + x.sizeBytes, 0) === 45025306, 'IOS_HOST_LOCAL_ARCHIVE_CATALOG');
+  const relativeTarget = path.relative(p.paths.temporary, form.output).split(path.sep);
+  assert.ok(relativeTarget.length === 2 && /^d[0-9]{8}-[0-9]+-[a-z0-9]+$/.test(relativeTarget[0]) && relativeTarget[1] === 'file.tgz', 'IOS_HOST_LOCAL_ARCHIVE_OUTPUT');
+  const outputParent = directory(path.dirname(form.output), end);
+  const read = (relative, pin, size, max) => {
+    const file = path.join(root, relative), input = readIosHostInput({ path: file, sha256: pin, sizeBytes: size }, { end, maxBytes: max });
+    try { assert.equal(input.canonical, file, 'IOS_HOST_LOCAL_ARCHIVE_SOURCE_ALIAS'); return input; }
+    catch (error) { input.bytes.fill(0); throw error; }
+  };
+  let lock, producer, manifest, archive;
+  try {
+    lock = read(table.lock.path, table.lock.sha256, table.lock.sizeBytes, 1048576);
+    const locked = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(lock.bytes)).packages[form.archive.packageRelative];
+    const pkg = table.packages[form.archive.packageRelative];
+    assert.ok(locked && locked.version === pkg.version && locked.integrity === pkg.integrity && locked.resolved === pkg.resolved && !locked.link, 'IOS_HOST_LOCAL_ARCHIVE_LOCK');
+    producer = read(table.producer.path, table.producer.sha256, table.producer.sizeBytes, 262144);
+    manifest = read('apps/mobile/' + form.archive.packageRelative + '/package.json', pkg.manifestSha256, pkg.manifestSizeBytes, 65536);
+    const packageValue = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifest.bytes));
+    assert.ok(packageValue.name === pkg.name && packageValue.version === pkg.version, 'IOS_HOST_LOCAL_ARCHIVE_PACKAGE');
+    archive = read(form.archive.path, form.archive.sha256, form.archive.sizeBytes, 33554432);
+    const receipt = { ...form, outputParent, bytes: archive.bytes, expectedSha256: form.archive.sha256, consumed: false,
+      source: { path: archive.canonical, metadata: archive.metadata, namespace: archive.namespace } };
+    archive = null; localArchiveReceipts.add(receipt); return receipt;
+  } finally { lock?.bytes.fill(0); producer?.bytes.fill(0); manifest?.bytes.fill(0); archive?.bytes.fill(0); }
+}
+function checkIosLocalArchiveSource(receipt, end) {
+  check(end); const source = receipt.source, current = fs.lstatSync(source.path, { bigint: true });
+  assert.ok(current.isFile() && !current.isSymbolicLink() && fs.realpathSync(source.path) === source.path, 'IOS_HOST_LOCAL_ARCHIVE_SOURCE_CHANGED');
+  assert.deepEqual(fields.map(k => String(current[k])), source.metadata, 'IOS_HOST_LOCAL_ARCHIVE_SOURCE_CHANGED');
+  assert.deepEqual(namespace(source.path, end), source.namespace, 'IOS_HOST_LOCAL_ARCHIVE_SOURCE_NAMESPACE_CHANGED');
+}
+function transferIosLocalArchive(command, end) {
+  const receipt = command.localArchive;
+  assert.ok(receipt && localArchiveReceipts.has(receipt) && receipt.consumed === false && Buffer.isBuffer(receipt.bytes), 'IOS_HOST_LOCAL_ARCHIVE_RECEIPT');
+  receipt.consumed = true;
+  assert.equal(sha(receipt.bytes), receipt.expectedSha256, 'IOS_HOST_LOCAL_ARCHIVE_BUFFER_CHANGED');
+  checkIosLocalArchiveSource(receipt, end);
+  const output = receipt.output;
+  assert.deepEqual(directory(path.dirname(output), end), receipt.outputParent, 'IOS_HOST_LOCAL_ARCHIVE_OUTPUT_NAMESPACE_CHANGED');
+  ownedMutationPath(output, command.policy.paths, end);
+  const parents = namespace(output, end); let fd;
+  try {
+    try { fd = fs.openSync(output, fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK, 0o600); }
+    catch (error) { if (error.code !== 'EEXIST') throw error; fd = fs.openSync(output, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK); }
+    const before = fs.fstatSync(fd, { bigint: true });
+    assert.ok(before.isFile() && before.uid === BigInt(process.getuid()) && before.nlink === 1n && before.size === 0n && (before.mode & 0o022n) === 0n, 'IOS_HOST_LOCAL_ARCHIVE_EMPTY_OUTPUT');
+    const named = fs.lstatSync(output, { bigint: true });
+    assert.ok(named.isFile() && !named.isSymbolicLink() && same(before, named) && fs.realpathSync(output) === output, 'IOS_HOST_LOCAL_ARCHIVE_OUTPUT_CHANGED');
+    checkIosLocalArchiveSource(receipt, end);
+    let at = 0;
+    while (at < receipt.bytes.length) { check(end); const n = fs.writeSync(fd, receipt.bytes, at, Math.min(65536, receipt.bytes.length - at), at); assert.ok(n > 0, 'IOS_HOST_LOCAL_ARCHIVE_WRITE'); at += n; }
+    fs.fsyncSync(fd);
+    const written = fs.fstatSync(fd, { bigint: true });
+    assert.equal(written.size, BigInt(receipt.bytes.length), 'IOS_HOST_LOCAL_ARCHIVE_OUTPUT_CHANGED');
+    const hash = createHash('sha256'), chunk = Buffer.alloc(65536); at = 0;
+    try { while (at < receipt.bytes.length) { check(end); const n = fs.readSync(fd, chunk, 0, Math.min(chunk.length, receipt.bytes.length - at), at); assert.ok(n > 0, 'IOS_HOST_LOCAL_ARCHIVE_READBACK'); hash.update(chunk.subarray(0, n)); at += n; } }
+    finally { chunk.fill(0); }
+    assert.equal(hash.digest('hex'), receipt.expectedSha256, 'IOS_HOST_LOCAL_ARCHIVE_READBACK');
+    const after = fs.fstatSync(fd, { bigint: true }), finalNamed = fs.lstatSync(output, { bigint: true });
+    assert.ok(after.isFile() && same(written, after) && same(after, finalNamed) && !finalNamed.isSymbolicLink() && fs.realpathSync(output) === output, 'IOS_HOST_LOCAL_ARCHIVE_OUTPUT_CHANGED');
+    assert.deepEqual(namespace(output, end), parents, 'IOS_HOST_LOCAL_ARCHIVE_OUTPUT_NAMESPACE_CHANGED');
+    checkIosLocalArchiveSource(receipt, end);
+    return 0;
+  } finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+
 const gitRef = s => cleanText(s, 256) && /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(s) && !s.includes('..') && !s.includes('//') && !s.endsWith('/') && !s.endsWith('.lock');
 const mutationRoots = paths => [...['cache', 'temporary', 'pods', 'repos'].map(k => paths[k]), path.join(paths.home, 'Library/Caches/ReactNative'), ...(typeof paths.projectPods === 'string' ? [paths.projectPods] : [])];
 const ownedPath = (value, paths) => absolute(value) && mutationRoots(paths).some(p => value.startsWith(p + path.sep));
@@ -642,9 +732,10 @@ export async function composeIosHostCommand(policyRef, role, args, { environment
   try {
     if (['APP_PATH', 'REACT_NATIVE_PATH'].some(name => Object.hasOwn(environment, name)))
       admitted.podBuildPaths = reviewIosPodBuildPaths(admitted.policy, { end });
+    if (role === 'curl' && args[0] === '-f' && args[4]?.startsWith('file:')) admitted.localArchive = reviewIosLocalArchive(admitted.policy, args, end);
     return iosHostCommandProjection(admitted, policyRef, role, args, environment);
   }
-  finally { admitted.bundle?.bytes.fill(0); admitted.podsSource.fill(0); admitted.podEntry.fill(0); }
+  finally { admitted.bundle?.bytes.fill(0); admitted.localArchive?.bytes.fill(0); admitted.podsSource.fill(0); admitted.podEntry.fill(0); }
 }
 // Pure projection, not an admission or execution API. The actual CLI always
 // obtains this object through verifyIosHostLaunch; JSON cannot supply it.
@@ -699,7 +790,12 @@ export function iosHostCommandProjection(admitted, policyRef, role, args, enviro
         neutral.CASEOPS_IOS_PODS_TLS_POLICY = JSON.stringify({ bundle: p.bundle, empty: p.paths.empty, home: p.paths.home, podHome: p.podHome, rubyGems: p.rubyGems, fixtureSha256: p.fixtureCA?.certificateSha256 ?? null });
         neutral.CASEOPS_IOS_POD_SOURCE_BASE64 = admitted.podEntry.toString('base64');
     }
-    if (role === 'curl') {
+    if (role === 'curl' && admitted.localArchive) {
+      assert.ok(localArchiveReceipts.has(admitted.localArchive), 'IOS_HOST_LOCAL_ARCHIVE_RECEIPT');
+      assert.deepEqual(args, admitted.localArchive.args, 'IOS_HOST_LOCAL_ARCHIVE_ARGUMENT_CHANGED');
+      result.localArchive = admitted.localArchive; admitted.localArchive = null;
+      result.curl = { family: 'expo-sdk-local-archive', output: result.localArchive.output, args: [...args] };
+    } else if (role === 'curl') {
       const form = validateIosCurlArguments(args);
       result.executable = p.tools.curl.path; result.args = ['--disable', '--cacert', '/dev/fd/3', '--proto', '=https', '--proto-redir', '=https', ...form.args];
       assert.ok(form.output === null || ownedPath(form.output, p.paths), 'IOS_HOST_CURL_OWNED_OUTPUT'); result.curl = form;
@@ -841,6 +937,7 @@ export async function iosHostCli(args) {
   const command = await composeIosHostCommand(policyRef, args[0], args.slice(1), { environment: process.env, end });
   const p = command.policy;
   let caTransport, originalStatus, mutationFence, originalFailure;
+  const originalStatusLabel = command.localArchive ? 'IOS_HOST_ORIGINAL_LOCAL_TRANSFER_EXIT_' : 'IOS_HOST_ORIGINAL_CHILD_EXIT_';
   try {
     command.node.helper.assertHostNodeTrust({ policyRef: p.nodePolicy, role: p.role, expectedFixtureCA: p.fixtureCA });
     assert.ok(process.platform === 'darwin', 'IOS_HOST_MACOS_REQUIRED');
@@ -857,7 +954,7 @@ export async function iosHostCli(args) {
       // same complete postflight. This is not OS-default trust acceptance.
       if (command.git) command.args = command.args.map(v => v === 'http.sslCAInfo=/dev/fd/3' ? 'http.sslCAInfo=' + caTransport.file : v);
     }
-    const status = await new Promise((resolve, reject) => {
+    const status = command.localArchive ? transferIosLocalArchive(command, end) : await new Promise((resolve, reject) => {
       const child = spawn(command.executable, command.args, { cwd: command.cwd, env: command.environment, stdio: command.bundle
         ? ['ignore', 'inherit', 'inherit', caTransport.fd] : command.input ? ['pipe', 'inherit', 'inherit'] : 'inherit', shell: false });
       let ended = false;
@@ -882,18 +979,18 @@ export async function iosHostCli(args) {
     return status;
   } catch (error) {
     originalFailure = error;
-    if (originalStatus !== undefined) console.error('IOS_HOST_ORIGINAL_CHILD_EXIT_' + originalStatus);
+    if (originalStatus !== undefined) console.error(originalStatusLabel + originalStatus);
     throw error;
   } finally {
     try { caTransport?.finish(Math.min(Date.now() + 20000, p.deadlineEpochMs)); }
     catch (error) {
       console.error('IOS_HOST_TRANSPORT_CLEANUP_REFUSED');
       if (!originalFailure) {
-        if (originalStatus !== undefined) console.error('IOS_HOST_ORIGINAL_CHILD_EXIT_' + originalStatus);
+        if (originalStatus !== undefined) console.error(originalStatusLabel + originalStatus);
         throw error;
       }
     }
-    finally { command.bundle?.fill(0); command.input?.fill(0); }
+    finally { command.bundle?.fill(0); command.input?.fill(0); command.localArchive?.bytes.fill(0); }
   }
 }
 if (import.meta.url.startsWith('file:') && process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
