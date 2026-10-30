@@ -54,7 +54,13 @@ const root = process.argv[2];
 assert.match(fs.readFileSync(path.join(root, 'java21.log'), 'utf8'), /Temurin-21\.0\.12\.1\+1\b/, 'PINNED_TEMURIN_21_REQUIRED');
 assert.match(fs.readFileSync(path.join(root, 'java17.log'), 'utf8'), /Temurin-17\.0\.20\.1\+1\b/, 'PINNED_TEMURIN_17_REQUIRED');
 NODE
-export PATH="$JAVA_HOME/bin:$PATH"
+if [[ -n "${CASEOPS_ANDROID_HOST_POLICY_FILE:-}" || -n "${CASEOPS_ANDROID_HOST_POLICY_SHA256:-}" ]]; then
+  : "${CASEOPS_ANDROID_HOST_POLICY_FILE:?Supply the admitted Android role policy}"
+  : "${CASEOPS_ANDROID_HOST_POLICY_SHA256:?Supply its exact SHA256}"
+  [[ "$(command -v java)" = "$JAVA_HOME/bin/java" ]] || { echo 'ADMITTED_ANDROID_JAVA_PATH_REQUIRED' >&2; exit 1; }
+else
+  export PATH="$JAVA_HOME/bin:$PATH"
+fi
 export CASEOPS_MOBILE_BUILD_PROFILE=android-local-acceptance CASEOPS_MOBILE_AUTOMATED_TEST=1
 export CASEOPS_MOBILE_RELEASE_SHA="$(git -C "$repo" rev-parse HEAD)"
 export NODE_ENV=production EXPO_NO_DOTENV=1 CMAKE_BUILD_PARALLEL_LEVEL=2

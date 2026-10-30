@@ -308,6 +308,47 @@ test('Android role PATH binding rejects dropped shadowed duplicated and relative
   for (const actual of ['/usr/bin:/bin', '/foreign:/owned/role:/usr/bin:/bin', '/owned/role:/usr/bin:/bin:/foreign']) assert.throws(() => assertAndroidNodePath({ PATH: actual }, shim, sourcePath), /ANDROID_HOST_NODE_SHIM_PATH_REQUIRED/);
   for (const invalid of ['/owned/role:/usr/bin', '.:/usr/bin', '/usr/bin::/bin', '/usr/bin\n/bin']) assert.throws(() => assertAndroidNodePath({ PATH: '/owned/role:' + invalid }, shim, invalid), /ANDROID_HOST_SOURCE_PATH/);
 });
+
+function wrapperJavaPathFixture(t) {
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-wrapper-java-path-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const role = path.join(root, 'role'), javaHome = path.join(root, 'jdk21'), foreign = path.join(root, 'foreign');
+  for (const directory of [role, path.join(javaHome, 'bin'), foreign]) mkdirSync(directory, { recursive: true, mode: 0o700 });
+  for (const file of [path.join(javaHome, 'bin/java'), path.join(foreign, 'java')])
+    writeFileSync(file, '#!/bin/bash\necho JAVA_MUST_NOT_EXECUTE >&2\nexit 99\n', { mode: 0o700, flag: 'wx' });
+  const source = readFileSync(new URL('./build-android-local-acceptance.sh', import.meta.url), 'utf8');
+  const block = /^if \[\[ -n "\$\{CASEOPS_ANDROID_HOST_POLICY_FILE:-\}" \|\| -n "\$\{CASEOPS_ANDROID_HOST_POLICY_SHA256:-\}" \]\]; then\n[\s\S]*?^fi$/m.exec(source)?.[0];
+  assert.ok(block, 'ACTUAL_WRAPPER_ROLE_PATH_BRANCH_REQUIRED');
+  const sourcePath = path.join(javaHome, 'bin') + ':/usr/bin:/bin';
+  const environment = { PATH: role + ':' + sourcePath, JAVA_HOME: javaHome,
+    CASEOPS_ANDROID_HOST_POLICY_FILE: path.join(role, 'policy.json'), CASEOPS_ANDROID_HOST_POLICY_SHA256: 'a'.repeat(64) };
+  const run = extra => spawnSync('/bin/bash', ['--noprofile', '--norc', '-c', block + '\nprintf "%s" "$PATH"'],
+    { env: { ...environment, ...extra }, encoding: 'utf8', timeout: 5000, maxBuffer: 8192 });
+  return { role, javaHome, foreign, sourcePath, environment, run };
+}
+test('actual Bash wrapper preserves admitted Node shim PATH and pinned Java selection together', t => {
+  const f = wrapperJavaPathFixture(t), result = f.run({});
+  assert.equal(result.status, 0, result.stderr); assert.equal(result.stderr, '');
+  assert.equal(result.stdout, f.environment.PATH);
+  assertAndroidNodePath({ PATH: result.stdout }, path.join(f.role, 'node'), f.sourcePath);
+});
+test('actual Bash wrapper retains standalone Java precedence when no role is supplied', t => {
+  const f = wrapperJavaPathFixture(t), original = '/usr/bin:/bin';
+  const result = f.run({ PATH: original, CASEOPS_ANDROID_HOST_POLICY_FILE: '', CASEOPS_ANDROID_HOST_POLICY_SHA256: '' });
+  assert.equal(result.status, 0, result.stderr); assert.equal(result.stderr, '');
+  assert.equal(result.stdout, path.join(f.javaHome, 'bin') + ':' + original);
+});
+test('actual Bash wrapper refuses foreign missing and half-supplied admitted Java or policy paths', t => {
+  const f = wrapperJavaPathFixture(t);
+  for (const extra of [{ PATH: f.role + ':' + f.foreign + ':' + f.sourcePath },
+    { PATH: f.role + ':/usr/bin:/bin' }, { CASEOPS_ANDROID_HOST_POLICY_FILE: '' }, { CASEOPS_ANDROID_HOST_POLICY_SHA256: '' }]) {
+    const result = f.run(extra); assert.notEqual(result.status, 0); assert.equal(result.stdout, '');
+    assert.match(result.stderr, /ADMITTED_ANDROID_JAVA_PATH_REQUIRED|Supply the admitted Android role policy|Supply its exact SHA256/);
+    assert.doesNotMatch(result.stderr, /JAVA_MUST_NOT_EXECUTE/);
+  }
+  for (const PATH of [f.foreign + ':' + f.environment.PATH, f.environment.PATH + ':' + f.role])
+    assert.throws(() => assertAndroidNodePath({ PATH }, path.join(f.role, 'node'), f.sourcePath), /ANDROID_HOST_NODE_SHIM_PATH_REQUIRED/);
+});
 test('Android public role reader binds both reference shapes to the same owned descriptor and closes it', t => {
   const f = androidRoleInput(t); if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput(f.ref), /ANDROID_HOST_REFERENCE/); return; }
   const open = fs.openSync, descriptors = []; fs.openSync = (...args) => { const fd = open(...args); descriptors.push(fd); return fd; };
