@@ -1,5 +1,19 @@
 # CaseOps  - Work To Be Done
 
+## October 31 Actual Release Checkpoint
+
+**Partially fixed / NO-GO.** Full998A Docker28 completed3617/10851phases:
+3615passed/2admission-race failures/0skips; browser0executed. Hosted998A rollup
+is55success/2skipped checks, not later-source acceptance. The new lifecycle
+read-bound and owned-harness repairs pass complete focused191/573, with
+both original failures reaching persistence assertions. Historical timeout
+causation remains Inconclusive; budgets/fences are unchanged. See the dated
+lifecycle-admission brief. Still require committed full replacement Docker,
+same-head CI/security, normal567/main merge/tree proof, guarded deployment,
+full exact-live Playwright/D29/cadences and both original Excel final updates.
+App/Mac/0008 and external legal/provider/consent/MFA holds remain separate.
+Older "latest" checkpoints below are historical, not this release's verdict.
+
 ## October 30 Consolidated Remaining Failures
 
 Latest: full135-case component132P/3physical-planF/405phases/0S; all original

@@ -1,5 +1,16 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 31 Lifecycle And Ownership Coverage
+
+Existing J04/M03/J08/M08/J14/M14 and IPLF-032/UJ-02/NFT-005 boundaries remain.
+Actual new component191cases/573phases passes with0skips/retries: all122
+admission races,2 fenced PostgreSQL lifecycle cases,9 ownership and58 passive
+controls. The new modules are standard-discoverable. Full Docker28 at998A is
+separately3615P/2F/0S of3617,0browser executed; it is not replacement or live
+acceptance. Preserve original deadlines and all failure bytes. See the dated
+lifecycle-admission brief; final-head Docker/CI/main/production/cadence and
+both real workbook publications remain required before any closure.
+
 ## October 30 Preflight And Observer Coverage
 
 Follow-up IPLF-032/UJ-02/NFT-005: complete135-case component132P/3physicalF,

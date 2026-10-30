@@ -32,13 +32,17 @@
   authorization or serialization work merely to satisfy stale inline checks.
 
 - A narrow postcommit response does not bound work while a writer owns tenant
-  admission. Measure the first transaction too: metadata DTOs must not hydrate
-  unrelated workspace history under Company/parent locks. Preserve fresh ACL,
+  admission. Measure the first transaction too: metadata and lifecycle DTOs
+  must not hydrate unrelated workspace history under Company/parent locks. Preserve fresh ACL,
   assignment and lifecycle checks, current scalar/tag/order values, no-op and
   caller-owned commit semantics, and subsequent full workspace reads. Keep
   original lock/deadline race oracles; removing unused queries does not invent
   missing historical barrier timings. Use extended-path IO for every retained
   Windows artifact before mistaking verifier path failure for a failed test.
+  Lifecycle neutralization must keep its exact operational-child locks and
+  writes atomic, without eagerly reading unrelated notes, document chunks,
+  billing or activity history. Prove returned tag/order flags after commit as
+  well as disposal/reopen persistence and non-resurrection of neutralized work.
 
 - Removing one redundant index does not bound a correlated provenance read.
   A different tenant-only prefix may still win under fresh or stale statistics.
@@ -3557,6 +3561,10 @@ requirements when using the fallback.
   callback self-cycles; prove strong active registration and stopped-recorder/
   native-cell release without forcing GC or changing its policy. An ownership
   defect or a process-wide GC overlap alone is not historical latency causation.
+  Audit sibling race harnesses and retained session callbacks, not only the
+  originating finalizer. Unregister exact owned listeners and clear their
+  bound-method roots only after workers stop; partial removal retains ownership.
+  Closed sessions must not pin stopped harnesses through transaction callbacks.
 - A fresh workspace read must not overwrite caller-owned pending objects.
   Capture new/dirty/deleted state before any query autoflush; refresh retained
   graphs and eligibility only on a clean entry, and prove pending collection,

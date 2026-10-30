@@ -3447,11 +3447,14 @@ def transition_matter_lifecycle_status(
         context=context,
         required_capability=MATTER_MUTATION_CAPABILITIES["transition_matter_lifecycle_status"],
     )
+    # Operational children are neutralized below; workspace history is not
+    # needed while the tenant, actor and lifecycle locks are held.
     matter = _get_matter_model(
         session,
         context=context,
         matter_id=matter_id,
         lock_for_update=True,
+        load_locked_children=False,
     )
     current_status = _status_value(matter.status)
     expected_status = _status_value(payload.expected_from_status)

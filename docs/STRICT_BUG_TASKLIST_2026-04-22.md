@@ -1,5 +1,17 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 31 Remaining Admission Failures: Partially Fixed
+
+Full998A Docker28 naturally completed3615P/2F/0S across3617cases/10851phases,
+with0browser execution. The two exact admission failures and their lock traces
+remain retained, not waived by hosted55success/2skipped checks. Valid REDs prove
+owned hook retention and12 unnecessary lifecycle history loads under real
+authority locks. Narrow runtime/ownership repairs pass191/573 focused, including
+all122 original races and independent persistence. Historical delay/GC causation
+remains Inconclusive. See bugfix-lifecycle-admission-and-race-ownership-2026-10-31.md.
+No original deadline/security/lifecycle/provider fence was relaxed. No deployed
+Playwright proof yet: remain Partially fixed/NO-GO, with both workbooks interim08.
+
 ## October 30 Consolidated CI And Import: Partially Fixed
 
 Latest complete component:135cases/405phases,132P/3physicalF/0S. The original

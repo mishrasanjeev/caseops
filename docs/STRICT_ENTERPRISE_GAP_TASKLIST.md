@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## October 31 Admission Lock Work And Diagnostic Ownership
+
+**Partially implemented / NO-GO.** Fresh998A Docker28 retained complete3617cases,
+3615P/2F/0S and10851phases; no browser gate ran. Hosted55success/2skipped checks
+does not override it. Separate lifecycle history hydration and sibling recorder/
+session ownership had been missed. Valid REDs and191/573 complete replacement
+component cover both fixes, original races and persistence with unchanged
+deadlines. No historical GC causal claim follows. Full final-head Docker/CI/
+security/main/live/D29/cadence and both original workbook publications remain
+required. See the October31 lifecycle-admission brief; no App/Mac/0008,
+legal-source, provider-consent, unknown-Matter or owner-MFA acceptance is implied.
+
 ## October 30 Remaining Work And Test Boundaries
 
 Latest component completes135/405 at132P/3physical-planF/0S. One-query/no-ORM
