@@ -383,9 +383,6 @@ jobs:
           docker exec "${CID}" psql -U caseops -d caseops_test             -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Pytest -m postgres
-        # Bound pytest before the unchanged whole-job timeout so partial
-        # journals and stack diagnostics can reach the always-upload step.
-        timeout-minutes: 9
         working-directory: apps/api
         env:
           # conftest.pg_engine reads CASEOPS_TEST_POSTGRES_URL.

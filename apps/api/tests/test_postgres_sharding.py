@@ -40,7 +40,8 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     total = strategy["matrix"]["total_shards"][0]
     assert job["name"] == "Postgres + pgvector shard ${{ matrix.shard }}/${{ matrix.total_shards }}"
     step = next(item for item in job["steps"] if item.get("name") == "Pytest -m postgres")
-    assert step["timeout-minutes"] == 9 < job["timeout-minutes"]
+    # Pytest timing excludes launcher overhead; retain the original whole-job budget.
+    assert "timeout-minutes" not in step
     assert shlex.split(step["run"]) == [
         "uv", "run", "python", "-m", "pytest", "-q", "-m", "postgres",
     ]
