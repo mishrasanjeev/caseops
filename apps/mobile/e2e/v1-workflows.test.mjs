@@ -1,7 +1,9 @@
+import { validateAndroidTransport } from './local-run.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
+import childProcess from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +16,7 @@ import { pendingV1ProducerPlan, requireV1ProducerPlan, produceV1Dataset, resolve
 import { pendingV1ViewerPlan, produceV1Viewer } from './v1-workflows-viewer.mjs';
 import { selector } from './native-ui.mjs';
 import { pendingV1Request } from '../../../scripts/mobile/prepare-v1-fixture.mjs';
-import { admitV1BeforeMembers } from '../../../scripts/mobile/run-v1-workflows.mjs';
+import { admitV1BeforeMembers, observeInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from '../../../scripts/mobile/run-v1-workflows.mjs';
 import { createControls, V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/v1-workflows-controls.mjs';
 
 const ids = ['SOURCE-01', 'SOURCE-02', 'SOURCE-03', 'SOURCE-04', 'SOURCE-05', 'SOURCE-06', 'SOURCE-07', 'WORK-01', 'WORK-02', 'WORK-03', 'WORK-04', 'WORK-05', 'WORK-06', 'WORK-07', 'WORK-08', 'COUNSEL-01', 'INBOX-01'];
@@ -558,4 +560,185 @@ test('all four producer oracle corpora are hashed without auth secrets and omiss
   assert.throws(() => validateV1OracleIdentityEvidence({ ...safe, identities: safe.identities.slice(1) }), /ORACLE_IDENTITY_HASH_REQUIRED/);
   const value = admissionFixture(), final = value.values.get(value.q.producerEvidence.path); final.oracleIdentityEvidence = v1OracleIdentityEvidence(uuid(1));
   await assert.rejects(admitV1BeforeMembers(value.q, value.dependencies), /ALL_FOUR_PHASE_PAYLOAD_ORACLES_REQUIRED/); assert.equal(value.log.includes('private-reader'), false);
+});
+
+
+function installedAndroidDouble(physical = true) {
+  const appId = 'ai.caseops.mobile.dev.localacceptance', app = `/data/user/0/${appId}`, provider = '/storage/emulated/0/Download';
+  const apk = '/data/app/~~unit==/unit/base.apk', calls = [], state = { usbDevPath: 'usb:1-2.5', pageSizeRaw: '4096\n', bootReads: 0, statFailure: null };
+  const f = { appId, udid: physical ? 'CASEOPSUNITUSB01' : 'emulator-5584', appPath: '/unit/never-opened.apk',
+    environment: 'docker-integration', syntheticDataOnly: true, coreInventory: 'native-core-2026-10-25',
+    androidTransport: { adbPort: physical ? 5042 : 5038, appiumUrl: physical ? 'http://127.0.0.1:4729' : 'http://127.0.0.1:4725',
+      systemPort: physical ? 8206 : 8202, ...(physical ? { transportMode: 'usb-reverse' } : {}) } };
+  const environment = { PATH: '/unit/no-adb', HOME: '/unit/home', ADB_SERVER_SOCKET: `tcp:127.0.0.1:${f.androidTransport.adbPort}`,
+    CASEOPS_MOBILE_CORE_PASSWORD: 'PRIVATE_UNIT_VALUE_MUST_NOT_REACH_ADB',
+    ...(physical ? { CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE: 'usb-reverse' } : {}) };
+  const metadata = privateRoot => `directory|${privateRoot ? 10087 : 1023}|10|${privateRoot ? 2 : 3}|0|2026-10-30 00:00:00 +0000|2026-10-30 00:00:00 +0000`;
+  const command = (file, args, options) => {
+    assert.equal(file, 'adb', 'NO_LIVE_OR_NON_ADB_COMMAND_FALLTHROUGH'); assert.deepEqual(args.slice(0, 2), ['-s', f.udid]);
+    assert.equal(options.shell, false); assert.ok(options.timeout > 0 && options.timeout <= 20000); assert.ok(options.maxBuffer <= 1048576);
+    assert.equal(options.env.ADB_SERVER_SOCKET, environment.ADB_SERVER_SOCKET);
+    assert.equal(Object.hasOwn(options.env, 'CASEOPS_MOBILE_CORE_PASSWORD'), false); calls.push({ args: args.slice(2), environment: { ...options.env } });
+    const a = args.slice(2), joined = a.join(' '); let value;
+    if (joined === `shell pm list packages ${appId}`) value = `package:${appId}`;
+    else if (joined === `shell pm path ${appId}`) value = `package:${apk}`;
+    else if (joined === `shell sha256sum ${apk}`) value = `${binary}  ${apk}`;
+    else if (joined === 'get-state') value = 'device';
+    else if (joined === 'shell id -u') value = physical ? '2000' : '0';
+    else if (joined === 'shell am get-current-user') value = '0';
+    else if (joined === 'shell getprop ro.build.version.sdk') value = '36';
+    else if (joined === 'shell getprop ro.product.cpu.abi') value = 'arm64-v8a';
+    else if (joined === 'shell getprop ro.kernel.qemu') { assert.equal(physical, true); value = '0'; }
+    else if (joined === 'get-devpath') { assert.equal(physical, true); value = state.usbDevPath; }
+    else if (joined === 'emu avd name') { assert.equal(physical, false); value = 'CaseOps_Pixel9_API36_arm64\nOK\n'; }
+    else if (joined === 'shell cat /proc/sys/kernel/random/boot_id') value = state.bootSequence?.[state.bootReads++] ?? '11111111-2222-4333-8444-555555555555';
+    else if (joined === 'shell getconf PAGESIZE') { assert.equal(physical, true); assert.equal(options.timeout, 5000); assert.equal(options.maxBuffer, 64); if (state.pageFailure) throw state.pageFailure; value = state.pageSizeRaw; }
+    else if (joined === `shell cmd package list packages -U ${appId}`) value = `package:${appId} uid:10087`;
+    else if (joined === `shell run-as ${appId} id -u`) { assert.equal(physical, true); value = '10087'; }
+    else if (joined === `shell run-as ${appId} pwd`) { assert.equal(physical, true); value = app; }
+    else if (joined === `shell run-as ${appId} readlink -f ${app}`) { assert.equal(physical, true); value = app; }
+    else if (joined === 'shell readlink -f /sdcard/Download') value = provider;
+    else if (joined === `shell readlink -f ${app}`) { assert.equal(physical, false); value = app; }
+    else if (a[0] === 'shell' && a[1] === '-T') {
+      assert.equal(a.length, 3); const source = a[2], target = /'([^']*)'$/.exec(source)?.[1];
+      if (physical) {
+        assert.ok(source.includes("'env' 'LC_ALL=C' '/system/bin/toybox' 'stat' '-c'"));
+        assert.equal(source.startsWith(`'run-as' '${appId}'`), target !== provider);
+        if (target.endsWith(`/Android/data/${appId}`)) {
+          if (state.statFailure) throw state.statFailure;
+          throw Object.assign(new Error('UNIT_OWNED_MISSING_EXTERNAL'), { status: 1, signal: null, stdout: '', stderr: `stat: '${target}': No such file or directory\n` });
+        }
+      } else assert.ok(source.includes('CASEOPS_ANDROID_STAT_V1'));
+      if (target === app) value = metadata(true);
+      else if (target === provider) value = metadata(false);
+      else { assert.equal(target, `/storage/emulated/0/Android/data/${appId}`); value = 'ABSENT'; }
+    } else assert.fail(`UNEXPECTED_OWNED_ANDROID_COMMAND: ${a[0]}`);
+    return options.encoding === 'utf8' ? value : Buffer.from(value);
+  };
+  return { fixture: f, environment, command, calls, state, app, provider };
+}
+function withInstalledAndroidDouble(f, action) {
+  const original = childProcess.execFileSync; childProcess.execFileSync = f.command; syncBuiltinESMExports();
+  try { return action(); } finally { childProcess.execFileSync = original; syncBuiltinESMExports(); }
+}
+
+test('actual observeInstalled composes binary and run-as attestation with fixture mode and filtered explicit tool environment', () => {
+  for (const explicitEnvironmentMode of [true, false]) {
+    const f = installedAndroidDouble(); if (!explicitEnvironmentMode) delete f.environment.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE;
+    const observed = withInstalledAndroidDouble(f, () => observeInstalled(f.fixture, 'android', binary, f.environment));
+    assert.equal(observed.binaryHash, binary); assert.equal(observed.appDataPath, f.app); assert.equal(observed.pageSizeBytes, 4096); assert.equal(Object.hasOwn(observed, 'pageSizeRequired'), false);
+    assert.equal(observed.transportMode, 'usb-reverse'); assert.equal(observed.deviceKind, 'physical'); assert.equal(observed.access, 'run-as');
+    assert.equal(observed.shellUid, 2000); assert.equal(observed.runAsUid, 10087); assert.equal(observed.usbDevPath, f.state.usbDevPath);
+    assert.equal(observed.apiLevel, 36); assert.equal(observed.abi, 'arm64-v8a'); assert.equal(observed.qemuOff, true);
+    assert.equal(Object.hasOwn(observed, 'rootUid'), false); assert.equal(Object.hasOwn(observed, 'avdName'), false);
+    assert.ok(f.calls.some(row => row.args.join(' ') === `shell run-as ${f.fixture.appId} id -u`));
+    assert.ok(f.calls.every(row => row.environment.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE === (explicitEnvironmentMode ? 'usb-reverse' : undefined)));
+    assert.equal(f.calls.some(row => ['root', 'push', 'install', 'emu', 'reboot'].includes(row.args[0])), false);
+  }
+});
+
+test('actual observeInstalled rejects fixture and explicit environment mode disagreement before device reads', () => {
+  for (const patch of [{ CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE: 'emulator' }, { CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE: 'unknown' }]) {
+    const f = installedAndroidDouble(); Object.assign(f.environment, patch);
+    assert.throws(() => withInstalledAndroidDouble(f, () => observeInstalled(f.fixture, 'android', binary, f.environment)), /V1_ANDROID_TRANSPORT_MODE_MISMATCH/);
+    assert.equal(f.calls.length, 0);
+  }
+  const f = installedAndroidDouble(); delete f.fixture.androidTransport.transportMode;
+  assert.throws(() => withInstalledAndroidDouble(f, () => observeInstalled(f.fixture, 'android', binary, f.environment)), /V1_ANDROID_TRANSPORT_MODE_MISMATCH/);
+  assert.equal(f.calls.length, 0);
+});
+
+test('actual observeInstalled keeps the complete historical emulator return shape and rooted AVD path', () => {
+  const f = installedAndroidDouble(false), observed = withInstalledAndroidDouble(f, () => observeInstalled(f.fixture, 'android', binary, f.environment));
+  assert.deepEqual(observed, { platform: 'android', udid: f.fixture.udid, appId: f.fixture.appId, binaryHash: binary,
+    bootId: '11111111-2222-4333-8444-555555555555', appDataPath: f.app,
+    appDataIdentity: { kind: 'directory', uid: 10087, device: '10', inode: '2' }, pageSizeRequired: 16384 });
+  assert.ok(f.calls.some(row => row.args.join(' ') === 'emu avd name'));
+  assert.equal(f.calls.some(row => row.args.includes('run-as')), false);
+});
+
+test('actual observeInstalled returns physical USB identity so later installed fences detect a changed endpoint', () => {
+  const f = installedAndroidDouble(), first = withInstalledAndroidDouble(f, () => observeInstalled(f.fixture, 'android', binary, f.environment));
+  f.state.usbDevPath = 'usb:2-3';
+  const later = withInstalledAndroidDouble(f, () => observeInstalled(f.fixture, 'android', binary, f.environment));
+  assert.notDeepEqual(later, first); assert.equal(later.usbDevPath, 'usb:2-3'); assert.equal(later.binaryHash, first.binaryHash);
+});
+
+test('actual observeInstalled retains original run-as stat denial without fallback or private body reads', () => {
+  const f = installedAndroidDouble(); f.state.statFailure = Object.assign(new Error('UNIT_ORIGINAL_PRIVATE_STAT_DENIED'), {
+    status: 1, signal: null, stdout: '', stderr: `stat: '/storage/emulated/0/Android/data/${f.fixture.appId}': Permission denied\n` });
+  assert.throws(() => withInstalledAndroidDouble(f, () => observeInstalled(f.fixture, 'android', binary, f.environment)), error => error === f.state.statFailure);
+  assert.equal(f.calls.some(row => row.args.some(value => value.includes('CASEOPS_ANDROID_READ_FD_V1'))), false);
+  assert.equal(f.calls.some(row => ['root', 'push', 'install', 'rm'].includes(row.args[0])), false);
+});
+
+
+function layoutAdmission(pageSize = 4096, physical = true) {
+  const x = admissionFixture(), d = installedAndroidDouble(physical); d.state.pageSizeRaw = `${pageSize}\n`;
+  const actual = withInstalledAndroidDouble(d, () => observeInstalled(d.fixture, 'android', binary, d.environment));
+  x.q.platform = 'android';
+  const seen = new Set(); const change = value => {
+    if (!value || typeof value !== 'object' || seen.has(value)) return; seen.add(value);
+    for (const [key, child] of Object.entries(value)) {
+      if (child === 'ai.caseops.mobile.dev.simulatoracceptance') value[key] = d.fixture.appId;
+      else if (child === 'synthetic-iphone') value[key] = d.fixture.udid;
+      else if (key === 'platform' && child === 'ios') value[key] = 'android';
+      else change(child);
+    }
+  };
+  for (const value of x.values.values()) change(value);
+  for (const f of [x.f, x.b]) {
+    f.androidTransport = d.fixture.androidTransport;
+    if (physical) { f.apiOrigin = 'https://127.0.0.1:8443'; f.auth.webOrigin = 'https://127.0.0.1:3443'; }
+  }
+  if (physical) Object.assign(x.values.get(x.q.buildReceipt.path), { apiOrigin: x.f.apiOrigin, webOrigin: x.f.auth.webOrigin });
+  validateAndroidTransport(x.f, 'android', x.values.get(x.q.buildReceipt.path));
+  for (const ref of [x.q.deviceEvidence, x.q.installedEvidence]) {
+    const value = x.values.get(ref.path); delete value.deviceTypeIdentifier;
+    Object.assign(value, structuredClone(actual), { pageSizeBytes: pageSize });
+  }
+  x.dependencies.installed = () => structuredClone(actual); x.actual = actual;
+  return x;
+}
+test('actual physical getconf accepts only4096 or16384 and brackets the observation with the same boot', () => {
+  for (const pageSize of [4096, 16384]) {
+    const f = installedAndroidDouble(); f.state.pageSizeRaw = `${pageSize}\n`;
+    const value = withInstalledAndroidDouble(f, () => observeInstalled(f.fixture, 'android', binary, f.environment));
+    assert.equal(value.pageSizeBytes, pageSize); assert.equal(value.androidLayout.returnedOutputBytes.pageSize, Buffer.byteLength(f.state.pageSizeRaw));
+    assert.equal(value.androidLayout.acceptanceScope, 'physical-workflow-only'); assert.equal(value.androidLayout.sixteenKEmulatorAcceptance, false);
+    assert.equal(value.androidLayout.bootId, value.bootId); assert.deepEqual(androidLayoutSummary(value), { androidAcceptanceScope: 'physical-workflow-only', androidPageSizeBytes: pageSize, sixteenKEmulatorAcceptance: false, sixteenKEmulator83Acceptance: 'required-separately' });
+  }
+  for (const raw of ['8192\n', '4096\nextra', '', '4096 '.repeat(20)]) {
+    const f = installedAndroidDouble(); f.state.pageSizeRaw = raw;
+    assert.throws(() => withInstalledAndroidDouble(f, () => observeInstalled(f.fixture, 'android', binary, f.environment)), /ANDROID_(?:PHYSICAL_PAGE_SIZE_REQUIRED|LAYOUT_OUTPUT_BOUND)/);
+  }
+  const f = installedAndroidDouble(); f.state.bootSequence = ['11111111-2222-4333-8444-555555555555', '11111111-2222-4333-8444-555555555555', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'];
+  assert.throws(() => withInstalledAndroidDouble(f, () => observeInstalled(f.fixture, 'android', binary, f.environment)), /ANDROID_LAYOUT_BOOT_CHANGED/);
+  const failed = installedAndroidDouble(); failed.state.pageFailure = new Error('UNIT_GETCONF_FAILURE');
+  assert.throws(() => withInstalledAndroidDouble(failed, () => observeInstalled(failed.fixture, 'android', binary, failed.environment)), error => error === failed.state.pageFailure);
+});
+test('complete V1 admission binds4K and16K physical current layout to both immutable receipts before readers', async () => {
+  for (const page of [4096, 16384]) { const x = layoutAdmission(page), result = await admitV1BeforeMembers(x.q, x.dependencies); assert.equal(result.installed.pageSizeBytes, page); assert.equal(x.log.filter(v => v === 'private-reader').length, 2); }
+  for (const mutation of [x => { x.values.get(x.q.deviceEvidence.path).pageSizeBytes = 16384; }, x => { x.values.get(x.q.installedEvidence.path).bootId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'; },
+    x => { x.values.get(x.q.deviceEvidence.path).androidLayout.binaryHash = 'f'.repeat(64); }, x => { x.values.get(x.q.installedEvidence.path).androidLayout = undefined; }, x => { x.values.get(x.q.deviceEvidence.path).runAsUid++; }]) {
+    const x = layoutAdmission(); mutation(x); await assert.rejects(admitV1BeforeMembers(x.q, x.dependencies)); assert.equal(x.log.includes('private-reader'), false);
+  }
+});
+test('legacy V1 admission still requires literal16K device evidence and physical flags never certify the emulator path', async () => {
+  const good = layoutAdmission(16384, false); await admitV1BeforeMembers(good.q, good.dependencies); assert.equal(good.actual.pageSizeRequired, 16384); assert.deepEqual(androidLayoutSummary(good.actual), {});
+  const bad = layoutAdmission(4096, false); await assert.rejects(admitV1BeforeMembers(bad.q, bad.dependencies)); assert.equal(bad.log.includes('private-reader'), false);
+  const x = layoutAdmission(); const disguised = { ...x.f, androidTransport: { adbPort: 5038, appiumUrl: 'http://127.0.0.1:4725', systemPort: 8202 } };
+  assert.throws(() => validateAndroidLayoutEvidence(disguised, x.actual, x.values.get(x.q.deviceEvidence.path), x.values.get(x.q.installedEvidence.path)), /ANDROID_LAYOUT_PHYSICAL_CANNOT_CERTIFY_EMULATOR/);
+});
+
+
+test('actual Root four-field USB transport composes with layout validation and rejects invented fifth field before admission', async () => {
+  const x = layoutAdmission(4096), transport = validateAndroidTransport(x.f, 'android', x.values.get(x.q.buildReceipt.path));
+  assert.deepEqual(Object.keys(transport).sort(), ['adbPort', 'appiumUrl', 'systemPort', 'transportMode']);
+  assert.equal(Object.hasOwn(x.f.androidTransport, 'deviceKind'), false);
+  validateAndroidLayoutEvidence(x.f, x.actual, x.values.get(x.q.deviceEvidence.path), x.values.get(x.q.installedEvidence.path));
+  const admitted = await admitV1BeforeMembers(x.q, x.dependencies); assert.equal(admitted.installed.pageSizeBytes, 4096);
+  const forged = { ...x.f, androidTransport: { ...x.f.androidTransport, deviceKind: 'physical' } };
+  assert.throws(() => validateAndroidTransport(forged, 'android', x.values.get(x.q.buildReceipt.path)), /ANDROID_TRANSPORT_SCHEMA_REQUIRED/);
+  assert.throws(() => validateAndroidLayoutEvidence(forged, x.actual, x.values.get(x.q.deviceEvidence.path), x.values.get(x.q.installedEvidence.path)), /ANDROID_LAYOUT_PHYSICAL_PROFILE_REQUIRED/);
 });

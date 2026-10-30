@@ -450,10 +450,11 @@ class PortabilityTests(unittest.TestCase):
     udid = "12345678-1234-1234-1234-123456789ABC"
     runtime = "com.apple.CoreSimulator.SimRuntime.iOS-27-0"
 
-    def config(self, platform="ios"):
+    def config(self, platform="ios", mode=None):
         return bootstrap_module.validated_config({"CASEOPS_MOBILE_PLATFORM": platform,
             "CASEOPS_MOBILE_PROJECT": "owned-unit-project", "CASEOPS_MOBILE_API_PORT": "8443",
-            "CASEOPS_MOBILE_WEB_PORT": "3443"})
+            "CASEOPS_MOBILE_WEB_PORT": "3443",
+            **({"CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE": mode} if mode is not None else {})})
 
     def listing(self, **changes):
         return {"devices": {self.runtime: [{"udid": self.udid, "state": "Booted", "isAvailable": True,
@@ -857,7 +858,7 @@ class PortabilityTests(unittest.TestCase):
                 self.assertFalse(root.exists())
 
     def test_up_persists_selected_platform_and_build_receipt_inputs_using_only_mock_commands(self):
-        for platform in ("android", "ios"):
+        for platform, mode in (("android", None), ("ios", None), ("android", "usb-reverse")):
             with tempfile.TemporaryDirectory() as directory:
                 root = Path(directory) / "fresh-fixture"
                 frozen = {"head": "a" * 40, "fingerprint": "b" * 64, "dirty": False, "files": [], "changedPaths": []}
@@ -882,13 +883,14 @@ class PortabilityTests(unittest.TestCase):
                     return ""
 
                 args = argparse.Namespace(action="up", cache=root, platform=platform, api_port=8443,
-                                          web_port=3443, credentials=None, mfa=True)
+                                          web_port=3443, credentials=None, mfa=True, android_transport_mode=mode)
                 with patch.object(bootstrap_module, "run", side_effect=run), patch.object(
                         bootstrap_module, "snapshot", return_value=frozen), patch.object(bootstrap_module, "port_free") as ports, patch.object(
                         bootstrap_module, "build_web") as web, patch.object(bootstrap_module, "finish") as finish, redirect_stdout(io.StringIO()):
                     bootstrap_module.main(args)
                 config = json.loads((root / "config.json").read_text())
-                host = "127.0.0.1" if platform == "ios" else "10.0.2.2"
+                host = "127.0.0.1" if platform == "ios" or mode == "usb-reverse" else "10.0.2.2"
+                self.assertEqual(config.get("CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE"), mode)
                 self.assertEqual(config["CASEOPS_MOBILE_PLATFORM"], platform)
                 self.assertEqual(config["CASEOPS_MOBILE_API_ORIGIN"], f"https://{host}:8443")
                 self.assertEqual(config["CASEOPS_MOBILE_WEB_ORIGIN"], f"https://{host}:3443")
@@ -901,15 +903,15 @@ class PortabilityTests(unittest.TestCase):
                 self.assertTrue(commands)
 
     def test_finish_receipt_uses_selected_origins_and_preserves_control_plane_tls_and_release_identity(self):
-        for platform, architecture in (("android", "arm64"), ("ios", "arm64"), ("ios", "x86_64")):
-            with self.subTest(platform=platform, architecture=architecture), tempfile.TemporaryDirectory() as directory, patch.object(
+        for platform, architecture, mode in (("android", "arm64", None), ("ios", "arm64", None), ("ios", "x86_64", None), ("android", "arm64", "usb-reverse")):
+            with self.subTest(platform=platform, architecture=architecture, mode=mode), tempfile.TemporaryDirectory() as directory, patch.object(
                     bootstrap_module.sys, "platform", "darwin"), patch.object(bootstrap_module, "machine", return_value=architecture):
                 root = Path(directory)
                 (root / "compose-secrets.json").write_text("{}")
                 (root / "seed.json").write_text("{}")
                 dockerfile = root / "unit-web.Dockerfile"
                 dockerfile.write_text("synthetic canonical-derived unit input")
-                config = {**self.config(platform), "CASEOPS_MOBILE_WEB_DOCKERFILE": str(dockerfile),
+                config = {**self.config(platform, mode), "CASEOPS_MOBILE_WEB_DOCKERFILE": str(dockerfile),
                           "CASEOPS_MOBILE_API_SHA": "a" * 40, "CASEOPS_MOBILE_WEB_SHA": "b" * 40,
                           "CASEOPS_MOBILE_API_REVISION": "unit-api-revision", "CASEOPS_MOBILE_WEB_REVISION": "unit-web-revision"}
                 source = {"api": {"head": "a" * 40}, "web": {"head": "b" * 40}}
@@ -961,8 +963,10 @@ class PortabilityTests(unittest.TestCase):
                 self.assertEqual(receipt["backendRevision"], build["revision"])
                 self.assertEqual(receipt["webIdentity"], web)
                 self.assertEqual(receipt["gatewayImplementationSha256"], gateway_hash)
-                if platform == "ios":
-                    override = next(root.glob("ios-compose-*.json"))
+                self.assertEqual(receipt.get("androidTransportMode"), mode)
+                self.assertEqual(receipt["fixtureSourceHashes"]["scripts/mobile/local-transport.py"], bootstrap_module.hashlib.sha256((bootstrap_module.REPO / "scripts/mobile/local-transport.py").read_bytes()).hexdigest())
+                if platform == "ios" or mode == "usb-reverse":
+                    override = next(root.glob(f"{platform}-compose-*.json"))
                     self.assertEqual(receipt["platformComposeOverride"], {"path": str(override),
                         "sha256": bootstrap_module.hashlib.sha256(override.read_bytes()).hexdigest()})
                     services = json.loads(override.read_text())["services"]
@@ -1654,6 +1658,171 @@ class GatewayTests(unittest.TestCase):
             self.assertEqual(self.request("OPTIONS", "/api/auth/login", {"Origin": "https://10.0.2.2:3443"})[0], 200)
         self.assertTrue(all("nativeMarker" not in item for item in self.gateway.state["requests"]))
         self.assertEqual(self.gateway.state["requests"][-1]["trafficClass"], "browser-preflight")
+
+
+
+class UsbReverseOriginTests(unittest.TestCase):
+    def config(self, mode='usb-reverse', platform='android'):
+        value = {'CASEOPS_MOBILE_PLATFORM': platform, 'CASEOPS_MOBILE_PROJECT': 'owned-unit-project',
+                 'CASEOPS_MOBILE_API_PORT': '8443', 'CASEOPS_MOBILE_WEB_PORT': '3443'}
+        if mode is not None:
+            value['CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE'] = mode
+        return bootstrap_module.validated_config(value)
+
+    def test_legacy_default_shapes_and_ios_identity_are_unchanged(self):
+        for platform, host in (('android', '10.0.2.2'), ('ios', '127.0.0.1')):
+            config = self.config(None, platform)
+            self.assertNotIn('CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE', config)
+            self.assertEqual(bootstrap_module._LOCAL_TRANSPORT['fields'](config), {})
+            self.assertEqual(config['CASEOPS_MOBILE_API_ORIGIN'], f'https://{host}:8443')
+            self.assertEqual(config['CASEOPS_MOBILE_WEB_ORIGIN'], f'https://{host}:3443')
+
+    def test_usb_config_and_extension_require_both_exact_loopback_origins(self):
+        config = self.config()
+        expected = {'platform': 'android', 'androidTransportMode': 'usb-reverse',
+                    'apiOrigin': 'https://127.0.0.1:8443', 'webOrigin': 'https://127.0.0.1:3443'}
+        self.assertEqual(bootstrap_module._LOCAL_TRANSPORT['fields'](config), {'androidTransportMode': 'usb-reverse'})
+        auth = extend_module.extension_auth(expected, config)
+        self.assertEqual((auth['webOrigin'], auth['mode'], auth['mfaRequired']), ('https://127.0.0.1:3443', 'native-firefox', True))
+        for replacement in ({'androidTransportMode': 'emulator'}, {'platform': 'ios'}, {'apiOrigin': 'https://10.0.2.2:8443'},
+                            {'webOrigin': 'https://10.0.2.2:3443'}):
+            with self.subTest(replacement=replacement), self.assertRaises(AssertionError):
+                extend_module.extension_auth({**expected, **replacement}, config)
+        with self.assertRaises(AssertionError):
+            extend_module.extension_auth({k: v for k, v in expected.items() if k != 'androidTransportMode'}, config)
+
+    def test_unknown_mixed_case_and_ios_modes_are_refused(self):
+        for mode in ('unknown', 'USB-REVERSE', '', None, True, 0):
+            with self.subTest(mode=mode), self.assertRaises(AssertionError):
+                bootstrap_module.validated_config({'CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE': mode})
+        for mode in ('emulator', 'usb-reverse'):
+            with self.subTest(mode=mode), self.assertRaises(AssertionError):
+                self.config(mode, 'ios')
+        with self.assertRaises(AssertionError):
+            bootstrap_module.validated_config({'caseops_mobile_android_transport_mode': 'usb-reverse'})
+        for key, value in (('CASEOPS_MOBILE_API_ORIGIN', 'https://10.0.2.2:8443'),
+                           ('CASEOPS_MOBILE_WEB_ORIGIN', 'https://localhost:3443')):
+            with self.subTest(key=key), self.assertRaises(AssertionError):
+                bootstrap_module.validated_config({**self.config(), key: value})
+
+    def test_cli_mode_parser_is_explicit_and_legacy_default_remains_absent(self):
+        parser = bootstrap_module.argument_parser()
+        self.assertIsNone(parser.parse_args(['up']).android_transport_mode)
+        self.assertEqual(parser.parse_args(['up', '--android-transport-mode', 'usb-reverse']).android_transport_mode, 'usb-reverse')
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parser.parse_args(['up', '--android-transport-mode', 'unknown'])
+
+    def test_usb_compose_binds_public_auth_url_without_relaxing_cors_tls_or_scanner(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); (root / 'compose-secrets.json').write_text('{}')
+            config = self.config()
+            with patch.object(bootstrap_module, 'ios_scanner_platform', return_value='linux/amd64'):
+                command, env = bootstrap_module.compose(root, config)
+            override = next(root.glob('android-compose-*.json'))
+            value = json.loads(override.read_text())
+            self.assertEqual(value, {'services': {'api': {'environment': {'CASEOPS_PUBLIC_APP_URL': 'https://127.0.0.1:3443'}},
+                'migrate': {'environment': {'CASEOPS_PUBLIC_APP_URL': 'https://127.0.0.1:3443'}}, 'scanner': {'platform': 'linux/amd64'}}})
+            self.assertIn(str(override), command)
+            self.assertEqual(env['CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE'], 'usb-reverse')
+            self.assertEqual(env['CASEOPS_MOBILE_API_ORIGIN'], 'https://127.0.0.1:8443')
+
+    def test_usb_locale_uses_only_owned_server_and_explicit_device(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sdk = Path(directory); (sdk / 'platform-tools').mkdir()
+            adb = sdk / 'platform-tools' / ('adb.exe' if os.name == 'nt' else 'adb'); adb.write_text('offline source fixture only'); adb.chmod(0o700)
+            seen = []
+            def output(command):
+                seen.append(command); return 'en-IN'
+            with patch.dict(os.environ, {'ANDROID_HOME': str(sdk), 'ADB_SERVER_SOCKET': 'tcp:127.0.0.1:5042', 'ANDROID_ADB_SERVER_PORT': '5042'}), patch.object(bootstrap_module, 'device_output', side_effect=output):
+                observed = bootstrap_module.observe_device_locale('android', 'unit-physical-serial', android_transport_mode='usb-reverse')
+            self.assertEqual(observed['locale'], 'en-IN')
+            self.assertEqual(seen, [[str(adb), '-P', '5042', '-s', 'unit-physical-serial', 'shell', 'getprop', key]
+                                    for key in ('persist.sys.locale', 'ro.product.locale')])
+            with patch.dict(os.environ, {'ANDROID_HOME': str(sdk), 'ADB_SERVER_SOCKET': 'tcp:127.0.0.1:5037'}), patch.object(bootstrap_module, 'device_output') as command:
+                with self.assertRaises(AssertionError):
+                    bootstrap_module.observe_device_locale('android', 'unit-physical-serial', android_transport_mode='usb-reverse')
+                command.assert_not_called()
+
+    def test_usb_extension_stages_exact_mode_and_immutable_locale_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = self.config()
+            for name, body in (('config.json', config), ('compose-secrets.json', {}), ('seed.json', {'calendarDate': '2026-10-25'}),
+                               ('gateway-routes.json', {'schemaVersion': 2, 'routes': ['GET /api/build'], 'dynamicAdmissions': {}})):
+                (root / name).write_text(json.dumps(body))
+            observed = {'platform': 'android', 'udid': 'unit-physical-serial', 'locale': 'en-IN', 'commandsWereReadOnly': True}
+            captured = []
+            def run(command, **kwargs):
+                if command[:2] == ['node', '-e']:
+                    return json.dumps({'2026-10-25': 'Synthetic date caption'})
+                inputs = json.loads((root / command[-1]).read_text()); captured.append(inputs)
+                auth = extend_module.extension_auth(inputs, config)
+                (root / f"extended-seed-{inputs['iteration']}.json").write_text(json.dumps({'lifecycleMatter': {'id': 'unit-life'},
+                    'accessMatter': {'id': 'unit-access'}, 'credentialsFile': 'unit-credentials.json', 'auth': auth}))
+                return ''
+            binding = {'modulePath': str(root / 'unit-owner.mjs'), 'moduleSha256': 'a' * 64, 'capabilities': ['readMatterState']}
+            with patch.object(bootstrap_module, 'observe_device_locale', return_value=observed) as locale, patch.object(bootstrap_module, 'run', side_effect=run), patch.object(bootstrap_module, 'bind_owner', return_value=binding), redirect_stdout(io.StringIO()):
+                bootstrap_module.extend_fixture(root, config, argparse.Namespace(platform='android', udid='unit-physical-serial'), 'unit-stamp')
+            self.assertEqual(captured[0]['androidTransportMode'], 'usb-reverse')
+            self.assertEqual(captured[0]['apiOrigin'], 'https://127.0.0.1:8443')
+            self.assertEqual(captured[0]['webOrigin'], 'https://127.0.0.1:3443')
+            locale.assert_called_once_with('android', 'unit-physical-serial', android_transport_mode='usb-reverse')
+            evidence = captured[0]['localeEvidence']; self.assertEqual(hashlib.sha256(Path(evidence['path']).read_bytes()).hexdigest(), evidence['sha256'])
+
+    def test_auth_probe_uses_configured_platform_and_origin_before_consent(self):
+        import sys, types
+        class StopBeforeConsent(Exception): pass
+        security = types.ModuleType('caseops_api.services.security'); security.TOTP_PERIOD_SECONDS = 30
+        security._hotp = lambda *_: self.fail('MFA worker must remain unreached in this origin-only oracle')
+        for platform, mode, expected in (('android', 'usb-reverse', 'https://127.0.0.1:3443'),
+                                         ('android', None, 'https://10.0.2.2:3443'), ('ios', None, 'https://127.0.0.1:3443')):
+            with self.subTest(platform=platform, mode=mode), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); (root / 'config.json').write_text(json.dumps(self.config(mode, platform)))
+                (root / 'credentials.json').write_text(json.dumps({'email': 'synthetic@example.com', 'password': 'synthetic-only', 'company_slug': 'synthetic-only'}))
+                (root / 'seed.json').write_text(json.dumps({}))
+                calls = []
+                class Client:
+                    def __init__(client): client.headers = dict(fixture_module.HEADERS); client.cookies = {'caseops_csrf': 'synthetic-csrf'}
+                    def __enter__(client): return client
+                    def __exit__(client, *_): pass
+                    def post(client, route, **kwargs):
+                        if route == '/api/auth/native/authorize':
+                            calls.append((dict(client.headers), kwargs['json'])); raise StopBeforeConsent()
+                        return SimpleNamespace(status_code=200, content=b'{}', json=lambda: {})
+                with patch.object(fixture_module, 'ROOT', root), patch.object(fixture_module, 'client', side_effect=Client), patch.dict(sys.modules, {'caseops_api.services.security': security}), self.assertRaises(StopBeforeConsent):
+                    fixture_module.auth_probe(argparse.Namespace())
+                self.assertEqual(calls[0][0]['Origin'], expected)
+                self.assertEqual(calls[0][0]['X-CaseOps-Automated-Test'], 'no-paid-providers')
+                self.assertEqual(calls[0][1]['platform'], platform)
+
+    def test_shared_helper_replacement_is_rejected_before_execution(self):
+        files_module = load('usb_files_loader', 'prepare-android-files-fixture.py')
+        for producer_module in (bootstrap_module, extend_module, fixture_module, files_module):
+            with self.subTest(producer=Path(producer_module.__file__).name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); producer = root / Path(producer_module.__file__).name; helper = root / 'local-transport.py'
+                original = (Path(producer_module.__file__).parent / 'local-transport.py').read_bytes()
+                producer.write_bytes(Path(producer_module.__file__).read_bytes()); helper.write_bytes(original)
+                spec = importlib.util.spec_from_file_location('usb_source_control', producer)
+                loaded = importlib.util.module_from_spec(spec); spec.loader.exec_module(loaded)
+                helper.write_bytes(original + b'\n# replacement must be refused\n')
+                with self.assertRaisesRegex(AssertionError, 'Local transport source changed'):
+                    loaded._load_local_transport()
+                helper.write_bytes(original)
+                linked = root / 'helper-hardlink'; os.link(helper, linked)
+                with self.assertRaisesRegex(AssertionError, 'Local transport source identity'):
+                    loaded._load_local_transport()
+                linked.unlink()
+                if os.name != 'nt':
+                    # Actual POSIX link/path proof; this does not claim Windows
+                    # symlink-privilege or native filesystem acceptance.
+                    helper.unlink(); helper.symlink_to(Path(producer_module.__file__).parent / 'local-transport.py')
+                    with self.assertRaisesRegex(AssertionError, 'Canonical local transport source'):
+                        loaded._load_local_transport()
+                    helper.unlink(); helper.write_bytes(original)
+                    alias = root / 'namespace-alias'; alias.symlink_to(root, target_is_directory=True)
+                    alias_spec = importlib.util.spec_from_file_location('usb_namespace_control', alias / producer.name)
+                    alias_module = importlib.util.module_from_spec(alias_spec)
+                    with self.assertRaisesRegex(AssertionError, 'Canonical local transport source'):
+                        alias_spec.loader.exec_module(alias_module)
 
 
 if __name__ == "__main__":

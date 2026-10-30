@@ -7,7 +7,7 @@ import { admitApplication, SEARCH_KINDS, validateBuildReceipt, validateCoreFixtu
 import { binaryHash, localUrl, safeFailure } from './support.mjs';
 import { collect } from './suite.mjs';
 import { validateSessionDeletePolicy } from './session-admission.mjs';
-import { androidLocalProfile } from './android-local-profile.mjs';
+import { androidLocalProfile, validateUsbReverseOrigins } from './android-local-profile.mjs';
 
 const allCases = collect('android').intended.map((id) => id.split(':')[1]);
 function noEmbeddedSecrets(value) {
@@ -33,19 +33,34 @@ export function validateAndroidTransport(fixture, platform, build) {
   if (value === undefined) {
     assert.equal(mandatory, false, 'MAC_ANDROID_TRANSPORT_REQUIRED'); return null;
   }
+  const usb = value?.transportMode === 'usb-reverse';
+  const keys = usb ? ['adbPort', 'appiumUrl', 'systemPort', 'transportMode'] : ['adbPort', 'appiumUrl', 'systemPort'];
   assert.ok(value && typeof value === 'object' && !Array.isArray(value)
-    && Object.keys(value).length === 3 && ['adbPort', 'appiumUrl', 'systemPort'].every(key => Object.hasOwn(value, key)),
+    && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key)),
   'ANDROID_TRANSPORT_SCHEMA_REQUIRED');
-  const profile = androidLocalProfile(fixture.udid, 'ANDROID_TRANSPORT_DEVICE_MISMATCH');
+  const profile = androidLocalProfile(fixture.udid, 'ANDROID_TRANSPORT_DEVICE_MISMATCH', value.transportMode);
   assert.equal(value.adbPort, profile.adbPort, 'ANDROID_TRANSPORT_ADB_PORT_MISMATCH');
   assert.equal(value.appiumUrl, profile.appiumUrl, 'ANDROID_TRANSPORT_APPIUM_URL_MISMATCH');
   assert.equal(value.systemPort, profile.systemPort, 'ANDROID_TRANSPORT_SYSTEM_PORT_MISMATCH');
-  return { adbPort: value.adbPort, appiumUrl: value.appiumUrl, systemPort: value.systemPort };
+  if (usb) {
+    assert.equal(fixture.appId, 'ai.caseops.mobile.dev.localacceptance', 'ANDROID_TRANSPORT_USB_QA_APP_REQUIRED');
+    validateUsbReverseOrigins(fixture.apiOrigin, fixture.auth?.webOrigin);
+    if (build) {
+      assert.equal(build.apiOrigin, fixture.apiOrigin, 'ANDROID_TRANSPORT_USB_BUILD_ORIGIN_MISMATCH');
+      assert.equal(build.webOrigin, fixture.auth.webOrigin, 'ANDROID_TRANSPORT_USB_BUILD_ORIGIN_MISMATCH');
+    }
+  }
+  return { adbPort: value.adbPort, appiumUrl: value.appiumUrl, systemPort: value.systemPort,
+    ...(usb ? { transportMode: 'usb-reverse' } : {}) };
 }
 
 export function androidSessionTransport(fixture, platform, environment = process.env) {
   const transport = validateAndroidTransport(fixture, platform);
   if (!transport) return { appiumUrl: localUrl(environment.CASEOPS_MOBILE_APPIUM_URL || 'http://127.0.0.1:4723'), capabilities: {} };
+  if (transport.transportMode === 'usb-reverse') assert.equal(environment.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE,
+    'usb-reverse', 'ANDROID_TRANSPORT_USB_MODE_REQUIRED');
+  else if (environment.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE !== undefined) assert.equal(environment.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE,
+    'emulator', 'ANDROID_TRANSPORT_EMULATOR_MODE_REQUIRED');
   if (environment.CASEOPS_MOBILE_APPIUM_URL !== undefined) assert.equal(environment.CASEOPS_MOBILE_APPIUM_URL,
     transport.appiumUrl, 'ANDROID_TRANSPORT_APPIUM_ENVIRONMENT_MISMATCH');
   // attestAndroidBinary invokes plain adb; its server must be the same one the
@@ -73,7 +88,8 @@ export function verifyAndroidSessionTransport(fixture, platform, capabilities) {
     for (const name of keys) assert.equal(capabilities[name], expected, 'ANDROID_SESSION_CAPABILITY_MISMATCH');
   }
   return { type: 'android_transport_verified', source: 'new-session-response', udid: fixture.udid, appId: fixture.appId,
-    appiumUrl: transport.appiumUrl, adbPort: transport.adbPort, systemPort: transport.systemPort };
+    appiumUrl: transport.appiumUrl, adbPort: transport.adbPort, systemPort: transport.systemPort,
+    ...(transport.transportMode ? { transportMode: transport.transportMode } : {}) };
 }
 
 export function inspectLocalPlan(plan, platform, environment = process.env) {
@@ -88,7 +104,7 @@ export function inspectLocalPlan(plan, platform, environment = process.env) {
   if (plan.buildReceipt) build = readReference(plan.buildReceipt);
   else block('STANDALONE_BUILD_RECEIPT_MISSING', ['buildReceipt']);
   const androidTransport = validateAndroidTransport({ androidTransport: plan.androidTransport,
-    udid: plan.device?.udid }, platform, build);
+    udid: plan.device?.udid, appId: plan.appId, apiOrigin: receipt.apiOrigin, auth: { webOrigin: receipt.webOrigin } }, platform, build);
   const expected = plan.expectations || {}, sourceMatter = seed.matter;
   const matter = { ...expected.matter, id: sourceMatter.id, identityLabel: sourceMatter.identityLabel, search: sourceMatter.search };
   const suppliedSearches = expected.matter?.searches || [];

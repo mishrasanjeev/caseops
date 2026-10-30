@@ -15,17 +15,48 @@ SEARCH_KINDS = ("matter_code", "case_number", "filing_number", "cnr_number", "te
 JOIN = " \u00b7 "
 
 
+def _load_local_transport():
+    import hashlib as _hashlib
+    import os as _os
+    import stat as _stat
+    _path = Path(__file__).absolute().with_name("local-transport.py")
+    _keys = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    _frame = lambda value: tuple(getattr(value, key) for key in _keys)
+    assert _path.resolve(strict=True) == _path, "Canonical local transport source required"
+    def _namespace():
+        rows = []
+        for parent in _path.parents:
+            value = parent.lstat()
+            assert len(rows) < 128 and _stat.S_ISDIR(value.st_mode) and not _stat.S_ISLNK(value.st_mode), "Local transport source namespace required"
+            rows.append((str(parent), *(getattr(value, key) for key in _keys[:5])))
+        return rows
+    _parents = _namespace()
+    _named = _path.lstat()
+    _fd = _os.open(_path, _os.O_RDONLY | getattr(_os, "O_NOFOLLOW", 0) | getattr(_os, "O_NONBLOCK", 0) | getattr(_os, "O_BINARY", 0))
+    try:
+        _first = _os.fstat(_fd)
+        assert _stat.S_ISREG(_first.st_mode) and not _stat.S_ISLNK(_named.st_mode) and _first.st_nlink == 1 and _first.st_uid == Path(__file__).lstat().st_uid, "Local transport source identity required"
+        assert 0 < _first.st_size <= 16384 and all(getattr(_first, key) == getattr(_named, key) for key in _keys if not (_os.name == "nt" and key == "st_dev" and _named.st_dev == 0)), "Local transport named descriptor mismatch"
+        _data = bytearray()
+        while len(_data) <= _first.st_size:
+            _part = _os.read(_fd, min(65536, _first.st_size + 1 - len(_data)))
+            if not _part:
+                break
+            _data.extend(_part)
+        _raw = bytes(_data)
+        assert len(_raw) == _first.st_size and _hashlib.sha256(_raw).hexdigest() == "95180cd961891d9056d2a4d491e9239c6f49d4de2562c35e6d48610d767dd6ae" and _frame(_first) == _frame(_os.fstat(_fd)) and _frame(_named) == _frame(_path.lstat()) and _parents == _namespace(), "Local transport source changed"
+    finally:
+        _os.close(_fd)
+    _scope = {"__name__": "caseops_local_transport", "__file__": str(_path)}
+    exec(compile(_raw, str(_path), "exec"), _scope)
+    return _scope
+
+_LOCAL_TRANSPORT = _load_local_transport()
+
 def extension_auth(inputs, config):
     assert isinstance(inputs, dict) and isinstance(config, dict), "Extension input and config objects required"
-    platform = config.get("CASEOPS_MOBILE_PLATFORM", "android")
-    assert platform in ("android", "ios"), "Unsupported fixture platform"
-    assert inputs.get("platform", "android") == platform, "Extension platform mismatch"
-    port = str(config.get("CASEOPS_MOBILE_WEB_PORT", "3443"))
-    assert re.fullmatch(r"[1-9][0-9]{3,4}", port) and 1024 <= int(port) <= 65535, "Explicit unprivileged web port required"
-    host = "127.0.0.1" if platform == "ios" else "10.0.2.2"
-    expected = f"https://{host}:{port}"
-    origin = config.get("CASEOPS_MOBILE_WEB_ORIGIN", expected)
-    assert origin == expected and inputs.get("webOrigin") == origin, "Extension web origin differs from server config"
+    expected = _LOCAL_TRANSPORT['witness'](config, inputs, require_api=False)
+    platform, origin = expected['platform'], expected['webOrigin']
     auth = {"webOrigin": origin, "companySlug": "test-legal",
             "mode": "web-context" if platform == "ios" else "native-firefox",
             "emailEnv": "CASEOPS_MOBILE_CORE_EMAIL", "passwordEnv": "CASEOPS_MOBILE_CORE_PASSWORD",
@@ -196,6 +227,7 @@ def main():
             "environment": "docker-integration", "syntheticDataOnly": True,
             "coreInventory": "native-core-2026-10-25", "iteration": nonce,
             "platform": config.get("CASEOPS_MOBILE_PLATFORM", "android"),
+            **_LOCAL_TRANSPORT["fields"](config),
             "baseSeed": {"file": "seed.json", "sha256": base_hash},
             "servingBuild": fixture.expect(owner.get("/api/build")),
             "principalLabel": credentials["full_name"], "workspaceLabel": identity["company"]["name"],

@@ -34,6 +34,7 @@ generator = types.ModuleType("bound_android_files_generator")
 generator.__file__ = str(generator_path)
 exec(compile(generator_bytes, str(generator_path), "exec"), generator.__dict__)
 require, read_bound, read_json, new_file = generator.require, generator.read_bound, generator.read_json, generator.new_file
+LOCAL_TRANSPORT_SHA256 = "95180cd961891d9056d2a4d491e9239c6f49d4de2562c35e6d48610d767dd6ae"
 MAX_REQUEST_BYTES = 32768
 MAX_STATUS_BYTES = 512 * 1024
 MAX_SOURCE_BYTES = generator.MAX_ASSET_BYTES
@@ -203,7 +204,8 @@ def snapshot_sources(cache, request):
     expected = {"admit-android-file-source.py": request["admissionPythonSha256"],
                 "prepare-android-files-fixture.py": manifest["helperSource"]["sha256"],
                 "prepare-ios-files-fixture.py": manifest["encoderSource"]["sha256"],
-                "local-fixture.py": request["fixturePythonSha256"]}
+                "local-fixture.py": request["fixturePythonSha256"],
+                "local-transport.py": LOCAL_TRANSPORT_SHA256}
     for name, digest in expected.items():
         data, _ = read_bound(HERE / name, digest)
         new_file(directory / name, data)
@@ -295,7 +297,8 @@ def container_admit(request, root=Path("/fixture-state")):
     expected_sources = {"admit-android-file-source.py": request["admissionPythonSha256"],
                         "prepare-android-files-fixture.py": manifest["helperSource"]["sha256"],
                         "prepare-ios-files-fixture.py": manifest["encoderSource"]["sha256"],
-                        "local-fixture.py": request["fixturePythonSha256"]}
+                        "local-fixture.py": request["fixturePythonSha256"],
+                "local-transport.py": LOCAL_TRANSPORT_SHA256}
     require(request.get("helperSources") == expected_sources, "Complete bound helper source closure required")
     snapshot = root / request["sourceSnapshot"]
     for name, digest in expected_sources.items():

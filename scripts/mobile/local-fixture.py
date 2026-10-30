@@ -19,6 +19,44 @@ CLEAN = b"Synthetic CaseOps mobile source. No legal authority or customer data.\
 EICAR = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
 
 
+def _load_local_transport():
+    import hashlib as _hashlib
+    import os as _os
+    import stat as _stat
+    _path = Path(__file__).absolute().with_name("local-transport.py")
+    _keys = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    _frame = lambda value: tuple(getattr(value, key) for key in _keys)
+    assert _path.resolve(strict=True) == _path, "Canonical local transport source required"
+    def _namespace():
+        rows = []
+        for parent in _path.parents:
+            value = parent.lstat()
+            assert len(rows) < 128 and _stat.S_ISDIR(value.st_mode) and not _stat.S_ISLNK(value.st_mode), "Local transport source namespace required"
+            rows.append((str(parent), *(getattr(value, key) for key in _keys[:5])))
+        return rows
+    _parents = _namespace()
+    _named = _path.lstat()
+    _fd = _os.open(_path, _os.O_RDONLY | getattr(_os, "O_NOFOLLOW", 0) | getattr(_os, "O_NONBLOCK", 0) | getattr(_os, "O_BINARY", 0))
+    try:
+        _first = _os.fstat(_fd)
+        assert _stat.S_ISREG(_first.st_mode) and not _stat.S_ISLNK(_named.st_mode) and _first.st_nlink == 1 and _first.st_uid == Path(__file__).lstat().st_uid, "Local transport source identity required"
+        assert 0 < _first.st_size <= 16384 and all(getattr(_first, key) == getattr(_named, key) for key in _keys if not (_os.name == "nt" and key == "st_dev" and _named.st_dev == 0)), "Local transport named descriptor mismatch"
+        _data = bytearray()
+        while len(_data) <= _first.st_size:
+            _part = _os.read(_fd, min(65536, _first.st_size + 1 - len(_data)))
+            if not _part:
+                break
+            _data.extend(_part)
+        _raw = bytes(_data)
+        assert len(_raw) == _first.st_size and _hashlib.sha256(_raw).hexdigest() == "95180cd961891d9056d2a4d491e9239c6f49d4de2562c35e6d48610d767dd6ae" and _frame(_first) == _frame(_os.fstat(_fd)) and _frame(_named) == _frame(_path.lstat()) and _parents == _namespace(), "Local transport source changed"
+    finally:
+        _os.close(_fd)
+    _scope = {"__name__": "caseops_local_transport", "__file__": str(_path)}
+    exec(compile(_raw, str(_path), "exec"), _scope)
+    return _scope
+
+_LOCAL_TRANSPORT = _load_local_transport()
+
 def initial_gateway_routes(matter_id, draft_id):
     # Exact method/path admission only. Query validation and native authority
     # remain API contracts; this public policy GET still needs the no-paid marker.
@@ -469,15 +507,16 @@ def auth_probe(args):
     state = json.loads((ROOT / "seed.json").read_text())
     verifier = secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    transport = _LOCAL_TRANSPORT["policy"](json.loads((ROOT / "config.json").read_text()))
     authorization = {"code_challenge": challenge, "state": secrets.token_urlsafe(32),
-                     "platform": "android", "redirect_uri": "caseops://oauth/callback"}
+                     "platform": transport["platform"], "redirect_uri": "caseops://oauth/callback"}
     with client() as browser, client() as token_http, client() as native:
         expect(browser.post("/api/auth/login", json={
             "email": credentials["email"], "password": credentials["password"],
             "company_slug": credentials["company_slug"],
         }))
         browser.headers["X-CSRF-Token"] = browser.cookies.get("caseops_csrf")
-        browser.headers["Origin"] = "https://10.0.2.2:3443"
+        browser.headers["Origin"] = transport["webOrigin"]
         expect(browser.post("/api/auth/native/authorize", json=authorization), 403)
         expect(browser.post("/api/auth/mfa/step-up", json={
             "code": _hotp(credentials["totp_secret"], int(time.time()) // TOTP_PERIOD_SECONDS),
@@ -486,7 +525,7 @@ def auth_probe(args):
         grant = expect(browser.post("/api/auth/native/authorize", json=authorization))
         assert grant["state"] == authorization["state"] and grant["redirect_uri"] == authorization["redirect_uri"]
         payload = {"code": grant["code"], "code_verifier": verifier,
-                   "platform": "android", "redirect_uri": authorization["redirect_uri"]}
+                   "platform": transport["platform"], "redirect_uri": authorization["redirect_uri"]}
         tokens = expect(token_http.post("/api/auth/native/token", json=payload))
         expect(token_http.post("/api/auth/native/token", json=payload), 401)
         native.headers["Authorization"] = f"Bearer {tokens['access_token']}"

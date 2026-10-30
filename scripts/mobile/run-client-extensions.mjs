@@ -5,7 +5,7 @@ import os from 'node:os';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { sourceSnapshot } from './source-snapshot.mjs';
-import { observeInstalled } from './run-v1-workflows.mjs';
+import { observeInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from './run-v1-workflows.mjs';
 import { createClientExtensionControls } from './client-extension-controls.mjs';
 import { readClientPublicInput } from './client-extension-public-input.mjs';
 import { admitClientServerAsync, clientHarnessFingerprint, captureClientFile, captureClientTreeCommitmentAsync, assertClientRuntimeInventory, selectedClientExecutable } from './client-extension-runtime.mjs';
@@ -79,7 +79,7 @@ export async function admitClientExtensions(q,dependencies={}) {
   assert.equal(registration.companyId,fixture.companyId);assert.equal(registration.implementationSha256,controls.gatewayImplementationEvidence.sha256);
   const installed=io.installed(fixture,q.platform,q.expectedBinaryHash,io.environment);assert.equal(installed.udid,fixture.udid);assert.equal(installed.appId,fixture.appId);assert.equal(installed.binaryHash,q.expectedBinaryHash);
   assert.equal(expectedInstalled.binaryHash??expectedInstalled.installedApkSha256,q.expectedBinaryHash);assert.equal(expectedInstalled.udid,fixture.udid);
-  if(q.platform==='android'){assert.equal(installed.bootId,device.bootId);assert.equal(device.pageSizeBytes,16384);}else{assert.equal(installed.deviceTypeIdentifier,device.deviceTypeIdentifier);assert.equal(installed.runtime,device.runtime);}
+  if(q.platform==='android')validateAndroidLayoutEvidence(fixture,installed,device,expectedInstalled);else{assert.equal(installed.deviceTypeIdentifier,device.deviceTypeIdentifier);assert.equal(installed.runtime,device.runtime);}
   const server=await io.server(q);assert.deepEqual(fixture.cx.osRecipes.appiumInventoryEvidence,q.appiumInventoryEvidence);
   const clientRuntime=io.read(q.clientRuntimeInventoryEvidence);assertClientRuntimeInventory(clientRuntime,'webdriver',q.platform);assert.equal(clientRuntime.root,io.environment.CASEOPS_MOBILE_TOOLING_HOME);
   assert.deepEqual(await io.tree(clientRuntime.root),clientRuntime.tree,'CX_COMPLETE_WEBDRIVER_RUNTIME_CHANGED');
@@ -204,7 +204,7 @@ export async function runClientExtensions(q,dependencies={}) {
   }
   if(preflightPassed)write({type:'postflight_result',status:finalPassed?'passed':'failed'});write({type:'run_completed',platform:q.platform,intendedCount:24});
   const result=reconcileResults(journal.events,collection.intended);closeJournal();
-  const summary={...collection,...result,report:q.report,actualNativeExecution:sessions.length>0,nativeExecution:sessions.length?'observed':'not-run',physicalHardwareAcceptance:'unverified',core23Claimed:false,files17Claimed:false,v1Claimed:false,...(runtimeRefusal?{captureCleanupUncertain:true,captureRequiresProcessExit:true}:{})};
+  const summary={...collection,...result,report:q.report,actualNativeExecution:sessions.length>0,nativeExecution:sessions.length?'observed':'not-run',physicalHardwareAcceptance:'unverified',...androidLayoutSummary(admitted.installed),core23Claimed:false,files17Claimed:false,v1Claimed:false,...(runtimeRefusal?{captureCleanupUncertain:true,captureRequiresProcessExit:true}:{})};
   fs.writeFileSync(path.join(q.report,'summary.json'),JSON.stringify(summary,null,2)+'\n',{flag:'wx',mode:0o600});return summary;
   }catch(error){originalError=error;throw error;}
   finally{

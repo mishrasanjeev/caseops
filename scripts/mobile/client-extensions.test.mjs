@@ -1,3 +1,4 @@
+import { validateAndroidTransport } from '../../apps/mobile/e2e/local-run.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -1093,3 +1094,27 @@ test('async server legacy, hash-only and incoherent evidence refuses before comm
  try{for(const tree of[captureClientTree(state.root),{sha256:good.tree.manifest.sha256},{...good.tree,observations:1},{...good.tree,chargedBytes:good.tree.chargedBytes+1}]){let reads=0,commands=0;const before=state.reads.length;await assert.rejects(state.track(admitClientServerAsync(q,{read:()=>++reads===1?server:{...good,tree},command:()=>{commands++;throw Error('MUST_NOT_DISPATCH');}})));assert.equal(commands,0);assert.equal(state.reads.length,before);}}
  finally{fs.rmSync(home,{recursive:true,force:true});}
 }));
+
+function physicalLayoutRecord(binaryHash, pageSizeBytes = 4096) {
+ const physicalIdentity={access:'run-as',deviceKind:'physical',transportMode:'usb-reverse',shellUid:2000,packageUid:10087,runAsUid:10087,usbDevPath:'usb:1-2.5',apiLevel:36,abi:'arm64-v8a',qemuOff:true};
+ const record={platform:'android',udid:'CASEOPSUNITUSB01',appId:'ai.caseops.mobile.dev.localacceptance',binaryHash,bootId:'11111111-2222-4333-8444-555555555555',pageSizeBytes,...physicalIdentity,physicalWorkflowOnly:true,sixteenKEmulatorAcceptance:false};
+ record.androidLayout={schemaVersion:1,kind:'android-physical-layout-observation',observed:true,platform:'android',udid:record.udid,appId:record.appId,binaryHash,bootId:record.bootId,deviceKind:'physical',transportMode:'usb-reverse',pageSizeBytes,physicalIdentity,observationCommand:['shell','getconf','PAGESIZE'],returnedOutputBytes:{beforeBoot:37,pageSize:pageSizeBytes===4096?5:6,afterBoot:37},acceptanceScope:'physical-workflow-only',sixteenKEmulatorAcceptance:false};
+ return record;
+}
+function bindPhysicalPacket(x, values, current, pageSize=4096) {
+ const actual={...physicalLayoutRecord(x.q.expectedBinaryHash,pageSize),...(current.appDataPath?{appDataPath:current.appDataPath}:{})}; x.q.platform='android'; const oldUdid=current.udid,oldAppId=current.appId;
+ const seen=new Set();function update(v){if(!v||typeof v!=='object'||seen.has(v))return;seen.add(v);for(const[k,c]of Object.entries(v)){if(c===oldUdid)v[k]=actual.udid;else if(c===oldAppId)v[k]=actual.appId;else if(k==='platform'&&c==='ios')v[k]='android';else if(k==='inventoryId'&&typeof c==='string')v[k]=c.replace('client-extension-ios','client-extension-android');else update(c);}}
+ for(const v of values.values())update(v);
+ x.q.inventoryId=x.q.inventoryId?.replace('client-extension-ios','client-extension-android');
+ for(const r of[x.q.deviceEvidence,x.q.installedEvidence]){const v=values.get(r.path);delete v.deviceTypeIdentifier;delete v.runtime;Object.assign(v,structuredClone(actual));}
+ for(const r of[x.q.fixtureEvidence,...x.q.members.map(m=>m.fixtureEvidence)]){const f=values.get(r.path);f.androidTransport={adbPort:5042,appiumUrl:'http://127.0.0.1:4729',systemPort:8206,transportMode:'usb-reverse'};if(f.cx)f.cx.workflowDomain='physical';f.apiOrigin='https://127.0.0.1:8443';f.auth.webOrigin='https://127.0.0.1:3443';}
+ const build=values.get(x.q.buildReceipt.path);Object.assign(build,{apiOrigin:'https://127.0.0.1:8443',webOrigin:'https://127.0.0.1:3443'});
+ for(const r of[x.q.fixtureEvidence,...x.q.members.map(m=>m.fixtureEvidence)])validateAndroidTransport(values.get(r.path),'android',build);
+ x.io.installed=()=>structuredClone(actual);return actual;
+}
+
+test('complete ClientExtensions admission binds physical4K layout and rejects mismatched records before protected members',async()=>{
+ function packet(){const x=clientAdmissionPacket(),current=x.io.installed();bindPhysicalPacket(x,x.values,current);const version=x.values.get(x.q.artifactVersionEvidence.path);version.reader='aapt2-dump-badging';return x;}
+ const good=packet(),result=await admitClientExtensions(good.q,good.io);assert.equal(result.installed.pageSizeBytes,4096);assert.equal(result.installed.androidLayout.sixteenKEmulatorAcceptance,false);assert.equal(good.reads(),2);
+ for(const mutate of[x=>x.values.get(x.q.deviceEvidence.path).pageSizeBytes=16384,x=>x.values.get(x.q.installedEvidence.path).androidLayout=undefined,x=>x.values.get(x.q.deviceEvidence.path).bootId='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee']){const x=packet();mutate(x);await assert.rejects(admitClientExtensions(x.q,x.io));assert.equal(x.reads(),0);}
+});

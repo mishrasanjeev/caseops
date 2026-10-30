@@ -121,3 +121,4 @@ apps/web/public/third-party-notices/node-22.23.4-LICENSE.txt -text whitespace=-s
 
 apps/mobile/e2e/android-local-profile.mjs text eol=lf
 scripts/mobile/fixtures/ios-local-archive/runner.mjs text eol=lf
+scripts/mobile/local-transport.py text eol=lf

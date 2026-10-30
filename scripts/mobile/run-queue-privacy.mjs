@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { QP,requireRequest,validateDataset,collectQP,readReference,readBytes,reference ,ownerRecipes } from '../../apps/mobile/e2e/queue-privacy-contract.mjs';
 import { queuePrivacyScenarios } from '../../apps/mobile/e2e/queue-privacy.mjs';
 import { readV1Member } from '../../apps/mobile/e2e/v1-workflows-credentials.mjs';
-import { observeInstalled } from './run-v1-workflows.mjs';
+import { observeInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from './run-v1-workflows.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { authenticate } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { find,visible,selector,dispatchNativeClick } from '../../apps/mobile/e2e/native-ui.mjs';
@@ -64,7 +64,7 @@ export async function admitQPBeforeMembers(q,dependencies={}){
  assert.equal(device.observed,true);assert.equal(device.udid,fixture.udid);assert.equal(device.platform,q.platform);assert.deepEqual(device.buildReceipt,q.buildReceipt);
  const actual=io.installed(fixture,q.platform,q.expectedBinaryHash,io.environment);assert.equal(actual.udid,fixture.udid);assert.equal(actual.appId,fixture.appId);assert.equal(actual.binaryHash,q.expectedBinaryHash);
  assert.equal(installed.udid,actual.udid);assert.equal(installed.binaryHash??installed.installedApkSha256,actual.binaryHash);assert.deepEqual(installed.buildReceipt,q.buildReceipt);
- if(q.platform==='android'){assert.equal(actual.bootId,device.bootId);assert.equal(device.pageSizeBytes,16384);}else assert.equal(actual.deviceTypeIdentifier,device.deviceTypeIdentifier);
+ if(q.platform==='android')validateAndroidLayoutEvidence(fixture,actual,device,installed);else assert.equal(actual.deviceTypeIdentifier,device.deviceTypeIdentifier);
  if(installed.appDataPath)assert.equal(actual.appDataPath,installed.appDataPath);
  const publics=q.members.map((m,i)=>{
   const f=io.read(m.fixtureEvidence),auth=io.read(m.authObservation),actor=registration.actors[i?'second-company':'member'];
@@ -143,7 +143,7 @@ export async function runQueuePrivacy(q){
  const sessions=journal.events.filter(e=>e.type==='appium_session'),created=sessions.filter(e=>e.state==='created'),deleted=sessions.filter(e=>e.state==='deleted');
  const paired=created.length===2&&deleted.length===2&&new Set(created.map(e=>e.sessionId)).size===2&&created.every(e=>deleted.some(z=>z.id===e.id&&z.sessionId===e.sessionId));
  if(preflight&&!paired)postflight={type:'postflight_result',status:'failed',reason:'QP_EXACT_TWO_SESSION_LIFECYCLE_REQUIRED'};if(postflight)journal.write(postflight);
- journal.write({type:'run_completed',...collection,intendedCount:2});const result=reconcileResults(journal.events,collection.intended);journal.close();const summary={...collection,...result,pairedSessions:paired,nativeExecution:created.length?'actual':'not-run',report,core23PassedByThisRun:false,files17PassedByThisRun:false,v1SeventeenPassedByThisRun:false};
+ journal.write({type:'run_completed',...collection,intendedCount:2});const result=reconcileResults(journal.events,collection.intended);journal.close();const summary={...collection,...result,pairedSessions:paired,nativeExecution:created.length?'actual':'not-run',report,...androidLayoutSummary(a.actual),core23PassedByThisRun:false,files17PassedByThisRun:false,v1SeventeenPassedByThisRun:false};
  fs.writeFileSync(path.join(report,'summary.json'),JSON.stringify(summary,null,2)+'\n',{flag:'wx',mode:0o600});return summary;
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){

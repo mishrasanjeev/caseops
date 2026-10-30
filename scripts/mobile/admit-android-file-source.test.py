@@ -286,7 +286,7 @@ class Admissions(unittest.TestCase):
         name, sources = admission.snapshot_sources(self.cache, request)
         self.assertRegex(name, r"^android-admission-source-[a-f0-9]{16}$")
         self.assertEqual(set(sources), {"admit-android-file-source.py", "prepare-android-files-fixture.py",
-                                       "prepare-ios-files-fixture.py", "local-fixture.py"})
+                                       "prepare-ios-files-fixture.py", "local-fixture.py", "local-transport.py"})
         for filename, digest in sources.items():
             staged = self.cache / name / filename
             self.assertEqual(hashlib.sha256(staged.read_bytes()).hexdigest(), digest)
@@ -332,6 +332,97 @@ class Admissions(unittest.TestCase):
                          "reason": "Only the local fixture API may admit sources"})
         self.assertFalse((self.cache / "credentials.json").exists())
         self.assertFalse((self.cache / "gateway-routes.json").exists())
+
+    def test_actual_snapshot_fixture_import_loads_pinned_transport_before_any_auth(self):
+        request, _ = admission.host_request(self.args())
+        name, _ = admission.snapshot_sources(self.cache, request)
+        program = """import importlib.util,json,socket,sys
+from pathlib import Path
+def refused(*args,**kwargs):raise RuntimeError('No network in snapshot import control')
+socket.socket.connect=refused
+socket.socket.connect_ex=refused
+socket.getaddrinfo=refused
+path=Path(sys.argv[1])
+spec=importlib.util.spec_from_file_location('actual_closed_fixture',path)
+module=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+legacy=module._LOCAL_TRANSPORT['policy']({})
+usb=module._LOCAL_TRANSPORT['policy']({'CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE':'usb-reverse'})
+print(json.dumps({'legacy':legacy['apiOrigin'],'usb':usb['apiOrigin'],'mode':usb['mode']}))
+"""
+        result = subprocess.run([os.sys.executable, "-I", "-B", "-c", program,
+                                 str(self.cache / name / "local-fixture.py")],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {"legacy": "https://10.0.2.2:8443",
+                         "usb": "https://127.0.0.1:8443", "mode": "usb-reverse"})
+        self.assertFalse((self.cache / "credentials.json").exists())
+        self.assertFalse((self.cache / "gateway-routes.json").exists())
+
+    def test_missing_or_changed_transport_source_refuses_container_before_fixture_auth(self):
+        request, _ = admission.host_request(self.args())
+        name, sources = admission.snapshot_sources(self.cache, request)
+        request.update(sourceSnapshot=name, helperSources=sources)
+        target = self.cache / name / "local-transport.py"
+        original = target.read_bytes()
+        with patch.dict(os.environ, {"CASEOPS_ENV": "local"}), patch.object(admission, "load_fixture") as loader:
+            incomplete = {key: value for key, value in sources.items() if key != "local-transport.py"}
+            with self.assertRaisesRegex(ValueError, "source closure"):
+                admission.container_admit({**request, "helperSources": incomplete}, self.cache)
+            target.chmod(0o600)
+            target.unlink()
+            with self.assertRaises(FileNotFoundError):
+                admission.container_admit(request, self.cache)
+            target.write_bytes(original + b"\n# substituted source\n")
+            with self.assertRaisesRegex(ValueError, "hash mismatch"):
+                admission.container_admit(request, self.cache)
+        loader.assert_not_called()
+        self.assertFalse((self.cache / "credentials.json").exists())
+
+    def test_historical_four_source_snapshot_fails_actual_cli_import_before_auth(self):
+        previous = "def snapshot_sources(cache, request):\n    \"\"\"Execute the new adapter without changing the canonical image's read-only mount.\"\"\"\n    directory = Path(cache) / (\"android-admission-source-\" + secrets.token_hex(8))\n    os.mkdir(directory, 0o700)\n    sources = {}\n    manifest = json.loads(request[\"manifestText\"])\n    expected = {\"admit-android-file-source.py\": request[\"admissionPythonSha256\"],\n                \"prepare-android-files-fixture.py\": manifest[\"helperSource\"][\"sha256\"],\n                \"prepare-ios-files-fixture.py\": manifest[\"encoderSource\"][\"sha256\"],\n                \"local-fixture.py\": request[\"fixturePythonSha256\"]}\n    for name, digest in expected.items():\n        data, _ = read_bound(HERE / name, digest)\n        new_file(directory / name, data)\n        os.chmod(directory / name, 0o400)\n        sources[name] = digest\n    return directory.name, sources\n\n"
+        scope = dict(vars(admission))
+        exec(compile(previous, "historical-four-source-snapshot", "exec"), scope)
+        request, _ = admission.host_request(self.args())
+        name, sources = scope["snapshot_sources"](self.cache, request)
+        self.assertEqual(set(sources), {"admit-android-file-source.py", "prepare-android-files-fixture.py",
+                                       "prepare-ios-files-fixture.py", "local-fixture.py"})
+        result = subprocess.run([os.sys.executable, "-I", "-B", str(self.cache / name / "admit-android-file-source.py"), "_container"],
+                                input=json.dumps(request), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                env={**os.environ, "CASEOPS_ENV": "production"}, timeout=5)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("FileNotFoundError", result.stderr)
+        self.assertIn("local-transport.py", result.stderr)
+        self.assertNotIn("Only the local fixture API may admit sources", result.stderr)
+        self.assertFalse((self.cache / "credentials.json").exists())
+        self.assertFalse((self.cache / "gateway-routes.json").exists())
+
+    def test_transport_snapshot_transfers_verified_buffer_without_reopening_replacement(self):
+        request, _ = admission.host_request(self.args())
+        source = self.root / "owned-source-copy"
+        source.mkdir()
+        filenames = ("admit-android-file-source.py", "prepare-android-files-fixture.py",
+                     "prepare-ios-files-fixture.py", "local-fixture.py", "local-transport.py")
+        for name in filenames:
+            admission.new_file(source / name, (admission.HERE / name).read_bytes())
+        old_read = admission.read_bound
+        events = []
+        original = (source / "local-transport.py").read_bytes()
+        def replacing_read(path, *args, **kwargs):
+            data, reference = old_read(path, *args, **kwargs)
+            if Path(path) == source / "local-transport.py":
+                events.append("verified-held-buffer")
+                Path(path).write_bytes(b"replacement must never be staged")
+            return data, reference
+        with patch.object(admission, "HERE", source), patch.object(admission, "read_bound", side_effect=replacing_read):
+            name, sources = admission.snapshot_sources(self.cache, request)
+        staged = self.cache / name / "local-transport.py"
+        self.assertEqual(events, ["verified-held-buffer"])
+        self.assertEqual(staged.read_bytes(), original)
+        self.assertEqual(hashlib.sha256(staged.read_bytes()).hexdigest(), admission.LOCAL_TRANSPORT_SHA256)
+        self.assertNotEqual(staged.read_bytes(), (source / "local-transport.py").read_bytes())
+        self.assertEqual(staged.stat().st_mode & 0o777, 0o400)
 
     def test_container_tls_uses_fixed_compose_listener_and_public_dynamic_host_without_verification_bypass(self):
         events = []

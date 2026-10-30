@@ -11,7 +11,7 @@ import { validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { binaryHash } from '../../apps/mobile/e2e/support.mjs';
 import { validateSessionDeletePolicy } from '../../apps/mobile/e2e/session-admission.mjs';
-import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile.mjs';
+import { androidLocalProfile, validateUsbReverseOrigins } from '../../apps/mobile/e2e/android-local-profile.mjs';
 
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const QA_ID = 'ai.caseops.mobile.dev.localacceptance';
@@ -53,7 +53,7 @@ function identity(left, right, keys, code) {
 function sameReference(actual, expected, code) { assert.deepEqual(reference(actual), expected, code); }
 
 function observedDevice(observation, request, build, buildRef) {
-  const profile = androidLocalProfile(request.udid, 'DEDICATED_ANDROID_SERIAL_REQUIRED');
+  const profile = androidLocalProfile(request.udid, 'DEDICATED_ANDROID_SERIAL_REQUIRED', request.androidTransportMode);
   identity(observation, { schemaVersion: 1, kind: 'observed-android-local-device', observed: true,
     platform: 'android', udid: request.udid, state: 'device', bootCompleted: true,
     apiLevel: 36, architecture: 'arm64-v8a', appId: QA_ID },
@@ -66,7 +66,13 @@ function observedDevice(observation, request, build, buildRef) {
   sameReference(observation.buildReceipt, buildRef, 'DEVICE_BUILD_REFERENCE_MISMATCH');
   identity(observation, profile,
     ['adbPort', 'appiumUrl', 'systemPort'], 'ISOLATED_ANDROID_TRANSPORT_REQUIRED');
-  if (profile.requiresAvdName || Object.hasOwn(observation, 'avdName')) {
+  if (profile.deviceKind === 'physical') {
+    identity(observation, { transportMode: 'usb-reverse', deviceKind: 'physical', shellUid: 2000 },
+      ['transportMode', 'deviceKind', 'shellUid'], 'ACTUAL_PHYSICAL_ANDROID_USB_REQUIRED');
+    assert.ok(/^usb:[A-Za-z0-9.:_-]{1,128}$/.test(observation.usbDevPath || ''), 'ACTUAL_PHYSICAL_ANDROID_USB_REQUIRED');
+    assert.ok(observation.kernelQemu === '' || observation.kernelQemu === '0', 'ACTUAL_PHYSICAL_ANDROID_USB_REQUIRED');
+    assert.equal(Object.hasOwn(observation, 'avdName'), false, 'PHYSICAL_ANDROID_CANNOT_CLAIM_AVD');
+  } else if (profile.requiresAvdName || Object.hasOwn(observation, 'avdName')) {
     assert.equal(observation.avdName, profile.avdName, 'OBSERVED_ANDROID_AVD_MISMATCH');
   }
   assert.ok(Array.isArray(observation.evidence) && observation.evidence.length > 0 && observation.evidence.length <= 16,
@@ -180,6 +186,9 @@ export function createAndroidLocalRun(request) {
   }
   assert.equal(receipt.platform, 'android', 'ANDROID_DOCKER_RECEIPT_REQUIRED');
   assert.equal(extension.platform, 'android', 'ANDROID_EXTENSION_REQUIRED');
+  for (const value of [receipt, extension]) assert.equal(value.androidTransportMode, request.androidTransportMode,
+    'ANDROID_TRANSPORT_MODE_PROVENANCE_MISMATCH');
+  if (request.androidTransportMode === 'usb-reverse') validateUsbReverseOrigins(receipt.apiOrigin, receipt.webOrigin);
   assert.equal(extension.coreInventory, 'native-core-2026-10-25', 'DATED_EXTENSION_REQUIRED');
   assert.equal(extension.baseSeed?.sha256, refs.baseSeed.sha256, 'EXTENSION_BASE_SEED_HASH_MISMATCH');
   assert.equal(path.basename(refs.baseSeed.path), extension.baseSeed?.file, 'EXTENSION_BASE_SEED_FILE_MISMATCH');
@@ -284,7 +293,8 @@ export function createAndroidLocalRun(request) {
     buildReceipt: refs.buildReceipt, publicCa: refs.publicCa, gatewayRoutes: refs.gatewayRoutes, ownerControls: owner,
     appId: QA_ID, binaryVersion: device.versionName, binaryBuild: String(device.versionCode),
     device: { deviceName: device.deviceName, platformVersion: device.platformVersion, udid: device.udid },
-    androidTransport: { adbPort: device.adbPort, appiumUrl: device.appiumUrl, systemPort: device.systemPort },
+    androidTransport: { adbPort: device.adbPort, appiumUrl: device.appiumUrl, systemPort: device.systemPort,
+      ...(request.androidTransportMode === 'usb-reverse' ? { transportMode: 'usb-reverse' } : {}) },
     auth: Object.fromEntries(Object.entries(auth).filter(([key]) => key !== 'firefoxUi')),
     firefoxRecipe: refs.firefoxRecipe, expectations, provenance, outputFixture: outputs.outputFixture };
   noSecrets(plan); noSecrets(effectiveSeed);

@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { attestAndroidFilesContainers } from './android-files-privacy.mjs';
+import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile.mjs';
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { androidSessionTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
 import { validateBuildReceipt, validateCoreFixture, admitApplication } from '../../apps/mobile/e2e/fixture-contract.mjs';
@@ -37,15 +38,44 @@ export function v1HarnessFingerprint(root = ROOT) {
   const hash = createHash('sha256'); for (const name of [...new Set([...allE2e, ...INPUTS])].sort()) { hash.update(name); hash.update('\0'); hash.update(fs.readFileSync(path.join(root, name))); hash.update('\0'); } return hash.digest('hex');
 }
 const toolEnvironment = environment => Object.fromEntries(['PATH', 'HOME', 'USERPROFILE', 'DEVELOPER_DIR', 'SYSTEMROOT', 'TEMP', 'TMPDIR',
-  'ANDROID_USER_HOME', 'ADB_SERVER_SOCKET', 'ANDROID_ADB_SERVER_PORT', 'ANDROID_SERIAL'].filter(k => typeof environment[k] === 'string').map(k => [k, environment[k]]));
+  'ANDROID_USER_HOME', 'ADB_SERVER_SOCKET', 'ANDROID_ADB_SERVER_PORT', 'ANDROID_SERIAL', 'CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE'].filter(k => typeof environment[k] === 'string').map(k => [k, environment[k]]));
 export function observeInstalled(fixture, platform, expectedHash, environment) {
-  const command = (file, args, options) => execFileSync(file, args, { ...options, env: toolEnvironment(environment) });
+  const tools = toolEnvironment(environment);
+  if (platform === 'android' && tools.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE !== undefined) {
+    assert.equal(tools.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE, fixture.androidTransport?.transportMode ?? 'emulator', 'V1_ANDROID_TRANSPORT_MODE_MISMATCH');
+  }
+  const command = (file, args, options) => execFileSync(file, args, { ...options, env: tools });
   if (platform === 'android') {
     const installed = attestAndroidBinary(fixture, expectedHash, { install: false, command });
-    const containers = attestAndroidFilesContainers({ udid: fixture.udid, appId: fixture.appId, command, environment: toolEnvironment(environment) });
+    const containers = attestAndroidFilesContainers({ udid: fixture.udid, appId: fixture.appId, androidTransportMode: fixture.androidTransport?.transportMode, command, environment: tools });
+    let layout;
+    if (containers.transportMode === 'usb-reverse') {
+      const observe = args => {
+        const raw = command('adb', ['-s', fixture.udid, 'shell', ...args], { shell: false, windowsHide: true,
+          encoding: 'utf8', timeout: 5000, maxBuffer: 64, stdio: ['pipe', 'pipe', 'pipe'] });
+        assert.ok(typeof raw === 'string' || Buffer.isBuffer(raw), 'ANDROID_LAYOUT_OUTPUT_REQUIRED');
+        const bytes = Buffer.from(raw); assert.ok(bytes.length > 0 && bytes.length <= 64, 'ANDROID_LAYOUT_OUTPUT_BOUND');
+        return { text: new TextDecoder('utf-8', { fatal: true }).decode(bytes), returnedBytes: bytes.length };
+      };
+      const beforeBoot = observe(['cat', '/proc/sys/kernel/random/boot_id']);
+      assert.equal(beforeBoot.text.trim(), containers.bootId, 'ANDROID_LAYOUT_BOOT_CHANGED');
+      const page = observe(['getconf', 'PAGESIZE']);
+      assert.match(page.text, /^(4096|16384)\r?\n?$/, 'ANDROID_PHYSICAL_PAGE_SIZE_REQUIRED');
+      const afterBoot = observe(['cat', '/proc/sys/kernel/random/boot_id']);
+      assert.equal(afterBoot.text.trim(), containers.bootId, 'ANDROID_LAYOUT_BOOT_CHANGED');
+      layout = { schemaVersion: 1, kind: 'android-physical-layout-observation', observed: true, platform: 'android',
+        udid: fixture.udid, appId: fixture.appId, binaryHash: installed.installedApkSha256, bootId: containers.bootId,
+        deviceKind: 'physical', transportMode: 'usb-reverse', pageSizeBytes: Number(page.text.trim()),
+        physicalIdentity: Object.fromEntries(['access', 'deviceKind', 'transportMode', 'shellUid', 'packageUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff'].map(key => [key, containers[key]])),
+        observationCommand: ['shell', 'getconf', 'PAGESIZE'], returnedOutputBytes: { beforeBoot: beforeBoot.returnedBytes, pageSize: page.returnedBytes, afterBoot: afterBoot.returnedBytes },
+        acceptanceScope: 'physical-workflow-only', sixteenKEmulatorAcceptance: false };
+    }
     return { platform, udid: fixture.udid, appId: fixture.appId, binaryHash: installed.installedApkSha256,
       bootId: containers.bootId, appDataPath: containers.appData.path,
-      appDataIdentity: Object.fromEntries(['kind', 'uid', 'device', 'inode'].map(key => [key, containers.appData.metadata[key]])), pageSizeRequired: 16384 };
+      appDataIdentity: Object.fromEntries(['kind', 'uid', 'device', 'inode'].map(key => [key, containers.appData.metadata[key]])),
+      ...(layout ? { pageSizeBytes: layout.pageSizeBytes, androidLayout: layout, physicalWorkflowOnly: true, sixteenKEmulatorAcceptance: false } : { pageSizeRequired: 16384 }),
+      ...(containers.transportMode === 'usb-reverse' ? Object.fromEntries(['access', 'deviceKind', 'transportMode', 'shellUid', 'packageUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff']
+        .map(key => [key, containers[key]])) : {}) };
   }
   assert.equal(process.platform, 'darwin', 'IOS_NATIVE_OWNER_MAC_REQUIRED');
   const invoke = args => command('/usr/bin/xcrun', ['simctl', ...args], { encoding: 'utf8', timeout: 10000, maxBuffer: 1048576 }).trim();
@@ -61,6 +91,61 @@ export function observeInstalled(fixture, platform, expectedHash, environment) {
   command('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], { timeout: 20000, stdio: ['ignore', 'pipe', 'pipe'] });
   return { platform, udid: fixture.udid, appId: id, binaryHash: observedHash, appPath, appDataPath, deviceTypeIdentifier: device.deviceTypeIdentifier,
     runtime: device.runtime, state: device.state };
+}
+export function validateAndroidLayoutEvidence(fixture, actual, device, expectedInstalled) {
+  const mode = fixture.androidTransport?.transportMode;
+  if (mode !== 'usb-reverse') {
+    for (const value of [actual, device, expectedInstalled]) {
+      assert.notEqual(value.deviceKind, 'physical', 'ANDROID_LAYOUT_PHYSICAL_CANNOT_CERTIFY_EMULATOR');
+      assert.notEqual(value.transportMode, 'usb-reverse', 'ANDROID_LAYOUT_PHYSICAL_CANNOT_CERTIFY_EMULATOR');
+      assert.equal(value.androidLayout, undefined, 'ANDROID_LAYOUT_PHYSICAL_CANNOT_CERTIFY_EMULATOR');
+      assert.notEqual(value.physicalWorkflowOnly, true, 'ANDROID_LAYOUT_PHYSICAL_CANNOT_CERTIFY_EMULATOR');
+    }
+    assert.equal(actual.bootId, device.bootId); assert.equal(device.pageSizeBytes, 16384);
+    return null;
+  }
+  const profile = androidLocalProfile(fixture.udid, 'ANDROID_LAYOUT_PHYSICAL_PROFILE_REQUIRED', mode);
+  assert.equal(fixture.appId, 'ai.caseops.mobile.dev.localacceptance', 'ANDROID_LAYOUT_QA_PACKAGE_REQUIRED');
+  assert.equal(profile.deviceKind, 'physical', 'ANDROID_LAYOUT_PHYSICAL_PROFILE_REQUIRED');
+  assert.deepEqual(Object.keys(fixture.androidTransport).sort(), ['adbPort', 'appiumUrl', 'systemPort', 'transportMode'], 'ANDROID_LAYOUT_PHYSICAL_PROFILE_REQUIRED');
+  for (const key of ['adbPort', 'appiumUrl', 'systemPort', 'transportMode']) assert.equal(fixture.androidTransport[key], profile[key], 'ANDROID_LAYOUT_PHYSICAL_PROFILE_REQUIRED');
+  const layout = actual.androidLayout;
+  assert.ok(layout && layout.schemaVersion === 1 && layout.kind === 'android-physical-layout-observation' && layout.observed === true, 'ANDROID_LAYOUT_OBSERVATION_REQUIRED');
+  assert.match(actual.binaryHash || '', /^[a-f0-9]{64}$/);
+  assert.equal(layout.udid, fixture.udid, 'ANDROID_LAYOUT_DEVICE_IDENTITY_CHANGED'); assert.equal(layout.appId, fixture.appId, 'ANDROID_LAYOUT_DEVICE_IDENTITY_CHANGED');
+  assert.equal(layout.binaryHash, actual.binaryHash, 'ANDROID_LAYOUT_BINARY_CHANGED');
+  assert.equal(layout.platform, 'android'); assert.equal(layout.deviceKind, 'physical'); assert.equal(layout.transportMode, mode);
+  assert.deepEqual(layout.observationCommand, ['shell', 'getconf', 'PAGESIZE']);
+  assert.ok([4096, 16384].includes(layout.pageSizeBytes), 'ANDROID_PHYSICAL_PAGE_SIZE_REQUIRED');
+  assert.equal(layout.acceptanceScope, 'physical-workflow-only'); assert.equal(layout.sixteenKEmulatorAcceptance, false);
+  assert.match(layout.bootId || '', /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
+  assert.deepEqual(Object.keys(layout.returnedOutputBytes || {}).sort(), ['afterBoot', 'beforeBoot', 'pageSize']);
+  for (const bytes of Object.values(layout.returnedOutputBytes)) assert.ok(Number.isSafeInteger(bytes) && bytes > 0 && bytes <= 64, 'ANDROID_LAYOUT_OUTPUT_BOUND');
+  const fields = ['access', 'deviceKind', 'transportMode', 'shellUid', 'packageUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff'];
+  for (const value of [actual, device, expectedInstalled]) {
+    assert.equal(value.udid, fixture.udid, 'ANDROID_LAYOUT_DEVICE_IDENTITY_CHANGED'); assert.equal(value.appId, fixture.appId, 'ANDROID_LAYOUT_DEVICE_IDENTITY_CHANGED');
+    assert.equal(value.binaryHash ?? value.installedApkSha256, actual.binaryHash, 'ANDROID_LAYOUT_BINARY_CHANGED');
+    assert.equal(value.bootId, layout.bootId, 'ANDROID_LAYOUT_BOOT_CHANGED'); assert.equal(value.pageSizeBytes, layout.pageSizeBytes, 'ANDROID_LAYOUT_PAGE_CHANGED');
+    assert.equal(value.pageSizeRequired, undefined, 'ANDROID_LAYOUT_PHYSICAL_CANNOT_CERTIFY_EMULATOR');
+    assert.ok(!Object.hasOwn(value, 'rootUid') && !Object.hasOwn(value, 'avdName'), 'ANDROID_LAYOUT_PHYSICAL_CANNOT_CERTIFY_EMULATOR');
+    assert.equal(value.access, 'run-as'); assert.equal(value.deviceKind, 'physical'); assert.equal(value.transportMode, mode); assert.equal(value.shellUid, 2000);
+    assert.ok(Number.isSafeInteger(value.packageUid) && value.packageUid >= 10000); assert.equal(value.runAsUid, value.packageUid);
+    assert.match(value.usbDevPath || '', /^usb:[A-Za-z0-9.:_-]{1,128}$/); assert.equal(value.apiLevel, 36); assert.equal(value.abi, 'arm64-v8a'); assert.equal(value.qemuOff, true);
+    assert.deepEqual(Object.fromEntries(fields.map(key => [key, value[key]])), layout.physicalIdentity, 'ANDROID_LAYOUT_PHYSICAL_IDENTITY_CHANGED');
+    assert.deepEqual(value.androidLayout, layout, 'ANDROID_LAYOUT_RETAINED_OBSERVATION_CHANGED');
+  }
+  return layout;
+}
+export function androidLayoutSummary(installed) {
+  if (installed === undefined) return {};
+  if (installed.transportMode !== 'usb-reverse') {
+    assert.equal(installed.androidLayout, undefined, 'ANDROID_LAYOUT_PHYSICAL_CANNOT_CERTIFY_EMULATOR'); return {};
+  }
+  const layout = installed.androidLayout;
+  assert.ok(layout && layout.kind === 'android-physical-layout-observation' && layout.observed === true && [4096, 16384].includes(layout.pageSizeBytes), 'ANDROID_LAYOUT_OBSERVATION_REQUIRED');
+  assert.equal(layout.acceptanceScope, 'physical-workflow-only'); assert.equal(layout.sixteenKEmulatorAcceptance, false);
+  return { androidAcceptanceScope: 'physical-workflow-only', androidPageSizeBytes: layout.pageSizeBytes,
+    sixteenKEmulatorAcceptance: false, sixteenKEmulator83Acceptance: 'required-separately' };
 }
 /** All public artifact, device and BOTH serving identities precede the reader. */
 export async function admitV1BeforeMembers(config, dependencies = {}) {
@@ -136,7 +221,7 @@ export async function admitV1BeforeMembers(config, dependencies = {}) {
   assert.equal(expectedInstalled.udid, fixture.udid); assert.equal(expectedInstalled.appId, fixture.appId); assert.deepEqual(expectedInstalled.buildReceipt, config.buildReceipt);
   assert.equal(expectedInstalled.binaryHash ?? expectedInstalled.installedApkSha256, config.expectedBinaryHash);
   if (expectedInstalled.appDataPath) assert.equal(actual.appDataPath, expectedInstalled.appDataPath);
-  if (config.platform === 'android') { assert.equal(actual.bootId, device.bootId); assert.equal(device.pageSizeBytes, 16384); }
+  if (config.platform === 'android') validateAndroidLayoutEvidence(fixture, actual, device, expectedInstalled);
   else assert.equal(actual.deviceTypeIdentifier, device.deviceTypeIdentifier);
   const api = await io.getJson(isolation.gatewayUrl + '/api/build'), web = await io.getJson(isolation.webGatewayUrl + '/api/release-identity');
   assert.equal(api.release_sha, config.expectedSourceSha); assert.equal(api.revision, isolation.backendRevision);
@@ -310,7 +395,7 @@ export async function runV1(config) {
   journal.write({ type: 'run_completed', platform: config.platform, intendedCount: 17 });
   const result = reconcileResults(journal.events, collection.intended); journal.close();
   const preview = journal.events.find(row => row.type === 'v1_assertion' && row.boundary === 'retained-long-obligation-preview');
-  const summary = { ...collection, ...result, ...reconcileV1Sessions(journal.events), completed, harnessFingerprint: frozen, report, core23PassedByThisRun: false, files17PassedByThisRun: false,
+  const summary = { ...collection, ...result, ...reconcileV1Sessions(journal.events), completed, harnessFingerprint: frozen, report, ...androidLayoutSummary(admitted.installed), core23PassedByThisRun: false, files17PassedByThisRun: false,
     retainedLongObligationPreview: preview?.observed === true ? 'passed' : 'unverified' };
   fs.writeFileSync(path.join(report, 'summary.json'), JSON.stringify(summary, null, 2) + '\n', { flag: 'wx', mode: 0o600 }); return summary;
 }

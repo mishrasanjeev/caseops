@@ -28,8 +28,23 @@ function save(file, value) {
   const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
   writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 }); return { path: file, sha256: hash(bytes) };
 }
-function device({ udid, appId, environment = process.env, command = execFileSync, deadline = Date.now() + 30000, budget }) {
-  const profile = androidLocalProfile(udid, 'DEDICATED_ANDROID_FILES_DEVICE_REQUIRED');
+function selectedTransportMode({ androidTransportMode, environment = process.env }) {
+  const configured = environment.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE;
+  if (androidTransportMode !== undefined && configured !== undefined) {
+    assert.equal(androidTransportMode, configured, 'ANDROID_FILES_TRANSPORT_MODE_MISMATCH');
+  }
+  return androidTransportMode === undefined ? configured : androidTransportMode;
+}
+function accessEvidence(containers) {
+  if (containers.transportMode !== 'usb-reverse') return {};
+  return Object.fromEntries(['access', 'deviceKind', 'transportMode', 'shellUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff']
+    .map(key => [key, containers[key]]));
+}
+function device({ udid, appId, androidTransportMode, environment = process.env, command = execFileSync, deadline = Date.now() + 30000, budget }) {
+  const mode = selectedTransportMode({ androidTransportMode, environment });
+  const profile = androidLocalProfile(udid, 'DEDICATED_ANDROID_FILES_DEVICE_REQUIRED', mode);
+  const physical = mode === 'usb-reverse';
+  if (physical) assert.ok(profile.transportMode === mode && profile.deviceKind === 'physical', 'ANDROID_FILES_PHYSICAL_PROFILE_REQUIRED');
   assert.equal(appId, APP, 'DEDICATED_ANDROID_FILES_APP_REQUIRED');
   assert.equal(environment.ADB_SERVER_SOCKET, `tcp:127.0.0.1:${profile.adbPort}`, 'ISOLATED_ANDROID_FILES_ADB_REQUIRED');
   if (environment.ANDROID_ADB_SERVER_PORT !== undefined) assert.equal(environment.ANDROID_ADB_SERVER_PORT, String(profile.adbPort), 'ISOLATED_ANDROID_FILES_ADB_REQUIRED');
@@ -50,8 +65,25 @@ function device({ udid, appId, environment = process.env, command = execFileSync
   const text = args => run(args, { encoding: 'utf8' }).trim();
   // adb shell rejoins argv. Supply one complete quoted command and disable
   // its PTY so descriptor-framed binary reads retain their exact bytes.
-  const script = (label, source, args = [], options = {}) => run(['shell', '-T',
-    ['sh', '-c', `# ${label}\n${source}`, '--', ...args].map(quote).join(' ')], options);
+  const privatePath = file => {
+    assert.ok(typeof file === 'string' && path.posix.normalize(file) === file && !/[\x00-\x1f\x7f]/.test(file), 'ANDROID_FILES_CANONICAL_SCOPED_PATH_REQUIRED');
+    const roots = [`/data/user/0/${APP}`, `/storage/emulated/0/Android/data/${APP}`];
+    if (roots.some(root => file === root || file.startsWith(`${root}/`))) return true;
+    const provider = '/storage/emulated/0/Download';
+    assert.ok(file === provider || file.startsWith(`${provider}/`), 'ANDROID_FILES_OWNED_SCOPED_PATH_REQUIRED');
+    return false;
+  };
+  const script = (label, source, args = [], options = {}) => {
+    let runAs = false;
+    if (physical) {
+      assert.ok(['CASEOPS_ANDROID_STAT_V1', 'CASEOPS_ANDROID_LIST_V1', 'CASEOPS_ANDROID_READ_FD_V1', 'CASEOPS_ANDROID_WRITE_ASSET_V1'].includes(label), 'ANDROID_FILES_REVIEWED_SCRIPT_REQUIRED');
+      const file = label === 'CASEOPS_ANDROID_READ_FD_V1' ? args[1] : args[0];
+      runAs = privatePath(file);
+      if (label === 'CASEOPS_ANDROID_WRITE_ASSET_V1') assert.equal(runAs, false, 'ANDROID_FILES_PROVIDER_WRITE_SCOPE_REQUIRED');
+    }
+    return run(['shell', '-T', [...(runAs ? ['run-as', APP] : []), 'sh', '-c', `# ${label}\n${source}`, '--', ...args].map(quote).join(' ')], options);
+  };
+  const readlink = file => text(['shell', ...(physical && file !== '/sdcard/Download' && privatePath(file) ? ['run-as', APP] : []), 'readlink', '-f', file]);
   const stat = file => {
     const raw = script('CASEOPS_ANDROID_STAT_V1', 'if [ -L "$1" ]; then printf SYMLINK; elif [ -e "$1" ]; then stat -c "%F|%u|%d|%i|%s|%y|%z" "$1"; else printf ABSENT; fi', [file], { encoding: 'utf8' }).trim();
     if (raw === 'ABSENT') return null;
@@ -62,17 +94,69 @@ function device({ udid, appId, environment = process.env, command = execFileSync
     return { kind: fields[0] === 'directory' ? 'directory' : 'file', uid: Number(fields[1]), device: fields[2], inode: fields[3],
       sizeBytes: Number(fields[4]), modified: fields[5], changed: fields[6] };
   };
-  return { text, script, stat, run, profile };
+  const physicalStat = file => {
+    const runAs = privatePath(file);
+    let result;
+    try {
+      result = run(['shell', '-T', [...(runAs ? ['run-as', APP] : []), 'env', 'LC_ALL=C', '/system/bin/toybox', 'stat',
+        '-c', '%F|%u|%d|%i|%s|%y|%z', '--', file].map(quote).join(' ')], { encoding: 'utf8' });
+    } catch (error) {
+      const valid = value => typeof value === 'string' || Buffer.isBuffer(value);
+      const stdout = valid(error?.stdout) ? Buffer.from(error.stdout) : null;
+      const stderr = valid(error?.stderr) ? Buffer.from(error.stderr) : null;
+      if (budget) {
+        budget.bytes += (stdout?.length || 0) + (stderr?.length || 0);
+        if (budget.bytes > budget.limit) throw new AggregateError([error], 'ANDROID_FILES_OBSERVATION_BYTE_BOUND', { cause: error });
+      }
+      // These are complete reviewed toybox diagnostics, including the exact
+      // requested path. Permission, I/O, transport and malformed failures keep
+      // their original Error; absence is never inferred from test -e.
+      const missing = [`stat: '${file}': No such file or directory\n`, `stat: ${file}: No such file or directory\n`];
+      if (error?.status === 1 && error.signal === null && error.code === undefined && stdout?.length === 0
+        && stderr && stderr.length <= 2048 && Date.now() <= deadline
+        && missing.some(value => stderr.equals(Buffer.from(value)))) return null;
+      throw error;
+    }
+    const raw = result.trim(), fields = raw.split('|');
+    assert.notEqual(fields[0], 'symbolic link', 'ANDROID_FILES_SYMLINK_REFUSED');
+    assert.ok(fields.length === 7 && ['regular file', 'regular empty file', 'directory'].includes(fields[0])
+      && fields.slice(1, 5).every(value => /^\d+$/.test(value)), 'ANDROID_FILES_STAT_REQUIRED');
+    return { kind: fields[0] === 'directory' ? 'directory' : 'file', uid: Number(fields[1]), device: fields[2], inode: fields[3],
+      sizeBytes: Number(fields[4]), modified: fields[5], changed: fields[6] };
+  };
+  const physicalStatFailures = new Set();
+  const observedStat = file => {
+    try { return physicalStat(file); }
+    catch (error) { physicalStatFailures.add(error); throw error; }
+  };
+  return { text, script, stat: physical ? observedStat : stat, run, profile, readlink, physical,
+    rethrowStatFailure: error => { if (physicalStatFailures.has(error)) throw error; } };
 }
 function identity(containers) {
   assert.equal(containers?.schemaVersion, 1, 'ATTESTED_ANDROID_FILES_CONTAINERS_REQUIRED');
   assert.equal(containers.kind, 'android-files-containers', 'ATTESTED_ANDROID_FILES_CONTAINERS_REQUIRED');
   assert.equal(containers.platform, 'android', 'ATTESTED_ANDROID_FILES_PLATFORM_REQUIRED');
-  const profile = androidLocalProfile(containers.udid, 'DEDICATED_ANDROID_FILES_DEVICE_REQUIRED');
+  const profile = androidLocalProfile(containers.udid, 'DEDICATED_ANDROID_FILES_DEVICE_REQUIRED', containers.transportMode);
   assert.equal(containers.appId, APP, 'DEDICATED_ANDROID_FILES_APP_REQUIRED');
-  assert.equal(containers.rootUid, 0, 'ANDROID_FILES_ROOT_ACCESS_REQUIRED');
+  if (containers.transportMode === 'usb-reverse') {
+    assert.equal(profile.deviceKind, 'physical', 'ANDROID_FILES_PHYSICAL_PROFILE_REQUIRED');
+    assert.equal(containers.deviceKind, 'physical', 'ANDROID_FILES_PHYSICAL_PROFILE_REQUIRED');
+    assert.equal(containers.access, 'run-as', 'ANDROID_FILES_PHYSICAL_ACCESS_REQUIRED');
+    assert.equal(containers.shellUid, 2000, 'ANDROID_FILES_SHELL_ACCESS_REQUIRED');
+    assert.equal(containers.runAsUid, containers.packageUid, 'ANDROID_FILES_RUN_AS_UID_REQUIRED');
+    assert.match(containers.usbDevPath || '', /^usb:[A-Za-z0-9.:_-]{1,128}$/, 'ANDROID_FILES_USB_DEVICE_REQUIRED');
+    assert.equal(containers.apiLevel, 36, 'ANDROID_FILES_API36_REQUIRED');
+    assert.equal(containers.abi, 'arm64-v8a', 'ANDROID_FILES_ARM64_REQUIRED');
+    assert.equal(containers.qemuOff, true, 'ANDROID_FILES_PHYSICAL_QEMU_OFF_REQUIRED');
+    assert.ok(!Object.hasOwn(containers, 'rootUid') && !Object.hasOwn(containers, 'avdName'), 'ANDROID_FILES_PHYSICAL_ROOT_AVD_FIELDS_FORBIDDEN');
+  } else {
+    assert.equal(containers.transportMode, undefined, 'ANDROID_FILES_TRANSPORT_MODE_MISMATCH');
+    assert.equal(containers.deviceKind, undefined, 'ANDROID_FILES_TRANSPORT_MODE_MISMATCH');
+    assert.equal(containers.access, undefined, 'ANDROID_FILES_TRANSPORT_MODE_MISMATCH');
+    assert.equal(containers.rootUid, 0, 'ANDROID_FILES_ROOT_ACCESS_REQUIRED');
+    assert.equal(containers.avdName, profile.avdName, 'OWNED_ANDROID_AVD_REQUIRED');
+  }
   assert.match(containers.bootId || '', UUID, 'ANDROID_FILES_BOOT_ID_REQUIRED');
-  assert.equal(containers.avdName, profile.avdName, 'OWNED_ANDROID_AVD_REQUIRED');
   assert.equal(containers.appData.path, `/data/user/0/${APP}`, 'ANDROID_FILES_PRIVATE_ROOT_REQUIRED');
   assert.ok(Number.isSafeInteger(containers.packageUid) && containers.packageUid >= 10000, 'ANDROID_FILES_PACKAGE_UID_REQUIRED');
   assert.equal(containers.appData.metadata.uid, containers.packageUid, 'ANDROID_FILES_PRIVATE_OWNER_MISMATCH');
@@ -84,35 +168,55 @@ function identity(containers) {
 export function attestAndroidFilesContainers(options) {
   const io = device(options);
   assert.equal(io.text(['get-state']), 'device', 'READY_ANDROID_FILES_DEVICE_REQUIRED');
-  assert.equal(io.text(['shell', 'id', '-u']), '0', 'ANDROID_FILES_ROOT_ACCESS_REQUIRED');
+  assert.equal(io.text(['shell', 'id', '-u']), io.physical ? '2000' : '0', io.physical ? 'ANDROID_FILES_SHELL_ACCESS_REQUIRED' : 'ANDROID_FILES_ROOT_ACCESS_REQUIRED');
   assert.equal(io.text(['shell', 'am', 'get-current-user']), '0', 'ANDROID_FILES_USER_ZERO_REQUIRED');
   assert.equal(io.text(['shell', 'getprop', 'ro.build.version.sdk']), '36', 'ANDROID_FILES_API36_REQUIRED');
   assert.equal(io.text(['shell', 'getprop', 'ro.product.cpu.abi']), 'arm64-v8a', 'ANDROID_FILES_ARM64_REQUIRED');
-  const avd = io.text(['emu', 'avd', 'name']).split(/\r?\n/);
-  assert.deepEqual(avd, [io.profile.avdName, 'OK'], 'OWNED_ANDROID_AVD_REQUIRED');
+  let avd, usbDevPath;
+  if (io.physical) {
+    usbDevPath = io.text(['get-devpath']); assert.match(usbDevPath, /^usb:[A-Za-z0-9.:_-]{1,128}$/, 'ANDROID_FILES_USB_DEVICE_REQUIRED');
+    assert.ok(['', '0'].includes(io.text(['shell', 'getprop', 'ro.kernel.qemu'])), 'ANDROID_FILES_PHYSICAL_QEMU_OFF_REQUIRED');
+  } else {
+    avd = io.text(['emu', 'avd', 'name']).split(/\r?\n/);
+    assert.deepEqual(avd, [io.profile.avdName, 'OK'], 'OWNED_ANDROID_AVD_REQUIRED');
+  }
   const bootId = io.text(['shell', 'cat', '/proc/sys/kernel/random/boot_id']); assert.match(bootId, UUID, 'ANDROID_FILES_BOOT_ID_REQUIRED');
   const packageLine = io.text(['shell', 'cmd', 'package', 'list', 'packages', '-U', APP]);
   const match = new RegExp(`^package:${APP.replaceAll('.', '\\.')} uid:(\\d+)$`).exec(packageLine);
   assert.ok(match && Number(match[1]) >= 10000, 'ANDROID_FILES_EXACT_PACKAGE_UID_REQUIRED');
-  const appPath = io.text(['shell', 'readlink', '-f', `/data/user/0/${APP}`]);
+  if (io.physical) {
+    assert.equal(io.text(['shell', 'run-as', APP, 'id', '-u']), match[1], 'ANDROID_FILES_RUN_AS_UID_REQUIRED');
+    assert.equal(io.text(['shell', 'run-as', APP, 'pwd']), `/data/user/0/${APP}`, 'ANDROID_FILES_RUN_AS_PRIVATE_ROOT_REQUIRED');
+  }
+  const appPath = io.readlink(`/data/user/0/${APP}`);
   assert.equal(appPath, `/data/user/0/${APP}`, 'ANDROID_FILES_PRIVATE_ROOT_REQUIRED');
-  const providerPath = io.text(['shell', 'readlink', '-f', '/sdcard/Download']);
+  const providerPath = io.readlink('/sdcard/Download');
   assert.equal(providerPath, '/storage/emulated/0/Download', 'ANDROID_FILES_PROVIDER_ROOT_REQUIRED');
   const appData = { path: appPath, metadata: io.stat(appPath) }, provider = { path: providerPath, metadata: io.stat(providerPath) };
   assert.equal(appData.metadata?.kind, 'directory', 'ANDROID_FILES_PRIVATE_DIRECTORY_REQUIRED');
   assert.equal(appData.metadata.uid, Number(match[1]), 'ANDROID_FILES_PRIVATE_OWNER_MISMATCH');
   assert.equal(provider.metadata?.kind, 'directory', 'ANDROID_FILES_PROVIDER_DIRECTORY_REQUIRED');
   const externalPath = `/storage/emulated/0/Android/data/${APP}`, externalMetadata = io.stat(externalPath);
-  if (externalMetadata) assert.equal(externalMetadata.kind, 'directory', 'ANDROID_FILES_EXTERNAL_DIRECTORY_REQUIRED');
+  if (externalMetadata) {
+    assert.equal(externalMetadata.kind, 'directory', 'ANDROID_FILES_EXTERNAL_DIRECTORY_REQUIRED');
+    if (io.physical) assert.equal(io.readlink(externalPath), externalPath, 'ANDROID_FILES_EXTERNAL_ROOT_REQUIRED');
+  }
   const result = { schemaVersion: 1, kind: 'android-files-containers', observed: true, platform: 'android',
-    udid: options.udid, appId: APP, rootUid: 0, packageUid: Number(match[1]), bootId, avdName: avd[0],
+    udid: options.udid, appId: APP, packageUid: Number(match[1]), bootId,
+    ...(io.physical ? { access: 'run-as', deviceKind: 'physical', transportMode: 'usb-reverse', shellUid: 2000,
+      runAsUid: Number(match[1]), usbDevPath, apiLevel: 36, abi: 'arm64-v8a', qemuOff: true } : { rootUid: 0, avdName: avd[0] }),
     appData, provider, externalAppData: externalMetadata ? { path: externalPath, metadata: externalMetadata } : null };
   identity(result); return result;
 }
 function current(containers, options) {
   identity(containers);
-  const actual = attestAndroidFilesContainers({ ...options, udid: containers.udid, appId: containers.appId });
-  for (const key of ['udid', 'appId', 'rootUid', 'packageUid', 'bootId', 'avdName']) assert.equal(actual[key], containers[key], 'ANDROID_FILES_CONTAINER_IDENTITY_CHANGED');
+  const requested = selectedTransportMode(options);
+  if (requested !== undefined) assert.equal(requested, containers.transportMode ?? 'emulator', 'ANDROID_FILES_TRANSPORT_MODE_MISMATCH');
+  const bound = { ...options, udid: containers.udid, appId: containers.appId, androidTransportMode: containers.transportMode };
+  const actual = attestAndroidFilesContainers(bound);
+  const fields = ['udid', 'appId', 'packageUid', 'bootId', ...(containers.transportMode === 'usb-reverse'
+    ? ['access', 'deviceKind', 'transportMode', 'shellUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff'] : ['rootUid', 'avdName'])];
+  for (const key of fields) assert.equal(actual[key], containers[key], 'ANDROID_FILES_CONTAINER_IDENTITY_CHANGED');
   for (const key of ['appData', 'provider']) {
     assert.equal(actual[key].path, containers[key].path, 'ANDROID_FILES_CONTAINER_IDENTITY_CHANGED');
     for (const field of ['kind', 'uid', 'device', 'inode']) assert.equal(actual[key].metadata[field], containers[key].metadata[field], 'ANDROID_FILES_CONTAINER_IDENTITY_CHANGED');
@@ -123,7 +227,7 @@ function current(containers, options) {
     for (const field of ['kind', 'uid', 'device', 'inode']) assert.equal(actual.externalAppData.metadata[field],
       containers.externalAppData.metadata[field], 'ANDROID_FILES_EXTERNAL_ROOT_CHANGED');
   }
-  return device({ ...options, udid: containers.udid, appId: containers.appId });
+  return device(bound);
 }
 function knownSource(value) {
   assert.ok(typeof value?.id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value.id), 'ANDROID_FILES_KNOWN_SOURCE_ID_REQUIRED');
@@ -156,7 +260,7 @@ export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, o
   assert.ok(assets.reduce((sum, asset) => sum + asset.sizeBytes, 0) <= 1048576, 'ANDROID_FILES_TOTAL_ASSET_BOUND');
   const folderName = `CaseOpsFiles-${runId}`, deviceFolderPath = `${containers.provider.path}/${folderName}`;
   const attemptEvidence = save(`${output}.attempt.json`, { schemaVersion: 1, kind: 'android-files-provider-stage-attempt',
-    udid: containers.udid, appId: containers.appId, bootId: containers.bootId, manifestEvidence,
+    udid: containers.udid, appId: containers.appId, bootId: containers.bootId, ...accessEvidence(containers), manifestEvidence,
     folderName, deviceFolderPath, assets: assets.map(knownSource), automaticReplayAllowed: false });
   // mkdir without -p is the exclusive ownership admission. Never reuse/delete
   // a preexisting provider folder, and never retry an unknown push outcome.
@@ -182,7 +286,8 @@ export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, o
   }
   current(containers, options);
   const receipt = { schemaVersion: 2, kind: 'android-files-provider-assets', observed: true, platform: 'android',
-    udid: containers.udid, appId: containers.appId, bootId: containers.bootId, avdName: containers.avdName,
+    udid: containers.udid, appId: containers.appId, bootId: containers.bootId, ...accessEvidence(containers),
+    ...(Object.hasOwn(containers, 'avdName') ? { avdName: containers.avdName } : {}),
     manifestEvidence, attemptEvidence, folderName, deviceFolderPath, provider: containers.provider,
     appData: containers.appData, assets: observed, originalsDeleted: false, providerOriginalsRead: false,
     providerOriginalsPreserved: null, originalByteVerification: 'deferred-until-postflight' };
@@ -233,6 +338,8 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
   for (const { value } of cohorts) {
     for (const [key, expected] of Object.entries({ schemaVersion: 2, kind: 'android-files-provider-assets', observed: true, providerOriginalsRead: false,
       platform: 'android', udid: containers.udid, appId: containers.appId, bootId: containers.bootId })) assert.equal(value[key], expected, 'ANDROID_FILES_STAGING_IDENTITY_MISMATCH');
+    for (const [key, expected] of Object.entries(accessEvidence(containers))) assert.equal(value[key], expected, 'ANDROID_FILES_STAGING_ACCESS_MISMATCH');
+    if (containers.transportMode === 'usb-reverse') assert.ok(!Object.hasOwn(value, 'rootUid') && !Object.hasOwn(value, 'avdName'), 'ANDROID_FILES_STAGING_ACCESS_MISMATCH');
     assert.ok(/^CaseOpsFiles-[A-Za-z0-9-]{6,64}$/.test(value.folderName || ''), 'ANDROID_FILES_OWNED_PROVIDER_FOLDER_REQUIRED');
     assert.equal(value.deviceFolderPath, `${containers.provider.path}/${value.folderName}`, 'ANDROID_FILES_PROVIDER_FOLDER_MISMATCH');
     assert.ok(Array.isArray(value.assets) && value.assets.length > 0 && value.assets.length <= 12, 'ANDROID_FILES_STAGED_ASSETS_REQUIRED');
@@ -255,7 +362,7 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
       if (verifyProviderBytes && metadataPreserved) {
         try { const data = openedBytes(io, asset.devicePath, metadata, asset.sizeBytes, true); providerBytesRead += data.length;
           assert.deepEqual(io.stat(asset.devicePath), metadata, 'ANDROID_FILES_PROVIDER_METADATA_CHANGED'); actualHash = hash(data); }
-        catch { issues.push({ reason: 'provider-original-unreadable', filename: asset.filename }); }
+        catch (error) { io.rethrowStatFailure(error); issues.push({ reason: 'provider-original-unreadable', filename: asset.filename }); }
       }
       const preserved = verifyProviderBytes ? metadataPreserved && actualHash === asset.sha256 : null;
       originals.push({ filename: asset.filename, sha256: asset.sha256, sizeBytes: asset.sizeBytes, metadataPreserved, preserved,
@@ -289,12 +396,12 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
   for (const root of roots) {
     let paths;
     try { paths = inventory(root); }
-    catch { issues.push({ reason: 'incomplete-initial-directory-inventory', relativePath: root.name }); continue; }
+    catch (error) { io.rethrowStatFailure(error); issues.push({ reason: 'incomplete-initial-directory-inventory', relativePath: root.name }); continue; }
     for (const file of paths) {
       if (Date.now() > deadline) { issues.push({ reason: 'time-bound', relativePath: root.name }); break; }
       const relative = file.slice(root.path.length).replace(/^\//, ''), relativePath = `${root.name}/${relative || '.'}`;
       let metadata;
-      try { metadata = io.stat(file); } catch { issues.push({ reason: 'metadata-unavailable-or-link', relativePath }); continue; }
+      try { metadata = io.stat(file); } catch (error) { io.rethrowStatFailure(error); issues.push({ reason: 'metadata-unavailable-or-link', relativePath }); continue; }
       if (!metadata) { issues.push({ reason: 'entry-disappeared', relativePath }); continue; }
       metadataByPath.set(file, metadata);
       if (metadata.device !== root.metadata.device) { issues.push({ reason: 'unreviewed-filesystem-boundary', relativePath }); continue; }
@@ -304,7 +411,7 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
         issues.push({ reason: 'byte-or-file-bound', relativePath }); continue;
       }
       let bytes;
-      try { bytes = openedBytes(io, file, metadata, limits.fileBytes); } catch { issues.push({ reason: 'opened-file-read-failed-or-changed', relativePath }); continue; }
+      try { bytes = openedBytes(io, file, metadata, limits.fileBytes); } catch (error) { io.rethrowStatFailure(error); issues.push({ reason: 'opened-file-read-failed-or-changed', relativePath }); continue; }
       bytesRead += bytes.length; const sha256 = hash(bytes), matches = [];
       for (const source of unique) {
         const reasons = [];
@@ -318,7 +425,7 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
     }
     let finalPaths;
     try { finalPaths = inventory(root); }
-    catch { issues.push({ reason: 'incomplete-final-directory-inventory', relativePath: root.name }); continue; }
+    catch (error) { io.rethrowStatFailure(error); issues.push({ reason: 'incomplete-final-directory-inventory', relativePath: root.name }); continue; }
     const stable = JSON.stringify(paths) === JSON.stringify(finalPaths);
     inventories.push({ root: root.name, initialCount: paths.length, finalCount: finalPaths.length,
       initialSha256: hash(Buffer.from(JSON.stringify(paths))), finalSha256: hash(Buffer.from(JSON.stringify(finalPaths))), stable });
@@ -326,17 +433,17 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
     for (const file of finalPaths) {
       const relativePath = `${root.name}/${file.slice(root.path.length).replace(/^\//, '') || '.'}`;
       try { assert.deepEqual(io.stat(file), metadataByPath.get(file)); }
-      catch { issues.push({ reason: 'directory-or-file-metadata-changed', relativePath }); }
+      catch (error) { io.rethrowStatFailure(error); issues.push({ reason: 'directory-or-file-metadata-changed', relativePath }); }
     }
   }
   for (const expected of providerChecks) {
     try { assert.deepEqual(io.stat(expected.path), expected.metadata, 'ANDROID_FILES_PROVIDER_METADATA_CHANGED'); }
-    catch { expected.row.metadataPreserved = false; if (verifyProviderBytes) expected.row.preserved = false;
+    catch (error) { io.rethrowStatFailure(error); expected.row.metadataPreserved = false; if (verifyProviderBytes) expected.row.preserved = false;
       issues.push({ reason: 'provider-original-final-metadata-changed', relativePath: expected.row.filename }); }
   }
   current(containers, scanOptions);
   const snapshot = { schemaVersion: 2, kind: 'android-files-privacy-snapshot', observed: true, platform: 'android',
-    udid: containers.udid, appId: containers.appId, bootId: containers.bootId, ownedAppScopeOnly: true,
+    udid: containers.udid, appId: containers.appId, bootId: containers.bootId, ...accessEvidence(containers), ownedAppScopeOnly: true,
     providerOriginalsPreserved: verifyProviderBytes ? originals.every(value => value.preserved) : null,
     providerMetadataPreserved: originals.every(value => value.metadataPreserved), providerOriginalsRead: providerBytesRead > 0,
     providerBytesRead, providerByteVerification: verifyProviderBytes ? 'postflight' : 'deferred-until-postflight', providerOriginals: originals,
@@ -361,7 +468,7 @@ export function snapshotAndroidCameraPrivacy({ containers, output, ...options })
     if (metadata) {
       assert.ok(metadata.kind === 'directory' && metadata.uid === containers.packageUid
         && metadata.device === containers.appData.metadata.device, 'CAMERA_DIRECTORY_OWNER_REQUIRED');
-      assert.equal(io.text(['shell', 'readlink', '-f', file]), file, 'CAMERA_DIRECTORY_NAMESPACE_REQUIRED');
+      assert.equal(io.readlink(file), file, 'CAMERA_DIRECTORY_NAMESPACE_REQUIRED');
     }
     return { path: file, metadata };
   });
@@ -399,17 +506,17 @@ export function snapshotAndroidCameraPrivacy({ containers, output, ...options })
         assert.ok(remaining > 0 && metadata.sizeBytes <= remaining, 'CAMERA_OBSERVATION_BYTE_BOUND');
         const bytes = openedBytes(io, file, metadata, remaining, true); bytesRead += bytes.length;
         copies.push({ nameSha256: hash(name), sizeBytes: bytes.length, sha256: hash(bytes), classification: 'owned-camera-sdk-copy' });
-      } catch { readBytesComplete = false; issues.push({ reason: 'camera-copy-read-or-identity-failed' }); break; }
+      } catch (error) { io.rethrowStatFailure(error); readBytesComplete = false; issues.push({ reason: 'camera-copy-read-or-identity-failed' }); break; }
     }
     const finalPaths = inventory(); pathsByObservation.push(finalPaths);
     assert.deepEqual(finalPaths, paths, 'CAMERA_DIRECTORY_CHANGED');
     for (const file of finalPaths) assert.deepEqual(io.stat(file), observedMetadata.get(file), 'CAMERA_COPY_CHANGED');
-  } catch { issues.push({ reason: 'camera-directory-incomplete-or-changed' }); }
+  } catch (error) { io.rethrowStatFailure(error); issues.push({ reason: 'camera-directory-incomplete-or-changed' }); }
   try { namespaces.push(initialNamespace, namespace()); assert.deepEqual(namespaces[1], initialNamespace, 'CAMERA_NAMESPACE_CHANGED'); }
-  catch { issues.push({ reason: 'camera-final-namespace-changed' }); }
+  catch (error) { io.rethrowStatFailure(error); issues.push({ reason: 'camera-final-namespace-changed' }); }
   current(containers, scanOptions);
   const observation = { schemaVersion: 1, kind: 'camera-sdk-private-copies', platform: 'android', udid: containers.udid,
-    appId: containers.appId, bootId: containers.bootId, packageUid: containers.packageUid, root, complete: issues.length === 0,
+    appId: containers.appId, bootId: containers.bootId, packageUid: containers.packageUid, ...accessEvidence(containers), root, complete: issues.length === 0,
     directoryPresent: present, limits, counts: { copies: paths.length, bytesRead, observationBytes: budget.bytes, entries }, readBytesComplete, copies, issues,
     inventory: pathsByObservation.map(values => ({ count: values.length, sha256: hash(JSON.stringify(values)) })),
     legacyKnownFixtureCountsIncluded: false, providerOriginalsRead: false, fileContentsRecorded: false,

@@ -4988,7 +4988,7 @@ test('ANDROID-CDN-01 keeps eight repositories and admits only the official artif
 });
 
 test('ANDROID-CDN-02 preserves every original URI, marker, TLS, factory and Download fence byte', () => {
-  let restored = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
+  let restored = restoreAndroidEmptyAuthLocalResource(fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8'));
   const replacements = [
     ['configuredBases.size() <= 9', 'configuredBases.size() <= 10'],
     ['exactScopes.size() <= 9', 'exactScopes.size() <= 8'],
@@ -5056,4 +5056,34 @@ test('IOS-ARCHIVE-04 the separately executed actual CLI fixture retains every lo
   assert.match(source, /phases:24/); assert.match(source, /actualChildren:0,httpRequests:0/);
   assert.match(source, /assert\.equal\(r\.error,sentinel\)/);
   assert.match(source, /assert\.equal\(sourceOpens,1\)/);
+});
+
+function restoreAndroidEmptyAuthLocalResource(source) {
+  const replacements = [
+  [
+    "// Gradle eagerly creates protocol connectors while reading a bundled jar resource.\n// An unmarked connector may be constructed but can never perform any IO.\nfinal class CaseOpsBlockedUnmarkedHttpConnector implements ExternalResourceConnector {\n    private static GradleException blocked() { new GradleException('ANDROID_UNMARKED_HTTP_CONNECTOR_USE') }\n    @Override public <T> T withContent(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate, org.gradle.internal.resource.ExternalResource.ContentAndMetadataAction<T> action) { throw blocked() }\n    @Override public <T> T withContent(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate, org.gradle.internal.resource.ExternalResource.ContentAction<T> action) { throw blocked() }\n    @Override org.gradle.internal.resource.metadata.ExternalResourceMetaData getMetaData(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate) { throw blocked() }\n    @Override List<String> list(org.gradle.internal.resource.ExternalResourceName parent) { throw blocked() }\n    @Override void upload(org.gradle.internal.resource.ReadableContent resource, org.gradle.internal.resource.ExternalResourceName destination) { throw blocked() }\n}\n",
+    ""
+  ],
+  [
+    "    @Override ExternalResourceConnector createResourceConnector(ResourceConnectorSpecification original) {\n        if (original != null && original.authentications != null && original.authentications.empty) return new CaseOpsBlockedUnmarkedHttpConnector()\n        return delegate.createResourceConnector(new CaseOpsMarkedConnectorSpecification(original, policy))\n    }",
+    "    @Override ExternalResourceConnector createResourceConnector(ResourceConnectorSpecification original) { delegate.createResourceConnector(new CaseOpsMarkedConnectorSpecification(original, policy)) }"
+  ]
+];
+  for (const [before, after] of replacements) {
+    assert.equal(source.split(before).length - 1, 1);
+    source = source.replace(before, after);
+  }
+  return source;
+}
+
+test('ANDROID-LOCAL-RESOURCE-01 empty-auth constructor has no HTTP delegate and every IO entry remains blocked', () => {
+  const source = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
+  const restored = restoreAndroidEmptyAuthLocalResource(source);
+  assert.equal(createHash('sha256').update(restored).digest('hex'), 'd39b669c685898fabd3ba96f4ff9da7c19713783209e8df6ae4bb1a8261674c7');
+  const blocked = source.split('final class CaseOpsBlockedUnmarkedHttpConnector implements ExternalResourceConnector {')[1]?.split('final class CaseOpsMarkedHttpConnectorFactory')[0];
+  assert.ok(blocked); assert.equal((blocked.match(/throw blocked\(\)/g) || []).length, 5);
+  for (const method of ['ContentAndMetadataAction<T>', 'ContentAction<T>', 'getMetaData(', 'list(', 'upload(']) assert.ok(blocked.includes(method));
+  assert.ok(!blocked.includes('delegate') && !blocked.includes('createResourceConnector('));
+  assert.equal(source.split("originals.size() == 1, 'ANDROID_CONNECTOR_AUTH_COUNT'").length - 1, 1);
+  assert.equal(source.split("credentials.value == markerValue, 'ANDROID_CONNECTOR_FIXED_MARKER'").length - 1, 1);
 });

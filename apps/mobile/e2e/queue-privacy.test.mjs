@@ -1,3 +1,4 @@
+import { validateAndroidTransport } from './local-run.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -152,3 +153,26 @@ test('both four-read privacy boundaries execute within the fixed17 RPC allocatio
 test('private UID metadata is required before the QP reader and retained descriptor UID must match',async()=>{for(const edit of[ref=>delete ref.uid,ref=>ref.uid=true]){const x=await admissionDouble();try{edit(x.q.members[0].credentialEvidence);await assert.rejects(x.run());assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);}finally{x.close();}}const x=await admissionDouble();try{x.io.reader=file=>{x.calls.push('PRIVATE:'+file);return{bytes:x.credentials[0].bytes,value:x.credentials[0].value,sha256:'e'.repeat(64),uid:process.getuid()+1};};await assert.rejects(x.run());assert.equal(x.calls.filter(v=>v.startsWith('PRIVATE:')).length,1);assert.ok(x.credentials[0].bytes.every(v=>v===0));}finally{x.close();}});
 test('public fixture projection binds normal producer, exact recipes, current source and descriptor hash without private reads',async()=>{const x=await admissionDouble();try{const q={...x.q,baseFixtureEvidence:x.q.fixtureEvidence,registrationEvidence:x.controls.registrationEvidence,nativeSelectorEvidence:{path:'/synthetic/selectors',sha256:'e'.repeat(64)}};x.map.set(q.nativeSelectorEvidence.path,x.first.qp.nativeSelectors);const result=composeQPFixture(q,{read:x.io.read,snapshot:x.io.snapshot});assert.equal(result.actualNativeAcceptance,false);assert.deepEqual(result.fixture.qp.dataset,x.dataset);assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);x.registration.ownerRecipes[0].requests[2].body.due_on='2099-01-01';assert.throws(()=>composeQPFixture(q,{read:x.io.read,snapshot:x.io.snapshot}));assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);}finally{x.close();}});
 test('stale registration, unobserved control descriptor and mismatched protocol refuse before private member admission',async()=>{for(const mutate of[x=>x.registration.sourceSha='f'.repeat(40),x=>x.controls.observed=false,x=>x.controls.registrationSha256='f'.repeat(64),x=>x.controls.protocol={...V1_CONTROL_PROTOCOL,statusReads:20},x=>x.controls.binaryHash='f'.repeat(64)]){const x=await admissionDouble();try{mutate(x);await assert.rejects(x.run());assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);}finally{x.close();}}});
+
+function physicalLayoutRecord(binaryHash, pageSizeBytes = 4096) {
+ const physicalIdentity={access:'run-as',deviceKind:'physical',transportMode:'usb-reverse',shellUid:2000,packageUid:10087,runAsUid:10087,usbDevPath:'usb:1-2.5',apiLevel:36,abi:'arm64-v8a',qemuOff:true};
+ const record={platform:'android',udid:'CASEOPSUNITUSB01',appId:'ai.caseops.mobile.dev.localacceptance',binaryHash,bootId:'11111111-2222-4333-8444-555555555555',pageSizeBytes,...physicalIdentity,physicalWorkflowOnly:true,sixteenKEmulatorAcceptance:false};
+ record.androidLayout={schemaVersion:1,kind:'android-physical-layout-observation',observed:true,platform:'android',udid:record.udid,appId:record.appId,binaryHash,bootId:record.bootId,deviceKind:'physical',transportMode:'usb-reverse',pageSizeBytes,physicalIdentity,observationCommand:['shell','getconf','PAGESIZE'],returnedOutputBytes:{beforeBoot:37,pageSize:pageSizeBytes===4096?5:6,afterBoot:37},acceptanceScope:'physical-workflow-only',sixteenKEmulatorAcceptance:false};
+ return record;
+}
+function bindPhysicalPacket(x, values, current, pageSize=4096) {
+ const actual={...physicalLayoutRecord(x.q.expectedBinaryHash,pageSize),...(current.appDataPath?{appDataPath:current.appDataPath}:{})}; x.q.platform='android'; const oldUdid=current.udid,oldAppId=current.appId;
+ const seen=new Set();function update(v){if(!v||typeof v!=='object'||seen.has(v))return;seen.add(v);for(const[k,c]of Object.entries(v)){if(c===oldUdid)v[k]=actual.udid;else if(c===oldAppId)v[k]=actual.appId;else if(k==='platform'&&c==='ios')v[k]='android';else if(k==='inventoryId'&&typeof c==='string')v[k]=c.replace('client-extension-ios','client-extension-android');else update(c);}}
+ for(const v of values.values())update(v);
+ x.q.inventoryId=x.q.inventoryId?.replace('client-extension-ios','client-extension-android');
+ for(const r of[x.q.deviceEvidence,x.q.installedEvidence]){const v=values.get(r.path);delete v.deviceTypeIdentifier;delete v.runtime;Object.assign(v,structuredClone(actual));}
+ for(const r of[x.q.fixtureEvidence,...x.q.members.map(m=>m.fixtureEvidence)]){const f=values.get(r.path);f.androidTransport={adbPort:5042,appiumUrl:'http://127.0.0.1:4729',systemPort:8206,transportMode:'usb-reverse'};if(f.cx)f.cx.workflowDomain='physical';f.apiOrigin='https://127.0.0.1:8443';f.auth.webOrigin='https://127.0.0.1:3443';}
+ const build=values.get(x.q.buildReceipt.path);Object.assign(build,{apiOrigin:'https://127.0.0.1:8443',webOrigin:'https://127.0.0.1:3443'});
+ for(const r of[x.q.fixtureEvidence,...x.q.members.map(m=>m.fixtureEvidence)])validateAndroidTransport(values.get(r.path),'android',build);
+ x.io.installed=()=>structuredClone(actual);return actual;
+}
+
+test('complete Queue/Privacy admission binds physical4K layout and rejects changed retained page or boot before readers',async()=>{
+ const good=await admissionDouble();try{const current=good.io.installed();bindPhysicalPacket(good,good.map,current);const result=await good.run();assert.equal(result.actual.pageSizeBytes,4096);assert.equal(result.actual.androidLayout.sixteenKEmulatorAcceptance,false);}finally{good.close();}
+ for(const mutate of[x=>x.map.get(x.q.deviceEvidence.path).pageSizeBytes=16384,x=>x.map.get(x.q.installedEvidence.path).androidLayout=undefined,x=>x.map.get(x.q.deviceEvidence.path).bootId='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee']){const x=await admissionDouble();try{bindPhysicalPacket(x,x.map,x.io.installed());mutate(x);await assert.rejects(x.run());assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);}finally{x.close();}}
+});

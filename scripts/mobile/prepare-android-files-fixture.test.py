@@ -317,5 +317,50 @@ class Fixtures(unittest.TestCase):
             fixture.read_bound(reference["path"], reference["sha256"])
 
 
+
+class UsbReverseFixtures(unittest.TestCase):
+    setUp = Fixtures.setUp
+    write_inputs = Fixtures.write_inputs
+    def usb(self):
+        self.config['CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE'] = 'usb-reverse'
+        self.core['androidTransportMode'] = 'usb-reverse'
+        for key, port in (('apiOrigin', '8453'), ('webOrigin', '3453')):
+            self.core[key] = 'https://127.0.0.1:' + port
+            self.config['CASEOPS_MOBILE_' + ('API' if key == 'apiOrigin' else 'WEB') + '_ORIGIN'] = self.core[key]
+        helper = fixture.HERE / 'local-transport.py'
+        self.core['fixtureSourceHashes']['scripts/mobile/local-transport.py'] = hashlib.sha256(helper.read_bytes()).hexdigest()
+        self.write_inputs()
+
+    def test_usb_binding_and_snapshot_preserve_mode_after_gateway_reset(self):
+        self.usb(); fixture.prepare(self.cache, self.receipt, self.output)
+        manifest = json.loads((self.output / 'manifest.json').read_text())
+        self.assertEqual(manifest['androidTransportMode'], 'usb-reverse')
+        self.assertEqual(manifest['apiOrigin'], 'https://127.0.0.1:8453')
+        snapshot = manifest['configEvidence']; before = Path(snapshot['path']).read_bytes()
+        self.config['CASEOPS_MOBILE_GATEWAY_RUN_ID'] = 'later-unit-reset'; self.write_inputs()
+        self.assertEqual(fixture.read_bound(snapshot['path'], snapshot['sha256'])[0], before)
+        self.assertEqual(json.loads(before)['CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE'], 'usb-reverse')
+
+    def test_usb_missing_or_wrong_mode_receipt_is_refused(self):
+        self.usb()
+        for mode in (None, 'emulator', 'unknown'):
+            with self.subTest(mode=mode):
+                self.core.pop('androidTransportMode', None)
+                if mode is not None: self.core['androidTransportMode'] = mode
+                self.write_inputs()
+                with self.assertRaises(ValueError): fixture.binding(self.cache, self.receipt)
+
+    def test_usb_mixed_origin_and_helper_source_are_refused(self):
+        self.usb(); self.core['webOrigin'] = 'https://10.0.2.2:3453'; self.write_inputs()
+        with self.assertRaises(ValueError): fixture.binding(self.cache, self.receipt)
+        self.usb(); self.core['fixtureSourceHashes']['scripts/mobile/local-transport.py'] = '0' * 64; self.write_inputs()
+        with self.assertRaisesRegex(ValueError, 'transport source hash mismatch'): fixture.binding(self.cache, self.receipt)
+
+    def test_usb_unknown_config_mode_is_refused_before_asset_creation(self):
+        self.config['CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE'] = 'unknown'; self.write_inputs()
+        with self.assertRaises(ValueError): fixture.prepare(self.cache, self.receipt, self.output)
+        self.assertFalse(self.output.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

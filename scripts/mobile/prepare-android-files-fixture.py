@@ -21,6 +21,44 @@ MAX_TOTAL_BYTES = 1024 * 1024
 PUBLIC_SOURCE = b"Synthetic CaseOps mobile source. No legal authority or customer data.\n"
 
 
+def _load_local_transport():
+    import hashlib as _hashlib
+    import os as _os
+    import stat as _stat
+    _path = Path(__file__).absolute().with_name("local-transport.py")
+    _keys = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    _frame = lambda value: tuple(getattr(value, key) for key in _keys)
+    assert _path.resolve(strict=True) == _path, "Canonical local transport source required"
+    def _namespace():
+        rows = []
+        for parent in _path.parents:
+            value = parent.lstat()
+            assert len(rows) < 128 and _stat.S_ISDIR(value.st_mode) and not _stat.S_ISLNK(value.st_mode), "Local transport source namespace required"
+            rows.append((str(parent), *(getattr(value, key) for key in _keys[:5])))
+        return rows
+    _parents = _namespace()
+    _named = _path.lstat()
+    _fd = _os.open(_path, _os.O_RDONLY | getattr(_os, "O_NOFOLLOW", 0) | getattr(_os, "O_NONBLOCK", 0) | getattr(_os, "O_BINARY", 0))
+    try:
+        _first = _os.fstat(_fd)
+        assert _stat.S_ISREG(_first.st_mode) and not _stat.S_ISLNK(_named.st_mode) and _first.st_nlink == 1 and _first.st_uid == Path(__file__).lstat().st_uid, "Local transport source identity required"
+        assert 0 < _first.st_size <= 16384 and all(getattr(_first, key) == getattr(_named, key) for key in _keys if not (_os.name == "nt" and key == "st_dev" and _named.st_dev == 0)), "Local transport named descriptor mismatch"
+        _data = bytearray()
+        while len(_data) <= _first.st_size:
+            _part = _os.read(_fd, min(65536, _first.st_size + 1 - len(_data)))
+            if not _part:
+                break
+            _data.extend(_part)
+        _raw = bytes(_data)
+        assert len(_raw) == _first.st_size and _hashlib.sha256(_raw).hexdigest() == "95180cd961891d9056d2a4d491e9239c6f49d4de2562c35e6d48610d767dd6ae" and _frame(_first) == _frame(_os.fstat(_fd)) and _frame(_named) == _frame(_path.lstat()) and _parents == _namespace(), "Local transport source changed"
+    finally:
+        _os.close(_fd)
+    _scope = {"__name__": "caseops_local_transport", "__file__": str(_path)}
+    exec(compile(_raw, str(_path), "exec"), _scope)
+    return _scope
+
+_LOCAL_TRANSPORT = _load_local_transport()
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)
@@ -95,11 +133,12 @@ def binding(cache, receipt_path):
     api_port = checked_port(config.get("CASEOPS_MOBILE_API_PORT"))
     web_port = checked_port(config.get("CASEOPS_MOBILE_WEB_PORT"))
     require(api_port != web_port, "Distinct isolated API/web ports required")
-    for key, config_key, expected in (
-        ("apiOrigin", "CASEOPS_MOBILE_API_ORIGIN", "https://10.0.2.2:" + api_port),
-        ("webOrigin", "CASEOPS_MOBILE_WEB_ORIGIN", "https://10.0.2.2:" + web_port),
-    ):
-        require(receipt.get(key) == config.get(config_key) == expected, "Android emulator origin mismatch")
+    try:
+        _LOCAL_TRANSPORT['witness'](config, receipt)
+    except AssertionError as error:
+        raise ValueError(str(error)) from error
+    if config.get('CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE') == 'usb-reverse':
+        require(receipt.get('fixtureSourceHashes', {}).get('scripts/mobile/local-transport.py') == '95180cd961891d9056d2a4d491e9239c6f49d4de2562c35e6d48610d767dd6ae', 'USB-reverse fixture transport source hash mismatch')
     require(receipt.get("gatewayUrl") == "https://127.0.0.1:" + api_port and
             receipt.get("webGatewayUrl") == "https://127.0.0.1:" + web_port, "Loopback gateway origin mismatch")
     require(re.fullmatch(r"[a-f0-9]{40}", receipt.get("backendSha", "")) is not None and
@@ -149,7 +188,7 @@ def binding(cache, receipt_path):
     source_hash = hashlib.sha256(PUBLIC_SOURCE).hexdigest()
     require(seed.get("sourceSha256") == source_hash and seed.get("cleanUploadAndDownload") is True,
             "Actual base source hash/readback mismatch")
-    return {"isolationReceipt": receipt_ref, "baseSeed": seed_ref, "configEvidence": config_ref,
+    return {**_LOCAL_TRANSPORT["fields"](config), "isolationReceipt": receipt_ref, "baseSeed": seed_ref, "configEvidence": config_ref,
             "fixtureSource": fixture_ref, "project": project, "backendSha": receipt["backendSha"],
             "backendRevision": receipt["backendRevision"], "matter": seed["matter"],
             "companyId": seed["companyId"], "ownerMembershipId": seed["membershipId"],

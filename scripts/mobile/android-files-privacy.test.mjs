@@ -7,8 +7,9 @@ import test from 'node:test';
 import { ANDROID_FILES_SCAN_LIMITS, attestAndroidFilesContainers, snapshotAndroidFilesPrivacy, stageAndroidFilesAssets, snapshotAndroidCameraPrivacy } from './android-files-privacy.mjs';
 import { assertCameraCopiesRemoved, CAMERA_PRIVACY_LIMITS } from './camera-files-privacy.mjs';
 
-const APP = 'ai.caseops.mobile.dev.localacceptance', SERIAL = 'emulator-5584';
-const PRIVATE = `/data/user/0/${APP}`, PUBLIC = '/storage/emulated/0/Download';
+const APP = 'ai.caseops.mobile.dev.localacceptance';
+const PRIVATE = `/data/user/0/${APP}`, PUBLIC = '/storage/emulated/0/Download', EXTERNAL = `/storage/emulated/0/Android/data/${APP}`;
+const PHONE = Object.freeze({ udid: 'CASEOPSUNITUSB01', adbPort: 5042, appiumUrl: 'http://127.0.0.1:4729', systemPort: 8206, deviceKind: 'physical', transportMode: 'usb-reverse' });
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const environment = { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5038', PATH: '/unit/bin',
   CASEOPS_MOBILE_CORE_PASSWORD: 'SYNTHETIC_PRIVATE_VALUE_MUST_NOT_REACH_ADB' };
@@ -17,7 +18,7 @@ const environment = { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5038', PATH: '/unit/bin'
 // or production operation is invoked by these source-contract tests.
 function fixture(t, selectedProfile = null) {
   const profile = selectedProfile ?? { udid: 'emulator-5584', adbPort: 5038, appiumUrl: 'http://127.0.0.1:4725', systemPort: 8202, avdName: 'CaseOps_Pixel9_API36_arm64' };
-  const SERIAL = profile.udid;
+  const SERIAL = profile.udid, physical = profile.deviceKind === 'physical';
   const selectedEnvironment = { ...environment, ADB_SERVER_SOCKET: `tcp:127.0.0.1:${profile.adbPort}` };
   const root = mkdtempSync(path.join(os.tmpdir(), 'caseops-android-files-fs-unit-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -31,32 +32,65 @@ function fixture(t, selectedProfile = null) {
   add(PRIVATE); add(PUBLIC); add(`${PRIVATE}/cache`);
   const line = node => [node.kind === 'directory' ? 'directory' : 'regular file', node.uid, node.device, node.inode,
     node.sizeBytes, node.modified, node.changed].join('|');
-  const state = { uid: '0', bootId: '11111111-2222-4333-8444-555555555555', avd: profile.avdName, brokenRead: false, listCalls: 0 };
+  const state = { uid: physical ? '2000' : '0', user: '0', api: '36', abi: 'arm64-v8a', qemu: '0', devpath: 'usb:1-2.5', runAsUid: '10087', runAsPwd: PRIVATE, packageUid: '10087', privateReadlink: PRIVATE, bootId: '11111111-2222-4333-8444-555555555555', statFailures: new Map(), avd: profile.avdName, brokenRead: false, listCalls: 0 };
   const command = (binary, args, options) => {
     assert.equal(binary, 'adb'); assert.deepEqual(args.slice(0, 2), ['-s', SERIAL]);
     assert.equal(options.shell, false); assert.ok(options.timeout > 0 && options.timeout <= 15000);
     assert.equal(options.env.ADB_SERVER_SOCKET, `tcp:127.0.0.1:${profile.adbPort}`);
     assert.equal(Object.hasOwn(options.env, 'CASEOPS_MOBILE_CORE_PASSWORD'), false);
     const argv = args.slice(2); calls.push(argv);
+    if (physical) assert.equal(['root', 'unroot', 'push', 'install', 'uninstall', 'emu', 'reboot'].includes(argv[0]), false, 'PHYSICAL_HELPER_MUST_NOT_ESCALATE_OR_MUTATE');
     let value;
     if (argv[0] === 'get-state') value = 'device';
     else if (argv.join(' ') === 'shell id -u') value = state.uid;
-    else if (argv.join(' ') === 'shell am get-current-user') value = '0';
-    else if (argv.join(' ') === 'shell getprop ro.build.version.sdk') value = '36';
-    else if (argv.join(' ') === 'shell getprop ro.product.cpu.abi') value = 'arm64-v8a';
+    else if (argv.join(' ') === 'shell am get-current-user') value = state.user;
+    else if (argv.join(' ') === 'shell getprop ro.build.version.sdk') value = state.api;
+    else if (argv.join(' ') === 'shell getprop ro.product.cpu.abi') value = state.abi;
+    else if (argv.join(' ') === 'shell getprop ro.kernel.qemu') value = state.qemu;
+    else if (argv[0] === 'get-devpath') value = state.devpath;
+    else if (argv.join(' ') === `shell run-as ${APP} id -u`) value = state.runAsUid;
+    else if (argv.join(' ') === `shell run-as ${APP} pwd`) value = state.runAsPwd;
+    else if (argv.slice(0, 5).join(' ') === `shell run-as ${APP} readlink -f`) value = argv.at(-1) === PRIVATE ? state.privateReadlink : argv.at(-1);
     else if (argv.join(' ') === 'emu avd name') value = `${state.avd}\nOK\n`;
     else if (argv.join(' ') === 'shell cat /proc/sys/kernel/random/boot_id') value = state.bootId;
-    else if (argv.slice(0, 6).join(' ') === 'shell cmd package list packages -U') value = `package:${APP} uid:10087`;
-    else if (argv[0] === 'shell' && argv[1] === 'readlink') value = argv.at(-1) === '/sdcard/Download' ? PUBLIC : argv.at(-1);
+    else if (argv.slice(0, 6).join(' ') === 'shell cmd package list packages -U') value = `package:${APP} uid:${state.packageUid}`;
+    else if (argv[0] === 'shell' && argv[1] === 'readlink') {
+      if (physical) assert.equal(argv.at(-1), '/sdcard/Download', 'PHYSICAL_PRIVATE_READLINK_REQUIRES_RUN_AS');
+      value = argv.at(-1) === '/sdcard/Download' ? PUBLIC : argv.at(-1);
+    }
+    else if (physical && argv[0] === 'shell' && argv[1] === '-T' && argv[2].includes("'/system/bin/toybox' 'stat'")) {
+      assert.equal(argv.length, 3); const source = argv[2], file = /'([^']*)'$/.exec(source)?.[1];
+      const privateScope = file === PRIVATE || file.startsWith(`${PRIVATE}/`) || file === EXTERNAL || file.startsWith(`${EXTERNAL}/`);
+      assert.equal(source.startsWith(`'run-as' '${APP}' 'env' 'LC_ALL=C'`), privateScope, 'DIRECT_STAT_EXACT_QA_RUN_AS_REQUIRED');
+      if (!privateScope) assert.ok(file === PUBLIC || file.startsWith(`${PUBLIC}/`));
+      assert.ok(source.includes("'env' 'LC_ALL=C' '/system/bin/toybox' 'stat' '-c'"));
+      assert.equal(source.includes("'-L'"), false); assert.equal(source.includes('test -e'), false);
+      if (state.statFailures.has(file)) throw state.statFailures.get(file);
+      if (!nodes.has(file)) {
+        const error = Object.assign(new Error('UNIT_TOYBOX_MISSING'), { status: 1, signal: null, stdout: '', stderr: `stat: '${file}': No such file or directory\n` });
+        throw error;
+      }
+      const node = nodes.get(file); value = node.symlink ? ['symbolic link', node.uid, node.device, node.inode, node.sizeBytes, node.modified, node.changed].join('|') : line(node);
+    }
     else if (argv[0] === 'shell' && argv[1] === '-T') {
       assert.equal(argv.length, 3, 'ONE_QUOTED_REMOTE_SHELL_COMMAND_REQUIRED');
       const script = argv[2], file = /'([^']*)'$/.exec(script)?.[1];
+      if (physical) {
+        const runAs = script.startsWith(`'run-as' '${APP}' 'sh' '-c'`);
+        if (['CASEOPS_ANDROID_STAT_V1', 'CASEOPS_ANDROID_LIST_V1', 'CASEOPS_ANDROID_READ_FD_V1'].some(label => script.includes(label))) {
+          const privateScope = file === PRIVATE || file.startsWith(`${PRIVATE}/`) || file === EXTERNAL || file.startsWith(`${EXTERNAL}/`);
+          assert.equal(runAs, privateScope, 'PHYSICAL_EXACT_PRIVATE_RUN_AS_PROVIDER_SHELL_REQUIRED');
+          if (!privateScope) assert.ok(file === PUBLIC || file.startsWith(`${PUBLIC}/`), 'NO_FOREIGN_PHYSICAL_FILE_SCOPE');
+        } else if (script.includes('CASEOPS_ANDROID_WRITE_ASSET_V1')) assert.equal(runAs, false, 'PROVIDER_WRITE_MUST_REMAIN_SHELL');
+        else assert.fail('NO_UNKNOWN_PHYSICAL_SCRIPT_FALLTHROUGH');
+      }
       if (script.includes('CASEOPS_ANDROID_STAT_V1')) value = nodes.has(file) ? nodes.get(file).symlink ? 'SYMLINK' : line(nodes.get(file)) : 'ABSENT';
       else if (script.includes('CASEOPS_ANDROID_LIST_V1')) {
         state.listCalls++;
         let selected = [...nodes.keys()].filter(name => name === file || name.startsWith(`${file}/`));
         if (state.listMode === 'missing-root') selected = selected.filter(name => name !== file);
         if (state.listMode === 'duplicate') selected.push(file);
+        if (state.listMode === 'unsafe') selected.push(`${file}/../other-app/file`);
         value = state.listMode === 'empty' ? Buffer.alloc(0) : Buffer.from(selected.join('\0') + '\0');
         if (state.listCalls === 1 && state.lateBytes) add(`${PRIVATE}/cache/late-known-copy`, state.lateBytes);
         if (state.listCalls === 1 && state.cameraLateBytes) add(`${file}/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.png`, state.cameraLateBytes);
@@ -93,7 +127,7 @@ function fixture(t, selectedProfile = null) {
     else assert.fail(`UNEXPECTED_OFFLINE_DEVICE_COMMAND: ${argv[0]}`);
     return options.encoding === 'utf8' ? Buffer.isBuffer(value) ? value.toString() : value : Buffer.from(value);
   };
-  const options = { udid: SERIAL, appId: APP, command, environment: selectedEnvironment };
+  const options = { udid: SERIAL, appId: APP, command, environment: selectedEnvironment, ...(physical ? { androidTransportMode: 'usb-reverse' } : {}) };
   const save = (name, value) => {
     const file = path.join(root, name), bytes = Buffer.from(typeof value === 'string' ? value : JSON.stringify(value));
     writeFileSync(file, bytes); return { path: file, sha256: sha(bytes) };
@@ -446,4 +480,214 @@ test('owned 16K Files constructor refuses mixed ADB/serial before command and ol
   }
   f.state.avd = 'CaseOps_Pixel9_API36_arm64';
   assert.throws(() => attestAndroidFilesContainers(f.options), /OWNED_ANDROID_AVD_REQUIRED/);
+});
+
+
+// Synthetic USB identity only: no actual serial is committed or contacted.
+test('explicit physical Files attestation binds shell and run-as identities without inventing root or AVD evidence', t => {
+  const f = fixture(t, PHONE), c = f.containers;
+  assert.equal(c.access, 'run-as'); assert.equal(c.deviceKind, 'physical'); assert.equal(c.transportMode, 'usb-reverse');
+  assert.equal(c.shellUid, 2000); assert.equal(c.runAsUid, c.packageUid); assert.equal(c.packageUid, 10087);
+  assert.equal(c.apiLevel, 36); assert.equal(c.abi, 'arm64-v8a'); assert.equal(c.qemuOff, true); assert.equal(c.usbDevPath, 'usb:1-2.5');
+  assert.equal(Object.hasOwn(c, 'rootUid'), false); assert.equal(Object.hasOwn(c, 'avdName'), false);
+  assert.ok(f.calls.some(args => args.join(' ') === `shell run-as ${APP} id -u`));
+  assert.ok(f.calls.some(args => args.join(' ') === `shell run-as ${APP} pwd`));
+  assert.ok(f.calls.some(args => args.join(' ') === `shell run-as ${APP} readlink -f ${PRIVATE}`));
+  assert.equal(f.calls.some(args => ['root', 'unroot', 'emu', 'push', 'install', 'rm', 'reboot'].includes(args[0]) || args.includes('settings')), false);
+});
+
+test('physical transport requires an explicit matching mode and exact profile socket before any device command', t => {
+  const f = fixture(t, PHONE), command = f.options.command;
+  const fromEnvironment = attestAndroidFilesContainers({ ...f.options, androidTransportMode: undefined,
+    environment: { ...f.options.environment, CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE: 'usb-reverse' } });
+  assert.equal(fromEnvironment.transportMode, 'usb-reverse');
+  for (const patch of [
+    { androidTransportMode: undefined },
+    { androidTransportMode: 'unknown' },
+    { androidTransportMode: 'unknown', environment: { ...f.options.environment, CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE: 'usb-reverse' } },
+    { environment: { ...f.options.environment, ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5038' } },
+    { environment: { ...f.options.environment, ANDROID_ADB_SERVER_PORT: '5038' } },
+    { environment: { ...f.options.environment, ANDROID_SERIAL: 'OTHER_SYNTHETIC_USB' } },
+    { udid: 'emulator-5584' },
+  ]) {
+    let calls = 0;
+    assert.throws(() => attestAndroidFilesContainers({ ...f.options, ...patch, command: () => { calls++; } }), /ANDROID_FILES_|ANDROID_LOCAL_PROFILE|DEDICATED_ANDROID/);
+    assert.equal(calls, 0);
+  }
+  assert.equal(f.options.command, command);
+});
+
+test('physical shell user API ABI USB qemu package and run-as fences reject before any private body read', t => {
+  for (const [key, value] of [['uid', '0'], ['uid', '1000'], ['user', '10'], ['api', '35'], ['abi', 'x86_64'],
+    ['devpath', 'local:tcp'], ['devpath', 'usb:bad path'], ['qemu', '1'], ['packageUid', '9999'],
+    ['runAsUid', '10088'], ['runAsPwd', '/data/user/0/other.app'], ['privateReadlink', '/data/user/0/other.app']]) {
+    const f = fixture(t, PHONE); f.state[key] = value;
+    assert.throws(() => attestAndroidFilesContainers(f.options), /ANDROID_FILES_/, key);
+    assert.equal(f.state.bodyReads || 0, 0);
+    assert.equal(f.calls.some(args => ['root', 'unroot', 'emu', 'push', 'install', 'rm'].includes(args[0])), false);
+  }
+  const emptyQemu = fixture(t, PHONE); emptyQemu.state.qemu = '';
+  assert.equal(attestAndroidFilesContainers(emptyQemu.options).qemuOff, true);
+});
+
+test('a denied run-as never falls back to privileged or shell private reads', t => {
+  const f = fixture(t, PHONE), before = f.calls.length, command = f.options.command;
+  f.options.command = (binary, args, options) => {
+    if (args.slice(2).join(' ') === `shell run-as ${APP} id -u`) throw Error('UNIT_RUN_AS_DENIED');
+    return command(binary, args, options);
+  };
+  assert.throws(() => attestAndroidFilesContainers(f.options), /UNIT_RUN_AS_DENIED/);
+  assert.equal(f.calls.slice(before).some(args => args[1] === 'readlink' || args.some(value => value.includes('CASEOPS_ANDROID_STAT_V1'))), false);
+  assert.equal(f.state.bodyReads || 0, 0);
+});
+
+test('physical provider staging keeps verified buffers exclusive and cold while private Files and camera operations use run-as', t => {
+  const f = fixture(t, PHONE), staged = f.stage(), asset = staged.receipt.assets[0];
+  assert.equal(staged.receipt.transportMode, 'usb-reverse'); assert.equal(staged.receipt.access, 'run-as');
+  assert.equal(Object.hasOwn(staged.receipt, 'avdName'), false); assert.equal(staged.receipt.providerOriginalsRead, false);
+  assert.equal(f.state.bodyReads || 0, 0);
+  const cold = f.snapshot(staged.evidence, { verifyProviderBytes: false });
+  assert.equal(cold.snapshot.complete, true); assert.equal(cold.snapshot.transportMode, 'usb-reverse');
+  assert.equal(cold.snapshot.providerOriginalsRead, false); assert.equal(cold.snapshot.providerOriginalsPreserved, null);
+  f.add(`${PRIVATE}/cache/known`, readFileSync(JSON.parse(readFileSync(f.manifestEvidence.path)).assets[0].path));
+  const final = f.snapshot(staged.evidence);
+  assert.equal(final.snapshot.complete, true); assert.equal(final.snapshot.providerOriginalsPreserved, true);
+  assert.equal(final.snapshot.counts.privateAssetMatchCount, 1); assert.equal(final.snapshot.access, 'run-as');
+  const sdk = `${PRIVATE}/cache/ImagePicker`; f.add(sdk); f.add(`${sdk}/11111111-2222-4333-8444-555555555555.jpg`, 'UNKNOWN_SYNTHETIC_PHONE_CAMERA');
+  const camera = f.camera().observation;
+  assert.equal(camera.complete, true); assert.equal(camera.deviceKind, 'physical'); assert.equal(camera.copies.length, 1);
+  assert.equal(camera.providerOriginalsRead, false); assert.equal(camera.physicalCameraAcceptance, false);
+  assert.equal(JSON.stringify(camera).includes('UNKNOWN_SYNTHETIC_PHONE_CAMERA'), false);
+  assert.throws(() => assertCameraCopiesRemoved(camera), /OWNED_CAMERA_SDK_COPY_REMAINS/);
+  assert.ok(f.calls.some(args => args[2]?.startsWith(`'run-as' '${APP}' 'sh' '-c'`) && args[2].includes('CASEOPS_ANDROID_READ_FD_V1')));
+  assert.equal(f.calls.some(args => args[0] === 'push' || args.includes('rm') || args.includes('settings')), false);
+  assert.equal(asset.transferMethod, 'verified-buffer-exclusive-device-write');
+});
+
+test('physical current checks carry the attested mode and reject changed runtime or forged legacy fields before scanning', t => {
+  const carried = fixture(t, PHONE), staged = carried.stage(); delete carried.options.androidTransportMode;
+  assert.equal(carried.snapshot(staged.evidence, { verifyProviderBytes: false }).snapshot.complete, true);
+  for (const edit of [f => { f.state.devpath = 'usb:2-3'; }, f => { f.state.qemu = '1'; }, f => { f.state.uid = '0'; },
+    f => { f.containers.rootUid = 0; }, f => { f.containers.avdName = 'fabricated-avd'; },
+    f => { f.containers.access = 'root'; }, f => { f.options.androidTransportMode = 'unknown'; }]) {
+    const f = fixture(t, PHONE), value = f.stage(); edit(f); f.state.bodyReads = 0;
+    assert.throws(() => f.snapshot(value.evidence), /ANDROID_FILES_/);
+    assert.equal(f.state.bodyReads, 0);
+  }
+});
+
+test('physical staging receipts cannot be replayed with missing or changed access mode', t => {
+  for (const patch of [{ transportMode: undefined }, { deviceKind: 'emulator' }, { access: 'root' }, { runAsUid: 10088 }, { rootUid: 0 }, { avdName: 'fabricated-avd' }]) {
+    const f = fixture(t, PHONE), staged = f.stage(), value = JSON.parse(readFileSync(staged.evidence.path));
+    Object.assign(value, patch); const ref = f.save('wrong-access.json', value); f.state.bodyReads = 0;
+    assert.throws(() => f.snapshot(ref), /ANDROID_FILES_STAGING_ACCESS_MISMATCH/);
+    assert.equal(f.state.bodyReads, 0);
+  }
+});
+
+test('physical external app roots are separately bound and scanned only through the exact QA package run-as', t => {
+  const f = fixture(t, PHONE), staged = f.stage(); f.add(EXTERNAL); f.add(`${EXTERNAL}/cache`); f.add(`${EXTERNAL}/cache/public-copy`, 'SYNTHETIC-012345abcdef-txt');
+  assert.throws(() => f.snapshot(staged.evidence), /ANDROID_FILES_EXTERNAL_ROOT_CHANGED/);
+  const actual = attestAndroidFilesContainers(f.options), result = f.snapshot(staged.evidence, { containers: actual });
+  assert.equal(result.snapshot.complete, true); assert.equal(result.snapshot.counts.privateAssetMatchCount, 1);
+  assert.ok(f.calls.some(args => args.join(' ') === `shell run-as ${APP} readlink -f ${EXTERNAL}`));
+  assert.ok(f.calls.some(args => args[2]?.startsWith(`'run-as' '${APP}'`) && args[2].includes(`'${EXTERNAL}'`) && args[2].includes('CASEOPS_ANDROID_LIST_V1')));
+});
+
+test('physical scans retain original list and byte limits and reject unsafe listings instead of escaping app scope', t => {
+  for (const listMode of ['empty', 'missing-root', 'duplicate', 'unsafe']) {
+    const f = fixture(t, PHONE), staged = f.stage(); f.state.listMode = listMode;
+    const result = f.snapshot(staged.evidence, { verifyProviderBytes: false });
+    assert.equal(result.snapshot.complete, false); assert.ok(result.snapshot.issues.length > 0);
+    assert.deepEqual(result.snapshot.limits, ANDROID_FILES_SCAN_LIMITS);
+  }
+  const f = fixture(t, PHONE), staged = f.stage();
+  assert.throws(() => f.snapshot(staged.evidence, { limits: { ...ANDROID_FILES_SCAN_LIMITS, depth: 17 } }), /ANDROID_FILES_REVIEWED_SCAN_LIMITS_REQUIRED/);
+});
+
+test('physical camera owner inode link and late-inventory races preserve admitted descriptor and cleanup evidence', t => {
+  for (const kind of ['inode', 'uid', 'hardlink', 'late-copy']) {
+    const f = fixture(t, PHONE), sdk = `${PRIVATE}/cache/ImagePicker`; f.add(sdk);
+    const node = f.add(`${sdk}/11111111-2222-4333-8444-555555555555.jpg`, 'SYNTHETIC_PHONE_CAMERA');
+    if (kind === 'inode' || kind === 'uid') f.state.replacementBeforeRead = kind;
+    if (kind === 'hardlink') node.links = 2;
+    if (kind === 'late-copy') f.state.cameraLateBytes = 'late phone camera';
+    const value = f.camera().observation;
+    assert.equal(value.complete, false); assert.ok(value.issues.length > 0); assert.deepEqual(value.limits, CAMERA_PRIVACY_LIMITS);
+    if (kind !== 'late-copy') assert.equal(f.state.bodyReads || 0, 0);
+    assert.equal(value.filesDeleted, false); assert.equal(value.fileContentsRecorded, false);
+  }
+});
+
+
+test('explicit emulator mode retains the original rooted AVD evidence and full staging contract', t => {
+  const f = fixture(t); f.options.androidTransportMode = 'emulator';
+  f.options.environment.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE = 'emulator';
+  const c = attestAndroidFilesContainers(f.options);
+  assert.equal(c.rootUid, 0); assert.equal(c.avdName, 'CaseOps_Pixel9_API36_arm64');
+  assert.equal(Object.hasOwn(c, 'transportMode'), false); assert.equal(Object.hasOwn(c, 'access'), false);
+  const staged = f.stage(); assert.equal(f.snapshot(staged.evidence).snapshot.complete, true);
+});
+
+
+test('physical stat accepts only exact bounded original ENOENT and preserves every ambiguous failure', t => {
+  for (const stderr of [`stat: '${EXTERNAL}': No such file or directory\n`, `stat: ${EXTERNAL}: No such file or directory\n`]) {
+    const f = fixture(t, PHONE), error = Object.assign(new Error('UNIT_ENOENT'), { status: 1, signal: null, stdout: '', stderr });
+    f.state.statFailures.set(EXTERNAL, error);
+    const observed = attestAndroidFilesContainers(f.options); assert.equal(observed.externalAppData, null);
+  }
+  for (const patch of [
+    { stderr: `stat: '${EXTERNAL}': Permission denied\n` },
+    { stderr: `stat: '${EXTERNAL}': Input/output error\n` },
+    { stderr: `stat: '${EXTERNAL}': Not a directory\n` },
+    { stderr: `stat: '${EXTERNAL}': Unknown error 991\n` },
+    { stderr: `stat: '${EXTERNAL}': No such file or directory\nextra\n` },
+    { stderr: `stat: '/other/path': No such file or directory\n` },
+    { stdout: 'unexpected stdout' }, { status: 2 }, { signal: 'SIGTERM' }, { code: 'ETIMEDOUT' },
+    { stderr: null }, { stdout: null },
+  ]) {
+    const f = fixture(t, PHONE), error = Object.assign(new Error('UNIT_ORIGINAL_STAT_FAILURE'), {
+      status: 1, signal: null, stdout: '', stderr: `stat: '${EXTERNAL}': No such file or directory\n`, ...patch });
+    f.state.statFailures.set(EXTERNAL, error);
+    assert.throws(() => attestAndroidFilesContainers(f.options), value => value === error);
+    assert.equal(f.state.bodyReads || 0, 0);
+  }
+  for (const dangling of [false, true]) {
+    const f = fixture(t, PHONE), node = f.add(EXTERNAL); node.symlink = true; node.dangling = dangling;
+    assert.throws(() => attestAndroidFilesContainers(f.options), /ANDROID_FILES_SYMLINK_REFUSED/);
+    assert.equal(f.state.bodyReads || 0, 0);
+  }
+});
+
+
+test('physical stat failures retain the original Error through Files and camera snapshot catch boundaries', t => {
+  for (const kind of ['Files', 'camera']) {
+    const f = fixture(t, PHONE), staged = f.stage(), sdk = `${PRIVATE}/cache/ImagePicker`;
+    f.add(sdk); const file = `${sdk}/11111111-2222-4333-8444-555555555555.jpg`; f.add(file, 'SYNTHETIC_PROTECTED_COPY');
+    const error = Object.assign(new Error('UNIT_PRIVATE_STAT_PERMISSION_DENIED'), { status: 1, signal: null,
+      stdout: '', stderr: `stat: '${file}': Permission denied\n` });
+    f.state.statFailures.set(file, error); f.state.bodyReads = 0;
+    assert.throws(() => kind === 'Files' ? f.snapshot(staged.evidence, { verifyProviderBytes: false }) : f.camera(), value => value === error);
+    assert.equal(f.state.bodyReads, 0);
+  }
+  const f = fixture(t, PHONE), command = f.options.command;
+  f.options.command = (binary, args, options) => {
+    if (args[4]?.includes("'/system/bin/toybox' 'stat'") && args[4].endsWith(`'${EXTERNAL}'`)) return 'ABSENT';
+    return command(binary, args, options);
+  };
+  assert.throws(() => attestAndroidFilesContainers(f.options), /ANDROID_FILES_STAT_REQUIRED/);
+});
+
+
+test('physical ENOENT stdout and stderr observations stay charged to the unchanged camera byte budget', t => {
+  const f = fixture(t, PHONE), command = f.options.command; let charged = 0, failedBytes = 0;
+  f.options.command = (binary, args, options) => {
+    try { const value = command(binary, args, options); charged += Buffer.byteLength(value); return value; }
+    catch (error) { const size = Buffer.byteLength(error.stdout || '') + Buffer.byteLength(error.stderr || '');
+      charged += size; failedBytes += size; throw error; }
+  };
+  const value = f.camera().observation;
+  assert.equal(value.complete, true); assert.equal(value.directoryPresent, false); assert.ok(failedBytes > 0);
+  assert.equal(value.counts.observationBytes, charged); assert.ok(charged <= CAMERA_PRIVACY_LIMITS.totalBytes);
+  assert.deepEqual(value.limits, CAMERA_PRIVACY_LIMITS);
 });

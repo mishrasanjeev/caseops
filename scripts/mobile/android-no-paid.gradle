@@ -96,13 +96,26 @@ final class CaseOpsMarkedConnectorSpecification implements ResourceConnectorSpec
     @Override Collection<Authentication> getAuthentications() { authentications }
     @Override HttpRedirectVerifier getRedirectVerifier() { verifier }
 }
+// Gradle eagerly creates protocol connectors while reading a bundled jar resource.
+// An unmarked connector may be constructed but can never perform any IO.
+final class CaseOpsBlockedUnmarkedHttpConnector implements ExternalResourceConnector {
+    private static GradleException blocked() { new GradleException('ANDROID_UNMARKED_HTTP_CONNECTOR_USE') }
+    @Override public <T> T withContent(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate, org.gradle.internal.resource.ExternalResource.ContentAndMetadataAction<T> action) { throw blocked() }
+    @Override public <T> T withContent(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate, org.gradle.internal.resource.ExternalResource.ContentAction<T> action) { throw blocked() }
+    @Override org.gradle.internal.resource.metadata.ExternalResourceMetaData getMetaData(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate) { throw blocked() }
+    @Override List<String> list(org.gradle.internal.resource.ExternalResourceName parent) { throw blocked() }
+    @Override void upload(org.gradle.internal.resource.ReadableContent resource, org.gradle.internal.resource.ExternalResourceName destination) { throw blocked() }
+}
 final class CaseOpsMarkedHttpConnectorFactory implements ResourceConnectorFactory {
     private final ResourceConnectorFactory delegate
     private final CaseOpsReviewedRedirectPolicy policy
     CaseOpsMarkedHttpConnectorFactory(ResourceConnectorFactory delegate, CaseOpsReviewedRedirectPolicy policy) { this.delegate = delegate; this.policy = policy }
     @Override Set<String> getSupportedProtocols() { delegate.supportedProtocols }
     @Override Set<Class<? extends Authentication>> getSupportedAuthentication() { delegate.supportedAuthentication }
-    @Override ExternalResourceConnector createResourceConnector(ResourceConnectorSpecification original) { delegate.createResourceConnector(new CaseOpsMarkedConnectorSpecification(original, policy)) }
+    @Override ExternalResourceConnector createResourceConnector(ResourceConnectorSpecification original) {
+        if (original != null && original.authentications != null && original.authentications.empty) return new CaseOpsBlockedUnmarkedHttpConnector()
+        return delegate.createResourceConnector(new CaseOpsMarkedConnectorSpecification(original, policy))
+    }
     boolean matches(ResourceConnectorFactory expectedDelegate, String expectedDigest) { delegate.is(expectedDelegate) && policy.digest == expectedDigest }
     ResourceConnectorFactory originalDelegate() { delegate }
     String policyDigest() { policy.digest }

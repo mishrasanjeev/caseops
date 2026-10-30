@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { androidFilesInventory, collectAndroidFiles } from '../../apps/mobile/e2e/android-files.mjs';
-import { assembleAndroidFilesFixture, androidFilesKnownSources, assertStrictAndroidFilesEnvironment, bindAndroidFilesPrivateRoots,
+import { assembleAndroidFilesFixture, androidFilesKnownSources, androidFilesHarnessFingerprint, assertStrictAndroidFilesEnvironment, bindAndroidFilesPrivateRoots,
   captureAndroidFilesFailure, captureAndroidFilesPrivacy, executeAndroidFilesCases, validateAndroidFilesContainers } from './run-android-files.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -219,4 +219,57 @@ test('actual runner source preserves runtime fences, actual capability readback,
   assert.ok(source.includes('connectionRetryCount: 0')); assert.equal(/\.click\s*\(/.test(source), false);
   assert.ok(source.includes("newJson(path.join(report, 'gateway-after.json'), after)"));
   assert.ok(source.includes('assert.equal(source.sourceDirty, false'));
+});
+
+
+test('physical private-root rebinding retains the complete run-as USB identity and rejects every changed field', () => {
+  const metadata = { kind: 'directory', uid: 10087, device: '1', inode: '2' };
+  const base = { udid: 'CASEOPSUNITUSB01', appId: 'ai.caseops.mobile.dev.localacceptance', bootId: 'unit-boot', packageUid: 10087,
+    transportMode: 'usb-reverse', deviceKind: 'physical', access: 'run-as', shellUid: 2000, runAsUid: 10087,
+    usbDevPath: 'usb:1-2.5', apiLevel: 36, abi: 'arm64-v8a', qemuOff: true,
+    appData: { path: '/data/user/0/ai.caseops.mobile.dev.localacceptance', metadata },
+    provider: { path: '/storage/emulated/0/Download', metadata }, externalAppData: null };
+  const actual = structuredClone(base); assert.equal(bindAndroidFilesPrivateRoots(base, actual), actual);
+  for (const patch of [{ transportMode: 'emulator' }, { transportMode: undefined }, { deviceKind: 'emulator' }, { access: 'root' },
+    { shellUid: 0 }, { runAsUid: 10088 }, { usbDevPath: 'usb:2-3' }, { apiLevel: 35 }, { abi: 'x86_64' }, { qemuOff: false },
+    { rootUid: 0 }, { avdName: 'fabricated-avd' }]) {
+    assert.throws(() => bindAndroidFilesPrivateRoots(base, { ...actual, ...patch }), /ANDROID_FILES_PRIVATE_RUNTIME_CHANGED/);
+  }
+  const external = { ...actual, externalAppData: { path: '/storage/emulated/0/Android/data/ai.caseops.mobile.dev.localacceptance',
+    metadata: { ...metadata, inode: '3' } } };
+  assert.equal(bindAndroidFilesPrivateRoots(base, external), external);
+  assert.throws(() => bindAndroidFilesPrivateRoots(external, { ...external, externalAppData: null }), /ANDROID_FILES_PRIVATE_ROOT_CHANGED/);
+});
+
+test('physical rebinding requires complete attested fields and cannot accept two equally incomplete or fabricated identities', () => {
+  const metadata = { kind: 'directory', uid: 10087, device: '1', inode: '2' };
+  const base = { udid: 'CASEOPSUNITUSB01', appId: 'ai.caseops.mobile.dev.localacceptance', bootId: 'unit-boot', packageUid: 10087,
+    transportMode: 'usb-reverse', deviceKind: 'physical', access: 'run-as', shellUid: 2000, runAsUid: 10087,
+    usbDevPath: 'usb:1-2.5', apiLevel: 36, abi: 'arm64-v8a', qemuOff: true,
+    appData: { path: '/data/user/0/ai.caseops.mobile.dev.localacceptance', metadata },
+    provider: { path: '/storage/emulated/0/Download', metadata }, externalAppData: null };
+  for (const key of ['deviceKind', 'access', 'shellUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff']) {
+    const incomplete = { ...base }; delete incomplete[key];
+    assert.throws(() => bindAndroidFilesPrivateRoots(incomplete, structuredClone(incomplete)), /ANDROID_FILES_PRIVATE_RUNTIME_CHANGED/, key);
+  }
+  for (const patch of [{ shellUid: 0 }, { runAsUid: 0 }, { usbDevPath: 'tcp:127.0.0.1' }, { rootUid: 0 }, { avdName: 'fabricated' }]) {
+    const invalid = { ...base, ...patch };
+    assert.throws(() => bindAndroidFilesPrivateRoots(invalid, structuredClone(invalid)), /ANDROID_FILES_PRIVATE_RUNTIME_CHANGED/);
+  }
+});
+
+
+test('actual Files fingerprint closes local transport helper bytes and refuses its missing-source boundary', t => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'caseops-files-helper-fingerprint-')); t.after(() => rmSync(directory, { recursive: true, force: true }));
+  mkdirSync(path.join(directory, 'scripts/mobile'), { recursive: true }); mkdirSync(path.join(directory, 'apps/mobile/e2e'), { recursive: true });
+  const source = fileURLToPath(new URL('../../', import.meta.url));
+  for (const name of ['run-android-files.mjs','android-files-privacy.mjs','source-snapshot.mjs','prepare-android-files-fixture.py','admit-android-file-source.py','local-transport.py']) {
+    writeFileSync(path.join(directory, 'scripts/mobile', name), readFileSync(path.join(source, 'scripts/mobile', name)));
+  }
+  writeFileSync(path.join(directory, 'apps/mobile/e2e/android-local-profile.mjs'), readFileSync(path.join(source, 'apps/mobile/e2e/android-local-profile.mjs')));
+  const file = path.join(directory, 'scripts/mobile/local-transport.py'), original = readFileSync(file), first = androidFilesHarnessFingerprint(directory);
+  writeFileSync(file, Buffer.concat([original, Buffer.from('\n# synthetic fingerprint mutation only\n')]));
+  assert.notEqual(androidFilesHarnessFingerprint(directory), first);
+  writeFileSync(file, original); assert.equal(androidFilesHarnessFingerprint(directory), first);
+  rmSync(file); assert.throws(() => androidFilesHarnessFingerprint(directory), { code: 'ENOENT' });
 });

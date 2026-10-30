@@ -19,6 +19,7 @@ const OPERATIONS = ['disposeMatter', 'readMatterState', 'revokeMatterAccess', 'r
 function fixture(t, stage = 'consent', selectedProfile = null) {
   const profile = selectedProfile ?? { udid: 'emulator-5584', adbPort: 5038, appiumUrl: 'http://127.0.0.1:4725', systemPort: 8202, avdName: 'CaseOps_Pixel9_API36_arm64' };
   const SERIAL = profile.udid;
+  const usb = profile.transportMode === 'usb-reverse', HOST = usb ? '127.0.0.1' : '10.0.2.2';
   const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-android-export-unit-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const save = (name, value) => {
@@ -38,6 +39,7 @@ function fixture(t, stage = 'consent', selectedProfile = null) {
     .map((kind, index) => ({ kind, value: index === 0 ? 'MAT-001' : `identifier-${index}` })) };
   const task = { id: 'member-task', kind: 'task', title: 'Synthetic member task', metaLabel: 'task · Sun, Oct 25, 2026 · open · high', matter };
   const extension = { environment: 'docker-integration', syntheticDataOnly: true, coreInventory: 'native-core-2026-10-25', platform: 'android',
+    ...(usb ? { androidTransportMode: 'usb-reverse' } : {}),
     baseSeed: { file: 'seed.json', sha256: baseSeed.sha256 }, companyId: 'company', membershipId: 'member', ownerMembershipId: 'owner',
     principalLabel: 'Synthetic Member', workspaceLabel: 'Synthetic Workspace', userId: 'member-user',
     servingBuild: { release_sha: 'a'.repeat(40), revision: 'api-revision' }, matter,
@@ -50,17 +52,17 @@ function fixture(t, stage = 'consent', selectedProfile = null) {
     foreignMatter: { id: 'foreign', identityLabel: 'FOREIGN', title: 'Synthetic foreign', search: 'foreign-lookup' },
     lifecycleMatter: { id: 'lifecycle', identityLabel: 'LIFECYCLE', title: 'Synthetic lifecycle', search: 'lifecycle-lookup' },
     accessMatter: { id: 'access', identityLabel: 'ACCESS', title: 'Synthetic access', search: 'access-lookup' },
-    auth: { mode: 'native-firefox', webOrigin: 'https://10.0.2.2:3443', companySlug: 'test-legal', mfaRequired: true,
+    auth: { mode: 'native-firefox', webOrigin: `https://${HOST}:3443`, companySlug: 'test-legal', mfaRequired: true,
       emailEnv: 'CASEOPS_MOBILE_CORE_EMAIL', passwordEnv: 'CASEOPS_MOBILE_CORE_PASSWORD', totpSecretEnv: 'CASEOPS_MOBILE_CORE_TOTP_SECRET' },
     locale: 'en-US', localeEvidence, credentialsFile: 'credentials-file-must-never-be-opened.json',
     destructiveControlsExecuted: false, nativeBrowserCookiesOrTokensPrepared: false };
   const extensionSeed = save('extended-seed-012345abcdef.json', extension);
   const ca = save('public-ca.crt', 'Synthetic public CA bytes; no TLS execution.');
-  const receipt = { environment: 'docker-integration', syntheticDataOnly: true, platform: 'android', project: 'unit-project',
+  const receipt = { environment: 'docker-integration', syntheticDataOnly: true, platform: 'android', project: 'unit-project', ...(usb ? { androidTransportMode: 'usb-reverse' } : {}),
     backendSha: 'a'.repeat(40), backendRevision: 'api-revision', webSha: 'a'.repeat(40), webRevision: 'web-revision',
     webIdentity: { service: 'web', release_sha: 'a'.repeat(40), revision: 'web-revision' },
     gatewayUrl: 'https://127.0.0.1:9443', webGatewayUrl: 'https://127.0.0.1:4443', gatewayRunId: 'unit-run',
-    apiOrigin: 'https://10.0.2.2:8443', webOrigin: 'https://10.0.2.2:3443', publicCA: ca.path,
+    apiOrigin: `https://${HOST}:8443`, webOrigin: `https://${HOST}:3443`, publicCA: ca.path,
     source: { api: { dirty: false, head: 'a'.repeat(40) }, web: { dirty: false, head: 'a'.repeat(40) } },
     productionAccessed: false, metroLaunched: false, webAcceptanceMarkerBuild: true, webMarkerTransportSourcePresent: true,
     gatewayImplementationSha256: gatewaySha,
@@ -105,6 +107,7 @@ function fixture(t, stage = 'consent', selectedProfile = null) {
     platform: 'android', udid: SERIAL, state: 'device', bootCompleted: true, deviceName: 'Explicit synthetic unit model',
     platformVersion: '16.2', apiLevel: 36, architecture: 'arm64-v8a', appId: APP, versionName: '0.1.0-unit', versionCode: 7,
     installedApkSha256: artifact.sha256, buildReceipt, adbPort: profile.adbPort, appiumUrl: profile.appiumUrl, systemPort: profile.systemPort, avdName: profile.avdName,
+    ...(usb ? { transportMode: 'usb-reverse', deviceKind: 'physical', shellUid: 2000, usbDevPath: 'usb:1-2', kernelQemu: '' } : {}),
     evidence: [save('explicit-synthetic-device-command-evidence.log', 'Offline unit fixture only; this is not an actual Android observation.')] });
   const locators = Object.fromEntries(['urlOpen', 'urlValue', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact',
     'workspace', 'connect', 'urlClose'].map(key => [key, { kind: 'id', value: `synthetic-${key}` }]));
@@ -128,7 +131,7 @@ function fixture(t, stage = 'consent', selectedProfile = null) {
     pkceUnchanged: true, nativePrincipalVerified: true, nativeWorkspaceVerified: true, logoutAcknowledged: true, signedOutAfter: true, sessionClosed: true });
   const request = { schemaVersion: 1, dockerReceipt, baseSeed, extensionSeed, buildReceipt, publicCa: ca, gatewayRoutes,
     ownerControls: save('owner-controls.json', owner), ownerBinding: save('owner-binding.json', binding),
-    deviceObservation, firefoxRecipe, authObservation, udid: SERIAL,
+    deviceObservation, firefoxRecipe, authObservation, udid: SERIAL, ...(usb ? { androidTransportMode: 'usb-reverse' } : {}),
     outputSeed: path.join(root, 'effective-seed.json'), outputPlan: path.join(root, 'plan.json'), outputFixture: path.join(root, 'fixture.json') };
   const replace = (key, edit) => { const value = JSON.parse(readFileSync(request[key].path)); edit(value); request[key] = save(path.basename(request[key].path), value); };
   const rebindAuth = () => replace('authObservation', value => {
@@ -473,3 +476,102 @@ test('Android session constructors and returned capabilities retain one whole se
   }
 });
 }
+
+
+// These exercise source adapters with synthetic evidence only. Actual USB,
+// reverse-port ownership, installed APK and new-session proofs remain required.
+const usbProfile = () => androidLocalProfile('UNITUSB1234', undefined, 'usb-reverse');
+const usbEnvironment = () => ({ CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE: 'usb-reverse',
+  ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5042', ANDROID_ADB_SERVER_PORT: '5042',
+  ANDROID_SERIAL: 'UNITUSB1234', CASEOPS_MOBILE_APPIUM_URL: 'http://127.0.0.1:4729' });
+const unitCredentials = { CASEOPS_MOBILE_CORE_EMAIL: 'unit@example.test',
+  CASEOPS_MOBILE_CORE_PASSWORD: 'synthetic-unit-only', CASEOPS_MOBILE_CORE_TOTP_SECRET: 'JBSWY3DPEHPK3PXP' };
+test('USB Android producer and plan/session consumers bind the physical tuple and matching loopback fixture for both MFA stages', t => {
+  for (const stage of ['login', 'consent']) {
+    const f = fixture(t, stage, usbProfile()), result = prepareAndroidLocalRun(f.request);
+    const plan = JSON.parse(readFileSync(result.plan.path));
+    assert.deepEqual(plan.androidTransport, { adbPort: 5042, appiumUrl: 'http://127.0.0.1:4729',
+      systemPort: 8206, transportMode: 'usb-reverse' });
+    const actual = inspectLocalPlan(plan, 'android', unitCredentials);
+    assert.deepEqual(actual.readiness.blockers, []);
+    assert.deepEqual(actual.fixture.androidTransport, plan.androidTransport);
+    assert.equal(actual.fixture.apiOrigin, 'https://127.0.0.1:8443');
+    assert.equal(actual.fixture.auth.webOrigin, 'https://127.0.0.1:3443');
+    assert.deepEqual(androidSessionTransport(actual.fixture, 'android', usbEnvironment()), {
+      appiumUrl: new URL('http://127.0.0.1:4729'), capabilities: { 'appium:adbPort': 5042, 'appium:systemPort': 8206 } });
+    assert.equal(verifyAndroidSessionTransport(actual.fixture, 'android', { platformName: 'Android',
+      automationName: 'UiAutomator2', udid: 'UNITUSB1234', appPackage: APP, platformVersion: '16.2',
+      adbPort: 5042, systemPort: 8206 }).transportMode, 'usb-reverse');
+    assert.equal(JSON.parse(readFileSync(plan.provenance.deviceObservation.path)).deviceKind, 'physical');
+  }
+});
+test('USB Android profile is explicit, immutable and refuses emulator, network and reserved serial identities', () => {
+  const actual = usbProfile();
+  assert.equal(Object.isFrozen(actual), true);
+  assert.equal(Object.hasOwn(actual, 'avdName'), false);
+  assert.equal(actual.deviceKind, 'physical');
+  assert.throws(() => { actual.adbPort = 5037; }, TypeError);
+  for (const udid of ['emulator-5580', 'emulator-5584', 'emulator-5554', '127.0.0.1:5555', '-sother',
+    '__proto__', 'constructor', 'unknown', 'offline', 'unauthorized', '', null, 12345, 'A'.repeat(65)]) {
+    assert.throws(() => androidLocalProfile(udid, 'UNIT_USB_PROFILE_REFUSED', 'usb-reverse'), /UNIT_USB_PROFILE_REFUSED/);
+  }
+  assert.throws(() => androidLocalProfile('UNITUSB1234'), /REVIEWED_ANDROID_LOCAL_PROFILE_REQUIRED/);
+  assert.throws(() => androidLocalProfile('UNITUSB1234', 'UNIT_USB_PROFILE_REFUSED', 'physical'), /UNIT_USB_PROFILE_REFUSED/);
+  assert.deepEqual(androidLocalProfile('emulator-5580', undefined, 'emulator'), androidLocalProfile('emulator-5580'));
+});
+test('USB Android producer refuses absent or conflicting transport and physical observations without creating outputs', t => {
+  for (const patch of [{ transportMode: 'emulator' }, { deviceKind: 'emulator' }, { shellUid: 0 },
+    { usbDevPath: 'tcp:127.0.0.1:5555' }, { usbDevPath: 'USB:1-2' }, { usbDevPath: '' }, { kernelQemu: '1' },
+    { kernelQemu: undefined }, { avdName: 'CaseOps_PR558_16K_20261028_03' }]) {
+    const f = fixture(t, 'consent', usbProfile());
+    f.replace('deviceObservation', value => Object.assign(value, patch)); f.rebindAuth();
+    assert.throws(() => prepareAndroidLocalRun(f.request), /ACTUAL_PHYSICAL_ANDROID_USB_REQUIRED|PHYSICAL_ANDROID_CANNOT_CLAIM_AVD/);
+    for (const key of ['outputSeed', 'outputPlan', 'outputFixture']) assert.equal(existsSync(f.request[key]), false);
+  }
+  for (const field of ['dockerReceipt', 'extensionSeed']) {
+    const f = fixture(t, 'consent', usbProfile());
+    f.replace(field, value => { delete value.androidTransportMode; }); f.rebindAuth();
+    assert.throws(() => prepareAndroidLocalRun(f.request), /ANDROID_TRANSPORT_MODE_PROVENANCE_MISMATCH/);
+    assert.equal(existsSync(f.request.outputPlan), false);
+  }
+  const f = fixture(t, 'consent', usbProfile()); delete f.request.androidTransportMode;
+  assert.throws(() => prepareAndroidLocalRun(f.request), /ANDROID_TRANSPORT_MODE_PROVENANCE_MISMATCH/);
+});
+test('USB Android session refuses global or mixed transports, missing explicit mode and mismatched returned capabilities', t => {
+  const f = fixture(t, 'consent', usbProfile()), prepared = prepareAndroidLocalRun(f.request);
+  const actual = inspectLocalPlan(JSON.parse(readFileSync(prepared.plan.path)), 'android', unitCredentials).fixture;
+  for (const patch of [{ CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE: undefined }, { CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE: 'emulator' },
+    { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5037' }, { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5040' },
+    { ANDROID_ADB_SERVER_PORT: '5038' }, { ANDROID_SERIAL: 'UNITUSB5678' },
+    { CASEOPS_MOBILE_APPIUM_URL: 'http://127.0.0.1:4727' }]) {
+    assert.throws(() => androidSessionTransport(actual, 'android', { ...usbEnvironment(), ...patch }), /ANDROID_TRANSPORT_/);
+  }
+  const capabilities = { platformName: 'Android', automationName: 'UiAutomator2', udid: actual.udid,
+    appPackage: APP, platformVersion: '16.2', adbPort: 5042, systemPort: 8206 };
+  for (const patch of [{ adbPort: 5037 }, { systemPort: 8204 }, { udid: 'UNITUSB5678' },
+    { 'appium:adbPort': 5040 }, { platformName: 'iOS' }]) {
+    assert.throws(() => verifyAndroidSessionTransport(actual, 'android', { ...capabilities, ...patch }), /ANDROID_SESSION_/);
+  }
+  for (const patch of [{ adbPort: 5040 }, { appiumUrl: 'http://127.0.0.1:4727' }, { systemPort: 8204 },
+    { transportMode: undefined }, { extra: true }]) {
+    assert.throws(() => validateAndroidTransport({ ...actual, androidTransport: { ...actual.androidTransport, ...patch } }, 'android'), /ANDROID_TRANSPORT_/);
+  }
+  assert.throws(() => validateAndroidTransport(actual, 'ios'), /ANDROID_TRANSPORT_REQUIRES_ANDROID/);
+});
+test('USB Android transport requires canonical separate HTTPS loopback origins, matching build and the dedicated QA package', () => {
+  const base = { udid: 'UNITUSB1234', appId: APP, apiOrigin: 'https://127.0.0.1:8443',
+    auth: { webOrigin: 'https://127.0.0.1:3443' }, androidTransport: {
+      adbPort: 5042, appiumUrl: 'http://127.0.0.1:4729', systemPort: 8206, transportMode: 'usb-reverse' } };
+  assert.deepEqual(validateAndroidTransport(base, 'android'), base.androidTransport);
+  for (const value of ['https://10.0.2.2:8443', 'https://localhost:8443', 'http://127.0.0.1:8443',
+    'https://caseops.ai', 'https://127.0.0.1:8443/', 'https://127.0.0.1:8443?x=y',
+    'https://user:pass@127.0.0.1:8443', 'https://127.0.0.1:443', 'https://127.0.0.1:999', undefined]) {
+    assert.throws(() => validateAndroidTransport({ ...base, apiOrigin: value }, 'android'), /ANDROID_TRANSPORT_USB_ORIGIN_REQUIRED/);
+    assert.throws(() => validateAndroidTransport({ ...base, auth: { webOrigin: value } }, 'android'), /ANDROID_TRANSPORT_USB_ORIGIN_REQUIRED/);
+  }
+  assert.throws(() => validateAndroidTransport({ ...base, auth: { webOrigin: base.apiOrigin } }, 'android'),
+    /ANDROID_TRANSPORT_DISTINCT_USB_ORIGINS_REQUIRED/);
+  assert.throws(() => validateAndroidTransport({ ...base, appId: 'ai.caseops.mobile' }, 'android'), /ANDROID_TRANSPORT_USB_QA_APP_REQUIRED/);
+  assert.throws(() => validateAndroidTransport(base, 'android', { apiOrigin: base.apiOrigin, webOrigin: 'https://127.0.0.1:4443' }),
+    /ANDROID_TRANSPORT_USB_BUILD_ORIGIN_MISMATCH/);
+});
