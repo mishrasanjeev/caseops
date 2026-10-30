@@ -5,6 +5,10 @@
   Retain the exact driver SQL/binds and fresh/stale/analyzed default plans;
   bound raw tuples, loops, heap fetches and buffers without planner overrides.
   Keep nested EXPLAIN/catalog files in CI artifacts before asserting outcomes.
+- Before changing a workflow's artifact paths, inventory every existing exact
+  path contract, not only the newly added retention test. Preserve the exact
+  approved inventory, run those consumers together, and inspect the subsequent
+  downloaded artifact; a new uploader assertion does not cover older consumers.
 
 - A known-created-container cleanup test must actually reach acknowledged
   creation before testing attached-client timeout. Keep setup bounded and cap

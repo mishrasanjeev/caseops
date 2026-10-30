@@ -2,6 +2,34 @@
 
 Status: Partially fixed. NO-GO pending the complete replacement release.
 
+## C50C Replacement And Missed Workflow Consumer
+
+The committed scalar correction completed114 intended cases/342 phases:
+all58 observer, three unchanged physical plans,52 semantic SQLite/PostgreSQL
+cases and the original1,000-successful-materialization pass, zero skips/retries.
+Source stayed unchanged;38 retained files verify. All three statistics states
+charge16,003 total operations,3,000 audit/4,000 docket tuples,1,000loops each,
+750 audit heap fetches and6,750 shared buffers, inside the unchanged bounds.
+The original successful import creates1,000 dockets with2,000 particulars and
+49,540 statements. This is complete focused acceptance atC50C, not full release.
+
+C50C CI41096559894 separately exposes a missed exact workflow consumer:
+test_postgres_sharding.py still requires only the original four upload paths.
+The added nested evidence paths made that strict assertion fail. The new
+retention test passed but did not cover this existing consumer; this omission
+is the agent's adjacent-path audit failure, not an unrelated product defect.
+Keep the strict equality and extend its approved list to all six paths. A
+search also inventories the deployment-hardening and export-plan consumers,
+whose existing requirements remain valid. Replay these consumers together and
+retain the original failed hosted result. Product query/test bytes are unchanged
+by this contract correction; fresh full Docker and hosted gates remain required.
+
+The complete adjacent-consumer replay now passes106 cases/318 phases, no skips
+or retries:45 sharding tests (including all24 actual launcher probes),58 observer,
+two export-plan and the exact deployment artifact contract. Before/after source
+snapshots match the four owned test/document edits. This is component evidence,
+not clean whole-release acceptance or authority to route production.
+
 ## Follow-Up After Complete 135-Case Execution
 
 Clean5FAA consolidated acceptance completed all135 intended cases/405 phases:

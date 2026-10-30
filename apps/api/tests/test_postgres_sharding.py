@@ -58,7 +58,11 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     assert upload["with"]["path"].splitlines() == [
         f"apps/api/postgres-shard-${{{{ matrix.shard }}}}.{extension}"
         for extension in ("json", "xml", "jsonl")
-    ] + ["apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl"]
+    ] + [
+        "apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl",
+        "apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.json",
+        "apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.jsonl",
+    ]
     aggregate = workflow["jobs"]["postgres-validation"]
     assert aggregate["needs"] == ["postgres-validation-shards"]
     assert aggregate["if"] == "always() && !cancelled()"
