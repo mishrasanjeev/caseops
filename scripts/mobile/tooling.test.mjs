@@ -2912,7 +2912,7 @@ test('unknown and modified import URIs refuse before preload or application entr
 
 
 import { createRequire as ciTrustCreateRequire, syncBuiltinESMExports } from 'node:module';
-import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, ciTrustFailureCode, reviewCIHostSourceAclOutput, reviewCICommandOwnerResult } from './host-node-trust-ci.mjs';
+import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, ciTrustFailureCode, reviewCIHostSourceAclOutput, reviewCICommandOwnerResult, hardenCITrustRunnerCommand } from './host-node-trust-ci.mjs';
 const ciTrustYaml = ciTrustCreateRequire(new URL('../../apps/mobile/package.json', import.meta.url))('js-yaml');
 const ciTrustKeys = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY'];
 const ciTrustValues = Object.fromEntries(ciTrustKeys.map(key => [key, 'public-fixture-' + key]));
@@ -4392,6 +4392,88 @@ async function ciNativeRunnerFixture(callback, { name = ciRunnerOutputName, nest
     finally { cp.spawnSync = original; syncBuiltinESMExports(); }
   });
 }
+function ciHardeningRefusal(environment) {
+  let failure;
+  try { hardenCITrustRunnerCommand(environment); } catch (error) { failure = error; }
+  return failure;
+}
+test('CI-COMMAND-01 native command hardening keeps bytes and independently rechecks strict ownership before the original append', async () => {
+  let hardening = 0, owners = 0;
+  await ciNativeRunnerFixture(async ({ environment, root, command }) => {
+    environment.SystemRoot = process.env.SystemRoot;
+    const result = hardenCITrustRunnerCommand(environment);
+    assert.deepEqual(result, { commandFileHardened: true, previousBytes: 17, contentsPreserved: true, ownerMatches: true, writeScopeSafe: true });
+    assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    assert.equal(hardening, 1); assert.equal(owners, 1);
+    const appended = appendCITrustOutputs(command, root, ciTrustValues);
+    assert.equal(appended.appendedKeys, 9); assert.equal(appended.previousBytes, 17);
+    assert.equal(owners, 2); assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n' + ciTrustKeys.map(key => key + '=' + ciTrustValues[key] + '\n').join(''));
+  }, { proof: ({ command }, args, options) => {
+    assert.equal(options.env.CASEOPS_TRUST_ACL_PATH, command);
+    const code = args.at(-1);
+    if (!code.includes("[Console]::Out.Write('SECURED')")) { owners++; return { status: 0, stdout: 'SAFE', stderr: ciCommandMarkers }; }
+    hardening++;
+    assert.deepEqual(Object.keys(options.env).sort(), ['CASEOPS_COMMAND_BIRTH', 'CASEOPS_COMMAND_INO', 'CASEOPS_COMMAND_LENGTH', 'CASEOPS_COMMAND_MTIME', 'CASEOPS_COMMAND_SHA256', 'CASEOPS_COMMAND_VOLUME', 'CASEOPS_TRUST_ACL_PATH', 'SystemRoot']);
+    const state = fs.statSync(command, { bigint: true });
+    assert.deepEqual(Object.fromEntries(['INO', 'VOLUME', 'BIRTH', 'MTIME', 'LENGTH'].map(key => [key, options.env['CASEOPS_COMMAND_' + key]])), { INO: String(state.ino), VOLUME: String(state.dev), BIRTH: String(state.birthtimeNs), MTIME: String(state.mtimeNs), LENGTH: '17' });
+    assert.equal(options.env.CASEOPS_COMMAND_SHA256, createHash('sha256').update('EARLIER=retained\n').digest('base64'));
+    assert.equal(options.timeout, 4000); assert.equal(options.maxBuffer, 4096);
+    assert.match(code, /\[IO\.FileMode\]::Open,\$rights,\[IO\.FileShare\]::Read/);
+    assert.match(code, /\$f\.SetAccessControl\(\$a\)/); assert.match(code, /\$f\.GetAccessControl\(\)/);
+    assert.doesNotMatch(code, /\$f\.GetAccessControl\(\[/);
+    assert.match(code, /GetFileInformationByHandle\(\$f\.SafeFileHandle\.DangerousGetHandle\(\),\$info\)/);
+    assert.ok(code.indexOf('$first=Identity') < code.indexOf('$f.SetAccessControl($a)'));
+    assert.ok(code.indexOf('$before -cne $env:CASEOPS_COMMAND_SHA256') < code.indexOf('$f.SetAccessControl($a)'));
+    assert.match(code, /Check;\$last=Identity/); assert.match(code, /ToUInt32\(\$b,40\) -ne 1/);
+    assert.match(code, /SetAccessRuleProtection\(\$true,\$false\)/); assert.match(code, /SetOwner\(\$u\)/);
+    assert.match(code, /\$f\.Length -gt 1048576/); assert.match(code, /\(Digest\) -ne \$before/);
+    assert.match(code, /\$rules\.Count -ne 3/); assert.match(code, /FreeHGlobal\(\$info\)/); assert.match(code, /if\(\$null -ne \$f\)\{\$f\.Dispose\(\)\}/);
+    assert.doesNotMatch(code, /Set-Acl|\[IO\.File\]::SetAccessControl|WriteAll|CreateNew|GITHUB_ENV|Add-Type|Start-Process/);
+    return { status: 0, stdout: 'SECURED', stderr: '' };
+  } });
+});
+test('CI-COMMAND-02 hardening refuses missing context foreign command names aliases hardlinks and oversize before dispatch', async () => {
+  for (const options of [{ name: 'set_env_01234567-89ab-cdef-0123-456789abcdef' }, { nested: true }, { alias: true }]) await ciNativeRunnerFixture(async f => {
+    f.environment.SystemRoot = process.env.SystemRoot;
+    const failure = ciHardeningRefusal(f.environment);
+    assert.match(failure?.message ?? '', /CI_TRUST_COMMAND_HARDEN_CONTEXT|CI_TRUST_CANONICAL_PATH/);
+    assert.equal(f.commandCalls, 0); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+  }, options);
+  await ciNativeRunnerFixture(async f => {
+    const environment = { ...f.environment, SystemRoot: process.env.SystemRoot };
+    for (const change of [{ CI: 'false' }, { GITHUB_ACTIONS: 'false' }, { SystemRoot: '' }, { SystemRoot: path.join(f.root, 'unadmitted-system') }]) {
+      const failure = ciHardeningRefusal({ ...environment, ...change });
+      assert.equal(failure?.message, 'CI_TRUST_COMMAND_HARDEN_CONTEXT');
+    }
+    fs.linkSync(f.command, path.join(f.root, 'command-alias'));
+    const linked = ciHardeningRefusal(environment);
+    assert.equal(linked?.message, 'CI_TRUST_COMMAND_FILE'); assert.equal(f.commandCalls, 0);
+    fs.unlinkSync(path.join(f.root, 'command-alias')); fs.writeFileSync(f.command, Buffer.alloc(1048577));
+    const oversized = ciHardeningRefusal(environment);
+    assert.equal(oversized?.message, 'CI_TRUST_COMMAND_FILE'); assert.equal(f.commandCalls, 0);
+  });
+});
+test('CI-COMMAND-03 hardening preserves subprocess failures and unsafe postcondition without writing command bytes', async () => {
+  for (const failure of [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED' }, { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }, { status: 0, stdout: 'SECURED\nSYNTHETIC_PRIVATE', stderr: '' }, { status: 0, stdout: 'SECURED', stderr: 'SYNTHETIC_PRIVATE' }]) await ciNativeRunnerFixture(async f => {
+    const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
+    assert.equal(refused?.message, 'CI_TRUST_COMMAND_HARDEN_REFUSED');
+    assert.equal(f.commandCalls, 1); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+  }, { proof: () => failure });
+  await ciNativeRunnerFixture(async f => {
+    const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
+    assert.equal(refused?.message, 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_UNSAFE');
+    assert.equal(f.commandCalls, 2); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+  }, { proof: (_f, args) => args.at(-1).includes("[Console]::Out.Write('SECURED')") ? { status: 0, stdout: 'SECURED', stderr: '' } : ciCommandFalse({ writeScopeSafe: false }) });
+});
+test('CI-COMMAND-04 hardening rejects same-byte pathname replacement and changed bytes through the retained descriptor', async () => {
+  for (const replacement of [false, true]) await ciNativeRunnerFixture(async f => {
+    const trace = ciSourceTrace();
+    try { const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot }); assert.match(refused?.message ?? '', /CI_TRUST_(?:NAMED_DESCRIPTOR|COMMAND_HARDEN)_CHANGED/); assert.equal(f.commandCalls, 1); }
+    finally { trace.restore(); } trace.closed();
+    assert.equal(fs.readFileSync(f.command, 'utf8'), replacement ? 'EARLIER=retained\n' : 'CHANGED=retained\n');
+    if (replacement) assert.equal(fs.readFileSync(path.join(f.directory, 'retained-command'), 'utf8'), 'EARLIER=retained\n');
+  }, { proof: (f) => { if (replacement) { fs.renameSync(f.command, path.join(f.directory, 'retained-command')); fs.writeFileSync(f.command, 'EARLIER=retained\n', { flag: 'wx', mode: 0o600 }); } else fs.writeFileSync(f.command, 'CHANGED=retained\n'); return { status: 0, stdout: 'SECURED', stderr: '' }; } });
+});
 test('CI native runner output admits only its observed safe Administrators owner and preserves distinct authority', async () => ciNativeRunnerFixture(async ({ environment, command }) => {
   const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.commandFileAuthority, 'native-runner-command-safe-administrators-owner'); assert.equal(result.appendedKeys, 9); assert.equal(result.runtimeSourceCopies.length, 2);
   const rows = fs.readFileSync(command, 'utf8').split('\n'); assert.equal(rows.shift(), 'EARLIER=retained'); assert.equal(rows.pop(), ''); assert.deepEqual(rows.map(row => row.slice(0, row.indexOf('='))), ciTrustKeys);
@@ -4858,4 +4940,27 @@ test('source observer bootstrap generator preserves exact tokens and AST within 
   try { assert.throws(() => readBootstrapGeneratorInput(file), /SYNTHETIC_GENERATOR_READ/); }
   finally { fs.openSync = open; fs.readSync = read; }
   assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
+
+
+// IOS-RUBY-01..02 are source/transport projection contracts; actual Ruby TLS is a separate component.
+test('IOS-RUBY-01 durable Ruby transport inventory is complete and independent of Node execution', () => {
+  const source = fs.readFileSync(new URL('./ios-host-pods.test.rb', import.meta.url), 'utf8');
+  const match = source.match(/CASE_IDS = %w\[\n([\s\S]+?)\n\]\.freeze/); assert.ok(match);
+  const actual = match[1].trim().split(/\s+/), expected = ["OPENURI-01-default-real-tls","OPENURI-02-unknown-direct-store","OPENURI-03-custom-ca-file","OPENURI-04-custom-ca-directory","OPENURI-05-unsafe-verify","OPENURI-06-unsafe-version","OPENURI-07-proxy","OPENURI-08-http","OPENURI-09-real-hostname-mismatch","OPENURI-10-real-unknown-ca","OPENURI-11-nested-success-restoration","OPENURI-12-nested-rejection-restoration","OPENURI-13-http-error-restoration","OPENURI-14-explicit-retry-marker","OPENURI-15-redirect-marker","OPENURI-16-fiber-isolation","OPENURI-17-thread-isolation","OPENURI-18-stale-receipt","OPENURI-19-direct-net-http","OPENURI-20-marker-override","OPENURI-21-http-identity","OPENURI-22-explicit-peer","OPENURI-23-client-auth-refused","OPENURI-24-error-identity","OPENURI-25-return-identity"];
+  assert.deepEqual(actual, expected); assert.equal(new Set(actual).size, 25);
+  assert.match(source, /ARGV == \['--list'\]/); assert.match(source, /CASE_IDS\.zip\(cases\)/);
+  assert.match(source, /reports\.length == CASE_IDS\.length \* 3/);
+});
+test('IOS-RUBY-02 actual retained Ruby policy bytes reach bounded pod stdin and stale policy pins refuse', () => {
+  const bytes = fs.readFileSync(new URL('./ios-host-pods.rb', import.meta.url)), before = Buffer.from(bytes);
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), IOS_PODS_SOURCE_SHA256); assert.ok(bytes.length > 8192 && bytes.length <= 32768);
+  const f = iosProjectionFixture(); f.admitted.podsSource = bytes; f.policy.source['ios-host-pods.rb'].sha256 = IOS_PODS_SOURCE_SHA256;
+  const command = iosHostCommandProjection(f.admitted, f.ref, 'pod', ['install'], f.environment);
+  assert.deepEqual(command.args, ['-', 'install']); assert.deepEqual(command.input, Buffer.concat([before, Buffer.from('\nCaseopsIosPods.run\n')]));
+  assert.deepEqual(bytes, before); const policy = JSON.parse(command.environment.CASEOPS_IOS_PODS_TLS_POLICY);
+  assert.deepEqual(policy.bundle, f.policy.bundle); assert.equal(f.policy.fixtureCA, null); assert.equal(policy.fixtureSha256, null); assert.equal(command.environment.NODE_OPTIONS, undefined); command.input.fill(0);
+  const stale = iosProjectionFixture(); stale.admitted.podsSource = Buffer.from(before); stale.policy.source['ios-host-pods.rb'].sha256 = '0'.repeat(64);
+  assert.throws(() => iosHostCommandProjection(stale.admitted, stale.ref, 'pod', ['install'], stale.environment), /IOS_HOST_PODS_SOURCE_UNREVIEWED/);
+  bytes.fill(0); before.fill(0); stale.admitted.podsSource.fill(0);
 });

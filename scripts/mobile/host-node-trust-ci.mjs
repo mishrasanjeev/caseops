@@ -6,6 +6,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 // Windows must stage exact reviewed bytes before loading any H code.
 const unixTrust = process.platform === 'win32' ? null : await import('./host-node-trust.mjs');
+// The CLI's original preparation window includes Windows command hardening.
+const CI_MAIN_DEADLINE = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href ? performance.now() + 30000 : undefined;
 
 const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
 const identity = fields.slice(0, 6);
@@ -445,8 +447,85 @@ if($bodyFailed -or $cleanupFailed){[Console]::Error.WriteLine('COPS_PARENT_REFUS
   freshParentClaim(parent, check);
   return { kind: 'windows-protected-new-parent', owner: 'current-user', writers: ['current-user', 'system', 'administrators'], protected: true, identityBound: true, childrenCreatedAfterSetup: true, creation: 'exclusive-native-security-descriptor' };
 }
+/** The hosted runner can inherit a broadly writable ACL on its per-step output.
+ * Harden only that native command file before preparing or publishing trust
+ * values. The existing append and ownership checks remain independent. */
+export function hardenCITrustRunnerCommand(environment = process.env) {
+  assert.equal(process.platform, 'win32', 'CI_TRUST_COMMAND_HARDEN_PLATFORM');
+  assert.ok(environment.GITHUB_ACTIONS === 'true' && environment.CI === 'true', 'CI_TRUST_COMMAND_HARDEN_CONTEXT');
+  const root = environment.RUNNER_TEMP, file = environment.GITHUB_OUTPUT;
+  admittedFile(file, root);
+  assert.ok(path.dirname(file) === path.join(root, '_runner_file_commands') && /^set_output_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path.basename(file)), 'CI_TRUST_COMMAND_HARDEN_CONTEXT');
+  assert.ok(typeof environment.SystemRoot === 'string' && path.isAbsolute(environment.SystemRoot) && environment.SystemRoot === process.env.SystemRoot, 'CI_TRUST_COMMAND_HARDEN_CONTEXT');
+  const end = performance.now() + 10000, check = () => assert.ok(performance.now() < end, 'CI_TRUST_COMMAND_HARDEN_DEADLINE');
+  const namespace = parents(file, check); let fd;
+  const read = size => {
+    const bytes = Buffer.alloc(Number(size) + 1); let n = 0;
+    while (n < bytes.length) { check(); const amount = fs.readSync(fd, bytes, n, bytes.length - n, n); if (!amount) break; n += amount; }
+    assert.equal(BigInt(n), size, 'CI_TRUST_COMMAND_HARDEN_EXTENT'); return bytes.subarray(0, n);
+  };
+  try {
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+    const initial = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true });
+    assert.ok(initial.isFile() && named.isFile() && !named.isSymbolicLink() && initial.nlink === 1n && initial.size >= 0n && initial.size <= BigInt(MAX), 'CI_TRUST_COMMAND_FILE');
+    checkNamed(named, initial); const before = read(initial.size);
+    assert.ok(equal(frame(initial), frame(fs.fstatSync(fd, { bigint: true }))) && equal(frame(named), frame(fs.lstatSync(file, { bigint: true }))), 'CI_TRUST_COMMAND_HARDEN_CHANGED');
+    assert.ok(initial.ino > 0n && initial.dev >= 0n && initial.dev <= 4294967295n && initial.birthtimeNs > 0n && initial.mtimeNs > 0n, 'CI_TRUST_COMMAND_HARDEN_CHANGED');
+    const code = String.raw`$ErrorActionPreference='Stop';$f=$null;$info=[IntPtr]::Zero;try{
+$p=$env:CASEOPS_TRUST_ACL_PATH;$clock=[Diagnostics.Stopwatch]::StartNew();function Check {if($clock.ElapsedMilliseconds -ge 3500){throw 'bounded'}}
+Check;$rights=[Security.AccessControl.FileSystemRights]::Read -bor [Security.AccessControl.FileSystemRights]::Write -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
+$f=[IO.FileStream]::new($p,[IO.FileMode]::Open,$rights,[IO.FileShare]::Read,4096,[IO.FileOptions]::None)
+Check;if(!$f.CanSeek -or $f.Length -lt 0 -or $f.Length -gt 1048576){throw 'extent'}
+$assembly=[AppDomain]::CurrentDomain.DefineDynamicAssembly([Reflection.AssemblyName]::new('CaseOpsCommandHandle'),[Reflection.Emit.AssemblyBuilderAccess]::Run)
+$type=$assembly.DefineDynamicModule('Native').DefineType('CaseOpsCommandHandle.Native',[Reflection.TypeAttributes]::Public)
+$method=$type.DefinePInvokeMethod('GetFileInformationByHandle','kernel32.dll','GetFileInformationByHandle',[Reflection.MethodAttributes]'Public,Static,PinvokeImpl',[Reflection.CallingConventions]::Standard,[bool],[Type[]]@([IntPtr],[IntPtr]),[Runtime.InteropServices.CallingConvention]::Winapi,[Runtime.InteropServices.CharSet]::Unicode)
+$method.SetImplementationFlags($method.GetMethodImplementationFlags() -bor [Reflection.MethodImplAttributes]::PreserveSig);$native=$type.CreateType();$info=[Runtime.InteropServices.Marshal]::AllocHGlobal(52)
+function Identity {
+Check;if(!$native::GetFileInformationByHandle($f.SafeFileHandle.DangerousGetHandle(),$info)){throw 'identity'}
+$b=[byte[]]::new(52);[Runtime.InteropServices.Marshal]::Copy($info,$b,0,52)
+$ino=([uint64][BitConverter]::ToUInt32($b,44) -shl 32) -bor [uint64][BitConverter]::ToUInt32($b,48)
+$birth=(([uint64][BitConverter]::ToUInt32($b,8) -shl 32) -bor [uint64][BitConverter]::ToUInt32($b,4))
+$mtime=(([uint64][BitConverter]::ToUInt32($b,24) -shl 32) -bor [uint64][BitConverter]::ToUInt32($b,20))
+$size=([uint64][BitConverter]::ToUInt32($b,32) -shl 32) -bor [uint64][BitConverter]::ToUInt32($b,36)
+if(([BitConverter]::ToUInt32($b,0) -band 1040) -ne 0 -or [BitConverter]::ToUInt32($b,40) -ne 1 -or $birth -le 116444736000000000 -or $mtime -le 116444736000000000){throw 'identity'}
+$culture=[Globalization.CultureInfo]::InvariantCulture
+if($ino.ToString($culture) -cne $env:CASEOPS_COMMAND_INO -or [BitConverter]::ToUInt32($b,28).ToString($culture) -cne $env:CASEOPS_COMMAND_VOLUME -or (($birth-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_COMMAND_BIRTH -or (($mtime-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_COMMAND_MTIME -or $size.ToString($culture) -cne $env:CASEOPS_COMMAND_LENGTH -or $f.Length.ToString($culture) -cne $env:CASEOPS_COMMAND_LENGTH){throw 'identity'}
+return ,$b
+}
+$first=Identity
+function Digest {$f.Position=0;$hash=[Security.Cryptography.SHA256]::Create();try{return [Convert]::ToBase64String($hash.ComputeHash($f))}finally{$hash.Dispose()}}
+$length=$f.Length;$before=Digest;if($before -cne $env:CASEOPS_COMMAND_SHA256){throw 'changed'};Check;$u=[Security.Principal.WindowsIdentity]::GetCurrent().User;if(!$u){throw 'identity'}
+$a=[Security.AccessControl.FileSecurity]::new();$a.SetOwner($u);$a.SetAccessRuleProtection($true,$false)
+foreach($sid in @($u.Value,'S-1-5-18','S-1-5-32-544')){$id=[Security.Principal.SecurityIdentifier]::new($sid);$rule=[Security.AccessControl.FileSystemAccessRule]::new($id,[Security.AccessControl.FileSystemRights]::FullControl,[Security.AccessControl.AccessControlType]::Allow);$a.AddAccessRule($rule)}
+Check;$f.SetAccessControl($a);Check;$actual=$f.GetAccessControl()
+if(!$actual.AreAccessRulesProtected -or $actual.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $u.Value){throw 'owner'}
+$rules=@($actual.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]));$seen=@{}
+foreach($rule in $rules){Check;$sid=$rule.IdentityReference.Value;if($rule.IsInherited -or $rule.AccessControlType -ne 'Allow' -or $sid -notin @($u.Value,'S-1-5-18','S-1-5-32-544') -or $rule.FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl -or $seen.ContainsKey($sid)){throw 'acl'};$seen[$sid]=$true}
+Check;$last=Identity;foreach($offset in @(0,4,8,20,24,28,32,36,40,44,48)){if([BitConverter]::ToUInt32($first,$offset) -ne [BitConverter]::ToUInt32($last,$offset)){throw 'changed'}}
+if($rules.Count -ne 3 -or $f.Length -ne $length -or (Digest) -ne $before){throw 'changed'}
+Check;[Console]::Out.Write('SECURED')
+}catch{[Console]::Error.Write('CI_TRUST_COMMAND_HARDEN_REFUSED');exit 1}finally{if($info -ne [IntPtr]::Zero){[Runtime.InteropServices.Marshal]::FreeHGlobal($info)};if($null -ne $f){$f.Dispose()}}`;
+    const result = spawnSync(path.join(environment.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], {
+      env: { SystemRoot: environment.SystemRoot, CASEOPS_TRUST_ACL_PATH: file, CASEOPS_COMMAND_INO: String(initial.ino), CASEOPS_COMMAND_VOLUME: String(initial.dev), CASEOPS_COMMAND_BIRTH: String(initial.birthtimeNs), CASEOPS_COMMAND_MTIME: String(initial.mtimeNs), CASEOPS_COMMAND_LENGTH: String(initial.size), CASEOPS_COMMAND_SHA256: createHash('sha256').update(before).digest('base64') }, encoding: 'utf8', timeout: 4000, maxBuffer: 4096, windowsHide: true,
+    });
+    check();
+    assert.ok(!result.error && result.status === 0 && result.stdout === 'SECURED' && result.stderr === '', 'CI_TRUST_COMMAND_HARDEN_REFUSED');
+    const final = fs.fstatSync(fd, { bigint: true }), finalNamed = fs.lstatSync(file, { bigint: true });
+    // The ACL/owner change may update ctime. Every other observed field and all
+    // bytes must match the same retained descriptor before publication.
+    for (const key of fields.filter(key => key !== 'ctimeNs')) assert.equal(initial[key], final[key], 'CI_TRUST_COMMAND_HARDEN_CHANGED');
+    checkNamed(finalNamed, final); assert.ok(read(final.size).equals(before), 'CI_TRUST_COMMAND_HARDEN_CHANGED');
+    assert.ok(equal(frame(final), frame(fs.fstatSync(fd, { bigint: true }))) && equal(frame(finalNamed), frame(fs.lstatSync(file, { bigint: true }))) && equal(namespace, parents(file, check)) && canonical(file) === file, 'CI_TRUST_COMMAND_HARDEN_CHANGED');
+    const proof = commandOwner(file, final, 'GITHUB_OUTPUT'); check();
+    assert.ok(proof.ownerMatches === true && proof.writeScopeSafe === true, 'CI_TRUST_COMMAND_HARDEN_REFUSED');
+    checkNamed(fs.lstatSync(file, { bigint: true }), fs.fstatSync(fd, { bigint: true }));
+    assert.ok(equal(frame(final), frame(fs.fstatSync(fd, { bigint: true }))) && equal(namespace, parents(file, check)), 'CI_TRUST_COMMAND_HARDEN_CHANGED');
+    return { commandFileHardened: true, previousBytes: before.length, contentsPreserved: true, ownerMatches: true, writeScopeSafe: true };
+  } finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+
 function ciContext(environment, createProtectedWindowsParent = false) {
-  const end = performance.now() + 30000;
+  const end = CI_MAIN_DEADLINE ?? performance.now() + 30000;
   const check = () => assert.ok(performance.now() < end, 'CI_TRUST_PREPARATION_DEADLINE');
   Object.defineProperty(check, 'deadline', { value: end });
   assert.equal(environment.GITHUB_ACTIONS, 'true', 'CI_TRUST_GITHUB_REQUIRED');
@@ -512,6 +591,7 @@ const DIAGNOSTICS = new Set([
   'HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED', 'HOST_TRUST_DEADLINE',
   'HOST_TRUST_NAMED_FD_CHANGED', 'HOST_TRUST_DIRECTORY_PATH',
   'CI_TRUST_COMMAND_OWNER', 'CI_TRUST_COMMAND_OWNER_PROTOCOL', 'CI_TRUST_RUNNER_COMMAND_NAMESPACE', 'CI_TRUST_RUNNER_COMMAND_CHANGED', 'CI_TRUST_NAMESPACE', 'CI_TRUST_CONFIG_DEADLINE',
+  'CI_TRUST_COMMAND_HARDEN_PLATFORM', 'CI_TRUST_COMMAND_HARDEN_CONTEXT', 'CI_TRUST_COMMAND_HARDEN_DEADLINE', 'CI_TRUST_COMMAND_HARDEN_EXTENT', 'CI_TRUST_COMMAND_HARDEN_CHANGED', 'CI_TRUST_COMMAND_HARDEN_REFUSED',
   'CI_TRUST_APPEND_DEADLINE', 'CI_TRUST_PREPARATION_DEADLINE',
   'CI_TRUST_RUNTIME_SOURCE_ACL_COMMAND', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL', 'CI_TRUST_RUNTIME_SOURCE_OWNER',
   'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES', 'CI_TRUST_RUNTIME_SOURCE_PUBLIC_INPUT_REQUIRED', 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_WRITE', 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_READ',
@@ -535,6 +615,9 @@ export function ciTrustFailureCode(error) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { console.log(JSON.stringify(process.platform === 'win32' ? await prepareCIHostNodeTrustWindows() : prepareCIHostNodeTrust())); }
+  try {
+    if (process.platform === 'win32') hardenCITrustRunnerCommand();
+    console.log(JSON.stringify(process.platform === 'win32' ? await prepareCIHostNodeTrustWindows() : prepareCIHostNodeTrust()));
+  }
   catch (error) { console.error('CaseOps CI Node trust preparation refused: ' + ciTrustFailureCode(error)); process.exitCode = 1; }
 }

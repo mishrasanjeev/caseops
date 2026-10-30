@@ -85,11 +85,71 @@ module CaseopsIosPods
     require 'typhoeus'
     require 'cocoapods'
     require 'net/http'
+    require 'open-uri'
+    admit_open_uri!
     Typhoeus::Request.prepend(Constructor) unless Typhoeus::Request.ancestors.include?(Constructor)
     Pod::Executable.singleton_class.prepend(ExecutableResolver) unless Pod::Executable.singleton_class.ancestors.include?(ExecutableResolver)
     Net::HTTP.prepend(NetHttpConstructor) unless Net::HTTP.ancestors.include?(NetHttpConstructor)
     Net::HTTP.singleton_class.prepend(NetHttpClass) unless Net::HTTP.singleton_class.ancestors.include?(NetHttpClass)
     self
+  end
+  OPEN_URI_SOURCE_SHA256 = '87056fcf0483dad72a3388cccfbd7b1fda4aa78545dfcb99ef13383c5a8eff02'.freeze
+  OPEN_URI_PROFILE_KEY = :caseops_ios_open_uri_default_store_profile
+  OpenUriProfile = Struct.new(:host, :port, :http, :store, :pinned, :fiber, :active, keyword_init: true)
+  def self.admit_open_uri!
+    abi = File.basename(@policy.fetch('rubyGems'))
+    need(abi.match?(/\A[0-9]+\.[0-9]+\.[0-9]+\z/), 'IOS_PODS_OPEN_URI_SOURCE')
+    file = File.expand_path('../../' + abi + '/open-uri.rb', @policy.fetch('rubyGems'))
+    need(File.realpath(file) == file, 'IOS_PODS_OPEN_URI_SOURCE')
+    File.open(file, File::RDONLY | File::NOFOLLOW | File::NONBLOCK) do |input|
+      before = input.stat
+      need(before.file? && before.uid == Process.uid && before.nlink == 1 && (before.mode & 0o022).zero? && before.size.between?(1, 65_536) && frame(before) == frame(File.lstat(file)), 'IOS_PODS_OPEN_URI_SOURCE')
+      parents = namespace(file); bytes = input.read(before.size + 1)
+      need(bytes.bytesize == before.size && Digest::SHA256.hexdigest(bytes) == OPEN_URI_SOURCE_SHA256 && frame(input.stat) == frame(before) && frame(File.lstat(file)) == frame(before) && namespace(file) == parents, 'IOS_PODS_OPEN_URI_SOURCE')
+      @open_uri_file = file; @open_uri_frame = frame(before); @open_uri_namespace = parents
+    ensure
+      bytes&.replace("\0" * bytes.bytesize)
+    end
+    original = OpenURI.method(:open_http)
+    original = original.super_method if original.owner == OpenUriConstructor
+    need(original && original.owner == OpenURI.singleton_class && original.source_location == [file, 283], 'IOS_PODS_OPEN_URI_SOURCE')
+    @open_uri_original = original
+    OpenURI.singleton_class.prepend(OpenUriConstructor) unless OpenURI.singleton_class.ancestors.include?(OpenUriConstructor)
+  end
+  def self.current_open_uri_profile
+    Thread.current[OPEN_URI_PROFILE_KEY] # Ruby Thread#[] is fiber-local.
+  end
+  def self.open_uri(buf, target, proxy, options)
+    previous = current_open_uri_profile; profile = nil
+    no_profiles!; check_bundle!
+    need(frame(File.lstat(@open_uri_file)) == @open_uri_frame && namespace(@open_uri_file) == @open_uri_namespace && File.realpath(@open_uri_file) == @open_uri_file, 'IOS_PODS_OPEN_URI_SOURCE')
+    need(target.instance_of?(URI::HTTPS) && target.userinfo.nil? && target.fragment.nil? && proxy.nil? && options.instance_of?(Hash), 'IOS_PODS_OPEN_URI_HTTPS_REQUIRED')
+    need(options[:ssl_ca_cert].nil? && options[:ssl_min_version].nil? && options[:ssl_max_version].nil?, 'IOS_PODS_OPEN_URI_DEFAULT_CA_REQUIRED')
+    need(options[:ssl_verify_mode].nil? || options[:ssl_verify_mode] == OpenSSL::SSL::VERIFY_PEER, 'IOS_PODS_NET_HTTP_VERIFY_REQUIRED')
+    profile = OpenUriProfile.new(host: target.hostname.dup.freeze, port: target.port, pinned: @cert_store, fiber: Fiber.current, active: true)
+    Thread.current[OPEN_URI_PROFILE_KEY] = profile
+    @open_uri_original.call(buf, target, proxy, options)
+  ensure
+    if profile
+      profile.active = false
+      Thread.current[OPEN_URI_PROFILE_KEY] = previous
+    end
+  end
+  def self.capture_open_uri_store(http, store, location)
+    return if store.nil? || store.equal?(@cert_store)
+    profile = current_open_uri_profile
+    return unless profile
+    need(profile.active && profile.fiber.equal?(Fiber.current) && profile.pinned.equal?(@cert_store) && profile.http.nil? && profile.store.nil? && http.instance_of?(Net::HTTP) && http.address == profile.host && http.port == profile.port && store.instance_of?(OpenSSL::X509::Store) && location && location.absolute_path == @open_uri_file && location.lineno == 343, 'IOS_PODS_NET_HTTP_STORE_REFUSED')
+    profile.http = http; profile.store = store
+  end
+  def self.open_uri_store?(http, store)
+    profile = current_open_uri_profile
+    profile && profile.active && profile.fiber.equal?(Fiber.current) && profile.pinned.equal?(@cert_store) && profile.http.equal?(http) && profile.store.equal?(store)
+  end
+  module OpenUriConstructor
+    def open_http(buf, target, proxy, options)
+      CaseopsIosPods.open_uri(buf, target, proxy, options)
+    end
   end
   def self.options(url, options)
     no_profiles!; check_bundle!
@@ -119,12 +179,16 @@ module CaseopsIosPods
     end
   end
   module NetHttpConstructor
+    def cert_store=(value)
+      CaseopsIosPods.capture_open_uri_store(self, value, caller_locations(1, 1).first)
+      super(value)
+    end
     def start(*args, &block)
       CaseopsIosPods.no_profiles!; CaseopsIosPods.check_bundle!
       CaseopsIosPods.need(use_ssl? && !proxy?, 'IOS_PODS_NET_HTTP_HTTPS_REQUIRED')
       policy = CaseopsIosPods.instance_variable_get(:@policy)
       store = CaseopsIosPods.instance_variable_get(:@cert_store)
-      CaseopsIosPods.need(cert_store.nil? || cert_store.equal?(store), 'IOS_PODS_NET_HTTP_STORE_REFUSED')
+      CaseopsIosPods.need(cert_store.nil? || cert_store.equal?(store) || CaseopsIosPods.open_uri_store?(self, cert_store), 'IOS_PODS_NET_HTTP_STORE_REFUSED')
       CaseopsIosPods.need(verify_mode.nil? || verify_mode == OpenSSL::SSL::VERIFY_PEER, 'IOS_PODS_NET_HTTP_VERIFY_REQUIRED')
       CaseopsIosPods.need(verify_hostname.nil? || verify_hostname == true, 'IOS_PODS_NET_HTTP_HOST_REQUIRED')
       CaseopsIosPods.need(ca_file.nil? || ca_file == policy.fetch('bundle').fetch('path'), 'IOS_PODS_NET_HTTP_STORE_REFUSED')

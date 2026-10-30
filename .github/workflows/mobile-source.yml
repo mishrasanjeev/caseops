@@ -108,6 +108,12 @@ jobs:
       - name: PowerShell 7 complete offline inventory
         shell: pwsh
         run: ./scripts/mobile/android-tooling.ps1 -SelfTest
+      - name: PowerShell 5.1 command-handle field regressions
+        shell: powershell
+        run: ./scripts/mobile/windows-command-handle.test.ps1
+      - name: PowerShell 7 command-handle field regressions
+        shell: pwsh
+        run: ./scripts/mobile/windows-command-handle.test.ps1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
