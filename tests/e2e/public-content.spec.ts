@@ -464,8 +464,8 @@ test.describe("Public landing page and user guide", () => {
       await expect(page.locator('meta[name="googlebot"]')).toHaveAttribute("content", "noindex, follow");
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://caseops.ai/third-party-notices");
       await expect(page.locator("article form, article input, article textarea")).toHaveCount(0);
-      await expect(page.locator("article h2")).toHaveCount(6);
-      await expect(page.locator("article details")).toHaveCount(8);
+      await expect(page.locator("article h2")).toHaveCount(7);
+      await expect(page.locator("article details")).toHaveCount(9);
       for (const component of thirdPartyNotices.components) {
         const section = page.getByRole("region", { name: component.name, exact: true });
         await expect(section).toContainText(component.packageName);

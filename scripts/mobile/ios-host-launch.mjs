@@ -146,8 +146,16 @@ const podBuildValues = Object.freeze({
   EX_DEV_CLIENT_NETWORK_INSPECTOR: Object.freeze(['true', 'false']),
   RCT_USE_PREBUILT_RNCORE: Object.freeze(['0', '1']),
   RCT_USE_RN_DEP: Object.freeze(['0', '1']),
+  RCT_SKIP_CODEGEN: Object.freeze(['0', '1']),
+  RCT_REMOVE_LEGACY_ARCH: Object.freeze(['0', '1']),
+  RCT_REMOVE_LEGACY_MODULE_INTEROP: Object.freeze(['0', '1']),
+  RCT_REMOVE_LEGACY_COMPONENT_INTEROP: Object.freeze(['0', '1']),
+  RCT_HERMES_V1_ENABLED: Object.freeze(['0', '1']),
+  RCT_FABRIC_ENABLED: Object.freeze(['1']),
+  RCT_AGGREGATE_PRIVACY_FILES: Object.freeze(['0', '1']),
+  RCT_NEW_ARCH_ENABLED: Object.freeze(['1']),
 });
-export function neutralIosEnvironment(environment, { buildNames = [] } = {}) {
+export function neutralIosEnvironment(environment, { buildNames = [], podBuildPaths = null } = {}) {
   assert.ok(environment && typeof environment === 'object' && !Array.isArray(environment), 'IOS_HOST_ENVIRONMENT');
   const result = {}; let bytes = 0;
   for (const [key, value] of Object.entries(environment)) {
@@ -167,6 +175,13 @@ export function neutralIosEnvironment(environment, { buildNames = [] } = {}) {
     }
     if (unsafe.test(key) || key.startsWith('CASEOPS_HOST_') || key.startsWith('CASEOPS_IOS_HOST_')
       || ['PWD', 'OLDPWD', 'SHLVL', '_', 'COCOAPODS_DISABLE_STATS', 'COCOAPODS_SKIP_UPDATE_MESSAGE', 'CASEOPS_IOS_PODS_TLS_POLICY', 'CASEOPS_IOS_POD_SOURCE_BASE64'].includes(key)) continue;
+    const sdkName = key.toUpperCase();
+    if (Object.hasOwn(podBuildValues, sdkName) || ['APP_PATH', 'REACT_NATIVE_PATH'].includes(sdkName))
+      assert.equal(key, sdkName, 'IOS_HOST_UNREVIEWED_ENVIRONMENT');
+    if (['APP_PATH', 'REACT_NATIVE_PATH'].includes(key)) {
+      assert.ok(podBuildPaths && Object.hasOwn(podBuildPaths, key) && Array.isArray(podBuildPaths[key])
+        && podBuildPaths[key].includes(value), 'IOS_HOST_POD_SOURCE_PATH'); result[key] = value; continue;
+    }
     if (Object.hasOwn(podBuildValues, key)) {
       assert.ok(podBuildValues[key].includes(value), 'IOS_HOST_POD_BUILD_VALUE'); result[key] = value; continue;
     }
@@ -569,10 +584,66 @@ export function reviewProjectNpm(p, end = Date.now() + 20000) {
   }
   return rows;
 }
+// These are SDK source paths, not arbitrary Xcode build-name values. Review
+// them only after prebuild has created ios/ and when a child actually has them.
+export function reviewIosPodBuildPaths(policy, { end = Date.now() + 20000 } = {}) {
+  assert.ok(typeof process.getuid === 'function', 'IOS_HOST_POSIX_OWNER_REQUIRED');
+  const helper = readIosHostInput(policy.helper, { end, maxBytes: 131072 });
+  try {
+    assert.equal(helper.canonical, policy.helper.path, 'IOS_HOST_POD_SOURCE_ROOT');
+    const root = path.resolve(path.dirname(policy.helper.path), '../..');
+    assert.equal(policy.helper.path, path.join(root, 'scripts/mobile/ios-host-launch.mjs'), 'IOS_HOST_POD_SOURCE_ROOT');
+    const mobile = path.join(root, 'apps/mobile'), ios = path.join(mobile, 'ios');
+    const rn = path.join(mobile, 'node_modules/react-native'), pods = path.join(ios, 'Pods');
+    assert.equal(policy.paths.projectPods, pods, 'IOS_HOST_PROJECT_PODS_BINDING');
+    const observe = folder => {
+      const row = directory(folder, end, false);
+      assert.equal(fs.lstatSync(folder, { bigint: true }).uid, BigInt(process.getuid()), 'IOS_HOST_POD_SOURCE_OWNER');
+      return row;
+    };
+    const observed = [root, mobile, ios, rn].map(observe);
+    const podsStat = fs.lstatSync(pods, { bigint: true, throwIfNoEntry: false });
+    const nativePaths = [rn];
+    if (podsStat) {
+      observed.push(observe(pods));
+      // RN post_install writes this exact physical-relative Xcode setting.
+      nativePaths.push(pods + path.sep + path.relative(pods, rn));
+    }
+    const values = Object.freeze({ APP_PATH: Object.freeze([ios + path.sep + '..']),
+      REACT_NATIVE_PATH: Object.freeze(nativePaths) });
+    for (const row of observed) assert.deepEqual(observe(row.path), row, 'IOS_HOST_POD_SOURCE_CHANGED');
+    if (!podsStat) assert.equal(fs.lstatSync(pods, { throwIfNoEntry: false }), undefined, 'IOS_HOST_POD_SOURCE_CHANGED');
+    const named = fs.lstatSync(policy.helper.path, { bigint: true });
+    assert.deepEqual(fields.map(key => String(named[key])), helper.metadata, 'IOS_HOST_INPUT_CHANGED');
+    assert.equal(fs.realpathSync(policy.helper.path), helper.canonical, 'IOS_HOST_INPUT_CHANGED');
+    assert.deepEqual(namespace(policy.helper.path, end), helper.namespace, 'IOS_HOST_NAMESPACE_CHANGED');
+    return Object.freeze({ sourceRoot: root, values, directories: observed });
+  } finally { helper.bytes.fill(0); }
+}
+
+const nodeCodeOptions = new Set(['-p', '--print', '-e', '--eval']);
+export function validateIosHostArguments(role, args) {
+  assert.ok(['node', 'npm', 'ruby', 'pod', 'curl', 'git', 'xcodebuild', 'neutral'].includes(role) && Array.isArray(args) && args.length <= 256, 'IOS_HOST_COMMAND_DOMAIN');
+  const code = role === 'node' && nodeCodeOptions.has(args[0]) ? 1 : -1;
+  const terminator = args.indexOf('--', 2);
+  assert.ok(code < 0 || (args.length > 1 && !nodeCodeOptions.has(args[1]) && !args.slice(2, terminator < 0 ? undefined : terminator).some(arg => nodeCodeOptions.has(arg))), 'IOS_HOST_COMMAND_DOMAIN');
+  let bytes = 0;
+  for (const [index, arg] of args.entries()) {
+    const valid = index === code ? typeof arg === 'string' && arg.length > 0 && Buffer.byteLength(arg) <= 8192 && !arg.includes('\0') : cleanText(arg);
+    assert.ok(valid, 'IOS_HOST_COMMAND_DOMAIN'); bytes += Buffer.byteLength(arg);
+    assert.ok(bytes <= 256 * 8192, 'IOS_HOST_COMMAND_DOMAIN');
+  }
+  return args;
+}
+
 export async function composeIosHostCommand(policyRef, role, args, { environment = {}, end = Date.now() + 20000 } = {}) {
-  assert.ok(['node', 'npm', 'ruby', 'pod', 'curl', 'git', 'xcodebuild', 'neutral'].includes(role) && Array.isArray(args) && args.length <= 256 && args.every(a => cleanText(a)), 'IOS_HOST_COMMAND_DOMAIN');
+  validateIosHostArguments(role, args);
   const admitted = await verifyIosHostLaunch(policyRef, { end });
-  try { return iosHostCommandProjection(admitted, policyRef, role, args, environment); }
+  try {
+    if (['APP_PATH', 'REACT_NATIVE_PATH'].some(name => Object.hasOwn(environment, name)))
+      admitted.podBuildPaths = reviewIosPodBuildPaths(admitted.policy, { end });
+    return iosHostCommandProjection(admitted, policyRef, role, args, environment);
+  }
   finally { admitted.bundle?.bytes.fill(0); admitted.podsSource.fill(0); admitted.podEntry.fill(0); }
 }
 // Pure projection, not an admission or execution API. The actual CLI always
@@ -581,7 +652,10 @@ export function iosHostCommandProjection(admitted, policyRef, role, args, enviro
   const p = admitted.policy;
   try {
     validateIncoming(p, admitted.node.environment, environment);
-    const neutral = neutralIosEnvironment(environment, { buildNames: role === 'node' ? admitted.nodeBuildNames ?? [] : [] });
+    if (admitted.podBuildPaths) assert.equal(admitted.podBuildPaths.sourceRoot,
+      path.resolve(path.dirname(p.helper.path), '../..'), 'IOS_HOST_POD_SOURCE_ROOT');
+    const neutral = neutralIosEnvironment(environment, { buildNames: role === 'node' ? admitted.nodeBuildNames ?? [] : [],
+      podBuildPaths: admitted.podBuildPaths?.values ?? null });
     Object.assign(neutral, { HOME: p.paths.home, CURL_HOME: p.paths.home, XDG_CONFIG_HOME: p.paths.home,
       CP_HOME_DIR: p.paths.pods, CP_CACHE_DIR: p.paths.cache, CP_REPOS_DIR: p.paths.repos, TMPDIR: p.paths.temporary,
       LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8',

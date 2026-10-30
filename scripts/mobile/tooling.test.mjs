@@ -29,7 +29,7 @@ import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFai
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA } from './host-node-trust.mjs';
 import { localCertificates } from './host-node-trust-fixture.mjs';
-import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, validatePodsCurlArguments, validateIosCurlArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments } from './ios-host-launch.mjs';
+import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, composeIosHostCommand, validateIosHostArguments, reviewIosPodBuildPaths, validatePodsCurlArguments, validateIosCurlArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments } from './ios-host-launch.mjs';
 
 const installedHash = 'a'.repeat(64);
 const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
@@ -3285,6 +3285,107 @@ test('iOS Podfile flags reject other values names and trust overrides before chi
     const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [name]: 'SYNTHETIC_UNADMITTED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
   }
 });
+// IOS-ENV-03..06: J20/M22 source contracts, not native acceptance.
+function iosRnProjectionFixture() {
+  const f = iosProjectionFixture(), root = path.resolve('/SYNTHETIC/reviewed-rn-source');
+  const mobile = path.join(root, 'apps/mobile'), ios = path.join(mobile, 'ios'), rn = path.join(mobile, 'node_modules/react-native');
+  f.policy.helper = { path: path.join(root, 'scripts/mobile/ios-host-launch.mjs') };
+  f.policy.paths.projectPods = path.join(ios, 'Pods');
+  f.admitted.podBuildPaths = { sourceRoot: root, values: { APP_PATH: [ios + path.sep + '..'],
+    REACT_NATIVE_PATH: [rn, f.policy.paths.projectPods + path.sep + path.relative(f.policy.paths.projectPods, rn)] } };
+  return f;
+}
+test('IOS-ENV-03 RN source flags and paths survive Pods to every composed constructor with unchanged trust', () => {
+  for (let bits = 0; bits < 64; bits++) {
+    const f = iosRnProjectionFixture(), deadline = String(Date.now() + 5000);
+    const flags = { RCT_SKIP_CODEGEN: String(bits & 1), RCT_REMOVE_LEGACY_ARCH: String((bits >> 1) & 1),
+      RCT_REMOVE_LEGACY_MODULE_INTEROP: String((bits >> 2) & 1), RCT_REMOVE_LEGACY_COMPONENT_INTEROP: String((bits >> 3) & 1),
+      RCT_HERMES_V1_ENABLED: String((bits >> 4) & 1), RCT_FABRIC_ENABLED: '1', RCT_AGGREGATE_PRIVACY_FILES: String((bits >> 5) & 1), RCT_NEW_ARCH_ENABLED: '1' };
+    const paths = Object.fromEntries(Object.entries(f.admitted.podBuildPaths.values).map(([name, values]) => [name, values[0]]));
+    const pod = iosHostCommandProjection(f.admitted, f.ref, 'pod', ['install'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: deadline });
+    const inherited = { ...pod.environment, ...flags, ...paths }, before = { ...inherited };
+    for (const role of ['node', 'ruby', 'pod', 'curl', 'git', 'xcodebuild', 'neutral']) {
+      const child = iosRnProjectionFixture(), args = role === 'node' ? ['./../node_modules/react-native/scripts/generate-codegen-artifacts.js', '-p', paths.APP_PATH, '-o', '/SYNTHETIC/reviewed-rn-source/apps/mobile/ios', '-t', 'ios'] : role === 'curl' ? curlDownloaderArgs() : role === 'git' ? ['--version'] : [];
+      const result = iosHostCommandProjection(child.admitted, child.ref, role, args, inherited);
+      for (const [name, value] of Object.entries({ ...flags, ...paths })) assert.equal(result.environment[name], value, role + ':' + name);
+      assert.equal(result.environment.CASEOPS_IOS_HOST_OUTER_DEADLINE, deadline);
+      if (role === 'node') { assert.deepEqual(result.args, args); assert.equal(result.environment.SSL_CERT_FILE, child.environment.SSL_CERT_FILE); assert.equal(result.environment.NODE_OPTIONS, child.environment.NODE_OPTIONS); assert.equal(result.environment.NPM_CONFIG_STRICT_SSL, 'true'); }
+      else assert.equal(result.environment.NODE_OPTIONS, undefined);
+      result.input?.fill(0); result.bundle?.fill(0);
+    }
+    assert.deepEqual(inherited, before); pod.input.fill(0);
+  }
+});
+test('IOS-ENV-04 RN finite values and case aliases cannot bypass declared build names or trust fences', () => {
+  const flags = ['RCT_SKIP_CODEGEN', 'RCT_REMOVE_LEGACY_ARCH', 'RCT_REMOVE_LEGACY_MODULE_INTEROP', 'RCT_REMOVE_LEGACY_COMPONENT_INTEROP', 'RCT_HERMES_V1_ENABLED', 'RCT_FABRIC_ENABLED', 'RCT_AGGREGATE_PRIVACY_FILES', 'RCT_NEW_ARCH_ENABLED'];
+  for (const name of flags) {
+    for (const value of ['', '2', '-1', 'true', 'TRUE', '1 ', '0\n', 'SYNTHETIC_UNADMITTED']) {
+      const f = iosRnProjectionFixture(); f.admitted.nodeBuildNames = [name]; assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [name]: value }), /IOS_HOST_POD_BUILD_VALUE/);
+    }
+    for (const value of [false, 1, null, {}, 'bad\0value']) assert.throws(() => neutralIosEnvironment({ [name]: value }), /IOS_HOST_ENVIRONMENT/);
+    const f = iosRnProjectionFixture(), alias = name.toLowerCase(); f.admitted.nodeBuildNames = [alias]; assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [alias]: '1' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+  for (const name of ['RCT_FABRIC_ENABLED', 'RCT_NEW_ARCH_ENABLED']) { const f = iosRnProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [name]: '0' }), /IOS_HOST_POD_BUILD_VALUE/); }
+  for (const name of ['RCT_UNREVIEWED_FLAG', 'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'HTTPS_PROXY', 'RUBYOPT']) { const f = iosRnProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { RCT_NEW_ARCH_ENABLED: '1', [name]: 'SYNTHETIC_UNADMITTED' }), /IOS_HOST_(?:UNREVIEWED_ENVIRONMENT|CROSS_ROLE_OVERRIDE)/); }
+});
+test('IOS-ENV-05 SDK path values require reviewed policy root even when Xcode declares their names', () => {
+  const f = iosRnProjectionFixture(), root = path.resolve('/SYNTHETIC/reviewed-rn-source');
+  for (const name of ['APP_PATH', 'REACT_NATIVE_PATH']) {
+    for (const value of ['/FOREIGN/source', root.toLowerCase() + '/apps/mobile', root + '/apps/mobile/ios/../../../private', '$' + '{PODS_ROOT}/../../node_modules/react-native', f.admitted.podBuildPaths.values[name][0] + '/']) {
+      const c = iosRnProjectionFixture(); c.admitted.nodeBuildNames = [name]; assert.throws(() => iosHostCommandProjection(c.admitted, c.ref, 'node', [], { [name]: value }), /IOS_HOST_POD_SOURCE_PATH/);
+    }
+    const c = iosRnProjectionFixture(), alias = name.toLowerCase(); c.admitted.nodeBuildNames = [alias]; assert.throws(() => iosHostCommandProjection(c.admitted, c.ref, 'node', [], { [alias]: f.admitted.podBuildPaths.values[name][0] }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+    const missing = iosProjectionFixture(); missing.admitted.nodeBuildNames = [name]; assert.throws(() => iosHostCommandProjection(missing.admitted, missing.ref, 'node', [], { [name]: f.admitted.podBuildPaths.values[name][0] }), /IOS_HOST_POD_SOURCE_PATH/);
+  }
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { APP_PATH: root + '/apps/mobile' }), /IOS_HOST_POD_SOURCE_PATH/);
+  const xcode = iosHostCommandProjection(f.admitted, f.ref, 'node', [], { REACT_NATIVE_PATH: f.admitted.podBuildPaths.values.REACT_NATIVE_PATH[1] }); assert.equal(xcode.environment.REACT_NATIVE_PATH, f.admitted.podBuildPaths.values.REACT_NATIVE_PATH[1]);
+});
+test('IOS-ENV-06 actual path review rejects symlinks and changed helper before composed command projection', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => reviewIosPodBuildPaths({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const mobile = path.join(root, 'apps/mobile'), ios = path.join(mobile, 'ios'), rn = path.join(mobile, 'node_modules/react-native'); const sourceFolder = path.join(root, 'scripts/mobile');
+  for (const folder of [sourceFolder, ios, rn]) fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
+  const helperFile = path.join(sourceFolder, 'ios-host-launch.mjs'), source = fs.readFileSync(new URL('./ios-host-launch.mjs', import.meta.url)); fs.writeFileSync(helperFile, source, { mode: 0o600 }); const helper = referenceIosHostInput(helperFile, Date.now() + 20000, 131072);
+  const f = iosProjectionFixture(); f.policy.helper = helper; f.policy.paths.projectPods = path.join(ios, 'Pods'); f.admitted.podBuildPaths = reviewIosPodBuildPaths(f.policy); assert.equal(fs.existsSync(f.policy.paths.projectPods), false);
+  assert.deepEqual(f.admitted.podBuildPaths.values.APP_PATH, [ios + path.sep + '..']); assert.deepEqual(f.admitted.podBuildPaths.values.REACT_NATIVE_PATH, [rn]);
+  const node = iosHostCommandProjection(f.admitted, f.ref, 'node', ['--print', '1'], { APP_PATH: ios + path.sep + '..', REACT_NATIVE_PATH: rn }); assert.equal(node.environment.REACT_NATIVE_PATH, rn); assert.equal(node.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+  fs.mkdirSync(f.policy.paths.projectPods, { mode: 0o700 }); const withPods = reviewIosPodBuildPaths(f.policy); assert.equal(withPods.values.REACT_NATIVE_PATH[1], f.policy.paths.projectPods + path.sep + path.relative(f.policy.paths.projectPods, rn)); assert.equal(fs.realpathSync(withPods.values.REACT_NATIVE_PATH[1]), rn);
+  for (const folder of [ios, rn]) { fs.renameSync(folder, folder + '-retained'); fs.symlinkSync(folder + '-retained', folder, 'dir'); assert.throws(() => reviewIosPodBuildPaths(f.policy), /IOS_HOST_DIRECTORY/); fs.unlinkSync(folder); fs.renameSync(folder + '-retained', folder); }
+  const changed = Buffer.from(source); changed[0] ^= 1; fs.writeFileSync(helperFile, changed); assert.throws(() => reviewIosPodBuildPaths(f.policy), /IOS_HOST_HASH_CHANGED/); fs.writeFileSync(helperFile, source); assert.equal(reviewIosPodBuildPaths(f.policy).sourceRoot, root);
+});
+
+// IOS-ARGV-01..02: exact SDK code operands, not native acceptance.
+test('IOS-ARGV-01 Node code operands preserve exact LF CRLF bytes and composed argv with unchanged trust', () => {
+  const program = "require.resolve(\n    \"react-native\",\n    {paths: [process.argv[1]]},\n    )";
+  for (const flag of ['-p', '--print', '-e', '--eval']) for (const code of [program, program.replaceAll('\n', '\r\n')]) {
+    const args = [flag, code, '/SYNTHETIC/reviewed-rn-source/third-party-podspecs'], before = [...args];
+    assert.equal(validateIosHostArguments('node', args), args);
+    const f = iosRnProjectionFixture(), command = iosHostCommandProjection(f.admitted, f.ref, 'node', args, f.environment);
+    assert.deepEqual(command.args, before); assert.deepEqual(args, before); assert.equal(command.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS); assert.equal(command.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE); assert.equal(command.environment.NPM_CONFIG_STRICT_SSL, 'true');
+  }
+  const literalTail = ['-p', program, '--', '--eval']; assert.equal(validateIosHostArguments('node', literalTail), literalTail);
+  const byteBoundary = ['-e', ' '.repeat(8191) + '1']; assert.equal(validateIosHostArguments('node', byteBoundary), byteBoundary);
+  const unicodeBoundary = ['--eval', 'é'.repeat(4096)]; assert.equal(validateIosHostArguments('node', unicodeBoundary), unicodeBoundary);
+  const aggregateBoundary = Array.from({ length: 256 }, () => 'x'.repeat(8192)); assert.equal(validateIosHostArguments('node', aggregateBoundary), aggregateBoundary);
+});
+test('IOS-ARGV-02 CRLF paths flags env ambiguous code and original byte bounds refuse before policy reads', async t => {
+  const cases = [
+    ['node', ['-p']], ['node', ['-e', '']], ['node', ['-p', '--eval']], ['node', ['-p', '1', '-e', '2']], ['node', ['--eval', '1', '--print', '2']],
+    ['node', ['--print\n', '1']], ['node', ['--eval\r', '1']], ['node', ['/SYNTHETIC/script\n.js']], ['node', ['-p', '1', '/SYNTHETIC/path\r\n']], ['node', ['/SYNTHETIC/codegen.js', '-p', 'source\npath']],
+    ['node', ['--PRINT', '1\n']], ['node', ['-pe', '1\n']], ['node', ['-e', '1\0']], ['node', ['-e', 'x'.repeat(8193)]], ['node', ['-p', '😀'.repeat(2049)]], ['node', Array(257).fill('x')], ['node', ['-e', null]],
+    ...['npm', 'ruby', 'pod', 'curl', 'git', 'xcodebuild', 'neutral'].map(role => [role, ['-e', '1\n']]),
+  ];
+  let reads = 0; const opened = t.mock.method(fs, 'openSync', () => { reads++; throw Error('POLICY_READ_REACHED'); });
+  for (const [role, args] of cases) {
+    const before = [...args]; assert.throws(() => validateIosHostArguments(role, args), /IOS_HOST_COMMAND_DOMAIN/);
+    const promise = composeIosHostCommand({}, role, args); assert.ok(promise instanceof Promise); await assert.rejects(promise, /IOS_HOST_COMMAND_DOMAIN/); assert.deepEqual(args, before);
+  }
+  assert.equal(reads, 0); opened.mock.restore();
+  for (const [name, code] of [['RCT_SKIP_CODEGEN', 'IOS_HOST_POD_BUILD_VALUE'], ['APP_PATH', 'IOS_HOST_POD_SOURCE_PATH'], ['NODE_OPTIONS', 'IOS_HOST_CROSS_ROLE_OVERRIDE']]) {
+    const f = iosRnProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.environment, [name]: 'value\n' }), new RegExp(code));
+  }
+});
+
 test('CocoaPods curl constructor preserves exact payload and headers while using held CA FD and required marker', () => {
   const f = iosProjectionFixture(), input = [...curlDownloaderArgs(), "-A 'CocoaPods/1.17.0 cocoapods-downloader/2.1'", '-H', 'If-None-Match: SYNTHETIC-ETAG'];
   const result = iosHostCommandProjection(f.admitted, f.ref, 'curl', input, {});
