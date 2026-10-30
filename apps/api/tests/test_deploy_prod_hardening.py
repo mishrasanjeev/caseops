@@ -1541,6 +1541,9 @@ def test_api_startup_dependency_removal_is_rerunnable(
     snippet = script.split("API_DEPENDENCY_FLAGS=()", 1)[1].split(
         "# Prepare only on canonical main", 1
     )[0]
+    consumers = [line.strip().removesuffix("\\").strip()
+                 for line in script.splitlines() if "API_DEPENDENCY_FLAGS[@]" in line]
+    assert len(consumers) == 1
     fake = tmp_path / "gcloud"
     _write_fake_executable(
         fake, "#!/bin/sh\nprintf '%s' \"$TEST_DEPENDENCIES\"\n"
@@ -1550,7 +1553,7 @@ def test_api_startup_dependency_removal_is_rerunnable(
     result = subprocess.run(
         [_find_working_bash(), "-c", "set -euo pipefail\nREGION=local\nPROJECT=offline\n"
          "API_DEPENDENCY_FLAGS=()" + snippet
-         + '\nprintf "<%s>" "${API_DEPENDENCY_FLAGS[@]}"'],
+         + '\nprintf "<%s>" ' + consumers[0]],
         env=env, capture_output=True, text=True, timeout=5, check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -2991,7 +2994,7 @@ def test_deploy_prod_executes_the_complete_two_container_api_contract(tmp_path: 
     ):
         assert replacing_flag not in arguments
     assert (
-        'CMD ["sh", "-c", "uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 '
+        'CMD ["sh", "-c", "exec uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 '
         '--port ${PORT} --app-dir src"]'
     ) in _read_repo_text("apps/api/Dockerfile")
 

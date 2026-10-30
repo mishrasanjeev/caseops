@@ -1825,5 +1825,132 @@ class UsbReverseOriginTests(unittest.TestCase):
                         alias_spec.loader.exec_module(alias_module)
 
 
+class GatewayShutdownTests(unittest.TestCase):
+    def test_api_container_cmd_execs_uvicorn_without_changing_server_arguments(self):
+        dockerfile = Path(__file__).resolve().parents[2] / "apps/api/Dockerfile"
+        commands = [json.loads(line.removeprefix("CMD ")) for line in dockerfile.read_text().splitlines()
+                    if line.startswith("CMD ")]
+        self.assertEqual(commands, [["sh", "-c", "exec uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 --port ${PORT} --app-dir src"]])
+
+    def test_gateway_shutdown_stops_accept_loops_concurrently(self):
+        barrier = threading.Barrier(2)
+
+        class Server:
+            closed = False
+
+            def shutdown(self):
+                barrier.wait(timeout=1)
+
+            def server_close(self):
+                self.closed = True
+
+        servers = [Server(), Server()]
+        complete = gateway_module.shutdown_servers(servers, servers, gateway_module.time.monotonic() + 2)
+        self.assertTrue(complete)
+        self.assertTrue(all(server.closed for server in servers))
+
+    def test_gateway_shutdown_has_one_deadline_and_closes_blocked_listeners(self):
+        release = threading.Event()
+
+        class Server:
+            def __init__(self):
+                self.closed = False
+                self.finished = threading.Event()
+
+            def shutdown(self):
+                release.wait()
+                self.finished.set()
+
+            def server_close(self):
+                self.closed = True
+
+        servers = [Server() for _ in range(8)]
+        started = gateway_module.time.monotonic()
+        try:
+            complete = gateway_module.shutdown_servers(servers, servers, started + 0.1)
+            elapsed = gateway_module.time.monotonic() - started
+            self.assertFalse(complete)
+            self.assertLess(elapsed, 0.6)
+            self.assertTrue(all(server.closed for server in servers))
+        finally:
+            release.set()
+            finished = [server.finished.wait(1) for server in servers]
+        self.assertTrue(all(finished))
+
+    def run_main_fixture(self, wrap_error=None):
+        from contextlib import ExitStack
+
+        state = SimpleNamespace(servers=[], handlers=[], journal=io.StringIO(), v1_closed=False)
+        self.shutdown_state = state
+        previous = lambda _signum, _frame: None
+        state.previous = previous
+
+        class Server:
+            def __init__(self, _address, _handler):
+                self.socket = object()
+                self.closed = False
+                self.stopped = threading.Event()
+                state.servers.append(self)
+
+            def serve_forever(self):
+                self.stopped.wait()
+
+            def shutdown(self):
+                self.stopped.set()
+
+            def server_close(self):
+                self.closed = True
+
+        def close_v1():
+            state.v1_closed = True
+
+        gateway = SimpleNamespace(state={"runId": "shutdown-fixture"}, handler=lambda _web: object(),
+                                  journal=state.journal, v1=SimpleNamespace(close=close_v1))
+
+        def register(_signum, handler):
+            state.handlers.append(handler)
+            return previous
+
+        def wrap_socket(value, **_kwargs):
+            if wrap_error is not None:
+                raise wrap_error
+            return value
+
+        context = SimpleNamespace(load_cert_chain=lambda *_args: None, wrap_socket=wrap_socket)
+
+        def ready(_value, **_kwargs):
+            state.handlers[0](gateway_module.signal.SIGTERM, None)
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(gateway_module, "Gateway", return_value=gateway))
+            stack.enter_context(patch.object(gateway_module, "ThreadingHTTPServer", Server))
+            stack.enter_context(patch.object(gateway_module.ssl, "SSLContext", return_value=context))
+            stack.enter_context(patch.object(gateway_module.signal, "getsignal", return_value=previous))
+            stack.enter_context(patch.object(gateway_module.signal, "signal", side_effect=register))
+            stack.enter_context(patch.object(gateway_module, "print", side_effect=ready, create=True))
+            gateway_module.main()
+        return state
+
+    def test_gateway_main_sigterm_restores_handler_and_closes_resources(self):
+        state = self.run_main_fixture()
+        self.assertEqual(len(state.servers), 2)
+        self.assertTrue(all(server.closed for server in state.servers))
+        self.assertTrue(state.journal.closed)
+        self.assertTrue(state.v1_closed)
+        self.assertIs(state.handlers[-1], state.previous)
+
+    def test_gateway_main_setup_error_preserves_identity_and_closes_unstarted_listener(self):
+        expected = RuntimeError("synthetic-wrap-failure")
+        with self.assertRaises(RuntimeError) as caught:
+            self.run_main_fixture(wrap_error=expected)
+        self.assertIs(caught.exception, expected)
+        state = self.shutdown_state
+        self.assertEqual(len(state.servers), 1)
+        self.assertTrue(state.servers[0].closed)
+        self.assertTrue(state.journal.closed)
+        self.assertTrue(state.v1_closed)
+        self.assertIs(state.handlers[-1], state.previous)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

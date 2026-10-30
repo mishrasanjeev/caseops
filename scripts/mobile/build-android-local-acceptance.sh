@@ -98,9 +98,10 @@ NODE
 ) 2>&1 | tee "$run/gradle.log"
 apk="$run/caseops-local-acceptance-arm64.apk"
 cp android/app/build/outputs/apk/localAcceptance/app-localAcceptance.apk "$apk"
-node - "$apk" "$run/apk-before-inspection.json" <<'NODE'
+node - "$apk" "$run/apk-before-inspection.json" "$proof" <<'NODE'
 const fs = require('node:fs'), crypto = require('node:crypto');
-const [apk, output] = process.argv.slice(2), sha256 = crypto.createHash('sha256').update(fs.readFileSync(apk)).digest('hex');
+const [apk, output, proofModule] = process.argv.slice(2), { readBuildInput } = require(proofModule);
+const sha256 = crypto.createHash('sha256').update(readBuildInput(apk, 512 * 1024 * 1024)).digest('hex');
 fs.writeFileSync(output, JSON.stringify({ sha256 }) + '\n', { flag: 'wx' });
 NODE
 "$aapt" dump badging "$apk" >"$run/apk-badging.log" 2>"$run/apk-badging.stderr"
@@ -133,9 +134,9 @@ with zipfile.ZipFile(apk) as source:
     with (root/'apk-abi.json').open('x') as output:json.dump({'schemaVersion':1,'abis':abis,'nativeLibraryCount':len(libraries),'elfClass':64,'elfMachine':183},output)
 PY
 node "$proof" android-zip "$run/android-resources.json" "$run/apk-zip-inventory.json" "$run/public-ca-from-apk.pem" "$run/before.json" "$apk" "$run/android-security.json" 2>&1 | tee "$run/zip.log"
-node - "$run" "$apk" <<'NODE'
+node - "$run" "$apk" "$proof" <<'NODE'
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
-const [root, apk] = process.argv.slice(2), digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+const [root, apk, proofModule] = process.argv.slice(2), { readBuildInput } = require(proofModule), digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const badging = fs.readFileSync(path.join(root, 'apk-badging.log'), 'utf8'), signing = fs.readFileSync(path.join(root, 'apk-signing.log'), 'utf8');
 assert.ok(Buffer.byteLength(badging) <= 1048576 && Buffer.byteLength(signing) <= 1048576, 'BOUNDED_SDK_IDENTITY_OUTPUT_REQUIRED');
 const identity = /^package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'/m.exec(badging);
@@ -152,7 +153,7 @@ const certificates = signingLines.filter(line => line.includes('certificate SHA-
 assert.equal(certificates.length, 1, 'ONE_APK_SIGNER_REQUIRED');
 const certificate = /^(?:Signer #1 certificate|V2 Signer: certificate) SHA-256 digest: ([a-fA-F0-9]{64})$/.exec(certificates[0]);
 assert.ok(certificate, 'ONE_APK_SIGNER_REQUIRED');
-const artifactSha256 = digest(fs.readFileSync(apk));
+const artifactSha256 = digest(readBuildInput(apk, 512 * 1024 * 1024));
 assert.equal(artifactSha256, JSON.parse(fs.readFileSync(path.join(root, 'apk-before-inspection.json'), 'utf8')).sha256, 'APK_CHANGED_DURING_SIGNING_OR_ABI_INSPECTION');
 assert.ok(Number.isSafeInteger(Number(identity[2])) && Number(identity[2]) > 0, 'POSITIVE_APK_VERSION_CODE_REQUIRED');
 const refs = ['apk-badging.log', 'apk-signing.log', 'apk-abi.json', 'generated-android-inputs.json', 'java21.log', 'java17.log']

@@ -399,7 +399,9 @@ export function finishBuild(platform, before, artifact, embeddedConfig, nativeSe
   assert.equal(embeddedConfig.extra.releaseSha, after.sourceSha, 'EMBEDDED_SOURCE_MISMATCH');
   assert.deepEqual(embeddedConfig.extra.privacyPolicy ?? null, after.privacyPolicy, 'EMBEDDED_PRIVACY_POLICY_MISMATCH');
   if (platform === 'ios') assert.equal(embeddedConfig.ios.bundleIdentifier, after.appId, 'EMBEDDED_QA_BUNDLE_ID_REQUIRED');
-  const hash = binaryHash(artifact);
+  const hash = platform === 'android'
+    ? createHash('sha256').update(readBuildInput(artifact, 512 * 1024 * 1024)).digest('hex')
+    : binaryHash(artifact);
   if (platform === 'android' && nativeSecurity) {
     assert.equal(nativeSecurity.kind, 'compiled-android-acceptance-security', 'COMPILED_ANDROID_SECURITY_PROOF_REQUIRED');
     assert.equal(nativeSecurity.apkSha256, hash, 'ANDROID_SECURITY_ARTIFACT_MISMATCH');
@@ -429,7 +431,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       assert.equal(args.length, 6, 'ANDROID_ZIP_ARGUMENTS_REQUIRED');
       const [planFile, inventory, caFile, before, apk, destination] = args;
       const plan = readJson(planFile);
-      assert.equal(binaryHash(apk), plan.apkSha256, 'APK_CHANGED_DURING_ZIP_INSPECTION');
+      assert.equal(createHash('sha256').update(readBuildInput(apk, 512 * 1024 * 1024)).digest('hex'), plan.apkSha256, 'APK_CHANGED_DURING_ZIP_INSPECTION');
       result = { ...plan, ...verifyAndroidZipEvidence(plan, readJson(inventory), readBuildInput(caFile, 16384), readJson(before).publicCaSha256),
         kind: 'compiled-android-acceptance-security', nativeExecution: 'not-run-by-verifier' };
       output = destination;

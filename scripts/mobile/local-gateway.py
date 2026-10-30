@@ -13,6 +13,7 @@ import ssl
 import threading
 import time
 import secrets
+import signal
 from urllib.parse import urlsplit
 
 ROOT = Path(os.environ.get("CASEOPS_MOBILE_STATE", "/fixture-state"))
@@ -447,28 +448,69 @@ class Gateway:
         return Handler
 
 
+def shutdown_servers(servers, started_servers, deadline):
+    """Stop both accept loops concurrently within one shutdown deadline."""
+    workers = []
+    failed = []
+
+    def stop(server):
+        try:
+            server.shutdown()
+        except Exception:
+            failed.append("shutdown")
+
+    for server in started_servers:
+        worker = threading.Thread(target=stop, args=(server,), daemon=True)
+        try:
+            worker.start()
+        except Exception:
+            failed.append("worker")
+        else:
+            workers.append(worker)
+    for worker in workers:
+        worker.join(max(0.0, deadline - time.monotonic()))
+    for server in servers:
+        try:
+            server.server_close()
+        except Exception:
+            failed.append("close")
+    return not failed and all(not worker.is_alive() for worker in workers)
+
+
 def main():
     gateway = Gateway()
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
-    context.load_cert_chain(ROOT / "tls/server.crt", ROOT / "tls/server.key")
     servers = []
-    for port, web in ((8443, False), (3443, True)):
-        server = ThreadingHTTPServer(("0.0.0.0", port), gateway.handler(web))
-        server.socket = context.wrap_socket(server.socket, server_side=True)
-        servers.append(server)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-    print(json.dumps({"ready": True, "runId": gateway.state["runId"], "tls": True}), flush=True)
+    started_servers = []
+    stop = threading.Event()
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+    shutdown_complete = True
     try:
-        threading.Event().wait()
+        signal.signal(signal.SIGTERM, lambda _signum, _frame: stop.set())
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.load_cert_chain(ROOT / "tls/server.crt", ROOT / "tls/server.key")
+        for port, web in ((8443, False), (3443, True)):
+            server = ThreadingHTTPServer(("0.0.0.0", port), gateway.handler(web))
+            servers.append(server)
+            server.socket = context.wrap_socket(server.socket, server_side=True)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            started_servers.append(server)
+        print(json.dumps({"ready": True, "runId": gateway.state["runId"], "tls": True}), flush=True)
+        stop.wait()
     finally:
-        for server in servers:
-            server.shutdown()
         try:
-            if gateway.v1:
-                gateway.v1.close()
+            shutdown_complete = shutdown_servers(servers, started_servers, time.monotonic() + 5.0)
         finally:
-            gateway.journal.close()
+            try:
+                if gateway.v1:
+                    gateway.v1.close()
+            finally:
+                try:
+                    gateway.journal.close()
+                finally:
+                    signal.signal(signal.SIGTERM, previous_sigterm)
+    if not shutdown_complete:
+        raise RuntimeError("GATEWAY_SHUTDOWN_DEADLINE")
 
 
 if __name__ == "__main__":

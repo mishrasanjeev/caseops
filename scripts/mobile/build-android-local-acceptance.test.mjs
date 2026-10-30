@@ -558,3 +558,83 @@ test('Android Gradle execution rejects extra user JVM options and changed runtim
   }
   assert.throws(() => androidGradleExecutionArguments(androidGradleArguments(), f.binding, { ...env, JAVA_TOOL_OPTIONS: env.JAVA_TOOL_OPTIONS + ' -Dforeign=true' }), /ANDROID_HOST_BOUND_JAVA_OPTIONS/);
 });
+
+import vm from 'node:vm';
+import { readBuildInput } from './build-acceptance.mjs';
+
+function actualApkHashPrograms() {
+  const shell = readFileSync(new URL('./build-android-local-acceptance.sh', import.meta.url), 'utf8');
+  const module = readFileSync(new URL('./build-acceptance.mjs', import.meta.url), 'utf8');
+  const inline = [...shell.matchAll(/^(node - [^\n]+ <<'NODE')\n([\s\S]*?)\nNODE$/gm)];
+  const first = inline.filter(([, , code]) => code.includes('const [apk, output, proofModule]'));
+  const second = inline.filter(([, , code]) => code.includes('const [root, apk, proofModule]'));
+  assert.equal(first.length, 1); assert.equal(second.length, 1);
+  assert.equal(first[0][1], 'node - "$apk" "$run/apk-before-inspection.json" "$proof" <<\'NODE\'');
+  assert.equal(second[0][1], 'node - "$run" "$apk" "$proof" <<\'NODE\'');
+  const start = module.indexOf('export function finishBuild('), end = module.indexOf('\n}\n', start);
+  assert.ok(start > 0 && end > start);
+  const finish = module.slice(start, end + 2).replace('export function ', 'function ');
+  const zip = module.match(/assert\.equal\([^\n]+APK_CHANGED_DURING_ZIP_INSPECTION[^\n]*\);/g);
+  assert.equal(zip?.length, 1);
+  return [{ kind: 'inline-before', code: first[0][2] }, { kind: 'inline-signature', code: second[0][2] },
+    { kind: 'android-finish', code: `${finish}\nfinishBuild('android', before, apk, embeddedConfig, nativeSecurity);` },
+    { kind: 'android-zip', code: zip[0] }];
+}
+
+function evaluateActualApkHashProgram(t, program, failure) {
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-apk-reader-bound-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const apk = path.join(root, 'artifact.apk'), original = path.join(root, 'held-original.apk');
+  const output = path.join(root, 'apk-before-inspection.json'), proof = path.join(repo, 'scripts/mobile/build-acceptance.mjs');
+  const payload = Buffer.from('bounded synthetic APK reader bytes\n'); writeFileSync(apk, payload);
+  if (failure === 'oversized') fs.truncateSync(apk, 512 * 1024 * 1024 + 1);
+  const expected = hash(payload);
+  writeFileSync(path.join(root, 'apk-badging.log'), "package: name='ai.caseops.mobile.dev.localacceptance' versionCode='1' versionName='0.1.0'\nnative-code: 'arm64-v8a'\n");
+  writeFileSync(path.join(root, 'apk-signing.log'), SDK37_REPORT);
+  writeFileSync(output, JSON.stringify({ sha256: expected }) + '\n');
+  for (const name of ['apk-abi.json', 'generated-android-inputs.json', 'java21.log', 'java17.log']) writeFileSync(path.join(root, name), '{}\n');
+  writeFileSync(path.join(root, 'android-security.json'), JSON.stringify({ apkSha256: expected }) + '\n');
+  const observed = { payloadReads: 0, closes: 0, updates: 0, writes: 0, legacyRawReads: 0, helperCalls: 0 };
+  let replaced = false;
+  const io = { openSync: fs.openSync, fstatSync: fs.fstatSync, lstatSync: fs.lstatSync,
+    closeSync(fd) { observed.closes++; return fs.closeSync(fd); },
+    readSync(...args) {
+      observed.payloadReads++; const n = fs.readSync(...args);
+      if (failure === 'replacement' && !replaced) { replaced = true; fs.renameSync(apk, original); writeFileSync(apk, payload); }
+      return n;
+    } };
+  const bounded = (file, limit) => { observed.helperCalls++; assert.equal(file, apk); assert.equal(limit, 512 * 1024 * 1024); return readBuildInput(file, limit, io); };
+  const crypto = { createHash(...args) { const h = createHash(...args); return { update(bytes) { observed.updates++; h.update(bytes); return this; }, digest(...values) { return h.digest(...values); } }; } };
+  const fileApi = { ...fs, readFileSync(file, ...args) {
+    if (path.resolve(file) === apk) { observed.legacyRawReads++; throw new Error('UNBOUNDED_RAW_APK_READER_REACHED'); }
+    return readFileSync(file, ...args);
+  }, writeFileSync(...args) { observed.writes++; return writeFileSync(...args); } };
+  const before = { appId: 'ai.caseops.mobile.dev.localacceptance', sourceSha: 'a'.repeat(40), apiOrigin: 'https://127.0.0.1:8543',
+    webOrigin: 'https://127.0.0.1:3543', privacyPolicy: null, publicCaSha256: 'b'.repeat(64) };
+  const argv = program.kind === 'inline-before' ? ['node', '-', apk, path.join(root, 'first-output.json'), proof]
+    : ['node', '-', root, apk, proof];
+  const context = { assert, path, Buffer, process: { argv, env: { ANDROID_UDID: 'emulator-5580' } }, apk,
+    createHash: crypto.createHash, readBuildInput: bounded, binaryHash() { throw new Error('ANDROID_GENERIC_2GIB_READER_REACHED'); },
+    before, checkBuildConfig: () => ({ ...before }), embeddedConfig: { extra: { automatedTest: true, apiOrigin: before.apiOrigin,
+      webOrigin: before.webOrigin, releaseSha: before.sourceSha, privacyPolicy: null } }, nativeSecurity: {
+      kind: 'compiled-android-acceptance-security', apkSha256: expected, publicCaSha256: before.publicCaSha256 }, plan: { apkSha256: expected },
+    require(name) { if (name === 'node:fs') return fileApi; if (name === 'node:crypto') return crypto;
+      if (name === 'node:assert/strict') return assert; if (name === 'node:path') return path;
+      assert.equal(name, proof, 'EXACT_EXISTING_BOUNDED_HELPER_IMPORT'); return { readBuildInput: bounded }; } };
+  assert.throws(() => vm.runInNewContext(program.code, context, { timeout: 5000 }),
+    failure === 'oversized' ? /OWNED_BOUNDED_BUILD_INPUT_REQUIRED/ : /BUILD_INPUT_(?:CHANGED|NAMESPACE_CHANGED)/, program.kind);
+  assert.equal(observed.helperCalls, 1, program.kind); assert.equal(observed.closes, 1, program.kind);
+  assert.equal(observed.legacyRawReads, 0, program.kind); assert.equal(observed.updates, 0, program.kind); assert.equal(observed.writes, 0, program.kind);
+  if (failure === 'oversized') assert.equal(observed.payloadReads, 0, program.kind);
+  else { assert.ok(observed.payloadReads > 0, program.kind); assert.equal(replaced, true, program.kind); }
+  assert.equal(existsSync(path.join(root, 'first-output.json')), false);
+  assert.equal(existsSync(path.join(root, 'android-native-proof.json')), false);
+}
+
+test('APK-BOUNDED-READ-01 all four actual hash paths reject oversized APKs before payload reads or proof writes', t => {
+  for (const program of actualApkHashPrograms()) evaluateActualApkHashProgram(t, program, 'oversized');
+});
+
+test('APK-BOUNDED-READ-02 all four actual hash paths reject same-bytes pathname replacement and close the held descriptor', t => {
+  for (const program of actualApkHashPrograms()) evaluateActualApkHashProgram(t, program, 'replacement');
+});
