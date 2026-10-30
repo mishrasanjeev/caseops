@@ -5059,6 +5059,7 @@ test('IOS-ARCHIVE-04 the separately executed actual CLI fixture retains every lo
 });
 
 function restoreAndroidEmptyAuthLocalResource(source) {
+  source = restoreAndroidBoundJavaEnvironment(source);
   const replacements = [
   [
     "// Gradle eagerly creates protocol connectors while reading a bundled jar resource.\n// An unmarked connector may be constructed but can never perform any IO.\nfinal class CaseOpsBlockedUnmarkedHttpConnector implements ExternalResourceConnector {\n    private static GradleException blocked() { new GradleException('ANDROID_UNMARKED_HTTP_CONNECTOR_USE') }\n    @Override public <T> T withContent(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate, org.gradle.internal.resource.ExternalResource.ContentAndMetadataAction<T> action) { throw blocked() }\n    @Override public <T> T withContent(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate, org.gradle.internal.resource.ExternalResource.ContentAction<T> action) { throw blocked() }\n    @Override org.gradle.internal.resource.metadata.ExternalResourceMetaData getMetaData(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate) { throw blocked() }\n    @Override List<String> list(org.gradle.internal.resource.ExternalResourceName parent) { throw blocked() }\n    @Override void upload(org.gradle.internal.resource.ReadableContent resource, org.gradle.internal.resource.ExternalResourceName destination) { throw blocked() }\n}\n",
@@ -5086,4 +5087,21 @@ test('ANDROID-LOCAL-RESOURCE-01 empty-auth constructor has no HTTP delegate and 
   assert.ok(!blocked.includes('delegate') && !blocked.includes('createResourceConnector('));
   assert.equal(source.split("originals.size() == 1, 'ANDROID_CONNECTOR_AUTH_COUNT'").length - 1, 1);
   assert.equal(source.split("credentials.value == markerValue, 'ANDROID_CONNECTOR_FIXED_MARKER'").length - 1, 1);
+});
+
+function restoreAndroidBoundJavaEnvironment(source) {
+  const exact = "// Fixed, value-free observation from the actual Gradle process. The owning\n// consumer independently binds this PID and loaded helper bytes/source receipt.\nfinal List<String> boundJavaPropertyKeys = ['javax.net.ssl.trustStore', 'javax.net.ssl.trustStoreType', 'javax.net.ssl.trustStorePassword', 'java.io.tmpdir', 'user.home']\nfinal Map<String,String> boundJavaProperties = boundJavaPropertyKeys.collectEntries { key -> [(key):System.getProperty(key)] }\nif (boundJavaProperties.any { key,value -> value == null || value.isEmpty() || value.find(/[\\s\"'\\\\]/) != null }\n    || boundJavaProperties['javax.net.ssl.trustStoreType'] != 'PKCS12'\n    || boundJavaProperties['javax.net.ssl.trustStorePassword'] != 'changeit'\n    || boundJavaProperties['java.io.tmpdir'] != System.getenv('TMPDIR')\n    || boundJavaProperties['user.home'] != System.getenv('HOME')) {\n    throw new GradleException('ANDROID_GRADLE_PARENT_JAVA_PROPERTIES')\n}\nfinal String boundJavaOptions = boundJavaPropertyKeys.collect { key -> '-D' + key + '=' + boundJavaProperties[key] }.join(' ')\nif (System.getenv('JAVA_TOOL_OPTIONS') != boundJavaOptions\n    || ['JDK_JAVA_OPTIONS', '_JAVA_OPTIONS'].any { key -> def value = System.getenv(key); value != null && !value.isEmpty() }) {\n    throw new GradleException('ANDROID_GRADLE_PARENT_JAVA_ENV_MISMATCH')\n}\nlogger.lifecycle('CASEOPS_GRADLE_PARENT_JAVA_ENV ' + JsonOutput.toJson([kind:'caseops-gradle-parent-java-env-v1',schemaVersion:1,processPid:ProcessHandle.current().pid(),sourceRoot:sourceRoot.canonicalPath,helperRelativePath:'scripts/mobile/android-no-paid.gradle',boundJavaRecipeVerified:true,otherJvmEnvironmentAbsent:true]))\n\n";
+  assert.equal(source.split(exact).length - 1, 1, 'EXACT_BOUND_JAVA_ENVIRONMENT_FENCE');
+  return source.replace(exact, '');
+}
+
+test('ANDROID-PRIVATE-TMP-01 actual daemon predicate requires exact bound JAVA5 and preserves every existing transport byte', () => {
+  const source = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
+  const restored = restoreAndroidBoundJavaEnvironment(source);
+  assert.equal(createHash('sha256').update(restored).digest('hex'), '40a112edff53b11c9004c76721284d398480b23a92b3de1eb542d088965b9eee');
+  assert.ok(!source.includes('allThreeAbsentOrEmpty'));
+  const host = fs.readFileSync(new URL('./android-host-launch.mjs', import.meta.url), 'utf8');
+  assert.equal(host.split("return [...args, '-Pkotlin.daemon.jvmargs=' + policy.javaOptions];").length - 1, 1);
+  assert.equal(host.split("assert.equal(environment.JAVA_TOOL_OPTIONS, policy.javaOptions, 'ANDROID_HOST_BOUND_JAVA_OPTIONS');").length - 1, 1);
+  assert.ok(host.includes("privateJavaTmp.path + ' -Duser.home=' + privateJavaHome"));
 });

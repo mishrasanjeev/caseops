@@ -193,6 +193,24 @@ final File gradleHome = gradle.gradleUserHomeDir.canonicalFile
 if (!sourceRoot.isDirectory() || !new File(sourceRoot, 'apps/mobile/node_modules').isDirectory()) {
     throw new GradleException('ANDROID_MARKED_SOURCE_ROOT_REQUIRED')
 }
+// Fixed, value-free observation from the actual Gradle process. The owning
+// consumer independently binds this PID and loaded helper bytes/source receipt.
+final List<String> boundJavaPropertyKeys = ['javax.net.ssl.trustStore', 'javax.net.ssl.trustStoreType', 'javax.net.ssl.trustStorePassword', 'java.io.tmpdir', 'user.home']
+final Map<String,String> boundJavaProperties = boundJavaPropertyKeys.collectEntries { key -> [(key):System.getProperty(key)] }
+if (boundJavaProperties.any { key,value -> value == null || value.isEmpty() || value.find(/[\s"'\\]/) != null }
+    || boundJavaProperties['javax.net.ssl.trustStoreType'] != 'PKCS12'
+    || boundJavaProperties['javax.net.ssl.trustStorePassword'] != 'changeit'
+    || boundJavaProperties['java.io.tmpdir'] != System.getenv('TMPDIR')
+    || boundJavaProperties['user.home'] != System.getenv('HOME')) {
+    throw new GradleException('ANDROID_GRADLE_PARENT_JAVA_PROPERTIES')
+}
+final String boundJavaOptions = boundJavaPropertyKeys.collect { key -> '-D' + key + '=' + boundJavaProperties[key] }.join(' ')
+if (System.getenv('JAVA_TOOL_OPTIONS') != boundJavaOptions
+    || ['JDK_JAVA_OPTIONS', '_JAVA_OPTIONS'].any { key -> def value = System.getenv(key); value != null && !value.isEmpty() }) {
+    throw new GradleException('ANDROID_GRADLE_PARENT_JAVA_ENV_MISMATCH')
+}
+logger.lifecycle('CASEOPS_GRADLE_PARENT_JAVA_ENV ' + JsonOutput.toJson([kind:'caseops-gradle-parent-java-env-v1',schemaVersion:1,processPid:ProcessHandle.current().pid(),sourceRoot:sourceRoot.canonicalPath,helperRelativePath:'scripts/mobile/android-no-paid.gradle',boundJavaRecipeVerified:true,otherJvmEnvironmentAbsent:true]))
+
 final List<File> localRoots = [new File(sourceRoot, 'apps/mobile/node_modules').canonicalFile, gradleHome]
 def inside = { File child, File parent -> child.toPath().startsWith(parent.toPath()) }
 def effectiveRepository = { repository ->

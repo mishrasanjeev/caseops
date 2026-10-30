@@ -103,6 +103,17 @@ export function androidGradleArguments(java21 = JAVA21, java17 = JAVA17) {
   assert.equal(java21, JAVA21, 'ANDROID_HOST_JAVA21'); assert.equal(java17, JAVA17, 'ANDROID_HOST_JAVA17');
   return ['./gradlew', ':app:assembleLocalAcceptance', '-PreactNativeArchitectures=arm64-v8a', '-Pandroid.compileSdkVersion=37', '-Pandroid.buildToolsVersion=37.0.0', '-Pandroid.ndkVersion=27.1.12297006', '-Pandroid.cmakeVersion=3.30.5', '-Pandroid.builder.sdkDownload=false', `-Dorg.gradle.java.installations.paths=${java17},${java21}`, '-Dorg.gradle.java.installations.auto-download=false', '--no-daemon', '--max-workers=2', '--console=plain'];
 }
+/** Pure source-owned projection; actual role admission must precede dispatch. */
+export function androidGradleExecutionArguments(args, policy, environment, end = performance.now() + 5000) {
+  assert.equal(environment.JAVA_HOME, JAVA21, 'PINNED_JDK21_REQUIRED');
+  assert.equal(environment.CASEOPS_ANDROID_JDK17_HOME, JAVA17, 'PINNED_JDK17_REQUIRED');
+  assert.deepEqual(args, androidGradleArguments(environment.JAVA_HOME, environment.CASEOPS_ANDROID_JDK17_HOME), 'ANDROID_HOST_CANONICAL_GRADLE_ARGV');
+  assert.equal(environment.JAVA_TOOL_OPTIONS, policy.javaOptions, 'ANDROID_HOST_BOUND_JAVA_OPTIONS');
+  const binding = { privateJavaHome: policy.privateJavaHome, privateJavaTmp: policy.privateJavaTmp,
+    sharedJavaOptions: policy.sharedJavaOptions, javaOptions: policy.javaOptions, gradlePolicyReference: policy.gradlePolicyReference };
+  bindAndroidJavaHome({ ...environment, JAVA_TOOL_OPTIONS: policy.sharedJavaOptions }, binding, end);
+  return [...args, '-Pkotlin.daemon.jvmargs=' + policy.javaOptions];
+}
 export function neutralAndroidGradleEnvironment(environment, expectedNodeEnvironment) {
   keys(expectedNodeEnvironment, NODE_KEYS); const output = {};
   for (const [key, value] of Object.entries(environment)) {
@@ -118,17 +129,31 @@ export function assertAndroidNodePath(environment, nodeShimPath, sourcePath) {
   assert.ok(entries.length <= 64 && entries.every(entry => absolute(entry) && entry !== directory), 'ANDROID_HOST_SOURCE_PATH');
   assert.equal(environment.PATH, directory + path.delimiter + sourcePath, 'ANDROID_HOST_NODE_SHIM_PATH_REQUIRED');
 }
+function privateJavaTemporaryBinding(file, end) {
+  assert.ok(absolute(file) && !/[\s\0"'\\]/.test(file) && file !== ROOT && !file.startsWith(ROOT + path.sep), 'ANDROID_HOST_PRIVATE_JAVA_TMP');
+  privateDirectory(file, end);
+  const initial = fs.lstatSync(file, { bigint: true }), parents = namespace(file, end);
+  assert.equal(initial.mode & 0o777n, 0o700n, 'ANDROID_HOST_PRIVATE_JAVA_TMP_MODE');
+  const current = fs.lstatSync(file, { bigint: true });
+  assert.ok(IDENTITY.every(key => initial[key] === current[key]) && fs.realpathSync(file) === file, 'ANDROID_HOST_PRIVATE_JAVA_TMP_CHANGED');
+  assert.deepEqual(namespace(file, end), parents, 'ANDROID_HOST_PRIVATE_JAVA_TMP_NAMESPACE');
+  return { path: file, identity: IDENTITY.map(key => String(initial[key])), namespace: parents };
+}
 export function bindAndroidJavaHome(environment, binding, end = performance.now() + 5000) {
   assert.ok(environment && typeof environment === 'object' && !Array.isArray(environment), 'ANDROID_HOST_JAVA_ENVIRONMENT');
-  keys(binding, ['privateJavaHome', 'sharedJavaOptions', 'javaOptions', 'gradlePolicyReference']);
+  keys(binding, ['privateJavaHome', 'privateJavaTmp', 'sharedJavaOptions', 'javaOptions', 'gradlePolicyReference']);
   keys(binding.gradlePolicyReference, ['path', 'sha256', 'sizeBytes']);
-  const { privateJavaHome, sharedJavaOptions, javaOptions, gradlePolicyReference } = binding;
+  const { privateJavaHome, privateJavaTmp, sharedJavaOptions, javaOptions, gradlePolicyReference } = binding;
   assert.ok(absolute(gradlePolicyReference.path) && /^[a-f0-9]{64}$/.test(gradlePolicyReference.sha256) && Number.isSafeInteger(gradlePolicyReference.sizeBytes) && gradlePolicyReference.sizeBytes > 0 && gradlePolicyReference.sizeBytes <= 1048576, 'ANDROID_HOST_GRADLE_REFERENCE');
   assert.ok(absolute(privateJavaHome) && !/[\s\0"'\\]/.test(privateJavaHome) && privateJavaHome !== ROOT && !privateJavaHome.startsWith(ROOT + path.sep), 'ANDROID_HOST_PRIVATE_JAVA_HOME');
   privateDirectory(privateJavaHome, end);
   assert.equal(environment.HOME, privateJavaHome, 'ANDROID_HOST_PRIVATE_JAVA_HOME');
+  keys(privateJavaTmp, ['path', 'identity', 'namespace']);
+  assert.notEqual(privateJavaTmp.path, privateJavaHome, 'ANDROID_HOST_PRIVATE_JAVA_TMP');
+  assert.deepEqual(privateJavaTmp, privateJavaTemporaryBinding(privateJavaTmp.path, end), 'ANDROID_HOST_PRIVATE_JAVA_TMP_IDENTITY');
+  assert.equal(environment.TMPDIR, privateJavaTmp.path, 'ANDROID_HOST_BOUND_TMPDIR');
   assert.ok(typeof sharedJavaOptions === 'string' && /^-Djavax\.net\.ssl\.trustStore=\/[^\s\0"'\\]+ -Djavax\.net\.ssl\.trustStoreType=PKCS12 -Djavax\.net\.ssl\.trustStorePassword=changeit$/.test(sharedJavaOptions), 'ANDROID_HOST_SHARED_JAVA_OPTIONS');
-  assert.equal(javaOptions, sharedJavaOptions + ' -Duser.home=' + privateJavaHome, 'ANDROID_HOST_BOUND_JAVA_OPTIONS');
+  assert.equal(javaOptions, sharedJavaOptions + ' -Djava.io.tmpdir=' + privateJavaTmp.path + ' -Duser.home=' + privateJavaHome, 'ANDROID_HOST_BOUND_JAVA_OPTIONS');
   // This check deliberately precedes addition: the real shared helper must have
   // returned its exact production three-option recipe, with no inherited home.
   assert.equal(environment.JAVA_TOOL_OPTIONS, sharedJavaOptions, 'ANDROID_GRADLE_JAVA117_RECIPE');
@@ -161,6 +186,8 @@ export function renderAndroidNodeShim(nodeExecutable, nodeEnvironment, gradlePol
 function sourceEnvironment(environment, end) {
   assert.equal(environment.HOME, process.env.HOME, 'ANDROID_HOST_ACTUAL_SOURCE_ENVIRONMENT');
   assert.equal(environment.PATH, process.env.PATH, 'ANDROID_HOST_ACTUAL_SOURCE_ENVIRONMENT');
+  assert.equal(environment.TMPDIR, process.env.TMPDIR, 'ANDROID_HOST_ACTUAL_SOURCE_ENVIRONMENT');
+  privateJavaTemporaryBinding(environment.TMPDIR, end);
   privateDirectory(environment.HOME, end);
   assert.ok(environment.HOME !== ROOT && !environment.HOME.startsWith(ROOT + path.sep), 'ANDROID_HOST_EXTERNAL_HOME');
   for (const [key, expected] of [['GIT_CONFIG_GLOBAL', '/dev/null'], ['GIT_CONFIG_NOSYSTEM', '1'], ['GIT_OPTIONAL_LOCKS', '0'], ['GIT_TERMINAL_PROMPT', '0']]) {
@@ -188,19 +215,19 @@ export function prepareAndroidHostLauncher({ directory, nodePolicyReference, gra
   const runtimeEnvironment = { [ANDROID_HOST_ENV.file]: path.join(directory, 'policy.json'), PATH: directory + path.delimiter + environment.PATH };
   assertAndroidNodePath(runtimeEnvironment, path.join(directory, 'node'), environment.PATH);
   fs.mkdirSync(directory, { mode: 0o700 }); privateDirectory(directory, end);
-  const privateJavaHome = environment.HOME;
-  const javaOptions = sharedJavaOptions + ' -Duser.home=' + privateJavaHome;
+  const privateJavaHome = environment.HOME, privateJavaTmp = privateJavaTemporaryBinding(environment.TMPDIR, end);
+  const javaOptions = sharedJavaOptions + ' -Djava.io.tmpdir=' + privateJavaTmp.path + ' -Duser.home=' + privateJavaHome;
   // Validate the public binding before staging either executable or policy.
-  bindAndroidJavaHome({ HOME: privateJavaHome, JAVA_TOOL_OPTIONS: sharedJavaOptions, CASEOPS_HOST_PLATFORM_TRUST_POLICY_FILE: gradlePolicyReference.path, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: gradlePolicyReference.sha256 }, { privateJavaHome, sharedJavaOptions, javaOptions, gradlePolicyReference }, end);
+  bindAndroidJavaHome({ HOME: privateJavaHome, TMPDIR: privateJavaTmp.path, JAVA_TOOL_OPTIONS: sharedJavaOptions, CASEOPS_HOST_PLATFORM_TRUST_POLICY_FILE: gradlePolicyReference.path, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: gradlePolicyReference.sha256 }, { privateJavaHome, privateJavaTmp, sharedJavaOptions, javaOptions, gradlePolicyReference }, end);
   const nodeShim = writeAndroidHostOutput(path.join(directory, 'node'), renderAndroidNodeShim(process.execPath, nodeEnvironment, gradlePolicyReference, javaOptions), end, 0o500);
-  const value = { schemaVersion: 1, kind: 'caseops-android-host-role-v1', sourceRoot: ROOT, source, sourceFiles, sourcePath: environment.PATH, nodeExecutable: process.execPath, pythonExecutable: PYTHON, nodePolicyReference, gradlePolicyReference, nodeEnvironment, privateJavaHome, sharedJavaOptions, javaOptions, nodeShim, limits: { compileSeconds: 1800, cleanupSeconds: 30, pipeBytes: 67108864 } };
+  const value = { schemaVersion: 1, kind: 'caseops-android-host-role-v1', sourceRoot: ROOT, source, sourceFiles, sourcePath: environment.PATH, nodeExecutable: process.execPath, pythonExecutable: PYTHON, nodePolicyReference, gradlePolicyReference, nodeEnvironment, privateJavaHome, privateJavaTmp, sharedJavaOptions, javaOptions, nodeShim, limits: { compileSeconds: 1800, cleanupSeconds: 30, pipeBytes: 67108864 } };
   const policyReference = writeAndroidHostOutput(path.join(directory, 'policy.json'), Buffer.from(JSON.stringify(value) + '\n'), end);
   return { policyReference, descriptor: value, environment: { ...runtimeEnvironment, [ANDROID_HOST_ENV.sha256]: policyReference.sha256 }, actualGradleAdmission: 'required-fresh-before-dispatch', downloads: 0, nativeBuilds: 0 };
 }
 export function readAndroidHostPolicy(policyReference) {
   const end = performance.now() + 20000;
   const value = readJson(policyReference, { end, limit: 131072 });
-  keys(value, ['schemaVersion', 'kind', 'sourceRoot', 'source', 'sourceFiles', 'sourcePath', 'nodeExecutable', 'pythonExecutable', 'nodePolicyReference', 'gradlePolicyReference', 'nodeEnvironment', 'privateJavaHome', 'sharedJavaOptions', 'javaOptions', 'nodeShim', 'limits']);
+  keys(value, ['schemaVersion', 'kind', 'sourceRoot', 'source', 'sourceFiles', 'sourcePath', 'nodeExecutable', 'pythonExecutable', 'nodePolicyReference', 'gradlePolicyReference', 'nodeEnvironment', 'privateJavaHome', 'privateJavaTmp', 'sharedJavaOptions', 'javaOptions', 'nodeShim', 'limits']);
   assert.ok(value.schemaVersion === 1 && value.kind === 'caseops-android-host-role-v1' && value.sourceRoot === ROOT && value.pythonExecutable === PYTHON && value.nodeExecutable === NODE && process.execPath === NODE, 'ANDROID_HOST_POLICY');
   sourceEnvironment(process.env, end);
   assert.deepEqual(value.limits, { compileSeconds: 1800, cleanupSeconds: 30, pipeBytes: 67108864 }); assert.deepEqual(value.source, cleanSource(), 'ANDROID_HOST_SOURCE_CHANGED');
@@ -210,7 +237,7 @@ export function readAndroidHostPolicy(policyReference) {
   }
   assert.equal(value.nodeShim.path, path.join(path.dirname(policyReference.path), 'node'), 'ANDROID_HOST_NODE_SHIM_PATH');
   assertAndroidNodePath(process.env, value.nodeShim.path, value.sourcePath);
-  bindAndroidJavaHome({ HOME: process.env.HOME, JAVA_TOOL_OPTIONS: value.sharedJavaOptions, CASEOPS_HOST_PLATFORM_TRUST_POLICY_FILE: value.gradlePolicyReference.path, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: value.gradlePolicyReference.sha256 }, { privateJavaHome: value.privateJavaHome, sharedJavaOptions: value.sharedJavaOptions, javaOptions: value.javaOptions, gradlePolicyReference: value.gradlePolicyReference }, end);
+  bindAndroidJavaHome({ HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, JAVA_TOOL_OPTIONS: value.sharedJavaOptions, CASEOPS_HOST_PLATFORM_TRUST_POLICY_FILE: value.gradlePolicyReference.path, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: value.gradlePolicyReference.sha256 }, { privateJavaHome: value.privateJavaHome, privateJavaTmp: value.privateJavaTmp, sharedJavaOptions: value.sharedJavaOptions, javaOptions: value.javaOptions, gradlePolicyReference: value.gradlePolicyReference }, end);
   const shim = readAndroidHostInput(value.nodeShim, { end }); try { assert.ok(shim.equals(renderAndroidNodeShim(value.nodeExecutable, value.nodeEnvironment, value.gradlePolicyReference, value.javaOptions)), 'ANDROID_HOST_NODE_SHIM_BYTES'); } finally { shim.fill(0); }
   assertHostNodeTrust({ policyRef: value.nodePolicyReference, role: 'base' }); neutralAndroidGradleEnvironment(process.env, value.nodeEnvironment); return value;
 }
@@ -230,7 +257,7 @@ async function gradleEnvironment(policy, logFile, end) {
     for (const key of ['dev', 'ino', 'uid', 'gid', 'mode', 'nlink']) assert.equal(initial[key], state[key], 'ANDROID_GRADLE_DIAGNOSTIC_IDENTITY');
     assert.deepEqual(namespace(logFile, end), parents, 'ANDROID_GRADLE_DIAGNOSTIC_NAMESPACE'); check(end);
     const result = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(output));
-    const binding = { privateJavaHome: policy.privateJavaHome, sharedJavaOptions: policy.sharedJavaOptions, javaOptions: policy.javaOptions, gradlePolicyReference: policy.gradlePolicyReference };
+    const binding = { privateJavaHome: policy.privateJavaHome, privateJavaTmp: policy.privateJavaTmp, sharedJavaOptions: policy.sharedJavaOptions, javaOptions: policy.javaOptions, gradlePolicyReference: policy.gradlePolicyReference };
     return bindAndroidJavaHome(result, binding, end);
   } catch (error) { bodyFailed = true; throw error; }
   finally { data.fill(0); output.fill(0); if (fd !== undefined) closeOwned(fd, bodyFailed); }
@@ -245,10 +272,11 @@ export async function runAndroidGradle(policyReference, args) {
   assert.deepEqual(args, androidGradleArguments(process.env.JAVA_HOME, process.env.CASEOPS_ANDROID_JDK17_HOME), 'ANDROID_HOST_CANONICAL_GRADLE_ARGV');
   assert.equal(process.env.CASEOPS_ANDROID_COMPILE_READY_GO, policy.source.sourceSha, 'ANDROID_HOST_COMPILE_NOT_ARMED');
   const end = performance.now() + 60000, logFile = path.join(path.dirname(policyReference.path), 'gradle-verification.jsonl'), env = await gradleEnvironment(policy, logFile, end);
+  const executionArgs = androidGradleExecutionArguments(args, policy, env, end);
   env.CASEOPS_ANDROID_MARKED_SOURCE_ROOT = ROOT;
   const initDirectory = path.join(env.GRADLE_USER_HOME, 'init.d'); privateDirectory(env.GRADLE_USER_HOME, end); fs.mkdirSync(initDirectory, { mode: 0o700 });
   const marker = readAndroidHostInput(policy.sourceFiles.marker, { end }); try { writeAndroidHostOutput(path.join(initDirectory, 'caseops-no-paid.gradle'), marker, end); } finally { marker.fill(0); }
-  return await new Promise((resolve, reject) => { const child = spawn(args[0], args.slice(1), { cwd, env, stdio: 'inherit' }); child.on('error', reject); child.on('close', (code, signal) => signal === null && Number.isInteger(code) ? resolve(code) : reject(new Error('ANDROID_GRADLE_OUTCOME_UNKNOWN'))); });
+  return await new Promise((resolve, reject) => { const child = spawn(executionArgs[0], executionArgs.slice(1), { cwd, env, stdio: 'inherit' }); child.on('error', reject); child.on('close', (code, signal) => signal === null && Number.isInteger(code) ? resolve(code) : reject(new Error('ANDROID_GRADLE_OUTCOME_UNKNOWN'))); });
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {

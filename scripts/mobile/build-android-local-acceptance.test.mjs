@@ -8,7 +8,7 @@ import path from 'node:path';
 import { rootCertificates } from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { androidGradleArguments, androidSharedJavaOptions, assertAndroidNodePath, bindAndroidJavaHome, neutralAndroidGradleEnvironment, prepareAndroidGradleEnvironment, renderAndroidNodeShim, readAndroidHostInput, writeAndroidHostOutput } from './android-host-launch.mjs';
+import { androidGradleArguments, androidGradleExecutionArguments, androidSharedJavaOptions, assertAndroidNodePath, bindAndroidJavaHome, neutralAndroidGradleEnvironment, prepareAndroidGradleEnvironment, renderAndroidNodeShim, readAndroidHostInput, writeAndroidHostOutput } from './android-host-launch.mjs';
 import { prepareHostNodeTrust } from './host-node-trust.mjs';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
@@ -464,14 +464,22 @@ test('Android role output handles real partial writes and refuses same-descripto
 });
 function androidJavaHomeBinding(t) {
   const f = androidRoleInput(t), sharedJavaOptions = '-Djavax.net.ssl.trustStore=/owned/shared117 -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit';
-  const gradlePolicyReference = { path: path.join(f.root, 'policy.json'), sha256: 'a'.repeat(64), sizeBytes: 1 }, binding = { privateJavaHome: f.root, sharedJavaOptions, javaOptions: sharedJavaOptions + ' -Duser.home=' + f.root, gradlePolicyReference };
-  const environment = { HOME: f.root, JAVA_TOOL_OPTIONS: sharedJavaOptions, CASEOPS_HOST_PLATFORM_TRUST_POLICY_FILE: gradlePolicyReference.path, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: gradlePolicyReference.sha256 };
-  return { ...f, binding, environment };
+  const temporaryParent = path.join(f.root, 'temporary-parent'), temporary = path.join(temporaryParent, 'tmp');
+  fs.mkdirSync(temporaryParent, { mode: 0o700 }); fs.mkdirSync(temporary, { mode: 0o700 });
+  const identityKeys = ['dev', 'ino', 'mode', 'uid', 'gid'], temporaryState = fs.lstatSync(temporary, { bigint: true }), parents = [];
+  for (let parent = path.dirname(temporary);;) {
+    const state = fs.lstatSync(parent, { bigint: true }); parents.push([parent, ...identityKeys.map(key => String(state[key]))]);
+    if (parent === path.dirname(parent)) break; parent = path.dirname(parent);
+  }
+  const privateJavaTmp = { path: temporary, identity: identityKeys.map(key => String(temporaryState[key])), namespace: parents };
+  const gradlePolicyReference = { path: path.join(f.root, 'policy.json'), sha256: 'a'.repeat(64), sizeBytes: 1 }, binding = { privateJavaHome: f.root, privateJavaTmp, sharedJavaOptions, javaOptions: sharedJavaOptions + ' -Djava.io.tmpdir=' + temporary + ' -Duser.home=' + f.root, gradlePolicyReference };
+  const environment = { HOME: f.root, TMPDIR: temporary, JAVA_TOOL_OPTIONS: sharedJavaOptions, CASEOPS_HOST_PLATFORM_TRUST_POLICY_FILE: gradlePolicyReference.path, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: gradlePolicyReference.sha256 };
+  return { ...f, binding, environment, temporary, temporaryParent };
 }
 test('Android Java home binding first requires the exact shared TLS3 recipe then adds only the owned property', t => {
   const f = androidJavaHomeBinding(t); if (typeof process.getuid !== 'function') { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding)); return; }
   const result = bindAndroidJavaHome(f.environment, f.binding);
-  assert.deepEqual(result, { ...f.environment, JAVA_TOOL_OPTIONS: f.binding.sharedJavaOptions + ' -Duser.home=' + f.root });
+  assert.deepEqual(result, { ...f.environment, JAVA_TOOL_OPTIONS: f.binding.sharedJavaOptions + ' -Djava.io.tmpdir=' + f.temporary + ' -Duser.home=' + f.root });
   assert.equal(f.environment.JAVA_TOOL_OPTIONS, f.binding.sharedJavaOptions); assert.equal(Object.keys(result).length, Object.keys(f.environment).length);
 });
 test('Android Java home binding refuses changed extra missing or previously home-extended shared TLS options', t => {
@@ -483,7 +491,7 @@ test('Android Java home binding refuses changed extra missing or previously home
 test('Android Java home binding refuses foreign HOME aliases cross-role fields and foreign policy recipes', t => {
   const f = androidJavaHomeBinding(t); if (typeof process.getuid !== 'function') { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding)); return; }
   assert.throws(() => bindAndroidJavaHome({ ...f.environment, HOME: path.dirname(f.root) }, f.binding), /ANDROID_HOST_PRIVATE_JAVA_HOME/);
-  const alias = path.join(f.root, 'alias'); fs.symlinkSync(f.root, alias, 'dir'); assert.throws(() => bindAndroidJavaHome({ ...f.environment, HOME: alias }, { ...f.binding, privateJavaHome: alias, javaOptions: f.binding.sharedJavaOptions + ' -Duser.home=' + alias }), /ANDROID_HOST_OWNED_DIRECTORY/);
+  const alias = path.join(f.root, 'alias'); fs.symlinkSync(f.root, alias, 'dir'); assert.throws(() => bindAndroidJavaHome({ ...f.environment, HOME: alias }, { ...f.binding, privateJavaHome: alias, javaOptions: f.binding.sharedJavaOptions + ' -Djava.io.tmpdir=' + f.temporary + ' -Duser.home=' + alias }), /ANDROID_HOST_OWNED_DIRECTORY/);
   for (const extra of [{ SSL_CERT_FILE: '/foreign/roots' }, { NODE_OPTIONS: '--use-bundled-ca' }, { JAVA_OPTS: '-Dforeign=true' }, { java_tool_options: f.binding.sharedJavaOptions }]) assert.throws(() => bindAndroidJavaHome({ ...f.environment, ...extra }, f.binding), /ANDROID_HOST_CROSS_ROLE_OVERRIDE/);
   assert.throws(() => bindAndroidJavaHome({ ...f.environment, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: 'b'.repeat(64) }, f.binding), /ANDROID_GRADLE_POLICY_RECIPE/);
 });
@@ -504,4 +512,49 @@ test('Android shared policy projection refuses array aliases and malformed requi
   for (const aliases of [Object.values(value.aliases), null, true, Object.fromEntries(Object.entries(value.aliases).slice(1)), { ...value.aliases, 'synthetic-root-0': false }, { ...value.aliases, 'synthetic-root-0': value.aliases['synthetic-root-1'] }]) assert.throws(() => androidSharedJavaOptions({ ...value, aliases }), /ANDROID_HOST_PRODUCTION_JAVA117_ALIASES/);
   for (const extra of [{ schemaVersion: '1' }, { schemaVersion: true }, { qaOnly: 0 }, { qaOnly: true }, { runtimeScope: 'java21' }, { type: 'JKS' }]) assert.throws(() => androidSharedJavaOptions({ ...value, ...extra }), /ANDROID_HOST_PRODUCTION_JAVA117_REQUIRED/);
   for (const store of [{ ...value.store, sizeBytes: true }, { ...value.store, sha256: 1 }, { ...value.store, sha256: ['a'.repeat(64)] }, { ...value.store, path: '/unadmitted store' }]) assert.throws(() => androidSharedJavaOptions({ ...value, store }), /ANDROID_HOST_SHARED_STORE_REFERENCE/);
+});
+
+test('Android Java temporary binding rejects inherited TMPDIR drift and non-private or aliased directory', t => {
+  const f = androidJavaHomeBinding(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding)); return; }
+  for (const TMPDIR of [undefined, os.tmpdir(), f.root]) {
+    assert.throws(() => bindAndroidJavaHome({ ...f.environment, TMPDIR }, f.binding), /ANDROID_HOST_BOUND_TMPDIR/);
+  }
+  fs.chmodSync(f.temporary, 0o755);
+  try { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding), /ANDROID_HOST_OWNED_DIRECTORY/); }
+  finally { fs.chmodSync(f.temporary, 0o700); }
+  const alias = path.join(f.root, 'temporary-alias'); fs.symlinkSync(f.temporary, alias, 'dir');
+  assert.throws(() => bindAndroidJavaHome({ ...f.environment, TMPDIR: alias }, { ...f.binding,
+    privateJavaTmp: { ...f.binding.privateJavaTmp, path: alias } }), /ANDROID_HOST_OWNED_DIRECTORY/);
+});
+test('Android Java temporary binding rejects a replaced leaf inode and a replaced parent with the original leaf', t => {
+  const f = androidJavaHomeBinding(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding)); return; }
+  fs.renameSync(f.temporary, f.temporary + '-retained'); fs.mkdirSync(f.temporary, { mode: 0o700 });
+  assert.throws(() => bindAndroidJavaHome(f.environment, f.binding), /ANDROID_HOST_PRIVATE_JAVA_TMP_IDENTITY/);
+  const g = androidJavaHomeBinding(t), retainedParent = g.temporaryParent + '-retained';
+  fs.renameSync(g.temporaryParent, retainedParent); fs.mkdirSync(g.temporaryParent, { mode: 0o700 });
+  fs.renameSync(path.join(retainedParent, 'tmp'), g.temporary);
+  assert.throws(() => bindAndroidJavaHome(g.environment, g.binding), /ANDROID_HOST_PRIVATE_JAVA_TMP_IDENTITY/);
+});
+
+test('Android Gradle execution preserves all user arguments and appends only the bound Kotlin JVM vector', t => {
+  const f = androidJavaHomeBinding(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding)); return; }
+  const env = { ...bindAndroidJavaHome(f.environment, f.binding), JAVA_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-21.0.12.1+1/Contents/Home',
+    CASEOPS_ANDROID_JDK17_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-17.0.20.1+1/Contents/Home' };
+  const args = androidGradleArguments(), before = [...args], actual = androidGradleExecutionArguments(args, f.binding, env);
+  assert.deepEqual(args, before); assert.equal(actual.length, 14); assert.deepEqual(actual.slice(0, 13), before);
+  assert.equal(actual[13], '-Pkotlin.daemon.jvmargs=' + f.binding.javaOptions);
+  assert.equal(actual.filter(value => value.startsWith('-Pkotlin.daemon.jvmargs=')).length, 1);
+});
+test('Android Gradle execution rejects extra user JVM options and changed runtime options before projection', t => {
+  const f = androidJavaHomeBinding(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding)); return; }
+  const env = { ...bindAndroidJavaHome(f.environment, f.binding), JAVA_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-21.0.12.1+1/Contents/Home',
+    CASEOPS_ANDROID_JDK17_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-17.0.20.1+1/Contents/Home' };
+  for (const extra of ['-Pkotlin.daemon.jvmargs=-Dforeign=true', '-Pkotlin.compiler.execution.strategy=in-process', '--init-script=/foreign']) {
+    assert.throws(() => androidGradleExecutionArguments([...androidGradleArguments(), extra], f.binding, env), /ANDROID_HOST_CANONICAL_GRADLE_ARGV/);
+  }
+  assert.throws(() => androidGradleExecutionArguments(androidGradleArguments(), f.binding, { ...env, JAVA_TOOL_OPTIONS: env.JAVA_TOOL_OPTIONS + ' -Dforeign=true' }), /ANDROID_HOST_BOUND_JAVA_OPTIONS/);
 });
