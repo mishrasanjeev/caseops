@@ -2,6 +2,14 @@
 
 ## October 30 Consolidated CI And Import: Partially Fixed
 
+Latest complete component:135cases/405phases,132P/3physicalF/0S. The original
+observer/multi-order/finalizer/successful1,000-row/workspace assertions pass;
+fresh/stale/analyzed plans expose broad history scans despite correct scalar
+facts. Keep every failed plan and original budget. Correlated scalar candidate
+seeks,52 semantic cases including NULL receipts, and CI nested plan retention
+need full replacement proof. Workbooks are interim08, not certification. Do not
+read historical unexecuted claims below as the current state.
+
 Retained-claim resume repeatedly read every pending docket. Valid SQLite/PG
 RED2/6phases proves1,000scalar reads, correct409/unchanged history and no ORM
 hydration. Scalar batched facts preserve exact provenance/ordered rejection and

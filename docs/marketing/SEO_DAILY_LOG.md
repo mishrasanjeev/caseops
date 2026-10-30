@@ -8,6 +8,15 @@ traffic, a backlink, or a conversion.
 
 ## 2026-10-30 IST - Continuing Human Release Gate
 
+After the complete135-case component:132passed/3physical-plan failures,405phases,
+no skips. CI41088520247 completed37successful/4failed/2skipped jobs; only three
+root physical-plan failures plus aggregate. Query-work correction and nested
+evidence retention require replacement Docker/hosted/main/live certification.
+Both original summaries now contain published/fresh-read-back interim08, not
+certification. SEO stays ACTIVE/release-deferred, browser URL-safety stop intact;
+no fresh Google report, public audit, metric, lead, provider call or tracking.
+This supersedes the earlier workbook-publication-pending checkpoint below.
+
 16:13UTC engineering continuation only: D060 CI is terminally failed with all
 57checks reconciled (42success/12failure/3skips). Consolidated remaining source
 repairs are unverified. The nine-file component was retained as incomplete at

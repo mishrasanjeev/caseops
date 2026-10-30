@@ -1301,26 +1301,34 @@ def _preflight_materialized_dockets(
         column("row_id", String(36)),
         column("docket_id", String(36)),
     ).data(pending).cte("ip_import_preflight_candidates")
-    provenance = (
-        select(AuditEvent.id)
+    matched_docket = (
+        select(IpDocketRecord.id)
+        .where(
+            IpDocketRecord.id == candidates.c.docket_id,
+            IpDocketRecord.company_id == context.company.id,
+        )
+        .correlate(candidates)
+        .limit(1)
+        .scalar_subquery()
+    )
+    # Scalar limited lookups retain candidate-bound seeks instead of allowing
+    # a join or hashed EXISTS to read the tenant's full docket/receipt history.
+    receipt = (
+        select(1)
+        .select_from(AuditEvent)
         .where(
             AuditEvent.company_id == context.company.id,
             AuditEvent.action == IMPORT_MATERIALIZATION_ACTION,
             AuditEvent.target_type == "ip_import_row",
             AuditEvent.target_id == candidates.c.row_id,
-            AuditEvent.ip_docket_id == IpDocketRecord.id,
+            AuditEvent.ip_docket_id == candidates.c.docket_id,
         )
-        .correlate(candidates, IpDocketRecord)
-        .exists()
+        .correlate(candidates)
+        .limit(1)
+        .scalar_subquery()
     )
-    statement = select(candidates.c.row_id, provenance).select_from(
-        candidates.join(
-            IpDocketRecord,
-            and_(
-                IpDocketRecord.id == candidates.c.docket_id,
-                IpDocketRecord.company_id == context.company.id,
-            ),
-        )
+    statement = select(candidates.c.row_id, receipt.is_not(None)).where(
+        matched_docket.is_not(None)
     )
     return {row_id: proven for row_id, proven in session.execute(statement)}
 

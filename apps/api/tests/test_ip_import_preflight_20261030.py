@@ -260,7 +260,8 @@ def test_scalar_facts_exclude_invalid_finished_and_foreign_reservations(import_c
 
 
 @pytest.mark.parametrize(
-    "difference", ["none", "company_id", "action", "target_type", "target_id", "ip_docket_id"]
+    "difference", ["none", "company_id", "action", "target_type", "target_id", "ip_docket_id",
+                   "null_target_id", "null_ip_docket_id"]
 )
 def test_preflight_provenance_matches_the_original_recovery_predicate(import_client, difference):
     """IP-PF-03: every original audit identity field remains significant."""
@@ -273,13 +274,16 @@ def test_preflight_provenance_matches_the_original_recovery_predicate(import_cli
         docket_id = _reserve(session, actor, row_id)
         alternate = _reserve(session, actor, str(uuid4()))
         replacements = {
-            "company_id": foreign["company"]["id"],
-            "action": "ip_docket.created",
-            "target_type": "ip_docket_record",
-            "target_id": str(uuid4()),
-            "ip_docket_id": alternate,
+            "none": {},
+            "company_id": {"company_id": foreign["company"]["id"]},
+            "action": {"action": "ip_docket.created"},
+            "target_type": {"target_type": "ip_docket_record"},
+            "target_id": {"target_id": str(uuid4())},
+            "ip_docket_id": {"ip_docket_id": alternate},
+            "null_target_id": {"target_id": None},
+            "null_ip_docket_id": {"ip_docket_id": None},
         }
-        overrides = {} if difference == "none" else {difference: replacements[difference]}
+        overrides = dict(replacements[difference])
         # AuditEvent has scalar company/docket FKs, not a composite tenant FK.
         # This deliberately inconsistent negative receipt is never an admission.
         if difference == "company_id":

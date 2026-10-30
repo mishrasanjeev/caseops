@@ -398,6 +398,8 @@ jobs:
             apps/api/postgres-shard-${{ matrix.shard }}.xml
             apps/api/postgres-shard-${{ matrix.shard }}.jsonl
             apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl
+            apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.json
+            apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.jsonl
           if-no-files-found: error
           retention-days: 14
 

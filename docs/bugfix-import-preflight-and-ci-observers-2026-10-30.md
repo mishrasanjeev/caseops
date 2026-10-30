@@ -2,6 +2,44 @@
 
 Status: Partially fixed. NO-GO pending the complete replacement release.
 
+## Follow-Up After Complete 135-Case Execution
+
+Clean5FAA consolidated acceptance completed all135 intended cases/405 phases:
+132passed, three physical-plan call failures, no skips. All58 observer, both
+multi-order, all30 real finalizer/concurrency, original1,000-successful-import
+and41 workspace cases pass. The worker retained completed/error null. The
+import created1,000 dockets with2,000 particulars hydrated and49,540 statements;
+its unchanged per-request90s and total-work assertions passed. All59 retained
+files verify and source-before equals after. This is a failed component, not
+full Docker or production certification.
+
+Current5FAA hosted CI41088520247 is terminal:37successful/4failed/2skipped jobs.
+The same three physical-plan cases fail and their aggregate is consequential.
+Security/Advanced/independent CodeQL checks succeed. Independent analysis still
+reports17 test warnings/notices, not zero findings or reproduced runtime bugs.
+The missing old worker error remains unknown; the new positive worker result
+does not retroactively identify its cause.
+
+Exact retained local plans expose broader work despite correct1,000/750 facts,
+one read and no hydration. Fresh/stale audit access reads96,000 receipt tuples
+using only the first three provenance keys. The docket join scans tenant rows;
+after ANALYZE it still visits13,064 rows. Do not raise the4,016 raw tuple,
+24,128 total-work or existing latency bounds. The correction uses independently
+correlated limited scalar docket/receipt lookups with the same tenant and five
+receipt equalities. The actual writer and ordered errors remain unchanged.
+LIMIT is not itself index-work proof: all three unchanged default-plan cases
+must pass on the correction. Four nullable-receipt negatives extend semantic
+parity from48 to52 SQLite/PostgreSQL cases; those new variants are unexecuted
+at this source checkpoint.
+
+Hosted uploads omitted the new nested EXPLAIN/catalog files. Add explicit JSON
+and JSONL globs under the approved ip-preflight-plans namespace and assert the
+actual workflow paths; verify the next downloaded artifacts contain them. Old
+missing plans cannot be reconstructed from replacement success. Both original
+workbooks were backed up, published and freshly read back as interim08 with
+36fixed/7partial/1inconclusive unchanged. Final Docker/current CI/main/live/D29/
+cadence and final paired workbooks remain required. App stays with the MacBook.
+
 ## Ownership
 
 IPLF-032, UJ-02 and NFT-005 retain bounded import/recovery ownership. Existing

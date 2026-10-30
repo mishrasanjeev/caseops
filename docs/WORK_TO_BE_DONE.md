@@ -2,6 +2,14 @@
 
 ## October 30 Consolidated Remaining Failures
 
+Latest: full135-case component132P/3physical-planF/405phases/0S; all original
+observer/multi-order/finalizer/successful1,000-row/workspace cases passed.
+5FAA CI is37successful/4failed/2skipped jobs; three root cases plus aggregate.
+Exact broad docket/receipt plans require bounded scalar lookup correction and
+52-case semantic replacement, with nested plans retained in CI. Both originals
+are actual interim08. Full Docker/current CI/main/live/cadence still NO-GO;
+the earlier unexecuted/partial checkpoints below are historical, not latest.
+
 **Partially fixed / NO-GO.** D060 CI has57terminalchecks:42success/12failure/
 3skips. Complete shard reconciliation identifies seven historical UNION-hook
 failures, one worker outcome with missing underlying error, four callback-

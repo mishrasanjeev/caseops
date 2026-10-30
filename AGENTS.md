@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- One scalar query is not proof of bounded database work. A candidate VALUES
+  join and correlated EXISTS can scan tenant-wide docket and receipt history.
+  Retain the exact driver SQL/binds and fresh/stale/analyzed default plans;
+  bound raw tuples, loops, heap fetches and buffers without planner overrides.
+  Keep nested EXPLAIN/catalog files in CI artifacts before asserting outcomes.
+
 - A known-created-container cleanup test must actually reach acknowledged
   creation before testing attached-client timeout. Keep setup bounded and cap
   that real transport within the remaining total budget; assert the exact

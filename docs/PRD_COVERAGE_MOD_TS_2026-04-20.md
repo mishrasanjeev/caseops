@@ -2,6 +2,14 @@
 
 ## October 30 Preflight And Observer Coverage
 
+Follow-up IPLF-032/UJ-02/NFT-005: complete135-case component132P/3physicalF,
+405 complete phases/0S. All58 observer/2multi-order/30finalizer/1,000-success/
+41workspace pass. Preserve the three real broad-plan failures; scalar limited
+lookup replacement and all52 semantic cases (four new NULL negatives) remain
+unverified. CI must retain nested exact plans/catalogs. Interim08 publication
+is proven, not production certification. Earlier partial numbers below remain
+historical and do not supersede this complete failed component.
+
 IPLF-032/UJ-02/NFT-005 maps IP-PF-01..09 to48 actual dual-database passes
 inside incomplete green02; original90s/1,000-materialization still pending.
 Three new default physical-plan cases are intended, not passed. Historical

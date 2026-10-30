@@ -534,4 +534,9 @@ def test_ci_retains_exact_per_shard_native_journals_without_weakening_invocation
     assert test["run"] == "uv run python -m pytest -q -m postgres"
     assert upload["if"] == "always()"
     assert f"apps/api/{directory}/*.jsonl" in upload["with"]["path"].splitlines()
+    for extension in ("json", "jsonl"):
+        assert (
+            f"apps/api/{directory}/ip-preflight-plans/**/*.{extension}"
+            in upload["with"]["path"].splitlines()
+        )
     assert upload["with"]["if-no-files-found"] == "error"

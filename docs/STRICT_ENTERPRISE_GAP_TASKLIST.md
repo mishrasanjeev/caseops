@@ -2,6 +2,14 @@
 
 ## October 30 Remaining Work And Test Boundaries
 
+Latest component completes135/405 at132P/3physical-planF/0S. One-query/no-ORM
+facts did not bound physical history work. Preserve the measured broad scans,
+original budgets and old failures; prove correlated scalar lookup replacement
+under all three statistics states and52 semantic cases. Retain nested plan
+artifacts in hosted CI. All original focused roles pass, but complete Docker,
+current CI/main/deploy/live/cadence remain required. Both original summaries are
+verified interim08. Earlier partial/unexecuted text below remains history.
+
 **Partially implemented / NO-GO.** Full D060 CI evidence is57terminalchecks,
 42success/12failure/3skips, with one independent product CodeQL error. New scalar
 import preflight removes an independently reproduced1,000reads/resume boundary
