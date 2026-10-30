@@ -1,5 +1,36 @@
 # CaseOps  - Work To Be Done
 
+## October 31 Native Replacement and Fresh Dependency Gate
+
+J20/M22 remains **Partially implemented; release NO-GO**. PR #558's
+`17812fade00bd82d9d6724ae8267770b4e853ed0` passed the current Android
+configuration/prebuild component, and its actual API and web Docker images
+built with closed process groups and paired source/output evidence. Those
+results do not establish a current APK, iOS app, device suite or store archive.
+The older Android 23-case result below retains its original binary identity.
+
+A fresh check of the actual API image's 139 installed identities found four
+new high-severity OSV advisories affecting `pyasn1==0.6.4`: GHSA-2qm8-x737-gmw5,
+GHSA-9m75-vc3g-4x39, GHSA-fm9c-5rcf-2q5p and GHSA-mm57-4v3p-rchx. Their
+official fixed version is 0.6.5. Preserve that failed security verdict and the
+completed historical image build separately. The targeted lock update pins
+0.6.5, preserves the other 162 records, passes offline lock validation and 15
+ordinary decoder checks, and retains exact-version license provenance. The
+advisory parser failure boundary was not executed; no algorithmic repair is
+claimed. Fresh resolved and installed audits, current CI and replacement images
+are required before native acceptance. No dependency exception applies.
+
+Android is the next physical-device target. The combined model/APK controller
+is still unarmed while its source, lifecycle and finite resource checks close.
+The unchanged 137 ownership cases and 53 Java-verification controls pass as
+tooling components; they are not device results. Current Android/iOS core,
+picker/upload/reader, cache/privacy and extension acceptance remains open. The
+user deferred physical iPhone checks because its USB connection is unreliable;
+Simulator work remains required. Enrollment, distribution signing, production
+HTTPS associations, public business/support/privacy details and actual signed
+store artifacts remain open. The organization website stays private. No merge,
+production deployment or store upload has occurred.
+
 ## October 26 Export Completion Gate Found During Release
 
 Issue564 is a real production performance failure, not a failed header fix.
