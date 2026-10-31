@@ -264,7 +264,7 @@ test('fixed mobile glob keeps actual Expo consumers ordinary matching and bounde
     const expoRequire = createRequire(require.resolve('expo/package.json'));
     const cliPath = path.join(path.dirname(expoRequire.resolve('@expo/cli/package.json')), 'build/src/utils/glob.js');
     const cli = require(cliPath);
-    assert.deepEqual(await cli.everyMatchAsync('src/**/*.ts', { cwd: directory, nodir: true }), ['src/a.ts']);
+    assert.deepEqual(await cli.everyMatchAsync('src/**/*.ts', { cwd: directory, nodir: true }), [path.join('src', 'a.ts')]);
     assert.deepEqual(await cli.anyMatchAsync('no-match-*', { cwd: directory }), []);
     const fingerprintPath = path.join(path.dirname(require.resolve('@expo/fingerprint/package.json')), 'build/utils/Path.js');
     const fingerprint = require(fingerprintPath);
@@ -272,7 +272,7 @@ test('fixed mobile glob keeps actual Expo consumers ordinary matching and bounde
     assert.equal(fingerprint.isIgnoredPathWithMatchObjects('src/a.ts', objects), false);
     assert.equal(fingerprint.isIgnoredPathWithMatchObjects('src/c.ts', objects), true);
     const glob = require('glob');
-    assert.deepEqual(glob.globSync('src/*.{ts,js}', { cwd: directory, nodir: true }).sort(), ['src/a.ts', 'src/b.js']);
+    assert.deepEqual(glob.globSync('src/*.{ts,js}', { cwd: directory, nodir: true }).sort(), [path.join('src', 'a.ts'), path.join('src', 'b.js')]);
     const reason = Error('OWNED_GLOB_CANCELLATION');
     await assert.rejects(glob.glob('**/*', { cwd: directory, signal: AbortSignal.abort(reason) }), error => error === reason);
     const minimatch = require('minimatch');

@@ -16,7 +16,20 @@ import { installNpmRegistryTransport } from './npm-registry.mjs';
 
 const archive = process.env.CASEOPS_TEST_NPM_ARCHIVE || fileURLToPath(new URL('../../apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', import.meta.url));
 const hash = b => createHash('sha256').update(b).digest('hex');
-function fixture(t) { const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-npm-test-'))); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; }
+function fixture(t) { const root = (fs.realpathSync.native ?? fs.realpathSync)(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-npm-test-'))); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; }
+// An open Windows handle may prevent replacement. Keep that native refusal and
+// then model only a mismatched named inode; this is a unit double, not OS proof.
+function replaceNamedFixture(replacement, target, fd, platform = process.platform) {
+  try { fs.renameSync(replacement, target); return false; }
+  catch (error) {
+    assert.equal(platform, 'win32'); assert.equal(error.code, 'EPERM');
+    assert.equal(fs.lstatSync(target, { bigint: true }).ino, fs.fstatSync(fd, { bigint: true }).ino);
+    return true;
+  }
+}
+function fixtureRenameMode(mode, run) {
+  return mode === 'native' ? run(process.platform) : withFs({ renameSync() { const error = new Error('CONTROL_WINDOWS_OPEN_HANDLE'); error.code = 'EPERM'; throw error; } }, () => run('win32'));
+}
 function tar(entries) {
   const blocks = [];
   for (const { name = 'package/a', bytes = Buffer.from('ordinary'), mode = 0o644, type = '0' } of entries) {
@@ -205,10 +218,14 @@ test('ordinary registry transport refuses unverified TLS foreign origins plainte
   });
 });
 test('ordinary registry log failure restores constructors and closes its descriptor', t => {
-  const root = fixture(t), original = https.request, log = path.join(root, 'requests.jsonl');
-  const transport = installNpmRegistryTransport({ logPath: log, deadline: Date.now() + 5000 });
-  const replacement = path.join(root, 'replacement'); fs.writeFileSync(replacement, 'replacement'); fs.renameSync(replacement, log);
-  assert.throws(() => transport.close(), /NPM_REGISTRY_LOG_IDENTITY/); assert.equal(https.request, original);
+  for (const mode of ['native', 'windows-refusal']) fixtureRenameMode(mode, platform => {
+    const root = fixture(t), original = https.request, log = path.join(root, 'requests.jsonl'); let opened, transport;
+    withFs({ openSync(originalOpen, ...args) { const fd = originalOpen(...args); if (args[0] === log) opened = fd; return fd; } }, () => { transport = installNpmRegistryTransport({ logPath: log, deadline: Date.now() + 5000 }); });
+    const replacement = path.join(root, 'replacement'); fs.writeFileSync(replacement, 'replacement');
+    const modelNamed = replaceNamedFixture(replacement, log, opened, platform);
+    withFs({ lstatSync(originalLstat, file, ...args) { const state = originalLstat(file, ...args); return modelNamed && file === log ? new Proxy(state, { get: (target, key) => key === 'ino' ? state.ino + 1n : Reflect.get(target, key) }) : state; } }, () => assert.throws(() => transport.close(), /NPM_REGISTRY_LOG_IDENTITY/));
+    assert.equal(https.request, original); assert.throws(() => fs.fstatSync(opened), { code: 'EBADF' });
+  });
 });
 test('fresh advisory requests retain default TLS, the isolation marker and exact installed graph', async () => {
   const inventory = { graph: { npm: ['11.12.1'] }, rows: [{ name: 'npm', version: '11.12.1' }] }; let calls = 0;
@@ -333,27 +350,32 @@ test('installed file descriptors precede pathname checks and reject replacement 
     lstatSync(original, file, ...args) { if (file === value.file) events.push('named'); return original(file, ...args); },
   }, () => verify(value));
   assert.equal(events[0], 'open');
-  let opened, closed, reads = 0;
-  withFs({
-    openSync(original, file, ...args) {
-      const fd = original(file, ...args);
-      if (file === value.file) { opened = fd; const replacement = path.join(value.root, 'replacement'); fs.writeFileSync(replacement, 'ordinary'); fs.renameSync(replacement, file); }
-      return fd;
-    },
-    readSync(original, fd, ...args) { if (fd === opened) reads++; return original(fd, ...args); },
-    closeSync(original, fd) { if (fd === opened) closed = fd; return original(fd); },
-  }, () => assert.throws(() => verify(value), /NPM_TOOLING_NAMED_DESCRIPTOR_CHANGED/));
-  assert.equal(reads, 0); assert.equal(closed, opened); assert.throws(() => fs.fstatSync(opened), { code: 'EBADF' });
+  for (const mode of ['native', 'windows-refusal']) fixtureRenameMode(mode, platform => {
+    const target = installed(t); let opened, closed, reads = 0, modelNamed = false;
+    withFs({
+      openSync(original, file, ...args) {
+        const fd = original(file, ...args);
+        if (file === target.file) { opened = fd; const replacement = path.join(target.root, 'replacement'); fs.writeFileSync(replacement, 'ordinary'); modelNamed = replaceNamedFixture(replacement, file, fd, platform); }
+        return fd;
+      },
+      lstatSync(original, file, ...args) { const state = original(file, ...args); return modelNamed && file === target.file ? new Proxy(state, { get: (entry, key) => key === 'ino' ? state.ino + 1n : Reflect.get(entry, key) }) : state; },
+      readSync(original, fd, ...args) { if (fd === opened) reads++; return original(fd, ...args); },
+      closeSync(original, fd) { if (fd === opened) closed = fd; return original(fd); },
+    }, () => assert.throws(() => verify(target), /NPM_TOOLING_NAMED_DESCRIPTOR_CHANGED/));
+    assert.equal(reads, 0); assert.equal(closed, opened); assert.throws(() => fs.fstatSync(opened), { code: 'EBADF' });
+  });
 });
 
 test('ordinary registry transport accepts only default or explicit verified TLS and preserves native request identity', t => {
   withNativeRequest(t, ({ requests }) => {
-    for (const option of [{}, { rejectUnauthorized: undefined }, { rejectUnauthorized: true }]) {
+    // Missing options exercise the undefined/default branch without configuring
+    // a native TLS client with an explicit undefined verification setting.
+    for (const option of [{}, { rejectUnauthorized: true }]) {
       const request = https.request({ hostname: 'registry.npmjs.org', path: '/ordinary', ...option });
       assert.equal(request, requests[requests.length - 1].req);
       assert.equal(requests[requests.length - 1].options.rejectUnauthorized, true);
       assert.equal(requests[requests.length - 1].options.headers['X-CaseOps-Automated-Test'], 'no-paid-providers');
     }
-    assert.equal(requests.length, 3);
+    assert.equal(requests.length, 2);
   });
 });

@@ -1,6 +1,49 @@
 import importlib.util, pathlib, tempfile, unittest, os, types, hashlib, subprocess, sys, json, ast, re
 P=pathlib.Path(__file__).with_name('android-observer-manifest.py');spec=importlib.util.spec_from_file_location('observer_manifest',P);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 RAW=b'<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="ai.caseops.mobile.dev.localacceptance"><uses-permission android:name="android.permission.CAMERA"/><application android:name="ai.caseops.mobile.dev.MainApplication" android:debuggable="false" android:allowBackup="false" android:appComponentFactory="reviewed.actual.Factory"><provider android:name="reviewed.actual.Provider" android:authorities="owned"><meta-data android:name="reviewed.actual.Initializer" android:value="androidx.startup"/></provider><activity android:name="ai.caseops.mobile.dev.MainActivity"/></application></manifest>'
+
+def owned_cli_runtime(root,b):
+ # Only this test fixture may copy public interpreter bytes. Production held()
+ # keeps its current-owner/single-link rule unchanged.
+ import stat,time,sysconfig,argparse,xml.etree.ElementTree as ET,_hashlib
+ source=pathlib.Path(sys.executable).resolve();ns=m.namespace(source,b);fd=os.open(source,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_NONBLOCK',0))
+ try:
+  first=os.fstat(fd);named=source.lstat();b.charge();b.charge();m.need(stat.S_ISREG(first.st_mode)and stat.S_ISREG(named.st_mode)and not stat.S_ISLNK(named.st_mode)and m.named_matches_fd(named,first)and 0<first.st_size<=33554432,'TEST_RUNTIME_PUBLIC_DESCRIPTOR');raw=bytearray()
+  while len(raw)<=first.st_size:
+   part=os.read(fd,min(65536,first.st_size+1-len(raw)));b.charge(len(part))
+   if not part:break
+   raw.extend(part)
+  source_after_fd=os.fstat(fd);b.charge();source_after_named=source.lstat();b.charge();m.need(len(raw)==first.st_size and m.same(first,source_after_fd)and m.same(named,source_after_named)and m.namespace(source,b)==ns,'TEST_RUNTIME_PUBLIC_CHANGED');pin=hashlib.sha256(raw).hexdigest();runtime=source;copied=first.st_uid!=m.owner()or first.st_nlink!=1
+  if copied:
+   m.need(sys.platform=='linux'and source.is_relative_to('/usr')and sys.prefix==sys.base_prefix,'TEST_RUNTIME_COPY_ONLY_SYSTEM_LINUX')
+   try:m.held(source,m.Budget(),33554432)
+   except RuntimeError as error:m.need(str(error)=='QA_MANIFEST_OWNED_FILE','TEST_RUNTIME_ORIGINAL_REFUSAL')
+   else:raise AssertionError('TEST_RUNTIME_ORIGINAL_WAS_NOT_REFUSED')
+   parent=root/'owned-runtime';parent.mkdir(mode=0o700);runtime=parent/source.name;target_ns=m.namespace(runtime,b);target=os.open(runtime,os.O_RDWR|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),0o700)
+   try:
+    created=os.fstat(target);b.charge();m.need(stat.S_ISREG(created.st_mode)and created.st_uid==m.owner()and created.st_nlink==1 and created.st_size==0,'TEST_RUNTIME_EXCLUSIVE_DESCRIPTOR');offset=0
+    while offset<len(raw):
+     width=os.write(target,memoryview(raw)[offset:offset+65536]);b.charge(width);m.need(width>0,'TEST_RUNTIME_COPY_PROGRESS');offset+=width
+    os.fchmod(target,0o700);os.fsync(target);final=os.fstat(target);b.charge();m.need(final.st_size==len(raw)and stat.S_IMODE(final.st_mode)==0o700 and all(getattr(created,k)==getattr(final,k)for k in('st_dev','st_ino','st_uid','st_gid','st_nlink')),'TEST_RUNTIME_COPY_IDENTITY');os.lseek(target,0,os.SEEK_SET);back=bytearray()
+    while len(back)<=len(raw):
+     part=os.read(target,min(65536,len(raw)+1-len(back)));b.charge(len(part))
+     if not part:break
+     back.extend(part)
+    last_named=runtime.lstat();b.charge();last_fd=os.fstat(target);b.charge();m.need(back==raw and m.same(final,last_fd)and m.named_matches_fd(last_named,final)and m.namespace(runtime,b)==target_ns,'TEST_RUNTIME_COPY_READBACK')
+   finally:os.close(target)
+  source_final_fd=os.fstat(fd);b.charge();source_final_named=source.lstat();b.charge();m.need(m.same(first,source_final_fd)and m.same(named,source_final_named)and m.namespace(source,b)==ns,'TEST_RUNTIME_PUBLIC_FINAL_CHANGED')
+ finally:os.close(fd)
+ identity_source="def module_identity(value):\n name=value.__name__;file=getattr(value,'__file__',None)\n if file is not None:\n  if type(file)is not str or not file or not pathlib.Path(file).is_absolute():raise RuntimeError('TEST_RUNTIME_MODULE_FILE_ORIGIN')\n  return {'kind':'file','name':name,'origin':str(pathlib.Path(file).resolve())}\n spec=getattr(value,'__spec__',None)\n if spec is None or spec.origin!='built-in' or name not in sys.builtin_module_names:raise RuntimeError('TEST_RUNTIME_MODULE_BUILTIN_ORIGIN')\n return {'kind':'built-in','name':name,'origin':'built-in'}\n"
+ identity_scope={'sys':sys,'pathlib':pathlib};exec(compile(identity_source,'fixture-runtime-module-identity','exec'),identity_scope);identity=identity_scope['module_identity']
+ expected={'prefix':sys.prefix,'basePrefix':sys.base_prefix,'stdlib':sysconfig.get_path('stdlib'),'libdir':sysconfig.get_config_var('LIBDIR'),'ldlibrary':sysconfig.get_config_var('LDLIBRARY'),'shared':sysconfig.get_config_var('Py_ENABLE_SHARED'),'modules':{x.__name__:identity(x)for x in(argparse,hashlib,json,ET,_hashlib)}}
+ if copied:
+  # The same literal identity function distinguishes exact file origins from
+  # actual interpreter built-ins in both the parent and copied executable.
+  code="import argparse,hashlib,json,pathlib,sys,sysconfig,xml.etree.ElementTree as ET,_hashlib\n"+identity_source+"\nprint(json.dumps({'prefix':sys.prefix,'basePrefix':sys.base_prefix,'stdlib':sysconfig.get_path('stdlib'),'libdir':sysconfig.get_config_var('LIBDIR'),'ldlibrary':sysconfig.get_config_var('LDLIBRARY'),'shared':sysconfig.get_config_var('Py_ENABLE_SHARED'),'modules':{x.__name__:module_identity(x)for x in(argparse,hashlib,json,ET,_hashlib)}}))"
+  remaining=b.end-time.monotonic();m.need(remaining>0,'TEST_RUNTIME_SHARED_DEADLINE');probe=subprocess.run([str(runtime),'-I','-B','-c',code],capture_output=True,timeout=remaining);m.need(probe.returncode==0 and probe.stderr==b''and len(probe.stdout)<=16384,'TEST_RUNTIME_STDLIB_PROBE');b.charge(len(probe.stdout));m.need(json.loads(probe.stdout)==expected,'TEST_RUNTIME_STDLIB_LIBRARY_EQUIVALENCE')
+ print('QA_MANIFEST_TEST_RUNTIME '+json.dumps({'sourceUid':first.st_uid,'ownerUid':m.owner(),'sourceNlink':first.st_nlink,'sourceBytes':first.st_size,'copied':copied,'runtimeSha256':pin,'prefix':expected['prefix'],'stdlib':expected['stdlib'],'libdir':expected['libdir'],'ldlibrary':expected['ldlibrary'],'shared':expected['shared'],'modules':expected['modules']},sort_keys=True),file=sys.stderr)
+ return runtime,pin
+
 class Manifest(unittest.TestCase):
  def transform(self,raw=RAW):return m.transform(raw,m.APP,'a'*40)
  def test_actual_merged_factory_is_recorded_and_delegated(self):
@@ -36,9 +79,10 @@ class Manifest(unittest.TestCase):
    self.assertEqual(p.read_bytes(),b'first')
  def test_actual_cli_binds_runtime_artifact_paths_source_and_generated_java(self):
   with tempfile.TemporaryDirectory()as d:
-   android=pathlib.Path(d).resolve()/'android';inp=android/'app/build/intermediates/merged_manifest/localAcceptance/AndroidManifest.xml';inp.parent.mkdir(parents=True);inp.write_bytes(RAW);out=android/('app/build/generated/caseops-qa-observer/'+'a'*40+'/localAcceptance');manifest=android/'app/build/intermediates/caseopsQaObserverManifest/AndroidManifest.xml';(out/'java/ai/caseops/mobile/qa').mkdir(parents=True);manifest.parent.mkdir(parents=True);runtime=pathlib.Path(sys.executable).resolve();pin=hashlib.sha256(runtime.read_bytes()).hexdigest()
-   result=subprocess.run([str(runtime),'-I','-B',str(P),'--input',str(inp),'--output-root',str(out),'--manifest-output',str(manifest),'--android-root',str(android),'--source','a'*40,'--target',m.APP,'--python-sha256',pin],capture_output=True,timeout=15)
-   self.assertEqual(result.returncode,0,result.stderr.decode());self.assertEqual(result.stdout,b'');receipt=json.loads((out/'receipt.json').read_bytes());self.assertEqual(receipt['runtimeSha256'],pin);self.assertEqual(receipt['inputSha256'],hashlib.sha256(RAW).hexdigest());self.assertEqual(receipt['outputSha256'],hashlib.sha256(manifest.read_bytes()).hexdigest());self.assertTrue((out/'java/ai/caseops/mobile/qa/QaObserverFactory.java').is_file());self.assertFalse(receipt['productionTransform'])
+   android=pathlib.Path(d).resolve()/'android';inp=android/'app/build/intermediates/merged_manifest/localAcceptance/AndroidManifest.xml';inp.parent.mkdir(parents=True);inp.write_bytes(RAW);out=android/('app/build/generated/caseops-qa-observer/'+'a'*40+'/localAcceptance');manifest=android/'app/build/intermediates/caseopsQaObserverManifest/AndroidManifest.xml';(out/'java/ai/caseops/mobile/qa').mkdir(parents=True);manifest.parent.mkdir(parents=True);budget=m.Budget();runtime,pin=owned_cli_runtime(pathlib.Path(d).resolve(),budget)
+   remaining=budget.end-__import__('time').monotonic();self.assertGreater(remaining,0)
+   result=subprocess.run([str(runtime),'-I','-B',str(P),'--input',str(inp),'--output-root',str(out),'--manifest-output',str(manifest),'--android-root',str(android),'--source','a'*40,'--target',m.APP,'--python-sha256',pin],capture_output=True,timeout=remaining)
+   self.assertLess(__import__('time').monotonic(),budget.end);self.assertEqual(result.returncode,0,result.stderr.decode());self.assertEqual(result.stdout,b'');receipt=json.loads((out/'receipt.json').read_bytes());self.assertEqual(receipt['runtimeSha256'],pin);self.assertEqual(receipt['inputSha256'],hashlib.sha256(RAW).hexdigest());self.assertEqual(receipt['outputSha256'],hashlib.sha256(manifest.read_bytes()).hexdigest());self.assertTrue((out/'java/ai/caseops/mobile/qa/QaObserverFactory.java').is_file());self.assertFalse(receipt['productionTransform'])
  def test_windows_device_exception_preserves_all_other_identity_fields(self):
   a=types.SimpleNamespace(**{k:1 for k in m.FIELDS});b=types.SimpleNamespace(**vars(a));b.st_dev=0;self.assertTrue(m.named_matches_fd(b,a,'nt'));self.assertFalse(m.named_matches_fd(b,a,'posix'));self.assertFalse(m.same(a,b));b.st_ino=2;self.assertFalse(m.named_matches_fd(b,a,'nt'))
  def test_nonzero_named_windows_device_mismatch_is_never_waived(self):
