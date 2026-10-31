@@ -1,5 +1,5 @@
 import { defaultScheduler, notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,10 +15,14 @@ import type {
 const mocks = vi.hoisted(() => ({
   capability: vi.fn(),
   create: vi.fn(),
+  docket: vi.fn(),
   dockets: vi.fn(),
   documents: vi.fn(),
+  instruments: vi.fn(),
   recordals: vi.fn(),
+  taxonomy: vi.fn(),
   transaction: vi.fn(),
+  upload: vi.fn(),
   workspace: vi.fn(),
 }));
 
@@ -29,8 +33,12 @@ vi.mock("@/lib/api/endpoints", async () => {
   return {
     ...actual,
     createIpRecordal: mocks.create,
+    fetchIpDocket: mocks.docket,
     fetchIpDockets: mocks.dockets,
     fetchIpDocuments: mocks.documents,
+    fetchIpDocumentTaxonomy: mocks.taxonomy,
+    fetchIpRecordalInstruments: mocks.instruments,
+    uploadIpDocument: mocks.upload,
     fetchIpRecordals: mocks.recordals,
     fetchIpRecordalWorkspace: mocks.workspace,
     recordIpRecordalTransaction: mocks.transaction,
@@ -218,7 +226,7 @@ describe("post-registration workspace", () => {
     mocks.capability.mockReturnValue(true);
     mocks.dockets.mockResolvedValue({ dockets: [DOCKET], count: 1 });
     mocks.documents.mockResolvedValue({ items: [DOCUMENT], total: 1 });
-    mocks.recordals.mockResolvedValue({ items: [RECORDAL], total: 1, limit: 100, offset: 0 });
+    mocks.recordals.mockResolvedValue({ items: [{ ...RECORDAL, docket_title: "ASTER registration" }], total: 1, limit: 100, offset: 0 });
     mocks.workspace.mockResolvedValue(WORKSPACE);
     mocks.transaction.mockResolvedValue({ recordal: { ...RECORDAL, status: "accepted", version: 4 }, event: WORKSPACE.transactions[0], projected_title_interests: [DOCKET.title_interests[1]], registry_projection_applied: true });
   });
@@ -363,5 +371,213 @@ describe("post-registration workspace", () => {
     render(<RecordalsPage />, { wrapper: wrapper() });
     expect(screen.getByText("IP access required")).toBeVisible();
     expect(mocks.recordals).not.toHaveBeenCalled();
+  });
+});
+
+// BUG-008 (Ram 2026-10-30): the recordal form was a dead end. Each party's
+// Instrument picker listed only documents ticked in a separate checkbox list,
+// and a docket without a document had no path to upload one.
+describe("BUG-008 new recordal form", () => {
+  const PICKER_PAGE = { dockets: [DOCKET], count: 1, has_more: false, next_cursor: null, total_count: 1 };
+  // Linked through a docket event only: the API accepts it, so the picker must offer it.
+  const EVENT_DOCUMENT: IpDocument = {
+    ...DOCUMENT,
+    id: "document-event",
+    title: "Board resolution approving the assignment",
+    taxonomy_label: "Evidence",
+    confidentiality: "internal",
+    links: [{ id: "link-2", version_id: null, target_type: "event", target_id: "event-1", created_by_membership_id: "member-1", created_at: "2026-07-02T00:00:00Z" }],
+  };
+  const TAXONOMY = {
+    taxonomy_version: "ip-document-taxonomy-v1",
+    entries: [
+      { key: "assignment", label: "Assignment", is_active: true, version: 1 },
+      { key: "licence", label: "Licence", is_active: true, version: 1 },
+    ],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.capability.mockReturnValue(true);
+    mocks.recordals.mockResolvedValue({ items: [], total: 0, limit: 100, offset: 0 });
+    mocks.dockets.mockResolvedValue(PICKER_PAGE);
+    mocks.instruments.mockResolvedValue({ docket_id: "docket-1", items: [DOCUMENT, EVENT_DOCUMENT], truncated: false });
+    mocks.taxonomy.mockResolvedValue(TAXONOMY);
+    mocks.create.mockResolvedValue({ ...RECORDAL, id: "recordal-new", status: "draft", version: 1 });
+  });
+
+  async function openForm(user: ReturnType<typeof userEvent.setup>) {
+    render(<RecordalsPage />, { wrapper: wrapper() });
+    const toggle = await screen.findByRole("button", { name: "New recordal" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Close new recordal" })).toHaveAttribute("aria-expanded", "true");
+    const form = screen.getByRole("form", { name: "New recordal" });
+    return form;
+  }
+
+  async function chooseDocket(user: ReturnType<typeof userEvent.setup>) {
+    const picker = await screen.findByLabelText("IP docket");
+    await waitFor(() => expect(picker).toBeEnabled());
+    await user.selectOptions(picker, "docket-1");
+  }
+
+  function instrumentPicker(party: number) {
+    return within(screen.getByRole("group", { name: `Party ${party}` })).getByLabelText("Instrument");
+  }
+
+  it("lists every instrument the API accepts in each party's picker and submits them", async () => {
+    const user = userEvent.setup();
+    const form = await openForm(user);
+    const create = within(form).getByRole("button", { name: "Create recordal" });
+    expect(create).toBeDisabled();
+    expect(create).toHaveAccessibleDescription(/choose the IP docket/);
+    // Before a docket is chosen the pickers explain themselves instead of offering nothing.
+    expect(instrumentPicker(1)).toBeDisabled();
+    expect(screen.getByText(/Choose the IP docket first/)).toBeVisible();
+    expect(mocks.instruments).not.toHaveBeenCalled();
+
+    await chooseDocket(user);
+    await waitFor(() => expect(mocks.instruments).toHaveBeenCalledWith("docket-1", expect.anything()));
+    for (const party of [1, 2]) {
+      const picker = instrumentPicker(party);
+      await waitFor(() => expect(picker).toBeEnabled());
+      expect(within(picker).getByRole("option", { name: /^Executed assignment deed · Assignment deed/ })).toBeInTheDocument();
+      expect(within(picker).getByRole("option", { name: /^Board resolution approving the assignment · Evidence/ })).toBeInTheDocument();
+    }
+    expect(screen.getByLabelText("Affected application or registration references")).toHaveValue("TM-10001");
+
+    await user.type(screen.getByLabelText("Form code"), "TM-P");
+    await user.type(screen.getByLabelText("Legal basis"), "Trade Marks Act, 1999, section 45");
+    await user.type(screen.getByLabelText("Execution date"), "2026-07-01");
+    await user.type(screen.getByLabelText("Effective date"), "2026-07-15");
+    await user.type(within(screen.getByRole("group", { name: "Party 1" })).getByLabelText("Party name"), "Aster Labs Private Limited");
+    await user.type(within(screen.getByRole("group", { name: "Party 2" })).getByLabelText("Party name"), "Nova Holdings LLP");
+    await user.selectOptions(instrumentPicker(1), "document-1");
+    await user.selectOptions(instrumentPicker(2), "document-event");
+    expect(instrumentPicker(1)).toHaveAccessibleDescription(/Executed assignment deed · Assignment deed · uploaded 1 Jul 2026 · confidential/);
+    await user.type(screen.getByLabelText("Affected classes"), "Class 9, 42");
+    await user.type(screen.getByLabelText("Creation reason"), "Record the executed assignment.");
+    expect(create).toBeEnabled();
+    await user.click(create);
+
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+    const payload = mocks.create.mock.calls[0][0];
+    expect(payload).toEqual(expect.objectContaining({
+      docketId: "docket-1",
+      expectedLifecycleVersion: 4,
+      responsibleMembershipId: "member-1",
+      recordalType: "assignment",
+      affectedClasses: [9, 42],
+      supportingInstrumentRefs: ["document-1", "document-event"],
+      deadlineRuleKey: null,
+    }));
+    expect(payload.parties.map((party: { role: string; evidence_reference: string }) => [party.role, party.evidence_reference]))
+      .toEqual([["assignor", "document-1"], ["assignee", "document-event"]]);
+    // Every cited instrument is a supporting instrument: the API contract holds.
+    for (const party of payload.parties) expect(payload.supportingInstrumentRefs).toContain(party.evidence_reference);
+  });
+
+  it("offers an upload on a docket with no instrument, then lists the upload for both parties", async () => {
+    const user = userEvent.setup();
+    mocks.instruments.mockResolvedValueOnce({ docket_id: "docket-1", items: [], truncated: false });
+    const uploaded: IpDocument = { ...DOCUMENT, id: "document-uploaded", title: "Deed of assignment", taxonomy_label: "Assignment", confidentiality: "internal" };
+    mocks.upload.mockResolvedValue({ outcome: "created", document: uploaded, duplicate_candidates: [] });
+    const form = await openForm(user);
+    await chooseDocket(user);
+
+    expect(await screen.findByText(/No executed instrument is filed on this docket yet/)).toBeVisible();
+    for (const party of [1, 2]) {
+      expect(instrumentPicker(party)).toBeDisabled();
+      expect(within(instrumentPicker(party)).getByRole("option", { name: "Upload an instrument first" })).toBeInTheDocument();
+    }
+    expect(within(form).getByRole("button", { name: "Create recordal" })).toHaveAccessibleDescription(/upload the executed instrument for this docket/);
+
+    const uploadButton = await screen.findByRole("button", { name: "Upload instrument" });
+    expect(uploadButton).toBeDisabled();
+    // The suggested classification is visible, never a hidden default.
+    expect(screen.getByLabelText("Classification")).toHaveValue("assignment");
+    await user.upload(screen.getByLabelText("Executed instrument file"), new File(["executed deed"], "Deed of assignment.pdf", { type: "application/pdf" }));
+    expect(screen.getByLabelText("Instrument title")).toHaveValue("Deed of assignment");
+    mocks.instruments.mockResolvedValue({ docket_id: "docket-1", items: [uploaded], truncated: false });
+    await user.click(uploadButton);
+
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.objectContaining({
+      docketId: "docket-1",
+      taxonomyKey: "assignment",
+      title: "Deed of assignment",
+      confidentiality: "internal",
+      applicationNo: "TM-10001",
+    })));
+    for (const party of [1, 2]) {
+      await waitFor(() => expect(instrumentPicker(party)).toBeEnabled());
+      expect(within(instrumentPicker(party)).getByRole("option", { name: /^Deed of assignment · Assignment/ })).toBeInTheDocument();
+    }
+  });
+
+  it("says why an upload cannot start when no classification exists, by role", async () => {
+    const user = userEvent.setup();
+    mocks.instruments.mockResolvedValue({ docket_id: "docket-1", items: [], truncated: false });
+    mocks.taxonomy.mockResolvedValue({ taxonomy_version: "ip-document-taxonomy-v1", entries: [] });
+    mocks.capability.mockImplementation((value: string) => value !== "ip:taxonomy_admin");
+    await openForm(user);
+    await chooseDocket(user);
+    expect(await screen.findByText(/none is configured for this workspace/)).toBeVisible();
+    expect(screen.getByText("Ask an IP workspace admin to load the standard document classifications.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Upload instrument" })).not.toBeInTheDocument();
+  });
+
+  it("tells a role without document upload who can file the instrument", async () => {
+    const user = userEvent.setup();
+    mocks.instruments.mockResolvedValue({ docket_id: "docket-1", items: [], truncated: false });
+    mocks.capability.mockImplementation((value: string) => value !== "documents:upload");
+    await openForm(user);
+    await chooseDocket(user);
+    expect(await screen.findByText(/Your role cannot upload documents/)).toBeVisible();
+    expect(mocks.taxonomy).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Upload instrument" })).not.toBeInTheDocument();
+  });
+
+  it("shows a retry when the docket's instruments fail to load", async () => {
+    const user = userEvent.setup();
+    mocks.instruments.mockRejectedValueOnce(new Error("Gateway timeout"));
+    const form = await openForm(user);
+    await chooseDocket(user);
+    expect(await screen.findByText("Could not load this docket's instruments")).toBeVisible();
+    expect(instrumentPicker(1)).toBeDisabled();
+    expect(within(form).getByRole("button", { name: "Create recordal" })).toBeDisabled();
+    mocks.instruments.mockResolvedValue({ docket_id: "docket-1", items: [DOCUMENT], truncated: false });
+    await user.click(screen.getByRole("button", { name: /try again|retry/i }));
+    await waitFor(() => expect(instrumentPicker(1)).toBeEnabled());
+  });
+
+  it("keeps typed party names when the recordal type changes and anchors class errors", async () => {
+    const user = userEvent.setup();
+    const form = await openForm(user);
+    await user.type(within(screen.getByRole("group", { name: "Party 1" })).getByLabelText("Party name"), "Aster Labs Private Limited");
+    await user.selectOptions(within(form).getByLabelText("Recordal type"), "licence");
+    const first = screen.getByRole("group", { name: "Party 1" });
+    expect(within(first).getByLabelText("Party name")).toHaveValue("Aster Labs Private Limited");
+    expect(within(first).getByLabelText("Role")).toHaveValue("licensor");
+
+    const classes = screen.getByLabelText("Affected classes");
+    await user.type(classes, "Biscuits");
+    expect(classes).toHaveAttribute("aria-invalid", "true");
+    expect(classes).toHaveAccessibleDescription(/"Biscuits" is not a Nice class number/);
+  });
+
+  it("disables Record corrected and offers an upload when a defective recordal's docket has no instrument", async () => {
+    const user = userEvent.setup();
+    const defective = { ...RECORDAL, status: "defective", version: 4 };
+    mocks.recordals.mockResolvedValue({ items: [{ ...defective, docket_title: "ASTER registration" }], total: 1, limit: 100, offset: 0 });
+    mocks.workspace.mockResolvedValue({ ...WORKSPACE, recordal: defective, documents: [] });
+    render(<RecordalsPage />, { wrapper: wrapper() });
+    await screen.findByRole("heading", { name: "Record transaction" });
+    await user.selectOptions(screen.getByLabelText("Transaction"), "corrected");
+    expect(screen.getByText(/A correction must cite the corrected instrument/)).toBeVisible();
+    const record = screen.getByRole("button", { name: "Record corrected" });
+    expect(record).toBeDisabled();
+    expect(record).toHaveAccessibleDescription("Upload the corrected instrument to record the correction.");
+    expect(await screen.findByRole("button", { name: "Upload instrument" })).toBeInTheDocument();
   });
 });

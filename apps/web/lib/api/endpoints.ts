@@ -10277,6 +10277,9 @@ export type IpRecordal = {
   updated_at: string;
 };
 
+/** A row of GET /api/ip/recordals: the recordal plus its docket's title. */
+export type IpRecordalListItem = IpRecordal & { docket_title: string };
+
 export type IpRecordalWorkspace = {
   recordal: IpRecordal;
   docket: IpDocket;
@@ -11934,7 +11937,7 @@ export async function fetchIpRecordals(input?: {
   docketId?: string | null;
   recordalType?: IpRecordalType | null;
   status?: IpRecordalStatus | null;
-}): Promise<{ items: IpRecordal[]; total: number; limit: number; offset: number }> {
+}): Promise<{ items: IpRecordalListItem[]; total: number; limit: number; offset: number }> {
   const query = new URLSearchParams({ limit: "100", offset: "0" });
   if (input?.docketId) query.set("docket_id", input.docketId);
   if (input?.recordalType) query.set("recordal_type", input.recordalType);
@@ -11946,6 +11949,25 @@ export async function fetchIpRecordalWorkspace(
   recordalId: string,
 ): Promise<IpRecordalWorkspace> {
   return apiRequest(`/api/ip/recordals/${encodeURIComponent(recordalId)}/workspace`);
+}
+
+/**
+ * Documents a recordal on this docket may cite, from the same predicate the
+ * create validator applies (linked to the docket or one of its events or
+ * deadlines, and readable by the viewer). `truncated` means more exist.
+ */
+export type IpRecordalInstrumentOptions = {
+  docket_id: string;
+  items: IpDocument[];
+  truncated: boolean;
+};
+
+export async function fetchIpRecordalInstruments(
+  docketId: string,
+  signal?: AbortSignal,
+): Promise<IpRecordalInstrumentOptions> {
+  const query = new URLSearchParams({ docket_id: docketId });
+  return apiRequest(`/api/ip/recordals/instruments?${query.toString()}`, { signal });
 }
 
 export async function createIpRecordal(input: {
