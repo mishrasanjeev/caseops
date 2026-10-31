@@ -477,3 +477,60 @@ def test_a1_deadline_writers_read_the_governing_rule_under_a_share_lock() -> Non
     alert_source = inspect.getsource(ip_deadline_workflow._alert_rule_transition)
     assert "matter=" not in alert_source
     assert "ip_docket=" not in alert_source
+
+
+def test_a1_disable_fences_recipients_and_fails_closed_on_late_owners(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Alert recipients are fenced before the rule locks; an owner that appears
+    after the plan is taken with NOWAIT, and a busy one refuses the disable."""
+
+    from sqlalchemy.exc import OperationalError
+
+    governed = _governed_company(client, "a1-late-owner")
+    _confirmed_and_candidate(client, governed)
+    planned: list[set[str]] = []
+    original_plan = ip_deadline_workflow._planned_transition_recipients
+
+    def recorded_plan(*args, **kwargs):
+        result = original_plan(*args, **kwargs)
+        planned.append(result)
+        return set()  # pretend every owner appeared after the plan
+
+    original_lock = ip_deadline_workflow.lock_company_memberships_for_assignment
+
+    def busy(*args, **kwargs):
+        if kwargs.get("nowait"):
+            raise OperationalError("SELECT ... NOWAIT", {}, Exception("lock not available"))
+        return original_lock(*args, **kwargs)
+
+    monkeypatch.setattr(ip_deadline_workflow, "_planned_transition_recipients", recorded_plan)
+    monkeypatch.setattr(ip_deadline_workflow, "lock_company_memberships_for_assignment", busy)
+    _impact, refused = _transition(
+        client, governed, disable=True, reason="Official source withdrew the rule text."
+    )
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["code"] == "ip_rule_transition_recipients_changed"
+    # The real plan named every non-actor owner the disable alerts.
+    assert planned and planned[0] == {
+        governed["reviewer"]["membership_id"],
+        governed["docketer"]["membership_id"],
+    }
+    with get_session_factory()() as session:
+        assert session.get(IpRuleVersion, governed["rule"]["id"]).status == "active"
+    assert _intents("ip_rule_version_disabled") == []
+
+    # Uncontended late owners are taken and alerted.
+    monkeypatch.setattr(
+        ip_deadline_workflow, "lock_company_memberships_for_assignment", original_lock
+    )
+    _impact, disabled = _transition(
+        client, governed, disable=True, reason="Official source withdrew the rule text."
+    )
+    assert disabled.status_code == 200, disabled.text
+    assert {i.recipient_membership_id for i in _intents("ip_rule_version_disabled")} == {
+        governed["legal"]["membership_id"],
+        governed["reviewer"]["membership_id"],
+        governed["docketer"]["membership_id"],
+    }

@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException, status
 from pydantic import ValidationError
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from caseops_api.core.settings import get_settings
@@ -289,6 +289,7 @@ def _lock_governance_memberships(
     required_capability: str,
     participant_ids: set[str | None] | None = None,
     reviewer_membership_id: str | None = None,
+    extra_lock_ids: set[str] | None = None,
 ) -> tuple[SessionContext, dict[str, CompanyMembership]]:
     """Fence the governance actor and any resulting evidence principals.
 
@@ -310,7 +311,14 @@ def _lock_governance_memberships(
         for membership_id in (participant_ids or set()) | {context.membership.id}
         if membership_id
     }
-    membership_ids = required_ids | ({reviewer_membership_id} if reviewer_membership_id else set())
+    membership_ids = (
+        required_ids
+        | ({reviewer_membership_id} if reviewer_membership_id else set())
+        # Locked in the same ordered batch but not required to be usable:
+        # a rule transition fences the members it will alert (see
+        # ``transition_rule_version``).
+        | (extra_lock_ids or set())
+    )
     memberships = lock_company_memberships_for_assignment(
         session,
         company_id=context.company.id,
@@ -1207,10 +1215,24 @@ def transition_rule_version(
     payload: IpRuleTransitionRequest,
 ) -> IpRuleVersionRecord:
     _assert_rule_governance_writer_allowed(session, context=context)
-    context, _memberships = _lock_governance_memberships(
+    # Deadlock avoidance, proven on PostgreSQL: each alert inserts a row that
+    # references the recipient membership (FOR KEY SHARE), and a deadline
+    # writer can hold that membership FOR UPDATE while it waits for this
+    # version's share lock. The members to alert are therefore fenced in the
+    # same ordered membership batch as the actor, before any rule lock; a
+    # recipient that appears only after the version lock is taken with NOWAIT
+    # and a conflict fails closed (``_alert_rule_transition``).
+    planned_recipients = _planned_transition_recipients(
+        session,
+        context=context,
+        rule_version_id=rule_version_id,
+        include_confirmed=payload.emergency_disable,
+    )
+    context, fenced = _lock_governance_memberships(
         session,
         context=context,
         required_capability="ip:rules_activate",
+        extra_lock_ids=planned_recipients,
     )
     row, rule_set = _lock_owned_rule_version(
         session,
@@ -1243,6 +1265,12 @@ def transition_rule_version(
             .with_for_update()
         ).all()
     )
+    # Captured before the suspension below rewrites the updater to the actor.
+    selector_ids = [
+        str(policy.updated_by_membership_id)
+        for policy in affected_policies
+        if policy.updated_by_membership_id
+    ]
     suspended_company_ids: list[str] = []
     suspended_policy_ids: list[str] = []
     for policy in affected_policies:
@@ -1269,8 +1297,9 @@ def transition_rule_version(
         rule_set=rule_set,
         reason=payload.reason,
         disabled=payload.emergency_disable,
-        policies=affected_policies,
+        selector_ids=selector_ids,
         dependents=dependents,
+        fenced_ids=set(fenced),
     )
 
     record_from_context(
@@ -1347,6 +1376,94 @@ def _dependent_deadlines(
     )
 
 
+def _transition_recipients(
+    session: Session,
+    *,
+    company_id: str,
+    actor_id: str,
+    selector_ids: list[str],
+    dependents: list[IpDeadline],
+) -> tuple[list[str], dict[str, int], dict[str, bool], bool]:
+    """Ordered, bounded alert recipients for a rule transition.
+
+    The actor and every member who selected the version for the company come
+    first (the company governance owners), then the current owners of every
+    dependent deadline, critical first. A candidate has no responsibility rows
+    yet, so its proposer owns it. Returns the ordered ids, the dependent count
+    and critical flag per member, and whether the ceiling truncated the list.
+    """
+
+    owners_by_deadline: dict[str, set[str]] = {item.id: set() for item in dependents}
+    if dependents:
+        for assignment in session.scalars(
+            select(IpResponsibilityAssignment).where(
+                IpResponsibilityAssignment.company_id == company_id,
+                IpResponsibilityAssignment.deadline_id.in_(sorted(owners_by_deadline)),
+                IpResponsibilityAssignment.effective_until.is_(None),
+            )
+        ):
+            if assignment.membership_id:
+                owners_by_deadline[assignment.deadline_id].add(assignment.membership_id)
+    counts: dict[str, int] = {}
+    critical: dict[str, bool] = {}
+    for deadline in dependents:
+        owners = owners_by_deadline[deadline.id] or (
+            {deadline.created_by_membership_id} if deadline.created_by_membership_id else set()
+        )
+        for membership_id in owners:
+            counts[membership_id] = counts.get(membership_id, 0) + 1
+            critical[membership_id] = critical.get(membership_id, False) or deadline.is_critical
+    ordered = list(
+        dict.fromkeys(
+            [
+                actor_id,
+                *selector_ids,
+                *sorted(counts, key=lambda member_id: (not critical[member_id], member_id)),
+            ]
+        )
+    )
+    truncated = len(ordered) > _RULE_TRANSITION_ALERT_RECIPIENT_LIMIT
+    return ordered[:_RULE_TRANSITION_ALERT_RECIPIENT_LIMIT], counts, critical, truncated
+
+
+def _planned_transition_recipients(
+    session: Session,
+    *,
+    context: SessionContext,
+    rule_version_id: str,
+    include_confirmed: bool,
+) -> set[str]:
+    """Unlocked plan of whom a transition will alert, used only to fence them.
+
+    Company scoped throughout, so another tenant's version id plans nothing.
+    The transition recomputes the recipients under its rule locks.
+    """
+
+    selector_ids = [
+        str(member_id)
+        for member_id in session.scalars(
+            select(CompanyIpRulePolicy.updated_by_membership_id).where(
+                CompanyIpRulePolicy.company_id == context.company.id,
+                CompanyIpRulePolicy.active_rule_version_id == rule_version_id,
+            )
+        )
+        if member_id
+    ]
+    ordered, _counts, _critical, _truncated = _transition_recipients(
+        session,
+        company_id=context.company.id,
+        actor_id=context.membership.id,
+        selector_ids=selector_ids,
+        dependents=_dependent_deadlines(
+            session,
+            company_id=context.company.id,
+            rule_version_id=rule_version_id,
+            include_confirmed=include_confirmed,
+        ),
+    )
+    return set(ordered) - {context.membership.id}
+
+
 def _alert_rule_transition(
     session: Session,
     *,
@@ -1355,8 +1472,9 @@ def _alert_rule_transition(
     rule_set: IpRuleSet,
     reason: str,
     disabled: bool,
-    policies: list[CompanyIpRulePolicy],
+    selector_ids: list[str],
     dependents: list[IpDeadline],
+    fenced_ids: set[str],
 ) -> tuple[list[str], bool]:
     """RULE-GOV-07: one bounded in-app alert per affected member of the company.
 
@@ -1373,42 +1491,35 @@ def _alert_rule_transition(
     whether the recipient ceiling truncated the list.
     """
 
-    owners_by_deadline: dict[str, set[str]] = {item.id: set() for item in dependents}
-    if dependents:
-        for assignment in session.scalars(
-            select(IpResponsibilityAssignment).where(
-                IpResponsibilityAssignment.company_id == context.company.id,
-                IpResponsibilityAssignment.deadline_id.in_(sorted(owners_by_deadline)),
-                IpResponsibilityAssignment.effective_until.is_(None),
+    ordered, counts, critical, truncated = _transition_recipients(
+        session,
+        company_id=context.company.id,
+        actor_id=context.membership.id,
+        selector_ids=selector_ids,
+        dependents=dependents,
+    )
+    late = sorted(set(ordered) - fenced_ids - {context.membership.id})
+    if late:
+        # Ownership changed after the fence was planned. Never wait for a
+        # membership while holding the rule locks: take it now or refuse.
+        try:
+            lock_company_memberships_for_assignment(
+                session,
+                company_id=context.company.id,
+                membership_ids=late,
+                nowait=True,
             )
-        ):
-            if assignment.membership_id:
-                owners_by_deadline[assignment.deadline_id].add(assignment.membership_id)
-    counts: dict[str, int] = {}
-    critical: dict[str, bool] = {}
-    for deadline in dependents:
-        owners = owners_by_deadline[deadline.id] or (
-            {deadline.created_by_membership_id} if deadline.created_by_membership_id else set()
-        )
-        for membership_id in owners:
-            counts[membership_id] = counts.get(membership_id, 0) + 1
-            critical[membership_id] = critical.get(membership_id, False) or deadline.is_critical
-    governance_ids = [context.membership.id]
-    governance_ids.extend(
-        str(policy.updated_by_membership_id)
-        for policy in policies
-        if policy.updated_by_membership_id
-    )
-    ordered = list(
-        dict.fromkeys(
-            [
-                *governance_ids,
-                *sorted(counts, key=lambda member_id: (not critical[member_id], member_id)),
-            ]
-        )
-    )
-    truncated = len(ordered) > _RULE_TRANSITION_ALERT_RECIPIENT_LIMIT
-    ordered = ordered[:_RULE_TRANSITION_ALERT_RECIPIENT_LIMIT]
+        except DBAPIError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "ip_rule_transition_recipients_changed",
+                    "detail": (
+                        "Owners of records that depend on this rule changed while "
+                        "it was being transitioned; preview the impact again."
+                    ),
+                },
+            ) from exc
     members = {
         member.id: member
         for member in session.scalars(

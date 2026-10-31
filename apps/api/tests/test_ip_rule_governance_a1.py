@@ -770,7 +770,16 @@ def _assert_rule_set_lock_first(statements: list[str], label: str) -> None:
     assert lock_positions, (label, statements)
     lock = lock_positions[0]
     for index, statement in enumerate(statements):
-        if "company_ip_rule_policies" in statement or (
+        # A transition plans its alert recipients with one unlocked read of
+        # the policy selectors so it can fence them before any rule lock
+        # (F4b deadlock fix); every policy lock, write or decision read
+        # still follows the rule-set lock.
+        planning_read = (
+            label == "transition"
+            and statement.startswith("SELECT company_ip_rule_policies.updated_by_membership_id")
+            and "FOR UPDATE" not in statement
+        )
+        if ("company_ip_rule_policies" in statement and not planning_read) or (
             "FROM ip_rule_versions" in statement and "FOR UPDATE" in statement
         ):
             assert index > lock, (label, statement)
