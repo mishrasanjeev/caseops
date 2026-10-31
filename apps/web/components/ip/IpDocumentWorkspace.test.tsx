@@ -449,4 +449,21 @@ describe("IpDocumentWorkspace", () => {
       expect.objectContaining({ taxonomyKey: "assignment", docketId: "docket-1" }),
     );
   });
+
+  it("preselects a deep-linked record and closes the docket list when there is none", async () => {
+    const two = [dockets[0], { ...dockets[0], id: "docket-pine", title: "PINE LABS" }];
+    const view = render(withClient(
+      <IpDocumentWorkspace dockets={two} preferredDocketId="docket-pine" canUpload canManage canReview canConfigure />,
+    ));
+    expect(await screen.findByLabelText("Linked docket")).toHaveValue("docket-pine");
+    view.unmount();
+
+    render(withClient(
+      <IpDocumentWorkspace dockets={[]} canUpload canManage canReview canConfigure />,
+    ));
+    const linked = await screen.findByLabelText("Linked docket");
+    expect(linked).toBeDisabled();
+    expect(linked).toHaveAttribute("aria-describedby", "ip-document-docket-empty");
+    expect(screen.getByText(/No IP record to link yet/)).toBeVisible();
+  });
 });

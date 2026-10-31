@@ -501,13 +501,20 @@ export function IpDocumentWorkspace({
               <Label htmlFor="ip-document-docket">Linked docket</Label>
               <select
                 id="ip-document-docket"
-                className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm disabled:opacity-60"
                 value={docketId}
+                disabled={dockets.length === 0}
+                aria-describedby={dockets.length === 0 ? "ip-document-docket-empty" : undefined}
                 onChange={(event) => setDocketId(event.target.value)}
               >
                 <option value="">Choose docket</option>
                 {dockets.map((docket) => <option key={docket.id} value={docket.id}>{docket.title}</option>)}
               </select>
+              {dockets.length === 0 ? (
+                <p id="ip-document-docket-empty" className="mt-1 text-xs text-[var(--color-mute)]">
+                  No IP record to link yet. Create the record first, then upload its documents.
+                </p>
+              ) : null}
             </div>
             <div className="min-w-0">
               <Label htmlFor="ip-document-confidentiality">Confidentiality</Label>
