@@ -1,0 +1,61 @@
+{
+  "name": "deepmerge",
+  "version": "4.3.1-caseops.1",
+  "privateCompatibilityBackport": true,
+  "officialFixedRelease": false,
+  "upstream": {
+    "url": "https://registry.npmjs.org/deepmerge/-/deepmerge-4.3.1.tgz",
+    "bytes": 8452,
+    "sha256": "4003a0a348276a95543fa969f561f6b5968629acbbb59d66018dd23e7b8f1d5c",
+    "integrity": "sha512-3sUqbMEc77XqpdNO7FRyRog+eW3ph+GYCbj+rK+uYyRMuwsVy0rMiVtPn+QJlKFvWP/1PYpapqYn0Me2knFn+A==",
+    "gitHead": "5b87756a5671635679001cbac72aa42f23472c81",
+    "license": "MIT"
+  },
+  "originalFiles": {
+    ".editorconfig": "73cc38e40b41f1eea6fd2d98d0ade5324f1ad564c3f111ebd0040b4286d2c25c",
+    ".eslintcache": "7690c5da38095c17a8c3ce73f3ebdc7bf7d7797c618a9c919c79a6b5e0024012",
+    "changelog.md": "360f6a3465a3e82f7bc1428cf1dc0cf5e6935a83b97345d172d27a4d8703321e",
+    "dist/cjs.js": "2e5160f84a1141bd927264afe4d15766f1e6cf07daef182b37ff53fea121de7d",
+    "dist/umd.js": "f33e6596482d1fb5c7c427f8ef92f2aa849eea9223acd974176b2fb27ddbf73a",
+    "index.d.ts": "146ba4b99c5feb82663e17a671bf9f53bb39c704cd76345d6c5a801c26372f44",
+    "index.js": "12440c84957c1990ea2d5e33dc0091722dc1dc1585c6d20e0c780e568ffa9d30",
+    "license.txt": "6cfc4687cb2f2d86f4a77e6b526290d3878e5e512f3fec2f4cb36a9cb36f798b",
+    "package.json": "f56978e7a6da1a3c6edee41abb54f98584a2fa2680458c48db820ae772fef0c9",
+    "readme.md": "202430923abee498512b2f9cbab686a1e7d64759314a503ca0d5aaa29007fc0f",
+    "rollup.config.js": "abba48beb11daa282e69134e4928ec32737ae6f6d192dd5f00a6e660e032bb25"
+  },
+  "packageFiles": {
+    ".editorconfig": "73cc38e40b41f1eea6fd2d98d0ade5324f1ad564c3f111ebd0040b4286d2c25c",
+    ".eslintcache": "7690c5da38095c17a8c3ce73f3ebdc7bf7d7797c618a9c919c79a6b5e0024012",
+    "CASEOPS-BACKPORT-NOTICE.txt": "126349c00074e7eb8133c2e68b7730ee4a56422be03ea3fadb8f9ac2d009fd24",
+    "changelog.md": "360f6a3465a3e82f7bc1428cf1dc0cf5e6935a83b97345d172d27a4d8703321e",
+    "dist/cjs.js": "278642f8a325a8f227b6573bfddc237ad6e3cff00a842d84a2f6809bb938cb45",
+    "dist/umd.js": "7958ede13ba7f3325cb4d8c056d62cbe5679316a3add00aad8d395795ff05c5f",
+    "index.d.ts": "146ba4b99c5feb82663e17a671bf9f53bb39c704cd76345d6c5a801c26372f44",
+    "index.js": "3d8f0c92d1c438bbf655e34b8e3af9263e6f0fff42b5d25842463cddb223b0a7",
+    "license.txt": "6cfc4687cb2f2d86f4a77e6b526290d3878e5e512f3fec2f4cb36a9cb36f798b",
+    "package.json": "4886f8932abaefbbd428f2083d835b09133eba36780a1e2630b6c3093f4fa776",
+    "readme.md": "202430923abee498512b2f9cbab686a1e7d64759314a503ca0d5aaa29007fc0f",
+    "rollup.config.js": "abba48beb11daa282e69134e4928ec32737ae6f6d192dd5f00a6e660e032bb25"
+  },
+  "patchedRuntimeForms": [
+    "index.js",
+    "dist/cjs.js",
+    "dist/umd.js"
+  ],
+  "runtimeReverseByteExact": true,
+  "tarball": {
+    "filename": "deepmerge-4.3.1-caseops.1.tgz",
+    "sha256": "e4edd663b9da1b76adc1899b4ad5285db739a9997d8aefb2dfb927b89266d77b",
+    "integrity": "sha512-LAdyb5OR89FgedlUo+TP2YuM1bGNCZEU2LSrv4zCwgs7g7j+uj4Xt8AL6o3CkddD3q7LU0nP1xJVKmQDku5NBQ==",
+    "bytes": 9260,
+    "uid": 0,
+    "gid": 0,
+    "mtime": 0,
+    "mode": "0644",
+    "format": "ustar+gzip"
+  },
+  "originalAdvisory": "https://github.com/advisories/GHSA-gcqx-w48m-w2h4",
+  "originalAuditAffectedNodes": 7,
+  "auditExceptionAdded": false
+}

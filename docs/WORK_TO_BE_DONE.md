@@ -1,4 +1,47 @@
+## 2026-10-31 — current mobile build-tool security follow-on
+
+J20/M22 remains **Partially implemented; release NO-GO**. Published PR #558 head `bcf881a8b6f8121f71ef52c9f45594fd2330748d` completed all70 CI checks (68success,2explicit skips). The earlier CI timeout regression passed that run. Those results do not certify an APK, Simulator app, connected device, store archive or a dependency advisory published afterwards.
+
+Fresh mobile/tooling review found affected glob/minimatch copies, including pre-fix matcher code inside the official glob14.0.2 default bundles. The local glob14.0.2-caseops.1 artifact rebuilds both default bundles from pinned minimatch11.0.1 inputs, retains raw dist/types and all bundled notices, and reproduced identical archives twice. Sixteen ordinary default-bundle/Expo-consumer controls passed. A clean isolated543-row lock regeneration and ordinary mobile npm ci passed; full physical inventory confirms511installed packages,31typed optional absences and exact local glob payloads. Current combined source/export and Linux/Windows checks remain required. Existing zod/deepmerge versions and reviewed exception policy are unchanged.
+
+The isolated npm11.12.1 dependency rebundle passed complete2149-member extraction, real dependency health, ordinary offline installation and a fresh154-row installed/embedded advisory query with no findings. Its portable helper accepts exact Node22.23.4/24.15.0 and passes24 Mac and24 actual Linux22 controls, including complete paired inventories, descriptor/path failures, marked ordinary and nested npm/npx requests, exact nested CLI identity and kernel executable-access refusal. The prepared runtime has2600 root-present objects. Actual Windows acceptance remains pending. Global npm was not repaired or replaced.
+
+Actual Android/iOS acceptance remains open: the first Android model/APK attempt failed before assembly at a stale source fence, its corrected private source has controls but no replacement APK yet, and canonical backend provisioning stopped before persistent creation at a certificate ownership mapping assertion. The controlled container proof and narrow mapped-UID fix do not create a running backend. Fresh exact-source build, full83-case/249-phase inventories per OS and store signing remain required. Android QA privacy observation is still under development; it must preserve the main process, remain absent from production, and explicitly distinguish its running signed observer from full-package force-stop evidence. DUNS enrollment is underway; no store submission or launch date is established.
+
+See `docs/mobile/HOST_TOOLING_SECURITY_2026-10-28.md` and QA18 in the enterprise ledger.
+
 # CaseOps  - Work To Be Done
+
+## October 31 Native Replacement and Fresh Dependency Gate
+
+J20/M22 remains **Partially implemented; release NO-GO**. PR #558's
+`17812fade00bd82d9d6724ae8267770b4e853ed0` passed the current Android
+configuration/prebuild component, and its actual API and web Docker images
+built with closed process groups and paired source/output evidence. Those
+results do not establish a current APK, iOS app, device suite or store archive.
+The older Android 23-case result below retains its original binary identity.
+
+A fresh check of the actual API image's 139 installed identities found four
+new high-severity OSV advisories affecting `pyasn1==0.6.4`: GHSA-2qm8-x737-gmw5,
+GHSA-9m75-vc3g-4x39, GHSA-fm9c-5rcf-2q5p and GHSA-mm57-4v3p-rchx. Their
+official fixed version is 0.6.5. Preserve that failed security verdict and the
+completed historical image build separately. The targeted lock update pins
+0.6.5, preserves the other 162 records, passes offline lock validation and 15
+ordinary decoder checks, and retains exact-version license provenance. The
+advisory parser failure boundary was not executed; no algorithmic repair is
+claimed. Fresh resolved and installed audits, current CI and replacement images
+are required before native acceptance. No dependency exception applies.
+
+Android is the next physical-device target. The combined model/APK controller
+is still unarmed while its source, lifecycle and finite resource checks close.
+The unchanged 137 ownership cases and 53 Java-verification controls pass as
+tooling components; they are not device results. Current Android/iOS core,
+picker/upload/reader, cache/privacy and extension acceptance remains open. The
+user deferred physical iPhone checks because its USB connection is unreliable;
+Simulator work remains required. Enrollment, distribution signing, production
+HTTPS associations, public business/support/privacy details and actual signed
+store artifacts remain open. The organization website stays private. No merge,
+production deployment or store upload has occurred.
 
 ## October 26 Export Completion Gate Found During Release
 
@@ -26,6 +69,108 @@ mobile558, preserving the failed0/2replacement and accepted23-case older core
 receipt. Full native/core/security/release and owner-MacBook iOS acceptance are
 not established by the verification-client release. Keep heavyweight workstation
 gates exclusive and preserve deferred external cleanup/consent boundaries.
+
+## October 26 Two-Platform Store Preparation
+
+J20/M22 remains **Partially implemented; release NO-GO**. PR #558 is being
+integrated with current main while the remaining native iOS Files cases and
+fresh Mac Android acceptance are completed. Earlier platform receipts retain
+their original binary/source identities; they do not certify the merged release.
+The iOS private Inbox leak and independent rapid-input cleanup race have source
+repairs and regression evidence. A new iOS candidate uses Expo's documented
+cache-copy contract for the reproduced unreadable raw picker URI; its complete
+native Files and replacement core runs remain required. The SDK copy occurs
+before JavaScript size validation. No ambiguous upload is replayed and all failed
+runs remain retained.
+
+The selected publisher is **Orchestrum Technologies LLP from the first release**.
+D-U-N-S, Apple organization membership, Play organization account, final app
+identities and distribution signing are not provisioned. Android's seven
+approved SDK packages are installed and verified. The Expo/node-forge high
+advisory remains unpatched and blocks release. The Python OpenTelemetry repair
+passes its current installed audit and scoped regressions; that does not waive
+Linux/Docker, full CI or deployed acceptance. Production HTTPS app links also
+need implementation and native proof: the current local custom-scheme callback
+does not satisfy the non-local API's registered HTTPS-only policy.
+Current evidence and enrollment steps: [store preparation](mobile/STORE_RELEASE_2026-10-26.md).
+
+## October 25 Android Core Result
+
+J20/M22: **23/23 dated Android core cases pass** on the real Android16/API36
+emulator and local Docker, exact app/API/web4959129a. All phases, byte-attested
+binary boundaries and postflight completed; prior failures stay retained.
+Two native picker uploads are read-confirmed indexed with exact204-byte hashes;
+no upload replayed. Files end-to-end certification is still open: latest059d496c
+has0/2 passed calls, source-hash visibility after reload and browser-menu setup
+failure. Reproduce those precise boundaries and complete the entire replacement,
+preserving data and earlier1/2/MFA-expiry/offscreen-confirmation evidence.
+Tooling263/4 files passes; that is not a native Files pass.
+Mobile304 component tests/22 files and Windows iOS Hermes export
+are not full native release acceptance. The new upstream node-forge high
+advisory leaves the unwaived dependency gate blocked. Mac native, GC/IP breadth,
+inbox/push, physical privacy/accessibility/performance, signing/store, full
+canonical Docker/CI/main and production gates remain open. No production change.
+Current evidence: `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-25.md`.
+
+## October 25 Native Runtime Follow-Up
+
+J20/M22 remains release NO-GO. The source-bound ee8dde90 Android run has 14
+passed calls, three failed calls and six unexecuted calls. Files/TXT read passes
+separately; picker return is observed but its single attempted upload was not
+acknowledged and was not replayed. The actual Expo encoder rejects the prior
+URI part. The replacement passes mobile304/22 files and strict TypeScript;
+rebuild and actual picker/upload/reload/open plus complete core replay remain
+required. Preserve the wrong-binary, interrupted and failed receipts. Mac native
+iOS, physical/privacy/accessibility/push and release/security gates remain open.
+See `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-25.md` for current evidence.
+
+## October 25 Native Handoff Replay
+
+The standalone Android APK runs without a Metro development server. Actual
+23-case attempts exposed browser-control orchestration defects and an unreliable
+post-consent app launch. Explicit user-gesture launch and bounded server lifetime
+now pass web79; fresh API/web/APK builds and complete native replacement are
+required before closure. Preserve all earlier incomplete/failed evidence. iOS
+fixture portability is implemented but actual Mac/Xcode execution remains open.
+
+## October 25 Native Integration
+
+J20/M22 is **Partially implemented**, not shipped. Integrated mobile components
+pass 295 tests across all 20 intended files plus strict TypeScript; web handoff
+passes 44 checks. Native 23-case inventory, candidate Docker/APK identity and
+actual Android execution remain pending at source freeze. Private reader/cache,
+GC/IP scope, inbox/push, iOS MacBook and release gates are not waived.
+See `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-25.md`; no production change occurred.
+
+## October 24 Native Build
+
+J20/M22 is **Partially implemented**. The first Expo/Compose-Expressive/SwiftUI
+client and native session integration are development code, not certified apps.
+See `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-24.md` for component results and the
+remaining GC/IP/files/push/native-navigation/security gates. Actual Android and
+iOS core E2E, full Docker/shared regression and signed distribution remain open.
+Owner-authorized Android SDK setup and an accelerated emulator boot are now
+verified. Actual app acceptance and separate MacBook/Xcode execution remain
+required; tooling readiness is not a waiver.
+The first Android debug APK also compiled, installed and opened its development
+launcher; CaseOps screens and native core workflows remain unverified.
+No production deployment occurred. October23's Missing status below is historical.
+
+## October 23 Native App Planning
+
+J20/M22 native Android/iOS client: **Missing**. Planning is retained in
+`mobile/MOBILE_APP_PLAN_2026-10-23.md`, with five sequential expert UI/UX rounds
+and forty planned acceptance groups. No app build, native test or store release
+is claimed. Current web/API E3B was independently read during planning; old
+dated release checkpoints below are not the current serving identity.
+
+Next: P0 stable two-platform/auth-session feasibility, followed by a design-only
+prototype and scoped implementation. Native rotating refresh/device revocation,
+safe browser handoff, Today ownership/GC read integration, inbox/push and private
+viewer/cache behavior require actual contracts and proof. Preserve existing
+server owners and keep private offline mutation queues, lifecycle commands,
+paid AI generation and formal legal approvals outside v1. iOS needs approved
+macOS/Xcode/signing/device access; workstation Docker is not iOS acceptance.
 
 ## October 25 Security Dependency Closure
 
@@ -133,7 +278,9 @@ C24 Security39506605978 failed nine Pillow12.3.0 vulnerabilities. Docker15
 was deliberately superseded before native/browser acceptance. Close the
 Pillow13/FastEmbed metadata constraint with the pinned compatibility rebuild,
 retain ordinary dependency checks, and audit actual installed inventories plus
-shipped uv0.13.4 with fresh data before another complete candidate gate.
+shipped uv0.13.5 with fresh data before another complete candidate gate.
+Its clean120 roots are distinct from the fixed0.103.16 certificate verifier;
+actual Linux image/TLS/inference acceptance remains required.
 
 C23 patches Python certifi but leaves the affected anchor in pinned Node's
 web HTTPS defaults. Close both trust stores before fresh combined gates;

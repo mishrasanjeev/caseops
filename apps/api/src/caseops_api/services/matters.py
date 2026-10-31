@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import io
+import json
 import logging
 import zipfile
 from datetime import UTC, date, datetime, time, timedelta
@@ -688,6 +690,12 @@ def _task_record_with_source(
     source_label: str | None = None,
 ) -> MatterTaskRecord:
     return MatterTaskRecord(
+        immutable_lifecycle_history=bool(
+            task.cancelled_by_matter_disposal
+            or task.neutralized_by_ip_lifecycle_event_id is not None
+            or task.neutralized_by_ip_lifecycle_version is not None
+            or task.neutralized_at is not None
+        ),
         id=task.id,
         matter_id=task.matter_id,
         created_by_membership_id=task.created_by_membership_id,
@@ -711,13 +719,49 @@ def _task_record_with_source(
         source_ref_id=source_ref_id,
         source_label=source_label,
         completed_at=task.completed_at,
-        created_at=task.created_at,
-        updated_at=task.updated_at,
+        cancelled_by_matter_disposal=task.cancelled_by_matter_disposal,
+        created_at=_utc_datetime(task.created_at),
+        updated_at=_utc_datetime(task.updated_at),
     )
+
+
+def _hearing_content_version(hearing: MatterHearing) -> str:
+    """Fingerprint the current persisted state; exact state ABA is not a history change."""
+    def canonical(value):
+        if isinstance(value, datetime):
+            return _utc_datetime(value).isoformat(timespec="microseconds")
+        if isinstance(value, (date, time)):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {key: canonical(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [canonical(item) for item in value]
+        return value
+
+    # Bind company/id and every mapped scalar, including fields not exposed by the
+    # compact read DTO. HMAC prevents the token becoming an oracle for hidden data.
+    state = {
+        column.key: canonical(getattr(hearing, column.key))
+        for column in MatterHearing.__table__.columns
+    }
+    payload = json.dumps(
+        {"purpose": "matter-hearing-content-state-v1", "state": state},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False,
+    ).encode("utf-8")
+    return "mhv1:" + hmac.new(
+        get_settings().auth_secret.encode("utf-8"), payload, hashlib.sha256,
+    ).hexdigest()
 
 
 def _hearing_record(hearing: MatterHearing) -> MatterHearingRecord:
     return MatterHearingRecord(
+        immutable_lifecycle_history=bool(
+            hearing.cancelled_by_matter_disposal
+            or hearing.neutralized_by_ip_lifecycle_event_id is not None
+            or hearing.neutralized_by_ip_lifecycle_version is not None
+            or hearing.neutralized_at is not None
+        ),
+        record_version=_hearing_content_version(hearing),
         id=hearing.id,
         matter_id=hearing.matter_id,
         hearing_on=hearing.hearing_on,
@@ -731,6 +775,7 @@ def _hearing_record(hearing: MatterHearing) -> MatterHearingRecord:
         purpose=hearing.purpose,
         status=hearing.status,
         outcome_note=hearing.outcome_note,
+        cancelled_by_matter_disposal=hearing.cancelled_by_matter_disposal,
         created_at=hearing.created_at,
     )
 
@@ -3678,6 +3723,17 @@ def create_matter_note(
         lock_for_update=True,
     )
     _assert_matter_not_disposed(matter, operation="add an internal note")
+    expected_version = payload.expected_lifecycle_version
+    if context.native_session_id is not None and expected_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Native note writes require expected_lifecycle_version. Reload the matter.",
+        )
+    if expected_version is not None and expected_version != matter.lifecycle_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The matter lifecycle changed. Reload the matter before adding a note.",
+        )
     note = MatterNote(
         matter_id=matter.id,
         author_membership_id=context.membership.id,
@@ -3701,6 +3757,39 @@ def create_matter_note(
     )
     assert refreshed_note is not None
     return _note_record(refreshed_note)
+
+
+def _assert_observed_work_lifecycle(
+    *, context: SessionContext, matter: Matter, expected_version: int | None,
+) -> None:
+    """Call only after the existing assignment fence has locked the parent."""
+    if context.native_session_id is not None and expected_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "native_matter_lifecycle_required",
+                "message": "Reload the matter and include expected_lifecycle_version.",
+            },
+        )
+    if expected_version is not None and expected_version != matter.lifecycle_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_lifecycle_changed",
+                "message": "The matter lifecycle changed. Reload before saving work.",
+            },
+        )
+
+
+def _assert_native_work_patch(context: SessionContext, updates: dict) -> None:
+    if context.native_session_id is not None and not updates:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "native_work_changes_required",
+                "message": "Include at least one changed work field.",
+            },
+        )
 
 
 def create_matter_task(
@@ -3731,6 +3820,9 @@ def create_matter_task(
         required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_task"],
     )
     _assert_matter_not_disposed(matter, operation="create a task")
+    _assert_observed_work_lifecycle(
+        context=context, matter=matter, expected_version=payload.expected_lifecycle_version,
+    )
     owner_membership_id: str | None = None
     owner_name: str | None = None
     if payload.owner_membership_id:
@@ -3877,6 +3969,10 @@ def update_matter_task(
     payload: MatterTaskUpdateRequest,
 ) -> MatterTaskRecord:
     requested_updates = payload.model_dump(exclude_unset=True)
+    # Control fields are never data fields and must never reach setattr below.
+    expected_lifecycle_version = requested_updates.pop("expected_lifecycle_version", None)
+    expected_updated_at = requested_updates.pop("expected_updated_at", None)
+    _assert_native_work_patch(context, requested_updates)
     candidate = _discover_matter_task_mutation_snapshot(
         session,
         company_id=context.company.id,
@@ -3907,6 +4003,9 @@ def update_matter_task(
         required_capability=MATTER_MUTATION_CAPABILITIES["update_matter_task"],
     )
     _assert_matter_not_disposed(matter, operation="update a task")
+    _assert_observed_work_lifecycle(
+        context=context, matter=matter, expected_version=expected_lifecycle_version,
+    )
     task = session.scalar(
         select(MatterTask)
         .options(
@@ -3919,6 +4018,24 @@ def update_matter_task(
     )
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter task not found.")
+    if context.native_session_id is not None and expected_updated_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "native_task_version_required",
+                "message": "Reload the task and include expected_updated_at.",
+            },
+        )
+    if expected_updated_at is not None and (
+        _utc_datetime(task.updated_at) != _utc_datetime(expected_updated_at)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_task_changed",
+                "message": "The task changed. Reload before saving.",
+            },
+        )
     assert task.matter_id is not None
     current_task_snapshot = _matter_task_mutation_snapshot_from_values(
         matter_id=task.matter_id,
@@ -4077,6 +4194,9 @@ def update_matter_hearing(
     post-hearing loop survives a distracted user. Other status changes
     are recorded as activity but do not create tasks."""
     requested_hearing_updates = payload.model_dump(exclude_unset=True)
+    expected_lifecycle_version = requested_hearing_updates.pop("expected_lifecycle_version", None)
+    expected_record_version = requested_hearing_updates.pop("expected_record_version", None)
+    _assert_native_work_patch(context, requested_hearing_updates)
     matter_roles = _discover_matter_role_snapshot(
         session,
         company_id=context.company.id,
@@ -4103,6 +4223,9 @@ def update_matter_hearing(
         required_capability=MATTER_MUTATION_CAPABILITIES["update_matter_hearing"],
     )
     _assert_matter_not_disposed(matter, operation="update a hearing")
+    _assert_observed_work_lifecycle(
+        context=context, matter=matter, expected_version=expected_lifecycle_version,
+    )
     hearing = session.scalar(
         select(MatterHearing)
         .where(MatterHearing.id == hearing_id, MatterHearing.matter_id == matter.id)
@@ -4111,6 +4234,24 @@ def update_matter_hearing(
     )
     if hearing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hearing not found.")
+    if context.native_session_id is not None and expected_record_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "native_hearing_version_required",
+                "message": "Reload the hearing and include expected_record_version.",
+            },
+        )
+    if expected_record_version is not None and not hmac.compare_digest(
+        expected_record_version, _hearing_content_version(hearing),
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_hearing_changed",
+                "message": "The hearing changed. Reload before saving.",
+            },
+        )
 
     assert hearing.matter_id is not None
     current_hearing_roles = _hearing_role_snapshot_from_values(
@@ -5035,6 +5176,9 @@ def create_matter_hearing(
         required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_hearing"],
     )
     _assert_matter_not_disposed(matter, operation="create a hearing")
+    _assert_observed_work_lifecycle(
+        context=context, matter=matter, expected_version=payload.expected_lifecycle_version,
+    )
     recipients = [
         _active_locked_assignment_membership(
             locked_memberships,
@@ -5519,6 +5663,7 @@ def create_matter_attachment(
     filename: str,
     content_type: str | None,
     stream: BinaryIO,
+    expected_lifecycle_version: int | None = None,
     document_type: str | None = None,
     lifecycle_stage: str | None = None,
     document_date: date | None = None,
@@ -5559,10 +5704,24 @@ def create_matter_attachment(
     require_read_only_upload_session(
         session, detail="Matter upload requires a read-only session before its I/O boundary.",
     )
+    if expected_lifecycle_version is not None and (
+        type(expected_lifecycle_version) is not int or expected_lifecycle_version < 0
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="expected_lifecycle_version must be a nonnegative integer.",
+        )
+    # Refreshing the actor below returns a context without its native credential identity.
+    if context.native_session_id is not None and expected_lifecycle_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Native uploads require expected_lifecycle_version. Reload the matter.",
+        )
     lock_compliance_participants(
         session, company_id=context.company.id, matter_id=matter_id,
         actor_membership_id=context.membership.id, context=context,
         required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_attachment"],
+        expected_lifecycle_version=expected_lifecycle_version,
         include_order_notifications=linked_court_order_id is not None,
     )
     _lock_matter_mutation_actor(
@@ -5585,7 +5744,11 @@ def create_matter_attachment(
     audit_matter_id = matter.id
     upload_company_id = context.company.id
     upload_actor_id = context.membership.id
-    upload_lifecycle_version = matter.lifecycle_version
+    upload_lifecycle_version = (
+        matter.lifecycle_version
+        if expected_lifecycle_version is None
+        else expected_lifecycle_version
+    )
     linked_court_order_id = _validated_attachment_court_order_id(
         session,
         matter_id=matter.id,

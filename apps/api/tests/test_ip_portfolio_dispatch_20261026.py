@@ -132,6 +132,7 @@ def test_callback_returns_durable_outcome_without_inventing_completion(
 def test_callback_authentication_fails_before_worker(
     worker_client, monkeypatch, mutation, callback_clock
 ):
+    global_time = time.time
     run = Mock(side_effect=AssertionError("Unauthorized task reached worker"))
     monkeypatch.setattr(route, "run_portfolio_export_job", run)
     payload = body()
@@ -157,6 +158,52 @@ def test_callback_authentication_fails_before_worker(
     headers["Cookie"] = "caseops_csrf=browser-cookie"
     assert worker_client.post(PATH, content=payload, headers=headers).status_code == 401
     run.assert_not_called()
+    assert time.time is global_time
+
+
+@pytest.mark.parametrize(
+    ("offset", "expected"),
+    [(-301, 401), (-300, 200), (-299, 200), (0, 200),
+     (299, 200), (300, 200), (301, 401)],
+)
+def test_callback_timestamp_window_includes_exact_300_second_boundary(
+    worker_client, monkeypatch, offset, expected
+):
+    now = 1_793_059_200
+    global_time = time.time
+    monkeypatch.setattr(route, "time", SimpleNamespace(time=lambda: now))
+    run = Mock(return_value="completed")
+    monkeypatch.setattr(route, "run_portfolio_export_job", run)
+    payload = body()
+    response = worker_client.post(
+        PATH, content=payload, headers=signed(payload, timestamp=str(now + offset))
+    )
+    assert response.status_code == expected
+    if expected == 200:
+        assert response.json() == {"accepted": True, "status": "completed"}
+        run.assert_called_once_with(JOB)
+    else:
+        assert response.json() == {"detail": "Valid export worker authentication is required."}
+        run.assert_not_called()
+    assert time.time is global_time
+
+
+def test_one_second_advance_makes_a_301_second_future_header_valid(
+    worker_client, monkeypatch
+):
+    """Retain the old fixture's boundary race as an explicit valid-window control."""
+    signed_at = 1_793_059_200
+    global_time = time.time
+    monkeypatch.setattr(route, "time", SimpleNamespace(time=lambda: signed_at + 1))
+    run = Mock(return_value="completed")
+    monkeypatch.setattr(route, "run_portfolio_export_job", run)
+    payload = body()
+    response = worker_client.post(
+        PATH, content=payload, headers=signed(payload, timestamp=str(signed_at + 301))
+    )
+    assert response.status_code == 200
+    run.assert_called_once_with(JOB)
+    assert time.time is global_time
 
 
 @pytest.mark.parametrize(

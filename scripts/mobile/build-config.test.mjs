@@ -1,0 +1,1089 @@
+import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import { createHash, X509Certificate } from 'node:crypto';
+import { appendFileSync, closeSync, existsSync, fstatSync, lstatSync, mkdtempSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
+import { rootCertificates } from 'node:tls';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+import { sourceSnapshot, SOURCE_SNAPSHOT_LIMITS } from './source-snapshot.mjs';
+import { readBuildInput } from './build-acceptance.mjs';
+
+const app = fileURLToPath(new URL('../../apps/mobile/', import.meta.url));
+const repo = path.resolve(app, '../..');
+const require = createRequire(path.join(app, 'package.json'));
+const plugin = require(path.join(app, 'plugins/with-local-acceptance.cjs'));
+const linkPolicy = require(path.join(repo, 'apps/web/lib/native-link-policy.cjs'));
+const { readNativeLinkConfig } = require(path.join(repo, 'apps/web/lib/native-link-config.cjs'));
+const { compileModsAsync, XML } = require('@expo/config-plugins');
+const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
+const certificate = `${rootCertificates.find((pem) => {
+  const cert = new X509Certificate(pem);
+  return cert.ca && cert.checkIssued(cert) && cert.verify(cert.publicKey)
+    && Date.parse(cert.validFrom) < Date.now() && Date.now() < Date.parse(cert.validTo);
+}).trim()}\n`;
+const digest = (value) => createHash('sha256').update(value).digest('hex');
+
+for (const change of ['none', 'growth', 'replacement', 'parent-replacement', 'read-error']) {
+  test(`bounded build inputs retain descriptor bytes and close it: ${change}`, (t) => {
+    const folder = mkdtempSync(path.join(os.tmpdir(), 'caseops-build-input-'));
+    const retained = `${folder}-retained`;
+    t.after(() => { rmSync(folder, { recursive: true, force: true }); rmSync(retained, { recursive: true, force: true }); });
+    const file = path.join(folder, 'public.json');
+    writeFileSync(file, '{"public":true}');
+    let descriptor, changed = false;
+    const io = { openSync: (...args) => { descriptor = openSync(...args); return descriptor; }, closeSync, fstatSync, lstatSync,
+      readSync: (...args) => {
+        if (!changed) {
+          changed = true;
+          if (change === 'growth') appendFileSync(file, ' excess');
+          if (change === 'replacement') {
+            renameSync(file, path.join(folder, 'retained-original.json'));
+            writeFileSync(file, '{"public":false}');
+          }
+          if (change === 'parent-replacement') {
+            renameSync(folder, retained);
+            symlinkSync(retained, folder, process.platform === 'win32' ? 'junction' : 'dir');
+          }
+          if (change === 'read-error') throw new Error('Synthetic bounded read failure');
+        }
+        return readSync(...args);
+      } };
+    if (change === 'none') assert.equal(readBuildInput(file, 64, io).toString(), '{"public":true}');
+    else assert.throws(() => readBuildInput(file, 64, io), /BUILD_INPUT_(?:CHANGED|NAMESPACE_CHANGED)|Synthetic bounded read failure/);
+    assert.ok(Number.isInteger(descriptor));
+    assert.throws(() => fstatSync(descriptor), { code: 'EBADF' });
+  });
+}
+
+test('build input Windows dev-zero portability never admits nonzero mismatches or independent frame drift', (t) => {
+  const folder = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-build-portability-')));
+  t.after(() => rmSync(folder, { recursive: true, force: true }));
+  const file = path.join(folder, 'public.json'); writeFileSync(file, '{"public":true}');
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  for (const change of ['zero', 'same', 'nonzero', 'inode', 'owner', 'directory', 'symlink', 'fd-drift', 'named-drift', 'darwin']) {
+    let fd, reads = 0;
+    Object.defineProperty(process, 'platform', { ...platform, value: change === 'darwin' ? 'darwin' : 'win32' });
+    const io = { openSync(...args) { fd = openSync(...args); return fd; }, closeSync,
+      fstatSync(...args) { const value = fstatSync(...args); return change === 'fd-drift' && reads > 0
+        ? new Proxy(value, { get: (target, key) => key === 'dev' ? value.dev + 1n : Reflect.get(target, key) }) : value; },
+      lstatSync(name, options) {
+        const value = lstatSync(name, options); if (name !== file) return value;
+        const device = change === 'same' || change === 'named-drift' && reads > 0 ? value.dev : change === 'nonzero' ? value.dev + 1n : 0n;
+        return new Proxy(value, { get(target, key) {
+          if (key === 'dev') return device;
+          if (key === 'ino' && change === 'inode') return value.ino + 1n;
+          if (key === 'uid' && change === 'owner') return value.uid + 1n;
+          if (key === 'isFile' && change === 'directory') return () => false;
+          if (key === 'isSymbolicLink' && change === 'symlink') return () => true;
+          return Reflect.get(target, key);
+        } });
+      }, readSync(...args) { reads++; return readSync(...args); } };
+    try {
+      if (['zero', 'same'].includes(change)) assert.equal(readBuildInput(file, 64, io).toString(), '{"public":true}');
+      else assert.throws(() => readBuildInput(file, 64, io), /BUILD_INPUT/, change);
+      if (!['zero', 'same', 'fd-drift', 'named-drift'].includes(change)) assert.equal(reads, 0, `${change}: refuse before payload`);
+      assert.throws(() => fstatSync(fd), { code: 'EBADF' });
+    } finally { Object.defineProperty(process, 'platform', platform); }
+  }
+});
+
+test('mobile dependency closure installs and audits actual Linux and Windows graphs', () => {
+  const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
+  const job = workflow.jobs['dependency-closure'];
+  assert.deepEqual(job.strategy.matrix.os, ['ubuntu-24.04', 'windows-latest']);
+  assert.equal(job.strategy['fail-fast'], false);
+  assert.equal(job['runs-on'], '${{ matrix.os }}');
+  assert.equal(job.defaults.run['working-directory'], 'apps/mobile');
+  assert.equal(job.defaults.run.shell, 'pwsh');
+  assert.deepEqual(job.env, { CASEOPS_MOBILE_DEPENDENCY_SCOPE: 'mobile-only', NPM_CONFIG_UPDATE_NOTIFIER: 'false' });
+  assert.equal(job.steps.find(step => step.uses === 'actions/setup-node@v4').with['node-version'], '24.15.0');
+  const commands = job.steps.filter(step => step.run).map(step => step.run);
+  assert.deepEqual(commands, [
+    'node ../../scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund',
+    'node ../../scripts/mobile/npm-tooling.mjs ls --all --json --long > installed-dependencies.json',
+    'node ../../scripts/mobile/npm-tooling.mjs --cli-health > npm-cli-dependencies.json',
+    'node ../../scripts/mobile/npm-tooling.mjs --audit-cli > npm-cli-audit.json',
+    'node --test ../../scripts/mobile/forge-security.test.mjs ../../scripts/mobile/deepmerge-installed.test.mjs ../../scripts/mobile/npm-tooling.test.mjs',
+    'node ../../scripts/mobile/npm-tooling.mjs audit --audit-level=high --json > dependency-audit.json',
+  ]);
+  for (const step of job.steps) assert.notEqual(step['continue-on-error'], true);
+  const artifact = job.steps.find(step => step.uses === 'actions/upload-artifact@v4');
+  assert.equal(artifact.if, 'always()');
+  assert.equal(artifact.with['if-no-files-found'], 'error');
+  assert.deepEqual(artifact.with.path.trim().split(/\s+/), [
+    'apps/mobile/installed-dependencies.json', 'apps/mobile/dependency-audit.json',
+    'apps/mobile/npm-cli-dependencies.json', 'apps/mobile/npm-cli-audit.json',
+  ]);
+});
+
+test('source exports use existing loopback QA profiles after the audit without weakening production config', () => {
+  const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
+  const steps = workflow.jobs.source.steps;
+  const audit = steps.findIndex(step => step.name === 'Enforce the unwaived high-severity dependency gate');
+  const prepare = steps.findIndex(step => step.name === 'Prepare loopback-only source-export inputs');
+  const scopedTrust = Object.fromEntries(['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE',
+    'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY']
+    .map(key => [key, '${{ steps.node_trust.outputs.' + key + ' }}']));
+  assert.equal(prepare > audit, true);
+  assert.deepEqual(steps[prepare].env, { ...scopedTrust, CASEOPS_MOBILE_SOURCE_EXPORT: '1' });
+  assert.equal(steps[prepare].run, 'node scripts/mobile/prepare-source-exports.mjs >> "$GITHUB_ENV"');
+  const android = steps.findIndex(step => step.run === 'node ../../scripts/mobile/npm-tooling.mjs run export:android');
+  const ios = steps.findIndex(step => step.run === 'node ../../scripts/mobile/npm-tooling.mjs run export:ios');
+  assert.equal(android > prepare && ios > android, true);
+  assert.deepEqual(steps[android].env, {
+    ...scopedTrust,
+    CASEOPS_MOBILE_BUILD_PROFILE: 'android-local-acceptance',
+    EXPO_PUBLIC_API_ORIGIN: 'https://10.0.2.2:8453',
+    EXPO_PUBLIC_WEB_ORIGIN: 'https://10.0.2.2:3453',
+    CASEOPS_MOBILE_ANDROID_CA_FILE: '${{ env.CASEOPS_MOBILE_SOURCE_EXPORT_CA_FILE }}',
+    CASEOPS_MOBILE_ANDROID_CA_SHA256: '${{ env.CASEOPS_MOBILE_SOURCE_EXPORT_CA_SHA256 }}',
+  });
+  assert.deepEqual(steps[ios].env, {
+    ...scopedTrust,
+    CASEOPS_MOBILE_BUILD_PROFILE: 'ios-simulator-acceptance',
+    EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443',
+    EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443',
+  });
+  for (const step of [steps[prepare], steps[android], steps[ios]]) assert.notEqual(step['continue-on-error'], true);
+  assert.equal(workflow.jobs.source.env.CASEOPS_NATIVE_LINK_CONFIG_FILE, undefined);
+  assert.equal(workflow.jobs.source.env.CASEOPS_MOBILE_BUILD_PROFILE, undefined);
+});
+
+test('mobile CI selects every tooling module and audits before either platform export', () => {
+  const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
+  const steps = workflow.jobs.source.steps;
+  const expected = ['scripts/mobile/build-config.test.mjs', 'scripts/mobile/tooling.test.mjs',
+    'scripts/mobile/local-owner-controls.test.mjs', 'apps/mobile/e2e/files-20261025.test.mjs',
+    'apps/mobile/e2e/ios-files.test.mjs', 'apps/mobile/e2e/android-files.test.mjs',
+    'scripts/mobile/ios-browser-context.test.mjs', 'scripts/mobile/ios-native-locators.test.mjs',
+    'scripts/mobile/ios-simulator-signing.test.mjs',
+    'scripts/mobile/prepare-gateway-routes.test.mjs',
+    'scripts/mobile/prepare-ios-local-run.test.mjs', 'scripts/mobile/ios-files-privacy.test.mjs',
+    'scripts/mobile/camera-files-privacy.test.mjs',
+    'scripts/mobile/run-ios-files.test.mjs',
+    'scripts/mobile/filesystem-security.test.mjs', 'apps/mobile/e2e/evidence.test.mjs',
+    'scripts/mobile/build-android-local-acceptance.test.mjs',
+    'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs',
+    'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
+    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
+    'scripts/mobile/prepare-source-exports.test.mjs', 'apps/mobile/e2e/v1-workflows.test.mjs',
+    'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs'];
+  const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
+    .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
+  assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
+  const harness = steps.find(step => step.name === 'Verify the native evidence harness');
+  assert.equal(harness.run, `node --test ${expected.join(' ')}`);
+  const fixturePreparation = steps.find(step => step.name === 'Verify isolated fixture preparation and gateway');
+  assert.equal(fixturePreparation?.run, 'python3 scripts/mobile/local-fixture.test.py');
+  const filesFixtureCommands = [
+    ['Verify QA-only Android observer merged manifest projection', 'python3 scripts/mobile/android-observer-manifest.test.py'],
+    ['Verify guarded local store packaging child transport', 'python3 scripts/mobile/store-packaging-host.test.py'],
+    ['Verify deterministic private deepmerge package', 'python3 scripts/mobile/rebuild-deepmerge-compat.test.py'],
+    ['Verify disabled-by-default synthetic V1 controls', 'python3 scripts/mobile/local-v1-controls.test.py'],
+    ['Verify separate queue and account-request controls', 'python3 scripts/mobile/local-queue-privacy-controls.test.py'],
+    ['Verify independent queue and account-request inventory', 'python3 scripts/mobile/queue-privacy.test.py'],
+    ['Verify isolated native client extension controls', 'python3 scripts/mobile/local-client-extension-controls.test.py'],
+    ['Verify native client extension fixture producer', 'python3 scripts/mobile/client-extension-fixture.test.py'],
+    ['Verify independent native client extension inventory', 'python3 scripts/mobile/client-extensions.test.py'],
+    ['Verify the scoped canonical in-app Inbox fixture worker', 'python3 scripts/mobile/local-v1-inbox.test.py'],
+    ['Verify the independent complete V1 source inventory', 'python3 scripts/mobile/v1-workflows.test.py'],
+    ['Verify synthetic iOS Files picker inputs', 'python3 scripts/mobile/prepare-ios-files-fixture.test.py'],
+    ['Verify acknowledged iOS Files source admission', 'python3 scripts/mobile/admit-ios-file-source.test.py'],
+    ['Verify synthetic Android Files picker inputs', 'python3 scripts/mobile/prepare-android-files-fixture.test.py'],
+    ['Verify acknowledged Android Files source admission', 'python3 scripts/mobile/admit-android-file-source.test.py'],
+  ];
+  for (const [name, command] of filesFixtureCommands) {
+    const matches = steps.filter(step => step.name === name);
+    assert.equal(matches.length, 1, 'EXACT_FILES_FIXTURE_CI_STEP_REQUIRED');
+    assert.equal(matches[0].run, command, 'FILES_FIXTURE_REGRESSION_CI_COMMAND_REQUIRED');
+    assert.notEqual(matches[0]['continue-on-error'], true);
+    assert.equal(matches[0].if, undefined, 'FILES_FIXTURE_CI_MUST_RUN_UNCONDITIONALLY');
+    assert.ok(!matches[0]['working-directory'] || matches[0]['working-directory'] === '.', 'FILES_FIXTURE_CI_REPOSITORY_ROOT_REQUIRED');
+    assert.ok(existsSync(path.join(repo, command.split(' ')[1])), 'FILES_FIXTURE_TEST_SOURCE_REQUIRED');
+  }
+  const audit = steps.findIndex(step => step.name === 'Enforce the unwaived high-severity dependency gate');
+  assert.ok(audit >= 0);
+  assert.equal(steps[audit].run, 'node ../../scripts/mobile/npm-tooling.mjs audit --audit-level=high');
+  assert.notEqual(steps[audit]['continue-on-error'], true);
+  for (const [, command] of filesFixtureCommands) {
+    assert.ok(steps.findIndex(step => step.run === command) < audit, 'FILES_FIXTURE_REGRESSIONS_MUST_PRECEDE_PLATFORM_EXPORT_GATE');
+  }
+  for (const command of ['node ../../scripts/mobile/npm-tooling.mjs run export:android', 'node ../../scripts/mobile/npm-tooling.mjs run export:ios']) {
+    const exporting = steps.findIndex(step => step.run === command);
+    assert.ok(exporting > audit, 'DEPENDENCY_AUDIT_MUST_PRECEDE_PLATFORM_EXPORT');
+  }
+});
+
+test('hash-bound local gateway inputs retain canonical LF checkout and stored Git bytes', () => {
+  for (const relative of ['scripts/mobile/local-gateway.py', 'scripts/mobile/local-v1-controls.py', 'scripts/mobile/local-v1-inbox.py', 'scripts/mobile/local-v1-inbox.test.py',
+    'scripts/mobile/local-queue-privacy-controls.py', 'scripts/mobile/local-queue-privacy-controls.test.py', 'scripts/mobile/queue-privacy.test.py']) {
+    const attributes = execFileSync('git', ['check-attr', 'text', 'eol', '--', relative], { cwd: repo, encoding: 'utf8' });
+    assert.equal(attributes, `${relative}: text: set\n${relative}: eol: lf\n`);
+    const stored = execFileSync('git', ['show', `:${relative}`], { cwd: repo });
+    const current = readFileSync(path.join(repo, relative));
+    assert.equal(stored.includes(13), false, 'STORED_GATEWAY_CR_FORBIDDEN');
+    assert.equal(current.includes(13), false, 'CHECKOUT_GATEWAY_CR_FORBIDDEN');
+    assert.equal(stored.length > 0 && current.length > 0, true);
+    assert.equal(digest(stored), digest(current), 'EXACT_STORED_GATEWAY_BYTES_REQUIRED');
+  }
+});
+
+test('mobile source CI installs the renderer browser and both locked dependency graphs', () => {
+  const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
+  const steps = workflow.jobs.source.steps;
+  const isRoot = (step) => !step['working-directory'] || step['working-directory'] === '.';
+  const rootInstall = steps.findIndex(step => isRoot(step) && step.run === 'node scripts/mobile/npm-tooling.mjs ci --include=dev');
+  const mobileInstall = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs ci');
+  const browserInstall = steps.findIndex(step => isRoot(step) && step.run === 'node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install --with-deps chromium');
+  const typecheck = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs run typecheck');
+  const tests = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs test');
+  assert.ok(rootInstall >= 0 && mobileInstall >= 0 && browserInstall >= 0);
+  assert.ok(rootInstall < typecheck && mobileInstall < typecheck);
+  assert.ok(rootInstall < browserInstall && browserInstall < tests);
+  const nodeSetup = steps.find(step => step.uses === 'actions/setup-node@v4');
+  assert.equal(nodeSetup.with['node-version'], '24.15.0', 'NATIVE_WRAPPER_RUNTIME_MUST_MATCH_SOURCE_CI');
+  assert.deepEqual(nodeSetup.with['cache-dependency-path'].trim().split(/\s+/).sort(),
+    ['apps/mobile/package-lock.json', 'package-lock.json']);
+  for (const event of ['push', 'pull_request']) {
+    for (const dependency of ['package.json', 'package-lock.json', 'apps/web/**', 'tests/e2e/support/**', 'playwright.mobile-handoff.config.ts', 'tsconfig.e2e.json'])
+      assert.ok(workflow.on[event].paths.includes(dependency), `NATIVE_SHARED_INPUT_TRIGGER_REQUIRED:${event}:${dependency}`);
+  }
+  assert.deepEqual(workflow.jobs['browser-handoff'].env, {
+    NPM_CONFIG_UPDATE_NOTIFIER: 'false',
+    NEXT_PUBLIC_API_BASE_URL: 'http://127.0.0.1:8000',
+    NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE: '1',
+    NEXT_PUBLIC_APP_URL: 'https://127.0.0.1:3443',
+  }, 'BUILT_BROWSER_MOCKS_REQUIRE_EXPLICIT_ISOLATED_POLICY_WITHOUT_PRODUCTION_CONFIG');
+});
+
+const resourceDump = `Package name=ai.caseops.mobile.dev.localacceptance id=7f
+  type raw id=10 entryCount=1
+    resource 0x7f100000 raw/caseops_local_acceptance_ca
+      () (file) res/Ap.pem
+  type xml id=14 entryCount=1
+    resource 0x7f140000 xml/caseops_local_acceptance_network
+      () (file) res/RM.xml type=XML
+`;
+const manifestDump = `N: android=http://schemas.android.com/apk/res/android (line=2)
+  E: manifest (line=2)
+    A: package="ai.caseops.mobile.dev.localacceptance" (Raw: "ai.caseops.mobile.dev.localacceptance")
+      E: application (line=3)
+        A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=false
+        A: http://schemas.android.com/apk/res/android:usesCleartextTraffic(0x010104ec)=false
+        A: http://schemas.android.com/apk/res/android:networkSecurityConfig(0x01010527)=@0x7f140000
+`;
+const networkDump = `E: network-security-config (line=2)
+    E: base-config (line=3)
+      A: cleartextTrafficPermitted=false
+        E: trust-anchors (line=4)
+            E: certificates (line=4)
+              A: src="system" (Raw: "system")
+    E: domain-config (line=7)
+      A: cleartextTrafficPermitted=false
+        E: domain (line=8)
+          A: includeSubdomains=false
+            T: 'localhost'
+        E: domain (line=9)
+          A: includeSubdomains=false
+            T: 'ip6-localhost'
+        E: domain (line=10)
+          A: includeSubdomains=false
+            T: '127.0.0.1'
+        E: domain (line=11)
+          A: includeSubdomains=false
+            T: '[::1]'
+        E: trust-anchors (line=12)
+            E: certificates (line=12)
+              A: src="system" (Raw: "system")
+    E: domain-config (line=14)
+      A: cleartextTrafficPermitted=false
+        E: domain (line=15)
+          A: includeSubdomains=false
+            T: '10.0.2.2'
+        E: trust-anchors (line=16)
+            E: certificates (line=16)
+              A: src=@0x7f100000
+`;
+const zipInventory = [
+  { name: 'AndroidManifest.xml', length: 1000 },
+  { name: 'assets/index.android.bundle', length: 2000 },
+  { name: 'assets/app.config', length: 1000 },
+  { name: 'res/Ap.pem', length: Buffer.byteLength(certificate) },
+  { name: 'res/RM.xml', length: 1000 },
+];
+
+test('optimized APK names resolve through SDK identities and compiled manifest/XML pointers', async () => {
+  const build = await import('./build-acceptance.mjs');
+  const resources = build.resolveAndroidAcceptanceResources(resourceDump);
+  assert.deepEqual(resources.ca, { id: '0x7f100000', path: 'res/Ap.pem' });
+  assert.deepEqual(resources.network, { id: '0x7f140000', path: 'res/RM.xml' });
+  build.verifyAndroidCompiledSecurity(resources, manifestDump, networkDump, ['10.0.2.2']);
+  assert.equal(build.verifyAndroidZipEvidence(resources, zipInventory, Buffer.from(certificate), digest(certificate)).publicCaSha256, digest(certificate));
+  const renamed = resourceDump.replaceAll('res/Ap.pem', 'res/Another.pem').replaceAll('res/RM.xml', 'res/Another.xml')
+    .replaceAll('0x7f100000', '0x7f210005').replaceAll('0x7f140000', '0x7f220007');
+  const dynamic = build.resolveAndroidAcceptanceResources(renamed);
+  build.verifyAndroidCompiledSecurity(dynamic, manifestDump.replaceAll('0x7f140000', '0x7f220007'),
+    networkDump.replaceAll('0x7f100000', '0x7f210005'), ['10.0.2.2']);
+});
+
+for (const [label, altered] of [
+  ['missing', resourceDump.replace('raw/caseops_local_acceptance_ca', 'raw/not_the_ca')],
+  ['duplicate name', resourceDump + '    resource 0x7f100008 raw/caseops_local_acceptance_ca\n      () (file) res/other.pem\n'],
+  ['duplicate ID', resourceDump + '    resource 0x7f100000 raw/other\n      () (file) res/other.pem\n'],
+  ['qualified alternate', resourceDump.replace('() (file) res/Ap.pem', '() (file) res/Ap.pem\n      (v37) (file) res/other.pem')],
+  ['traversal', resourceDump.replace('res/Ap.pem', 'res/../outside.pem')],
+  ['absolute', resourceDump.replace('res/Ap.pem', '/res/Ap.pem')],
+  ['backslash', resourceDump.replace('res/Ap.pem', 'res\\Ap.pem')],
+  ['misleading suffix', resourceDump.replace('raw/caseops_local_acceptance_ca', 'raw/caseops_local_acceptance_ca_fake')],
+  ['shared ZIP path', resourceDump.replace('res/RM.xml', 'res/Ap.pem')],
+  ['malformed extra header', resourceDump + '    resource invalid raw/caseops_local_acceptance_ca\n'],
+]) {
+  test(`SDK resource lookup rejects ${label}`, async () => {
+    const { resolveAndroidAcceptanceResources } = await import('./build-acceptance.mjs');
+    assert.throws(() => resolveAndroidAcceptanceResources(altered), /RESOURCE|ZIP/);
+  });
+}
+
+test('APK ZIP verification rejects missing/duplicate entries, traversal and wrong CA bytes or source hash', async () => {
+  const build = await import('./build-acceptance.mjs');
+  const resources = build.resolveAndroidAcceptanceResources(resourceDump);
+  for (const inventory of [zipInventory.slice(0, -1), [...zipInventory, zipInventory[3]],
+    [...zipInventory, { name: 'res/../evil', length: 1 }],
+    [...zipInventory, { name: '/absolute', length: 1 }],
+    [...zipInventory, { name: 'res\\evil', length: 1 }],
+    zipInventory.map((entry) => entry.name === 'res/Ap.pem' ? { ...entry, length: 16385 } : entry)]) {
+    assert.throws(() => build.verifyAndroidZipEvidence(resources, inventory, Buffer.from(certificate), digest(certificate)), /ZIP|APK/);
+  }
+  assert.throws(() => build.verifyAndroidZipEvidence(resources, zipInventory, Buffer.from(certificate), '0'.repeat(64)), /CA_HASH_MISMATCH/);
+  assert.throws(() => build.verifyAndroidZipEvidence(resources, zipInventory, Buffer.from(certificate.replace('CERTIFICATE', 'NOT_CERTIFICATE')), digest(certificate)), /CA_HASH_MISMATCH/);
+});
+
+for (const [label, manifest, network] of [
+  ['wrong manifest pointer', manifestDump.replace('@0x7f140000', '@0x7f140001'), networkDump],
+  ['wrong CA pointer', manifestDump, networkDump.replace('@0x7f100000', '@0x7f100001')],
+  ['duplicate manifest pointer', manifestDump + '        A: http://schemas.android.com/apk/res/android:networkSecurityConfig(0x01010527)=@0x7f140000\n', networkDump],
+  ['cleartext', manifestDump, networkDump.replace('cleartextTrafficPermitted=false', 'cleartextTrafficPermitted=true')],
+  ['user CA substitute', manifestDump, networkDump.replace('src=@0x7f100000', 'src="user" (Raw: "user")')],
+  ['foreign CA host', manifestDump, networkDump.replace("T: '10.0.2.2'", "T: 'caseops.ai'")],
+  ['wildcard host', manifestDump, networkDump.replace('includeSubdomains=false', 'includeSubdomains=true')],
+  ['backup', manifestDump.replace('allowBackup(0x01010280)=false', 'allowBackup(0x01010280)=true'), networkDump],
+  ['debuggable', manifestDump + '        A: http://schemas.android.com/apk/res/android:debuggable(0x0101000f)=true\n', networkDump],
+  ['fake named CA string', manifestDump, networkDump.replace('src=@0x7f100000', 'src="@raw/caseops_local_acceptance_ca" (Raw: "@raw/caseops_local_acceptance_ca")')],
+  ['wrong framework attribute ID', manifestDump.replace('networkSecurityConfig(0x01010527)', 'networkSecurityConfig(0x01010001)'), networkDump],
+  ['extra trust source', manifestDump, networkDump + '            E: certificates (line=18)\n              A: src="system" (Raw: "system")\n'],
+]) {
+  test(`compiled security verification rejects ${label}`, async () => {
+    const build = await import('./build-acceptance.mjs');
+    assert.throws(() => build.verifyAndroidCompiledSecurity(build.resolveAndroidAcceptanceResources(resourceDump), manifest, network, ['10.0.2.2']),
+      /SDK_XML|COMPILED|MANIFEST|NETWORK|BASE|SUBDOMAIN|TRUST|DOMAIN|CERTIFICATE|FRAMEWORK/);
+  });
+}
+
+test('SDK resource and XML parsers enforce byte, line and structural bounds', async () => {
+  const build = await import('./build-acceptance.mjs');
+  assert.throws(() => build.resolveAndroidAcceptanceResources('x'.repeat(16 * 1024 * 1024 + 1)), /SDK_DUMP_SIZE_BOUND/);
+  assert.throws(() => build.resolveAndroidAcceptanceResources('x'.repeat(8193)), /SDK_DUMP_LINE_BOUND/);
+  assert.throws(() => build.verifyAndroidCompiledSecurity(build.resolveAndroidAcceptanceResources(resourceDump),
+    manifestDump, networkDump + 'E: network-security-config (line=100)\n', ['10.0.2.2']), /ONE_COMPILED_XML_ROOT_REQUIRED/);
+});
+
+test('Windows native staging is short, outside sources, module-isolated and part of build evidence', () => {
+  const init = readFileSync(path.join(repo,'scripts/mobile/windows-native-paths.gradle'),'utf8');
+  assert.match(init, /gradle\.beforeProject/);
+  assert.match(init, /components\.finalizeDsl/);
+  assert.match(init, /dsl\.externalNativeBuild\.cmake\.buildStagingDirectory = staging\.resolve\(module\)/);
+  assert.match(init, /!staging\.startsWith\(owned\)/);
+  assert.match(init, /substring\(0, 12\)/);
+  assert.doesNotMatch(init, /delete\(|deleteDir|exec\(|debuggable|cleartext|LongPathsEnabled/);
+  const wrapper=readFileSync(path.join(repo,'scripts/mobile/build-android-local-acceptance.ps1'),'utf8');
+  assert.match(wrapper, /'--init-script', \(Join-Path \$PSScriptRoot 'windows-native-paths\.gradle'\)/);
+  const snapshot=readFileSync(path.join(repo,'scripts/mobile/source-snapshot.mjs'),'utf8');
+  for (const file of ['windows-native-paths.gradle','build-android-local-acceptance.ps1','build-ios-simulator-acceptance.sh']) assert.ok(snapshot.includes(file));
+});
+
+function fixture(t) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'caseops-build-config-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'public-ca.pem');
+  writeFileSync(file, certificate);
+  return { dir, file, env: {
+    CASEOPS_MOBILE_BUILD_PROFILE: plugin.ANDROID_PROFILE,
+    CASEOPS_MOBILE_AUTOMATED_TEST: '1', CASEOPS_MOBILE_RELEASE_SHA: sha,
+    CASEOPS_MOBILE_ANDROID_CA_FILE: file, CASEOPS_MOBILE_ANDROID_CA_SHA256: digest(certificate),
+    EXPO_PUBLIC_API_ORIGIN: 'https://10.0.2.2:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://10.0.2.2:3443',
+  } };
+}
+
+function cleanEnv(extra = {}) {
+  return { ...Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    !/^(CASEOPS_MOBILE_|CASEOPS_NATIVE_LINK_|CASEOPS_STORE_|EXPO_PUBLIC_|__EXPO_CONFIG_MODE$|EX_UPDATES_NATIVE_DEBUG$|SKIP_BUNDLING$)/.test(key))),
+  EXPO_NO_DOTENV: '1', ...extra };
+}
+function expoConfig(env = {}, type = 'public') {
+  return JSON.parse(execFileSync(process.execPath, ['./node_modules/expo/bin/cli', 'config', '--type', type, '--json'], {
+    cwd: app, env: cleanEnv(env), encoding: 'utf8', timeout: 30000,
+  }));
+}
+function withEnv(env, action) {
+  const prior = process.env;
+  process.env = cleanEnv(env);
+  return Promise.resolve().then(action).finally(() => { process.env = prior; });
+}
+
+test('default Expo config retains production origins, native IDs and no QA trust metadata', () => {
+  const config = expoConfig();
+  assert.equal(config.android.package, 'ai.caseops.mobile.dev');
+  assert.equal(config.ios.bundleIdentifier, 'ai.caseops.mobile.dev');
+  assert.equal(config.extra.apiOrigin, 'https://caseops.ai');
+  assert.equal(config.extra.webOrigin, 'https://caseops.ai');
+  assert.equal(config.extra.automatedTest, false);
+  assert.equal(config.updates.enabled, false);
+  assert.deepEqual(config.extra.nativeLinkPolicy, { mode: 'disabled' });
+  assert.equal(config.extra.privacyPolicy, undefined);
+  assert.equal(config.ios.infoPlist.NSAppTransportSecurity, undefined);
+  assert.equal(config.android.networkSecurityConfig, undefined);
+  assert.doesNotMatch(JSON.stringify(config), /BEGIN CERTIFICATE|public-ca\.pem|fingerprint256/);
+});
+
+function publicLinkFixture(t, syntheticDataOnly = true) {
+  const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-native-links-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const config = { schemaVersion: 1, kind: 'caseops-native-links', syntheticDataOnly,
+    redirectUri: syntheticDataOnly ? 'https://native.invalid/native/oauth/callback' : 'https://native.caseops.ai/native/oauth/callback',
+    ios: { bundleIdentifier: 'ai.caseops.mobile', applicationIdentifierPrefix: 'X9Y8Z7W6V5' },
+    android: { packageName: 'ai.caseops.mobile', signingCertificateSha256: [digest('public synthetic signing certificate test bytes')] } };
+  const file = path.join(dir, 'links.json'), bytes = JSON.stringify(config) + '\n'; writeFileSync(file, bytes);
+  const identities = { iosBundleIdentifier: config.ios.bundleIdentifier, androidPackageName: config.android.packageName };
+  const baseline = { schemaVersion: 1, kind: 'caseops-declared-store-build-baseline', syntheticDataOnly, identities,
+    marketingVersion: '0.0.0', iosBuildNumber: '0', androidVersionCode: 0, scope: 'operator-declared-not-store-verified' };
+  const baselineFile = path.join(dir, 'declared-baseline.json'), baselineBytes = JSON.stringify(baseline) + '\n';
+  writeFileSync(baselineFile, baselineBytes);
+  const store = { schemaVersion: 1, kind: 'caseops-store-build', syntheticDataOnly, nativeLinkConfigSha256: digest(bytes), identities,
+    version: '1.0.0', iosBuildNumber: '1', androidVersionCode: 1, baseline: { path: baselineFile, sha256: digest(baselineBytes) } };
+  const storeFile = path.join(dir, 'store-build.json'), storeBytes = JSON.stringify(store) + '\n'; writeFileSync(storeFile, storeBytes);
+  const policyFile = path.join(dir, 'privacy-policy.json');
+  const policyBytes = JSON.stringify({ schemaVersion: 1, kind: 'caseops-mobile-privacy-policy', nativeLinkConfigSha256: digest(bytes),
+    url: new URL(config.redirectUri).origin + '/privacy-policy', version: 'synthetic-policy-v1' }) + '\n';
+  writeFileSync(policyFile, policyBytes);
+  return { dir, file, config, bytes, env: { CASEOPS_NATIVE_LINK_CONFIG_FILE: file, CASEOPS_NATIVE_LINK_CONFIG_SHA256: digest(bytes),
+    CASEOPS_STORE_BUILD_FILE: storeFile, CASEOPS_STORE_BUILD_SHA256: digest(storeBytes), EXPO_PUBLIC_WEB_ORIGIN: new URL(config.redirectUri).origin,
+    CASEOPS_MOBILE_PRIVACY_POLICY_FILE: policyFile, CASEOPS_MOBILE_PRIVACY_POLICY_SHA256: digest(policyBytes) } };
+}
+test('production Expo configuration refuses absent, partial, tampered and synthetic public link inputs', t => {
+  assert.throws(() => expoConfig({ NODE_ENV: 'production', __EXPO_CONFIG_MODE: 'production' }), /IMMUTABLE_NATIVE_LINK_CONFIG_REQUIRED/);
+  const f = publicLinkFixture(t);
+  assert.throws(() => readNativeLinkConfig(f.env), /SYNTHETIC_NATIVE_LINK_CONFIG_FORBIDDEN/);
+  assert.throws(() => readNativeLinkConfig({ CASEOPS_NATIVE_LINK_CONFIG_FILE: f.file }), /IMMUTABLE_NATIVE_LINK_CONFIG_REQUIRED/);
+  writeFileSync(f.file, f.bytes + ' ');
+  assert.throws(() => readNativeLinkConfig(f.env, { allowSynthetic: true }), /HASH_MISMATCH/);
+});
+test('complete immutable structural config projects exactly matching mobile, web, API and association identities without enabling auth', t => {
+  const f = publicLinkFixture(t, false), loaded = readNativeLinkConfig(f.env);
+  const config = expoConfig({ ...f.env, NODE_ENV: 'production' }), p = loaded.projections;
+  assert.equal(config.version, '1.0.0'); assert.equal(config.ios.buildNumber, '1'); assert.equal(config.android.versionCode, 1);
+  assert.equal(config.scheme, undefined);
+  assert.equal(config.ios.bundleIdentifier, f.config.ios.bundleIdentifier);
+  assert.deepEqual(config.ios.associatedDomains, ['applinks:native.caseops.ai']);
+  assert.deepEqual(config.android.intentFilters, p.mobile.android.intentFilters);
+  assert.equal(config.android.package, f.config.android.packageName);
+  assert.deepEqual(config.extra.nativeLinkPolicy, p.policy);
+  assert.deepEqual(JSON.parse(p.apiEnvironment.CASEOPS_NATIVE_REDIRECT_URIS), [config.extra.nativeLinkPolicy.redirectUri]);
+  assert.deepEqual(Object.keys(p.apiEnvironment), ['CASEOPS_NATIVE_REDIRECT_URIS']);
+  assert.deepEqual(p.appleAppSiteAssociation.applinks.details[0].appIDs, ['X9Y8Z7W6V5.ai.caseops.mobile']);
+  assert.deepEqual(p.appleAppSiteAssociation.applinks.details[0].components,
+    [{ '/': '/native/oauth/callback' }, { '/': '/native/open/*' }]);
+  assert.deepEqual(config.android.intentFilters[0].data,
+    [{ scheme: 'https', host: 'native.caseops.ai', path: '/native/oauth/callback' },
+      { scheme: 'https', host: 'native.caseops.ai', pathPrefix: '/native/open/' }]);
+  assert.equal(p.assetlinks[0].target.package_name, config.android.package);
+  assert.deepEqual(p.assetlinks[0].target.sha256_cert_fingerprints, [f.config.android.signingCertificateSha256[0].toUpperCase().match(/../g).join(':')]);
+  assert.equal(config.extra.nativeLinkPolicy.configSha256, digest(f.bytes));
+  assert.deepEqual(config.extra.privacyPolicy, { url: 'https://native.caseops.ai/privacy-policy', version: 'synthetic-policy-v1', sha256: f.env.CASEOPS_MOBILE_PRIVACY_POLICY_SHA256 });
+});
+test('production policy rejects reserved endpoints, scheme downgrade, QA identities and malformed or unknown fields', t => {
+  const f = publicLinkFixture(t, false);
+  for (const redirectUri of ['caseops://oauth/callback', 'http://native.caseops.ai/native/oauth/callback', 'https://native.invalid/native/oauth/callback', 'https://example.com/native/oauth/callback', 'https://native.caseops.ai/native/oauth/callback/extra', 'https://native.caseops.ai:8443/native/oauth/callback', 'https://native.caseops.ai/native/oauth/callback?x=1'])
+    assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, redirectUri }));
+  assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, arbitrary: true }));
+  assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, ios: { ...f.config.ios, bundleIdentifier: 'ai.caseops.mobile.dev' } }));
+  assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, ios: { ...f.config.ios, applicationIdentifierPrefix: 1234567890 } }));
+  assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, android: { ...f.config.android, signingCertificateSha256: ['a'.repeat(64)] } }));
+});
+test('production and store config refuse absent or partial privacy-policy references', t => {
+  const f = publicLinkFixture(t, false), env = { ...f.env, NODE_ENV: 'production' };
+  delete env.CASEOPS_MOBILE_PRIVACY_POLICY_FILE; delete env.CASEOPS_MOBILE_PRIVACY_POLICY_SHA256;
+  assert.throws(() => expoConfig(env), /IMMUTABLE_PRIVACY_POLICY_REFERENCE_REQUIRED/);
+  assert.throws(() => expoConfig({ ...env, CASEOPS_MOBILE_PRIVACY_POLICY_FILE: path.join(f.dir, 'privacy-policy.json') }), /IMMUTABLE_PRIVACY_POLICY_REFERENCE_REQUIRED/);
+});
+test('production privacy-policy config refuses changed bytes and a different configured web origin', t => {
+  const f = publicLinkFixture(t, false);
+  assert.throws(() => expoConfig({ ...f.env, NODE_ENV: 'production', EXPO_PUBLIC_WEB_ORIGIN: 'https://foreign.contract-fixture.org' }), /EXACT_APPROVED_PRIVACY_POLICY_REQUIRED/);
+  writeFileSync(f.env.CASEOPS_MOBILE_PRIVACY_POLICY_FILE, 'PRIVATE_SYNTHETIC_INVALID_POLICY');
+  assert.throws(() => expoConfig({ ...f.env, NODE_ENV: 'production' }), /PRIVACY_POLICY_HASH_MISMATCH/);
+});
+test('native public config is read and hashed from the opened descriptor, with no parse-error content reflection', t => {
+  const f = publicLinkFixture(t), fs = require('node:fs');
+  const original = { openSync: fs.openSync, readSync: fs.readSync, readFileSync: fs.readFileSync };
+  let descriptor, opens = 0, descriptorReads = 0, bytesRead = 0;
+  try {
+    fs.openSync = function(file, ...args) {
+      const fd = original.openSync.call(this, file, ...args);
+      if (file === f.file) { descriptor = fd; opens++; }
+      return fd;
+    };
+    fs.readSync = function(fd, ...args) {
+      assert.equal(fd, descriptor, 'PUBLIC_CONFIG_MUST_READ_ITS_OPENED_DESCRIPTOR');
+      if (!descriptorReads++) writeFileSync(f.file + '.replacement', '{}');
+      const count = original.readSync.call(this, fd, ...args); bytesRead += count; return count;
+    };
+    fs.readFileSync = function(file, ...args) {
+      assert.notEqual(file, f.file, 'PUBLIC_CONFIG_MUST_NOT_REOPEN_ITS_PATH');
+      return original.readFileSync.call(this, file, ...args);
+    };
+    const loaded = readNativeLinkConfig(f.env, { allowSynthetic: true });
+    assert.equal(opens, 1); assert.ok(descriptorReads > 0);
+    assert.equal(bytesRead, Buffer.byteLength(f.bytes)); assert.equal(loaded.bytes.toString(), f.bytes);
+  } finally { Object.assign(fs, original); }
+  const malformed = 'PRIVATE_INVALID_INPUT_NOT_FOR_ERROR_MESSAGES'; writeFileSync(f.file, malformed);
+  assert.throws(() => readNativeLinkConfig({ ...f.env, CASEOPS_NATIVE_LINK_CONFIG_SHA256: digest(malformed) }, { allowSynthetic: true }), error => {
+    assert.equal(error.message, 'NATIVE_LINK_CONFIG_JSON_REQUIRED'); assert.ok(!error.message.includes(malformed)); return true;
+  });
+  const output = path.join(f.dir, 'malformed-output');
+  const refused = spawnSync(process.execPath, [path.join(repo, 'scripts/mobile/prepare-native-links.mjs'),
+    '--config', f.file, '--sha256', digest(malformed), '--output', output, '--synthetic'], {
+    cwd: repo, encoding: 'utf8', timeout: 10000,
+  });
+  assert.equal(refused.status, 1);
+  assert.equal(refused.stdout, '');
+  assert.equal(refused.stderr.trim(), 'NATIVE_LINK_CONFIG_JSON_REQUIRED');
+  assert.ok(!refused.stderr.includes(malformed));
+  assert.equal(existsSync(output), false);
+});
+test('actual offline generator emits deterministic hash-bound public projections only into a fresh directory, preserves earlier snapshots', async t => {
+  const { prepareNativeLinks } = await import('./prepare-native-links.mjs');
+  const f = publicLinkFixture(t), first = path.join(f.dir, 'first'), second = path.join(f.dir, 'second');
+  assert.throws(() => prepareNativeLinks({ file: f.file, sha256: digest(f.bytes), output: first }), /SYNTHETIC/);
+  const a = prepareNativeLinks({ file: f.file, sha256: digest(f.bytes), output: first, synthetic: true });
+  prepareNativeLinks({ file: f.file, sha256: digest(f.bytes), output: second, synthetic: true });
+  for (const file of ['config-evidence.json', 'projections.json', 'apple-app-site-association', 'assetlinks.json', 'api-environment.json'])
+    assert.deepEqual(readFileSync(path.join(first, file)), readFileSync(path.join(second, file)));
+  assert.equal(a.productionEnabled, false); assert.equal(a.platformAssociationVerified, false);
+  writeFileSync(f.file, '{}\n');
+  assert.equal(readFileSync(a.configEvidence.path, 'utf8'), f.bytes);
+  assert.throws(() => readNativeLinkConfig(f.env, { allowSynthetic: true }), /HASH_MISMATCH/);
+  assert.throws(() => prepareNativeLinks({ file: a.configEvidence.path, sha256: a.configEvidence.sha256, output: first, synthetic: true }), /NEW_ABSOLUTE/);
+});
+test('native link runtime/generator imports are in the actual source snapshot and existing web builder closure', () => {
+  const snapshot = readFileSync(path.join(repo, 'scripts/mobile/source-snapshot.mjs'), 'utf8');
+  for (const file of ['apps/web/lib/native-link-policy.cjs', 'apps/web/lib/native-link-policy.d.cts', 'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts', 'scripts/mobile/prepare-native-links.mjs']) assert.ok(snapshot.includes(file));
+  assert.match(readFileSync(path.join(repo, 'apps/web/Dockerfile'), 'utf8'), /COPY apps\/web \.\//);
+  const metro = require(path.join(app, 'metro.config.js'));
+  assert.ok(metro.watchFolders.includes(path.join(repo, 'apps/web/lib')), 'SHARED_PUBLIC_RUNTIME_POLICY_MUST_BE_VISIBLE_TO_METRO');
+  assert.doesNotMatch(readFileSync(path.join(app, 'src/auth/handoff.ts'), 'utf8'), /native-link-config\.cjs|node:fs|node:crypto/);
+});
+test('actual source fingerprint and dirty fence include shared callback policy changes', t => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'caseops-link-snapshot-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(path.join(dir, 'apps/mobile'), { recursive: true });
+  mkdirSync(path.join(dir, 'apps/web/lib'), { recursive: true });
+  writeFileSync(path.join(dir, 'apps/mobile/index.ts'), 'export {};\n');
+  const policy = path.join(dir, 'apps/web/lib/native-link-policy.cjs');
+  writeFileSync(policy, 'module.exports = { mode: "disabled" };\n');
+  execFileSync('git', ['init', '--quiet'], { cwd: dir });
+  execFileSync('git', ['add', '.'], { cwd: dir });
+  execFileSync('git', ['-c', 'user.name=Offline fixture', '-c', 'user.email=offline@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'Synthetic source snapshot'], { cwd: dir });
+  const before = sourceSnapshot(dir); assert.equal(before.sourceDirty, false);
+  writeFileSync(policy, 'module.exports = { mode: "changed" };\n');
+  const after = sourceSnapshot(dir); assert.equal(after.sourceDirty, true);
+  assert.notEqual(after.sourceFingerprint, before.sourceFingerprint);
+  assert.equal(after.sourceSha, before.sourceSha);
+});
+
+function snapshotFixture(t, values = { 'apps/mobile/one.txt': 'one', 'apps/mobile/two.txt': 'two' }) {
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-selected-snapshot-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(path.join(root, 'apps/mobile'), { recursive: true });
+  for (const [relative, bytes] of Object.entries(values)) { mkdirSync(path.dirname(path.join(root, relative)), { recursive: true }); writeFileSync(path.join(root, relative), bytes); }
+  execFileSync('git', ['init', '--quiet'], { cwd: root }); execFileSync('git', ['add', '.'], { cwd: root });
+  execFileSync('git', ['-c', 'user.name=Offline fixture', '-c', 'user.email=offline@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '--quiet', '-m', 'Synthetic selected source'], { cwd: root });
+  return root;
+}
+function snapshotHooks(hooks, operation) {
+  const cp = require('node:child_process'), restore = [];
+  for (const [key, replacement] of Object.entries(hooks)) {
+    const target = key === 'spawnSync' ? cp : fs; restore.push([target, key, target[key]]); target[key] = replacement;
+  }
+  syncBuiltinESMExports();
+  try { return operation(); } finally { for (const [target, key, original] of restore) target[key] = original; syncBuiltinESMExports(); }
+}
+function snapshotFileHooks(file, change) {
+  const opened = new Set(), originals = { open: fs.openSync, read: fs.readSync, fstat: fs.fstatSync, lstat: fs.lstatSync };
+  let bytes = 0;
+  return { opened, bytes: () => bytes, hooks: {
+    openSync: (...args) => { const fd = originals.open(...args); if (args[0] === file) opened.add(fd); return fd; },
+    fstatSync: (...args) => { const result = originals.fstat(...args); return opened.has(args[0]) && change.fstat ? change.fstat(result, args[0]) : result; },
+    readSync: (...args) => { if (opened.has(args[0])) change.beforeRead?.(args[0]); const width = originals.read(...args); if (opened.has(args[0])) bytes += width; return width; },
+    lstatSync: (...args) => { const result = originals.lstat(...args); return args[0] === file && change.lstat ? change.lstat(result) : result; },
+  } };
+}
+const snapshotClosed = control => { assert.ok(control.opened.size > 0); for (const fd of control.opened) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' }); };
+
+test('selected source keeps legacy sorted path-NUL-digest-NUL bytes and the four-field DTO', t => {
+  const root = snapshotFixture(t), actual = sourceSnapshot(root);
+  assert.deepEqual(actual, { sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), sourceFingerprint: '99c6e5b1a2dde7671c37f2c071145645392496402ea072cfa547c154ab64abf2', sourceDirty: false, inputFileCount: 2 });
+});
+test('selected source charges exact paired root-present entries and refuses one less', t => {
+  const root = snapshotFixture(t);
+  assert.equal(sourceSnapshot(root, { limits: { entries: 10 } }).inputFileCount, 2);
+  assert.throws(() => sourceSnapshot(root, { limits: { entries: 9 } }), /SOURCE_INVENTORY_BOUND/);
+});
+test('selected source rejects an excessive declared extent before any payload and closes its FD', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt'), control = snapshotFileHooks(file, {});
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root, { limits: { fileBytes: 2 } }), /SOURCE_FILE_BYTE_BOUND/));
+  assert.equal(control.bytes(), 0); snapshotClosed(control);
+});
+test('selected source reserves native Git capture headroom inside the shared byte budget before dispatch', t => {
+  const root = snapshotFixture(t), run = args => execFileSync('git', args, { cwd: root });
+  const bytes = 65537 + 12 + 2 * run(['rev-parse', 'HEAD']).length + 2 * run(['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'apps/mobile']).length;
+  assert.equal(sourceSnapshot(root, { limits: { bytes } }).inputFileCount, 2);
+  const original = require('node:child_process').spawnSync; let calls = 0;
+  snapshotHooks({ spawnSync: (...args) => { calls++; return original(...args); } }, () => assert.throws(() => sourceSnapshot(root, { limits: { bytes: bytes - 1 } }), /SOURCE_GIT_OUTPUT_RESERVE_REQUIRED/));
+  assert.equal(calls, 5); // Final empty status command is refused before spawn.
+});
+test('selected source accounts both captured streams even when the actual child exits unsuccessfully', t => {
+  const root = snapshotFixture(t), original = require('node:child_process').spawnSync;
+  snapshotHooks({ spawnSync: (file, args, options) => original(process.execPath, ['--eval', 'const fs=require("node:fs");fs.writeSync(1,Buffer.alloc(500));fs.writeSync(2,Buffer.alloc(501));process.exit(7);'], options) }, () => {
+    assert.throws(() => sourceSnapshot(root), error => error.code === 'SOURCE_GIT_COMMAND_REFUSED'
+      && error.gitExitCode === 7 && error.stdoutBytes === 500 && error.stderrBytes === 501
+      && error.capturedBytes === 1001 && error.sourceBytesRead === 1001);
+  });
+});
+test('selected source bounds an actual overflowing child inside the Git ceiling including its native read chunk', t => {
+  const root = snapshotFixture(t), original = require('node:child_process').spawnSync; let captured = 0;
+  snapshotHooks({ spawnSync: (file, args, options) => {
+    assert.equal(options.maxBuffer + 65536, SOURCE_SNAPSHOT_LIMITS.gitBytes);
+    const result = original(process.execPath, ['--eval', 'const fs=require("node:fs");fs.writeSync(1,Buffer.alloc(2*1024*1024));fs.writeSync(2,Buffer.alloc(2*1024*1024));'], options);
+    captured = (result.stdout?.length ?? 0) + (result.stderr?.length ?? 0); return result;
+  } }, () => assert.throws(() => sourceSnapshot(root), error => error.code === 'SOURCE_GIT_COMMAND_REFUSED'
+    && error.gitErrorCode === 'ENOBUFS' && error.capturedBytes === captured));
+  assert.ok(captured > 0 && captured <= SOURCE_SNAPSHOT_LIMITS.gitBytes);
+});
+test('selected source rejects root files and cap increases before Git or source payload reads', t => {
+  const root = snapshotFixture(t), original = require('node:child_process').spawnSync; let calls = 0;
+  snapshotHooks({ spawnSync: (...args) => { calls++; return original(...args); } }, () => {
+    assert.throws(() => sourceSnapshot(path.join(root, 'apps/mobile/one.txt')), /SOURCE_ROOT_DIRECTORY_REQUIRED/);
+    for (const [key, value] of Object.entries(SOURCE_SNAPSHOT_LIMITS)) assert.throws(() => sourceSnapshot(root, { limits: { [key]: value + 1 } }), /SOURCE_LIMIT_INCREASE_REFUSED/);
+    const version = Object.getOwnPropertyDescriptor(process.versions, 'node');
+    try { Object.defineProperty(process.versions, 'node', { ...version, value: '24.15.1' }); assert.throws(() => sourceSnapshot(root), /SOURCE_GIT_RUNTIME_REQUIRED/); }
+    finally { Object.defineProperty(process.versions, 'node', version); }
+  }); assert.equal(calls, 0);
+});
+test('selected source binds the opened descriptor before bytes when its pathname is replaced', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt'); let changed = false;
+  const control = snapshotFileHooks(file, { fstat: value => { if (!changed) { changed = true; renameSync(file, file + '.retained'); writeFileSync(file, 'bad'); } return value; } });
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_NAMED_FD_CHANGED/));
+  assert.equal(control.bytes(), 0); snapshotClosed(control);
+});
+test('selected source refuses a late parent link to the same opened leaf before bytes', t => {
+  const root = snapshotFixture(t, { 'apps/mobile/a/one.txt': 'one' }), parent = path.join(root, 'apps/mobile/a'), file = path.join(parent, 'one.txt'); let changed = false;
+  const control = snapshotFileHooks(file, { fstat: value => { if (!changed) { changed = true; renameSync(parent, parent + '-retained'); symlinkSync(parent + '-retained', parent, process.platform === 'win32' ? 'junction' : 'dir'); } return value; } });
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_CANONICAL_PATH_CHANGED|SOURCE_ANCESTOR_DIRECTORY_REQUIRED/));
+  assert.equal(control.bytes(), 0); snapshotClosed(control);
+});
+test('selected source reads at most declared extent plus one on growth and always closes', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt'); let changed = false;
+  const control = snapshotFileHooks(file, { beforeRead: () => { if (!changed) { changed = true; appendFileSync(file, 'extra'); } } });
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), error => error.code === 'SOURCE_FILE_GREW' && error.detectorBytes === 1));
+  assert.equal(control.bytes(), 4); snapshotClosed(control);
+});
+test('selected source refuses hardlinked ownership aliases before payload and closes', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt'); fs.linkSync(file, path.join(root, 'retained-alias'));
+  const control = snapshotFileHooks(file, {});
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_OPENED_REGULAR_OWNER_REQUIRED/));
+  assert.equal(control.bytes(), 0); snapshotClosed(control);
+});
+test('selected source closes its retained descriptor when a real payload-read call throws', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt');
+  const control = snapshotFileHooks(file, { beforeRead: () => { throw new Error('SOURCE_FIXTURE_READ_FAILURE'); } });
+  snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_FIXTURE_READ_FAILURE/)); snapshotClosed(control);
+});
+test('selected source refuses duplicate Git names before opening a payload', t => {
+  const root = snapshotFixture(t), original = require('node:child_process').spawnSync, file = path.join(root, 'apps/mobile/one.txt'), control = snapshotFileHooks(file, {});
+  snapshotHooks({ ...control.hooks, spawnSync: (...args) => { const result = original(...args); if (args[1][0] === 'ls-files') result.stdout = Buffer.concat([result.stdout, result.stdout.subarray(0, result.stdout.indexOf(0) + 1)]); return result; } }, () => assert.throws(() => sourceSnapshot(root), /SOURCE_DUPLICATE_GIT_PATH/));
+  assert.equal(control.bytes(), 0); assert.equal(control.opened.size, 0);
+});
+test('selected source bounds directory discovery before retaining a duplicate and closes its iterator', t => {
+  const root = snapshotFixture(t), original = fs.opendirSync; let closed = false;
+  snapshotHooks({ opendirSync: (...args) => { const dir = original(...args), first = dir.readSync(); let count = 0; return { readSync: () => ++count <= 2 ? first : dir.readSync(), closeSync: () => { closed = true; dir.closeSync(); } }; } }, () => assert.throws(() => sourceSnapshot(root), /SOURCE_DUPLICATE_DIRECTORY_ENTRY/));
+  assert.equal(closed, true);
+});
+test('selected source rejects a new untracked input after the first real Git listing', t => {
+  const root = snapshotFixture(t), original = require('node:child_process').spawnSync; let changed = false;
+  snapshotHooks({ spawnSync: (...args) => { const result = original(...args); if (!changed && args[1][0] === 'ls-files') { changed = true; writeFileSync(path.join(root, 'apps/mobile/late.txt'), 'late'); } return result; } }, () => assert.throws(() => sourceSnapshot(root), /SOURCE_SELECTED_INVENTORY_CHANGED|SOURCE_ROOT_CHANGED/));
+  assert.equal(changed, true);
+});
+for (const empty of [false, true]) test(`selected source final directories reject late insertion after both Git captures: empty=${empty}`, t => {
+  const root = snapshotFixture(t, { 'apps/mobile/a/one.txt': 'one', 'apps/mobile/z/two.txt': 'two' });
+  const target = path.join(root, 'apps/mobile', empty ? 'empty' : 'a'); if (empty) mkdirSync(target);
+  const originalSpawn = require('node:child_process').spawnSync, originalStat = fs.lstatSync; let status = 0, final = false, inserted = false;
+  snapshotHooks({ spawnSync: (...args) => { const result = originalSpawn(...args); if (args[1][0] === 'status' && ++status === 2) final = true; return result; }, lstatSync: (...args) => {
+    if (final && !inserted && args[0] === path.join(root, 'apps/mobile/z/two.txt')) { inserted = true; writeFileSync(path.join(target, 'late.txt'), 'late'); }
+    return originalStat(...args);
+  } }, () => assert.throws(() => sourceSnapshot(root), /SOURCE_FINAL_DIRECTORY_CHANGED/));
+  assert.equal(inserted, true);
+});
+test('selected source checks its shared deadline immediately after a Git response before any payload', t => {
+  const root = snapshotFixture(t), originalSpawn = require('node:child_process').spawnSync, descriptor = Object.getOwnPropertyDescriptor(performance, 'now'), now = performance.now.bind(performance), file = path.join(root, 'apps/mobile/one.txt'), control = snapshotFileHooks(file, {});
+  try { snapshotHooks({ ...control.hooks, spawnSync: (...args) => { const result = originalSpawn(...args); if (args[1][0] === 'ls-files') Object.defineProperty(performance, 'now', { configurable: true, value: () => now() + 6000 }); return result; } }, () => assert.throws(() => sourceSnapshot(root), /SOURCE_DEADLINE/)); }
+  finally { if (descriptor) Object.defineProperty(performance, 'now', descriptor); else delete performance.now; }
+  assert.equal(control.bytes(), 0); assert.equal(control.opened.size, 0);
+});
+test('selected source Windows dev-zero compatibility never admits a nonzero mismatch or final named-frame drift', t => {
+  const root = snapshotFixture(t), file = path.join(root, 'apps/mobile/one.txt'), platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const fake = (value, dev) => new Proxy(value, { get: (target, key, receiver) => key === 'dev' ? dev : Reflect.get(target, key, receiver) });
+  try {
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    let control = snapshotFileHooks(file, { lstat: value => fake(value, 0n) });
+    snapshotHooks(control.hooks, () => assert.equal(sourceSnapshot(root).inputFileCount, 2)); snapshotClosed(control);
+    control = snapshotFileHooks(file, { lstat: value => fake(value, value.dev + 1n) });
+    snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_NAMED_FD_CHANGED/)); assert.equal(control.bytes(), 0); snapshotClosed(control);
+    let calls = 0; control = snapshotFileHooks(file, { lstat: value => fake(value, ++calls >= 5 ? value.dev : 0n) });
+    snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_FINAL_FILE_CHANGED/)); snapshotClosed(control);
+  } finally { Object.defineProperty(process, 'platform', platform); }
+});
+
+test('Android public config is marker-enforced, exact-source and leaves iOS defaults intact', (t) => {
+  const { env, file } = fixture(t);
+  const config = expoConfig(env);
+  assert.equal(config.extra.automatedTest, true);
+  assert.deepEqual(config.extra.nativeLinkPolicy, { mode: 'local', redirectUri: 'caseops://oauth/callback' });
+  assert.equal(config.extra.apiOrigin, env.EXPO_PUBLIC_API_ORIGIN);
+  assert.equal(config.extra.webOrigin, env.EXPO_PUBLIC_WEB_ORIGIN);
+  assert.equal(config.extra.releaseSha, sha);
+  assert.equal(config.android.package, 'ai.caseops.mobile.dev'); // suffix is build-type-owned, not namespace.
+  assert.equal(config.ios.bundleIdentifier, 'ai.caseops.mobile.dev');
+  assert.equal(config.ios.infoPlist.NSAppTransportSecurity, undefined);
+  assert.ok(!JSON.stringify(config).includes(file));
+  assert.doesNotMatch(JSON.stringify(config), /BEGIN CERTIFICATE/);
+});
+
+test('iOS simulator acceptance has a distinct ID, HTTPS, marker and no Android CA', () => {
+  const config = expoConfig({ CASEOPS_MOBILE_BUILD_PROFILE: plugin.IOS_PROFILE,
+    CASEOPS_MOBILE_AUTOMATED_TEST: '1', CASEOPS_MOBILE_RELEASE_SHA: sha,
+    EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443' });
+  assert.equal(config.ios.bundleIdentifier, plugin.IOS_BUNDLE_ID);
+  assert.equal(config.extra.automatedTest, true);
+  assert.deepEqual(config.extra.nativeLinkPolicy, { mode: 'local', redirectUri: 'caseops://oauth/callback' });
+  assert.equal(config.ios.infoPlist.NSAppTransportSecurity, undefined);
+  assert.equal(config.android.package, 'ai.caseops.mobile.dev');
+});
+
+test('actual Expo native manifest projection allows explicit camera capture and blocks microphone and inherited media storage permissions', t => {
+  const android = fixture(t), production = publicLinkFixture(t, false);
+  const ios = { CASEOPS_MOBILE_BUILD_PROFILE: plugin.IOS_PROFILE, CASEOPS_MOBILE_AUTOMATED_TEST: '1',
+    CASEOPS_MOBILE_RELEASE_SHA: sha, EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443' };
+  const blocked = ['android.permission.SYSTEM_ALERT_WINDOW', 'android.permission.READ_MEDIA_IMAGES',
+    'android.permission.READ_EXTERNAL_STORAGE', 'android.permission.WRITE_EXTERNAL_STORAGE',
+    'android.permission.RECORD_AUDIO'];
+  for (const env of [android.env, ios, { ...production.env, NODE_ENV: 'production' }]) {
+    const config = expoConfig(env, 'introspect');
+    assert.deepEqual(config.android.blockedPermissions, blocked);
+    const permissions = config._internal.modResults.android.manifest.manifest['uses-permission'];
+    assert.deepEqual(permissions.filter(row => row.$['tools:node'] === 'remove').map(row => row.$['android:name']).sort(), [...blocked].sort());
+    for (const name of blocked) {
+      assert.equal(permissions.filter(row => row.$['android:name'] === name).length, 1);
+      assert.equal(permissions.find(row => row.$['android:name'] === name).$['tools:node'], 'remove');
+    }
+    assert.ok(permissions.some(row => row.$['android:name'] === 'android.permission.INTERNET' && row.$['tools:node'] !== 'remove'));
+    assert.ok(permissions.some(row => row.$['android:name'] === 'android.permission.CAMERA' && row.$['tools:node'] !== 'remove'));
+    assert.equal(config._internal.modResults.ios.infoPlist.NSCameraUsageDescription,
+      'Allow CaseOps to take a photo you choose to attach to a matter.');
+    assert.equal(config._internal.modResults.ios.infoPlist.NSPhotoLibraryUsageDescription, undefined);
+    assert.equal(config._internal.modResults.ios.infoPlist.NSMicrophoneUsageDescription, undefined);
+    assert.equal(config._internal.modResults.ios.infoPlist.NSFaceIDUsageDescription,
+      'Use Face ID to unlock CaseOps when you enable biometric screen lock.');
+  }
+});
+
+test('pinned Expo deployment-target hooks project HTTPS production 17.4 and retain both local QA defaults', t => {
+  const production = publicLinkFixture(t, false), android = fixture(t);
+  const ios = { CASEOPS_MOBILE_BUILD_PROFILE: plugin.IOS_PROFILE, CASEOPS_MOBILE_AUTOMATED_TEST: '1',
+    CASEOPS_MOBILE_RELEASE_SHA: sha, EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443' };
+  const config = expoConfig({ ...production.env, NODE_ENV: 'production' }, 'introspect');
+  assert.equal(config.ios.deploymentTarget, '17.4');
+  assert.equal(config._internal.modResults.ios.podfileProperties['ios.deploymentTarget'], '17.4');
+  assert.equal(config.extra.nativeLinkPolicy.mode, 'https');
+  for (const env of [android.env, ios]) {
+    const local = expoConfig(env, 'introspect');
+    assert.equal(local.ios.deploymentTarget, undefined);
+    assert.equal(local._internal.modResults.ios.podfileProperties['ios.deploymentTarget'], undefined);
+    assert.deepEqual(local.extra.nativeLinkPolicy, { mode: 'local', redirectUri: 'caseops://oauth/callback' });
+  }
+});
+
+test('unknown profiles and CA variables without the Android profile fail closed', () => {
+  assert.throws(() => plugin.acceptanceSettings({ CASEOPS_MOBILE_BUILD_PROFILE: 'production' }), /UNKNOWN_MOBILE_BUILD_PROFILE/);
+  for (const name of ['CASEOPS_MOBILE_ANDROID_CA_FILE', 'CASEOPS_MOBILE_ANDROID_CA_SHA256']) {
+    assert.throws(() => plugin.acceptanceSettings({ [name]: 'value' }), /CA_REQUIRES_ANDROID_ACCEPTANCE_PROFILE/);
+  }
+});
+
+test('missing marker, partial source identity and bundling bypass flags are rejected', (t) => {
+  const { env } = fixture(t);
+  for (const marker of [undefined, '0', 'true']) {
+    assert.throws(() => plugin.acceptanceSettings({ ...env, CASEOPS_MOBILE_AUTOMATED_TEST: marker }), /AUTOMATED_MARKER_REQUIRED/);
+  }
+  assert.throws(() => plugin.acceptanceSettings({ ...env, CASEOPS_MOBILE_RELEASE_SHA: sha.slice(0, 8) }), /EXACT_SOURCE_SHA_REQUIRED/);
+  for (const name of ['EX_UPDATES_NATIVE_DEBUG', 'SKIP_BUNDLING']) {
+    assert.throws(() => plugin.acceptanceSettings({ ...env, [name]: '1' }), /STANDALONE_BUNDLING_REQUIRED/);
+  }
+});
+
+for (const origin of ['http://10.0.2.2:8443', 'https://caseops.ai:8443', 'https://10.0.2.2.evil.test:8443',
+  'https://user:password@10.0.2.2:8443', 'https://10.0.2.2:8443/path', 'https://10.0.2.2:8443?x=1',
+  'https://10.0.2.2:8443#fragment', 'https://10.0.2.2', 'https://10.0.2.2:8443/', 'https://192.168.1.2:8443']) {
+  test(`Android acceptance rejects noncanonical or nonlocal origin: ${origin}`, () => {
+    assert.throws(() => plugin.localOrigin(origin, 'android'), /LOCAL_HTTPS_ORIGIN_REQUIRED/);
+  });
+}
+
+test('both origins are mandatory and iOS cannot borrow the emulator host or Android trust', (t) => {
+  const { env } = fixture(t);
+  assert.throws(() => plugin.acceptanceSettings({ ...env, EXPO_PUBLIC_WEB_ORIGIN: undefined }), /EXPLICIT_ACCEPTANCE_ORIGINS_REQUIRED/);
+  assert.throws(() => plugin.localOrigin('https://10.0.2.2:8443', 'ios'), /LOCAL_HTTPS_ORIGIN_REQUIRED/);
+  assert.throws(() => plugin.acceptanceSettings({ ...env, CASEOPS_MOBILE_BUILD_PROFILE: plugin.IOS_PROFILE,
+    EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443' }), /ANDROID_CA_FORBIDDEN_ON_IOS/);
+});
+
+test('only one external current public root CA with the exact byte hash is admitted', (t) => {
+  const { file } = fixture(t);
+  assert.equal(plugin.readPublicCa(file, digest(certificate)).sha256, digest(certificate));
+  assert.throws(() => plugin.readPublicCa(file, '0'.repeat(64)), /PUBLIC_CA_HASH_MISMATCH/);
+  assert.throws(() => plugin.readPublicCa(file, digest(certificate), Date.parse(new X509Certificate(certificate).validTo)), /PUBLIC_CA_NOT_CURRENT/);
+  assert.throws(() => plugin.readPublicCa('relative.pem', digest(certificate)), /EXTERNAL_PUBLIC_CA_FILE_REQUIRED/);
+  assert.throws(() => plugin.readPublicCa(path.join(app, 'app.config.ts'), '0'.repeat(64)), /PUBLIC_CA_MUST_BE_OUTSIDE_GIT/);
+  for (const pem of [certificate + certificate, certificate + '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----\n']) {
+    writeFileSync(file, pem);
+    assert.throws(() => plugin.readPublicCa(file, digest(pem)), /ONE_PUBLIC_CERTIFICATE_ONLY/);
+  }
+});
+
+test('network trust is exact-host CA-only, not a global or user-store trust override', async (t) => {
+  const { env } = fixture(t);
+  const settings = plugin.acceptanceSettings(env);
+  const xml = plugin.networkSecurityXml(settings);
+  assert.equal((xml.match(/<domain includeSubdomains="false">10.0.2.2<\/domain>/g) || []).length, 1);
+  assert.doesNotMatch(xml, /includeSubdomains="true"|src="user"|debug-overrides|cleartextTrafficPermitted="true"/);
+  assert.match(xml, /<domain includeSubdomains="false">localhost<\/domain>/);
+  const domain = xml.slice(xml.lastIndexOf('<domain-config'));
+  assert.doesNotMatch(domain, /src="system"/);
+  assert.match(domain, /src="@raw\/caseops_local_acceptance_ca"/);
+  assert.doesNotMatch(xml.slice(0, xml.indexOf('<domain-config')), /@raw/);
+  const parsed = (await XML.parseXMLAsync(xml))['network-security-config'];
+  assert.equal(parsed['base-config'][0].$.cleartextTrafficPermitted, 'false');
+  const domains = parsed['domain-config'];
+  assert.equal(domains.length, 2);
+  assert.deepEqual(domains[1].domain.map((item) => item._), ['10.0.2.2']);
+  assert.equal(domains[1]['trust-anchors'][0].certificates[0].$.src, '@raw/caseops_local_acceptance_ca');
+});
+
+test('release-derived Gradle generation is idempotent and default cleanup is byte-identical', (t) => {
+  const { env } = fixture(t);
+  const settings = plugin.acceptanceSettings(env);
+  const template = "// Existing default build types and signing are untouched.\r\nandroid { buildTypes { release {} } }\r\n";
+  const built = plugin.updateGradle(template, settings);
+  assert.equal(plugin.updateGradle(built, settings), built);
+  assert.equal(plugin.updateGradle(built, null), template);
+  assert.match(built, /initWith release[\s\S]*debuggable false[\s\S]*applicationIdSuffix '\.localacceptance'[\s\S]*matchingFallbacks = \['release'\]/);
+  assert.match(built, /variant\.buildType != 'localAcceptance'.*variant\.enable = false/);
+  assert.match(built, /System\.getenv\(key\) != expected/);
+  assert.match(built, /MessageDigest\.getInstance\('SHA-256'\)/);
+  assert.match(built, /extensions\.getByType\(com\.facebook\.react\.ReactExtension\)\.debuggableVariants\.get\(\)/);
+  assert.doesNotMatch(built, /if \(react\.debuggableVariants/);
+  assert.doesNotMatch(built, /useDevSupport\s*=|getUseDeveloperSupport|debuggableVariants\s*=/);
+  assert.throws(() => plugin.updateGradle(`${built}\n// BEGIN CaseOps generated local acceptance`, settings), /GENERATED_GRADLE_MARKERS_INVALID/);
+});
+
+test('overlay creation, replacement and cleanup never touch main, release or unowned files', (t) => {
+  const { env, dir } = fixture(t);
+  const root = path.join(dir, 'android');
+  const main = path.join(root, 'app/src/main/AndroidManifest.xml');
+  const unrelated = path.join(root, 'app/src/localAcceptance/unowned.txt');
+  mkdirSync(path.dirname(main), { recursive: true });
+  writeFileSync(main, '<manifest>production sentinel</manifest>');
+  const settings = plugin.acceptanceSettings(env);
+  plugin.writeAndroidOverlay(root, settings);
+  writeFileSync(unrelated, 'retain');
+  const ca = path.join(root, 'app/src/localAcceptance/res/raw/caseops_local_acceptance_ca.pem');
+  assert.equal(readFileSync(ca, 'utf8'), certificate);
+  plugin.writeAndroidOverlay(root, settings);
+  assert.equal(readFileSync(ca, 'utf8'), certificate);
+  plugin.writeAndroidOverlay(root, null);
+  assert.equal(existsSync(ca), false);
+  assert.equal(existsSync(path.join(root, 'app/src/localAcceptance/AndroidManifest.xml')), false);
+  assert.equal(readFileSync(main, 'utf8'), '<manifest>production sentinel</manifest>');
+  assert.equal(readFileSync(unrelated, 'utf8'), 'retain');
+  assert.equal(existsSync(path.join(root, 'app/src/release')), false);
+});
+
+test('actual Expo Android mod compiler applies the plugin and removes QA output on default replay', async (t) => {
+  const { env, dir } = fixture(t);
+  const gradle = path.join(dir, 'android/app/build.gradle');
+  mkdirSync(path.dirname(gradle), { recursive: true });
+  writeFileSync(gradle, "apply plugin: 'com.android.application'\n");
+  const main=path.join(dir,'android/app/src/main/java/ai/caseops/mobile/dev/MainApplication.kt');
+  mkdirSync(path.dirname(main),{recursive:true});
+  writeFileSync(main,'package ai.caseops.mobile.dev\nclass MainApplication : Application(), ReactApplication {\n}\n');
+  const run = (values) => withEnv(values, () => compileModsAsync(plugin({ name: 'CaseOps', slug: 'caseops-mobile' }), {
+    projectRoot: dir, platforms: ['android'],
+  }));
+  await run(env);
+  assert.match(readFileSync(gradle, 'utf8'), /localAcceptance/);
+  assert.ok(existsSync(path.join(dir, 'android/app/src/localAcceptance/res/raw/caseops_local_acceptance_ca.pem')));
+  await run({});
+  assert.equal(readFileSync(gradle, 'utf8'), "apply plugin: 'com.android.application'\n");
+  assert.equal(existsSync(path.join(dir, 'android/app/src/localAcceptance/res/raw/caseops_local_acceptance_ca.pem')), false);
+});
+
+test('installed RN and Expo use non-debug dev=false bundling and release launcher stubs', () => {
+  const gradle = readFileSync(path.join(app, 'node_modules/@react-native/gradle-plugin/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/TaskConfiguration.kt'), 'utf8');
+  assert.match(gradle, /if \(!isDebuggableVariant\)/);
+  assert.match(gradle, /task\.devEnabled\.set\(false\)/);
+  const launcher = readFileSync(path.join(app, 'node_modules/expo-dev-launcher/android/build.gradle'), 'utf8');
+  assert.match(launcher, /configureInRelease = findProperty\("expo.devlauncher.configureInRelease"\) == "true"/);
+  assert.match(launcher, /java\.srcDir 'src\/disableInRelease\/java'/);
+  const xcode = readFileSync(path.join(app, 'node_modules/expo/scripts/react-native-xcode.sh'), 'utf8');
+  assert.match(xcode, /\*Debug\*\)[\s\S]*DEV=true[\s\S]*\*\)[\s\S]*DEV=false/);
+});
+
+test('build receipt binds exact current source and rejects a stale requested release', async (t) => {
+  const { env } = fixture(t);
+  const { checkBuildConfig, finishBuild } = await import('./build-acceptance.mjs');
+  await withEnv(env, () => {
+    const before = checkBuildConfig('android');
+    assert.equal(before.appId, plugin.ANDROID_APP_ID);
+    assert.equal(before.sourceSha, sha);
+    assert.equal(before.devEnabled, false);
+    assert.equal(before.privacyPolicy, null);
+    const config = { extra: { automatedTest: true, apiOrigin: before.apiOrigin,
+      webOrigin: before.webOrigin, releaseSha: sha } };
+    assert.throws(() => finishBuild('android', { ...before, sourceFingerprint: 'changed' }, env.CASEOPS_MOBILE_ANDROID_CA_FILE, config), /SOURCE_OR_CONFIGURATION_CHANGED_DURING_BUILD/);
+    assert.throws(() => finishBuild('android', before, env.CASEOPS_MOBILE_ANDROID_CA_FILE,
+      { extra: { ...config.extra, automatedTest: false } }), /EMBEDDED_MARKER_REQUIRED/);
+    assert.throws(() => finishBuild('android', before, env.CASEOPS_MOBILE_ANDROID_CA_FILE,
+      { extra: { ...config.extra, privacyPolicy: { url: 'https://publisher.contract-fixture.org/privacy', version: 'synthetic-v1', sha256: 'a'.repeat(64) } } }), /EMBEDDED_PRIVACY_POLICY_MISMATCH/);
+    const receipt = finishBuild('android', before, env.CASEOPS_MOBILE_ANDROID_CA_FILE, config);
+    assert.equal(receipt.binaryHash, digest(certificate)); // synthetic file, not APK acceptance.
+  });
+  await withEnv({ ...env, CASEOPS_MOBILE_RELEASE_SHA: '0'.repeat(40) }, () => {
+    assert.throws(() => checkBuildConfig('android'), /CURRENT_SOURCE_SHA_REQUIRED/);
+  });
+  // Expo caches dynamic config in-process. Each real builder owns one platform;
+  // use a new child rather than reuse the earlier Android module instance.
+  const iosScript = `import assert from 'node:assert/strict';
+import {checkBuildConfig,finishBuild} from './scripts/mobile/build-acceptance.mjs';
+const before=checkBuildConfig('ios');assert.equal(before.privacyPolicy,null);
+assert.equal(before.apiOrigin,'https://127.0.0.1:8443');
+assert.throws(()=>finishBuild('ios',before,process.argv[1],{ios:{bundleIdentifier:before.appId},extra:{automatedTest:true,apiOrigin:before.apiOrigin,webOrigin:before.webOrigin,releaseSha:before.sourceSha,privacyPolicy:{url:'https://publisher.contract-fixture.org/privacy',version:'synthetic-v1',sha256:'a'.repeat(64)}}}),/EMBEDDED_PRIVACY_POLICY_MISMATCH/);`;
+  const ios = spawnSync(process.execPath, ['--input-type=module', '-e', iosScript, env.CASEOPS_MOBILE_ANDROID_CA_FILE], {
+    cwd: repo, encoding: 'utf8', timeout: 30000, env: cleanEnv({ CASEOPS_MOBILE_BUILD_PROFILE: plugin.IOS_PROFILE,
+      CASEOPS_MOBILE_AUTOMATED_TEST: '1', CASEOPS_MOBILE_RELEASE_SHA: sha,
+      EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443' }),
+  });
+  assert.equal(ios.status, 0, ios.stdout + ios.stderr);
+});
+
+test('build wrappers never start Metro, use distinct standalone tasks and retain raw logs', () => {
+  const android = readFileSync(new URL('./build-android-local-acceptance.ps1', import.meta.url), 'utf8');
+  const entry = readFileSync(new URL('./build-ios-simulator-acceptance.sh', import.meta.url), 'utf8');
+  const ios = readFileSync(new URL('./ios-simulator-build.sh', import.meta.url), 'utf8');
+  assert.match(entry, /IOS_HOST_REVIEWED_ENTRY/);
+  assert.match(entry, /--input-type=module -e/);
+  assert.doesNotMatch(entry, /pod install|xcodebuild|prebuild/);
+  assert.match(android, /:app:assembleLocalAcceptance/);
+  assert.match(android, /& \$Command @Arguments/);
+  assert.match(android, /GetEntry\('assets\/index.android.bundle'\)/);
+  assert.match(android, /application-debuggable/);
+  assert.match(ios, /-configuration Release/);
+  assert.match(ios, /CODE_SIGNING_ALLOWED=YES/);
+  assert.match(ios, /CODE_SIGN_IDENTITY=-/);
+  assert.match(ios, /CODE_SIGN_INJECT_BASE_ENTITLEMENTS=YES/);
+  assert.doesNotMatch(ios, /CODE_SIGNING_ALLOWED=NO|CODE_SIGNING_REQUIRED=NO/);
+  assert.match(ios, /test -s "\$app\/main.jsbundle"/);
+  for (const script of [android, ios]) {
+    assert.doesNotMatch(script, /expo[^\n]* start |Set-ExecutionPolicy|ExecutionPolicy Bypass|--insecure|NODE_TLS_REJECT_UNAUTHORIZED|allowProvisioningUpdates/);
+    assert.match(script, /Raw build evidence retained/);
+  }
+});
+
+test('receipt writer creates UTF-8 JSON exclusively and refuses evidence overwrite', (t) => {
+  const { dir, env } = fixture(t);
+  const output = path.join(dir, 'before.json');
+  const args = ['scripts/mobile/build-acceptance.mjs', 'check', 'android', output];
+  execFileSync(process.execPath, args, { cwd: repo, env: cleanEnv(env), stdio: 'pipe' });
+  assert.equal(JSON.parse(readFileSync(output, 'utf8')).automatedTest, true);
+  const original = readFileSync(output);
+  const again = spawnSync(process.execPath, args, { cwd: repo, env: cleanEnv(env), encoding: 'utf8' });
+  assert.notEqual(again.status, 0);
+  assert.match(again.stderr, /EEXIST/);
+  assert.deepEqual(readFileSync(output), original);
+});
+
+for (const shell of ['powershell.exe', 'pwsh.exe']) {
+  test(`Windows wrapper parses and forwards native drive-letter arguments in ${shell}`, { skip: process.platform !== 'win32' }, (t) => {
+    const { dir } = fixture(t);
+    const wrapper = fileURLToPath(new URL('./build-android-local-acceptance.ps1', import.meta.url));
+    const quote = (value) => `'${value.replaceAll("'", "''")}'`;
+    const argument = 'C:/explicit path/QA input/public-ca.pem';
+    const script = `
+$ErrorActionPreference = 'Stop'
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(${quote(wrapper)}, [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors.Count -ne 0) { throw 'WRAPPER_PARSE_FAILED' }
+$definition = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-BuildCommand' }, $true)
+. ([scriptblock]::Create($definition.Extent.Text))
+$run = ${quote(dir)}
+$nativeArguments = @('-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)))', ${quote(argument)})
+Invoke-BuildCommand ${quote(process.execPath)} $nativeArguments 'argv.log' | Out-Null
+Invoke-BuildCommand ${quote(process.execPath)} @('-e', 'process.stderr.write(''SUCCESS_STDERR''); process.exit(0)') 'stderr.log' | Out-Null
+$rejected = $false
+try {
+    Invoke-BuildCommand ${quote(process.execPath)} @('-e', 'process.stderr.write(''FAILED_STDERR''); process.exit(7)') 'failure.log' | Out-Null
+} catch { $rejected = $true }
+[pscustomobject]@{
+    received = @((Get-Content -LiteralPath (Join-Path $run 'argv.log') -Raw | ConvertFrom-Json))
+    stderrRetained = (Get-Content -LiteralPath (Join-Path $run 'stderr.log') -Raw).Contains('SUCCESS_STDERR')
+    failureRetained = (Get-Content -LiteralPath (Join-Path $run 'failure.log') -Raw).Contains('FAILED_STDERR')
+    failedExitRejected = $rejected
+} | ConvertTo-Json
+`;
+    const stdout = execFileSync(shell, ['-NoProfile', '-NonInteractive', '-Command', script], {
+      encoding: 'utf8', timeout: 15000, windowsHide: true,
+    });
+    assert.deepEqual(JSON.parse(stdout.trim()), { received: [argument], stderrRetained: true,
+      failureRetained: true, failedExitRejected: true });
+  });
+}
+
+test('cross-platform profile guards reject prebuilding the wrong native platform', async (t) => {
+  const { env, dir } = fixture(t);
+  await withEnv(env, async () => {
+    const config = plugin({ name: 'CaseOps', slug: 'caseops-mobile' });
+    await assert.rejects(() => config.mods.ios.dangerous({ ...config, modResults: {},
+      modRequest: { projectRoot: dir, platformProjectRoot: path.join(dir, 'ios'), platform: 'ios', modName: 'dangerous' } }),
+    /ANDROID_ACCEPTANCE_CANNOT_PREBUILD_IOS/);
+  });
+  await withEnv({ CASEOPS_MOBILE_BUILD_PROFILE: plugin.IOS_PROFILE,
+    CASEOPS_MOBILE_AUTOMATED_TEST: '1', CASEOPS_MOBILE_RELEASE_SHA: sha,
+    EXPO_PUBLIC_API_ORIGIN: 'https://127.0.0.1:8443', EXPO_PUBLIC_WEB_ORIGIN: 'https://127.0.0.1:3443' }, async () => {
+    const config = plugin({ name: 'CaseOps', slug: 'caseops-mobile' });
+    await assert.rejects(() => config.mods.android.dangerous({ ...config, modResults: {},
+      modRequest: { projectRoot: dir, platformProjectRoot: path.join(dir, 'android'), platform: 'android', modName: 'dangerous' } }),
+    /IOS_ACCEPTANCE_CANNOT_PREBUILD_ANDROID/);
+  });
+});

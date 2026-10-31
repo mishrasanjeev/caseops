@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "scope": "J20/M22 P0/P2 core subset; not the complete MOB-01..40 release gate",
+  "platforms": ["android", "ios"],
+  "cases": [
+    {"id": "CORE-01", "groups": ["MOB-01"], "title": "Native authenticated principal and workspace"},
+    {"id": "CORE-02", "groups": ["MOB-07", "MOB-15", "MOB-19"], "title": "Four native destinations remain reachable"},
+    {"id": "CORE-03", "groups": ["MOB-08"], "title": "Find and open exact authorized Matter"},
+    {"id": "CORE-04", "groups": ["MOB-11"], "title": "Save once and reread note after process restart"},
+    {"id": "CORE-06", "groups": ["MOB-30"], "title": "Native requests obey no-paid marker and explicit route admission"},
+    {"id": "CORE-05", "groups": ["MOB-05"], "title": "Sign out removes private record surface"}
+  ]
+}

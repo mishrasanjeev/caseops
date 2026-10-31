@@ -1,0 +1,214 @@
+# CaseOps store release preparation — 2026-10-26
+
+**Status: blocked; neither store submission nor production native acceptance is complete.**
+
+The user selected **Orchestrum Technologies LLP as the organization for the first release**. The user has no D‑U‑N‑S Number, paid Apple Developer Program membership, or Google Play Console account yet. Organization enrollment is the selected route; an individual-first publication is not pending. No store console, payment, CaseOps production service deployment, or distribution upload was performed during this review; the separate corporate Site is deployed privately as recorded below.
+
+Work concerns [PR #558](https://github.com/mishrasanjeev/caseops/pull/558), whose reviewed starting head is `6de2bacc3d8afaa5f352e6b811f1297be07379ed`. Release work is isolated at `/Users/sanjeevkumar/.codex/worktrees/mobile-store-release/CaseOpsApp`. The original iOS checkout remains separately owned while its Files supplement is completed. The working source integrates current-main verification-marker changes, the SDK cache-copy/static renderer repairs and guarded HTTPS callback configuration. Its canonical merge/freeze and matching native rebuilds remain pending; final native receipts retain their own binary/source identities. Publishing this draft does not constitute release approval.
+
+## Owner enrollment checklist
+
+These external steps can proceed while code, tests and Android SDK installation continue. Account identity documents and payment details belong in the official verification portals; signing keys and private verification documents are not repository inputs.
+
+1. **Prepare organization identity.** Use the legal name from Orchestrum Technologies LLP's registration. Have its registration document, headquarters/mailing addresses, business phone, authorized representative, work contact details, organization-domain email and functioning organization website available. These values have not been supplied or verified here. Do not substitute the app's development identifier or infer the organization's domain from a source-code URL.
+2. **Look up/request D‑U‑N‑S.** Follow Apple's [D‑U‑N‑S lookup/request route](https://developer.apple.com/help/account/membership/D-U-N-S/). It checks for an existing number and offers a free request when the organization is absent. Ensure the legal name/address match the registration; allow verification and propagation time. This is an owner action and no request has been submitted.
+3. **Enroll Apple as an organization.** An authorized person uses their Apple Account to [enroll the organization](https://developer.apple.com/help/account/membership/program-enrollment/). Apple verifies legal entity, D‑U‑N‑S and authority; work email/website must be associated with the organization. Confirm the resulting seller name and Team ID. Apple's [membership page](https://developer.apple.com/programs/enroll/) lists US$99 per year, with regional pricing shown during enrollment. Review the agreement and pay manually only after approval.
+4. **Create Google Play organization account.** Use the official [Play Console signup instructions](https://support.google.com/googleplay/android-developer/answer/6112435?hl=en), selecting Organization. The published registration fee is US$25 once; the owner handles agreement/payment. [Organization verification](https://support.google.com/googleplay/android-developer/answer/10841920?hl=en) may require D‑U‑N‑S, representative government ID and an official organization document. Keep the linked payments profile's legal name/address consistent with D&B and verify the requested contact details. This is Play Console enrollment, not a separate outside-Play distribution account.
+5. **Register final app identities after account verification.** Confirm production iOS bundle ID and Android package name, store app records, authorized team access and public support/privacy contacts. None is chosen in this document. The current `ai.caseops.mobile.dev` defaults are development identities and must not be adopted for public publication without an explicit final decision. Apple documents that the [bundle ID becomes fixed after the first uploaded build](https://developer.apple.com/documentation/xcode/preparing-your-app-for-distribution).
+
+## Confirmed technical gaps
+
+Unauthenticated marked GETs on2026-10-26 independently observed production API
+`caseops-api-00503-kw2` and web `caseops-web-00480-fmx` both serving
+`29865557c2745997f6b7d6253e995404b5a11673`. At that observation the native sign-in page
+returned404. These public identity reads performed no authentication, mutation or
+paid-provider operation; they do not certify production native workflows.
+The compatible native API/web rollout and registered links must precede store
+login acceptance. Evidence: `pr558-release-20261026/public-production-readiness.json`.
+
+| Area | Observed fact | Required release evidence |
+|---|---|---|
+| App identity/version | `apps/mobile/app.config.ts:9,15,22` sets version `0.1.0` and development bundle/package defaults. Retained local native builds use build `1`; no explicit production build-number/version-code policy is configured. | Registered final IDs and a deliberate monotonic store version/build policy, reflected in actual IPA/AAB metadata. |
+| Distribution signing | Read-only local query found **0 valid code-signing identities** and **0 provisioning profiles** in the two standard Mac profile directories. No Android release keystore has been supplied or verified for this release worktree. | Apple organization membership, explicit App ID and valid distribution signing/profile; an operator-controlled Android upload key and Play App Signing setup. Simulator ad-hoc signatures and debug APK keys cannot establish these. See [Apple profiles](https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile/) and [Play App Signing](https://support.google.com/googleplay/android-developer/answer/9842756?hl=en). |
+| Artwork/build pipeline | The release checkout now configures an opaque1024px icon and Android adaptive/monochrome layers from the existing CaseOps website mark. Dimensions, alpha and rendered appearance were verified; generator/source SVGs are retained. No verified store archive/submission recipe exists yet; current build recipes produce acceptance artifacts only. | Inspect the actual signed IPA/AAB resources, final launch presentation and store screenshots. EAS is optional; a reviewed native Xcode/Gradle route is also possible. [Apple distribution preparation](https://developer.apple.com/documentation/xcode/preparing-your-app-for-distribution) requires icons and app information. |
+| Android host | All seven explicitly approved SDK packages are installed/verified; the real first build additionally required AGP's Build Tools36.0.0. That free component is now installed under the identical already-accepted SDK terms, with zero new license prompts. JDK21/17, Gradle9.4.1, native tools, acceleration and the stopped dedicated AVD are prepared. | `android-mac-setup/readiness-v2.json` retains the original seven-package proof, supplemental36 proof and failed first build. A fresh cb27 APK is built and installed-byte attested on the dedicated AVD. Full core/Files/privacy execution remains required; source changes after cb27 require a matching rebuild. |
+| Platform compatibility | Existing local APK/Simulator evidence is for earlier binary/source fingerprints. `supportsTablet: true` is configured without a corresponding current iPad acceptance claim. | Current signed release artifacts, target/ABI checks, physical-device testing and supported iPad layouts where advertised. Google currently requires new submissions/updates to target [Android 16/API 36 or higher](https://developer.android.com/google/play/requirements/target-sdk); verify the actual artifact. Inspect/test native library [16 KB compatibility](https://developer.android.com/guide/practices/page-sizes), rather than infer it from framework versions. |
+
+Google requires [Android App Bundles for new Play apps](https://developer.android.com/guide/app-bundle). The existing Simulator build wrapper and local Android acceptance APK wrapper do not produce a certified public-store release by themselves.
+
+## Production HTTPS callback readiness — Partially fixed
+
+The earlier client hardcoded a custom callback that the production API correctly rejected. Source support now requires one complete hash-bound public link configuration and derives matching mobile policy, web policy, exact API redirect registry and association projections. Production native builds refuse missing, malformed, synthetic or mismatched configuration. The iOS client explicitly selects the pinned SDK's HTTPS callback mode only on supported iOS17.4+; Android uses verified HTTPS intent filters. Existing local acceptance profiles remain explicit and unchanged. No API issuance, PKCE, MFA, signing, realm, TTL, TLS or revocation policy was weakened.
+
+The static HTTPS fallback does not reflect/exchange code or state. Its exact GET/HEAD proxy/route headers and fixed-script hash were corrected after actual Next header precedence defeated a route-only header test. All eight built-browser cases now pass, including effective CSP/no-referrer, exact URL scrubbing, no reflected input and zero authentication/exchange calls. API tests exercise both platforms' registered HTTPS authorization/exchange with wrong URI/platform/verifier and single-use controls; these are offline HTTP fixtures, not production association proof.
+
+Owner-selected identifiers, actual application-identifier prefix and app-signing certificates, accessible immutable web input, deployed registry, served AASA/Digital Asset Links, ingress query-redaction and real signed-device HTTPS handoff remain unverified. The owner explicitly deferred business/enrollment facts while engineering/testing continues. The generator never signs, deploys or enables auth and never marks association verified. See [NATIVE_LINK_CONFIGURATION.md](NATIVE_LINK_CONFIGURATION.md) for exact input/delivery/readiness requirements. Production native sign-in stays disabled; local custom-callback acceptance cannot certify it.
+
+## Picker repair boundary — Inconclusive for release
+
+Repeated select/Clear/reselect reproduced an unreadable raw iOS picker URI before any upload POST. Preserving the OS-managed Inbox directory did not resolve it. The candidate now enables Expo's documented iOS cache-copy path, admits only a direct child of the exact SDK cache root, verifies returned metadata and the unchanged50MiB global limit, and clears SDK, Inbox and app-staging copies on all owned lifecycle paths. Android retains its existing non-copy picker path. A separately reproduced rapid-input race is guarded by a synchronous interaction lease, preventing a rejected busy action from deleting the active upload's input.
+
+The SDK performs its native copy **before JavaScript can enforce size limits**; this is not a claim that all native copying is bounded in advance. Native full-run success, final artifact parity and production verification are still required. Source regressions do not close those gates. See `apps/mobile/src/files/INTEGRATION.md` and retained native reports.
+
+## Embedded reader repair boundary — Inconclusive for release
+
+The completed iOS Files run failed FILES09 with `IOS_FILES_NATIVE_PAGE_EVENT_REQUIRED` and FILES10 with `IOS_FILES_NATIVE_ZOOM_EVENT_REQUIRED`. The old HTML builder embedded `rendererMain.toString()` at runtime. A bounded public-program probe through the actual app's pinned Hermes framework returned a40-character bytecode placeholder with no renderer body; the generated static script survived the same HBC/runtime round-trip with the ready protocol intact. This is direct mechanism evidence, not an observed WebView error or a replacement native pass.
+
+The candidate now embeds a deterministic public JavaScript string generated before Metro/Hermes. The generator's `--check` runs before native source capture; poisoned-function-source, asset, security and real Chromium reader regressions pass. CSP/nonce/bridge/network/asset limits remain unchanged. Rebuild both platforms from the final canonical source, retain every old failed receipt, prove existing admitted PDF/PNG/JPEG read-only, then complete each platform's full Files/core inventories. No old upload may be resubmitted to repair a reader failure.
+
+## Security and test status at this handoff
+
+| Boundary | Current scoped result | Evidence locator |
+|---|---|---|
+| Required hosted API check | **Failed on older published head `762980ab4b5ad6a5c7b8df95764d03a0c3a59455`: API shard11/13 completed with14 failures,876 passes and452 skips**, including `tests/test_public_lead_notifications_20261021.py`. The exact invalid-adapter emulator tests followed by the notification module reproduced the same14 failures locally. Incoming main has identical relevant blobs. The pytest fixture now registers all three emulator-owned environment originals before direct installation so late overrides cannot resurrect a closed adapter during teardown; production transport fences are unchanged. Both new absent/preexisting-environment controls failed before the correction, and the complete paired files now collect54:50 pass, zero failures/errors, four existing PostgreSQL-only skips. This fixture regression is locally repaired; the original hosted failure remains retained and a fresh canonical required-check pass is mandatory. Evidence: `pr558-release-20261026/api-public-lead-readonly-ayg_7298/{summary.json,red.xml,green.xml}`. The scoped local72-pass selection alone did not supersede it. | [Failed API shard11/13, job121424228755](https://github.com/mishrasanjeev/caseops/actions/runs/40277816189/job/121424228755), run40277816189; [aggregate job121434041166](https://github.com/mishrasanjeev/caseops/actions/runs/40277816189/job/121434041166). |
+| Mobile dependency audit | **Failed:** fresh final source audit still reports four high package entries through one unpatched node-forge1.4.0 advisory in Expo CLI/certificate tooling. Official latest remains1.4.0. No rollback, fabricated fork version or waiver; production exports also require real link configuration after this gate can pass. | `pr558-release-20261026/source-gates-12/{mobile-audit-final.json,node-forge-latest-final.json}`; independent `forge-remediation-review-20261026T135952Z/`. |
+| Installed Python audit | The initial moderate CVE-2026-114603 failure is retained. The coherent optional OpenTelemetry1.45.1/0.66b1 update passes strict OSV against the exact installed160 packages, dependency compatibility and44 related tests with zero skips. The new cb27 Linux API image additionally passes installed-set OSV139/139 and `pip check`, with zero findings/skips; its production-only graph has no optional OpenTelemetry packages. Deployed release closure remains open. | `pr558-release-20261026/pip-audit/results.json`; replacement `pr558-release-20261026/observability-20261026/summary.json`, final XML and installed audit. |
+| Gitleaks | Exact published75378814 passed pinned full tree83,009,893bytes and all-parent f49..753 history13commits/10,467,650bytes, with owned containers absent; existing33 exact origin translations retained. Earlier failures and original27 findings remain preserved. Callback changes create a later candidate that still needs its own scan. | `pr558-release-20261026/secret-scan-final-75378814b20c-20261026T141537Z-f983c4/evidence/completion.json`; `canonical-753-security/`. |
+| Mobile source and harness | **348/348 mobile tests**, strict TypeScript and four-output generator check pass. All literal19 tooling modules collect **533:531 pass**, zero failures/cancellations/todos, two existing Windows-only skips. All96 Python fixture/admission tests pass. Independent baseline execution proves build-config56→63, seven added cases; initial55/+8 estimate is superseded. The observed Google DocumentsUI package required three additional Android picker regressions; both exact system packages and matching resource namespaces are supported, with unknown/mismatched namespaces rejected before clicks. The official installed system APK confirms the Google roots_list ID; actual picker visibility/interaction is still a native prerequisite. CI triggers include the whole shared web tree and browser support; complete tooling replay validates the CI-only closure delta after runtime inputs were frozen. | `pr558-release-20261026/source-gates-12/{mobile-summary.json,tooling.log,tooling-ci-closure.log,baseline753-build-config-count.log,post-gate-ci-delta.json,final-tested-input-reconciliation.json}`.  Latest533-case evidence: `pr558-release-20261026/documentsui-final-15/{summary.json,all19.log}`. |
+| API regressions | Complete selected native-auth, verification-marker, emulator and notification modules collect129: **124 pass**, zero failures/errors, five existing skips (one Windows curl boundary, four PostgreSQL-only cases). Full Ruff passes. Native-auth alone47/47 includes Android/iOS registered HTTPS exchange, non-consuming wrong bindings and replay refusal. No production API auth logic was loosened. Earlier214 and real PostgreSQL9/9 remain separately scoped historical proofs. | `pr558-release-20261026/source-gates-12/{api-combined.xml,api-combined.log,api-ruff.log}`; `https-native-api-12/`. |
+| Web source | Full251-file suite **2022/2022**, zero skips; web/E2E types and both production/default-disabled and explicit local browser builds pass. All8 built-browser cases pass. Explicit workspace coverage verified fresh report/thresholds: lines66.50%, statements63.19%, branches57.84%. The earlier nested npm command consumed the coverage flag; that repeated functional run remains retained as incomplete coverage evidence, superseded by the actual test:coverage run. Original PowerShell setup failures remain historical. | `pr558-release-20261026/source-gates-12/{web-summary.json,web-full.log,web-production-build.log,browser-coverage-summary.json,browser-eight.log,web-coverage-explicit-summary.json,source-inputs-after-all.json}`. |
+| Native iOS | Earlier23/23 core acceptance remains valid only for its older signed binary. Host-fixed8Tddh13c completed the full Files inventory: **15/17 calls passed**, with all51 phases and17 created/deleted sessions retained. FILES09 PDF page readiness and FILES10 image zoom acknowledgement failed; all five uploads/source readbacks,13 privacy boundaries, six-cohort original preservation, zero private copies and final signed-out restart passed. The static-renderer repair now passes source/browser and actual pinned-Hermes round-trip controls, but a new canonical signed app still needs actual PDF/PNG/JPEG proof plus complete17 Files and fresh23 core runs. No combined40-case or production certification is claimed. | Core: `ios-acceptance-i47Hqf5B/native-reports/2026-10-25T16-20-32-949Z-ios-1cd06c81/`. Files: `ios-files-20261026/reports/2026-10-26T05-38-23-294Z-ios-files-9bff0dd1/`, including `independent-failed-run-v2-reconciliation.json`. Renderer controls: `ios-files-20261026/renderer-hermes-diagnosis/`. |
+| Native Android |75378814 ARM64 APK build, signature, source/CA and independent receipt consumer pass; binarySHA d2e5d66bc52e7ef3c5f1d2a9d4dedac935acc3b4fbda46277c2b2303ea0332cf, sourceFP ad0db8b95179c7bcadd5810422ed6d1d9083700a1159c3f115fcd5d54123670c. It was not installed or run and becomes historical after callback changes. ZIP plus all20 ELF LOAD/RELRO static checks pass; the earlier modulo-only false flags are retained with corrected own-LOAD/page-overlap controls. Official API36/ARM64 16KiB image is installed under unchanged accepted terms. Its first36.389s boot ended in an unrecorded ADB metadata failure; page-size/root readiness remains incomplete, not an OS defect. VM absence/ports closed were verified. Final rebuilt23core/17Files and actual16KiB runtime remain pending. | `android-mac-setup/receipts/android-final-75378814-1ea6gsmp/{final-build-handoff.json,16k-segment-review-3so6_hnw/receipt.json}`; `receipts/16k-image-proposal-w2dbhpou/installed-verified.json`, `16k-boot-readiness-pgxwoy7h/`, `16k-controller-offline-ajtu83sa/`. |
+
+Paths beginning `ios-setup/` and `pr558-release-20261026/` above are beneath `/Users/sanjeevkumar/.cache/caseops-mobile/`. Local signing metadata is retained at `ios-setup/pr558-gitleaks-40184439567/local-signing-metadata.json`. These are local proof locators, not uploaded store assets or production attestations.
+
+## Draft listing and privacy review inputs
+
+These are preparation notes, **not approved store declarations**:
+
+| Field | Draft/current input | Still required |
+|---|---|---|
+| Product/seller | Product name: CaseOps. Organization selected: Orchestrum Technologies LLP. | Verified seller enrollment, final developer display name, category, age/content rating, territories and languages. |
+| Description | Draft: “Access your organization's authorized Matters, work, calendar, notes and files from CaseOps.” | Product/legal review against features actually present in the final signed build. No promise of legal advice, guaranteed legal accuracy, offline access or unverified capabilities. |
+| Support/privacy | No verified organization support URL, privacy-policy URL or public contact is selected here. | Publish the correct organization contacts and accessible policy; keep app links and store metadata consistent. |
+| Review access | App requires an authorized account and browser/MFA handoff. | A bounded synthetic review account, usable MFA/review instructions and available review backend, supplied through official review fields; no real client records or credentials in source. Apple requires [review access and accurate metadata](https://developer.apple.com/app-store/review/guidelines/). |
+| Data map | Review account identifiers, tenant membership, authentication/session data, Matter metadata, notes, uploaded documents/images and SDK/backend processing. | Actual retention, deletion, processing purposes, service-provider sharing and shipped SDK inventory. Do not declare “no data collected” from local cache-purge tests. Complete [Apple app privacy](https://developer.apple.com/help/app-store-connect/manage-app-information/manage-app-privacy/) and [Google Data safety](https://support.google.com/googleplay/android-developer/answer/10787469?hl=en) from verified behavior. |
+| Permissions/encryption | The historical 7d Android APK has backup/debug/cleartext disabled, but inherited four unused overlay/media/storage permissions despite `permissions: []`. The source candidate explicitly blocks those four permissions and removes the unused iOS camera purpose string. Headless pinned Expo manifest/Info.plist projection passes; replacement native artifacts remain required. SecureStore/browser plugins and `ITSAppUsesNonExemptEncryption: false` remain unchanged. | Recheck the actual merged replacement APK and iOS artifact, privacy manifests and export-compliance responses. Source projections are not reviewed store declarations. |
+| Minimum iOS version | The historical e825 Simulator artifact supports iOS 16.4 and uses the explicit local callback. Production HTTPS authentication requires iOS 17.4. The source candidate sets built-in `ios.deploymentTarget: "17.4"` only with production link configuration; both QA profiles retain the SDK default. Pinned Expo introspection confirms the production Podfile property and unchanged local policy. | Verify the eventual production archive's minimum OS against HTTPS authentication; no production archive or App Store compatibility proof is claimed. |
+| Account lifecycle | Current scope proves local sign-in/logout/session controls, not a complete public account-creation/deletion policy. | If account creation is offered, assess and implement the applicable [Apple account deletion requirements](https://developer.apple.com/help/app-review/guideline-reference/5-1-1-account-deletion/) and corresponding Google policy. |
+| Visual assets | Current local screenshots demonstrate specific tested states only. | Approved production icons, accurate device screenshots, accessibility/layout review and final listings. |
+
+Public release remains blocked until organization verification/identities, production callback compatibility, verified support/account-lifecycle policies, distribution artifacts, current independent Android/iOS acceptance and all required security gates have corresponding positive evidence. Owner enrollment and manual membership/registration payments can proceed in parallel with engineering work. No payment or public upload is automated by this checklist.
+
+## Organization website preparation
+
+A separate corporate Site is deployed owner-private at https://orchestrum-technologies-llp.mishra-sanjeev.chatgpt.site. The premium portfolio revision source is `bc7d60a705668076647df6178278dbf437c1489f`, deployment `appgdep_6adf5caf977c8191a0f62b6dc0b886d9`, with native success and the live headline/product links verified. Nine routes cover the company, Grantex, AgenticOrg, CaseOps, contact and website-only privacy/terms. The owner confirmed all three products belong to the LLP; precise product summaries and `sanjeev@orchestrum.in` were checked against the primary product websites. Fresh desktop/tablet/phone QA, route/asset checks, navigation, product filters and CaseOps overview controls are recorded in the separate Site source; live screenshot and delivery metadata are in `orchestrum-site/premium-v3-delivery.json` beneath the mobile cache. It contains no forms, analytics, invented corporate identifiers or app-store availability claim. Its source is separately managed under `sites/orchestrum-corporate-20261026/` and excluded from this PR.
+
+The user explicitly chose to keep the Site private until business details are added. A public company-associated domain, real organization contacts and verified enrollment details are still required. The separate private `APP_PUBLISHING_REVIEW.md` records data-policy questions and the prior unverified AccountScreen statement about web account-deletion settings. The next candidate removes that false destination and directs account/data requests to the organization administrator; this copy correction does not implement or certify account deletion. Device-session revocation is not account deletion; store policy applicability must be checked against actual account creation/provisioning. No final app privacy/support/deletion notice is represented as complete by the corporate Site.
+
+## Preserved e825 native build checkpoint before picker-harness correction
+
+Both e825 builds remain immutable. Android actual APK SHA `b448e11a70a2bf80c97acfb007e6988b97e108710d49e01781c55afba4ef5875` passes receipt/signature/CA/source and all20 static16KiB checks. The iOS signed Simulator app SHA `c7d7a581396791d43c67ea77666e7e234d25124358ac16a459595b91e94fea18` passes independent receipt/codesign/source verification. Its one installation committed. The physical app-data directory changed, but complete MCM metadata bytes/logical identifier stayed identical; six provider cohorts and known private-copy0 checks pass. This does not prove arbitrary upgrade-data persistence. No authentication, native UI inventory or ledger reset occurred on that app.
+
+The generated ExpoModulesCore podspec checksum changed only because of two absolute checkout-root fields. Raw old/new checksum values and full locks remain preserved; actual pinned source/package and15,929,453-byte runtime tarball are byte-identical. Current canonical raw Podfile/Manifest lock SHA `543ac81f` prefix is retained as its own path-specific baseline, without rewriting historical hashes.
+
+The Android16KiB readiness boot proves actual API36/ARM64/16384-byte pages/rootUID0. A separate read-only system-APK audit proves `com.google.android.documentsui:id/roots_list`. Earlier generic ADB, lsof-parser and metadata postflight refusals remain retained; they were not app/OS defect proof. The new two-file Android harness correction requires fresh matching candidate metadata and full40 executions on each platform. Its complete19-module replacement collects533/531pass/two existing Windows skips. Runtime/mobile, API, web and dependency bytes are unchanged by that harness-only correction.
+
+## Preserved 029f Android core run and entry-readiness candidate
+
+Actual 029f Android CoreRun02 passed 12/23 calls; 11 calls did not run. All 69 phases and 23 distinct created/deleted session acknowledgements remain retained, with passing cleanup/postflight and matching source, APK and backend bindings. NATIVE-13 fresh-auth setup could not locate the company field. Three later settled-page, editor and fresh-PKCE read-only probes did not reproduce an offscreen or loading mechanism; the original cause remains unknown. Independent reconciliation is `android-mac-setup/independent-core-run02-nio295p9/audit.json` under the mobile cache.
+
+The harness candidate replaces one-time optional-link checks with one 20 second entry-readiness deadline, exact observed controls and one raw dispatch per navigation outside polling. Normal field scrolling and PKCE verification before credentials remain intact. A deterministic delayed-entry counterexample fails the old source; all 171 affected tooling tests pass, but source regressions do not establish the historical native cause or a replacement native pass. Complete fresh Android 23/17 and iOS 23/17 runs remain required. Proof logs are under `android-mac-setup/firefox-entry-readiness-xy9eugcn/`; the unwaived 4 HIGH mobile dependency gate still blocks release.
+
+Evidence beneath the mobile cache: `ios-build-5HRFLsrG/receipt.json`; `ios-files-20261026/canonical-run-14/{install-privacy-reconciliation.json,container-rotation-identity-reconciliation.json}`; `ios-setup/pod-lock-relocation-audit-kMzsBf/proof.json`; `android-mac-setup/receipts/android-final-e825331b-nckqmawr/final-build-handoff.json`; `android-mac-setup/receipts/16k-boot4-public-provider-e6n_8ay6/receipt.json`; `pr558-release-20261026/documentsui-final-15/{summary.json,all19.log}`. The separate launcher syntax refusal executed no tests and is retained at `documentsui-final-15-launch-refusal.json`.
+
+## Native renderer correction checkpoint — late 26 October UTC
+
+Public release remains **NO-GO**. The frozen `1525da166249dcec80d8ad05504e6c9d312b8e70` Android APK (`fddce5b1` prefix) and iOS Simulator app (`ec7a78e6` prefix) both passed real isolated browser/MFA/PKCE/account/workspace/logout smoke checks. Their full replacement inventories have not passed. Two current Android core attempts stopped in NATIVE-01 before credentials; outside diagnostic passes do not replace the complete 23-case run. The Firefox failure's cause remains unknown. Its later public-caption pixel observation occurred after a URL-editor probe, so it cannot certify the original failure frame. The prepared full-23 diagnostic fork preserves the entire 69-phase loop and captures pixels before any later failure-only metadata reads; it has not run natively.
+
+The current iOS read-only precheck failed the **initial** PDF page acknowledgement, before zoom or Next. Native diagnostics observed the safe-display refusal immediately; an independent PNG check failed zoom acknowledgement and did not reach JPEG. Full/range source reads and acknowledged logout/session cleanup passed, with no upload or source-admission replay. These failed candidates are retained separately. The exact generated renderer program exists in the actual Hermes bundle, excluding the earlier missing-program explanation for this failure.
+
+The same 6,094,557-byte HTML and verified 1,064-byte two-page public PDF rendered successfully in Chromium with zero network requests. A separately signed native WK probe proved navigation, ready/begin/chunk/end transfer and PDF canvas rendering, then failed in `page.getTextContent()` with TypeError. The actual iOS 26.5 runtime reports stream async iteration absent and `getReader` available. The owned portable-reader candidate then completed embedded text and acknowledged page 1 of 2 on that runtime. This agrees with the primary [PDF.js Safari report](https://github.com/mozilla/pdf.js/issues/21924); no supplier bytes, global polyfill, CSP or 15-second lease/render budget were changed.
+
+## Isolated packaging preparation — 2026-10-27
+
+A separate draft based exactly on canonical48f prepares explicit production
+version/build metadata and plan-only manual Xcode device archive/export and
+Android release AAB recipes. It changes neither the current48/118 QA candidate
+nor its installed artifacts or native reports. The declared previous counters
+are hash-bound operator inputs, not independently verified store maxima. The
+draft refuses execution and makes signing-material/toolchain/archive/AAB
+verification explicit before activation; it creates no keys, membership,
+agreement acceptance, payments or store upload. See `STORE_PACKAGING_DRAFT.md`.
+
+`NATIVE_DATA_INVENTORY_2026-10-27.md` records current narrow app/SDK data paths
+and a dated correction to the older private publishing review: camera-purpose
+copy and the former web-account-deletion destination are historical; current
+account guidance names the organization administrator. This correction does
+not implement account deletion, a public privacy policy or support workflow.
+The unwaived mobile four-HIGH dependency gate and all required current native,
+distribution and public service/association proof remain separate and open.
+
+The unchanged native PNG engine separately acknowledged its first page, then one 125% zoom request and the corresponding acknowledgement. That proves the engine path with an acknowledged initial page; the earlier app failure's exact early-input cause remains unobserved. The app candidate therefore also keeps page/zoom controls unavailable until an actual position acknowledgement matches the current controller, content revision and authority lease. The initial Page 1 of 1 value is no longer presented as render evidence.
+
+Verification at this checkpoint includes the preserved original portability regression failure, 11 passing focused PDF stream cases, 31 passing controller/readiness/integration cases, TypeScript and generator checks. The intended complete replacement mobile inventory is **365 cases** (348 baseline plus 11 stream and 6 readiness cases), with zero failure, skip, cancellation or todo required. The first complete invocation had 364 passes and one unchanged multipart-parity setup failure because the accepted Python executable was omitted; it is retained, with a full corrected invocation required. Fresh full-source tooling verification, matching canonical app rebuilds, complete Android/iPhone 23+17 and iPad/layout acceptance remain necessary. The isolated WK probes are not CaseOps native-case, production or store acceptance.
+
+Proofs beneath the mobile cache: `ios-build-CrSPw2qo/receipt.json`; `ios-files-20261026/canonical-renderer-readiness-1525da16/`; `ios-files-20261026/wk-isolator-source-1525-zjLqlRq0/{guarded-v2,guarded-stage-v3,guarded-portable-v4}/`; `ios-files-20261026/wk-png-baseline-1525-6_9erme7/`; `ios-files-20261026/chromium-exact-wk-1525-e_sf_nxd/`; `ios-files-20261026/renderer-stage-peer-review-1525-9n3yw0oo/`; `ios-files-20261026/pdf-stream-portability-source-cifyww1u/`. All probe processes were closed, and the original CaseOps installed binary/container and historical provider cohorts were preserved. No production credentials, paid-provider work, production deployment or store submission occurred.
+
+## Engineering checkpoint — 27 October UTC
+
+Frozen source `48f201ef056666cd0540bf442f63fb382e4bce40` completed365/365
+mobile cases and the complete19-module tooling inventory:545 collected,
+543 passed, two existing Windows-only skips, zero failures/cancellations/todos.
+The final accepted-interpreter/frozen-input reports supersede the earlier
+missing-Python and provisional runs without deleting those failures.
+
+Matching48f native artifacts were built and admitted: iOS Simulator binary
+`c42eae345e34dc45f2cc49cdd0665ba9b880ad00552ddcf1e3b3df3650dba88e`
+and Android ARM64 APK
+`5eb7e0a00a9a137a80a0ff415699db3d15fec2034d17072cf1ce9f88e77fab19`.
+Both bundles contain the exact new15,223-byte portable renderer program and
+exclude its predecessor. The APK passes20 static ELF/RELRO/16KiB alignment
+checks and actual permission/backup/cleartext/nondebuggable checks. These
+are artifact/source checks, not complete device acceptance or distribution.
+
+In the installed48f iOS app, the real FILES09/10 reader calls passed PDF
+page2/previous/125% zoom and PNG/JPEG125% zoom, with actual renderer
+acknowledgements, fresh browser/MFA, acknowledged logout and session cleanup.
+No upload or source-admission replay occurred. The preceding standalone
+authentication attempt failed before any credential POST or reader call;
+its original reporter discarded the finer failure boundary. A bounded native
+observation found and cancelled its exact current browser control once,
+proved signed-out idle and zero new POSTs, and preserved the failed report.
+The replacement diagnostic retained fixed, bounded, secret-free operation
+labels without adding device commands or changing protocol promises/timeouts.
+That replacement pass does not establish the original failure's cause.
+
+Independent source tests also reproduced a canonical iOS harness defect:
+a sign-in return link becoming visible just after its single check was missed,
+and duplicate visible links could both be clicked. The candidate resolves the
+exact current form or one observed link within the original10-second/200ms
+budget, rejects ambiguity/changed PKCE, and dispatches the resolved link once
+outside polling without wrapper replay. The affected210 cases pass, including
+11 new cases; this remains source-scoped until the complete integrated gate
+and matching native inventories run. No historical native cause is inferred.
+
+The integrated working candidate additionally prepares immutable production
+version/build metadata and explicitly nonexecuting archive/AAB command plans.
+Its20th tooling module, complete production metadata fixtures and isolated
+native-build fixture closure are included. Counter reservations belong to
+each platform's own app identity. Shared public-link and store metadata
+reads are bounded through their verified descriptors, including file growth,
+and reconcile the final pathname. See [store packaging preparation](STORE_PACKAGING_DRAFT.md)
+and [source-backed data inventory](NATIVE_DATA_INVENTORY_2026-10-27.md).
+Planning never certifies signing possession, store version history, actual
+IPA/AAB contents, production associations or privacy-policy completeness.
+
+Every integrated source/native result retains its own exact source, dependency,
+binary, backend and device scope. The full current Android/iPhone23+17 and
+advertised iPad/layout/accessibility inventories remain separate gates. The
+unpatched Expo/node-forge four-HIGH dependency gate, organization/signing/link
+prerequisites and operational privacy/support declarations still prevent
+release. The owner deferred business details while engineering continues;
+the corporate Site stays private. No merge, CaseOps production deployment,
+store upload, account enrollment or payment is authorized by these reports.
+
+Evidence beneath the mobile cache:
+`pr558-release-20261026/viewer-stream-final-18/summary.json`;
+`ios-files-20261026/pdf-stream-portability-source-cifyww1u/final-verification.json`;
+`ios-build-2PpJjy89/receipt.json`;
+`android-mac-setup/builds/android-arm64-4QoEPlP0/receipt.json`;
+`ios-files-20261026/canonical-renderer-readiness-48f201ef/phone-attempt-01/renderer-readiness.json`;
+`ios-files-20261026/canonical-renderer-readiness-48f201ef-diag-v3/phone-attempt-01/renderer-readiness.json`;
+`ios-files-20261026/ios-entry-counterexample-48f-e4bafivn/code-closure.json`;
+`ios-files-20261026/ios-entry-repair-48f-i5ynj05b/scoped-verification.json`.

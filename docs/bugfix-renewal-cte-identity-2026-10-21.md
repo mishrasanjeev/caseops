@@ -291,3 +291,22 @@ Fresh corrected-candidate local Docker, hosted gates, canonical merge/release
 and exact-serving browser verification are still required. Open CodeQL NOTE595
 on R22 is not a fixed finding; its explicit terminal-raise correction requires
 fresh analysis before any resolution claim.
+
+
+## October 28 Installer Verifier Follow-up
+
+The historical uv0.13.4 results above remain scoped to their original source.
+Its official `webpki-root-certs`1.0.10 already excludes G3 and contains the same
+120 DER roots as API certifi2026.10.19. Replacing that bundle with the OS store
+is not the repair. Its separate `rustls-webpki`0.103.14 verifier is covered by
+[RUSTSEC-2026-0382](https://rustsec.org/advisories/RUSTSEC-2026-0382).
+
+The new installer pin is the previously accepted host uv0.13.5, official source
+`46776a95d6686ac0160c10611327ce491e6b202f`: it retains that root crate and moves
+the verifier to0.103.16. Both exact upstream MIT/Apache notices and provenance
+are retained under `apps/api/vendor/uv-0.13.5` and copied into the API image. No
+license exception, global certificate override, Requests/HTTPX root set or TLS
+verification flag changes. Host0.13.5 local controls cannot certify the new
+Linux image; fresh image version, advisory, pipcheck, TLS and offline model
+checks remain required. No exploit or vulnerable-verifier demonstration is
+needed or claimed.

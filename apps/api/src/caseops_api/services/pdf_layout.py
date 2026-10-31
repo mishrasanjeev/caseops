@@ -61,9 +61,15 @@ def safe_pdf_class() -> type:
     Imported lazily so PDF support stays off the application start-up path.
     """
 
-    from fpdf import FPDF  # type: ignore[import-not-found]
+    from fpdf import FPDF, ResourceAccessPolicy  # type: ignore[import-not-found]
 
     class SafeCoreFontPDF(FPDF):  # type: ignore[misc]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            # Exports use text and explicitly supplied in-memory image bytes.
+            # HTML/SVG must never acquire a local file or make an HTTP request.
+            self.resource_access_policy = ResourceAccessPolicy.NONE
+
         def normalize_text(self, text: str) -> str:
             if not self.is_ttf_font:
                 text = pdf_text(text)

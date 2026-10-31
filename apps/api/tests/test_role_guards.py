@@ -200,7 +200,21 @@ def _hashable(value: object) -> bool:
         return False
 
 
+NATIVE_OWN_AUTH_MUTATING_ROUTES = {
+    # Cookie + CSRF/current MFA handoff; PKCE code and rotating refresh-secret
+    # possession for exchange/refresh/logout; caller-owned family revocation.
+    # Native auth service tests prove each boundary without tenant role grants.
+    ("POST", "/api/auth/native/authorize"),
+    ("POST", "/api/auth/native/token"),
+    ("POST", "/api/auth/native/refresh"),
+    ("POST", "/api/auth/native/logout"),
+    ("DELETE", "/api/auth/native/sessions/{session_id}"),
+}
+
+
 def _route_is_public(method: str, path: str) -> bool:
+    if (method, path) in NATIVE_OWN_AUTH_MUTATING_ROUTES:
+        return True
     if (method, path) in CONSOLE_OWN_AUTH_MUTATING_ROUTES:
         return True
     if (method, path) in PUBLIC_MUTATING_ROUTES:
@@ -248,6 +262,20 @@ def test_console_own_auth_inventory_matches_every_current_mutating_route(_app):
         for method in route.methods & MUTATING_METHODS
     }
     assert actual == CONSOLE_OWN_AUTH_MUTATING_ROUTES
+
+
+def test_native_own_auth_inventory_is_exact_and_never_exempts_siblings(_app):
+    actual = {
+        (method, route.path)
+        for route in _app.routes
+        if isinstance(route, APIRoute) and route.path.startswith("/api/auth/native/")
+        for method in route.methods & MUTATING_METHODS
+    }
+    assert actual == NATIVE_OWN_AUTH_MUTATING_ROUTES
+    for method, path in actual:
+        assert _route_is_public(method, path)
+        assert not _route_is_public(method, path + "/unreviewed")
+        assert not _route_is_public(method, path + "-unreviewed")
 
 
 @pytest.mark.parametrize("method,path", sorted(CONSOLE_OWN_AUTH_MUTATING_ROUTES))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.util
 import json
@@ -132,6 +133,276 @@ class GitFixture(unittest.TestCase):
         self.write("record.txt", content)
         merged = self.commit("resolve merge")
         return before, side, merged
+
+
+class ReviewedPublicVectorTests(GitFixture):
+    """Public-vector review remains bound to one exact immutable origin span."""
+
+    def test_repository_public_certifi_digest_review_binds_current_immutable_origin(self):
+        path = "scripts/mobile/host-platform-trust.py"
+        origins = {
+            "751b47fa9369d276c8dd280030fbc88b2837cf9d": 80,
+            "df4b299a660e9ab00655054f7f4caf1b28a1f340": 81,
+        }
+        policy = (ROOT / ".gitleaksignore").read_text().splitlines()
+        for origin, line in origins.items():
+            self.assertEqual(policy.count(f"{origin}:{path}:generic-api-key:{line}"), 1)
+        historical = "2fe2d37cc8623fe91d9e463244a2880469939612"
+        self.assertEqual(policy.count(f"{historical}:{path}:generic-api-key:35"), 1)
+        self.assertNotIn(f"{path}:generic-api-key:81", policy)
+        self.assertNotIn(f"{path}:generic-api-key:35", policy)
+        source = scan.git(ROOT, "show", "HEAD:" + path)
+        expected = "0c3ed116e3a6d25ea71ba6336dabfa79c49fcdea1bc629a17ec6ce0b09637fe4"
+        candidates = [
+            (number, span)
+            for number, span in enumerate(source.splitlines(keepends=True), 1)
+            if hashlib.sha256(span).hexdigest() == expected
+        ]
+        self.assertEqual(len(candidates), 1)
+        current_line, span = candidates[0]
+        blame = scan.git(
+            ROOT, "blame", "--line-porcelain", "-L", f"{current_line},{current_line}",
+            "HEAD", "--", path,
+        ).splitlines()
+        origin, original, current = blame[0].decode().split()[:3]
+        self.assertIn(origin, origins)
+        self.assertEqual((int(original), int(current)), (origins[origin], current_line))
+        retained = scan.git(ROOT, "show", f"{origin}:{path}").splitlines(
+            keepends=True
+        )[origins[origin] - 1]
+        self.assertEqual(hashlib.sha256(retained).hexdigest(), hashlib.sha256(span).hexdigest())
+        ancestor = REAL_RUN(
+            ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", origin, "HEAD"],
+            capture_output=True, timeout=30, check=False,
+        )
+        self.assertEqual(ancestor.returncode, 0)
+
+    def test_repository_public_apk_report_review_requires_all_six_exact_origins(self):
+        origin = "e8c3049b7150219073718689d7106d4a82df7c5a"
+        digests = (
+            "d00f58706ee970aa5bc7268ba1a0146ab7707de76a09ca69bb19a9b359d1af71",
+            "f45e8bba92099f478ca005fa2afa5a578ec2b424d4371d209c61dc8a88e5521d",
+            "6b5ba4627d6a58f9fba527746694ec0d2f18da22627c440262228dbbd9de5e28",
+        )
+        policy = (ROOT / ".gitleaksignore").read_text().splitlines()
+        for path, start in (
+            ("scripts/mobile/android-native-proof.test.mjs", 36),
+            ("scripts/mobile/build-android-local-acceptance.test.mjs", 30),
+        ):
+            source = scan.git(ROOT, "show", f"{origin}:{path}")
+            for offset, digest in enumerate(digests):
+                line = start + offset
+                entry = f"{origin}:{path}:generic-api-key:{line}"
+                self.assertEqual(policy.count(entry), 1)
+                self.assertNotIn(f"{path}:generic-api-key:{line}", policy)
+                span = source.splitlines(keepends=True)[line - 1]
+                self.assertTrue(span.startswith(b"V2 Signer: public key "))
+                self.assertEqual(hashlib.sha256(span).hexdigest(), digest)
+        ancestor = REAL_RUN(
+            ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", origin, "HEAD"],
+            capture_output=True, timeout=30, check=False,
+        )
+        self.assertEqual(ancestor.returncode, 0)
+
+    def test_repository_review_matches_only_the_public_rfc6238_origin(self):
+        origin = "438c79f776373ff31eba881e933ab07b9900231f"
+        path = "scripts/mobile/tooling.test.mjs"
+        entry = f"{origin}:{path}:generic-api-key:528"
+        policy = (ROOT / ".gitleaksignore").read_text().splitlines()
+        self.assertEqual(policy.count(entry), 1)
+        self.assertNotIn(f"{path}:generic-api-key:528", policy)
+        source = scan.git(ROOT, "show", f"{origin}:{path}")
+        span = source.splitlines(keepends=True)[527]
+        public_vector = base64.b32encode(b"12345678901234567890").decode()
+        expected = f"  const secret = '{public_vector}';\n".encode()
+        # Only digests can enter failure diagnostics, never a changed key value.
+        self.assertEqual(hashlib.sha256(span).hexdigest(), hashlib.sha256(expected).hexdigest())
+        self.assertEqual(
+            hashlib.sha256(span).hexdigest(),
+            "92e61d715b87e88b3152d737e72f08862cd37b51b80871373ff6b18c5cd0a60e",
+        )
+        ancestor = REAL_RUN(
+            ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", origin, "HEAD"],
+            capture_output=True, timeout=30, check=False,
+        )
+        self.assertEqual(ancestor.returncode, 0)
+
+    def public_receipt_span(self):
+        path = "apps/mobile/e2e/v1-workflows-fixture.mjs"
+        expected = "b4fa24bbd7c17e0be213bea4f9d6fe0f3fdbbe1a83b79f639d8ff0c04eec38d6"
+        source = scan.git(ROOT, "show", "HEAD:" + path)
+        candidates = [
+            (number, span)
+            for number, span in enumerate(source.splitlines(keepends=True), 1)
+            if hashlib.sha256(span).hexdigest() == expected
+        ]
+        self.assertEqual(len(candidates), 1)
+        return path, candidates[0][0], candidates[0][1]
+
+    def test_repository_public_receipt_review_binds_each_actual_origin_span(self):
+        path, current_line, span = self.public_receipt_span()
+        origins = {
+            "f43c10e3eed509ea2240f5add52e09aea5c4857a",
+            "a52e43caa57d1253271f581b347841e855112a29",
+        }
+        policy = (ROOT / ".gitleaksignore").read_text().splitlines()
+        for origin in origins:
+            fingerprint = f"{origin}:{path}:generic-api-key:225"
+            self.assertEqual(policy.count(fingerprint), 1)
+        self.assertNotIn(f"{path}:generic-api-key:225", policy)
+        blame = scan.git(
+            ROOT,
+            "blame",
+            "--line-porcelain",
+            "-L",
+            f"{current_line},{current_line}",
+            "HEAD",
+            "--",
+            path,
+        ).splitlines()
+        origin, original, current = blame[0].decode().split()[:3]
+        self.assertIn(origin, origins)
+        self.assertEqual((int(original), int(current)), (225, current_line))
+        original_span = scan.git(ROOT, "show", f"{origin}:{path}").splitlines(
+            keepends=True
+        )[224]
+        self.assertEqual(
+            hashlib.sha256(original_span).hexdigest(), hashlib.sha256(span).hexdigest()
+        )
+        ancestor = REAL_RUN(
+            ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", origin, "HEAD"],
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(ancestor.returncode, 0)
+
+    def test_api_publication_requires_own_review_and_future_changed_span_stays_blocked(
+        self,
+    ):
+        _path, _line, source_span = self.public_receipt_span()
+        text = source_span.decode()
+        self.write("record.txt", text)
+        local_origin = self.commit("local public protocol receipt")
+        self.git("switch", "-c", "api-publication", self.base)
+        self.write("record.txt", text)
+        api_origin = self.commit("API published public protocol receipt")
+        self.assertNotEqual(local_origin, api_origin)
+        self.assertEqual(
+            self.git("show", f"{local_origin}:record.txt"),
+            self.git("show", f"{api_origin}:record.txt"),
+        )
+        ancestor = REAL_RUN(
+            [
+                "git",
+                "-C",
+                str(self.repo),
+                "merge-base",
+                "--is-ancestor",
+                local_origin,
+                api_origin,
+            ],
+            capture_output=True,
+            timeout=30,
+        )
+        self.assertEqual(ancestor.returncode, 1)
+
+        def check(head, boundary, label):
+            tree = self.root / f"{label}-{boundary}-tree"
+            scan.tracked_tree(self.repo, head, tree)
+            output = self.root / f"{label}-{boundary}-evidence"
+            output.mkdir()
+            finding = self.finding(head)
+            if boundary == "tree":
+                return scan.tree_policy_provenance(
+                    self.repo, tree, [finding], output, head
+                )
+            return scan.history_policy_provenance(
+                self.repo, tree, [finding], output, head, "--all"
+            )
+
+        self.write(".gitleaksignore", f"{local_origin}:record.txt:generic-api-key:1\n")
+        local_only = self.commit("local origin review cannot cover separate API origin")
+        for boundary in ("tree", "history"):
+            with self.assertRaisesRegex(scan.ScanError, "unreviewed findings"):
+                check(local_only, boundary, "unreviewed-api")
+        self.write(
+            ".gitleaksignore",
+            f"{local_origin}:record.txt:generic-api-key:1\n"
+            f"{api_origin}:record.txt:generic-api-key:1\n",
+        )
+        reviewed = self.commit("both independently reviewed exact immutable origins")
+        for boundary in ("tree", "history"):
+            accepted = check(reviewed, boundary, "reviewed-api")
+            self.assertTrue(accepted.endswith(boundary + "-policy.ignore"))
+            proof = json.loads(
+                (
+                    self.root
+                    / f"reviewed-api-{boundary}-evidence"
+                    / f"{boundary}-policy-provenance.json"
+                ).read_text()
+            )
+            self.assertEqual(proof["accepted_existing_policy"], 1)
+            self.assertEqual(
+                proof["findings"][0]["existing_fingerprint"],
+                f"{api_origin}:record.txt:generic-api-key:1",
+            )
+            self.assertEqual(
+                proof["findings"][0]["span_sha256"],
+                hashlib.sha256(source_span).hexdigest(),
+            )
+        changed = (
+            "const token = '"
+            + hashlib.sha256(b"offline-unreviewed-replacement").hexdigest()
+            + "';\n"
+        )
+        self.write("record.txt", changed)
+        future = self.commit("new changed span cannot inherit either reviewed origin")
+        for boundary in ("tree", "history"):
+            with self.assertRaisesRegex(scan.ScanError, "unreviewed findings"):
+                check(future, boundary, "changed-future")
+
+    def vector_fixture(self):
+        public_vector = base64.b32encode(b"12345678901234567890").decode()
+        self.span = f"const secret = '{public_vector}';\n"
+        self.write("record.txt", self.span)
+        origin = self.commit("public RFC vector")
+        self.write(".gitleaksignore", f"{origin}:record.txt:generic-api-key:1\n")
+        return origin, self.commit("exact origin review")
+
+    def finding(self, head, start=1):
+        return {"ruleId": "generic-api-key", "partialFingerprints": {"commitSha": head},
+                "locations": [{"physicalLocation": {"artifactLocation": {"uri": "record.txt"},
+                               "region": {"startLine": start, "endLine": start}}}]}
+
+    def resolve(self, head, finding, boundary):
+        tree = self.root / (boundary + "-tree")
+        scan.tracked_tree(self.repo, head, tree)
+        output = self.root / (boundary + "-evidence")
+        output.mkdir()
+        if boundary == "tree":
+            return scan.tree_policy_provenance(self.repo, tree, [finding], output, head)
+        return scan.history_policy_provenance(self.repo, tree, [finding], output, head, "--all")
+
+    def test_shifted_public_vector_requires_exact_origin_in_tree_and_history(self):
+        origin, _ = self.vector_fixture()
+        self.write("record.txt", "// harmless line drift\n" + self.span)
+        head = self.commit("preserved reviewed line")
+        for boundary in ("tree", "history"):
+            result = self.resolve(head, self.finding(head, 2), boundary)
+            self.assertEqual(result, f"/scan/{boundary}-policy.ignore")
+            proof = json.loads((self.root / (boundary + "-evidence") / (boundary + "-policy-provenance.json")).read_text())
+            self.assertEqual(proof["accepted_existing_policy"], 1)
+            self.assertEqual(proof["findings"][0]["existing_fingerprint"], f"{origin}:record.txt:generic-api-key:1")
+
+    def test_changed_value_same_path_and_line_cannot_inherit_public_vector_review(self):
+        self.vector_fixture()
+        self.write("record.txt", self.span.replace("';\n", "A';\n"))
+        head = self.commit("unreviewed changed span")
+        for boundary in ("tree", "history"):
+            with self.assertRaisesRegex(scan.ScanError, "unreviewed findings"):
+                self.resolve(head, self.finding(head), boundary)
+            self.assertFalse((self.root / (boundary + "-policy.ignore")).exists())
 
 
 class SelectionTests(GitFixture):

@@ -5,7 +5,7 @@ from typing import BinaryIO
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload, raiseload, selectinload
 
 from caseops_api.db.models import (
     CompanyMembership,
@@ -918,7 +918,17 @@ def list_contracts(
 
 
 def get_contract(session: Session, *, context: SessionContext, contract_id: str) -> ContractRecord:
-    return _contract_record(_get_contract_model(session, context=context, contract_id=contract_id))
+    # ContractRecord contains scalar metadata only. Workspace children are not
+    # needed here, and their cardinality must not control a single-record read.
+    contract = session.scalar(
+        select(Contract)
+        .where(Contract.id == contract_id, Contract.company_id == context.company.id)
+        .options(raiseload("*"))
+        .execution_options(populate_existing=True)
+    )
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return _contract_record(contract)
 
 
 def update_contract(

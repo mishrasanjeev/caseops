@@ -93,7 +93,13 @@ def test_auth_fence_still_excludes_identity_deactivation(pg_engine, model):
             row.is_active = False
             writer.commit()
 
-    with Session(pg_engine) as login, ThreadPoolExecutor(max_workers=1) as pool:
+    with (
+        pg_engine.connect() as observer,
+        Session(pg_engine) as login,
+        ThreadPoolExecutor(max_workers=1) as pool,
+    ):
+        observer_pid = observer.scalar(text("SELECT pg_backend_pid()"))
+        assert isinstance(observer_pid, int) and observer_pid > 0
         auth = issue_auth_session_under_fence(
             login,
             company_id=company_id,
@@ -104,18 +110,17 @@ def test_auth_fence_still_excludes_identity_deactivation(pg_engine, model):
         writer = pool.submit(deactivate)
         try:
             assert started.wait(1)
-            with Session(pg_engine) as observer:
-                # The writer must be blocked by the real PostgreSQL auth transaction.
-                deadline = monotonic() + 1
-                blockers = []
-                while monotonic() < deadline:
-                    blockers = observer.scalar(
-                        text("SELECT pg_blocking_pids(:pid)"), {"pid": writer_pids[0]}
-                    )
-                    if login_pid in blockers:
-                        break
-                    sleep(0.01)
-                assert login_pid in blockers
+            # The writer must be blocked by the real PostgreSQL auth transaction.
+            deadline = monotonic() + 1
+            blockers = []
+            while monotonic() < deadline:
+                blockers = observer.scalar(
+                    text("SELECT pg_blocking_pids(:pid)"), {"pid": writer_pids[0]}
+                )
+                if login_pid in blockers:
+                    break
+                sleep(0.01)
+            assert login_pid in blockers
         finally:
             login.rollback()
         writer.result(timeout=3)
@@ -125,3 +130,19 @@ def test_auth_fence_still_excludes_identity_deactivation(pg_engine, model):
                 after, company_id=company_id, membership_id=membership_id
             )
         assert getattr(denial.value, "status_code", None) == 403
+
+
+@pytest.mark.parametrize("model", [CompanyMembership, User], ids=["membership", "user"])
+def test_auth_fence_releases_before_delayed_observer_cleanup(pg_engine, monkeypatch, model):
+    import sys
+
+    from tests.test_private_event_actor_safety_20261009_postgres import (
+        _assert_auth_fence_observer_receipt,
+        _run_auth_fence_with_delayed_observer_cleanup,
+    )
+
+    receipt = _run_auth_fence_with_delayed_observer_cleanup(
+        monkeypatch, pg_engine, sys.modules[__name__],
+        lambda: test_auth_fence_still_excludes_identity_deactivation(pg_engine, model),
+    )
+    _assert_auth_fence_observer_receipt(receipt)

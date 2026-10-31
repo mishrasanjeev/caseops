@@ -305,8 +305,14 @@ def problem_json(
         )
     merged_headers["X-Request-ID"] = request_id
     # Unhandled/server errors can be produced outside request middleware.
-    if request.url.path == "/api/platform-console" or request.url.path.startswith(
-        "/api/platform-console/"
+    if request.url.path in {
+        "/api/platform-console", "/api/recipient-inbox", "/api/matter-work-queue",
+        "/api/matter-readthrough",
+    } or request.url.path.startswith(
+        (
+            "/api/platform-console/", "/api/recipient-inbox/", "/api/matter-work-queue/",
+            "/api/matter-readthrough/",
+        )
     ):
         merged_headers["Cache-Control"] = "private, no-store"
         merged_headers["Referrer-Policy"] = "no-referrer"

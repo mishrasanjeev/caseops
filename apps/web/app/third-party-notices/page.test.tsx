@@ -27,13 +27,13 @@ describe("third-party license notices", () => {
     expect(sitemap().some((entry) => new URL(entry.url).pathname.startsWith("/third-party-notices"))).toBe(false);
   });
 
-  it("renders one heading, six named components and all eight original full notices", () => {
+  it("renders one heading, seven named components and all nine original full notices", () => {
     render(<ThirdPartyNoticesPage />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Third-party notices");
     const article = screen.getByRole("article");
-    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(6);
-    expect(article.querySelectorAll("details")).toHaveLength(8);
+    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(7);
+    expect(article.querySelectorAll("details")).toHaveLength(9);
     for (const { component, notice } of allNotices) {
       const section = document.getElementById(component.id)!;
       expect(section).toHaveTextContent(component.packageName);
@@ -61,7 +61,7 @@ describe("third-party license notices", () => {
     expect(screen.getByRole("main")).not.toHaveTextContent(/all licenses (?:approved|compliant)|production image|server image/i);
   });
 
-  it("binds each notice to the exact installed package name and version", () => {
+  it("binds each notice to the exact package or pinned shipping runtime version", () => {
     expect(notices.components.map(({ packageName, version }) => [packageName, version])).toEqual([
       ["@fontsource/atkinson-hyperlegible", "5.2.8"],
       ["@fontsource/jetbrains-mono", "5.2.8"],
@@ -69,8 +69,13 @@ describe("third-party license notices", () => {
       ["nodemailer", "10.2.1"],
       ["pako", "1.0.11"],
       ["qrcode.react", "4.2.0"],
+      ["node", "22.23.4"],
     ]);
     for (const component of notices.components) {
+      if (component.packageName === "node") {
+        expect(readFileSync(path.join(webRoot, "Dockerfile"), "utf8")).toContain("FROM node:22.23.4-alpine AS trusted-base");
+        continue;
+      }
       const installed = JSON.parse(readFileSync(path.join(repoRoot, "node_modules", component.packageName, "package.json"), "utf8"));
       expect(installed.name).toBe(component.packageName);
       expect(installed.version).toBe(component.version);
@@ -107,9 +112,28 @@ describe("third-party license notices", () => {
     expect(readFileSync(path.join(repoRoot, ".gitattributes"), "utf8")).toContain("license-policy/upstream/** -text");
   });
 
+  it("pins the shipping Node license to the immutable upstream source", () => {
+    const component = notices.components.find(({ packageName }) => packageName === "node")!;
+    expect(component.version).toBe("22.23.4");
+    expect(component.notices).toHaveLength(1);
+    expect(component.notices[0]).toMatchObject({
+      sourceFile: "LICENSE",
+      sourceUrl: "https://raw.githubusercontent.com/nodejs/node/27f213124280b4db4cd1e3dd42f6f8afd01ceff7/LICENSE",
+      retainedSource: "license-policy/upstream/node_22.23.4/LICENSE",
+      filename: "node-22.23.4-LICENSE.txt",
+      sha256: "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
+    });
+    const original = readFileSync(path.join(repoRoot, "license-policy/upstream/node_22.23.4/LICENSE"));
+    expect(original).toHaveLength(145485);
+    expect(sha256(original)).toBe("c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4");
+    expect(component.notices[0].text).toBe(original.toString("utf8"));
+  });
+
   for (const { component, notice } of allNotices) {
     it(`${component.packageName} ${notice.license} preserves original bytes, authors and full text`, () => {
-      const installed = component.packageName === "qrcode.react" && notice.license === "MIT"
+      const installed = component.packageName === "node"
+        ? readFileSync(path.join(repoRoot, "license-policy/upstream/node_22.23.4/LICENSE"))
+        : component.packageName === "qrcode.react" && notice.license === "MIT"
         ? readFileSync(path.join(repoRoot, "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt"))
         : readFileSync(path.join(repoRoot, "node_modules", component.packageName, notice.sourceFile));
       let original = installed;

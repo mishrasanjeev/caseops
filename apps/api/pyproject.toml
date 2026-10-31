@@ -26,7 +26,7 @@ dependencies = [
   "slowapi>=0.1.9",
   "boto3>=1.35.0",
   "python-docx>=1.1.2",
-  "fpdf2>=2.8.4",
+  "fpdf2==2.8.8",
   "google-genai>=1.73.1",
   "openai>=2.0.0",
   "voyageai>=0.3.7",
@@ -57,12 +57,14 @@ ocr = [
 # local + CI stay fast. Cloud Run / staging builds install via
 # `pip install .[observability]` in the Dockerfile.
 observability = [
-  "opentelemetry-api>=1.45.1",
-  "opentelemetry-sdk>=1.45.1",
-  "opentelemetry-exporter-otlp-proto-http>=1.45.1",
-  "opentelemetry-instrumentation-fastapi>=0.66b1",
-  "opentelemetry-instrumentation-sqlalchemy>=0.66b1",
-  "opentelemetry-instrumentation-httpx>=0.66b1",
+  # CVE-2026-114603: keep the patched API and its exact compatible SDK /
+  # instrumentation cohort together; these remain optional and disabled by default.
+  "opentelemetry-api==1.45.1",
+  "opentelemetry-sdk==1.45.1",
+  "opentelemetry-exporter-otlp-proto-http==1.45.1",
+  "opentelemetry-instrumentation-fastapi==0.66b1",
+  "opentelemetry-instrumentation-sqlalchemy==0.66b1",
+  "opentelemetry-instrumentation-httpx==0.66b1",
 ]
 
 [project.scripts]

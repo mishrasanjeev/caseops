@@ -19,15 +19,25 @@ QR_MATERIALS = {
     "apps/web/public/third-party-notices/qrcode.react-4.2.0-Nayuki-MIT-LICENSE.txt",
     "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt",
 }
+NODE_MATERIALS = {
+    "apps/web/public/third-party-notices/node-22.23.4-LICENSE.txt",
+    "license-policy/upstream/node_22.23.4/LICENSE",
+}
+NPM_TOOLING_INPUTS = {
+    "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
+}
 BUILDER_INPUTS = {
     "package.json", "package-lock.json", "apps/web/Dockerfile", "apps/web/package.json",
     "tests/fixtures/statutes/structured-schedule-api.json",
+    "tests/fixtures/node-default-tls-probe.cjs",
     *(f"tests/e2e/support/{name}.ts" for name in (
         "prod-failure-diagnostics", "bounded-network-evidence",
         "prod-api-response-evidence", "cost-controls",
         "public-release-identity", "ip-import-acknowledgements",
         "ip-portfolio-export-completion",
     )),
+    *NPM_TOOLING_INPUTS,
 }
 SAFE_WEB_INPUTS = {"apps/web/app/page.tsx", "apps/web/public/fake-safe.txt"}
 SIBLING_CANARIES = {
@@ -39,6 +49,12 @@ SIBLING_CANARIES = {
     "tests/e2e/unlisted.spec.ts", "tests/fixtures/statutes/deep/unlisted.json",
     "tests/fixtures/statutes/unlisted.json", "tests/fixtures/unlisted.json",
     "tests/other-private/canary.txt", "tests/unlisted.txt",
+    "scripts/unlisted.txt", "scripts/other-private/canary.txt",
+    "scripts/mobile/unlisted.mjs", "scripts/mobile/private/canary.txt",
+    "apps/mobile/unlisted.txt", "apps/mobile/private/canary.txt",
+    "apps/mobile/vendor/unlisted.txt", "apps/mobile/vendor/other/canary.tgz",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/unlisted.txt",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/private/canary.tgz",
 }
 
 
@@ -64,10 +80,10 @@ class NativeUploadTests(unittest.TestCase):
         if self.evidence:
             self.evidence.mkdir(parents=True, exist_ok=False)
         record = json.loads((ROOT / REGISTRY).read_text(encoding="utf-8"))
-        self.required = {REGISTRY, REVIEW, *QR_MATERIALS, *(
+        self.required = {REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *(
             value["path"] for entry in record["packages"] for value in entry["materials"]
         )}
-        self.assertEqual(len(self.required), 65)
+        self.assertEqual(len(self.required), 67)
 
     def files(self, paths):
         for relative in paths:
@@ -106,7 +122,7 @@ class NativeUploadTests(unittest.TestCase):
         operator = {name for name in present if name.startswith("license-policy/")}
         required_operator = {name for name in self.required if name.startswith("license-policy/")}
         self.assertEqual(operator, required_operator)
-        self.assertEqual(len(operator), 56)
+        self.assertEqual(len(operator), 57)
         self.assertTrue(
             BUILDER_INPUTS <= present,
             f"Missing builder inputs: {sorted(BUILDER_INPUTS - present)}",
@@ -168,7 +184,20 @@ class NativeUploadTests(unittest.TestCase):
         self.files(safe | SIBLING_CANARIES)
         original = (ROOT / ".dockerignore").read_text(encoding="utf-8")
         controls = {
-            "apps/**": {name for name in SIBLING_CANARIES if name.startswith("apps/")},
+            "apps/**": {name for name in SIBLING_CANARIES if name.startswith((
+                "apps/api/", "apps/other-private/"))},
+            "apps/mobile/**": {"apps/mobile/unlisted.txt", "apps/mobile/private/canary.txt"},
+            "apps/mobile/vendor/**": {
+                "apps/mobile/vendor/unlisted.txt", "apps/mobile/vendor/other/canary.tgz",
+            },
+            "apps/mobile/vendor/npm-11.12.1-caseops-security/**": {
+                "apps/mobile/vendor/npm-11.12.1-caseops-security/unlisted.txt",
+                "apps/mobile/vendor/npm-11.12.1-caseops-security/private/canary.tgz",
+            },
+            "scripts/**": {"scripts/unlisted.txt", "scripts/other-private/canary.txt"},
+            "scripts/mobile/**": {
+                "scripts/mobile/unlisted.mjs", "scripts/mobile/private/canary.txt",
+            },
             "tests/**": {
                 "tests/auth/canary.json", "tests/auth/deep/state.json",
                 "tests/other-private/canary.txt", "tests/unlisted.txt",

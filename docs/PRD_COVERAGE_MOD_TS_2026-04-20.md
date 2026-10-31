@@ -11,6 +11,46 @@ of this new source. The October26 GSC daily log is included for J19/M21/US-063.
 Native558Files recovery remains independently unverified, not part of those
 public-Web or operator-CLI counts. See the dated verification-markers brief.
 
+## October 25 Handoff Runtime Findings
+
+US-MOB-01/02 and NATIVE-01 now require explicit Open CaseOps after the one
+acknowledged grant; no automatic navigation/regrant counts as that gesture.
+Web79 spans all four intended files, including expiry, response latency,
+query/pagehide/visibility cleanup and duplicate-click rejection. Earlier native
+runs remain incomplete/failed; no full 23-case or MOB-01..40 pass is claimed.
+The checkpoint and MacBook runbook distinguish source/component and device proof.
+
+## October 25 Native Coverage
+
+J20/M22/US-MOB-01..08 remains **Partially implemented**. All 20 selected mobile
+files ran 295 passing cases; 44 web-handoff checks and real upload/MFA
+PostgreSQL cases are component evidence. Native acceptance expands to 23 named
+cases per platform; it is not a full MOB-01..40 pass. Exact candidate Docker/APK
+and actual Android execution follow. MacBook iOS and release gates stay open in
+`mobile/MOBILE_BUILD_CHECKPOINT_2026-10-25.md`.
+
+## October 24 Native Component Coverage
+
+J20/M22/US-MOB-01..08: **Partially implemented**. Native source components,
+auth/transport/domain tests and browser handoff tests exist; platform-specific
+Hermes exports passed before final closure. None is native Appium/device proof.
+The six-case per-platform Appium subset does not close MOB-01..40. Standard SDK
+consent, tool installation and accelerated Android emulator boot are verified.
+Native app acceptance, owner MacBook execution and scope/security/release gates are open
+in `mobile/MOBILE_BUILD_CHECKPOINT_2026-10-24.md`. Android debug build/install and
+development-launcher startup passed; CaseOps native workflows and production did not.
+
+## October 23 Android And iOS Coverage Plan
+
+J20/M22 is **Missing**, not a shipped responsive-web feature. Namespaced
+US-MOB-01..08 and MOB-01..40 in
+`mobile/MOBILE_ACCEPTANCE_MATRIX_2026-10-23.md` cover native identity, daily work,
+existing source-owned records, capture, review, notifications, accessibility,
+privacy and release. All forty groups are planned/not run; no native test
+identity or pass is invented. The five expert design rounds are planning
+evidence only. Existing J01/J03/J04/J07/J08/J09/J10/J13/J14/J15 and IP ownership
+remain authoritative; do not create parallel phone legal/workflow engines.
+
 ## October 23 Batch 3 Coverage Checkpoint
 
 Full Docker88 now proves all seven changed B3/IP sister journeys within the

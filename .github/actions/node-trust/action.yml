@@ -1,0 +1,39 @@
+name: Prepare reviewed Node trust
+description: Apply the pinned runtime's approved trust policy before npm and inherited Node children.
+outputs:
+  NODE_OPTIONS:
+    value: ${{ steps.prepare.outputs.NODE_OPTIONS }}
+    description: Reviewed inherited Node bootstrap.
+  SSL_CERT_FILE:
+    value: ${{ steps.prepare.outputs.SSL_CERT_FILE }}
+    description: This Node version's approved roots.
+  SSL_CERT_DIR:
+    value: ${{ steps.prepare.outputs.SSL_CERT_DIR }}
+    description: Owned empty certificate directory.
+  CASEOPS_HOST_NODE_TRUST_POLICY_FILE:
+    value: ${{ steps.prepare.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+    description: Immutable policy path.
+  CASEOPS_HOST_NODE_TRUST_POLICY_SHA256:
+    value: ${{ steps.prepare.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+    description: Exact policy digest.
+  NPM_CONFIG_USERCONFIG:
+    value: ${{ steps.prepare.outputs.NPM_CONFIG_USERCONFIG }}
+    description: Owned public user config.
+  NPM_CONFIG_GLOBALCONFIG:
+    value: ${{ steps.prepare.outputs.NPM_CONFIG_GLOBALCONFIG }}
+    description: Owned public global config.
+  NPM_CONFIG_STRICT_SSL:
+    value: ${{ steps.prepare.outputs.NPM_CONFIG_STRICT_SSL }}
+    description: Require certificate and hostname verification.
+  NPM_CONFIG_REGISTRY:
+    value: ${{ steps.prepare.outputs.NPM_CONFIG_REGISTRY }}
+    description: Explicit public package registry.
+runs:
+  using: composite
+  steps:
+    - name: Prepare the scoped Node trust environment
+      id: prepare
+      shell: bash
+      env:
+        CASEOPS_CI_WORKSPACE: ${{ github.workspace }}
+      run: node "$CASEOPS_CI_WORKSPACE/scripts/mobile/host-node-trust-ci.mjs"

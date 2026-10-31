@@ -673,3 +673,50 @@ def test_native_vector_query_retains_hnsw_index_eligibility(http_pg_engine):
         connection.exec_driver_sql("SET LOCAL enable_seqscan = off")
         plan = connection.exec_driver_sql("EXPLAIN (FORMAT JSON, COSTS FALSE) " + sql).scalar_one()
         assert "ix_authority_document_chunks_embedding_hnsw" in json.dumps(plan)
+
+
+# PG17 tables9.82/9.84: _if_assigned observes without assigning an ID;
+# functions-json table9.49 and functions-string document pure JSON/hash values.
+# https://www.postgresql.org/docs/17/functions-info.html
+# https://www.postgresql.org/docs/17/functions-json.html
+# https://www.postgresql.org/docs/17/functions-string.html
+@pytest.mark.parametrize("name", ["jsonb_build_object", "txid_current_if_assigned"])
+def test_standard_projection_value_functions_retain_read_provenance(name):
+    args = {"jsonb_build_object": ("key", "value"),
+            "txid_current_if_assigned": ()}
+    statement = sa.select(getattr(sa.func, name)(*args[name]))
+    assert _proven_read_statement(statement)
+    assert name + "(" in str(statement.compile(dialect=postgresql.dialect()))
+
+
+@pytest.mark.parametrize("kind", [
+    "assign-txid", "assign-xid", "sequence", "set-config", "advisory-lock", "unknown",
+    "catalog-package", "custom-package", "opaque-text", "nested-dml", "unused-md5",
+])
+def test_projection_read_function_additions_do_not_authorize_effects_or_opaque_sql(kind):
+    if kind == "assign-txid":
+        statement = sa.select(sa.func.txid_current())
+    elif kind == "assign-xid":
+        statement = sa.select(sa.func.pg_current_xact_id())
+    elif kind == "sequence":
+        statement = sa.select(sa.func.nextval("synthetic_sequence"))
+    elif kind == "set-config":
+        statement = sa.select(sa.func.set_config("application_name", "synthetic", True))
+    elif kind == "advisory-lock":
+        statement = sa.select(sa.func.pg_advisory_xact_lock(1, 2))
+    elif kind == "unknown":
+        statement = sa.select(sa.func.unreviewed_projection_function("synthetic"))
+    elif kind == "catalog-package":
+        statement = sa.select(sa.func.pg_catalog.jsonb_build_object("key", "synthetic"))
+    elif kind == "custom-package":
+        statement = sa.select(sa.func.unreviewed.jsonb_build_object("key", "synthetic"))
+    elif kind == "unused-md5":
+        statement = sa.select(sa.func.md5("synthetic"))
+    elif kind == "opaque-text":
+        statement = sa.select(sa.literal_column("md5('synthetic')"))
+    else:
+        mutation = sa.insert(_CallerRow).values(id=1, value="synthetic").returning(_CallerRow.id)
+        nested = mutation.cte("unexecuted_projection_write")
+        statement = sa.select(nested.c.id)
+    # Construction is intentionally outside the assertion; none is executed.
+    assert not _proven_read_statement(statement)

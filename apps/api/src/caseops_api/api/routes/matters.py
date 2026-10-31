@@ -2732,6 +2732,7 @@ def post_current_company_matter_attachment(
     background_tasks: BackgroundTasks,
     context: DocumentUploader,
     session: DbSession,
+    expected_lifecycle_version: Annotated[int | None, Form(ge=0)] = None,
     document_type: Annotated[MatterDocumentTypeLiteral | None, Form()] = None,
     lifecycle_stage: Annotated[MatterLifecycleStageLiteral | None, Form()] = None,
     document_date: Annotated[date | None, Form()] = None,
@@ -2773,6 +2774,7 @@ def post_current_company_matter_attachment(
         filename=file.filename or "document",
         content_type=file.content_type,
         stream=file.file,
+        expected_lifecycle_version=expected_lifecycle_version,
         document_type=document_type,
         lifecycle_stage=lifecycle_stage,
         document_date=document_date,
@@ -2961,7 +2963,11 @@ async def download_current_company_matter_attachment(
         media_type=media_type,
         filename=filename,
         content_disposition_type=disposition,
-        headers={"X-Content-Type-Options": "nosniff"},
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store, max-age=0",
+            "Pragma": "no-cache",
+        },
     )
 
 

@@ -1,0 +1,75 @@
+{
+  "advisory": {
+    "cve": "CVE-2026-114605",
+    "id": "GHSA-45c3-73f7-pv4m",
+    "upstreamPatchedVersion": "2.9.0",
+    "url": "https://github.com/rthalley/dnspython/security/advisories/GHSA-45c3-73f7-pv4m"
+  },
+  "artifacts": [
+    {
+      "filename": "dnspython-2.9.0-py3-none-any.whl",
+      "packagetype": "bdist_wheel",
+      "sha256": "9a4aedb833c3c1b49214d04d44d3032ab7a9135f7c1d29a549b4ff78fd82fda9",
+      "sizeBytes": 354822,
+      "url": "https://files.pythonhosted.org/packages/10/02/cdcc9b7c051786a103c3b09e1003a82fa0c66bcb91ffbdabcfbf7b4163b9/dnspython-2.9.0-py3-none-any.whl"
+    },
+    {
+      "filename": "dnspython-2.9.0.tar.gz",
+      "packagetype": "sdist",
+      "sha256": "b44dc6b18f07a8b1c56676a19fbfdb5209415b046a9cece286baafa87ff3f7f1",
+      "sizeBytes": 423560,
+      "url": "https://files.pythonhosted.org/packages/ef/4a/50822184bd67cc6493f0fb6a880749158fcd31ab3fa07409acfd91f9fc85/dnspython-2.9.0.tar.gz"
+    }
+  ],
+  "bundledFiles": {
+    "LICENSE": {
+      "sha256": "c3ea3ff5654b329c19d3bc5f7481af623c3dded4a6145585499f843ad3d741cd",
+      "sizeBytes": 1526
+    },
+    "NOTICE.txt": {
+      "sha256": "ac42631834197216dc2a68817c0f9b06b852724f4c75f533dcc82bd12006b4a5",
+      "sizeBytes": 851
+    }
+  },
+  "compatibility": {
+    "currentCaller": "email-validator==2.3.0; no dnspython extras",
+    "defaultRuntimeDependencies": [],
+    "optionalDohExtrasChanged": "Upstream2.9 uses httpx2/httpcore2; not selected by this application lock edge.",
+    "requiresPython": ">=3.11",
+    "selectedExtras": []
+  },
+  "imageLocation": "/usr/share/doc/caseops-api/third-party/dnspython-2.9.0",
+  "installedMembers": {
+    "METADATA": {
+      "sha256": "d25dbd09b39758cd5cebe518701012a6278731986cd384fc4a7f25e78f7de929",
+      "sizeBytes": 5713
+    },
+    "dns/name.py": {
+      "sha256": "747fb6cee70306a89955fd8651d6712e0803aa463593f4e8c30ed27d0a9d5902",
+      "sizeBytes": 46664
+    }
+  },
+  "libraryModified": false,
+  "licenseExpression": "ISC",
+  "name": "dnspython",
+  "pypi": {
+    "responseSha256": "89e6089acd2db053af43e5958a4a1d6627546487a771de4da330151b859875fb",
+    "url": "https://pypi.org/pypi/dnspython/2.9.0/json"
+  },
+  "release": {
+    "commit": "e790c8f20a67ad439c7aafef2321e161c6028eee",
+    "securityFixCommit": "b485e460c266540a1a09ca6d8d1d7b685b1d3023",
+    "tag": "v2.9.0",
+    "url": "https://github.com/rthalley/dnspython/releases/tag/v2.9.0"
+  },
+  "schemaVersion": 1,
+  "scope": "API Python dependency only; JavaScript inventories and exceptions unchanged",
+  "upstreamLicense": {
+    "sdistLicensePresent": false,
+    "sha256": "c3ea3ff5654b329c19d3bc5f7481af623c3dded4a6145585499f843ad3d741cd",
+    "sizeBytes": 1526,
+    "url": "https://raw.githubusercontent.com/rthalley/dnspython/e790c8f20a67ad439c7aafef2321e161c6028eee/LICENSE",
+    "wheelLicensePresent": false
+  },
+  "version": "2.9.0"
+}

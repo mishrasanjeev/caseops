@@ -229,9 +229,25 @@ def test_iplf_req_notif_01_02_17_21_hearing_policy_lineage_and_cancellation(
                 )
             )
         )
-        assert len(reminders) == 2
-        assert len([link for link in links if link.is_primary]) == 2
-        assert len(intents) == 4
+        # Two offsets per explicit channel. Email retains its critical in-app
+        # companion; each newly supported in-app reminder has its own primary.
+        assert len(reminders) == 4
+        assert sorted(row.channel for row in reminders) == ["email", "email", "in_app", "in_app"]
+        assert len([link for link in links if link.is_primary]) == 4
+        assert len([link for link in links if not link.is_primary]) == 2
+        assert len(intents) == 6
+        assert sorted(intent.channel for intent in intents) == [
+            "email", "email", "in_app", "in_app", "in_app", "in_app",
+        ]
+        primary = {link.hearing_reminder_id: link.intent_id for link in links if link.is_primary}
+        by_id = {intent.id: intent for intent in intents}
+        assert set(primary) == {row.id for row in reminders}
+        for row in reminders:
+            intent = by_id[primary[row.id]]
+            assert intent.source_id == f"{row.id}:v1"
+            assert intent.channel == row.channel
+            assert intent.schedule_source_id == hearing["id"]
+            assert intent.scheduled_for == row.scheduled_for
         assert {intent.channel for intent in intents} == {"email", "in_app"}
         assert all(intent.scheduled_for is not None for intent in intents)
         assert all(intent.critical for intent in intents)

@@ -2,8 +2,8 @@
 
 Covers the full lifecycle we care about:
 
-- Creating a hearing schedules one row per offset × recipient (owner
-  of the workspace).
+- Creating a hearing schedules one row per offset × recipient × selected
+  channel (the normal API default selects email and in-app).
 - Offsets in the past are skipped (so a hearing 3 hours from now
   gets a T-1h row but not a T-24h row).
 - Scheduling is idempotent — a second create with the same
@@ -51,7 +51,12 @@ def _days_ahead(n: int) -> date:
 
 def _mk_hearing_via_api(
     client: TestClient, token: str, matter_id: str, *, days_ahead: int = 2,
+    channels: list[str] | None = None,
 ) -> dict:
+    policy = {} if channels is None else {
+        "reminder_channels": channels,
+        "notification_critical": "in_app" in channels,
+    }
     resp = client.post(
         f"/api/matters/{matter_id}/hearings",
         headers=auth_headers(token),
@@ -59,6 +64,7 @@ def _mk_hearing_via_api(
             "hearing_on": _days_ahead(days_ahead).isoformat(),
             "forum_name": "Delhi HC, Bench: Hon'ble Mr. Justice X",
             "purpose": "Arguments on bail",
+            **policy,
         },
     )
     assert resp.status_code == 200, resp.text
@@ -88,8 +94,8 @@ def _mk_matter(client: TestClient, token: str, code: str = "REM-1") -> dict:
 
 
 def test_create_hearing_persists_reminder_rows(client: TestClient) -> None:
-    """A hearing 2 days out → two reminders per eligible recipient
-    (T-24h + T-1h) in status=queued. Proves the dark-launch hook
+    """A hearing 2 days out → two offsets for each default channel
+    in status=queued. Proves the dark-launch hook
     fires in the real HTTP path."""
     token = str(bootstrap_company(client)["access_token"])
     matter = _mk_matter(client, token, code="REM-CREATE")
@@ -102,11 +108,17 @@ def test_create_hearing_persists_reminder_rows(client: TestClient) -> None:
                 HearingReminder.hearing_id == hearing["id"],
             )
         )
-    # 1 owner × 2 offsets = 2 rows.
-    assert len(rows) == 2
+    # 1 owner × 2 offsets × 2 explicitly recorded default channels.
+    assert hearing["reminder_policy"]["channels"] == ["in_app", "email"]
+    assert len(rows) == 4
     assert {r.status for r in rows} == {HearingReminderStatus.QUEUED}
-    assert all(r.recipient_email for r in rows)
-    assert all(r.channel == "email" for r in rows)
+    counts = {channel: sum(r.channel == channel for r in rows) for channel in ("email", "in_app")}
+    assert counts == {"email": 2, "in_app": 2}
+    assert all(r.recipient_email for r in rows if r.channel == "email")
+    assert all(r.recipient_email is None for r in rows if r.channel == "in_app")
+    assert {r.scheduled_for for r in rows if r.channel == "email"} == {
+        r.scheduled_for for r in rows if r.channel == "in_app"
+    }
     # Both scheduled_for values are in the future. SQLite round-trips
     # datetime-naive so normalise both sides to UTC for the compare.
     now_naive = datetime.now(UTC).replace(tzinfo=None)
@@ -168,7 +180,7 @@ def test_scheduling_is_idempotent_on_second_call(client: TestClient) -> None:
         count = session.query(HearingReminder).filter(
             HearingReminder.hearing_id == hearing["id"]
         ).count()
-    assert count == 2  # still 2 rows from the first create
+    assert count == 4  # unchanged two offsets for each default channel
 
 
 # ---------------------------------------------------------------
@@ -190,7 +202,9 @@ def test_cancel_reminders_flips_queued_to_cancelled(client: TestClient) -> None:
                 HearingReminder.hearing_id == hearing["id"]
             )
         )
-    assert n == 2
+    assert n == 4
+    assert len(rows) == 4
+    assert {r.channel for r in rows} == {"email", "in_app"}
     assert {r.status for r in rows} == {HearingReminderStatus.CANCELLED}
 
 
@@ -375,7 +389,9 @@ def test_worker_auto_mode_flag_off_leaves_rows_queued(
 
     token = str(bootstrap_company(client)["access_token"])
     matter = _mk_matter(client, token, code="REM-DARK")
-    hearing = _mk_hearing_via_api(client, token, matter["id"], days_ahead=3)
+    hearing = _mk_hearing_via_api(
+        client, token, matter["id"], days_ahead=3, channels=["email"]
+    )
 
     factory = get_session_factory()
     with factory() as session:
@@ -400,9 +416,9 @@ def test_worker_auto_mode_flag_off_leaves_rows_queued(
 def test_legacy_worker_never_sends_directly(
     client: TestClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Flag ON + SendGrid creds set → worker actually POSTs to
-    SendGrid. We stub the httpx call but assert the row transitions
-    to SENT with a provider_message_id."""
+    """An explicit email-only plan stays queued in the compatibility
+    worker even when provider credentials exist. Only the canonical
+    delivery worker may dispatch; this worker must make zero calls."""
     import os
 
     from caseops_api.core.settings import get_settings
@@ -416,7 +432,9 @@ def test_legacy_worker_never_sends_directly(
 
     token = str(bootstrap_company(client)["access_token"])
     matter = _mk_matter(client, token, code="REM-LIVE")
-    hearing = _mk_hearing_via_api(client, token, matter["id"], days_ahead=3)
+    hearing = _mk_hearing_via_api(
+        client, token, matter["id"], days_ahead=3, channels=["email"]
+    )
 
     class _FakeResponse:
         status_code = 202
@@ -637,8 +655,11 @@ def test_admin_notifications_list_is_tenant_scoped(client: TestClient) -> None:
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["total_queued"] == 2  # T-24h + T-1h
-    assert len(body["reminders"]) == 2
+    assert body["total_queued"] == 4  # two offsets for email and in-app
+    assert len(body["reminders"]) == 4
+    assert sorted(row["channel"] for row in body["reminders"]) == [
+        "email", "email", "in_app", "in_app",
+    ]
 
     # Tenant B — separate workspace; should see zero reminders.
     b_resp = client.post(
@@ -671,8 +692,8 @@ def test_per_matter_reminders_endpoint_is_tenant_and_matter_scoped(
     admin notifications data but scoped to a single matter.
 
     Verify three things:
-    - Owner of a fresh matter sees the two queued T-24h + T-1h
-      rows the create-hearing path enqueued.
+    - Owner of a fresh matter sees both queued T-24h + T-1h
+      offsets for each default channel the create-hearing path enqueued.
     - A matter with NO hearings returns `reminders: []`.
     - Cross-tenant access 404s (anyone in tenant B sees no rows
       for tenant A's matter — same gate as get_matter).
@@ -689,14 +710,17 @@ def test_per_matter_reminders_endpoint_is_tenant_and_matter_scoped(
     assert listed.status_code == 200, listed.text
     body = listed.json()
     assert body["matter_id"] == matter["id"]
-    assert len(body["reminders"]) == 2
+    assert len(body["reminders"]) == 4
+    assert sorted(row["channel"] for row in body["reminders"]) == [
+        "email", "email", "in_app", "in_app",
+    ]
     statuses = {r["status"] for r in body["reminders"]}
     assert statuses == {"queued"}
     hearing_ids = {r["hearing_id"] for r in body["reminders"]}
     assert hearing_ids == {hearing["id"]}
     # Each row carries the user-actionable scheduling fields.
     for r in body["reminders"]:
-        assert r["channel"] == "email"
+        assert r["channel"] in {"email", "in_app"}
         assert r["scheduled_for"] is not None
         assert r["sent_at"] is None
         assert r["delivered_at"] is None
@@ -737,7 +761,8 @@ def test_full_lifecycle_create_hearing_through_delivered(
     """End-to-end demo of BUG-013 reminders, mirroring the live-prod
     verification recipe in session_log:
 
-      1. Create a hearing → two QUEUED rows appear (T-24h + T-1h).
+      1. Create an explicit email-only, noncritical hearing → two QUEUED rows
+         appear (T-24h + T-1h). Default dual-channel coverage is separate.
       2. The admin notifications endpoint reports total_queued=2.
       3. Simulate the cadence catching up to the scheduled times by
          shifting both rows' ``scheduled_for`` into the past
@@ -769,7 +794,9 @@ def test_full_lifecycle_create_hearing_through_delivered(
         # ---- Step 1: create the hearing -------------------------------
         token = str(bootstrap_company(client)["access_token"])
         matter = _mk_matter(client, token, code="REM-LIFECYCLE")
-        hearing = _mk_hearing_via_api(client, token, matter["id"], days_ahead=2)
+        hearing = _mk_hearing_via_api(
+            client, token, matter["id"], days_ahead=2, channels=["email"]
+        )
 
         # ---- Step 2: admin endpoint sees the two queued rows ----------
         list_resp = client.get(

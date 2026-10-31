@@ -28,7 +28,7 @@ def test_observability_manifest_and_lock_exclude_vulnerable_tracestate_parser(na
     api = Path(__file__).resolve().parents[1]
     manifest = tomllib.loads((api / "pyproject.toml").read_text(encoding="utf-8"))
     lock = tomllib.loads((api / "uv.lock").read_text(encoding="utf-8"))
-    assert f"{name}>={minimum}" in manifest["project"]["optional-dependencies"]["observability"]
+    assert f"{name}=={minimum}" in manifest["project"]["optional-dependencies"]["observability"]
     rows = [row for row in lock["package"] if row["name"] == name]
     assert len(rows) == 1
     assert Version(rows[0]["version"]) >= Version(minimum)
