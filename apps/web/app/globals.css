@@ -68,10 +68,52 @@
   --color-accent-500: oklch(0.62 0.080 55);
   --color-accent-600: oklch(0.52 0.090 55);
 
-  /* Status colours — kept restrained, no neon. */
+  /* Status colours — kept restrained, no neon. Shades 600/700 carry text and
+   * stay at or above WCAG AA 4.5:1 on white; 50-300 are tints and borders. */
+  --color-success-50:  oklch(0.97 0.020 150);
+  --color-success-300: oklch(0.85 0.070 150);
   --color-success-500: oklch(0.55 0.115 150);
+  --color-success-600: oklch(0.48 0.110 150);
+  --color-success-700: oklch(0.42 0.100 150);
+  --color-warning-50:  oklch(0.98 0.025 85);
+  --color-warning-300: oklch(0.87 0.100 85);
   --color-warning-500: oklch(0.70 0.130 75);
+  --color-warning-600: oklch(0.55 0.120 70);
+  --color-warning-700: oklch(0.49 0.110 65);
+  --color-danger-50:   oklch(0.97 0.014 25);
+  --color-danger-200:  oklch(0.89 0.055 25);
   --color-danger-500:  oklch(0.55 0.165 25);
+  --color-danger-600:  oklch(0.50 0.160 25);
+  --color-danger-700:  oklch(0.44 0.140 25);
+
+  /* Information — a steel blue, kept clear of the indigo brand hue so a task
+   * reads apart from a brand action and from the walnut hearing marker. */
+  --color-info-500: oklch(0.56 0.130 240);
+
+  /* Names pages already use. Each one was undefined, and in Tailwind v4 an
+   * undefined var() voids the whole declaration: calendar hearing and task
+   * markers and the today highlight painted transparent in production.
+   * Every name resolves to the scales above; lib/design-tokens.test.ts guards it. */
+  --color-ink-1: var(--color-ink);
+  --color-line-1: oklch(0.95 0.005 265);
+  --color-border: var(--color-line);
+  --color-bg-subtle: var(--color-bg-2);
+  --color-surface-muted: var(--color-bg-2);
+  --color-surface-raised: var(--color-surface);
+  --color-primary: var(--color-brand-700);
+  --color-accent: var(--color-accent-600);
+  --color-accent-bg: oklch(0.96 0.020 55);
+  --color-danger: var(--color-danger-600);
+  --color-danger-bg: var(--color-danger-50);
+  --color-danger-border: var(--color-danger-200);
+  --color-danger-text: var(--color-danger-700);
+  --color-warning: var(--color-warning-700);
+  --color-warn-50: var(--color-warning-50);
+  --color-warn-600: var(--color-warning-600);
+  --color-warn-700: var(--color-warning-700);
+  --color-warn-bg: var(--color-warning-50);
+  --color-warn-border: var(--color-warning-300);
+  --color-warn-text: var(--color-warning-700);
 
   --radius-xs: 4px;
   --radius-sm: 6px;
