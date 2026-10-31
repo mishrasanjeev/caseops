@@ -177,7 +177,8 @@ test("IPLF-049 completes UJ-38 and every governed exception path", async ({
   const headers = await enableWorkspace(api, tenant);
   const application = await createApplication(api, headers);
   await signIn(page, tenant.slug, tenant.email);
-  await page.goto(`/app/ip?docket=${application.docket.id}`);
+  // Proceedings moved to their own docket tab after this spec was written.
+  await page.goto(`/app/ip?docket=${application.docket.id}&view=proceedings`);
 
   const workspace = page.getByTestId("ip-post-registration-workspace");
   await expect(workspace).toBeVisible();
