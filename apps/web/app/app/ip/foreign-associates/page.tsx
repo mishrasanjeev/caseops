@@ -465,6 +465,10 @@ function CreateInstruction({
     placeholderData: (previous) => (previous?.docket_id === docketId ? previous : undefined),
   });
   const data = options.data?.docket_id === docketId ? options.data : undefined;
+  // While another jurisdiction's options are still shown (placeholderData),
+  // the associates and assignments on screen are not the ones the API checks.
+  const jurisdictionStale = Boolean(data) && (options.isPlaceholderData || (data?.target_jurisdiction ?? "") !== jurisdiction);
+  const offered = data && !jurisdictionStale ? data : undefined;
 
   const chooseDocket = (id: string) => {
     setDocketId(id);
@@ -476,8 +480,8 @@ function CreateInstruction({
     setErrors({});
   };
 
-  const associate = data?.associates.find((row) => row.id === counselId);
-  const counselAssignments = data?.assignments.filter((row) => row.counsel_id === counselId) ?? [];
+  const associate = offered?.associates.find((row) => row.id === counselId);
+  const counselAssignments = offered?.assignments.filter((row) => row.counsel_id === counselId) ?? [];
   const assignment = counselAssignments.find((row) => row.id === assignmentId);
   const usableEstimates = !data
     ? []
@@ -486,7 +490,8 @@ function CreateInstruction({
       : data.assignment_required ? [] : data.estimates;
   const serverBlocker = (code: IpForeignAssociateCreateBlocker["code"]) => data?.blockers.find((row) => row.code === code);
   const parsedClasses = parseNiceClasses(classes);
-  const docketHref = docketId ? `/app/ip?docket=${encodeURIComponent(docketId)}` : "/app/ip";
+  // Link Matter lives in the IP record's "Access and links" view.
+  const linkMatterHref = `/app/ip?docket=${encodeURIComponent(docketId)}&view=access`;
   const showQuoteForm = Boolean(data?.can_record_estimate) && (data?.estimates.length === 0 || (assignment !== undefined && usableEstimates.length === 0));
 
   const blockers: Array<{ key: string; field: string; text: string }> = [];
@@ -494,15 +499,19 @@ function CreateInstruction({
   else if (!data) blockers.push({ key: "options", field: FIELD_IDS.docket, text: options.isError ? "IP record: could not load what this record allows. Try again above." : "IP record: loading what this record allows…" });
   else {
     if (!jurisdiction) blockers.push({ key: "jurisdiction", field: FIELD_IDS.jurisdiction, text: "Target jurisdiction: choose where the associate files." });
-    else if (!data.associates.length) blockers.push({ key: "associate-none", field: FIELD_IDS.associate, text: `Approved associate: none on the panel files in ${jurisdiction}.` });
+    else if (!offered) blockers.push({ key: "jurisdiction-loading", field: FIELD_IDS.associate, text: `Approved associate: loading the associates approved for ${jurisdiction}…` });
+    else if (!offered.associates.length) blockers.push({ key: "associate-none", field: FIELD_IDS.associate, text: `Approved associate: none on the panel files in ${jurisdiction}.` });
     else if (!counselId) blockers.push({ key: "associate", field: FIELD_IDS.associate, text: "Approved associate: choose the associate." });
-    if (data.assignment_required && counselId) {
+    else if (!associate) blockers.push({ key: "associate-gone", field: FIELD_IDS.associate, text: `Approved associate: the associate you chose is no longer offered for ${jurisdiction}. Choose again.` });
+    if (offered?.assignment_required && associate) {
       if (!counselAssignments.length) blockers.push({ key: "assignment-none", field: FIELD_IDS.assignment, text: "Approved Matter assignment: this associate has no budgeted assignment on the Matter." });
       else if (!assignmentId) blockers.push({ key: "assignment", field: FIELD_IDS.assignment, text: "Approved Matter assignment: choose the assignment." });
+      else if (!assignment) blockers.push({ key: "assignment-gone", field: FIELD_IDS.assignment, text: "Approved Matter assignment: the assignment you chose is no longer offered. Choose again." });
     }
     if (!data.estimates.length) blockers.push({ key: "estimate-none", field: FIELD_IDS.estimate, text: "Estimate: no active associate estimate on this record." });
     else if (assignment && !usableEstimates.length) blockers.push({ key: "estimate-fit", field: FIELD_IDS.estimate, text: "Estimate: none fits the assignment's currency and budget ceiling." });
     else if (usableEstimates.length && !estimateId) blockers.push({ key: "estimate", field: FIELD_IDS.estimate, text: "Estimate: choose the associate's estimate." });
+    else if (estimateId && !usableEstimates.some((row) => row.id === estimateId)) blockers.push({ key: "estimate-gone", field: FIELD_IDS.estimate, text: "Estimate: the estimate you chose is no longer offered. Choose again." });
     if (!data.documents.length) blockers.push({ key: "documents-none", field: FIELD_IDS.documents, text: "Documents: none are linked to this record." });
     else if (!documentIds.length) blockers.push({ key: "documents", field: FIELD_IDS.documents, text: "Documents: select at least one document to send." });
     if (!clientInstructionId && !authority.trim()) blockers.push({ key: "authority", field: FIELD_IDS.authority, text: "Client authority: link an accepted client instruction or record the client's written authority." });
@@ -634,9 +643,9 @@ function CreateInstruction({
             value={counselId}
             onChange={(value) => { setCounselId(value); setAssignmentId(""); setEstimateId(""); }}
             placeholder="Select associate"
-            options={data?.associates.map((row) => ({ value: row.id, label: `${row.name} · ${row.firm_city ?? "City not recorded"}` })) ?? []}
+            options={offered?.associates.map((row) => ({ value: row.id, label: `${row.name} · ${row.firm_city ?? "City not recorded"}` })) ?? []}
             required
-            blocked={jurisdictionReason ?? (!jurisdiction ? "Choose the target jurisdiction first." : undefined)}
+            blocked={jurisdictionReason ?? (!jurisdiction ? "Choose the target jurisdiction first." : !offered ? `Loading the associates approved for ${jurisdiction}…` : undefined)}
             empty={<ServerReason blocker={serverBlocker("no_panel_associate") ?? serverBlocker("no_associate_for_jurisdiction")} />}
             caption={associate ? associateCaption(associate) : `Only active or preferred panel counsel approved for ${jurisdiction} are listed.`}
             error={errors[FIELD_IDS.associate]}
@@ -653,14 +662,19 @@ function CreateInstruction({
               !docketId ? "Select an IP record first."
                 : !data ? "Loading the record's Matter…"
                   : !data.assignment_required ? (
-                    <>This record has no linked Matter, so no Matter assignment or budget applies. To bill this work against a Matter budget, link the Matter on the IP record first. <NewTabLink href={docketHref}>Link a Matter on the IP record</NewTabLink></>
-                  ) : !counselId ? "Choose the approved associate first." : undefined
+                    <>This record has no linked Matter, so no Matter assignment or budget applies. To bill this work against a Matter budget, link the Matter as Operational in the IP record&apos;s Access and links tab, then press Check again. <NewTabLink href={linkMatterHref}>Link a Matter on the IP record</NewTabLink></>
+                  ) : !counselId ? "Choose the approved associate first."
+                    : !offered ? "Loading the Matter assignments…" : undefined
             }
-            empty={data?.matter_id ? (
+            empty={offered?.matter_id ? (
               <>
-                No approved assignment with a budget ceiling links {associate?.name ?? "this associate"} to the Matter {data.matter_title ?? ""}. Assign them on the Matter&apos;s Outside counsel tab with a budget ceiling in the quote&apos;s currency.
-                {data.unbudgeted_assignment_count ? ` ${data.unbudgeted_assignment_count} assignment(s) on this Matter have no budget ceiling and cannot fund foreign-associate work.` : ""}
-                {" "}<NewTabLink href={`/app/matters/${encodeURIComponent(data.matter_id)}/outside-counsel`}>Open the Matter&apos;s Outside counsel tab</NewTabLink>
+                No approved assignment with a budget ceiling links {associate?.name ?? "this associate"} to the Matter {offered.matter_title ?? ""}.
+                {offered.unbudgeted_assignment_count ? ` ${offered.unbudgeted_assignment_count} assignment(s) on this Matter have no budget ceiling and cannot fund foreign-associate work.` : ""}
+                {offered.can_manage_counsel ? (
+                  <> Assign them on the Matter&apos;s Outside counsel tab with a budget ceiling in the quote&apos;s currency. <NewTabLink href={`/app/matters/${encodeURIComponent(offered.matter_id)}/outside-counsel`}>Open the Matter&apos;s Outside counsel tab</NewTabLink></>
+                ) : (
+                  " An owner, admin or partner (outside-counsel management) must assign them on the Matter's Outside counsel tab with a budget ceiling in the quote's currency; your role cannot."
+                )}
               </>
             ) : null}
             caption={data?.matter_title ? `Matter: ${data.matter_title}. Only approved or active assignments with a budget ceiling are listed.` : undefined}
@@ -733,7 +747,10 @@ function CreateInstruction({
               ) : assignment ? (
                 `No active estimate fits this assignment: it must be in ${assignment.currency} and at most ${money(assignment.budget_amount_minor, assignment.currency)}.`
               ) : null}
-              caption={data?.can_record_estimate ? undefined : "Associate quotes are recorded by owners and admins (fee-management permission)."}
+              caption={[
+                data?.can_record_estimate ? null : "Associate quotes are recorded by owners and admins (fee-management permission).",
+                assignment && usableEstimates.some((row) => row.amount_withheld) ? "A restricted amount is checked against the budget ceiling when you create the instruction." : null,
+              ].filter(Boolean).join(" ") || undefined}
               error={errors[FIELD_IDS.estimate]}
             />
             {showQuoteForm && data ? (
@@ -976,7 +993,7 @@ function InstructionWorkspace({ instructionId, canWrite, canApprove }: { instruc
           {actionLoading ? <Skeleton className="h-[24rem]" /> : actionError ? (
             <QueryErrorState error={actionError} onRetry={retryActionQueries} />
           ) : (
-            <TransactionForm workspace={workspace.data} docket={workspace.data.docket} documents={documents.data?.items ?? []} deadlines={deadlines.data?.deadlines ?? []} counsel={counsel.data} associates={reassignOptions.data?.associates ?? []} communications={communications.data?.communications ?? []} canWrite={canWrite} canApprove={canApprove} />
+            <TransactionForm workspace={workspace.data} docket={workspace.data.docket} documents={documents.data?.items ?? []} deadlines={deadlines.data?.deadlines ?? []} counsel={counsel.data} associates={reassignOptions.data?.associates ?? []} associateBlocker={reassignOptions.data?.blockers.find((row) => row.field === "outside_counsel_id")} communications={communications.data?.communications ?? []} canWrite={canWrite} canApprove={canApprove} />
           )}
         </TabsContent>
         <TabsContent value="reminders"><ReminderPanel workspace={workspace.data} docket={workspace.data.docket} canWrite={canWrite} /></TabsContent>
@@ -1029,6 +1046,7 @@ function TransactionForm({
   deadlines,
   counsel,
   associates,
+  associateBlocker,
   communications,
   canWrite,
   canApprove,
@@ -1039,6 +1057,7 @@ function TransactionForm({
   deadlines: Array<{ id: string; title: string }>;
   counsel: CounselWorkspace | undefined;
   associates: IpForeignAssociateCreateOptions["associates"];
+  associateBlocker: IpForeignAssociateCreateBlocker | undefined;
   communications: Communication[];
   canWrite: boolean;
   canApprove: boolean;
@@ -1046,6 +1065,7 @@ function TransactionForm({
   const session = useSession();
   const queryClient = useQueryClient();
   const options = TRANSITIONS[workspace.instruction.status];
+  const canManageCounsel = useCapability("outside_counsel:manage");
   const [kind, setKind] = useState<IpForeignAssociateTransactionKind | "">(options[0] ?? "");
   const [reason, setReason] = useState("");
   const [evidence, setEvidence] = useState("");
@@ -1068,11 +1088,13 @@ function TransactionForm({
   const [assumptions, setAssumptions] = useState("");
   const needsApproval = kind ? ["approve", "approve_substantive_response", "approve_fee_change", "verify_filing_evidence", "complete", "reassign"].includes(kind) : false;
   // The API accepts only active (not voided or superseded) cost items.
-  const estimates = docket.cost_items.filter((row) => row.cost_nature === "estimate" && row.lineage_status === "active" && row.id !== workspace.instruction.estimate_cost_item_id);
+  const estimates = docket.cost_items.filter((row) => row.cost_nature === "estimate" && row.lineage_status === "active" && (kind === "reassign" || row.id !== workspace.instruction.estimate_cost_item_id));
   const actuals = docket.cost_items.filter((row) => row.cost_nature === "actual" && row.lineage_status === "active");
   const assignments = docket.matter_id ? counsel?.assignments.filter((row) => row.matter_id === docket.matter_id && row.counsel_id === replacementCounselId && ["approved", "active"].includes(row.status)) ?? [] : [];
   const docketHref = `/app/ip?docket=${encodeURIComponent(docket.id)}`;
-  const matterCounselHref = docket.matter_id ? `/app/matters/${encodeURIComponent(docket.matter_id)}/outside-counsel` : null;
+  const documentsHref = `${docketHref}&area=documents`;
+  // Assignments and associate invoices are recorded with outside_counsel:manage; link only for those roles.
+  const matterCounselHref = docket.matter_id && canManageCounsel ? `/app/matters/${encodeURIComponent(docket.matter_id)}/outside-counsel` : null;
   const spends = counsel?.spend_records.filter((row) => row.matter_id === docket.matter_id && row.counsel_id === workspace.instruction.outside_counsel_id) ?? [];
   const dispatches = communications.filter((row) => row.direction === "outbound" && ["logged", "sent", "delivered", "opened"].includes(row.status));
 
@@ -1141,7 +1163,7 @@ function TransactionForm({
         placeholder="Select estimate"
         options={estimates.map((row) => ({ value: row.id, label: `${row.description} · ${row.amount_withheld ? "Amount restricted" : money(row.amount_minor, row.currency)}` }))}
         required
-        empty={<>No other active estimate is recorded on this record. Owners and admins (fee-management permission) record the revised quote in the IP record&apos;s cost evidence. <NewTabLink href={docketHref}>Open the IP record</NewTabLink></>}
+        empty={<>No {kind === "reassign" ? "" : "other "}active estimate is recorded on this record. Owners and admins (fee-management permission) record the revised quote in the IP record&apos;s cost evidence. <NewTabLink href={docketHref}>Open the IP record</NewTabLink></>}
       />
       <Field label="Tax type"><Input value={taxType} onChange={(event) => setTaxType(event.target.value)} /></Field>
       <Field label="Tax rate percent"><Input type="number" min="0" max="100" step="0.01" value={taxRate} onChange={(event) => setTaxRate(event.target.value)} /></Field>
@@ -1165,7 +1187,7 @@ function TransactionForm({
         placeholder="Select invoice"
         options={spends.map((row) => ({ value: row.id, label: `${row.invoice_reference ?? row.description} · ${row.status}` }))}
         required
-        empty={matterCounselHref ? <>No invoice from this associate is recorded on the Matter. Record it on the Matter&apos;s Outside counsel tab. <NewTabLink href={matterCounselHref}>Open the Matter&apos;s Outside counsel tab</NewTabLink></> : "Associate invoices are recorded against a Matter, and this record has no Matter."}
+        empty={!docket.matter_id ? "Associate invoices are recorded against a Matter, and this record has no Matter." : matterCounselHref ? <>No invoice from this associate is recorded on the Matter. Record it on the Matter&apos;s Outside counsel tab. <NewTabLink href={matterCounselHref}>Open the Matter&apos;s Outside counsel tab</NewTabLink></> : "No invoice from this associate is recorded on the Matter. An owner, admin or partner (outside-counsel management) records it on the Matter's Outside counsel tab; your role cannot."}
       />
     </> : null}
     {kind === "reassign" ? <>
@@ -1176,7 +1198,7 @@ function TransactionForm({
         placeholder="Select associate"
         options={associates.map((row) => ({ value: row.id, label: `${row.name} · ${row.firm_city ?? "City not recorded"}` }))}
         required
-        empty={<>No approved associate on the panel files in {workspace.instruction.target_jurisdiction}. Add one in Outside Counsel with {workspace.instruction.target_jurisdiction} as a jurisdiction. <NewTabLink href="/app/outside-counsel">Add counsel in Outside Counsel</NewTabLink></>}
+        empty={associateBlocker ? <ServerReason blocker={associateBlocker} /> : `No approved associate on the panel files in ${workspace.instruction.target_jurisdiction}.`}
       />
       <ChoiceField
         label="Replacement assignment"
@@ -1186,7 +1208,7 @@ function TransactionForm({
         options={assignments.map((row) => ({ value: row.id, label: `${row.role_summary ?? row.counsel_name} · ${row.budget_amount_minor === null ? "No ceiling" : money(row.budget_amount_minor, row.currency)}` }))}
         required={Boolean(docket.matter_id)}
         blocked={!docket.matter_id ? "Not required: this record has no linked Matter." : !replacementCounselId ? "Choose the replacement associate first." : undefined}
-        empty={matterCounselHref ? <>The replacement associate has no approved assignment on this record&apos;s Matter. Assign them on the Matter&apos;s Outside counsel tab. <NewTabLink href={matterCounselHref}>Open the Matter&apos;s Outside counsel tab</NewTabLink></> : null}
+        empty={matterCounselHref ? <>The replacement associate has no approved assignment on this record&apos;s Matter. Assign them on the Matter&apos;s Outside counsel tab. <NewTabLink href={matterCounselHref}>Open the Matter&apos;s Outside counsel tab</NewTabLink></> : "The replacement associate has no approved assignment on this record's Matter. An owner, admin or partner (outside-counsel management) must assign them on the Matter's Outside counsel tab; your role cannot."}
       />
       <Field label="Replacement response due"><Input className="min-w-0" type="datetime-local" value={replacementDue} onChange={(event) => setReplacementDue(event.target.value)} /></Field>
     </> : null}
@@ -1199,7 +1221,7 @@ function TransactionForm({
         placeholder={kind === "report_filing" ? "Select document" : "No document"}
         options={documents.map((row) => ({ value: row.id, label: row.title }))}
         required={kind === "report_filing"}
-        empty={<>No documents are linked to this record. Upload the associate&apos;s filing documents on the IP record. <NewTabLink href={docketHref}>Open the IP record documents</NewTabLink></>}
+        empty={<>No documents are linked to this record. Upload the associate&apos;s filing documents in the record&apos;s Documents tab. <NewTabLink href={documentsHref}>Open the record&apos;s Documents tab</NewTabLink></>}
       />
     ) : null}
     <ChoiceField

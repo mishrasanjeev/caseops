@@ -43,6 +43,11 @@ function formatList(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
+/** The deep-linked record when it is listed, else the first record. */
+function defaultDocketId(dockets: Pick<IpDocket, "id">[], preferred: string | undefined): string {
+  return preferred && dockets.some((row) => row.id === preferred) ? preferred : (dockets[0]?.id ?? "");
+}
+
 const NEXT_STATE: Partial<Record<IpDocumentState, IpDocumentState>> = {
   draft: "review",
   review: "approved",
@@ -60,10 +65,13 @@ export function IpDocumentWorkspace({
   canConfigure,
   assetType = "Trademark",
   scopeDocketId,
+  preferredDocketId,
 }: {
   dockets: Pick<IpDocket, "id" | "title">[];
   assetType?: "Trademark" | "Patent";
   scopeDocketId?: string;
+  /** Preselects this record as the linked docket when it is listed (deep links). */
+  preferredDocketId?: string;
   canUpload: boolean;
   canManage: boolean;
   canReview: boolean;
@@ -80,7 +88,7 @@ export function IpDocumentWorkspace({
   const [proceedingNo, setProceedingNo] = useState("");
   const [documentDate, setDocumentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [taxonomyKey, setTaxonomyKey] = useState("");
-  const [docketId, setDocketId] = useState(dockets[0]?.id ?? "");
+  const [docketId, setDocketId] = useState(() => defaultDocketId(dockets, preferredDocketId));
   const [confidentiality, setConfidentiality] = useState<
     "internal" | "confidential" | "restricted"
   >(assetType === "Patent" ? "restricted" : "internal");
@@ -170,8 +178,8 @@ export function IpDocumentWorkspace({
     .filter(Boolean);
 
   useEffect(() => {
-    if (!docketId && dockets[0]?.id) setDocketId(dockets[0].id);
-  }, [docketId, dockets]);
+    if (!docketId && dockets.length) setDocketId(defaultDocketId(dockets, preferredDocketId));
+  }, [docketId, dockets, preferredDocketId]);
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["ip", "documents"] });
   };

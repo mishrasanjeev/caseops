@@ -137,6 +137,9 @@ export default function IpDocketPage() {
   const searchParams = useSearchParams();
   const requestedDocketId = searchParams.get("docket");
   const requestedView = requestedDocketView(searchParams.get("view"));
+  // ?area=documents opens the Documents tab (a deep link from a blocker that
+  // asks for an upload on this record).
+  const requestedArea = searchParams.get("area") === "documents" ? "documents" : "docket";
   const requestedProceedingId = searchParams.get("proceeding");
   const requestedDraftId = searchParams.get("draft");
   const queryClient = useQueryClient();
@@ -302,7 +305,7 @@ export default function IpDocketPage() {
         />
       ) : null}
 
-      <Tabs defaultValue="docket" className="min-w-0">
+      <Tabs defaultValue={requestedArea} className="min-w-0">
         <TabsList className="h-auto w-full min-w-0 flex-wrap sm:w-auto" aria-label="IP workspace areas">
           <TabsTrigger value="docket">Docket</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -312,13 +315,18 @@ export default function IpDocketPage() {
           <IpDomainAvailability domains={readiness.data.domains} />
         </TabsContent>
         <TabsContent value="documents">
-          <IpDocumentWorkspace
-            dockets={portfolioDockets}
-            canUpload={canWrite && canUploadDocuments}
-            canManage={canWrite && canManageDocuments}
-            canReview={canReview}
-            canConfigure={canConfigure}
-          />
+          {deepLinkDocketPending ? (
+            <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
+          ) : (
+            <IpDocumentWorkspace
+              dockets={portfolioDockets}
+              preferredDocketId={requestedDocketId ?? undefined}
+              canUpload={canWrite && canUploadDocuments}
+              canManage={canWrite && canManageDocuments}
+              canReview={canReview}
+              canConfigure={canConfigure}
+            />
+          )}
         </TabsContent>
         <TabsContent value="docket">
           {deepLinkDocketPending && requestedView === "access" && canManageAccess ? (

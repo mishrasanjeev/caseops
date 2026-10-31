@@ -208,6 +208,7 @@ function createOptions(overrides: Partial<IpForeignAssociateCreateOptions> = {})
     client_instructions: [],
     documents: [],
     can_record_estimate: true,
+    can_manage_counsel: true,
     blockers: [],
     ...overrides,
   };
@@ -216,7 +217,7 @@ function createOptions(overrides: Partial<IpForeignAssociateCreateOptions> = {})
 const GB_BLOCKERS: IpForeignAssociateCreateOptions["blockers"] = [
   { code: "no_associate_for_jurisdiction", field: "outside_counsel_id", message: "No approved associate on the panel files in GB · United Kingdom. Add one in Outside Counsel with GB as a jurisdiction.", action_label: "Add counsel in Outside Counsel", href: "/app/outside-counsel" },
   { code: "no_active_estimate", field: "estimate_cost_item_id", message: "No active associate estimate is recorded on this record. Record the associate's quote below.", action_label: null, href: null },
-  { code: "no_linked_documents", field: "selected_document_refs", message: "No documents are linked to this record. Upload the instruction documents on the IP record first.", action_label: "Open the IP record documents", href: "/app/ip?docket=docket-pine" },
+  { code: "no_linked_documents", field: "selected_document_refs", message: "No documents are linked to this record. Upload the instruction documents in the record's Documents tab.", action_label: "Open the record's Documents tab", href: "/app/ip?docket=docket-pine&area=documents" },
 ];
 
 /** Same rule as the Playwright crawler: an enabled select must offer a real choice. */
@@ -340,7 +341,9 @@ describe("foreign-associate coordinator workspace", () => {
     render(<ForeignAssociatesPage />, { wrapper: wrapper() });
     await screen.findByRole("heading", { name: "Liberty IP LLP" });
     await user.click(screen.getByRole("tab", { name: "Actions" }));
-    expect(screen.getByLabelText("Replacement estimate").querySelector('option[value="estimate-3"]')).toBeNull();
+    const replacementEstimates = Array.from((screen.getByLabelText("Replacement estimate") as HTMLSelectElement).options).map((option) => option.value);
+    // Voided estimates are never offered; the current estimate may be kept on reassign.
+    expect(replacementEstimates).toEqual(["", "estimate-1", "estimate-2"]);
     await user.selectOptions(screen.getByLabelText("Replacement estimate"), "estimate-2");
     await user.selectOptions(screen.getByLabelText("Replacement associate"), "counsel-2");
     await user.selectOptions(screen.getByLabelText("Replacement assignment"), "assignment-2");
@@ -414,7 +417,10 @@ describe("new foreign-associate instruction (Ram 2026-10-30)", () => {
     // BUG-010: the Matterless assignment explains itself and links to Link Matter.
     expect(screen.getByLabelText("Approved Matter assignment")).toBeDisabled();
     expect(screen.getByText(/This record has no linked Matter, so no Matter assignment or budget applies/)).toBeVisible();
-    expect(screen.getByRole("link", { name: /Link a Matter on the IP record/ })).toHaveAttribute("href", "/app/ip?docket=docket-pine");
+    // Link Matter is in the record's "Access and links" view, so the link opens that view.
+    expect(screen.getByText(/link the Matter as Operational in the IP record's Access and links tab/)).toBeVisible();
+    expect(screen.getByRole("link", { name: /Link a Matter on the IP record/ })).toHaveAttribute("href", "/app/ip?docket=docket-pine&view=access");
+    expect(screen.getByRole("link", { name: /Open the record's Documents tab/ })).toHaveAttribute("href", "/app/ip?docket=docket-pine&area=documents");
 
     // BUG-011: no placeholder-only select; the written-authority path is explicit.
     expect(screen.queryByLabelText("Accepted client instruction")).toBeNull();
@@ -528,14 +534,72 @@ describe("new foreign-associate instruction (Ram 2026-10-30)", () => {
     const user = userEvent.setup();
     mocks.createOptions.mockResolvedValue(createOptions({
       can_record_estimate: false,
-      blockers: [{ code: "no_active_estimate", field: "estimate_cost_item_id", message: "No active associate estimate is recorded on this record. An owner or admin (fee-management permission) must record the associate's quote in the IP record's cost evidence.", action_label: "Open the IP record", href: "/app/ip?docket=docket-pine" }],
+      blockers: [{ code: "no_active_estimate", field: "estimate_cost_item_id", message: "No active associate estimate is recorded on this record. An owner or admin (fee-management permission) must record the associate's quote in the IP record's cost evidence; your role cannot.", action_label: null, href: null }],
     }));
     render(<ForeignAssociatesPage />, { wrapper: wrapper() });
     await openCreateFor(user, "docket-pine");
-    expect(await screen.findByText(/An owner or admin \(fee-management permission\) must record/)).toBeVisible();
-    expect(screen.getByRole("link", { name: /Open the IP record/ })).toHaveAttribute("href", "/app/ip?docket=docket-pine");
+    expect(await screen.findByText(/An owner or admin \(fee-management permission\) must record .*your role cannot/)).toBeVisible();
+    expect(screen.queryByRole("link", { name: /Open the IP record/ })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Record associate quote" })).toBeNull();
     expect(screen.getByLabelText("Estimate")).toBeDisabled();
+  });
+
+  it("BUG-009/010 a member or paralegal is told who adds counsel and assignments, with no dead link", async () => {
+    const user = userEvent.setup();
+    const role = "Adding counsel and assigning them to a Matter needs the outside-counsel management permission (owners, admins and partners); your role cannot, so ask one of them.";
+    mocks.createOptions.mockImplementation(async ({ targetJurisdiction }: { targetJurisdiction: string | null }) => createOptions({
+      docket_id: "docket-1", matter_id: "matter-1", matter_title: "ASTER US filing", assignment_required: true,
+      can_manage_counsel: false, target_jurisdiction: targetJurisdiction,
+      associates: targetJurisdiction === "US" ? [LIBERTY] : [],
+      blockers: targetJurisdiction === "US"
+        ? [{ code: "no_assignment_for_matter", field: "assignment_id", message: `This record's Matter has no approved assignment with a budget ceiling for an associate approved in US.${role}`, action_label: null, href: null }]
+        : [{ code: "no_associate_for_jurisdiction", field: "outside_counsel_id", message: `No approved associate on the panel files in GB · United Kingdom.${role}`, action_label: null, href: null }],
+    }));
+    render(<ForeignAssociatesPage />, { wrapper: wrapper() });
+    const jurisdiction = await openCreateFor(user, "docket-1");
+    await user.selectOptions(jurisdiction, "GB");
+    expect(await screen.findByText(/No approved associate on the panel files in GB · United Kingdom\..*your role cannot/)).toBeVisible();
+    expect(screen.queryByRole("link", { name: /Add counsel in Outside Counsel/ })).toBeNull();
+    await user.selectOptions(jurisdiction, "US");
+    const associate = screen.getByLabelText("Approved associate");
+    await waitFor(() => expect(associate).toBeEnabled());
+    await user.selectOptions(associate, "counsel-1");
+    expect(screen.getByLabelText("Approved Matter assignment")).toBeDisabled();
+    expect(screen.getByText(/An owner, admin or partner \(outside-counsel management\) must assign them .*your role cannot/)).toBeVisible();
+    expect(screen.queryByRole("link", { name: /Open the Matter's Outside counsel tab/ })).toBeNull();
+  });
+
+  it("BUG-009 never offers the previous jurisdiction's associates while the new ones load", async () => {
+    const user = userEvent.setup();
+    let releaseGb: (() => void) | undefined;
+    let usAssociates = [LIBERTY, HUDSON];
+    mocks.createOptions.mockImplementation(({ targetJurisdiction }: { targetJurisdiction: string | null }) => {
+      const body = createOptions({ target_jurisdiction: targetJurisdiction, associates: targetJurisdiction === "US" ? usAssociates : [] });
+      if (targetJurisdiction !== "GB") return Promise.resolve(body);
+      return new Promise((resolve) => { releaseGb = () => resolve({ ...body, blockers: [GB_BLOCKERS[0]] }); });
+    });
+    render(<ForeignAssociatesPage />, { wrapper: wrapper() });
+    const jurisdiction = await openCreateFor(user, "docket-pine");
+    await user.selectOptions(jurisdiction, "US");
+    const associate = screen.getByLabelText("Approved associate");
+    await waitFor(() => expect(associate).toBeEnabled());
+
+    // Switch to GB: the US list is still cached as placeholder data, but it is not offered.
+    await user.selectOptions(jurisdiction, "GB");
+    expect(associate).toBeDisabled();
+    expect(screen.getByText("Loading the associates approved for GB…")).toBeVisible();
+    expect(screen.getByText("Approved associate: loading the associates approved for GB…")).toBeVisible();
+    await act(async () => { releaseGb?.(); });
+    expect(await screen.findByText(/No approved associate on the panel files in GB · United Kingdom/)).toBeVisible();
+
+    // An associate that drops off the panel after being chosen blocks Create instead of failing it.
+    await user.selectOptions(jurisdiction, "US");
+    await waitFor(() => expect(associate).toBeEnabled());
+    await user.selectOptions(associate, "counsel-1");
+    usAssociates = [HUDSON];
+    await user.click(screen.getByRole("button", { name: /Check again/ }));
+    expect(await screen.findByText("Approved associate: the associate you chose is no longer offered for US. Choose again.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create instruction" })).toBeDisabled();
   });
 
   it("shows a retryable error instead of empty pickers when the options cannot load", async () => {
