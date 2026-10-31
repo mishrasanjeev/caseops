@@ -552,6 +552,31 @@ describe("new foreign-associate instruction (Ram 2026-10-30)", () => {
     expect(deadSelects(view.container)).toEqual([]);
   });
 
+  it("offers privileged documents only on the terms the API accepts", async () => {
+    const user = userEvent.setup();
+    const privilegedOptions = createOptions({
+      documents: [
+        { id: "document-1", title: "Approved filing instruction", is_privileged: false },
+        { id: "document-2", title: "Privileged filing strategy", is_privileged: true },
+      ],
+    });
+    mocks.createOptions.mockResolvedValue(privilegedOptions);
+    mocks.capability.mockImplementation((value: string) => value !== "ip:approve");
+    const view = render(<ForeignAssociatesPage />, { wrapper: wrapper() });
+    await openCreateFor(user, "docket-pine");
+    expect(await screen.findByLabelText("Privileged filing strategy · privileged (IP approvers only)")).toBeDisabled();
+    expect(screen.getByLabelText("Approved filing instruction")).toBeEnabled();
+    view.unmount();
+
+    mocks.capability.mockReturnValue(true);
+    render(<ForeignAssociatesPage />, { wrapper: wrapper() });
+    await openCreateFor(user, "docket-pine");
+    await user.click(await screen.findByLabelText("Privileged filing strategy · privileged"));
+    expect(screen.getByText("Privilege approval: confirm that the selected privileged documents may be sent.")).toBeVisible();
+    await user.click(screen.getByLabelText("Explicitly include selected privileged/internal documents"));
+    expect(screen.queryByText("Privilege approval: confirm that the selected privileged documents may be sent.")).toBeNull();
+  });
+
   it("anchors a refused create to the field that caused it", async () => {
     const user = userEvent.setup();
     mocks.createOptions.mockResolvedValue(createOptions({

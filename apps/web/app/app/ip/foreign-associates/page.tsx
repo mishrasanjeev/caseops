@@ -506,6 +506,9 @@ function CreateInstruction({
     if (!data.documents.length) blockers.push({ key: "documents-none", field: FIELD_IDS.documents, text: "Documents: none are linked to this record." });
     else if (!documentIds.length) blockers.push({ key: "documents", field: FIELD_IDS.documents, text: "Documents: select at least one document to send." });
     if (!clientInstructionId && !authority.trim()) blockers.push({ key: "authority", field: FIELD_IDS.authority, text: "Client authority: link an accepted client instruction or record the client's written authority." });
+    if (!includePrivileged && data.documents.some((row) => row.is_privileged && documentIds.includes(row.id))) {
+      blockers.push({ key: "privilege", field: "fa-privilege", text: "Privilege approval: confirm that the selected privileged documents may be sent." });
+    }
     if (parsedClasses.errors.length) blockers.push({ key: "classes", field: FIELD_IDS.classes, text: `Nice classes: ${parsedClasses.errors[0].message}` });
   }
   if (!session.context?.membership.id) blockers.push({ key: "session", field: FIELD_IDS.docket, text: "Your session is still loading." });
@@ -765,8 +768,9 @@ function CreateInstruction({
               <div className="grid min-w-0 gap-2 sm:grid-cols-2">
                 {data.documents.map((row) => (
                   <label key={row.id} className="flex min-w-0 items-start gap-2 rounded-md border border-[var(--color-line)] p-2 text-sm">
-                    <input type="checkbox" checked={documentIds.includes(row.id)} onChange={(event) => setDocumentIds((current) => event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id))} />
-                    <span className="min-w-0 break-words">{row.title}{row.is_privileged ? " · privileged" : ""}</span>
+                    {/* The API refuses privileged documents unless an IP approver includes them. */}
+                    <input type="checkbox" checked={documentIds.includes(row.id)} disabled={row.is_privileged && !canApprove} onChange={(event) => setDocumentIds((current) => event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id))} />
+                    <span className="min-w-0 break-words">{row.title}{row.is_privileged ? (canApprove ? " · privileged" : " · privileged (IP approvers only)") : ""}</span>
                   </label>
                 ))}
               </div>
@@ -776,7 +780,7 @@ function CreateInstruction({
           <fieldset className="grid min-w-0 gap-1.5 md:col-span-2 xl:col-span-4">
             <legend className="mb-1.5 text-sm font-medium">Privilege approval</legend>
             <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" checked={includePrivileged} onChange={(event) => setIncludePrivileged(event.target.checked)} disabled={!canApprove} aria-describedby={canApprove ? undefined : "fa-privilege-hint"} />
+              <input id="fa-privilege" type="checkbox" checked={includePrivileged} onChange={(event) => setIncludePrivileged(event.target.checked)} disabled={!canApprove} aria-describedby={canApprove ? undefined : "fa-privilege-hint"} />
               Explicitly include selected privileged/internal documents
             </label>
             {!canApprove ? <p id="fa-privilege-hint" className="text-xs text-[var(--color-mute)]">Only IP approvers can include privileged documents.</p> : null}
