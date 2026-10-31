@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_, select
@@ -35,6 +36,7 @@ from caseops_api.db.models import (
 from caseops_api.schemas.ip_foreign_associates import (
     IpFilingJurisdictionOption,
     IpForeignAssociateCreateBlocker,
+    IpForeignAssociateCreateBlockerCode,
     IpForeignAssociateCreateOptionsResponse,
     IpForeignAssociateCreateRequest,
     IpForeignAssociateOptionAssignment,
@@ -57,11 +59,14 @@ from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.ip_docket_access import _docket_or_404
 from caseops_api.services.ip_document_workflow import list_ip_documents
+from caseops_api.services.ip_documents import ip_document_taxonomy_counts
 from caseops_api.services.ip_filing_jurisdictions import (
     FILING_JURISDICTIONS,
+    INDIAN_ABBREVIATION_CODES,
     canonical_filing_jurisdiction,
     filing_jurisdiction_label,
     filing_jurisdiction_matches,
+    profile_filing_jurisdiction,
 )
 from caseops_api.services.ip_lifecycle import append_ip_docket_event
 from caseops_api.services.ip_operations import (
@@ -471,8 +476,22 @@ def ip_foreign_associate_create_options(
 
     company_id = context.company.id
     docket = _docket_or_404(session, context=context, docket_id=docket_id)
-    jurisdiction = canonical_filing_jurisdiction(target_jurisdiction)
+    raw_target = (target_jurisdiction or "").strip() or None
+    jurisdiction = canonical_filing_jurisdiction(raw_target)
+    # A target stored before normalization (reassign only; create accepts
+    # codes alone) is matched exactly as the reassign validator matches it.
+    target = jurisdiction or raw_target
     docket_href = f"/app/ip?docket={docket.id}"
+
+    def can(capability: str) -> bool:
+        return membership_has_capability(session, context.membership, capability)
+
+    may_manage_counsel = can("outside_counsel:manage")
+    counsel_role_note = (
+        " Adding counsel and assigning them to a Matter needs the outside-counsel "
+        "management permission (owners, admins and partners); your role cannot, so ask one "
+        "of them."
+    )
 
     panel = list(
         session.scalars(
@@ -489,14 +508,12 @@ def ip_foreign_associate_create_options(
             {
                 code
                 for value in _decode_list(row.jurisdictions_json)
-                if (code := canonical_filing_jurisdiction(value)) is not None
+                if (code := profile_filing_jurisdiction(value)) is not None
             }
         )
         for row in panel
     }
-    associates = (
-        [row for row in panel if _associate_covers(row, jurisdiction)] if jurisdiction else []
-    )
+    associates = [row for row in panel if _associate_covers(row, target)] if target else []
 
     estimates = list(
         session.scalars(
@@ -505,7 +522,18 @@ def ip_foreign_associate_create_options(
             ).order_by(IpCostItem.created_at.desc(), IpCostItem.id)
         ).all()
     )
-    may_read_rates = membership_has_capability(session, context.membership, "ip:fees_manage")
+    may_read_rates = can("ip:fees_manage")
+
+    def withheld(estimate: IpCostItem) -> bool:
+        return bool(estimate.rate_confidential and not may_read_rates)
+
+    def compatible(estimate: IpCostItem, assignment: MatterOutsideCounselAssignment) -> bool:
+        # A caller who may not see a confidential amount learns nothing about it
+        # from the budget: only the currency is checked here, and the create
+        # validator checks the ceiling.
+        if withheld(estimate):
+            return estimate.currency.casefold() == assignment.currency.casefold()
+        return _initial_estimate_budget_problem(estimate=estimate, assignment=assignment) is None
 
     matter: Matter | None = None
     assignments: list[MatterOutsideCounselAssignment] = []
@@ -545,32 +573,51 @@ def ip_foreign_associate_create_options(
     documents = list_ip_documents(session, context=context, docket_id=docket.id).items
 
     blockers: list[IpForeignAssociateCreateBlocker] = []
-    if not panel:
+
+    def counsel_blocker(
+        code: IpForeignAssociateCreateBlockerCode,
+        field: Literal["outside_counsel_id", "assignment_id"],
+        message: str,
+        action_label: str,
+        href: str,
+    ) -> None:
+        # Only offer the link to someone whose role can act on it.
         blockers.append(
             IpForeignAssociateCreateBlocker(
-                code="no_panel_associate",
-                field="outside_counsel_id",
-                message=(
-                    "No outside counsel is on the active panel. Add the foreign associate "
-                    "in Outside Counsel with the country or office code it files in."
-                ),
-                action_label="Add counsel in Outside Counsel",
-                href="/app/outside-counsel",
+                code=code,
+                field=field,
+                message=message if may_manage_counsel else message + counsel_role_note,
+                action_label=action_label if may_manage_counsel else None,
+                href=href if may_manage_counsel else None,
             )
         )
-    elif jurisdiction and not associates:
-        blockers.append(
-            IpForeignAssociateCreateBlocker(
-                code="no_associate_for_jurisdiction",
-                field="outside_counsel_id",
-                message=(
-                    "No approved associate on the panel files in "
-                    f"{filing_jurisdiction_label(jurisdiction)}. Add one in Outside Counsel "
-                    f"with {jurisdiction} as a jurisdiction."
-                ),
-                action_label="Add counsel in Outside Counsel",
-                href="/app/outside-counsel",
-            )
+
+    if not panel:
+        counsel_blocker(
+            "no_panel_associate",
+            "outside_counsel_id",
+            "No outside counsel is on the active panel. Add the foreign associate in "
+            "Outside Counsel with the country or office it files in.",
+            "Add counsel in Outside Counsel",
+            "/app/outside-counsel",
+        )
+    elif target and not associates:
+        spelled = (
+            f"{FILING_JURISDICTIONS[jurisdiction]} written out (the bare code {jurisdiction} "
+            "also names an Indian state or court, so it is not read as a country)"
+            if jurisdiction in INDIAN_ABBREVIATION_CODES
+            else f"{jurisdiction} or {FILING_JURISDICTIONS[jurisdiction]}"
+            if jurisdiction
+            else target
+        )
+        counsel_blocker(
+            "no_associate_for_jurisdiction",
+            "outside_counsel_id",
+            "No approved associate on the panel files in "
+            f"{filing_jurisdiction_label(target)}. Add one in Outside Counsel with "
+            f"{spelled} as a jurisdiction.",
+            "Add counsel in Outside Counsel",
+            "/app/outside-counsel",
         )
     if docket.matter_id is not None and associates and not assignments:
         unbudgeted_note = (
@@ -579,18 +626,15 @@ def ip_foreign_associate_create_options(
             if unbudgeted
             else ""
         )
-        blockers.append(
-            IpForeignAssociateCreateBlocker(
-                code="no_assignment_for_matter",
-                field="assignment_id",
-                message=(
-                    "This record's Matter has no approved assignment with a budget ceiling "
-                    f"for an associate approved in {jurisdiction}. Assign the associate on "
-                    f"the Matter's Outside counsel tab with a budget ceiling.{unbudgeted_note}"
-                ),
-                action_label="Open the Matter's Outside counsel tab",
-                href=f"/app/matters/{docket.matter_id}/outside-counsel",
-            )
+        counsel_blocker(
+            "no_assignment_for_matter",
+            "assignment_id",
+            "This record's Matter has no approved assignment with a budget ceiling for an "
+            f"associate approved in {target}. Assign the associate on the Matter's Outside "
+            "counsel tab with a budget ceiling in the currency of the associate's quote."
+            f"{unbudgeted_note}",
+            "Open the Matter's Outside counsel tab",
+            f"/app/matters/{docket.matter_id}/outside-counsel",
         )
     if not estimates:
         blockers.append(
@@ -603,23 +647,50 @@ def ip_foreign_associate_create_options(
                     if may_read_rates
                     else "No active associate estimate is recorded on this record. An owner "
                     "or admin (fee-management permission) must record the associate's quote "
-                    "in the IP record's cost evidence."
+                    "in the IP record's cost evidence; your role cannot."
                 ),
-                action_label=None if may_read_rates else "Open the IP record",
-                href=None if may_read_rates else docket_href,
             )
         )
     if not documents:
+        documents_href = f"{docket_href}&area=documents"
+        _, active_classifications = ip_document_taxonomy_counts(session, company_id=company_id)
+        if not (can("documents:upload") and can("ip:write")):
+            message = (
+                "No documents are linked to this record. Your role cannot upload IP "
+                "documents; ask a colleague with document upload permission to upload the "
+                "instruction documents in the record's Documents tab."
+            )
+            action_label, href = None, None
+        elif active_classifications == 0:
+            message = (
+                "No documents are linked to this record, and uploads need setup first: this "
+                "workspace has no active document classification. "
+                + (
+                    "Load the standard classifications in the record's Documents tab, then "
+                    "upload the instruction documents."
+                    if can("ip:taxonomy_admin")
+                    else "An owner or admin (IP taxonomy administration) must load or "
+                    "reactivate the classifications; your role cannot."
+                )
+            )
+            action_label, href = (
+                ("Open the record's Documents tab", documents_href)
+                if can("ip:taxonomy_admin")
+                else (None, None)
+            )
+        else:
+            message = (
+                "No documents are linked to this record. Upload the instruction documents "
+                "in the record's Documents tab."
+            )
+            action_label, href = "Open the record's Documents tab", documents_href
         blockers.append(
             IpForeignAssociateCreateBlocker(
                 code="no_linked_documents",
                 field="selected_document_refs",
-                message=(
-                    "No documents are linked to this record. Upload the instruction "
-                    "documents on the IP record first."
-                ),
-                action_label="Open the IP record documents",
-                href=docket_href,
+                message=message,
+                action_label=action_label,
+                href=href,
             )
         )
 
@@ -629,7 +700,7 @@ def ip_foreign_associate_create_options(
         lifecycle_version=docket.lifecycle_version,
         matter_id=docket.matter_id,
         matter_title=matter.title if matter is not None else None,
-        target_jurisdiction=jurisdiction,
+        target_jurisdiction=target,
         jurisdictions=[
             IpFilingJurisdictionOption(
                 code=code,
@@ -662,10 +733,7 @@ def ip_foreign_associate_create_options(
                 currency=row.currency,
                 budget_amount_minor=int(row.budget_amount_minor or 0),
                 compatible_estimate_ids=[
-                    estimate.id
-                    for estimate in estimates
-                    if _initial_estimate_budget_problem(estimate=estimate, assignment=row)
-                    is None
+                    estimate.id for estimate in estimates if compatible(estimate, row)
                 ],
             )
             for row in assignments
@@ -675,10 +743,8 @@ def ip_foreign_associate_create_options(
             IpForeignAssociateOptionEstimate(
                 id=row.id,
                 description=row.description,
-                amount_minor=(
-                    row.amount_minor if may_read_rates or not row.rate_confidential else None
-                ),
-                amount_withheld=bool(row.rate_confidential and not may_read_rates),
+                amount_minor=None if withheld(row) else row.amount_minor,
+                amount_withheld=withheld(row),
                 currency=row.currency,
                 evidence_reference=row.evidence_reference,
                 created_at=row.created_at,
@@ -702,6 +768,7 @@ def ip_foreign_associate_create_options(
             for row in documents
         ],
         can_record_estimate=may_read_rates,
+        can_manage_counsel=may_manage_counsel,
         blockers=blockers,
     )
 

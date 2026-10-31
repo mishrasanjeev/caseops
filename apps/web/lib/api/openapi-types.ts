@@ -29077,6 +29077,8 @@ export interface components {
             associates: components["schemas"]["IpForeignAssociateOptionAssociate"][];
             /** Blockers */
             blockers: components["schemas"]["IpForeignAssociateCreateBlocker"][];
+            /** Can Manage Counsel */
+            can_manage_counsel: boolean;
             /** Can Record Estimate */
             can_record_estimate: boolean;
             /** Client Instructions */

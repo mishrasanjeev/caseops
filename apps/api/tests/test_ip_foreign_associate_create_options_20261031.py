@@ -423,8 +423,20 @@ def test_matterless_record_blockers_name_every_missing_prerequisite(
         "no_active_estimate",
         "no_linked_documents",
     ]
-    assert all(row["href"] for row in body["blockers"] if row["code"] != "no_active_estimate")
-    assert body["blockers"][2]["href"] == f"/app/ip?docket={docket_id}"
+    assert body["can_manage_counsel"] is True
+    assert body["blockers"][0]["href"] == "/app/outside-counsel"
+    documents_href = f"/app/ip?docket={docket_id}&area=documents"
+    # No classification is active yet: the blocker says uploads need setup,
+    # and the owner (taxonomy admin) is sent to the Documents tab to load them.
+    no_taxonomy = body["blockers"][2]
+    assert "uploads need setup first" in no_taxonomy["message"]
+    assert no_taxonomy["href"] == documents_href
+    seeded = client.post("/api/ip/document-taxonomy/seed", headers=headers)
+    assert seeded.status_code == 200, seeded.text
+    ready = client.get(OPTIONS, headers=headers, params={"docket_id": docket_id}).json()
+    upload = next(row for row in ready["blockers"] if row["code"] == "no_linked_documents")
+    assert upload["message"].startswith("No documents are linked to this record. Upload")
+    assert upload["href"] == documents_href
 
     with get_session_factory()() as session:
         session.add(
@@ -455,7 +467,8 @@ def test_matterless_record_blockers_name_every_missing_prerequisite(
         row for row in member_body["blockers"] if row["code"] == "no_active_estimate"
     )
     assert "owner or admin" in estimate_blocker["message"]
-    assert estimate_blocker["href"] == f"/app/ip?docket={docket_id}"
+    assert "your role cannot" in estimate_blocker["message"]
+    assert estimate_blocker["href"] is None
 
 
 def test_create_options_is_tenant_scoped_and_capability_gated(client: TestClient) -> None:
@@ -469,3 +482,212 @@ def test_create_options_is_tenant_scoped_and_capability_gated(client: TestClient
     assert refused.status_code == 403, refused.text
     client.cookies.clear()
     assert client.get(OPTIONS, params={"docket_id": docket["id"]}).status_code == 401
+
+
+def test_indian_state_and_court_codes_are_not_filing_jurisdictions(client: TestClient) -> None:
+    """A Delhi litigator listing "SC" (Supreme Court) or "MH" (Maharashtra) is
+    neither offered nor accepted for Seychelles or the Marshall Islands; the
+    country written out still counts."""
+
+    from caseops_api.services.ip_filing_jurisdictions import (
+        canonical_filing_jurisdiction,
+        filing_jurisdiction_matches,
+        profile_filing_jurisdiction,
+    )
+
+    assert canonical_filing_jurisdiction("SC") == "SC"
+    assert profile_filing_jurisdiction("SC") is None
+    assert profile_filing_jurisdiction(" mh ") is None
+    assert profile_filing_jurisdiction("Switzerland") == "CH"
+    assert profile_filing_jurisdiction("UK") == "GB"
+    assert not filing_jurisdiction_matches("MH", ["Delhi", "SC", "MH"])
+    assert filing_jurisdiction_matches("CH", ["Switzerland"])
+
+    _, headers, company_id, membership_id, _, docket, records = _tenant(client)
+    with get_session_factory()() as session:
+        domestic = OutsideCounsel(
+            company_id=company_id,
+            name="Delhi Supreme Court chambers",
+            jurisdictions_json='["Delhi", "SC", "MH"]',
+            practice_areas_json="[]",
+            panel_status="active",
+        )
+        swiss = OutsideCounsel(
+            company_id=company_id,
+            name="Alpine Marks AG",
+            jurisdictions_json='["Switzerland", "CH"]',
+            practice_areas_json="[]",
+            panel_status="active",
+        )
+        session.add_all([domestic, swiss])
+        session.commit()
+        domestic_id, swiss_id = domestic.id, swiss.id
+
+    for code in ("SC", "MH"):
+        body = client.get(
+            OPTIONS,
+            headers=headers,
+            params={"docket_id": docket["id"], "target_jurisdiction": code},
+        ).json()
+        assert body["associates"] == [], code
+        counted = next(row for row in body["jurisdictions"] if row["code"] == code)
+        assert counted["associate_count"] == 0, code
+        blocker = next(row for row in body["blockers"] if row["field"] == "outside_counsel_id")
+        assert "written out" in blocker["message"], code
+        refused = client.post(
+            "/api/ip/foreign-associate-instructions",
+            headers=headers,
+            json={
+                **_create_payload(
+                    docket_id=docket["id"],
+                    membership_id=membership_id,
+                    records=records,
+                    thread=f"DOMESTIC-{code}",
+                ),
+                "target_jurisdiction": code,
+                "outside_counsel_id": domestic_id,
+                "assignment_id": None,
+            },
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["detail"] == "Associate is not approved for the target jurisdiction."
+
+    swiss_body = client.get(
+        OPTIONS, headers=headers, params={"docket_id": docket["id"], "target_jurisdiction": "CH"}
+    ).json()
+    assert [row["id"] for row in swiss_body["associates"]] == [swiss_id]
+    assert swiss_body["associates"][0]["filing_jurisdictions"] == ["CH"]
+
+
+def test_counsel_blockers_name_the_role_instead_of_offering_a_link(client: TestClient) -> None:
+    """Adding counsel and Matter assignments needs outside_counsel:manage
+    (owner, admin, partner). A member or paralegal can open the form but is
+    told who can act, with no link to an action that can only fail."""
+
+    _, headers, company_id, _, matter, docket, _ = _tenant(client)
+    with get_session_factory()() as session:
+        session.add(
+            OutsideCounsel(
+                company_id=company_id,
+                name="Thames Marks LLP",
+                jurisdictions_json='["United Kingdom"]',
+                practice_areas_json="[]",
+                panel_status="active",
+            )
+        )
+        session.commit()
+    gb_params = {"docket_id": docket["id"], "target_jurisdiction": "GB"}
+    fr_params = {"docket_id": docket["id"], "target_jurisdiction": "FR"}
+    owner_gb = client.get(OPTIONS, headers=headers, params=gb_params).json()
+    owner_assignment = next(
+        row for row in owner_gb["blockers"] if row["code"] == "no_assignment_for_matter"
+    )
+    assert owner_assignment["href"] == f"/app/matters/{matter.id}/outside-counsel"
+    owner_fr = client.get(OPTIONS, headers=headers, params=fr_params).json()
+    owner_associate = next(
+        row for row in owner_fr["blockers"] if row["code"] == "no_associate_for_jurisdiction"
+    )
+    assert owner_associate["href"] == "/app/outside-counsel"
+
+    for role in ("member", "paralegal"):
+        role_headers = _user(client, headers, role)
+        gb = client.get(OPTIONS, headers=role_headers, params=gb_params)
+        assert gb.status_code == 200, (role, gb.text)
+        gb_body = gb.json()
+        assert gb_body["can_manage_counsel"] is False
+        assignment = next(
+            row for row in gb_body["blockers"] if row["code"] == "no_assignment_for_matter"
+        )
+        assert "owners, admins and partners" in assignment["message"], role
+        assert "your role cannot" in assignment["message"], role
+        assert (assignment["href"], assignment["action_label"]) == (None, None), role
+        fr = client.get(OPTIONS, headers=role_headers, params=fr_params).json()
+        associate = next(
+            row for row in fr["blockers"] if row["code"] == "no_associate_for_jurisdiction"
+        )
+        assert "your role cannot" in associate["message"], role
+        assert associate["href"] is None, role
+
+
+def test_legacy_target_is_matched_exactly_for_reassignment(client: TestClient) -> None:
+    """An instruction stored before normalization keeps its free-text target;
+    the reassign picker offers exactly the counsel the reassign validator
+    accepts for it (the validator keeps the exact case-insensitive match)."""
+
+    from caseops_api.services.ip_filing_jurisdictions import filing_jurisdiction_matches
+
+    _, headers, company_id, _, _, docket, _ = _tenant(client)
+    with get_session_factory()() as session:
+        session.add(
+            OutsideCounsel(
+                company_id=company_id,
+                name="Delhi filing chambers",
+                jurisdictions_json='["Delhi"]',
+                practice_areas_json="[]",
+                panel_status="active",
+            )
+        )
+        session.commit()
+    body = client.get(
+        OPTIONS,
+        headers=headers,
+        params={"docket_id": docket["id"], "target_jurisdiction": "Delhi"},
+    ).json()
+    assert body["target_jurisdiction"] == "Delhi"
+    assert [row["name"] for row in body["associates"]] == ["Delhi filing chambers"]
+    assert filing_jurisdiction_matches("Delhi", ["delhi"])
+
+
+def test_restricted_docket_is_hidden_from_a_member_without_a_grant(client: TestClient) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    created = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={"title": "SECRET LABS", "restricted": True, "particulars": _particulars("SECRET")},
+    )
+    assert created.status_code == 201, created.text
+    docket_id = created.json()["id"]
+    assert client.get(OPTIONS, headers=headers, params={"docket_id": docket_id}).status_code == 200
+    member = _user(client, headers, "member")
+    hidden = client.get(OPTIONS, headers=member, params={"docket_id": docket_id})
+    assert hidden.status_code == 404, hidden.text
+
+
+def test_withheld_estimate_compatibility_reveals_nothing_about_its_amount(
+    client: TestClient,
+) -> None:
+    _, headers, company_id, membership_id, matter, docket, records = _tenant(client)
+    with get_session_factory()() as session:
+        confidential = IpCostItem(
+            company_id=company_id,
+            docket_id=docket["id"],
+            matter_id=matter.id,
+            category="associate_fee",
+            description="Confidential associate quote",
+            amount_minor=999_999_999,
+            currency="USD",
+            billable=True,
+            cost_nature="estimate",
+            rate_confidential=True,
+            evidence_reference="Confidential quote Q-9",
+            reconciliation_status="estimate",
+            created_by_membership_id=membership_id,
+        )
+        session.add(confidential)
+        session.commit()
+        confidential_id = confidential.id
+    params = {"docket_id": docket["id"], "target_jurisdiction": "US"}
+    owner = client.get(OPTIONS, headers=headers, params=params).json()
+    assert owner["assignments"]
+    for row in owner["assignments"]:
+        # The owner sees the amount, so the over-budget quote is not compatible.
+        assert confidential_id not in row["compatible_estimate_ids"]
+    member_headers = _user(client, headers, "member")
+    member = client.get(OPTIONS, headers=member_headers, params=params).json()
+    withheld = next(row for row in member["estimates"] if row["id"] == confidential_id)
+    assert (withheld["amount_minor"], withheld["amount_withheld"]) == (None, True)
+    assert records["assignment_id"] in {row["id"] for row in member["assignments"]}
+    for row in member["assignments"]:
+        # Only the visible currency is compared; the ceiling is checked on create.
+        assert confidential_id in row["compatible_estimate_ids"]

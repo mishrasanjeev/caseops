@@ -423,4 +423,7 @@ class IpForeignAssociateCreateOptionsResponse(BaseModel):
     client_instructions: list[IpForeignAssociateOptionClientInstruction]
     documents: list[IpForeignAssociateOptionDocument]
     can_record_estimate: bool
+    #: Whether the caller may add panel counsel and Matter assignments
+    #: (outside_counsel:manage); blockers carry no link when it is false.
+    can_manage_counsel: bool
     blockers: list[IpForeignAssociateCreateBlocker]

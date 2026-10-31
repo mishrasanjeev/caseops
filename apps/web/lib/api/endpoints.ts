@@ -11808,7 +11808,8 @@ export type IpForeignAssociateCreateOptions = {
   lifecycle_version: number;
   matter_id: string | null;
   matter_title: string | null;
-  /** Canonical code (ISO 3166-1 alpha-2, or EM / WO / EP) or null. */
+  /** Canonical code (ISO 3166-1 alpha-2, or EM / WO / EP), a legacy
+   * instruction's stored free-text target unchanged, or null. */
   target_jurisdiction: string | null;
   jurisdictions: Array<{ code: string; name: string; associate_count: number }>;
   panel_associate_count: number;
@@ -11851,6 +11852,8 @@ export type IpForeignAssociateCreateOptions = {
   }>;
   documents: Array<{ id: string; title: string; is_privileged: boolean }>;
   can_record_estimate: boolean;
+  /** outside_counsel:manage: may add panel counsel and Matter assignments. */
+  can_manage_counsel: boolean;
   blockers: IpForeignAssociateCreateBlocker[];
 };
 

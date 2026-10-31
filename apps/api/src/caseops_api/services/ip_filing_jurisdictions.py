@@ -325,8 +325,23 @@ _BY_NAME: dict[str, str] = {
 }
 
 
+#: ISO codes that, in an Indian practice's free-text jurisdiction list, more
+#: often name a state or union territory (vehicle and ISO 3166-2:IN codes) or
+#: the Supreme Court ("SC") than the country: "MH" is Maharashtra before it is
+#: the Marshall Islands. On a counsel profile such a bare code is not read as a
+#: filing jurisdiction; the country name must be written out ("Switzerland",
+#: not "CH"). A filing target is always a code chosen from the picker, so the
+#: target side is unaffected.
+INDIAN_ABBREVIATION_CODES: frozenset[str] = frozenset(
+    {
+        "AR", "AS", "BR", "CG", "CH", "GA", "HR", "LA", "MH", "ML",
+        "MN", "MP", "MZ", "NL", "PY", "SC", "SK", "TG", "TN", "TR",
+    }
+)
+
+
 def canonical_filing_jurisdiction(value: str | None) -> str | None:
-    """Return the canonical code for a code, name or alias, else None."""
+    """Return the canonical code for a filing target: a code, name or alias."""
 
     if not value:
         return None
@@ -336,13 +351,26 @@ def canonical_filing_jurisdiction(value: str | None) -> str | None:
     return _BY_NAME.get(_key(stripped))
 
 
+def profile_filing_jurisdiction(value: str | None) -> str | None:
+    """Return the filing jurisdiction one counsel-profile entry names, if any.
+
+    Same as the target vocabulary, except that a bare code that is also an
+    Indian state, union territory or court abbreviation names no country.
+    """
+
+    if value and value.strip().upper() in INDIAN_ABBREVIATION_CODES:
+        return None
+    return canonical_filing_jurisdiction(value)
+
+
 def filing_jurisdiction_matches(target: str, approved: Iterable[str]) -> bool:
     """Whether a profile's jurisdictions cover the filing target.
 
-    Both sides are normalized to the canonical code. A target outside the
-    vocabulary (only possible for instructions stored before normalization)
-    keeps the historical case-insensitive exact comparison so those
-    instructions can still be approved, dispatched or reassigned.
+    Both sides are normalized to the canonical code (the profile side through
+    profile_filing_jurisdiction). A target outside the vocabulary (only
+    possible for instructions stored before normalization) keeps the
+    historical case-insensitive exact comparison so those instructions can
+    still be approved, dispatched or reassigned.
     """
 
     code = canonical_filing_jurisdiction(target)
@@ -350,16 +378,19 @@ def filing_jurisdiction_matches(target: str, approved: Iterable[str]) -> bool:
     if code is None:
         folded = target.strip().casefold()
         return any(value.strip().casefold() == folded for value in values)
-    return any(canonical_filing_jurisdiction(value) == code for value in values)
+    return any(profile_filing_jurisdiction(value) == code for value in values)
 
 
 def filing_jurisdiction_label(code: str) -> str:
-    return f"{code} · {FILING_JURISDICTIONS[code]}"
+    name = FILING_JURISDICTIONS.get(code)
+    return f"{code} · {name}" if name else code
 
 
 __all__ = [
     "FILING_JURISDICTIONS",
+    "INDIAN_ABBREVIATION_CODES",
     "canonical_filing_jurisdiction",
     "filing_jurisdiction_label",
     "filing_jurisdiction_matches",
+    "profile_filing_jurisdiction",
 ]
