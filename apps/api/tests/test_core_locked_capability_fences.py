@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import inspect
 from datetime import date, timedelta
 
@@ -437,8 +438,21 @@ def test_complete_core_writer_inventory_uses_actor_first_exact_capability() -> N
     assert "_lock_ip_writer_context" in docket_helper_source
     assert "required_capability" in docket_helper_source
 
+    # Pin the synchronous signature and delegation, not only the wrapper body.
+    public_create = ast.parse(inspect.getsource(ip_operations.create_ip_docket)).body[0]
+    expected_public = ast.parse(
+        "def create_ip_docket(session: Session, *, context: SessionContext, "
+        "payload: IpDocketCreateRequest, docket_id: str | None = None, "
+        "source_provenance: tuple[str, str] | None = None, "
+        "commit: bool = True) -> IpDocketRecordResponse:\n"
+        "    docket = _create_ip_docket_record(session, context=context, payload=payload, "
+        "docket_id=docket_id, source_provenance=source_provenance, commit=commit)\n"
+        "    return _serialize_docket(session, docket, context=context)\n"
+    ).body[0]
+    assert ast.dump(public_create) == ast.dump(expected_public)
+
     contracts = (
-        (ip_operations.create_ip_docket, "ip:write", "with_for_update"),
+        (ip_operations._create_ip_docket_record, "ip:write", "with_for_update"),
         (
             ip_operations.bulk_acknowledge_ip_coverage,
             "ip:write",
@@ -497,7 +511,7 @@ def test_complete_core_writer_inventory_uses_actor_first_exact_capability() -> N
             "lock_company_memberships_for_assignment"
             if writer
             in {
-                ip_operations.create_ip_docket,
+                ip_operations._create_ip_docket_record,
                 ip_operations.bulk_acknowledge_ip_coverage,
             }
             else "_lock_governance_memberships"

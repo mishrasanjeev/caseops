@@ -7,6 +7,8 @@ https://docs.cloud.google.com/tasks/docs/reference/rest/v2/projects.locations.qu
 https://docs.cloud.google.com/sdk/gcloud/reference/secrets/create
 https://docs.cloud.google.com/sdk/gcloud/reference/secrets/versions/add
 https://docs.cloud.google.com/sdk/gcloud/reference/secrets/versions/describe
+https://docs.cloud.google.com/service-usage/docs/reference/rest/v1/services/get
+https://docs.cloud.google.com/secret-manager/docs/reference/rest/v1/projects.secrets/get
 """
 
 from __future__ import annotations
@@ -56,6 +58,27 @@ ENV = {
     "CASEOPS_PORTFOLIO_EXPORT_TASK_QUEUE": QUEUE,
     "CASEOPS_PORTFOLIO_EXPORT_TASK_REGION": REGION,
 }
+PHASES = {
+    "startup",
+    "source_preflight",
+    "project_metadata",
+    "runtime_preflight",
+    "api_readiness",
+    "api_enable",
+    "api_enable_readback",
+    "queue_metadata",
+    "queue_reconcile",
+    "queue_readback",
+    "secret_metadata",
+    "secret_create",
+    "secret_version",
+    "secret_iam",
+    "queue_iam",
+    "final_metadata",
+    "final_iam",
+    "final_runtime",
+    "final_source",
+}
 Error = inventory.InventoryError
 
 
@@ -94,9 +117,7 @@ def guard_current_main(expected_sha: str) -> None:
         raise Error("production helper requires the main branch")
     for ref in ("HEAD", "refs/heads/main", "refs/remotes/origin/main"):
         if _git(["rev-parse", "--verify", f"{ref}^{{commit}}"]) != expected_sha.lower():
-            raise Error(
-                "candidate is not current canonical main; revalidate the release"
-            )
+            raise Error("candidate is not current canonical main; revalidate the release")
     if _git(["status", "--porcelain=v1", "--untracked-files=all"]):
         raise Error("production helper requires a clean main worktree")
 
@@ -172,9 +193,7 @@ def grant_policy(policy: dict, role: str) -> tuple[dict, bool]:
 
 
 def _policy_content(policy: dict) -> dict:
-    content = {
-        k: copy.deepcopy(v) for k, v in policy.items() if k not in {"etag", "version"}
-    }
+    content = {k: copy.deepcopy(v) for k, v in policy.items() if k not in {"etag", "version"}}
     for binding in content.get("bindings", []):
         binding["members"] = sorted(binding["members"])
     content["bindings"] = sorted(
@@ -184,21 +203,18 @@ def _policy_content(policy: dict) -> dict:
 
 
 class Release:
-    def __init__(
-        self, expected_sha: str, *, project: str = PROJECT, region: str = REGION
-    ):
+    def __init__(self, expected_sha: str, *, project: str = PROJECT, region: str = REGION):
         if not isinstance(expected_sha, str) or not SHA.fullmatch(expected_sha):
             raise Error("expected SHA must contain exactly 40 hexadecimal characters")
         if project != PROJECT or region != REGION:
-            raise Error(
-                "helper is restricted to the owned production project and region"
-            )
+            raise Error("helper is restricted to the owned production project and region")
         self.sha = expected_sha.lower()
         self.parent = f"projects/{PROJECT}/locations/{REGION}"
         self.queue = f"{self.parent}/queues/{QUEUE}"
         self.secret = f"projects/{PROJECT}/secrets/{SECRET}"
         self.project_number = ""
         self._token = ""
+        self.phase = "startup"
 
     def _call(self, args: list[str], *, json_result: bool = True):
         try:
@@ -225,13 +241,35 @@ class Release:
         guard_current_main(self.sha)
 
     def _rest(
-        self, api: str, path: str, *, method: str = "GET", body=None, query=None
-    ) -> dict:
+        self,
+        api: str,
+        path: str,
+        *,
+        method: str = "GET",
+        body=None,
+        query=None,
+        missing_ok: bool = False,
+    ) -> dict | None:
         bases = {
             "tasks": "https://cloudtasks.googleapis.com/v2/",
             "secrets": "https://secretmanager.googleapis.com/v1/",
+            "usage": "https://serviceusage.googleapis.com/v1/",
         }
-        if api not in bases or not path.startswith(f"projects/{PROJECT}/"):
+        usage_read = (
+            api == "usage"
+            and method == "GET"
+            and re.fullmatch(r"[0-9]{6,20}", self.project_number)
+            and path == f"projects/{self.project_number}/services/cloudtasks.googleapis.com"
+        )
+        if (
+            api not in bases
+            or api == "usage"
+            and not usage_read
+            or not path.startswith(f"projects/{PROJECT}/")
+            and not usage_read
+            or missing_ok
+            and not (api == "secrets" and method == "GET" and path == self.secret)
+        ):
             raise Error("unowned management resource")
         if not self._token:
             token = self._call(["auth", "print-access-token"], json_result=False)
@@ -265,6 +303,25 @@ class Release:
                 if response.status != 200 or len(raw) > MAX_RESPONSE:
                     raise Error("GCP management response status/size is unverified")
             result = json.loads(raw)
+        except error.HTTPError as exc:
+            try:
+                if missing_ok and exc.code == 404:
+                    raw = exc.read(MAX_RESPONSE + 1)
+                    try:
+                        missing = json.loads(raw) if len(raw) <= MAX_RESPONSE else None
+                        detail = missing.get("error") if isinstance(missing, dict) else None
+                        if (
+                            isinstance(detail, dict)
+                            and detail.get("code") == 404
+                            and detail.get("status") == "NOT_FOUND"
+                        ):
+                            return None
+                    except ValueError:
+                        # An invalid 404 body cannot prove absence; reject it below.
+                        pass
+            finally:
+                exc.close()
+            raise Error("GCP management resource lookup failed; absence is unverified") from None
         except (error.URLError, OSError, ValueError):
             raise Error(
                 "GCP management request failed; permissions/API prerequisites require review; "
@@ -289,10 +346,7 @@ class Release:
         if (
             not isinstance(service, dict)
             or service.get("metadata", {}).get("name") != SERVICE
-            or service.get("spec", {})
-            .get("template", {})
-            .get("spec", {})
-            .get("serviceAccountName")
+            or service.get("spec", {}).get("template", {}).get("spec", {}).get("serviceAccountName")
             != RUNTIME_SA
         ):
             raise Error("unexpected or unverified API runtime service account")
@@ -340,26 +394,18 @@ class Release:
         spec = deployed.get("spec", {})
         containers = spec.get("containers", [])
         api_containers = (
-            [
-                row
-                for row in containers
-                if isinstance(row, dict) and row.get("name") == "api"
-            ]
+            [row for row in containers if isinstance(row, dict) and row.get("name") == "api"]
             if isinstance(containers, list)
             else []
         )
         if (
             deployed.get("metadata", {}).get("name") != revision
-            or deployed.get("metadata", {})
-            .get("labels", {})
-            .get("serving.knative.dev/service")
+            or deployed.get("metadata", {}).get("labels", {}).get("serving.knative.dev/service")
             != SERVICE
             or spec.get("serviceAccountName") != RUNTIME_SA
             or not isinstance(containers, list)
             or len(containers) != 2
-            or any(
-                not isinstance(row, dict) or not row.get("name") for row in containers
-            )
+            or any(not isinstance(row, dict) or not row.get("name") for row in containers)
             or len({row["name"] for row in containers}) != len(containers)
             or {row["name"] for row in containers} != {"api", "clamav"}
             or len(api_containers) != 1
@@ -375,10 +421,7 @@ class Release:
         if (
             not isinstance(rows, list)
             or len(rows) > 1000
-            or any(
-                not isinstance(r, dict) or not isinstance(r.get("name"), str)
-                for r in rows
-            )
+            or any(not isinstance(r, dict) or not isinstance(r.get("name"), str) for r in rows)
             or len({r["name"] for r in rows}) != len(rows)
         ):
             raise Error("API environment inventory is invalid or duplicated")
@@ -398,29 +441,28 @@ class Release:
             self.secret,
             f"projects/{self.project_number}/secrets/{SECRET}",
         }
-        if (
-            "value" in secret
-            or ref.get("name") not in allowed
-            or ref.get("key") != "latest"
-        ):
+        if "value" in secret or ref.get("name") not in allowed or ref.get("key") != "latest":
             raise Error("API dedicated worker secret reference drift")
 
     def _api_enabled(self) -> bool:
-        rows = self._call(
-            [
-                "services",
-                "list",
-                "--enabled",
-                "--filter=config.name=cloudtasks.googleapis.com",
-                "--limit=2",
-                "--format=json(config.name)",
-            ]
+        if not re.fullmatch(r"[0-9]{6,20}", self.project_number):
+            raise Error("Cloud Tasks API project identity is unverified")
+        name = f"projects/{self.project_number}/services/cloudtasks.googleapis.com"
+        row = self._rest(
+            "usage",
+            name,
+            query={"fields": "name,state,config.name"},
         )
-        if not isinstance(rows, list) or len(rows) > 1:
-            raise Error("Cloud Tasks API inventory is invalid or truncated")
-        if rows and rows != [{"config": {"name": "cloudtasks.googleapis.com"}}]:
+        if (
+            not isinstance(row, dict)
+            or row.get("name") != name
+            or not isinstance(row.get("config"), dict)
+            or row["config"].get("name") != "cloudtasks.googleapis.com"
+            or not isinstance(row.get("state"), str)
+            or row["state"] not in {"ENABLED", "DISABLED"}
+        ):
             raise Error("Cloud Tasks API identity is unverified")
-        return bool(rows)
+        return row["state"] == "ENABLED"
 
     def _queue_inventory(self) -> dict | None:
         found = None
@@ -463,30 +505,22 @@ class Release:
         raise Error("queue inventory exceeds 100 pages; refusing truncated evidence")
 
     def _secret_exists(self) -> bool:
-        rows = self._call(
-            [
-                "secrets",
-                "list",
-                f"--filter=name~'/secrets/{SECRET}$'",
-                "--limit=2",
-                "--format=json(name)",
-            ]
+        if not re.fullmatch(r"[0-9]{6,20}", self.project_number):
+            raise Error("exact secret project identity is unverified")
+        row = self._rest(
+            "secrets",
+            self.secret,
+            query={"fields": "name"},
+            missing_ok=True,
         )
-        if (
-            not isinstance(rows, list)
-            or len(rows) > 1
-            or any(
-                not isinstance(row, dict)
-                or row.get("name")
-                not in {
-                    self.secret,
-                    f"projects/{self.project_number}/secrets/{SECRET}",
-                }
-                for row in rows
-            )
-        ):
-            raise Error("exact secret inventory is invalid or truncated")
-        return bool(rows)
+        if row is None:
+            return False
+        if not isinstance(row, dict) or row.get("name") not in {
+            self.secret,
+            f"projects/{self.project_number}/secrets/{SECRET}",
+        }:
+            raise Error("exact secret metadata identity is unverified")
+        return True
 
     def _create_secret(self) -> None:
         # Fence the metadata create and first-version upload independently. A partial
@@ -534,17 +568,13 @@ class Release:
                 "--format=json(name,state)",
             ]
         )
-        prefix = (
-            rf"projects/(?:{PROJECT}|{self.project_number})/secrets/{SECRET}/versions/"
-        )
+        prefix = rf"projects/(?:{PROJECT}|{self.project_number})/secrets/{SECRET}/versions/"
         if (
             not isinstance(version, dict)
             or version.get("state") != "ENABLED"
             or not re.fullmatch(prefix + r"[1-9][0-9]*", version.get("name", ""))
         ):
-            raise Error(
-                "existing latest worker secret version is not enabled; no rotation allowed"
-            )
+            raise Error("existing latest worker secret version is not enabled; no rotation allowed")
         return version["name"]
 
     def _policy(self, api: str, resource: str) -> dict:
@@ -565,9 +595,7 @@ class Release:
             return
         if not provision:
             raise Error("required unconditional resource-scoped IAM grant is missing")
-        self._rest(
-            api, resource + ":setIamPolicy", method="POST", body={"policy": desired}
-        )
+        self._rest(api, resource + ":setIamPolicy", method="POST", body={"policy": desired})
         actual = self._policy(api, resource)
         _, missing = grant_policy(actual, role)
         if missing or _policy_content(actual) != _policy_content(desired):
@@ -577,7 +605,9 @@ class Release:
         if command not in {"provision", "verify"}:
             raise Error("command must be provision or verify")
         provision = command == "provision"
+        self.phase = "source_preflight"
         guard_current_main(self.sha)
+        self.phase = "project_metadata"
         project = self._call(
             ["projects", "describe", PROJECT, "--format=json(projectId,projectNumber)"]
         )
@@ -588,18 +618,24 @@ class Release:
         ):
             raise Error("production project identity is unverified")
         self.project_number = str(project["projectNumber"])
+        self.phase = "runtime_preflight"
         self._runtime(require_release=not provision)
+        self.phase = "api_readiness"
         if not self._api_enabled():
             if not provision:
                 raise Error("Cloud Tasks API is not enabled")
+            self.phase = "api_enable"
             self._boundary()
             self._call(
                 ["services", "enable", "cloudtasks.googleapis.com", "--format=none"],
                 json_result=False,
             )
+            self.phase = "api_enable_readback"
             if not self._api_enabled():
                 raise Error("Cloud Tasks API enablement readback failed")
+        self.phase = "queue_metadata"
         row = self._queue_inventory()
+        self.phase = "queue_reconcile"
         if row is None:
             if not provision:
                 raise Error("owned queue is missing")
@@ -611,9 +647,9 @@ class Release:
             )
         else:
             check_queue(row, self.queue, exact=False)
-            drift = any(
-                row.get("rateLimits", {}).get(k) != v for k, v in RATE.items()
-            ) or any(row.get("retryConfig", {}).get(k) != v for k, v in RETRY.items())
+            drift = any(row.get("rateLimits", {}).get(k) != v for k, v in RATE.items()) or any(
+                row.get("retryConfig", {}).get(k) != v for k, v in RETRY.items()
+            )
             if drift and provision:
                 mask = ",".join(
                     [
@@ -630,17 +666,25 @@ class Release:
                 )
             if row["state"] == "PAUSED" and provision:
                 self._rest("tasks", self.queue + ":resume", method="POST", body={})
+        self.phase = "queue_readback"
         check_queue(self._rest("tasks", self.queue), self.queue)
+        self.phase = "secret_metadata"
         if not self._secret_exists():
             if not provision:
                 raise Error("dedicated worker secret is missing")
+            self.phase = "secret_create"
             self._create_secret()
+            self.phase = "secret_metadata"
             if not self._secret_exists():
                 raise Error("dedicated worker secret creation readback failed")
+        self.phase = "secret_version"
         version = self._latest()
+        self.phase = "secret_iam"
         self._iam("secrets", self.secret, SECRET_ROLE, provision=provision)
+        self.phase = "queue_iam"
         self._iam("tasks", self.queue, QUEUE_ROLE, provision=provision)
         # Re-read all managed state; provision deliberately does not require the future API env.
+        self.phase = "final_metadata"
         check_queue(self._rest("tasks", self.queue), self.queue)
         if self._latest() != version:
             raise Error("worker secret latest version changed during verification")
@@ -648,8 +692,11 @@ class Release:
             ("secrets", self.secret, SECRET_ROLE),
             ("tasks", self.queue, QUEUE_ROLE),
         ):
+            self.phase = "final_iam"
             self._iam(api, resource, role, provision=False)
+        self.phase = "final_runtime"
         revision = self._runtime(require_release=not provision)
+        self.phase = "final_source"
         guard_current_main(self.sha)
         return {
             "command": command,
@@ -672,14 +719,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project", default=PROJECT)
     parser.add_argument("--region", default=REGION)
     args = parser.parse_args(argv)
+    managed = None
     try:
-        result = Release(
-            args.expected_sha, project=args.project, region=args.region
-        ).run(args.command)
+        managed = Release(args.expected_sha, project=args.project, region=args.region)
+        result = managed.run(args.command)
     except (Error, OSError, ValueError, TypeError, KeyError, AttributeError):
+        phase = getattr(managed, "phase", "startup")
+        if not isinstance(phase, str) or phase not in PHASES:
+            phase = "startup"
         print(
             "ERROR: portfolio export release checks failed; "
-            "no retry or broader provisioning authorized.",
+            f"no retry or broader provisioning authorized. stage={phase}",
             file=sys.stderr,
         )
         return 1

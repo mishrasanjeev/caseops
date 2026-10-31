@@ -299,8 +299,8 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        total_shards: [16]
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        total_shards: [24]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
     services:
       postgres:
         # pgvector-on-pg17 image — same backend version as prod Cloud SQL.
@@ -398,6 +398,8 @@ jobs:
             apps/api/postgres-shard-${{ matrix.shard }}.xml
             apps/api/postgres-shard-${{ matrix.shard }}.jsonl
             apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl
+            apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.json
+            apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.jsonl
           if-no-files-found: error
           retention-days: 14
 
@@ -422,7 +424,7 @@ jobs:
           merge-multiple: true
       - name: Reconcile complete PostgreSQL acceptance
         working-directory: apps/api
-        run: uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence --total 16
+        run: uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence --total 24
 
   web:
     name: Web (typecheck + vitest + build)
@@ -513,6 +515,13 @@ jobs:
         timeout-minutes: 10
         working-directory: apps/api
         run: uv sync --all-extras --dev
+
+      - name: Verify local IP fixture protocol and database parity
+        timeout-minutes: 4
+        run: >-
+          uv run --project apps/api --python 3.13 python
+          scripts/e2e_fixture_regression.py
+          --results-directory test-results/e2e-fixtures
 
       # Keep the browser download separate from runtime verification. The
       # latter must be deterministic and must not mutate the hosted runner.

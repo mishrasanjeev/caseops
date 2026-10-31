@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from sqlalchemy import Integer, and_, case, cast, func, literal, select
+from sqlalchemy import Integer, and_, case, cast, func, literal, select, tuple_
 
 from caseops_api.db.models import (
     AuditEvent,
@@ -68,22 +68,51 @@ def imported_proof_expression():
     source_id = IpTrademarkParticularVersion.representation_json["portfolio_import"][
         "source_row_id"
     ].as_string()
+    audit_key = (
+        AuditEvent.company_id,
+        AuditEvent.action,
+        AuditEvent.target_type,
+        AuditEvent.target_id,
+        AuditEvent.ip_docket_id,
+    )
+    # Seek one full-key successor; check exact identity outside the LIMIT fence.
+    audit_candidate = (
+        select(*audit_key)
+        .where(
+            tuple_(*audit_key)
+            >= tuple_(
+                IpDocketRecord.company_id,
+                literal("ip_docket.source_materialized"),
+                literal("ip_import_row"),
+                IpImportRow.id,
+                IpDocketRecord.id,
+            )
+        )
+        .order_by(*audit_key)
+        .correlate(IpDocketRecord, IpImportRow)
+        .limit(1)
+        .subquery()
+    )
+    audit_matches = (
+        select(literal(1))
+        .select_from(audit_candidate)
+        .where(
+            audit_candidate.c.company_id == IpDocketRecord.company_id,
+            audit_candidate.c.action == "ip_docket.source_materialized",
+            audit_candidate.c.target_type == "ip_import_row",
+            audit_candidate.c.target_id == IpImportRow.id,
+            audit_candidate.c.ip_docket_id == IpDocketRecord.id,
+        )
+        .correlate(IpDocketRecord, IpImportRow)
+        .exists()
+    )
     return (
         select(IpImportRow.id)
         .where(
             func.length(source_id) == 36,
             IpImportRow.id == source_id,
             IpImportRow.company_id == IpDocketRecord.company_id,
-            select(AuditEvent.id)
-            .where(
-                AuditEvent.company_id == IpDocketRecord.company_id,
-                AuditEvent.action == "ip_docket.source_materialized",
-                AuditEvent.target_type == "ip_import_row",
-                AuditEvent.target_id == IpImportRow.id,
-                AuditEvent.ip_docket_id == IpDocketRecord.id,
-            )
-            .correlate(IpDocketRecord, IpImportRow)
-            .exists(),
+            audit_matches,
         )
         .correlate(IpDocketRecord, IpTrademarkParticularVersion)
         .exists()

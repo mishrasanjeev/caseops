@@ -15,7 +15,8 @@ from caseops_api.core.automated_test_context import (
     reset_automated_test_request,
     set_automated_test_request,
 )
-from caseops_api.services import court_sync_jobs
+from caseops_api.db import migrations
+from caseops_api.services import case_tracking_summary, court_sync_jobs, document_jobs
 from caseops_api.workers import court_sync, document_processor
 
 WORKERS = ("document", "court_sync")
@@ -40,10 +41,11 @@ def real_worker_environment(monkeypatch, tmp_path):
     monkeypatch.setattr(socket.socket, "connect", forbidden)
     monkeypatch.setattr(socket, "create_connection", forbidden)
     for module, names in (
-        (document_processor, (
-            "run_migrations", "run_worker_iteration", "drain_matter_court_sync_jobs",
-            "recover_stale_matter_court_sync_jobs", "enqueue_scheduled_document_reprocessing",
-            "drain_update_summaries", "recover_stale_document_processing_jobs",
+        (migrations, ("run_migrations",)),
+        (document_processor, ("run_worker_iteration",)),
+        (case_tracking_summary, ("drain_update_summaries",)),
+        (document_jobs, (
+            "enqueue_scheduled_document_reprocessing", "recover_stale_document_processing_jobs",
             "drain_document_processing_jobs",
         )),
         (court_sync_jobs, (
@@ -182,7 +184,7 @@ def test_real_env_enabled_cli_preserves_bounded_work_admission(
         calls.append(("drain", limit))
         return 0
 
-    module = document_processor if worker == "document" else court_sync_jobs
+    module = document_jobs if worker == "document" else court_sync_jobs
     suffix = "document_processing_jobs" if worker == "document" else "matter_court_sync_jobs"
     monkeypatch.setattr(module, "recover_stale_" + suffix, recover)
     monkeypatch.setattr(module, "drain_" + suffix, drain)
