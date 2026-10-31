@@ -2255,6 +2255,20 @@ export const calendarEventListResponse = z.object({
   events: z.array(calendarEventRecord),
 });
 
+// ENH-017 / FT-097 — per-day open-item counts for the Year view.
+export const calendarDaySummary = z.object({
+  occurs_on: z.string(),
+  total: z.number().int().min(1),
+  by_display_type: z.partialRecord(calendarEventDisplayType, z.number().int().min(0)),
+});
+
+export const calendarSummaryResponse = z.object({
+  range_from: z.string(),
+  range_to: z.string(),
+  total: z.number().int().min(0),
+  days: z.array(calendarDaySummary),
+});
+
 export const calendarConnectionRecord = z.object({
   id: z.string(),
   company_id: z.string(),
@@ -3757,6 +3771,8 @@ export type CalendarEventKind = z.infer<typeof calendarEventKind>;
 export type CalendarEventDisplayType = z.infer<typeof calendarEventDisplayType>;
 export type CalendarEventRecord = z.infer<typeof calendarEventRecord>;
 export type CalendarEventListResponse = z.infer<typeof calendarEventListResponse>;
+export type CalendarDaySummary = z.infer<typeof calendarDaySummary>;
+export type CalendarSummaryResponse = z.infer<typeof calendarSummaryResponse>;
 export type CalendarConnectionRecord = z.infer<typeof calendarConnectionRecord>;
 export type CalendarConnectionListResponse = z.infer<typeof calendarConnectionListResponse>;
 export type CalendarConnectionStartResponse = z.infer<typeof calendarConnectionStartResponse>;

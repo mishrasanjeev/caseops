@@ -2678,6 +2678,23 @@ export interface paths {
         patch: operations["patch_provider_event_candidate_api_calendar_provider_event_candidates__candidate_id__patch"];
         trace?: never;
     };
+    "/api/calendar/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per-day open-item counts by display type for up to one year. */
+        get: operations["summarize_calendar_api_calendar_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar/sync-status": {
         parameters: {
             query?: never;
@@ -17465,6 +17482,23 @@ export interface components {
             /** Unavailable Reason */
             unavailable_reason?: string | null;
         };
+        /**
+         * CalendarDaySummary
+         * @description Open-item counts for one date, by the same display types as the feed.
+         */
+        CalendarDaySummary: {
+            /** By Display Type */
+            by_display_type: {
+                [key: string]: number;
+            };
+            /**
+             * Occurs On
+             * Format: date
+             */
+            occurs_on: string;
+            /** Total */
+            total: number;
+        };
         /** CalendarEventListResponse */
         CalendarEventListResponse: {
             /** Events */
@@ -17731,6 +17765,26 @@ export interface components {
             candidate: components["schemas"]["CalendarProviderEventCandidateRecord"];
             /** Hearing Id */
             hearing_id?: string | null;
+        };
+        /**
+         * CalendarSummaryResponse
+         * @description Per-day counts for the Year view. Only dates with open items appear.
+         */
+        CalendarSummaryResponse: {
+            /** Days */
+            days: components["schemas"]["CalendarDaySummary"][];
+            /**
+             * Range From
+             * Format: date
+             */
+            range_from: string;
+            /**
+             * Range To
+             * Format: date
+             */
+            range_to: string;
+            /** Total */
+            total: number;
         };
         /** CalendarSyncCapabilityStatus */
         CalendarSyncCapabilityStatus: {
@@ -54036,6 +54090,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalendarProviderEventCandidateReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summarize_calendar_api_calendar_summary_get: {
+        parameters: {
+            query: {
+                /** @description Inclusive start date (yyyy-mm-dd). */
+                from: string;
+                /** @description Inclusive end date (yyyy-mm-dd). */
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarSummaryResponse"];
                 };
             };
             /** @description Validation Error */

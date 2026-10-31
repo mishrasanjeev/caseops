@@ -28,6 +28,7 @@ from caseops_api.schemas.calendar import (
     CalendarProviderEventCandidateRecord,
     CalendarProviderEventCandidateReviewRequest,
     CalendarProviderEventCandidateReviewResponse,
+    CalendarSummaryResponse,
     CalendarSyncStatusResponse,
     EmailInvitationCandidateExtractRequest,
     EmailInvitationCandidateExtractResponse,
@@ -40,6 +41,7 @@ from caseops_api.schemas.calendar import (
 from caseops_api.services.calendar import (
     aggregate_calendar_events,
     render_events_as_ical,
+    summarize_calendar_days,
 )
 from caseops_api.services.calendar_event_candidates import (
     create_calendar_event_candidate,
@@ -95,6 +97,10 @@ CalendarSyncer = Annotated[SessionContext, Depends(require_capability("calendar:
 # possible "next 3 months" view without ever pulling thousands of
 # rows in a single response.
 _MAX_RANGE_DAYS = 92
+# The Year view reads counts only, never event rows, so its payload is
+# bounded by the number of dates (at most 366) rather than firm volume.
+# 365 days of difference covers Jan 1 - Dec 31 of a leap year.
+_MAX_SUMMARY_RANGE_DAYS = 365
 
 
 @router.get(
@@ -152,6 +158,40 @@ async def list_calendar_events(
         range_from=range_from,
         range_to=range_to,
         events=events,
+    )
+
+
+@router.get(
+    "/summary",
+    response_model=CalendarSummaryResponse,
+    summary="Per-day open-item counts by display type for up to one year.",
+)
+async def summarize_calendar(
+    context: CalendarViewer,
+    session: DbSession,
+    range_from: Annotated[
+        date, Query(alias="from", description="Inclusive start date (yyyy-mm-dd).")
+    ],
+    range_to: Annotated[date, Query(alias="to", description="Inclusive end date (yyyy-mm-dd).")],
+) -> CalendarSummaryResponse:
+    if range_from > range_to:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="`from` must be on or before `to`.",
+        )
+    if (range_to - range_from) > timedelta(days=_MAX_SUMMARY_RANGE_DAYS):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Calendar summary is capped at one year (366 days). Request a narrower window.",
+        )
+    days = summarize_calendar_days(
+        session, context=context, range_from=range_from, range_to=range_to
+    )
+    return CalendarSummaryResponse(
+        range_from=range_from,
+        range_to=range_to,
+        total=sum(day.total for day in days),
+        days=days,
     )
 
 
