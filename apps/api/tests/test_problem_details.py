@@ -11,6 +11,7 @@ from uuid import UUID
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
@@ -81,9 +82,14 @@ def test_422_validation_has_errors_array(client: TestClient) -> None:
     )
     assert resp.status_code == 422
     body = resp.json()
-    # Detail is a human-readable join; errors[] preserves the raw shape.
+    # Detail is a human-readable join that names each field; errors[]
+    # preserves the raw shape, request source included.
     assert isinstance(body["detail"], str) and len(body["detail"]) > 0
+    assert "Forum level: Input should be" in body["detail"]
+    assert not body["detail"].lower().startswith("body")
     assert isinstance(body["errors"], list) and body["errors"]
+    assert {tuple(error["loc"])[:1] for error in body["errors"]} == {("body",)}
+    assert ["body", "forum_level"] in [error["loc"] for error in body["errors"]]
     # Type falls back to a URL because no specific slug matches generic
     # validation failures.
     assert body["type"].startswith("https://") or isinstance(body["type"], str)
@@ -338,3 +344,140 @@ def test_a_dict_detail_without_a_type_still_falls_back() -> None:
     )
 
     assert body["type"] == "https://httpstatuses.com/409"
+
+
+class _Publication(BaseModel):
+    class_numbers: list[int] = Field(min_length=1)
+    goods_services: dict[str, list[str]] = Field(default_factory=dict)
+    source_url: str
+
+    @model_validator(mode="after")
+    def _scope_within_classes(self) -> _Publication:
+        if self.class_numbers and str(self.class_numbers[0]) == "30":
+            raise ValueError("Goods/services scope must belong to a published class.")
+        return self
+
+
+class _JournalIngest(BaseModel):
+    publications: list[_Publication] = Field(min_length=1)
+
+
+def _journal_client() -> TestClient:
+    application = FastAPI()
+    register_problem_handlers(application)
+
+    @application.post("/journal")
+    async def _ingest(payload: _JournalIngest) -> dict[str, int]:
+        return {"count": len(payload.publications)}
+
+    @application.get("/dockets")
+    async def _dockets(cursor_position: int) -> dict[str, int]:
+        return {"cursor_position": cursor_position}
+
+    return TestClient(application)
+
+
+def test_422_detail_names_each_field_without_request_source_or_index() -> None:
+    # Ram 2026-10-30 (BUG-014): "List should have at least 1 item after
+    # validation, not 0; Input should be a valid list" named no field, so the
+    # tester blamed the evidence box. Each line now names its field.
+    with _journal_client() as isolated_client:
+        response = isolated_client.post(
+            "/journal",
+            json={
+                "publications": [
+                    {
+                        "class_numbers": [],
+                        "goods_services": {"45": "Confidential legal services"},
+                        "source_url": "https://search.ipindia.gov.in/journal",
+                    }
+                ]
+            },
+        )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["detail"] == (
+        "Publications › Class numbers: List should have at least 1 item after "
+        "validation, not 0; Publications › Goods services › 45: Input should "
+        "be a valid list"
+    )
+    # errors[] is unchanged: raw loc, msg and type, and never the input value.
+    assert body["errors"] == [
+        {
+            "loc": ["body", "publications", 0, "class_numbers"],
+            "msg": "List should have at least 1 item after validation, not 0",
+            "type": "too_short",
+        },
+        {
+            "loc": ["body", "publications", 0, "goods_services", "45"],
+            "msg": "Input should be a valid list",
+            "type": "list_type",
+        },
+    ]
+    assert "Confidential legal services" not in response.text
+    assert body["type"] == "https://httpstatuses.com/422"
+
+
+def test_422_detail_drops_the_pydantic_value_error_prefix() -> None:
+    with _journal_client() as isolated_client:
+        response = isolated_client.post(
+            "/journal",
+            json={"publications": [{"class_numbers": [30], "source_url": "https://x.test"}]},
+        )
+        query_error = isolated_client.get("/dockets", params={"cursor_position": "first"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Publications: Goods/services scope must belong to a published class."
+    )
+    assert "Value error" not in response.json()["detail"]
+    # The raw machine message is left untouched for clients that parse it.
+    assert response.json()["errors"][0]["msg"].startswith("Value error, ")
+    assert query_error.status_code == 422
+    assert query_error.json()["detail"].startswith(
+        "Cursor position: Input should be a valid integer"
+    )
+    assert "first" not in query_error.json()["detail"]
+
+
+def test_422_detail_humanizes_acronyms_and_keeps_bare_messages() -> None:
+    body = _problem_payload(
+        status_code=422,
+        detail=[
+            {"loc": ["body", "source_url"], "msg": "Field required", "type": "missing"},
+            {"loc": ["body", "matter_id"], "msg": "Field required", "type": "missing"},
+            {
+                "loc": ["body", "payload", "function-after[check(), str]"],
+                "msg": "Assertion failed, Payload must be signed.",
+                "type": "assertion_error",
+            },
+            {
+                "loc": ["body"],
+                "msg": "Value error, Choose exactly one target.",
+                "type": "value_error",
+            },
+            "A plain string problem",
+        ],
+        instance="/api/x",
+    )
+
+    assert body["detail"] == (
+        "Source URL: Field required; Matter ID: Field required; "
+        "Payload: Payload must be signed.; Choose exactly one target.; A plain string problem"
+    )
+
+
+def test_422_field_names_never_change_the_resolved_problem_type() -> None:
+    # PROBLEM_TYPE_MAP matches 422 + "verified citations"; a field whose name
+    # contains that phrase must not turn a plain validation error into it.
+    body = _problem_payload(
+        status_code=422,
+        detail=[
+            {"loc": ["body", "verified_citations"], "msg": "Field required", "type": "missing"}
+        ],
+        instance="/api/x",
+    )
+
+    assert body["detail"] == "Verified citations: Field required"
+    assert body["type"] == "https://httpstatuses.com/422"
