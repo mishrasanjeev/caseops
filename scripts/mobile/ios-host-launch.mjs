@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, X509Certificate, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { registerHooks } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const IOS_HOST_ENV = Object.freeze({ file: 'CASEOPS_IOS_HOST_POLICY_FILE', sha256: 'CASEOPS_IOS_HOST_POLICY_SHA256' });
@@ -25,7 +26,6 @@ const identity = ['dev', 'ino', 'mode', 'uid', 'gid'];
 const same = (a, b, keys = fields) => keys.every(k => a[k] === b[k]);
 const refKeys = ['path', 'sha256', 'sizeBytes'];
 const NPMRC = Buffer.from('# CaseOps isolated public package requests; no owner configuration.\n');
-const NPM_ENTRY = Buffer.from("#!/usr/bin/env node\nrequire('../lib/cli.js')(process)\n");
 const check = end => assert.ok(Number.isFinite(end) && Date.now() < end, 'IOS_HOST_DEADLINE');
 const exact = (v, keys, code) => assert.ok(v && typeof v === 'object' && !Array.isArray(v)
   && JSON.stringify(Object.keys(v).sort()) === JSON.stringify([...keys].sort()), code);
@@ -301,6 +301,70 @@ export function renderIosHostBuildEntry(helper) {
     '"$CASEOPS_IOS_HOST_NODE" --input-type=module -e ' + quote(SHIM_BOOTSTRAP) +
     ' "$repo/scripts/mobile/ios-host-launch.mjs" ' + quote(helper.sha256) + ' ' + quote(String(helper.sizeBytes)) + ' simulator\n';
 }
+// npm code is always constructed from the reviewed public artifact. These two
+// modules are consumed from their checked descriptors, including the relative
+// registry import when this host helper itself was loaded from a held data URL.
+const NPM_INPUTS = Object.freeze({
+  tooling: Object.freeze({ relative: 'scripts/mobile/npm-tooling.mjs', sha256: '7509dda7422c23f3eaf55a9c48c9aafe5cd796f5988b581a55d28f62445e2c7f', sizeBytes: 25889 }),
+  registry: Object.freeze({ relative: 'scripts/mobile/npm-registry.mjs', sha256: 'f354a9d943ebcb78cb7afdb78c83bc0961fc01bbe183a6791486464cad6db9de', sizeBytes: 12058 }),
+  archive: Object.freeze({ relative: 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', sha256: 'fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052', sizeBytes: 4043346 }),
+});
+const NPM_ENV_KEYS = ['CASEOPS_PINNED_NPM_NODE', 'CASEOPS_PINNED_NPM_ROOT', 'CASEOPS_PINNED_NPM_ENTRY', 'CASEOPS_PINNED_NPM_BOOTSTRAP', 'CASEOPS_PINNED_NPM_CLI_SHA256', 'CASEOPS_PINNED_NPX_CLI_SHA256', 'CASEOPS_PINNED_NPM_DEADLINE', 'CASEOPS_PINNED_NPM_CLI', 'CASEOPS_PINNED_NPX_CLI', 'PATH'];
+function npmInputReferences(root) {
+  return Object.fromEntries(Object.entries(NPM_INPUTS).map(([key, row]) => [key,
+    { path: path.join(root, row.relative), sha256: row.sha256, sizeBytes: row.sizeBytes }]));
+}
+function reviewIosNpmInputs(p, end, archivePayload = false) {
+  exact(p.nodeNpm, ['user', 'global', 'parent', 'tooling', 'registry', 'archive'], 'IOS_HOST_NPM_FIELDS');
+  const parent = path.dirname(p.paths.home), root = path.resolve(path.dirname(p.helper.path), '../..');
+  for (const name of ['user', 'global']) {
+    assert.equal(p.nodeNpm[name].path, path.join(parent, 'npm-' + name + '.npmrc'), 'IOS_HOST_NPM_CONFIG_PATH');
+    const input = readIosHostInput(p.nodeNpm[name], { end, maxBytes: 4096 });
+    try { assert.ok(input.bytes.equals(NPMRC) && (BigInt(input.metadata[2]) & 0o7777n) === 0o600n, 'IOS_HOST_ANONYMOUS_NPM_CONFIG'); } finally { input.bytes.fill(0); }
+  }
+  assert.equal(p.nodeNpm.parent, path.join(p.paths.runtime, 'npm'), 'IOS_HOST_NPM_OWNED_PARENT');
+  directory(p.nodeNpm.parent, end);
+  const expected = npmInputReferences(root);
+  for (const name of ['tooling', 'registry', 'archive']) {
+    assert.deepEqual(p.nodeNpm[name], expected[name], 'IOS_HOST_NPM_SOURCE_BINDING');
+    if (name !== 'archive' || archivePayload) {
+      const input = readIosHostInput(expected[name], { end, maxBytes: name === 'archive' ? 8388608 : 65536 }); input.bytes.fill(0);
+    } else {
+      // No archive code is consumed by non-npm roles. The actual constructor
+      // independently hashes its full descriptor before any CLI is produced.
+      const ref = expected[name], fd = fs.openSync(ref.path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+      try {
+        const a = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(ref.path, { bigint: true });
+        assert.ok(a.isFile() && !named.isSymbolicLink() && a.uid === BigInt(process.getuid()) && a.nlink === 1n
+          && a.size === BigInt(ref.sizeBytes) && same(a, named) && (a.mode & 0o022n) === 0n, 'IOS_HOST_NPM_ARCHIVE_IDENTITY');
+        const ns = namespace(ref.path, end); assert.equal(fs.realpathSync(ref.path), ref.path, 'IOS_HOST_NPM_ARCHIVE_NAMESPACE');
+        assert.ok(same(a, fs.fstatSync(fd, { bigint: true })) && same(a, fs.lstatSync(ref.path, { bigint: true })), 'IOS_HOST_NPM_ARCHIVE_IDENTITY');
+        assert.deepEqual(namespace(ref.path, end), ns, 'IOS_HOST_NPM_ARCHIVE_NAMESPACE');
+      } finally { fs.closeSync(fd); }
+    }
+  }
+}
+export async function prepareIosNpmRuntime(p, { end = Date.now() + 20000 } = {}) {
+  assert.equal(p.tools.node.path, process.execPath, 'IOS_HOST_NPM_PINNED_NODE');
+  reviewIosNpmInputs(p, end);
+  const tooling = readIosHostInput(p.nodeNpm.tooling, { end, maxBytes: 65536 }); let registry, hooks;
+  try {
+    registry = readIosHostInput(p.nodeNpm.registry, { end, maxBytes: 65536 });
+    const toolingURL = 'data:text/javascript;base64,' + tooling.bytes.toString('base64');
+    const registryURL = 'data:text/javascript;base64,' + registry.bytes.toString('base64');
+    hooks = registerHooks({ resolve(specifier, context, nextResolve) {
+      if (context.parentURL === toolingURL && specifier === './npm-registry.mjs') return { url: registryURL, shortCircuit: true };
+      return nextResolve(specifier, context);
+    } });
+    const { prepareNpm } = await import(toolingURL);
+    const prepared = prepareNpm({ parent: p.nodeNpm.parent, archive: p.nodeNpm.archive.path }); check(end);
+    assert.ok(path.dirname(prepared.root) === p.nodeNpm.parent && /^caseops-npm-[A-Za-z0-9]{6}$/.test(path.basename(prepared.root))
+      && prepared.files === 2149 && prepared.inventory.entries === 2600 && prepared.inventory.observations === 7800, 'IOS_HOST_NPM_CANONICAL_CONSTRUCTOR');
+    exact(prepared.environment, NPM_ENV_KEYS, 'IOS_HOST_NPM_CANONICAL_ENVIRONMENT');
+    return prepared;
+  } finally { hooks?.deregister(); tooling.bytes.fill(0); registry?.bytes.fill(0); }
+}
+
 export async function prepareIosHostLaunch({ directory: output, nodePolicy, rubyBundle, tools, role = 'base', fixtureCA = null,
   deadline = Date.now() + 3600000, sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..') } = {}) {
   const end = Math.min(Date.now() + 20000, deadline); check(end);
@@ -346,9 +410,10 @@ export async function prepareIosHostLaunch({ directory: output, nodePolicy, ruby
   }
   const shims = {};
   for (const name of ['node', 'npm', 'ruby', 'pod', 'curl', 'git']) shims[name] = writeExclusive(path.join(paths.bin, name), shimBytes(tools.node.path, helper, node.environment, name, { source: source['ios-git-readonly.py'], python: tools.python, git: tools.git }), end, 0o700);
+  const npmParent = path.join(paths.runtime, 'npm'); fs.mkdirSync(npmParent, { mode: 0o700 });
   const nodeNpm = { user: writeExclusive(path.join(output, 'npm-user.npmrc'), NPMRC, end), global: writeExclusive(path.join(output, 'npm-global.npmrc'), NPMRC, end),
-    cli: referenceIosHostInput(path.resolve(path.dirname(tools.node.path), '../lib/node_modules/npm/bin/npm-cli.js'), end, 4096),
-    package: referenceIosHostInput(path.resolve(path.dirname(tools.node.path), '../lib/node_modules/npm/package.json'), end, 65536) };
+    parent: npmParent, ...npmInputReferences(sourceRoot) };
+  reviewIosNpmInputs({ nodeNpm, paths, helper }, end, true);
   const policy = { schemaVersion: 1, kind: 'caseops-ios-host-launch-v1', role, deadlineEpochMs: deadline, nodePolicy, nodeNpm, tools, helper, podHome, rubyGems, podScript,
     rubySourceBundle: rubyBundle, rubyRootCount: 188, rubyRootSetSha256: RUBY_ROOT_SET, bundle, fixtureCA, paths, shims, source,
     curlScope: 'explicit-selected-ruby188-file; native-OS-default-unverified', requiresOwnedOuterController: true };
@@ -367,17 +432,7 @@ export async function verifyIosHostLaunch(policyRef, { end = Date.now() + 20000 
   const node = await nodeRecipe(p.nodePolicy, end); assert.ok(p.role === node.policy.role, 'IOS_HOST_ROLE'); assert.deepEqual(p.fixtureCA, node.policy.fixtureCA, 'IOS_HOST_FIXTURE_BINDING');
   exact(p.paths, ['home', 'empty', 'bin', 'cache', 'pods', 'repos', 'temporary', 'build', 'runtime', 'projectPods'], 'IOS_HOST_PATHS');
   const parent = path.dirname(policyRef.path); directory(parent, end);
-  exact(p.nodeNpm, ['user', 'global', 'cli', 'package'], 'IOS_HOST_NPM_FIELDS');
-  for (const name of ['user', 'global']) {
-    assert.equal(p.nodeNpm[name].path, path.join(parent, 'npm-' + name + '.npmrc'), 'IOS_HOST_NPM_CONFIG_PATH');
-    const input = readIosHostInput(p.nodeNpm[name], { end, maxBytes: 4096 });
-    try { assert.ok(input.bytes.equals(NPMRC) && (BigInt(input.metadata[2]) & 0o7777n) === 0o600n, 'IOS_HOST_ANONYMOUS_NPM_CONFIG'); } finally { input.bytes.fill(0); }
-  }
-  assert.equal(p.nodeNpm.cli.path, path.resolve(path.dirname(p.tools.node.path), '../lib/node_modules/npm/bin/npm-cli.js'), 'IOS_HOST_NPM_CLI_PATH');
-  assert.equal(p.nodeNpm.package.path, path.resolve(path.dirname(p.tools.node.path), '../lib/node_modules/npm/package.json'), 'IOS_HOST_NPM_PACKAGE_PATH');
-  const npmCli = readIosHostInput(p.nodeNpm.cli, { end, maxBytes: 4096 }); let npmPackage;
-  try { npmPackage = readIosHostInput(p.nodeNpm.package, { end, maxBytes: 65536 }); assert.ok(npmCli.bytes.equals(NPM_ENTRY), 'IOS_HOST_NPM_ENTRY_REQUIRED'); const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(npmPackage.bytes)); assert.ok(value.name === 'npm' && value.version === '11.12.1', 'IOS_HOST_NPM_VERSION'); }
-  finally { npmCli.bytes.fill(0); npmPackage?.bytes.fill(0); }
+  reviewIosNpmInputs(p, end);
   reviewProjectNpm(p, end);
   assert.equal(p.bundle.path, path.join(parent, 'ruby-curl-roots.pem'), 'IOS_HOST_OWNED_BUNDLE');
   for (const [name, value] of Object.entries(p.paths)) {
@@ -471,7 +526,7 @@ export function validateIosCurlArguments(args) {
   return { args: [...args, '-H', 'X-CaseOps-Automated-Test: no-paid-providers'], output, family };
 }
 
-const IOS_LOCAL_ARCHIVES = (() => { const value = {"schemaVersion":1,"lock":{"path":"apps/mobile/package-lock.json","sha256":"8a9b0e636a7444477d1c3cc26a21b80a808529e59ba88f269a3a1bf89ab3cec0","sizeBytes":266987},"producer":{"path":"apps/mobile/node_modules/expo-modules-autolinking/scripts/ios/precompiled_modules.rb","sha256":"480dc0e74b8712833cace4087c9ab16cd3115caa2849786432eb2c387e2f743e","sizeBytes":128827},"packages":{"node_modules/expo/node_modules/expo-font":{"name":"expo-font","version":"58.0.11","manifestSha256":"a39a111996fb3549857ce64b59fee0900af9d953f9b8581e5f116ae647041220","manifestSizeBytes":2260,"integrity":"sha512-6r7s6xk2L2orvum+x+TY1fzEcMtuCBRQTLgC/Su2uLzNPpT4L+E+S4IAGy8ZIjeVvwk2j2pj+HiZ23O7eh1PGQ==","resolved":"https://registry.npmjs.org/expo-font/-/expo-font-58.0.11.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"},"node_modules/expo-file-system":{"name":"expo-file-system","version":"58.0.13","manifestSha256":"7a5f05dffbdfb6071054dc164f44be739b25397f846845a38989686ef7b32cac","manifestSizeBytes":2254,"integrity":"sha512-+/1aFErkawyky5UdWI06zYeO2DeHUnfaWnYHeiI8M8Z/sB6L66gI3WUxqtvUvKJoaM0Ti1CximD3x3JwteLYIg==","resolved":"https://registry.npmjs.org/expo-file-system/-/expo-file-system-58.0.13.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"},"node_modules/expo-font":{"name":"expo-font","version":"58.0.10","manifestSha256":"c5e1bb077f5a2193b58e5942ce0713398d08afa1cd0cf2372e196bce47d5e9c4","manifestSizeBytes":2260,"integrity":"sha512-13orvRCiXg3EuirjMznWTKwFzhKHvtHRkUdgbvolbkyA1+EAbYDpp7LJMnvDnbTFU/m8Kb5awvOiaGzPYQ/ojg==","resolved":"https://registry.npmjs.org/expo-font/-/expo-font-58.0.10.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"},"node_modules/expo-modules-core":{"name":"expo-modules-core","version":"58.0.28","manifestSha256":"47517f4ef32b3d385516b939e99800b0a816481682ecb94c409eae9720827373","manifestSizeBytes":2846,"integrity":"sha512-2FCnT8mIubdQAHVtX9fVMN9qajF7hGDC3CjxxBG0HlyK7NEsxUDKkukiNVzqQpwiI+jJx7ysG0YvATwKKlu1sw==","resolved":"https://registry.npmjs.org/expo-modules-core/-/expo-modules-core-58.0.28.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"}},"archives":[{"path":"apps/mobile/node_modules/expo/node_modules/expo-font/prebuilds/output/debug/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo/node_modules/expo-font","flavor":"debug","product":"ExpoFont","sha256":"49334bfec7c0c87913499c1694e5e00d78fe87e8f18d0497fcfffe24cc5fe4e8","sizeBytes":1317476},{"path":"apps/mobile/node_modules/expo/node_modules/expo-font/prebuilds/output/release/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo/node_modules/expo-font","flavor":"release","product":"ExpoFont","sha256":"290797137e75ad1edb793ab3019577a0295a4d0196c3684a1737a2d0c2999f92","sizeBytes":1265246},{"path":"apps/mobile/node_modules/expo-file-system/prebuilds/output/debug/xcframeworks/ExpoFileSystem.tar.gz","packageRelative":"node_modules/expo-file-system","flavor":"debug","product":"ExpoFileSystem","sha256":"3b10e581b292a4550fa940b2d0bcfe2c5274f1a88e974c0af2386ad26fda3f2e","sizeBytes":4431085},{"path":"apps/mobile/node_modules/expo-file-system/prebuilds/output/release/xcframeworks/ExpoFileSystem.tar.gz","packageRelative":"node_modules/expo-file-system","flavor":"release","product":"ExpoFileSystem","sha256":"ff79f423af91eafd8b8a3607d2d64b3bed9d3f6098035d3fbd9c94fe910a6766","sizeBytes":3235468},{"path":"apps/mobile/node_modules/expo-font/prebuilds/output/debug/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo-font","flavor":"debug","product":"ExpoFont","sha256":"86f51373e8e401513ba873f48f2ae00c1a9cb8df57d5a894842bc940b9eb9639","sizeBytes":1229343},{"path":"apps/mobile/node_modules/expo-font/prebuilds/output/release/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo-font","flavor":"release","product":"ExpoFont","sha256":"b1cdfbaeefca5dfe219743dbce305924158b91569cc3ecf8d5ece0445a2d601a","sizeBytes":1173496},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/debug/xcframeworks/ExpoModulesCore.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"debug","product":"ExpoModulesCore","sha256":"bc3dcb318b342ca373b5149e64989b7e40decd848da6f4931ff817e37d6df639","sizeBytes":16127814},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/debug/xcframeworks/ExpoModulesWorklets.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"debug","product":"ExpoModulesWorklets","sha256":"581e17eaf29bfbdb1d7e07b5832cc4314bfe89aeddfe9d2fced19ec2b00daff0","sizeBytes":1030869},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/release/xcframeworks/ExpoModulesCore.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"release","product":"ExpoModulesCore","sha256":"e67a98002c67327a13bba00f645a192799327e57276ce3b1d625e09937bf036c","sizeBytes":14239057},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/release/xcframeworks/ExpoModulesWorklets.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"release","product":"ExpoModulesWorklets","sha256":"12f3c6a36d914b1a72e5dd516f541aa71a6fc0feeb770de4f6967a778670d646","sizeBytes":975452}]}; Object.freeze(value.lock); Object.freeze(value.producer); Object.values(value.packages).forEach(Object.freeze); Object.freeze(value.packages); value.archives.forEach(Object.freeze); Object.freeze(value.archives); return Object.freeze(value); })();
+const IOS_LOCAL_ARCHIVES = (() => { const value = {"schemaVersion":1,"lock":{"path":"apps/mobile/package-lock.json","sha256":"d15da4b402622883d58f0c61cd5b8fd7bc95cb36bb8ead1b3cc46b1b596c5def","sizeBytes":267494},"producer":{"path":"apps/mobile/node_modules/expo-modules-autolinking/scripts/ios/precompiled_modules.rb","sha256":"480dc0e74b8712833cace4087c9ab16cd3115caa2849786432eb2c387e2f743e","sizeBytes":128827},"packages":{"node_modules/expo/node_modules/expo-font":{"name":"expo-font","version":"58.0.11","manifestSha256":"a39a111996fb3549857ce64b59fee0900af9d953f9b8581e5f116ae647041220","manifestSizeBytes":2260,"integrity":"sha512-6r7s6xk2L2orvum+x+TY1fzEcMtuCBRQTLgC/Su2uLzNPpT4L+E+S4IAGy8ZIjeVvwk2j2pj+HiZ23O7eh1PGQ==","resolved":"https://registry.npmjs.org/expo-font/-/expo-font-58.0.11.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"},"node_modules/expo-file-system":{"name":"expo-file-system","version":"58.0.13","manifestSha256":"7a5f05dffbdfb6071054dc164f44be739b25397f846845a38989686ef7b32cac","manifestSizeBytes":2254,"integrity":"sha512-+/1aFErkawyky5UdWI06zYeO2DeHUnfaWnYHeiI8M8Z/sB6L66gI3WUxqtvUvKJoaM0Ti1CximD3x3JwteLYIg==","resolved":"https://registry.npmjs.org/expo-file-system/-/expo-file-system-58.0.13.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"},"node_modules/expo-font":{"name":"expo-font","version":"58.0.10","manifestSha256":"c5e1bb077f5a2193b58e5942ce0713398d08afa1cd0cf2372e196bce47d5e9c4","manifestSizeBytes":2260,"integrity":"sha512-13orvRCiXg3EuirjMznWTKwFzhKHvtHRkUdgbvolbkyA1+EAbYDpp7LJMnvDnbTFU/m8Kb5awvOiaGzPYQ/ojg==","resolved":"https://registry.npmjs.org/expo-font/-/expo-font-58.0.10.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"},"node_modules/expo-modules-core":{"name":"expo-modules-core","version":"58.0.28","manifestSha256":"47517f4ef32b3d385516b939e99800b0a816481682ecb94c409eae9720827373","manifestSizeBytes":2846,"integrity":"sha512-2FCnT8mIubdQAHVtX9fVMN9qajF7hGDC3CjxxBG0HlyK7NEsxUDKkukiNVzqQpwiI+jJx7ysG0YvATwKKlu1sw==","resolved":"https://registry.npmjs.org/expo-modules-core/-/expo-modules-core-58.0.28.tgz","licenseSha256":"fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"}},"archives":[{"path":"apps/mobile/node_modules/expo/node_modules/expo-font/prebuilds/output/debug/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo/node_modules/expo-font","flavor":"debug","product":"ExpoFont","sha256":"49334bfec7c0c87913499c1694e5e00d78fe87e8f18d0497fcfffe24cc5fe4e8","sizeBytes":1317476},{"path":"apps/mobile/node_modules/expo/node_modules/expo-font/prebuilds/output/release/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo/node_modules/expo-font","flavor":"release","product":"ExpoFont","sha256":"290797137e75ad1edb793ab3019577a0295a4d0196c3684a1737a2d0c2999f92","sizeBytes":1265246},{"path":"apps/mobile/node_modules/expo-file-system/prebuilds/output/debug/xcframeworks/ExpoFileSystem.tar.gz","packageRelative":"node_modules/expo-file-system","flavor":"debug","product":"ExpoFileSystem","sha256":"3b10e581b292a4550fa940b2d0bcfe2c5274f1a88e974c0af2386ad26fda3f2e","sizeBytes":4431085},{"path":"apps/mobile/node_modules/expo-file-system/prebuilds/output/release/xcframeworks/ExpoFileSystem.tar.gz","packageRelative":"node_modules/expo-file-system","flavor":"release","product":"ExpoFileSystem","sha256":"ff79f423af91eafd8b8a3607d2d64b3bed9d3f6098035d3fbd9c94fe910a6766","sizeBytes":3235468},{"path":"apps/mobile/node_modules/expo-font/prebuilds/output/debug/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo-font","flavor":"debug","product":"ExpoFont","sha256":"86f51373e8e401513ba873f48f2ae00c1a9cb8df57d5a894842bc940b9eb9639","sizeBytes":1229343},{"path":"apps/mobile/node_modules/expo-font/prebuilds/output/release/xcframeworks/ExpoFont.tar.gz","packageRelative":"node_modules/expo-font","flavor":"release","product":"ExpoFont","sha256":"b1cdfbaeefca5dfe219743dbce305924158b91569cc3ecf8d5ece0445a2d601a","sizeBytes":1173496},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/debug/xcframeworks/ExpoModulesCore.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"debug","product":"ExpoModulesCore","sha256":"bc3dcb318b342ca373b5149e64989b7e40decd848da6f4931ff817e37d6df639","sizeBytes":16127814},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/debug/xcframeworks/ExpoModulesWorklets.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"debug","product":"ExpoModulesWorklets","sha256":"581e17eaf29bfbdb1d7e07b5832cc4314bfe89aeddfe9d2fced19ec2b00daff0","sizeBytes":1030869},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/release/xcframeworks/ExpoModulesCore.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"release","product":"ExpoModulesCore","sha256":"e67a98002c67327a13bba00f645a192799327e57276ce3b1d625e09937bf036c","sizeBytes":14239057},{"path":"apps/mobile/node_modules/expo-modules-core/prebuilds/output/release/xcframeworks/ExpoModulesWorklets.tar.gz","packageRelative":"node_modules/expo-modules-core","flavor":"release","product":"ExpoModulesWorklets","sha256":"12f3c6a36d914b1a72e5dd516f541aa71a6fc0feeb770de4f6967a778670d646","sizeBytes":975452}]}; Object.freeze(value.lock); Object.freeze(value.producer); Object.values(value.packages).forEach(Object.freeze); Object.freeze(value.packages); value.archives.forEach(Object.freeze); Object.freeze(value.archives); return Object.freeze(value); })();
 const localArchiveReceipts = new WeakSet();
 export function validateIosLocalArchiveArguments(args, sourceRoot) {
   assert.ok(typeof process.getuid === 'function', 'IOS_HOST_POSIX_OWNER_REQUIRED');
@@ -489,7 +544,7 @@ export function validateIosLocalArchiveArguments(args, sourceRoot) {
   assert.equal(matches.length, 1, 'IOS_HOST_LOCAL_ARCHIVE_UNKNOWN');
   return { args: [...args], output: args[3], archive: matches[0], sourceRoot };
 }
-function reviewIosLocalArchive(p, args, end) {
+export function reviewIosLocalArchive(p, args, end = Date.now() + 20000) {
   const root = path.resolve(path.dirname(p.helper.path), '../..');
   directory(root, end, false); assert.equal(fs.lstatSync(root, { bigint: true }).uid, BigInt(process.getuid()), 'IOS_HOST_LOCAL_ARCHIVE_ROOT');
   const form = validateIosLocalArchiveArguments(args, root), table = IOS_LOCAL_ARCHIVES;
@@ -728,11 +783,17 @@ export function validateIosHostArguments(role, args) {
 
 export async function composeIosHostCommand(policyRef, role, args, { environment = {}, end = Date.now() + 20000 } = {}) {
   validateIosHostArguments(role, args);
+  if (role === 'npm') assert.deepEqual(args, ['--version'], 'IOS_HOST_NPM_METADATA_ONLY');
   const admitted = await verifyIosHostLaunch(policyRef, { end });
   try {
     if (['APP_PATH', 'REACT_NATIVE_PATH'].some(name => Object.hasOwn(environment, name)))
       admitted.podBuildPaths = reviewIosPodBuildPaths(admitted.policy, { end });
     if (role === 'curl' && args[0] === '-f' && args[4]?.startsWith('file:')) admitted.localArchive = reviewIosLocalArchive(admitted.policy, args, end);
+    if (role === 'npm') {
+      const deadline = Number(environment.CASEOPS_IOS_HOST_OUTER_DEADLINE);
+      assert.ok(Number.isFinite(deadline) && deadline > Date.now() && deadline <= admitted.policy.deadlineEpochMs, 'IOS_HOST_OWNED_OUTER_REQUIRED');
+      admitted.npmRuntime = await prepareIosNpmRuntime(admitted.policy, { end });
+    }
     return iosHostCommandProjection(admitted, policyRef, role, args, environment);
   }
   finally { admitted.bundle?.bytes.fill(0); admitted.localArchive?.bytes.fill(0); admitted.podsSource.fill(0); admitted.podEntry.fill(0); }
@@ -766,10 +827,20 @@ export function iosHostCommandProjection(admitted, policyRef, role, args, enviro
         NPM_CONFIG_STRICT_SSL: 'true', NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/' });
       if (role === 'npm') {
         assert.deepEqual(args, ['--version'], 'IOS_HOST_NPM_METADATA_ONLY');
-        // The checked upstream entry has precisely this code. No descriptor
-        // bytes are eval'd and no alternate npm executable is searched in PATH.
-        const program = `import{createRequire}from'node:module';const entry=${JSON.stringify(p.nodeNpm.cli.path)};process.argv=[process.execPath,entry,...process.argv.slice(1)];createRequire(entry)('../lib/cli.js')(process);`;
-        result.args = ['--input-type=module', '-e', program, '--', ...args];
+        const prepared = admitted.npmRuntime;
+        assert.ok(prepared && path.dirname(prepared.root) === p.nodeNpm.parent && /^caseops-npm-[A-Za-z0-9]{6}$/.test(path.basename(prepared.root)), 'IOS_HOST_NPM_ACTUAL_CONSTRUCTOR_REQUIRED');
+        exact(prepared.environment, NPM_ENV_KEYS, 'IOS_HOST_NPM_CANONICAL_ENVIRONMENT');
+        const scoped = prepared.environment;
+        assert.ok(scoped.CASEOPS_PINNED_NPM_NODE === p.tools.node.path && scoped.CASEOPS_PINNED_NPM_ROOT === prepared.root
+          && scoped.CASEOPS_PINNED_NPM_CLI === path.join(prepared.root, 'package/bin/npm-cli.js')
+          && scoped.CASEOPS_PINNED_NPM_ENTRY === path.join(prepared.root, 'caseops-entry.mjs'), 'IOS_HOST_NPM_CANONICAL_ENVIRONMENT');
+        const executionDeadline = Math.min(p.deadlineEpochMs, Number(neutral.CASEOPS_IOS_HOST_OUTER_DEADLINE));
+        assert.ok(Number.isFinite(executionDeadline) && executionDeadline > Date.now(), 'IOS_HOST_OWNED_OUTER_REQUIRED');
+        Object.assign(neutral, Object.fromEntries(Object.entries(scoped).filter(([key]) => key !== 'PATH')),
+          { CASEOPS_PINNED_NPM_DEADLINE: String(executionDeadline),
+            PATH: [path.join(prepared.root, 'bin'), path.dirname(p.tools.node.path), neutral.PATH].join(':') });
+        result.args = ['--input-type=module', '--eval', scoped.CASEOPS_PINNED_NPM_BOOTSTRAP, '--', 'npm', ...args];
+        result.npmSource = { root: prepared.root, files: prepared.files, inventory: prepared.inventory };
       }
     }
     if (role === 'pod' || role === 'ruby') { result.executable = p.tools.ruby.path; result.args = [...args]; Object.assign(neutral,

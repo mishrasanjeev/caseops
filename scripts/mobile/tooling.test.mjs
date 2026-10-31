@@ -29,7 +29,7 @@ import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFai
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA } from './host-node-trust.mjs';
 import { localCertificates } from './host-node-trust-fixture.mjs';
-import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, composeIosHostCommand, validateIosHostArguments, reviewIosPodBuildPaths, validatePodsCurlArguments, validateIosCurlArguments, validateIosLocalArchiveArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments } from './ios-host-launch.mjs';
+import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, composeIosHostCommand, validateIosHostArguments, reviewIosPodBuildPaths, validatePodsCurlArguments, validateIosCurlArguments, validateIosLocalArchiveArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments, reviewIosLocalArchive } from './ios-host-launch.mjs';
 
 const installedHash = 'a'.repeat(64);
 const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
@@ -1500,6 +1500,7 @@ test('Firefox waits for a delayed observed entry before any credential write wit
   assert.ok(fake.elapsed() >= 4011 && fake.elapsed() <= 20000);
 });
 
+const firefoxEntryClockMocks = new WeakMap();
 function firefoxEntryDouble(t, state, { dispatchFailure, lostAcknowledgement = false, readFailure } = {}) {
   const recipe = validateFirefoxRecipe(firefoxRecipe(t, { entryLocators: { useAnotherAccount: { kind: 'label', value: 'Use another account' } } }));
   let clock = 0, polling = false, wrapperClicks = 0, swallowed = 0;
@@ -1531,7 +1532,8 @@ function firefoxEntryDouble(t, state, { dispatchFailure, lostAcknowledgement = f
       }
     },
   };
-  t.mock.method(Date, 'now', () => clock);
+  firefoxEntryClockMocks.get(t)?.mock.restore();
+  firefoxEntryClockMocks.set(t, t.mock.method(Date, 'now', () => clock));
   return { recipe, context: { driver, platform: 'android', record: event => records.push(event) }, attempts, acknowledged, queries, waits,
     elapsed: () => clock, wrapperClicks: () => wrapperClicks, swallowed: () => swallowed, records };
 }
@@ -3195,12 +3197,18 @@ function iosProjectionFixture() {
   const policy = { paths, podHome: '/SYNTHETIC/Cellar/pods/libexec', rubyGems: '/SYNTHETIC/Cellar/ruby/lib/ruby/gems/4.0.0', deadlineEpochMs: Date.now() + 60000,
     tools: { node: { path: '/SYNTHETIC/node24' }, ruby: { path: '/SYNTHETIC/ruby4' }, curl: { path: '/usr/bin/curl' }, git: { path: '/SYNTHETIC/git' } },
     shims: { node: { path: paths.bin + '/node' } }, bundle: { path: base + '/ruby188.pem', sha256: '1'.repeat(64), sizeBytes: 100 }, fixtureCA: null,
-    nodeNpm: { user: { path: base + '/npm-user.npmrc' }, global: { path: base + '/npm-global.npmrc' }, cli: { path: '/SYNTHETIC/node24/lib/node_modules/npm/bin/npm-cli.js' } },
+    nodeNpm: { user: { path: base + '/npm-user.npmrc' }, global: { path: base + '/npm-global.npmrc' }, parent: paths.runtime + '/npm' },
     source: { 'ios-host-pods.rb': { sha256: IOS_PODS_SOURCE_SHA256 } } };
   const environment = { NODE_OPTIONS: '--use-openssl-ca --import=data:text/javascript;base64,REVIEWED', SSL_CERT_FILE: base + '/node144.pem', SSL_CERT_DIR: base + '/node-empty',
     CASEOPS_HOST_NODE_TRUST_POLICY_FILE: base + '/node.json', CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: '2'.repeat(64) };
   const admitted = { policy, node: { environment }, bundle: { bytes: Buffer.from('SYNTHETIC-PUBLIC-CA') },
     podsSource: Buffer.from('# SYNTHETIC CONTRACT SOURCE'), podEntry: Buffer.from('# SYNTHETIC POD ENTRY') };
+  const npmRoot = policy.nodeNpm.parent + '/caseops-npm-ABC123';
+  admitted.npmRuntime = { root: npmRoot, files: 2149, inventory: { entries: 2600, observations: 7800 },
+    environment: { CASEOPS_PINNED_NPM_NODE: policy.tools.node.path, CASEOPS_PINNED_NPM_ROOT: npmRoot,
+      CASEOPS_PINNED_NPM_ENTRY: npmRoot + '/caseops-entry.mjs', CASEOPS_PINNED_NPM_BOOTSTRAP: 'SYNTHETIC-REVIEWED-NPM-BOOTSTRAP',
+      CASEOPS_PINNED_NPM_CLI_SHA256: '4'.repeat(64), CASEOPS_PINNED_NPX_CLI_SHA256: '5'.repeat(64), CASEOPS_PINNED_NPM_DEADLINE: String(policy.deadlineEpochMs),
+      CASEOPS_PINNED_NPM_CLI: npmRoot + '/package/bin/npm-cli.js', CASEOPS_PINNED_NPX_CLI: npmRoot + '/package/bin/npx-cli.js', PATH: npmRoot + '/bin' } };
   const ref = { path: base + '/policy.json', sha256: '3'.repeat(64), sizeBytes: 100 };
   return { policy, admitted, ref, environment };
 }
@@ -3767,10 +3775,14 @@ test('iOS Node and npm metadata use the exact anonymous4 layer without leaking i
   assert.deepEqual(Object.fromEntries(Object.entries(node.environment).filter(([k]) => k.startsWith('NPM_CONFIG_'))), {
     NPM_CONFIG_USERCONFIG: f.policy.nodeNpm.user.path, NPM_CONFIG_GLOBALCONFIG: f.policy.nodeNpm.global.path,
     NPM_CONFIG_STRICT_SSL: 'true', NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/' });
-  const npm = iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], {});
+  const npm = iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: String(f.policy.deadlineEpochMs) });
   assert.equal(npm.executable, f.policy.tools.node.path); assert.equal(npm.args[0], '--input-type=module');
-  assert.deepEqual(npm.args.slice(-2), ['--', '--version']);
-  assert.match(npm.args[2], /createRequire\(entry\)\('\.\.\/lib\/cli\.js'\)\(process\)/);
+  assert.deepEqual(npm.args.slice(-3), ['--', 'npm', '--version']);
+  assert.equal(npm.args[2], f.admitted.npmRuntime.environment.CASEOPS_PINNED_NPM_BOOTSTRAP);
+  assert.equal(npm.environment.CASEOPS_PINNED_NPM_CLI, f.admitted.npmRuntime.root + '/package/bin/npm-cli.js');
+  assert.equal(npm.environment.PATH.split(':')[0], f.admitted.npmRuntime.root + '/bin');
+  const absent = iosProjectionFixture(); delete absent.admitted.npmRuntime;
+  assert.throws(() => iosHostCommandProjection(absent.admitted, absent.ref, 'npm', ['--version'], {}), /IOS_HOST_NPM_ACTUAL_CONSTRUCTOR_REQUIRED/);
   assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'npm', ['publish'], {}), /IOS_HOST_NPM_METADATA_ONLY/);
   for (const role of ['ruby', 'xcodebuild']) assert.equal(iosHostCommandProjection(f.admitted, f.ref, role, [], {}).environment.NPM_CONFIG_USERCONFIG, undefined);
   assert.deepEqual(original, {});
@@ -4729,13 +4741,15 @@ test('source observer exact selector keeps Node22, Worker, unknown argv and chan
     assert.deepEqual(selectCompactInvocation({ ...actual, ...delta }, admitted).sessionAllowed, false);
 });
 test('source observer sink uses its one FD, exact partial writes and same-FD readback', t => observerSinkFixture(({ output, io }) => {
-  t.mock.method(Date, 'now', () => 0); assert.equal(Date.now(), 0); assert.ok(observerNow() > 1000000000000);
+  const clock = t.mock.method(Date, 'now', () => 0);
+  try { assert.equal(Date.now(), 0); assert.ok(observerNow() > 1000000000000);
   let opens = 0, closes = 0; const originalOpen = io.openSync, originalClose = io.closeSync, originalWrite = io.writeSync;
   io.openSync = (...args) => { opens++; return originalOpen(...args); }; io.closeSync = fd => { closes++; return originalClose(fd); };
   io.writeSync = (fd, bytes, offset, length, position) => originalWrite(fd, bytes, offset, Math.min(7, length), position);
   const sink = createObserverSink(output, observerNow() + 5000, io); sink.emit({ event: 'unit', value: 'partial'.repeat(8) }); sink.close();
   const bytes = fs.readFileSync(sink.file); assert.equal(JSON.parse(bytes).value, 'partial'.repeat(8)); assert.equal(bytes.length, sink.bytes); assert.equal(sink.readbackBytes, sink.bytes);
   assert.equal(opens, 1); assert.equal(closes, 1);
+  } finally { clock.mock.restore(); }
 }));
 for (const [name, kind] of [['zero write', 'zero'], ['partial then EIO', 'partial'], ['readback failure', 'read']])
   test(`source observer sink closes after ${name} and preserves its actual successful extent`, () => observerSinkFixture(({ output, io }) => {
@@ -5115,4 +5129,94 @@ test('ANDROID-PRIVATE-TMP-01 actual daemon predicate requires exact bound JAVA5 
   assert.equal(host.split("return [...args, '-Pkotlin.daemon.jvmargs=' + policy.javaOptions];").length - 1, 1);
   assert.equal(host.split("assert.equal(environment.JAVA_TOOL_OPTIONS, policy.javaOptions, 'ANDROID_HOST_BOUND_JAVA_OPTIONS');").length - 1, 1);
   assert.ok(host.includes("privateJavaTmp.path + ' -Duser.home=' + privateJavaHome"));
+});
+
+
+function iosVerifiedCopy(source, destination, maxBytes) {
+  const end = Date.now() + 20000, ref = referenceIosHostInput(source, end, maxBytes), input = readIosHostInput(ref, { end, maxBytes });
+  fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+  try { fs.writeFileSync(destination, input.bytes, { flag: 'wx', mode: 0o600 }); }
+  finally { input.bytes.fill(0); }
+  return { ...ref, path: destination };
+}
+function iosNpmConstructorFixture(t) {
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const source = path.join(root, 'source'), scope = path.join(root, 'policy');
+  fs.mkdirSync(scope, { mode: 0o700 });
+  const f = iosProjectionFixture(), paths = Object.fromEntries(Object.keys(f.policy.paths).map(k => [k, path.join(scope, k)]));
+  for (const dir of Object.values(paths)) fs.mkdirSync(dir, { mode: 0o700 });
+  const refs = {};
+  for (const [name, relative, max] of [['tooling', 'scripts/mobile/npm-tooling.mjs', 65536], ['registry', 'scripts/mobile/npm-registry.mjs', 65536],
+    ['archive', 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', 8388608]])
+    refs[name] = iosVerifiedCopy(fileURLToPath(new URL('../../' + relative, import.meta.url)), path.join(source, relative), max);
+  const helper = iosVerifiedCopy(fileURLToPath(new URL('./ios-host-launch.mjs', import.meta.url)), path.join(source, 'scripts/mobile/ios-host-launch.mjs'), 131072);
+  const nodeNpm = { parent: path.join(paths.runtime, 'npm'), ...refs }; fs.mkdirSync(nodeNpm.parent, { mode: 0o700 });
+  for (const name of ['user', 'global']) {
+    const file = path.join(scope, 'npm-' + name + '.npmrc');
+    fs.writeFileSync(file, '# CaseOps isolated public package requests; no owner configuration.\n', { flag: 'wx', mode: 0o600 });
+    nodeNpm[name] = referenceIosHostInput(file, Date.now() + 20000, 4096);
+  }
+  Object.assign(f.policy, { paths, helper, nodeNpm }); f.policy.tools.node.path = process.execPath;
+  f.admitted.node.environment = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256'].includes(key)));
+  return { ...f, root, source };
+}
+test('iOS npm version uses the actual held public constructor and deregisters its scoped import hook on success and failure', async t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => referenceIosHostInput('unowned'), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const f = iosNpmConstructorFixture(t), moduleApi = ciTrustCreateRequire(import.meta.url)('node:module'), original = moduleApi.registerHooks;
+  let registered = 0, deregistered = 0;
+  moduleApi.registerHooks = hooks => { registered++; const token = original(hooks); return { deregister() { deregistered++; return token.deregister(); } }; }; syncBuiltinESMExports();
+  try {
+    const held = readIosHostInput(f.policy.helper, { maxBytes: 131072 }); let m;
+    try { m = await import('data:text/javascript;base64,' + held.bytes.toString('base64')); } finally { held.bytes.fill(0); }
+    f.admitted.npmRuntime = await m.prepareIosNpmRuntime(f.policy);
+    assert.deepEqual(f.admitted.npmRuntime.inventory, { entries: 2600, observations: 7800, bytesRead: 31910612 });
+    assert.equal(registered, 1); assert.equal(deregistered, 1);
+    const command = m.iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: String(f.policy.deadlineEpochMs) }), hostile = path.join(f.root, 'hostile');
+    fs.mkdirSync(hostile, { mode: 0o700 }); const sentinel = path.join(hostile, 'USED_GLOBAL');
+    fs.writeFileSync(path.join(hostile, 'npm'), '#!/bin/sh\necho GLOBAL > "' + sentinel + '"\nexit 99\n', { flag: 'wx', mode: 0o700 });
+    assert.equal(command.executable, process.execPath);
+    assert.equal(command.environment.CASEOPS_PINNED_NPM_CLI, path.join(f.admitted.npmRuntime.root, 'package/bin/npm-cli.js'));
+    const deadline = Number(command.environment.CASEOPS_PINNED_NPM_DEADLINE);
+    assert.ok(Number.isSafeInteger(deadline) && deadline > Date.now() && deadline <= f.policy.deadlineEpochMs, 'IOS_NPM_ACTUAL_EXECUTION_DEADLINE');
+    const actual = execFileSync(command.executable, command.args, { env: { ...command.environment, PATH: hostile }, timeout: 20000, encoding: 'utf8', maxBuffer: 1048576 });
+    assert.equal(actual.trim(), '11.12.1'); assert.equal(fs.existsSync(sentinel), false);
+    assert.throws(() => m.iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], {}), /IOS_HOST_OWNED_OUTER_REQUIRED/);
+    assert.deepEqual(await import('node:path'), await import('node:path'));
+    const access = fs.accessSync;
+    try { fs.accessSync = (file, mode) => { if (file.startsWith(f.policy.nodeNpm.parent + path.sep) && file.endsWith('/bin/npm') && mode === fs.constants.X_OK) throw Object.assign(new Error('CONTROL_EACCES'), { code: 'EACCES' }); return access(file, mode); };
+      await assert.rejects(m.prepareIosNpmRuntime(f.policy), /NPM_TOOLING_EXECUTABLE_SHIM_REQUIRED/);
+    } finally { fs.accessSync = access; }
+    assert.equal(registered, 2); assert.equal(deregistered, 2);
+    const before = fs.readdirSync(f.policy.nodeNpm.parent);
+    await assert.rejects(m.prepareIosNpmRuntime({ ...f.policy, nodeNpm: { ...f.policy.nodeNpm, cli: { path: '/unadmitted/global/npm-cli.js' } } }), /IOS_HOST_NPM_FIELDS/);
+    const source = f.policy.nodeNpm.tooling.path, bytes = fs.readFileSync(source);
+    try { fs.writeFileSync(source, Buffer.concat([bytes, Buffer.from('\n')])); await assert.rejects(m.prepareIosNpmRuntime(f.policy), /IOS_HOST_FILE_IDENTITY/); }
+    finally { fs.writeFileSync(source, bytes); }
+    const archive = f.policy.nodeNpm.archive.path, archiveBytes = fs.readFileSync(archive);
+    try { const changed = Buffer.from(archiveBytes); changed[0] ^= 1; fs.writeFileSync(archive, changed); await assert.rejects(m.prepareIosNpmRuntime(f.policy), /NPM_TOOLING_ARCHIVE_DIGEST/); }
+    finally { fs.writeFileSync(archive, archiveBytes); archiveBytes.fill(0); }
+    assert.deepEqual(fs.readdirSync(f.policy.nodeNpm.parent), before);
+    assert.equal(registered, 3); assert.equal(deregistered, 3);
+  } finally { moduleApi.registerHooks = original; syncBuiltinESMExports(); }
+});
+test('iOS local archive admission accepts the current full lock and refuses stale lock before archive payload', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => referenceIosHostInput('unowned'), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const helper = path.join(root, 'scripts/mobile/ios-host-launch.mjs'), temporary = path.join(root, 'temporary'), relative = iosArchiveFixtureRows[0][0];
+  for (const name of ['apps/mobile/package-lock.json', 'apps/mobile/node_modules/expo-modules-autolinking/scripts/ios/precompiled_modules.rb',
+    'apps/mobile/node_modules/expo/node_modules/expo-font/package.json', relative])
+    iosVerifiedCopy(fileURLToPath(new URL('../../' + name, import.meta.url)), path.join(root, name), name === relative ? 2097152 : 1048576);
+  fs.mkdirSync(path.dirname(helper), { recursive: true, mode: 0o700 });
+  const output = path.join(temporary, 'd20300101-1-owned', 'file.tgz'); fs.mkdirSync(path.dirname(output), { recursive: true, mode: 0o700 });
+  const args = ['-f', '-L', '-o', output, pathToFileURL(path.join(root, relative)).href, '--create-dirs', '--netrc-optional', '--retry', '2', "-A 'CocoaPods/1.17.0 cocoapods-downloader/2.1'"];
+  const p = { helper: { path: helper }, paths: { temporary } }, accepted = reviewIosLocalArchive(p, args);
+  assert.equal(accepted.expectedSha256, '49334bfec7c0c87913499c1694e5e00d78fe87e8f18d0497fcfffe24cc5fe4e8');
+  assert.equal(createHash('sha256').update(accepted.bytes).digest('hex'), accepted.expectedSha256); accepted.bytes.fill(0);
+  const lock = path.join(root, 'apps/mobile/package-lock.json'), bytes = fs.readFileSync(lock), open = fs.openSync; let archiveOpens = 0;
+  try { fs.writeFileSync(lock, Buffer.concat([bytes, Buffer.from('\n')]));
+    fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
+    assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_FILE_IDENTITY/);
+  } finally { fs.openSync = open; fs.writeFileSync(lock, bytes); }
+  assert.equal(archiveOpens, 0); assert.equal(fs.existsSync(output), false);
 });
