@@ -3,7 +3,7 @@
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useId, useMemo, useState } from "react";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -12,6 +12,7 @@ import { RecordSelect } from "@/components/ui/RecordSelect";
 import { isApiErrorShape } from "@/lib/api/config";
 import { listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
+import { useCapability } from "@/lib/capabilities";
 import { cn } from "@/lib/cn";
 
 /**
@@ -36,6 +37,12 @@ import { cn } from "@/lib/cn";
  *   the picker never offers a value the API refuses.
  * - `error`: a field-level message (validation or API); it sets
  *   `aria-invalid` and is announced with the field.
+ * - `enabled`: false holds the first read back, for pages that sequence
+ *   their reads.
+ *
+ * Enter in the search box searches at once and never submits the
+ * surrounding form, which would otherwise act on the Matter chosen before
+ * the new search (a portal invite granting the wrong Matter).
  */
 export type MatterPickerProps = {
   value: string;
@@ -48,10 +55,17 @@ export type MatterPickerProps = {
   pageSize?: number;
   required?: boolean;
   disabled?: boolean;
+  enabled?: boolean;
   className?: string;
 };
 
 const SEARCH_DEBOUNCE_MS = 300;
+
+// services/matter_operational_guard.py matter_is_operational: only these
+// lifecycle states may take new operational work (an intelligent review, the
+// operational IP link). is_active follows the status in the database
+// (ck_matters_status_active_consistent), so the status alone decides.
+export const OPERATIONAL_MATTER_STATUSES: ReadonlySet<string> = new Set(["intake", "active", "on_hold"]);
 
 /** One line that tells two Matters apart. */
 export function matterCaption(matter: Pick<Matter, "matter_code" | "title" | "client_name">): string {
@@ -62,6 +76,18 @@ function errorText(error: unknown): string {
   if (isApiErrorShape(error) && error.detail.trim()) return error.detail;
   if (error instanceof Error && error.message.trim()) return error.message;
   return "Request failed.";
+}
+
+/** Every reason on screen, grouped: "Already linked as Litigation: TM-1, TM-2, TM-3 and 4 more." */
+function blockedSummary(blocked: ReadonlyArray<{ matter: Matter; reason: string }>): string {
+  const groups = new Map<string, string[]>();
+  for (const { matter, reason } of blocked) groups.set(reason, [...(groups.get(reason) ?? []), matter.matter_code]);
+  return [...groups]
+    .map(([reason, codes]) => {
+      const more = codes.length > 3 ? ` and ${codes.length - 3} more` : "";
+      return `${reason.charAt(0).toUpperCase()}${reason.slice(1)}: ${codes.slice(0, 3).join(", ")}${more}.`;
+    })
+    .join(" ");
 }
 
 export function MatterPicker({
@@ -75,6 +101,7 @@ export function MatterPicker({
   pageSize = 50,
   required,
   disabled,
+  enabled = true,
   className,
 }: MatterPickerProps) {
   const generatedId = useId();
@@ -82,6 +109,7 @@ export function MatterPicker({
   const searchId = `${selectId}-search`;
   const statusId = `${selectId}-status`;
   const errorId = `${selectId}-error`;
+  const canCreateMatter = useCapability("matters:create");
 
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
@@ -97,6 +125,7 @@ export function MatterPicker({
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor ?? null,
     placeholderData: keepPreviousData,
+    enabled,
   });
   const loaded = useMemo(
     () => results.data?.pages.flatMap((page) => page.matters) ?? [],
@@ -111,19 +140,21 @@ export function MatterPicker({
   const matters = selected && !loaded.some((matter) => matter.id === selected.id)
     ? [selected, ...loaded]
     : loaded;
+  const rows = matters.map((matter) => ({ matter, reason: disabledReason?.(matter) ?? null }));
   const options = [
     { value: "", label: results.isPending ? "Loading Matters…" : "Select a Matter", disabled: true },
-    ...matters.map((matter) => {
-      const reason = disabledReason?.(matter) ?? null;
-      return {
-        value: matter.id,
-        label: reason ? `${matterCaption(matter)} — ${reason}` : matterCaption(matter),
-        disabled: Boolean(reason) && matter.id !== value,
-      };
-    }),
+    // The chosen Matter stays selectable so the field keeps showing it (with
+    // its reason); the caller anchors that reason to the field.
+    ...rows.map(({ matter, reason }) => ({
+      value: matter.id,
+      label: reason ? `${matterCaption(matter)} — ${reason}` : matterCaption(matter),
+      disabled: Boolean(reason) && matter.id !== value,
+    })),
   ];
-  const choosable = options.filter((option) => option.value && !option.disabled).length;
+  const choosable = rows.filter((row) => !row.reason).length;
+  const blocked = rows.flatMap(({ matter, reason }) => (reason ? [{ matter, reason }] : []));
   const searching = results.isPlaceholderData || search.trim() !== query;
+  const loadFailed = results.isError && !results.isFetchNextPageError;
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const next = event.target.value;
@@ -145,6 +176,11 @@ export function MatterPicker({
           placeholder="Matter code, title, client or case number"
           aria-controls={selectId}
           onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            setQuery(search.trim());
+          }}
         />
       </div>
 
@@ -161,49 +197,41 @@ export function MatterPicker({
         className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-[var(--color-danger-500)]"
       />
 
-      <div id={statusId} role={results.isError && !results.isFetchNextPageError ? "alert" : "status"}
-        className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-[var(--color-mute)]">
-        {results.isPending ? (
-          <span>Loading Matters…</span>
-        ) : results.isError && !results.isFetchNextPageError ? (
+      {/* The text is the live region and the field's description; its
+          actions sit beside it, not inside it. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-[var(--color-mute)]">
+        {loadFailed ? (
           <>
-            <span className="min-w-0 break-words text-[var(--color-danger-500)]">
+            <span id={statusId} role="alert" className="min-w-0 break-words text-[var(--color-danger-500)]">
               Matters could not be loaded: {errorText(results.error)}
             </span>
             <Button type="button" size="sm" variant="outline" onClick={() => results.refetch()}>
               Retry
             </Button>
           </>
-        ) : loaded.length === 0 && searching ? (
-          <span>Searching Matters…</span>
-        ) : loaded.length === 0 && !query ? (
-          <>
-            <span className="min-w-0 break-words">
-              No Matters are visible to you yet. Matters behind an ethical wall are not listed.
-            </span>
-            <Link className="font-semibold text-[var(--color-brand-700)] hover:underline" href="/app/matters">
-              Create a Matter
-            </Link>
-          </>
-        ) : loaded.length === 0 ? (
-          <span className="min-w-0 break-words">
-            No Matter you can see matches “{query}”. Search by matter code, title, client or case
-            number.
-          </span>
-        ) : choosable === 0 ? (
-          <span className="min-w-0 break-words">
-            None of these Matters can be chosen; each one lists the reason.
-          </span>
         ) : (
           <>
-            <span className="min-w-0 break-words">
-              {searching
-                ? "Searching Matters…"
-                : hasMore
-                  ? `Showing the ${loaded.length} most recently updated Matters${query ? ` matching “${query}”` : ""} — refine the search or load more.`
-                  : `${loaded.length} ${loaded.length === 1 ? "Matter" : "Matters"}${query ? ` matching “${query}”` : ""}.`}
+            <span id={statusId} role="status" className="min-w-0 break-words">
+              {results.isPending
+                ? "Loading Matters…"
+                : searching
+                  ? "Searching Matters…"
+                  : loaded.length === 0 && !query
+                    ? `No Matters are visible to you yet. Matters behind an ethical wall are not listed.${canCreateMatter ? "" : " Your role cannot create Matters; ask someone who can."}`
+                    : loaded.length === 0
+                      ? `No Matter you can see matches “${query}”. Search by matter code, title, client or case number.`
+                      : choosable === 0
+                        ? `None of these Matters can be chosen. ${blockedSummary(blocked)}`
+                        : hasMore
+                          ? `Showing the ${loaded.length} most recently updated Matters${query ? ` matching “${query}”` : ""} — refine the search or load more.`
+                          : `${loaded.length} ${loaded.length === 1 ? "Matter" : "Matters"}${query ? ` matching “${query}”` : ""}.`}
             </span>
-            {hasMore ? (
+            {!results.isPending && !searching && loaded.length === 0 && !query && canCreateMatter ? (
+              <Link className="font-semibold text-[var(--color-brand-700)] hover:underline" href="/app/matters">
+                Create a Matter
+              </Link>
+            ) : null}
+            {!results.isPending && !searching && hasMore ? (
               <Button
                 type="button"
                 size="sm"
@@ -218,12 +246,14 @@ export function MatterPicker({
           </>
         )}
         {results.isFetchNextPageError ? (
-          <span className="flex min-w-0 flex-wrap items-center gap-2 text-[var(--color-danger-500)]" role="alert">
-            More Matters could not be loaded: {errorText(results.error)}
+          <>
+            <span role="alert" className="min-w-0 break-words text-[var(--color-danger-500)]">
+              More Matters could not be loaded: {errorText(results.error)}
+            </span>
             <Button type="button" size="sm" variant="outline" onClick={() => results.fetchNextPage()}>
               Retry
             </Button>
-          </span>
+          </>
         ) : null}
       </div>
 
