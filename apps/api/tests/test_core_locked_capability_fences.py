@@ -489,6 +489,11 @@ def test_complete_core_writer_inventory_uses_actor_first_exact_capability() -> N
             "ip:rules_activate",
             "with_for_update",
         ),
+        (
+            ip_deadline_workflow.withdraw_calendar_version,
+            "ip:rules_propose",
+            "with_for_update",
+        ),
     )
     for writer, capability, parent_lock in contracts:
         source = inspect.getsource(writer)

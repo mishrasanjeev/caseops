@@ -75,6 +75,7 @@ from caseops_api.schemas.ip_deadlines import (
     LegalCalendarActivationRequest,
     LegalCalendarVersionProposalRequest,
     LegalCalendarVersionRecord,
+    LegalCalendarWithdrawalRequest,
 )
 from caseops_api.schemas.ip_documents import (
     IpDocumentAddLinksRequest,
@@ -320,6 +321,7 @@ from caseops_api.services.ip_deadline_workflow import (
     rule_impact,
     select_company_rule_version,
     transition_rule_version,
+    withdraw_calendar_version,
 )
 from caseops_api.services.ip_document_workflow import (
     add_ip_document_links,
@@ -1332,6 +1334,24 @@ async def post_ip_working_calendar_activation(
     session: DbSession,
 ) -> LegalCalendarVersionRecord:
     return activate_calendar_version(
+        session,
+        context=context,
+        calendar_version_id=calendar_version_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/working-calendars/{calendar_version_id}/withdraw",
+    response_model=LegalCalendarVersionRecord,
+)
+async def post_ip_working_calendar_withdrawal(
+    calendar_version_id: str,
+    payload: LegalCalendarWithdrawalRequest,
+    context: IpRuleProposer,
+    session: DbSession,
+) -> LegalCalendarVersionRecord:
+    return withdraw_calendar_version(
         session,
         context=context,
         calendar_version_id=calendar_version_id,

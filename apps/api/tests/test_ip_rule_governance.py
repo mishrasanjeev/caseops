@@ -203,6 +203,27 @@ def test_uj47_exc03_overlapping_effective_ranges_conflict(client: TestClient) ->
     impact = client.get(
         f"/api/ip/deadline-rules/{second['id']}/impact", headers=legal_headers
     ).json()
+    # The preview names what activation would retire, so the activator sees it
+    # before confirming (Ram 2026-10-31 BUG-006), and a stale preview is
+    # refused rather than silently applied.
+    assert impact["superseded_versions"] == [first["version"]]
+    assert impact["company_policy_count"] == 1
+    first_impact = client.get(
+        f"/api/ip/deadline-rules/{first['id']}/impact", headers=legal_headers
+    ).json()
+    assert first_impact["superseded_versions"] == []
+    stale = _activate(
+        client,
+        legal_headers,
+        second["id"],
+        reviewer_id,
+        supersede_overlapping=True,
+        impact_acknowledged=True,
+        impact_reason="Reviewed the mid-year amendment supersession.",
+        impact_token="0" * 64,
+    )
+    assert stale.status_code == 409, stale.text
+    assert "preview again" in stale.json()["detail"]
     superseded = _activate(
         client,
         legal_headers,
