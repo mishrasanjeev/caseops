@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import binascii
 import hashlib
 import json
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections import defaultdict
 from collections.abc import Iterable
 from copy import deepcopy
@@ -148,6 +150,7 @@ from caseops_api.services.ip_deadlines import (
 )
 from caseops_api.services.ip_docket_access import _docket_or_404, _lock_ip_writer_context
 from caseops_api.services.ip_domain_policy import TRADEMARK_RECORD_TYPES, assert_trademark_docket
+from caseops_api.services.ip_portfolio_search import portfolio_target_search_predicate
 from caseops_api.services.matter_access import (
     _operational_matter_role_snapshot,
     assert_access,
@@ -1082,25 +1085,90 @@ def append_ip_docket_version(
     return _serialize_docket(session, docket, context=context)
 
 
+INVALID_DOCKET_CURSOR = "Invalid docket cursor. Restart the docket search."
+
+
+def _encode_docket_cursor(updated_at: datetime, docket_id: str) -> str:
+    return urlsafe_b64encode(f"{updated_at.isoformat()}|{docket_id}".encode()).decode()
+
+
+def _decode_docket_cursor(cursor: str) -> tuple[datetime, str]:
+    """Parse the opaque keyset position. A malformed cursor is a client error."""
+
+    try:
+        timestamp, docket_id = urlsafe_b64decode(cursor.encode("ascii")).decode().split("|", 1)
+        position = datetime.fromisoformat(timestamp)
+    except (ValueError, UnicodeError, binascii.Error) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=INVALID_DOCKET_CURSOR
+        ) from exc
+    if not docket_id or len(docket_id) > 36:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=INVALID_DOCKET_CURSOR
+        )
+    return position, docket_id
+
+
 def list_ip_dockets(
-    session: Session, *, context: SessionContext, limit: int = 100
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int = 100,
+    query: str | None = None,
+    cursor: str | None = None,
 ) -> IpDocketListResponse:
+    """One page of visible active trademark dockets, newest change first.
+
+    ``query`` uses the shared portfolio target search (docket title, mark,
+    exact normalized identifier) plus the docket's own displayed primary
+    identifier, so a picker finds a docket by what it shows. ``cursor`` is
+    the keyset position (updated_at, id) returned as ``next_cursor``.
+    """
+
+    search = (query or "").strip()
+    scope = [
+        IpDocketRecord.company_id == context.company.id,
+        IpDocketRecord.record_type.in_(TRADEMARK_RECORD_TYPES),
+        IpDocketRecord.is_active.is_(True),
+        IpDocketRecord.archived_by_matter_disposal.is_(False),
+        visible_ip_dockets_filter(session, context=context),
+    ]
+    if search:
+        scope.append(
+            or_(
+                portfolio_target_search_predicate(company_id=context.company.id, query=search),
+                func.lower(func.coalesce(IpDocketRecord.primary_identifier, "")).like(
+                    f"%{search.lower()}%"
+                ),
+            )
+        )
+    page = select(IpDocketRecord).where(*scope)
+    if cursor:
+        position, last_id = _decode_docket_cursor(cursor)
+        page = page.where(
+            or_(
+                IpDocketRecord.updated_at < position,
+                and_(IpDocketRecord.updated_at == position, IpDocketRecord.id < last_id),
+            )
+        )
     rows = list(
         session.scalars(
-            select(IpDocketRecord)
-            .where(
-                IpDocketRecord.company_id == context.company.id,
-                IpDocketRecord.record_type.in_(TRADEMARK_RECORD_TYPES),
-                IpDocketRecord.is_active.is_(True),
-                IpDocketRecord.archived_by_matter_disposal.is_(False),
-                visible_ip_dockets_filter(session, context=context),
+            page.order_by(IpDocketRecord.updated_at.desc(), IpDocketRecord.id.desc()).limit(
+                limit + 1
             )
-            .order_by(IpDocketRecord.updated_at.desc(), IpDocketRecord.id.desc())
-            .limit(limit + 1)
         ).all()
     )
     has_more = len(rows) > limit
     rows = rows[:limit]
+    # The total is derivable from a complete first page; count only otherwise.
+    total_count = (
+        len(rows)
+        if not has_more and not cursor
+        else session.scalar(select(func.count()).select_from(IpDocketRecord).where(*scope)) or 0
+    )
+    next_cursor = (
+        _encode_docket_cursor(rows[-1].updated_at, rows[-1].id) if has_more and rows else None
+    )
     # One reader, one capability resolution - not one per docket in the list.
     may_read_rates = _may_read_confidential_rates(session, context=context)
     preload = _load_docket_serialization_rows(
@@ -1122,6 +1190,8 @@ def list_ip_dockets(
         dockets=visible,
         count=len(visible),
         has_more=has_more,
+        next_cursor=next_cursor,
+        total_count=total_count,
     )
 
 

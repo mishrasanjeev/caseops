@@ -2299,8 +2299,12 @@ async def get_ip_dockets(
     context: IpViewer,
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
 ) -> IpDocketListResponse:
-    return list_ip_dockets(session, context=context, limit=limit)
+    return list_ip_dockets(
+        session, context=context, limit=limit, query=query, cursor=cursor
+    )
 
 
 @router.get("/portfolio", response_model=IpPortfolioListResponse)
