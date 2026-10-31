@@ -280,16 +280,18 @@ def test_route_serves_and_validator_stamps_the_edition_in_force(
         json=_manual_payload(
             [
                 {"class_number": 35, "specification": "Advertising services"},
-                {"class_number": 9, "specification": "Downloadable software", "nice_edition": served},
+                {
+                    "class_number": 9,
+                    "specification": "Downloadable software",
+                    "nice_edition": served,
+                },
             ]
         ),
     )
     assert created.status_code == 201, created.text
     docket = client.get(f"/api/ip/dockets/{created.json()['docket']['id']}", headers=headers)
-    assert [row["nice_edition"] for row in docket.json()["current_particulars"]["classes_json"]] == [
-        served,
-        served,
-    ]
+    rows = docket.json()["current_particulars"]["classes_json"]
+    assert [row["nice_edition"] for row in rows] == [served, served]
 
     stale = client.post(
         "/api/ip/trademark-applications/manual",
