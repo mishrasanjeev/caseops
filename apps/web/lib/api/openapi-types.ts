@@ -48335,11 +48335,8 @@ export interface components {
         TrademarkClassScope: {
             /** Class Number */
             class_number: number;
-            /**
-             * Nice Edition
-             * @default NCL 13-2026
-             */
-            nice_edition: string;
+            /** Nice Edition */
+            nice_edition?: string;
             /** Specification */
             specification: string;
         };
@@ -63592,7 +63589,10 @@ export interface operations {
     };
     nice_class_catalogue_api_ip_nice_classes_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A held edition to read, for example the one a class row recorded. Omitted: the edition in force on the server date. */
+                edition?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -63606,6 +63606,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NiceClassCatalogueResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

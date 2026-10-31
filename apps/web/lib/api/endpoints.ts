@@ -10544,20 +10544,23 @@ export type IpCostReconciliationReport = {
   checksum_sha256: string;
 };
 
+export type IpFeatureBlockedReason =
+  | "unknown_feature"
+  | "missing_capability"
+  | "missing_entitlement"
+  | "rollout_disabled"
+  | "rollout_expired"
+  | "workspace_not_configured"
+  | "tenant_disabled"
+  | "readiness_test_failed"
+  | "incident_kill_switch";
+
 export type IpFeatureReadiness = {
   feature_id: string;
   available: boolean;
-  reason:
-    | "available"
-    | "unknown_feature"
-    | "missing_capability"
-    | "missing_entitlement"
-    | "rollout_disabled"
-    | "rollout_expired"
-    | "workspace_not_configured"
-    | "tenant_disabled"
-    | "readiness_test_failed"
-    | "incident_kill_switch";
+  reason: IpFeatureBlockedReason | "available";
+  /** Every failing gate, in server order; `reason` is its first entry. */
+  blocked_reasons?: IpFeatureBlockedReason[];
   owner: string;
   required_capabilities: string[];
   missing_capabilities: string[];
@@ -13730,11 +13733,23 @@ export async function transitionIpOppositionStage(input: {
   );
 }
 
-/** The WIPO Nice class catalogue: the only source of selectable classes. */
-export async function fetchIpNiceClasses(): Promise<IpNiceClassCatalogue> {
-  const data = await apiRequest<unknown>("/api/ip/nice-classes");
+/**
+ * The WIPO Nice class catalogue: the only source of selectable classes.
+ * Without `edition` the server returns the edition in force; with one it
+ * returns that held edition, for example the edition a class row recorded.
+ */
+export async function fetchIpNiceClasses(edition?: string): Promise<IpNiceClassCatalogue> {
+  const data = await apiRequest<unknown>(
+    edition ? `/api/ip/nice-classes?edition=${encodeURIComponent(edition)}` : "/api/ip/nice-classes",
+  );
   return ipNiceClassCatalogue.parse(data);
 }
+
+/** The mark kinds TrademarkParticularPayload.mark_kind accepts. */
+export const TRADEMARK_MARK_KINDS = [
+  "word", "device", "composite", "label", "colour", "shape", "sound", "other",
+] as const;
+export type TrademarkMarkKind = (typeof TRADEMARK_MARK_KINDS)[number];
 
 export async function createManualTrademarkApplication(input: {
   title: string;
@@ -13748,9 +13763,12 @@ export async function createManualTrademarkApplication(input: {
   applicationNumber?: string | null;
   identifierSource: string;
   identifierEffectiveFrom: string;
+  markKind: TrademarkMarkKind;
   markText: string;
-  classNumber: number;
-  specification: string;
+  /** One row per Nice class, validated against `niceEdition` (BUG-002). */
+  classes: Array<{ classNumber: number; specification: string }>;
+  /** Edition of the catalogue the classes were chosen from (GET /api/ip/nice-classes). */
+  niceEdition: string;
   applicantName: string;
   evidenceReference: string;
 }): Promise<{
@@ -13782,14 +13800,16 @@ export async function createManualTrademarkApplication(input: {
       particulars: {
         form_key: "TM-A",
         form_version: "2026.1",
-        mark_kind: "word",
+        mark_kind: input.markKind,
         representation: {
           text: input.markText,
           evidence_reference: input.evidenceReference,
         },
-        classes: [
-          { class_number: input.classNumber, specification: input.specification },
-        ],
+        classes: input.classes.map((row) => ({
+          class_number: row.classNumber,
+          specification: row.specification,
+          nice_edition: input.niceEdition,
+        })),
         use_priority: null,
         parties: [{ role: "applicant", name: input.applicantName }],
         agent: null,

@@ -337,7 +337,11 @@ test("IPLF-041 completes the governed applicant opposition journey", async ({ pa
   await opposition.getByLabel("Party 1 name").fill("Applicant Industries Private Limited");
   await opposition.getByLabel("Party 2 name").fill("Opponent Brands LLP");
   await opposition.getByLabel("Ground 1 lawyer detail").fill("Counsel confirmed the pleaded earlier-mark ground.");
-  await opposition.getByLabel("Scope 1 class").fill("9");
+  // BUG-002: the challenged class is chosen from the Nice catalogue.
+  const scopeClass = opposition.getByRole("combobox", { name: "Scope 1 class" });
+  await scopeClass.click();
+  await scopeClass.fill("9");
+  await opposition.page().getByRole("listbox").getByRole("option", { name: /^Class 9, goods:/ }).click();
   await opposition.getByLabel("Scope 1 goods and services").fill("Downloadable legal software");
   await opposition.getByLabel("Method").fill("registry email");
   await opposition.getByLabel("Destination").fill("applicant@example.com");

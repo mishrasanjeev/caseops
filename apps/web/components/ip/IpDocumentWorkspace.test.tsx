@@ -449,4 +449,38 @@ describe("IpDocumentWorkspace", () => {
       expect.objectContaining({ taxonomyKey: "assignment", docketId: "docket-1" }),
     );
   });
+
+  it("BUG-002 says the docket list is loading or failed instead of claiming no docket exists", async () => {
+    const { ApiError } = await import("@/lib/api/config");
+    const retry = vi.fn();
+    const { rerender } = render(withClient(
+      <IpDocumentWorkspace dockets={[]} docketsLoading canUpload canManage canReview canConfigure />,
+    ));
+    const linked = screen.getByRole("combobox", { name: "Linked docket" });
+    expect(linked).toBeDisabled();
+    expect(document.getElementById(linked.getAttribute("aria-describedby")!)).toHaveTextContent("Loading dockets…");
+    expect(screen.queryByText(/No trademark docket yet/)).not.toBeInTheDocument();
+
+    rerender(withClient(
+      <IpDocumentWorkspace
+        dockets={[]}
+        docketsError={new ApiError(503, "The IP service is unavailable.", null)}
+        onRetryDockets={retry}
+        canUpload
+        canManage
+        canReview
+        canConfigure
+      />,
+    ));
+    const failed = screen.getByRole("combobox", { name: "Linked docket" });
+    expect(document.getElementById(failed.getAttribute("aria-describedby")!)).toHaveTextContent("The IP service is unavailable.");
+    expect(screen.queryByText(/No trademark docket yet/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(retry).toHaveBeenCalledOnce();
+
+    rerender(withClient(
+      <IpDocumentWorkspace dockets={[]} canUpload canManage canReview canConfigure />,
+    ));
+    expect(screen.getByText(/No trademark docket yet\. Create one with New trademark/)).toBeVisible();
+  });
 });

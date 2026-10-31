@@ -164,7 +164,10 @@ def test_invalid_class_rows_are_refused_with_field_addressed_messages(
 
     assert refused.status_code == 422, refused.text
     body = refused.json()
-    assert body["detail"] == message
+    # The problem detail prefixes the humanized field path (shared 422 contract);
+    # the row message itself is the errors[] entry the form anchors to the field.
+    assert [error["msg"] for error in body["errors"]] == [message]
+    assert body["detail"].endswith(message)
     assert [error["loc"] for error in body["errors"]] == [loc]
     assert "Input should be" not in body["detail"]
     assert "Value error" not in body["detail"]

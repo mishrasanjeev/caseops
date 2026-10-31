@@ -13,7 +13,7 @@ import {
   Settings2,
 } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -25,6 +25,11 @@ import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
 import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
 import { IpPostRegistrationWorkspace } from "@/components/ip/IpPostRegistrationWorkspace";
 import { IpMatterLinksPanel } from "@/components/ip/IpMatterLinksPanel";
+import { IpAutomationReadiness, readinessReasonText } from "@/components/ip/IpAutomationReadiness";
+import { IP_NEW_TRADEMARK_PANEL_ID, IpTrademarkCreatePanel } from "@/components/ip/IpTrademarkCreatePanel";
+import { IpBillingRecordSelect } from "@/components/ip/IpBillingRecordSelect";
+import { IpDocketClassScope } from "@/components/ip/IpDocketClassScope";
+import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -49,7 +54,6 @@ import {
   completeIpRelatedRightObligation,
   confirmIpLegalDeadline,
   createIpDeadlineIncident,
-  createManualTrademarkApplication,
   createIpSharedHearing,
   listCompanyUsers,
   correctIpCostItem,
@@ -123,6 +127,14 @@ function requestedDocketView(value: string | null): DocketView {
   return DOCKET_VIEWS.includes(value as DocketView) ? (value as DocketView) : "overview";
 }
 
+// Page areas addressable with ?tab=<value>; anything else opens the docket.
+const WORKSPACE_TABS = ["docket", "documents", "availability"] as const;
+type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
+
+function requestedWorkspaceTab(value: string | null): WorkspaceTab {
+  return WORKSPACE_TABS.includes(value as WorkspaceTab) ? (value as WorkspaceTab) : "docket";
+}
+
 function verifiedHttpSource(reference: string | null | undefined): string | null {
   if (!reference) return null;
   try {
@@ -135,6 +147,9 @@ function verifiedHttpSource(reference: string | null | undefined): string | null
 
 export default function IpDocketPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const requestedTab = requestedWorkspaceTab(searchParams.get("tab"));
   const requestedDocketId = searchParams.get("docket");
   const requestedView = requestedDocketView(searchParams.get("view"));
   const requestedProceedingId = searchParams.get("proceeding");
@@ -161,6 +176,31 @@ export default function IpDocketPage() {
   );
   const [showCreate, setShowCreate] = useState(false);
   const [showConfiguration, setShowConfiguration] = useState(false);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(requestedTab);
+  const [createdDocketId, setCreatedDocketId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveTab(requestedTab);
+  }, [requestedTab]);
+
+  const replaceQuery = (updates: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null) next.delete(key);
+      else next.set(key, value);
+    }
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+  const changeTab = (value: string) => {
+    const tab = requestedWorkspaceTab(value);
+    setActiveTab(tab);
+    replaceQuery({ tab: tab === "docket" ? null : tab });
+  };
+  const closeCreate = () => {
+    setShowCreate(false);
+    window.setTimeout(() => document.getElementById("ip-new-trademark-toggle")?.focus(), 0);
+  };
 
   const readiness = useQuery({
     queryKey: ["ip", "readiness"],
@@ -204,6 +244,15 @@ export default function IpDocketPage() {
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["ip", "dockets"] });
   };
+
+  useEffect(() => {
+    if (!createdDocketId || selected?.id !== createdDocketId) return;
+    const heading = document.getElementById("ip-docket-title");
+    if (!heading) return;
+    heading.scrollIntoView?.({ block: "start" });
+    heading.focus({ preventScroll: true });
+    setCreatedDocketId(null);
+  }, [createdDocketId, selected?.id]);
 
   if (!canView) {
     return (
@@ -268,13 +317,33 @@ export default function IpDocketPage() {
                 onClick={() => setShowConfiguration((current) => !current)}>
                 <Settings2 className="h-4 w-4" aria-hidden />
               </Button> : null}
-              {canWrite ? <Button size="sm" onClick={() => setShowCreate((value) => !value)}>
+              {canWrite ? <Button id="ip-new-trademark-toggle" type="button" size="sm"
+                variant={showCreate ? "outline" : "primary"}
+                aria-expanded={showCreate} aria-controls={showCreate ? IP_NEW_TRADEMARK_PANEL_ID : undefined}
+                onClick={() => (showCreate ? closeCreate() : setShowCreate(true))}>
                 <Plus className="h-4 w-4" aria-hidden /> New trademark
               </Button> : null}
             </div>
           ) : null
         }
       />
+
+      {showCreate && canWrite ? (
+        <IpTrademarkCreatePanel
+          onCancel={closeCreate}
+          onCreated={async (docket) => {
+            setShowCreate(false);
+            queryClient.setQueryData(["ip", "dockets", docket.id], docket);
+            setSelectedId(docket.id);
+            setCreatedDocketId(docket.id);
+            setActiveTab("docket");
+            if (requestedDocketId || searchParams.get("tab")) {
+              replaceQuery({ docket: null, view: null, proceeding: null, draft: null, tab: null });
+            }
+            await refresh();
+          }}
+        />
+      ) : null}
 
       {canConfigure && showConfiguration ? (
         <section id="ip-workspace-configuration-panel" aria-label="Workspace configuration"
@@ -285,24 +354,22 @@ export default function IpDocketPage() {
         </section>
       ) : null}
 
-      <Link href="/app/ip/patents" className="w-fit text-sm text-brand-700 underline">Patent disclosures</Link>
-      <Link href="/app/ip/specialist" className="w-fit text-sm text-brand-700 underline">Specialist IP intake</Link>
+      <IpAutomationReadiness
+        features={readiness.data.features}
+        manualDocketingAvailable={readiness.data.manual_docketing_available}
+        canConfigure={canConfigure}
+        onOpenConfiguration={() => {
+          setShowConfiguration(true);
+          window.setTimeout(() => document.getElementById("ip-workspace-configuration-panel")?.scrollIntoView?.({ block: "start" }), 0);
+        }}
+      />
 
-      {readiness.data.features.some((feature) => !feature.available) ? (
-        <IpAutomationReadiness features={readiness.data.features} />
-      ) : null}
+      <nav aria-label="Other IP work" className="flex min-w-0 flex-wrap gap-x-4 gap-y-1">
+        <Link href="/app/ip/patents" className="w-fit text-sm text-brand-700 underline">Patent disclosures</Link>
+        <Link href="/app/ip/specialist" className="w-fit text-sm text-brand-700 underline">Specialist IP intake</Link>
+      </nav>
 
-      {showCreate && canWrite ? (
-        <CreateTrademarkCard
-          onCreated={async (docket) => {
-            setSelectedId(docket.id);
-            setShowCreate(false);
-            await refresh();
-          }}
-        />
-      ) : null}
-
-      <Tabs defaultValue="docket" className="min-w-0">
+      <Tabs value={activeTab} onValueChange={changeTab} className="min-w-0">
         <TabsList className="h-auto w-full min-w-0 flex-wrap sm:w-auto" aria-label="IP workspace areas">
           <TabsTrigger value="docket">Docket</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -314,6 +381,9 @@ export default function IpDocketPage() {
         <TabsContent value="documents">
           <IpDocumentWorkspace
             dockets={portfolioDockets}
+            docketsLoading={listing.isLoading || deepLinkDocketPending}
+            docketsError={listing.error ?? requestedDocket.error ?? null}
+            onRetryDockets={() => void (listing.isError ? listing.refetch() : requestedDocket.refetch())}
             canUpload={canWrite && canUploadDocuments}
             canManage={canWrite && canManageDocuments}
             canReview={canReview}
@@ -447,19 +517,6 @@ function IpAccessWorkspaceLoading() {
     </Card>
   );
 }
-
-const READINESS_REASON: Record<IpFeatureReadiness["reason"], string> = {
-  available: "Available",
-  unknown_feature: "Feature is not in the approved catalogue",
-  missing_capability: "Your role does not include the required capability",
-  missing_entitlement: "The workspace plan does not include this feature",
-  rollout_disabled: "The safety rollout has not been enabled",
-  rollout_expired: "The approved pilot window has expired",
-  workspace_not_configured: "Tenant setup has not been saved",
-  tenant_disabled: "Tenant enablement has not passed",
-  readiness_test_failed: "The latest required readiness test has not passed",
-  incident_kill_switch: "A risk incident has stopped this automation",
-};
 
 const DUE_FORMAT = new Intl.DateTimeFormat("en-IN", {
   day: "numeric",
@@ -713,7 +770,7 @@ function IpReadinessGate({
               <div className="min-w-0">
                 <div className="break-words font-semibold">{feature.feature_id.replaceAll("_", " ")}</div>
                 <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-                  {READINESS_REASON[feature.reason]} · owner {feature.owner}
+                  {feature.available ? "Ready" : readinessReasonText(feature)}
                 </div>
               </div>
               <span className={feature.available ? "text-sm font-semibold text-emerald-700" : "text-sm font-semibold text-amber-700"}>
@@ -1092,146 +1149,6 @@ function IpWorkspaceSetupCard({
   );
 }
 
-function IpAutomationReadiness({ features }: { features: IpFeatureReadiness[] }) {
-  const blocked = features.filter((feature) => !feature.available);
-  return (
-    <Card className="min-w-0">
-      <CardHeader><CardTitle as="h2">Automation readiness</CardTitle></CardHeader>
-      <CardContent className="flex min-w-0 flex-col gap-2">
-        {blocked.map((feature) => (
-          <div
-            key={feature.feature_id}
-            className="flex min-w-0 w-full flex-col gap-1 rounded-md bg-[var(--color-bg-2)] p-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between"
-            data-testid={`ip-automation-${feature.feature_id}`}
-          >
-            <div className="min-w-0 break-words text-sm font-semibold">
-              {feature.feature_id.replaceAll("_", " ")}
-            </div>
-            <div className="min-w-0 break-words text-xs text-[var(--color-mute)] sm:text-right">
-              Disabled · {READINESS_REASON[feature.reason]} · owner {feature.owner}
-            </div>
-            {feature.manual_fallback_feature_id ? (
-              <div className="w-full break-words text-xs text-[var(--color-mute)]">
-                Manual fallback remains {feature.manual_fallback_feature_id.replaceAll("_", " ")}.
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function CreateTrademarkCard({ onCreated }: { onCreated: (docket: IpDocket) => void }) {
-  const [title, setTitle] = useState("");
-  const [markText, setMarkText] = useState("");
-  const [classNumber, setClassNumber] = useState("9");
-  const [specification, setSpecification] = useState("");
-  const [applicant, setApplicant] = useState("");
-  const [evidence, setEvidence] = useState("");
-  const [matterId, setMatterId] = useState("");
-  const [restricted, setRestricted] = useState(false);
-  const [jurisdiction, setJurisdiction] = useState("IN");
-  const [office, setOffice] = useState("IP India");
-  const [filingPhase, setFilingPhase] = useState<"draft" | "pre_filing" | "filed">(
-    "pre_filing",
-  );
-  const [applicationNumber, setApplicationNumber] = useState("");
-  const [numberSource, setNumberSource] = useState("manual");
-  const [numberEffectiveFrom, setNumberEffectiveFrom] = useState(TODAY);
-  const [pendingAllocation, setPendingAllocation] = useState(false);
-  const mutation = useMutation({
-    mutationFn: () =>
-      createManualTrademarkApplication({
-        title,
-        matterId: matterId.trim() || null,
-        restricted,
-        assetTitle: markText,
-        jurisdiction,
-        office,
-        filingPhase,
-        sourcePendingIdentifierAllocation:
-          filingPhase === "filed" && !applicationNumber.trim() && pendingAllocation,
-        applicationNumber: applicationNumber.trim() || null,
-        identifierSource: numberSource,
-        identifierEffectiveFrom: numberEffectiveFrom,
-        markText,
-        classNumber: Number(classNumber),
-        specification,
-        applicantName: applicant,
-        evidenceReference: evidence,
-      }),
-    onSuccess: (result) => {
-      toast.success(
-        result.duplicate_candidates.length
-          ? "Draft created. Review the possible duplicate before marking it filed."
-          : "Trademark application created with its canonical identity records.",
-      );
-      onCreated(result.docket);
-    },
-    onError: (error) =>
-      toast.error(apiErrorMessage(error, "Could not create the trademark application.")),
-  });
-  const filedAllocationValid =
-    filingPhase !== "filed" || Boolean(applicationNumber.trim()) || pendingAllocation;
-  const valid =
-    title.trim().length >= 2 &&
-    markText.trim().length >= 1 &&
-    jurisdiction.trim().length >= 2 &&
-    office.trim().length >= 2 &&
-    specification.trim().length >= 3 &&
-    applicant.trim().length >= 2 &&
-    evidence.trim().length >= 3 &&
-    filedAllocationValid;
-
-  return (
-    <Card>
-      <CardHeader><CardTitle as="h2">New trademark application</CardTitle></CardHeader>
-      <CardContent>
-        <form
-          className="grid min-w-0 gap-4 md:grid-cols-2"
-          onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}
-        >
-          <Field label="Docket title"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-          <Field label="Matter ID (optional)"><Input value={matterId} onChange={(e) => setMatterId(e.target.value)} /></Field>
-          <Field label="Word mark"><Input value={markText} onChange={(e) => setMarkText(e.target.value)} /></Field>
-          <Field label="Nice class"><Input type="number" min={1} max={45} value={classNumber} onChange={(e) => setClassNumber(e.target.value)} /></Field>
-          <Field label="Goods / services specification"><Input value={specification} onChange={(e) => setSpecification(e.target.value)} /></Field>
-          <Field label="Applicant"><Input value={applicant} onChange={(e) => setApplicant(e.target.value)} /></Field>
-          <Field label="Representation evidence reference"><Input value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="attachment:… or drive:…" /></Field>
-          <Field label="Jurisdiction"><Input value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value.toUpperCase())} /></Field>
-          <Field label="Registry office"><Input value={office} onChange={(e) => setOffice(e.target.value)} /></Field>
-          <Field label="Filing phase">
-            <select className={FORM_SELECT_CLASS} value={filingPhase} onChange={(event) => setFilingPhase(event.target.value as typeof filingPhase)}>
-              <option value="draft">Draft</option>
-              <option value="pre_filing">Pre-filing</option>
-              <option value="filed">Filed</option>
-            </select>
-          </Field>
-          <Field label="Application number (optional before filing)"><Input value={applicationNumber} onChange={(event) => { setApplicationNumber(event.target.value); if (event.target.value) setPendingAllocation(false); }} /></Field>
-          {applicationNumber ? (
-            <>
-              <Field label="Number source"><Input value={numberSource} onChange={(event) => setNumberSource(event.target.value)} /></Field>
-              <Field label="Effective from"><Input type="date" value={numberEffectiveFrom} onChange={(event) => setNumberEffectiveFrom(event.target.value)} /></Field>
-            </>
-          ) : null}
-          {filingPhase === "filed" && !applicationNumber ? (
-            <label className="flex min-w-0 items-start gap-2 text-sm md:col-span-2">
-              <input type="checkbox" className="mt-1" checked={pendingAllocation} onChange={(event) => setPendingAllocation(event.target.checked)} />
-              Registry source confirms the application number is still pending allocation
-            </label>
-          ) : null}
-          <label className="flex min-w-0 items-start gap-2 text-sm md:col-span-2">
-            <input type="checkbox" className="mt-1" checked={restricted} onChange={(event) => setRestricted(event.target.checked)} />
-            Restrict this pre-engagement record to explicitly granted members
-          </label>
-          <div className="flex items-end md:col-span-2"><Button type="submit" disabled={!valid || mutation.isPending}>Create application</Button></div>
-        </form>
-      </CardContent>
-    </Card>
-  );
-}
-
 const IDENTIFIER_LABEL: Record<IpIdentifier["identifier_kind"], string> = {
   application: "Application no.",
   registration: "Registration no.",
@@ -1489,7 +1406,7 @@ function DocketWorkspace({
   return (
     <div className="flex min-w-0 flex-col gap-5" data-testid="ip-docket-workspace">
       <Card className="min-w-0">
-        <CardHeader><CardTitle as="h2">{docket.title}</CardTitle></CardHeader>
+        <CardHeader><CardTitle as="h2" id="ip-docket-title" tabIndex={-1} className="scroll-mt-20 outline-none">{docket.title}</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="Readiness" value={docket.current_particulars.readiness_status} icon={FileCheck2} />
           <Metric label="Form" value={`${docket.current_particulars.form_key} ${docket.current_particulars.form_version}`} icon={Scale} />
@@ -1497,13 +1414,7 @@ function DocketWorkspace({
           <Metric label="Cost items" value={String(docket.cost_items.length)} icon={BadgeIndianRupee} />
           <div className="sm:col-span-2 xl:col-span-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-mute)]">Class scope</div>
-            <ul className="mt-2 flex min-w-0 flex-col gap-2">
-              {classes.map((row) => (
-                <li key={row.class_number} className="min-w-0 rounded-md bg-[var(--color-bg-2)] p-3 text-sm">
-                  <strong>Class {row.class_number}</strong> · <span className="break-words">{row.specification}</span>
-                </li>
-              ))}
-            </ul>
+            <IpDocketClassScope classes={classes} />
           </div>
         </CardContent>
       </Card>
@@ -3243,7 +3154,16 @@ function LifecycleCard({ docket, enabled, onChanged }: { docket: IpDocket; enabl
             <Field label="Reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
             <Field label="Outcome"><Input value={outcome} onChange={(event) => setOutcome(event.target.value)} /></Field>
             <Field label="Evidence reference"><Input value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} /></Field>
-            {toStatus === "transferred" ? <Field label="Successor docket ID"><Input value={successorDocketId} onChange={(event) => setSuccessorDocketId(event.target.value)} /></Field> : null}
+            {toStatus === "transferred" ? (
+              <IpDocketPicker
+                id="lifecycle-successor-docket"
+                label="Successor docket"
+                value={successorDocketId}
+                onChange={(docketId) => setSuccessorDocketId(docketId)}
+                excludeIds={[docket.id]}
+                required
+              />
+            ) : null}
             <Field label="Second approver (optional)" htmlFor="lifecycle-second-approver"><PersonPicker id="lifecycle-second-approver" value={secondApproverMembershipId} onChange={setSecondApproverMembershipId} placeholder="No second approver" /></Field>
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!valid || preview.isPending}>Preview lifecycle impact</Button>
@@ -3846,7 +3766,7 @@ function CostCorrectionEditor({
                 <select
                   className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
                   value={billingLinkType}
-                  onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}
+                  onChange={(event) => { setBillingLinkType(event.target.value as typeof billingLinkType); setBillingLinkId(""); }}
                 >
                   <option value="">No billing link</option>
                   <option value="invoice">Invoice</option>
@@ -3854,10 +3774,15 @@ function CostCorrectionEditor({
                   <option value="time_entry">Time entry</option>
                 </select>
               </Field>
-              {billingLinkType ? (
-                <Field label="Corrected Matter billing record ID">
-                  <Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} />
-                </Field>
+              {billingLinkType && docket.matter_id ? (
+                <IpBillingRecordSelect
+                  id={`ip-cost-correction-billing-record-${row.id}`}
+                  label="Corrected Matter billing record"
+                  matterId={docket.matter_id}
+                  linkType={billingLinkType}
+                  value={billingLinkId}
+                  onChange={setBillingLinkId}
+                />
               ) : null}
             </>
           ) : null}
@@ -3894,6 +3819,7 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
   const [fxConvertedAt, setFxConvertedAt] = useState("");
   const [baseAmount, setBaseAmount] = useState("");
   const [baseCurrency, setBaseCurrency] = useState("INR");
+  const [category, setCategory] = useState<IpCostCategory>("official_fee");
 
   // UJ-52-EXC-01: with no billing Matter the cost is still recorded, but only
   // as nonbillable evidence. The billing decision is deferred, not the fee.
@@ -3904,12 +3830,12 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
   const resetForm = () => {
     setDescription(""); setAmount(""); setEvidence(""); setBillingLinkId("");
     setFxRate(""); setFxRateSource(""); setFxConvertedAt(""); setBaseAmount("");
-    setConverted(false); setCurrency("INR"); setRateConfidential(false);
+    setConverted(false); setCurrency("INR"); setRateConfidential(false); setCategory("official_fee");
   };
 
   const mutation = useMutation({
     mutationFn: () => addIpCostItem(docket.id, {
-      category: "official_fee",
+      category,
       description,
       amountMinor: Math.round(Number(amount) * 100),
       currency,
@@ -3991,6 +3917,11 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
                 attempt, or collection.
               </p>
             ) : null}
+            <Field label="Category">
+              <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={category} onChange={(event) => setCategory(event.target.value as IpCostCategory)}>
+                {COST_CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </Field>
             <Field label="Description"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
             <Field label={`Amount (${currency})`}><Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
             <Field label="Evidence reference"><Input value={evidence} onChange={(e) => setEvidence(e.target.value)} /></Field>
@@ -4027,7 +3958,7 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
             ) : null}
             {canLinkBilling ? (
               <Field label="Matter billing link type">
-                <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={billingLinkType} onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}>
+                <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={billingLinkType} onChange={(event) => { setBillingLinkType(event.target.value as typeof billingLinkType); setBillingLinkId(""); }}>
                   <option value="">No billing link</option>
                   <option value="invoice">Invoice</option>
                   <option value="invoice_line_item">Invoice line item</option>
@@ -4041,7 +3972,16 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
                   : "A nonbillable cost is not linked to a billing record."}
               </p>
             )}
-            {canLinkBilling && billingLinkType ? <Field label="Matter billing record ID"><Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} /></Field> : null}
+            {canLinkBilling && billingLinkType && docket.matter_id ? (
+              <IpBillingRecordSelect
+                id="ip-cost-billing-record"
+                label="Matter billing record"
+                matterId={docket.matter_id}
+                linkType={billingLinkType}
+                value={billingLinkId}
+                onChange={setBillingLinkId}
+              />
+            ) : null}
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={description.length < 3 || !amount || evidence.length < 3 || (canLinkBilling && Boolean(billingLinkType) !== Boolean(billingLinkId)) || conversionIncomplete || mutation.isPending}>
                 {hasBillingOwner ? "Add cost evidence" : "Add nonbillable cost evidence"}
@@ -4056,6 +3996,17 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
     </Card>
   );
 }
+
+type IpCostCategory = "official_fee" | "professional_fee" | "associate_fee" | "disbursement" | "other";
+
+// Same values as the API's IpCostItemCreate.category literal.
+const COST_CATEGORIES: ReadonlyArray<readonly [IpCostCategory, string]> = [
+  ["official_fee", "Official fee"],
+  ["professional_fee", "Professional fee"],
+  ["associate_fee", "Associate fee"],
+  ["disbursement", "Disbursement"],
+  ["other", "Other"],
+];
 
 function Field({
   label,

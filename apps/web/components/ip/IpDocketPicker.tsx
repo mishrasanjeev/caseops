@@ -46,6 +46,8 @@ import { cn } from "@/lib/cn";
  * - `error`: a field-level message from the caller (validation or API); it
  *   marks the select `aria-invalid` and is announced with it.
  * - `pageSize`: dockets per page, default 50 (server maximum 200).
+ * - `excludeIds`: dockets never offered here because the caller's API refuses
+ *   them, for example the docket being transferred as its own successor.
  * - `id`, `required`, `disabled`, `className` behave as on a form field.
  *
  * Dockets are cached under ["ip", "dockets", ...]: invalidating
@@ -61,6 +63,7 @@ export type IpDocketPickerProps = {
   emptyOptionLabel?: string;
   error?: string | null;
   pageSize?: number;
+  excludeIds?: readonly string[];
   required?: boolean;
   disabled?: boolean;
   className?: string;
@@ -107,6 +110,7 @@ export function IpDocketPicker({
   emptyOptionLabel,
   error,
   pageSize = 50,
+  excludeIds,
   required,
   disabled,
   className,
@@ -133,13 +137,19 @@ export function IpDocketPicker({
     getNextPageParam: (page) => page.next_cursor ?? null,
     placeholderData: keepPreviousData,
   });
-  const loaded = useMemo(
+  const excludedKey = (excludeIds ?? []).join(" ");
+  const listed = useMemo(
     () => results.data?.pages.flatMap((page) => page.dockets) ?? [],
     [results.data],
   );
+  const loaded = useMemo(() => {
+    const excluded = new Set(excludedKey ? excludedKey.split(" ") : []);
+    return listed.filter((docket) => !excluded.has(docket.id));
+  }, [listed, excludedKey]);
   const pages = results.data?.pages ?? [];
   const lastPage = pages[pages.length - 1];
-  const total = results.data?.pages[0]?.total_count ?? loaded.length;
+  // Excluded dockets are counted by the server; they are not choices here.
+  const total = (results.data?.pages[0]?.total_count ?? listed.length) - (listed.length - loaded.length);
 
   // The chosen docket stays an option when a later search no longer returns it.
   const [chosen, setChosen] = useState<IpDocket | null>(null);
@@ -216,6 +226,7 @@ export function IpDocketPicker({
         id={statusId}
         results={results}
         loadedCount={loaded.length}
+        onlyExcluded={loaded.length === 0 && listed.length > 0 && !lastPage?.next_cursor}
         total={total}
         query={query}
         hasMore={Boolean(lastPage?.next_cursor)}
@@ -253,6 +264,7 @@ function PickerStatus({
   id,
   results,
   loadedCount,
+  onlyExcluded,
   total,
   query,
   hasMore,
@@ -261,6 +273,8 @@ function PickerStatus({
   id: string;
   results: DocketPages;
   loadedCount: number;
+  /** Every listed docket is one the caller cannot accept here. */
+  onlyExcluded: boolean;
   total: number;
   query: string;
   hasMore: boolean;
@@ -289,8 +303,9 @@ function PickerStatus({
     return (
       <div id={id} role="status" className="flex min-w-0 flex-col gap-1 text-sm text-[var(--color-mute)]">
         <span>
-          No trademark dockets are visible to you. Dockets restricted to other teams are not
-          listed.
+          {onlyExcluded
+            ? "No other trademark docket is visible to you, and this one cannot be chosen here."
+            : "No trademark dockets are visible to you. Dockets restricted to other teams are not listed."}
         </span>
         <span className="flex flex-wrap gap-x-3 gap-y-1">
           <Link className="font-semibold text-[var(--color-brand-700)]" href="/app/ip">

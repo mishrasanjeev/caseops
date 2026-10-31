@@ -163,6 +163,14 @@ async function signIn(page: Page, slug: string): Promise<void> {
   await page.waitForURL(/\/app(?:[/?]|$)/);
 }
 
+async function chooseNiceClass(page: Page, row: number, query: string, option: RegExp): Promise<void> {
+  const input = page.getByRole("combobox", { name: `Nice class, row ${row}` });
+  await expect(input).toBeEnabled();
+  await input.click();
+  await input.fill(query);
+  await page.getByRole("listbox").getByRole("option", { name: option }).click();
+}
+
 test.describe("Ram 2026-08-01 IP law firm slices", () => {
   test.setTimeout(120_000);
 
@@ -185,12 +193,16 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
     expect(createBox!.x).toBeGreaterThanOrEqual(0);
     expect(createBox!.x + createBox!.width).toBeLessThanOrEqual(360);
     await create.click();
+    // BUG-001: the click alone puts the form on screen and focuses it.
+    await expect(page.getByRole("heading", { name: "New trademark application" })).toBeInViewport();
+    await expect(page.getByLabel("Docket title", { exact: true })).toBeFocused();
 
     const creationForm = page.locator("form").filter({ has: page.getByLabel("Docket title") });
     await creationForm.getByLabel("Docket title").fill("ASTER mobile mark");
     await creationForm.getByLabel("Word mark").fill("ASTER");
-    await creationForm.getByLabel("Nice class").fill("42");
-    await creationForm.getByLabel("Goods / services specification").fill("Legal software services");
+    // BUG-002: the class is chosen from the Nice catalogue, one row per class.
+    await chooseNiceClass(page, 1, "42", /^Class 42, services:/);
+    await creationForm.getByLabel("Goods and services, row 1").fill("Legal software services");
     await creationForm.getByLabel("Applicant").fill("Aster Legal LLP");
     await creationForm
       .getByLabel("Representation evidence reference")
