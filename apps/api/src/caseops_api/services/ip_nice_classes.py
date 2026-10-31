@@ -25,6 +25,28 @@ Provenance (retrieved 2026-10-31):
   (``NICE_SOURCE_URL``) renders the class heading. ``note`` is the
   ``Introduction`` sentence of the class's explanatory note.
 
+Edition NCL 13-2027 (13th edition, version 2027, in force from 1 January
+2027) is held as its own catalogue, retrieved 2026-10-31:
+
+* Data file: ``ncl-20270101-en-classification_texts-20260526.xml`` inside
+  ``ncl-20270101-classification_texts-20260526.zip`` (``NCL_13_2027.source_data_url``).
+  The XML root declares ``edition="13" version="2027" dateInForce="2027-01-01"``.
+  Its MD5, ``33795931965a2da2121993401f8a4dcb``, matches WIPO's published
+  ``20270101md5.txt`` (generated 2026-09-03); its SHA-256 is
+  ``235fbf5973e13ea9ab0fee003846b7de1c5237a66cfb5b0e976b0901ea25095d``.
+* ``classification_top_structure`` 20260526: MD5
+  ``ad153ef9b41839431b3b8baff3fb6f8d`` (matches ``20270101md5.txt``), SHA-256
+  ``b59b8aa63fbe9ec3ae993955dc0400c322a52cb6342b4337d5b25736f042848c``.
+* Against version 2026 only the class 6 heading and note and the class 9
+  heading change; ``NCL_13_2027_REVISED_CLASSES`` holds those rows verbatim and
+  every other row is the 2026 text, which the 2027 XML repeats unchanged. The
+  2027 digests pin the full 45-class text.
+
+The edition served and stamped is the one in force on the server's UTC date
+(``nice_catalogue_in_force``). A class row records that edition; a client that
+loaded the catalogue before 1 January and submits after it is refused on the
+row's ``nice_edition`` and reloads the list.
+
 Text is copied verbatim; do not edit it by hand. ``NICE_HEADINGS_SHA256`` and
 ``NICE_NOTES_SHA256`` pin the normalized text (see ``normalized_headings`` and
 ``normalized_notes``), and the tests recompute them. A new edition or version
@@ -40,7 +62,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Literal
 
 NiceClassKind = Literal["goods", "services"]
@@ -671,9 +693,104 @@ NICE_CLASSES: tuple[NiceClass, ...] = (
 
 _BY_NUMBER: dict[int, NiceClass] = {row.number: row for row in NICE_CLASSES}
 
+NCL_13_2027_REVISED_CLASSES: tuple[NiceClass, ...] = (
+    NiceClass(
+        number=6,
+        kind="goods",
+        heading=(
+            "Common metals and their alloys; ores; metal materials for building and "
+            "construction; transportable buildings of metal; non-electric cables and wires "
+            "of common metal; small items of metal hardware; metal containers for storage "
+            "or transport; safes."
+        ),
+        note=(
+            "Class 6 includes mainly unwrought and partly wrought common metals, as well "
+            "as certain goods made of common metals."
+        ),
+    ),
+    NiceClass(
+        number=9,
+        kind="goods",
+        heading=(
+            "Scientific, research, navigation, surveying, photographic, cinematographic, "
+            "audiovisual, optical, weighing, measuring, signalling, detecting, testing, "
+            "inspecting, life-saving and teaching apparatus and instruments; apparatus and "
+            "instruments for conducting, switching, transforming, accumulating, regulating or "
+            "controlling the distribution or use of electricity; apparatus and instruments "
+            "for recording, transmitting, reproducing or processing sound, images or data; "
+            "recorded and downloadable multimedia files, computer software, blank digital or "
+            "analogue recording and storage media; mechanisms for coin-operated apparatus; "
+            "cash registers, calculating devices; computers and computer peripheral devices; "
+            "diving suits, diving masks, ear plugs for diving, nose clips for diving, diving "
+            "gloves, breathing apparatus for underwater swimming; fire-extinguishing "
+            "apparatus."
+        ),
+        note=_BY_NUMBER[9].note,
+    ),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class NiceCatalogue:
+    edition: str
+    in_force_from: date
+    retrieved_on: date
+    source_url: str
+    source_data_url: str
+    attribution: str
+    headings_sha256: str
+    notes_sha256: str
+    classes: tuple[NiceClass, ...]
+
+
+NCL_13_2026 = NiceCatalogue(
+    edition=NICE_EDITION,
+    in_force_from=NICE_IN_FORCE_FROM,
+    retrieved_on=NICE_RETRIEVED_ON,
+    source_url=NICE_SOURCE_URL,
+    source_data_url=NICE_SOURCE_DATA_URL,
+    attribution=NICE_ATTRIBUTION,
+    headings_sha256=NICE_HEADINGS_SHA256,
+    notes_sha256=NICE_NOTES_SHA256,
+    classes=NICE_CLASSES,
+)
+
+_REVISED_2027 = {row.number: row for row in NCL_13_2027_REVISED_CLASSES}
+NCL_13_2027 = NiceCatalogue(
+    edition="NCL 13-2027",
+    in_force_from=date(2027, 1, 1),
+    retrieved_on=date(2026, 10, 31),
+    source_url=NICE_SOURCE_URL.replace("version=20260101", "version=20270101"),
+    source_data_url=(
+        "https://www.wipo.int/classifications/data/nice/ITSupport_and_download_area/20270101/"
+        "MasterFiles/ncl-20270101-classification_texts-20260526.zip"
+    ),
+    attribution=(
+        "Nice Classification, 13th edition, version 2027 (NCL 13-2027). "
+        "Copyright World Intellectual Property Organization (WIPO)."
+    ),
+    headings_sha256="27cd8bcd75b69ce8ad8787b0710e84a2256371cc23deb5fbcaea406a9496d2ed",
+    notes_sha256="4a875e8c6763be8de2993d352753c10e8ff771252873ebd5a61dfdd901d8a465",
+    classes=tuple(_REVISED_2027.get(row.number, row) for row in NICE_CLASSES),
+)
+
+# Oldest first; every edition lists classes 1-45.
+NICE_CATALOGUES: tuple[NiceCatalogue, ...] = (NCL_13_2026, NCL_13_2027)
+
+
+def _server_date() -> date:
+    return datetime.now(UTC).date()
+
+
+def nice_catalogue_in_force(on: date | None = None) -> NiceCatalogue:
+    """Return the latest edition in force on ``on`` (default: the server's UTC date)."""
+    day = on or _server_date()
+    in_force = [row for row in NICE_CATALOGUES if row.in_force_from <= day]
+    return in_force[-1] if in_force else NICE_CATALOGUES[0]
+
 
 def nice_class(number: int) -> NiceClass | None:
-    """Return the catalogue class for ``number``, or ``None`` if it is not one."""
+    """Return the NCL 13-2026 class for ``number``, or ``None`` if it is not one."""
     if isinstance(number, bool):
         return None
     return _BY_NUMBER.get(number)
