@@ -2,6 +2,14 @@
 
 ## October 31 Remaining Admission Failures: Partially Fixed
 
+Security continuation:75FA's pyasn1 audit and imperative test-assert CodeQL
+failures are repaired in the candidate without exclusions. Whole161-package
+strict audit is clean; complete244-case offline compatibility replay passes
+732phases/0skips. Preserve its first243P/1fixture-comparisonF and Docker29's
+owned interruption (61complete of3619intended,184phases,no session finish,
+0browser). Neither is full regression. Fresh final-head Docker/hosted/live
+proof is still mandatory; the dated lifecycle-admission brief retains details.
+
 Full998A Docker28 naturally completed3615P/2F/0S across3617cases/10851phases,
 with0browser execution. The two exact admission failures and their lock traces
 remain retained, not waived by hosted55success/2skipped checks. Valid REDs prove

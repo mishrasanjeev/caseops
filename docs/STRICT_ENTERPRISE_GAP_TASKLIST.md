@@ -2,6 +2,13 @@
 
 ## October 31 Admission Lock Work And Diagnostic Ownership
 
+Security continuation remains Partially implemented/NO-GO until full release:
+targeted pyasn1 .6.4->.6.5, all other resolved versions unchanged, official wheel
+hash verified and161/161 strict OSV packages clean with zero skips. Imperative
+test work now lives outside assertions;244 offline cases/732phases pass. No
+audit/CodeQL rule waiver. Docker29 is explicitly interrupted61/3619complete,
+0browser, not a completed replacement; preserve both this and full Docker28.
+
 **Partially implemented / NO-GO.** Fresh998A Docker28 retained complete3617cases,
 3615P/2F/0S and10851phases; no browser gate ran. Hosted55success/2skipped checks
 does not override it. Separate lifecycle history hydration and sibling recorder/

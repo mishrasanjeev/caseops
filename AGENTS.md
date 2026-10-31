@@ -3586,3 +3586,9 @@ requirements when using the fallback.
   registration for unraisable evidence, and replay existing interruption tests
   as well as new ownership tests. Stopped servers restore only their own
   unchanged dependency override after workers join; never discard active owners.
+- Test cleanup, dispatch and waits must execute outside assertions; optimized
+  Python may omit assert expressions entirely. Assert the observed results,
+  preserve the actual operation and deadline, and keep security scanning enabled
+  for regression code. An absent ASN.1 optional schema is not a value: compare
+  its explicit absence plus canonical bytes and populated fields, rather than
+  recursively equating an unpopulated schema object.

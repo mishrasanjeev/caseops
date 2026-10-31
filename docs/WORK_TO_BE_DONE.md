@@ -2,6 +2,14 @@
 
 ## October 31 Actual Release Checkpoint
 
+Continuation: the75FA dependency/CodeQL blockers have a scoped candidate repair.
+All161 installed isolated dependencies pass strict audit, zero skips; all244
+offline compatibility cases pass732phases. The first243P/1new-fixtureF is
+preserved. Owned interrupted Docker29 retains61complete/184phases of3619
+intended,0browser: incomplete, not full green. Require fresh final committed
+Docker30/hosted security/CI before normal merge and canonical deployment.
+See the October31 lifecycle-admission brief. No app/Mac work is included.
+
 **Partially fixed / NO-GO.** Full998A Docker28 completed3617/10851phases:
 3615passed/2admission-race failures/0skips; browser0executed. Hosted998A rollup
 is55success/2skipped checks, not later-source acceptance. The new lifecycle

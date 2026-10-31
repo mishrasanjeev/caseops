@@ -93,6 +93,48 @@ catalogue only; it is not an image or production test of this new runtime.
 The standard pytest inventory discovers the new modules; full final-head
 Docker/CI and live replay must still reconcile their complete intended roles.
 
+## Security Continuation And Interrupted Docker29
+
+The committed 75FA candidate's independent CodeQL check rejected an imperative
+`close()` inside a new test assertion. All new ownership-test dispatch, waits,
+detach and close operations now execute before result assertions. Their real
+calls, original deadlines and cleanup ownership are preserved; no scanner rule,
+test path or security threshold is excluded.
+
+Its strict dependency audit also found four published high-severity pyasn1
+decoder advisories in locked 0.6.4. Stable 0.6.5 was already published October27:
+[official release](https://github.com/pyasn1/pyasn1/releases/tag/v0.6.5),
+[upstream fixes](https://github.com/pyasn1/pyasn1/pull/132).
+The direct floor and targeted frozen lock now require 0.6.5. Structured comparison
+proves every other resolved package object unchanged; only root dependency
+metadata also changes. The independently downloaded official 84,807-byte wheel
+matches SHA-256 `4017b0fce125096b8573b39c989fdb1a4b19cf761e683398184550fea0e66587`.
+Google parents still admit this version; Python and BSD-2 licensing are unchanged.
+This does not establish endpoint exploitability or why older advisory reads
+differed.
+
+A separate frozen all-extras/dev environment, explicitly without the editable
+project distribution, passed pip check and strict OSV audit: all 161 installed
+packages audited, zero known vulnerabilities and zero skipped dependencies.
+Twenty-five small offline provenance/BER/CER/DER/schema cases cover the changed
+decoder paths; they are not a DoS-performance or legal-result claim. Complete
+replay with all nine ownership controls, 173 Gemini and 37 native money/SDK
+contracts passed **244 cases/732 phases**, no skips/retries, source unchanged.
+All selected modules and collected identities reconcile. No external provider
+transport occurred. The preceding complete run remains 243 passed/one failed:
+its new PKCS8 fixture compared an omitted optional schema as a value. Exact
+encoding/reencoding already passed; replacement proves explicit optional-field
+absence and populated fields without discarding the canonical-byte oracle.
+
+Docker29 was deliberately stopped through exact owned-process guards only after
+these independent release blockers were retained. Its 3,619-case/151-module
+inventory is complete, but only 61 cases/184 phases ran, with zero failed phases,
+no session completion and no browser execution. All 16 available runtime files/
+1,482,614 bytes were retained before source edits. It is **incomplete**, not
+successful full regression. Docker28's complete failures remain unchanged.
+Fresh final-head Docker30, hosted security/CI and all deployment gates are still
+required. Both Excel originals still report interim08, not a deployed fix.
+
 ## Remaining Release Boundaries
 
 Preserve the original 15-second desktop/narrow-screen 51-row portfolio export,

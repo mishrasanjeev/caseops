@@ -55,7 +55,9 @@ def _registered_race(*, close_only=False):
     race.sql["worker"] = ["ownership_template_not_executed"]
     race.pids["worker"] = 12345
     race.names["worker"] = "matter-ownership-unit"
-    assert race.submit("worker", lambda: "owned-result").result(timeout=5) == "owned-result"
+    future = race.submit("worker", lambda: "owned-result")
+    result = future.result(timeout=5)
+    assert result == "owned-result"
     return SimpleNamespace(
         engine=engine, hooks=race.hooks, race_ref=ref(race), evidence_ref=ref(evidence),
         pool=race.pool, observer=race.observer, future_count=1,
@@ -67,7 +69,8 @@ def _assert_diagnostics(owned):
     sql, futures, pids, names = owned.diagnostics
     assert sql == {"worker": ["ownership_template_not_executed"]}
     assert len(futures) == owned.future_count and futures[0].done()
-    assert futures[0].result(timeout=5) == "owned-result"
+    result = futures[0].result(timeout=5)
+    assert result == "owned-result"
     assert pids == {"worker": 12345} and names == {"worker": "matter-ownership-unit"}
     race = owned.race_ref()
     if race is not None:
@@ -161,10 +164,12 @@ def test_detach_is_idempotent_and_preserves_an_unowned_listener():
 
     def detach_twice():
         race = owned.race_ref()
-        assert race.detach_hooks() is None
+        result = race.detach_hooks()
+        assert result is None
         assert race.hooks is owned.hooks and owned.hooks == []
         _assert_diagnostics(owned)
-        assert race.detach_hooks() is None
+        result = race.detach_hooks()
+        assert result is None
 
     event.listen(owned.engine, "before_cursor_execute", unrelated)
     try:
@@ -207,7 +212,8 @@ def test_detach_refuses_idle_unstopped_pool_and_active_owned_worker():
 
     def work():
         started.set()
-        assert release.wait(5), "Ownership-only worker was not released"
+        released = release.wait(5)
+        assert released, "Ownership-only worker was not released"
         return "active-result"
 
     try:
@@ -217,13 +223,15 @@ def test_detach_refuses_idle_unstopped_pool_and_active_owned_worker():
         _assert_owned(owned)
         future = owned.race_ref().submit("held-worker", work)
         owned.future_count = 2
-        assert started.wait(5) and not future.done()
+        entered = started.wait(5)
+        assert entered and not future.done()
         with pytest.raises(AssertionError, match="Owned workers are still active"):
             owned.race_ref().detach_hooks()
         assert owned.race_ref().workers_stopped is False
         _assert_owned(owned)
         release.set()
-        assert future.result(timeout=5) == "active-result"
+        result = future.result(timeout=5)
+        assert result == "active-result"
         _stop_owned_workers(owned)
         owned.race_ref().detach_hooks()
         _assert_released(owned)
@@ -280,7 +288,8 @@ def test_partial_removal_keeps_exact_owned_list_and_diagnostics_until_retry(monk
             event.contains(owned.engine, name, callback) for name, callback in owned.hooks[1:]
         )
         assert owned.race_ref().workers_stopped is True
-        assert owned.race_ref().detach_hooks() is None
+        result = owned.race_ref().detach_hooks()
+        assert result is None
         _assert_released(owned)
     finally:
         _cleanup(owned)
@@ -320,7 +329,8 @@ def test_close_publishes_stopped_only_after_shutdown_returns(monkeypatch, shutdo
                 assert owned.race_ref().workers_stopped is False
                 _assert_owned(owned)
                 assert owned.observer.snapshots == 0 and owned.observer.disposals == 0
-            assert owned.race_ref().close() is None
+            result = owned.race_ref().close()
+            assert result is None
         _assert_released(owned)
         assert shutdowns == (["failed", "stopped"] if shutdown_error else ["stopped"])
         assert owned.observer.snapshots == 1 and owned.observer.disposals == 1
