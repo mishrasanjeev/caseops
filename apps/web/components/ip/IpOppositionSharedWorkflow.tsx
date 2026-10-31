@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { PersonChecklist, PersonPicker } from "@/components/ui/PersonPicker";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
@@ -345,8 +346,8 @@ export function IpOppositionSharedWorkflow({
         {actionKind === "deadline_extended" ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Active deadline"><select className={SELECT_CLASS} value={deadlineId} onChange={(event) => setDeadlineId(event.target.value)}><option value="">Select deadline</option>{workflow.data.active_deadlines.map((row) => <option key={row.id} value={row.id}>{row.title} - {row.result_on ?? "unresolved"}</option>)}</select></Field>
           <Field label="Extended result date"><Input type="date" value={newDeadlineOn} onChange={(event) => setNewDeadlineOn(event.target.value)} /></Field>
-          <Field label="Primary membership ID"><Input value={primaryId} onChange={(event) => setPrimaryId(event.target.value)} /></Field>
-          <Field label="Backup membership ID"><Input value={backupId} onChange={(event) => setBackupId(event.target.value)} /></Field>
+          <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-primary">Responsible lawyer</Label><PersonPicker id="shared-extension-primary" value={primaryId} onChange={setPrimaryId} /></div>
+          <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-backup">Backup lawyer</Label><PersonPicker id="shared-extension-backup" value={backupId} onChange={setBackupId} excludeMembershipIds={[primaryId]} placeholder="Select a backup…" /></div>
         </div> : null}
 
         {actionKind === "further_evidence_leave_recorded" ? <div className="grid gap-3 md:grid-cols-3">
@@ -385,7 +386,7 @@ export function IpOppositionSharedWorkflow({
           <Field label="Evidence documents"><Input value={hearingEvidenceRefs} onChange={(event) => setHearingEvidenceRefs(event.target.value)} placeholder="Comma separated" /></Field>
           <Field label="Authorities"><Input value={authorityRefs} onChange={(event) => setAuthorityRefs(event.target.value)} placeholder="Comma separated" /></Field>
           <Field label="Written submissions"><Input value={submissionRefs} onChange={(event) => setSubmissionRefs(event.target.value)} placeholder="Comma separated" /></Field>
-          <Field label="Attendance membership IDs"><Input value={attendanceIds} onChange={(event) => setAttendanceIds(event.target.value)} placeholder="Comma separated" /></Field>
+          <PersonChecklist id="shared-hearing-attendance" legend="Attending colleagues" value={refs(attendanceIds)} onChange={(ids) => setAttendanceIds(ids.join(","))} />
           <Field label="Cause-list source"><Input value={causeListSource} onChange={(event) => setCauseListSource(event.target.value)} /></Field>
           {actionKind === "post_hearing_note_recorded" ? <Field label="Post-hearing note"><Textarea value={postHearingNotes} onChange={(event) => setPostHearingNotes(event.target.value)} /></Field> : null}
         </div> : null}

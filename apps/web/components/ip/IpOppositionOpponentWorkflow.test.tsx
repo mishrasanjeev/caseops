@@ -8,9 +8,11 @@ const {
   createNumberMock,
   fetchDeadlineMock,
   fetchWorkflowMock,
+  listUsersMock,
   proposeMock,
   recordActionMock,
 } = vi.hoisted(() => ({
+  listUsersMock: vi.fn(),
   confirmMock: vi.fn(),
   createNumberMock: vi.fn(),
   fetchDeadlineMock: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   createIpOppositionIdentifier: createNumberMock,
   fetchIpDeadlineWorkspace: fetchDeadlineMock,
   fetchIpOppositionOpponentWorkflow: fetchWorkflowMock,
+  listCompanyUsers: listUsersMock,
   proposeIpOppositionOpponentDeadline: proposeMock,
   recordIpOppositionOpponentAction: recordActionMock,
 }));
@@ -31,6 +34,13 @@ vi.mock("@/lib/api/endpoints", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { IpOppositionOpponentWorkflow } from "@/components/ip/IpOppositionOpponentWorkflow";
+import type { IpDeadlineWorkspace } from "@/lib/api/endpoints";
+import {
+  availableGovernance,
+  governedRule,
+  rolloutPausedGovernance,
+  workingCalendar,
+} from "@/test/ip-governance-fixtures";
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -61,14 +71,21 @@ const deadline = {
   result_on: "2026-09-20",
   rule_citation: "Trade Marks Act and Rules",
 };
-const deadlineWorkspace = {
+const deadlineWorkspace: IpDeadlineWorkspace = {
+  docket_id: "docket-1",
   rules: [
-    { id: "wrong-rule", key: "applicant-rule", version: 1, status: "active", proceeding_kind: "opposition", role: "applicant", stage: "notice_filing_due" },
-    { id: "notice-rule", key: "opponent-notice", version: 3, status: "active", proceeding_kind: "opposition", role: "opponent", stage: "notice_filing_due" },
-    { id: "evidence-rule", key: "opponent-evidence", version: 4, status: "active", proceeding_kind: "opposition", role: "opponent", stage: "opponent_evidence_due" },
+    governedRule({ id: "wrong-rule", key: "applicant-rule", version: 1, role: "applicant" }),
+    governedRule({ id: "notice-rule", key: "opponent-notice", version: 3 }),
+    // Active and exact, but company policy does not select it: the validator refuses it.
+    governedRule({ id: "unselected-rule", key: "opponent-unselected", version: 5 }),
+    governedRule({ id: "evidence-rule", key: "opponent-evidence", version: 4, stage: "opponent_evidence_due" }),
   ],
-  calendars: [{ id: "calendar-1", name: "India registry calendar", version: 2, status: "active" }],
+  eligible_rule_version_ids: ["wrong-rule", "notice-rule", "evidence-rule"],
+  calendars: [workingCalendar({ id: "calendar-1", name: "India registry calendar", version: 2 })],
   deadlines: [],
+  exceptions: [],
+  automation_state: "explicit_confirmation_only",
+  governance: availableGovernance(),
 };
 
 function renderWorkflow(overrides: Record<string, unknown> = {}) {
@@ -106,6 +123,12 @@ describe("IpOppositionOpponentWorkflow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchDeadlineMock.mockResolvedValue(deadlineWorkspace);
+    listUsersMock.mockResolvedValue({
+      users: [
+        { membership_id: "membership-primary", full_name: "Ram Gupta", email: "ram@example.com", role: "owner", membership_active: true, user_active: true },
+        { membership_id: "membership-backup", full_name: "Asha Rao", email: "asha@example.com", role: "partner", membership_active: true, user_active: true },
+      ],
+    });
     createNumberMock.mockResolvedValue({ identifier: {}, duplicate_candidates: [] });
     proposeMock.mockResolvedValue({ workflow_stage: "notice_filing_due", deadline });
     confirmMock.mockResolvedValue({ ...deadline, state: "confirmed" });
@@ -116,8 +139,10 @@ describe("IpOppositionOpponentWorkflow", () => {
     fetchWorkflowMock.mockResolvedValue(workflow("propose_notice_filing_deadline"));
     renderWorkflow();
 
-    expect(await screen.findByRole("option", { name: "opponent-notice v3" })).toBeVisible();
-    expect(screen.queryByRole("option", { name: "applicant-rule v1" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: /^opponent-notice v3 · Opposition, opponent · notice of opposition due/ })).toBeVisible();
+    expect(screen.queryByRole("option", { name: /^applicant-rule v1/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^opponent-unselected v5/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^opponent-evidence v4/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Propose deadline" }));
     await waitFor(() => expect(proposeMock).toHaveBeenCalledOnce());
     expect(proposeMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -157,7 +182,10 @@ describe("IpOppositionOpponentWorkflow", () => {
     }));
     renderWorkflow();
 
-    fireEvent.change(await screen.findByLabelText("Opponent backup membership ID"), { target: { value: "membership-backup" } });
+    const backup = await screen.findByLabelText("Opponent backup lawyer");
+    await screen.findAllByRole("option", { name: "Asha Rao — asha@example.com" });
+    expect(screen.queryByRole("textbox", { name: /membership/i })).not.toBeInTheDocument();
+    fireEvent.change(backup, { target: { value: "membership-backup" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() => expect(confirmMock).toHaveBeenCalledOnce());
     expect(confirmMock.mock.calls[0][0].responsibilities).toEqual([
@@ -191,6 +219,64 @@ describe("IpOppositionOpponentWorkflow", () => {
       evidenceRefs: ["filing-receipt:042"],
       verification: expect.objectContaining({ signed_document_ref: "document:signed-tmo:042" }),
     }));
+  });
+
+  it("BUG-003/004 empty catalogue: disabled pickers name the missing rule and calendar and link to governance", async () => {
+    fetchWorkflowMock.mockResolvedValue(workflow("propose_notice_filing_deadline"));
+    fetchDeadlineMock.mockResolvedValue({
+      ...deadlineWorkspace,
+      rules: [],
+      eligible_rule_version_ids: [],
+      calendars: [],
+      governance: rolloutPausedGovernance(),
+    });
+    renderWorkflow();
+
+    const rule = await screen.findByLabelText("Governed rule");
+    await waitFor(() => expect(rule).toBeDisabled());
+    const calendar = screen.getByLabelText("Working calendar");
+    expect(calendar).toBeDisabled();
+    expect(rule).toHaveDisplayValue("No eligible rule for Opposition, opponent · notice of opposition due");
+    const ruleStatus = document.getElementById(rule.getAttribute("aria-describedby") ?? "");
+    expect(ruleStatus).toHaveTextContent("No active governed rule exists for Opposition, opponent · notice of opposition due.");
+    expect(ruleStatus).toHaveTextContent("Paused by CaseOps: Rule publication is paused by CaseOps");
+    const calendarStatus = document.getElementById(calendar.getAttribute("aria-describedby") ?? "");
+    expect(calendarStatus).toHaveTextContent("No active working calendar exists for this workspace.");
+    expect(calendarStatus).toHaveTextContent("Propose one in Rule and calendar governance");
+    expect(screen.getByRole("link", { name: "Open rule and calendar governance" })).toHaveAttribute(
+      "href",
+      "/app/ip?docket=docket-1&view=schedule&tab=schedule&rule_scope=opponent_notice#ip-deadline-governance",
+    );
+    expect(screen.getByRole("button", { name: "Propose deadline" })).toBeDisabled();
+    expect(screen.queryByText(/notice_filing_due/)).not.toBeInTheDocument();
+  });
+
+  it("BUG-004 names a candidate calendar awaiting another approver", async () => {
+    fetchWorkflowMock.mockResolvedValue(workflow("propose_notice_filing_deadline"));
+    fetchDeadlineMock.mockResolvedValue({
+      ...deadlineWorkspace,
+      calendars: [workingCalendar({ id: "calendar-2", name: "Delhi registry calendar", status: "candidate" })],
+    });
+    renderWorkflow();
+
+    const calendar = await screen.findByLabelText("Working calendar");
+    await waitFor(() => expect(calendar).toBeDisabled());
+    expect(document.getElementById(calendar.getAttribute("aria-describedby") ?? "")).toHaveTextContent(
+      "Delhi registry calendar v1 is awaiting activation by an approver other than its proposer.",
+    );
+  });
+
+  it("BUG-003 keeps the workflow usable while governed rules load and offers retry on failure", async () => {
+    fetchWorkflowMock.mockResolvedValue(workflow("propose_notice_filing_deadline"));
+    fetchDeadlineMock.mockRejectedValueOnce(new Error("Deadline workspace unavailable"));
+    renderWorkflow();
+
+    expect(await screen.findByText("Deadline workspace unavailable")).toBeVisible();
+    expect(screen.getByLabelText("Governed rule")).toBeDisabled();
+    expect(screen.getByLabelText("Governed rule")).toHaveDisplayValue("Unavailable — retry below");
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("option", { name: /^opponent-notice v3/ })).toBeVisible();
+    expect(screen.getByLabelText("Governed rule")).toBeEnabled();
   });
 
   it("opens corrective work for a rejected filing without recording acceptance", async () => {

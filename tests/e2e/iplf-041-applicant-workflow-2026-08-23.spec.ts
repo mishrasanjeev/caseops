@@ -359,7 +359,7 @@ test("IPLF-041 completes the governed applicant opposition journey", async ({ pa
   const counterProposal = page.waitForResponse((row) => row.url().endsWith("/applicant-deadlines") && row.request().method() === "POST");
   await applicant.getByRole("button", { name: "Propose deadline" }).click();
   expect((await counterProposal).status()).toBe(201);
-  await applicant.getByLabel("Backup membership ID").fill(backupMembershipId);
+  await applicant.getByLabel("Backup lawyer").selectOption(backupMembershipId);
   const counterConfirmed = page.waitForResponse((row) => row.url().endsWith("/confirm") && row.request().method() === "POST");
   await applicant.getByRole("button", { name: "Confirm" }).click();
   expect((await counterConfirmed).status()).toBe(200);
@@ -399,7 +399,7 @@ test("IPLF-041 completes the governed applicant opposition journey", async ({ pa
   const evidenceProposal = page.waitForResponse((row) => row.url().endsWith("/applicant-deadlines") && row.request().method() === "POST");
   await applicant.getByRole("button", { name: "Propose deadline" }).click();
   expect((await evidenceProposal).status()).toBe(201);
-  await applicant.getByLabel("Backup membership ID").fill(backupMembershipId);
+  await applicant.getByLabel("Backup lawyer").selectOption(backupMembershipId);
   const evidenceConfirmed = page.waitForResponse((row) => row.url().endsWith("/confirm") && row.request().method() === "POST");
   await applicant.getByRole("button", { name: "Confirm" }).click();
   expect((await evidenceConfirmed).status()).toBe(200);

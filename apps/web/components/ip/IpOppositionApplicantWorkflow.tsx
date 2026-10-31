@@ -2,13 +2,15 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, Check, FileSignature, Hash, Send } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
+import { IpGovernedDeadlinePickers, resolveGovernedSelection } from "@/components/ip/IpGovernedDeadlinePickers";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { PersonPicker } from "@/components/ui/PersonPicker";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
@@ -91,15 +93,10 @@ export function IpOppositionApplicantWorkflow({
   const workflowStage = next?.includes("applicant_evidence")
     ? "applicant_evidence_due" as const
     : "counterstatement_due" as const;
-  const exactRules = useMemo(
-    () => (deadlineWorkspace.data?.rules ?? []).filter((row) =>
-      row.status === "active" && row.proceeding_kind === "opposition" &&
-      row.role === "applicant" && row.stage === workflowStage),
-    [deadlineWorkspace.data?.rules, workflowStage],
-  );
-  const activeCalendars = (deadlineWorkspace.data?.calendars ?? []).filter((row) => row.status === "active");
-  const selectedRule = ruleVersionId || exactRules[0]?.id || "";
-  const selectedCalendar = calendarVersionId || activeCalendars[0]?.id || "";
+  const governedScope = { proceedingKind: "opposition", role: "applicant", stage: workflowStage };
+  const governed = resolveGovernedSelection(deadlineWorkspace.data, governedScope, ruleVersionId, calendarVersionId);
+  const selectedRule = governed.rule?.id ?? "";
+  const selectedCalendar = governed.calendar?.id ?? "";
   const triggerEvent = workflowStage === "counterstatement_due"
     ? workspace.profile_event
     : [...workspace.stage_events].reverse().find((row) => row.after_phase === "opponent_evidence_filed" || row.resulting_stage === "opponent_evidence_filed");
@@ -200,9 +197,8 @@ export function IpOppositionApplicantWorkflow({
     ...mutationOptions,
   });
 
-  if (workflow.isLoading || deadlineWorkspace.isLoading) return <Skeleton className="h-32 w-full" />;
+  if (workflow.isLoading) return <Skeleton className="h-32 w-full" />;
   if (workflow.isError) return <QueryErrorState error={workflow.error} onRetry={() => workflow.refetch()} />;
-  if (deadlineWorkspace.isError) return <QueryErrorState error={deadlineWorkspace.error} onRetry={() => deadlineWorkspace.refetch()} />;
   if (!workflow.data) return null;
 
   const actionReady = Boolean(sourceReference.trim() && reason.trim().length >= 5 && (
@@ -229,18 +225,17 @@ export function IpOppositionApplicantWorkflow({
       </form> : null}
 
       {next?.startsWith("propose_") ? <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-5" onSubmit={(event) => { event.preventDefault(); propose.mutate(); }}>
-        <Field label="Governed rule"><select className={SELECT_CLASS} value={selectedRule} onChange={(event) => setRuleVersionId(event.target.value)}>{exactRules.map((row) => <option key={row.id} value={row.id}>{row.key} v{row.version}</option>)}</select></Field>
-        <Field label="Working calendar"><select className={SELECT_CLASS} value={selectedCalendar} onChange={(event) => setCalendarVersionId(event.target.value)}>{activeCalendars.map((row) => <option key={row.id} value={row.id}>{row.name} v{row.version}</option>)}</select></Field>
+        <IpGovernedDeadlinePickers docketId={docket.id} idPrefix="applicant-deadline" scope={governedScope} workspace={deadlineWorkspace} selection={governed} onRuleChange={setRuleVersionId} onCalendarChange={setCalendarVersionId} />
         <Field label="Trigger date"><Input type="date" value={baseDate} onChange={(event) => setBaseDate(event.target.value)} /></Field>
         <Field label="Date certainty"><select className={SELECT_CLASS} value={certainty} onChange={(event) => setCertainty(event.target.value as typeof certainty)}><option value="certain">Certain</option><option value="uncertain">Uncertain</option><option value="conflicting">Conflicting</option><option value="unknown">Unknown</option></select></Field>
         <div className="flex items-end"><Button type="submit" disabled={!canReview || !triggerEvent || !selectedRule || !selectedCalendar || propose.isPending}><CalendarClock className="h-4 w-4" /> Propose deadline</Button></div>
         {!triggerEvent ? <p className="text-sm text-[var(--color-danger)] md:col-span-2 xl:col-span-5">The confirmed trigger event is not yet recorded.</p> : null}
-        {!exactRules.length ? <p className="text-sm text-[var(--color-danger)] md:col-span-2 xl:col-span-5">No active governed opposition/applicant/{workflowStage} rule is available.</p> : null}
+        {!canReview ? <p className="text-sm text-[var(--color-mute)] md:col-span-2 xl:col-span-5">Your role cannot propose legal deadlines; an IP reviewer must propose it.</p> : null}
       </form> : null}
 
-      {workflow.data.deadlines.length ? <div className="space-y-2">{workflow.data.deadlines.map(({ workflow_stage, deadline }) => <div key={deadline.id} className="grid min-w-0 gap-3 rounded-md border border-[var(--color-line)] p-3 md:grid-cols-[1fr_180px_180px_auto]">
+      {workflow.data.deadlines.length ? <div className="space-y-2">{workflow.data.deadlines.map(({ workflow_stage, deadline }) => <div key={deadline.id} className="grid min-w-0 gap-3 rounded-md border border-[var(--color-line)] p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
         <div><strong>{readable(workflow_stage)}</strong><p className="text-sm text-[var(--color-mute)]">{deadline.result_on ?? "Date unresolved"} · {deadline.state} · {deadline.rule_citation}</p></div>
-        {deadline.state === "provisional" || deadline.state === "candidate" ? <><Input aria-label="Primary membership ID" value={primaryId} onChange={(event) => setPrimaryId(event.target.value)} placeholder="Primary membership ID" /><Input aria-label="Backup membership ID" value={backupId} onChange={(event) => setBackupId(event.target.value)} placeholder="Backup membership ID" /><Button type="button" onClick={() => confirm.mutate(deadline)} disabled={!canReview || !primaryId.trim() || !backupId.trim() || primaryId.trim() === backupId.trim() || confirm.isPending}><Check className="h-4 w-4" /> Confirm</Button></> : <Badge tone="success">Confirmed</Badge>}
+        {deadline.state === "provisional" || deadline.state === "candidate" ? <><div className="flex min-w-0 flex-col gap-1"><Label htmlFor={`applicant-primary-${deadline.id}`}>Responsible lawyer</Label><PersonPicker id={`applicant-primary-${deadline.id}`} value={primaryId} onChange={setPrimaryId} /></div><div className="flex min-w-0 flex-col gap-1"><Label htmlFor={`applicant-backup-${deadline.id}`}>Backup lawyer</Label><PersonPicker id={`applicant-backup-${deadline.id}`} value={backupId} onChange={setBackupId} excludeMembershipIds={[primaryId]} placeholder="Select a backup…" /></div><Button type="button" onClick={() => confirm.mutate(deadline)} disabled={!canReview || !primaryId.trim() || !backupId.trim() || primaryId.trim() === backupId.trim() || confirm.isPending}><Check className="h-4 w-4" /> Confirm</Button>{!primaryId.trim() || !backupId.trim() || primaryId.trim() === backupId.trim() ? <p className="text-xs text-[var(--color-mute)] md:col-span-4">Choose a responsible lawyer and a different backup to confirm this deadline.</p> : null}</> : <Badge tone="success">Confirmed</Badge>}
       </div>)}</div> : null}
 
       {next && ["file_counterstatement", "record_counterstatement_service", "record_applicant_evidence_decision"].includes(next) ? <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => { event.preventDefault(); recordAction.mutate(); }}>
