@@ -592,16 +592,9 @@ def ip_foreign_associate_create_options(
             )
         )
 
-    if not panel:
-        counsel_blocker(
-            "no_panel_associate",
-            "outside_counsel_id",
-            "No outside counsel is on the active panel. Add the foreign associate in "
-            "Outside Counsel with the country or office it files in.",
-            "Add counsel in Outside Counsel",
-            "/app/outside-counsel",
-        )
-    elif target and not associates:
+    # Once a target is chosen the blocker names it, whether or not the panel
+    # has any counsel at all.
+    if target and not associates:
         spelled = (
             f"{FILING_JURISDICTIONS[jurisdiction]} written out (the bare code {jurisdiction} "
             "also names an Indian state or court, so it is not read as a country)"
@@ -614,8 +607,18 @@ def ip_foreign_associate_create_options(
             "no_associate_for_jurisdiction",
             "outside_counsel_id",
             "No approved associate on the panel files in "
-            f"{filing_jurisdiction_label(target)}. Add one in Outside Counsel with "
-            f"{spelled} as a jurisdiction.",
+            f"{filing_jurisdiction_label(target)}."
+            f"{'' if panel else ' The panel has no active counsel yet.'} Add one in "
+            f"Outside Counsel with {spelled} as a jurisdiction.",
+            "Add counsel in Outside Counsel",
+            "/app/outside-counsel",
+        )
+    elif not panel:
+        counsel_blocker(
+            "no_panel_associate",
+            "outside_counsel_id",
+            "No outside counsel is on the active panel. Add the foreign associate in "
+            "Outside Counsel with the country or office it files in.",
             "Add counsel in Outside Counsel",
             "/app/outside-counsel",
         )

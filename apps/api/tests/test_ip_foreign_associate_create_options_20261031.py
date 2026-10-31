@@ -425,6 +425,15 @@ def test_matterless_record_blockers_name_every_missing_prerequisite(
     ]
     assert body["can_manage_counsel"] is True
     assert body["blockers"][0]["href"] == "/app/outside-counsel"
+    # Once a target is chosen the blocker names it, even with an empty panel.
+    empty_gb = client.get(
+        OPTIONS, headers=headers, params={"docket_id": docket_id, "target_jurisdiction": "GB"}
+    ).json()["blockers"][0]
+    assert empty_gb["code"] == "no_associate_for_jurisdiction"
+    assert empty_gb["message"].startswith(
+        "No approved associate on the panel files in GB · United Kingdom. "
+        "The panel has no active counsel yet."
+    )
     documents_href = f"/app/ip?docket={docket_id}&area=documents"
     # No classification is active yet: the blocker says uploads need setup,
     # and the owner (taxonomy admin) is sent to the Documents tab to load them.
