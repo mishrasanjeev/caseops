@@ -7,12 +7,20 @@ widths exceeded the printable page width. Tabular exports must use
 ``write_wrapped_table``: columns are sized from relative weights to the exact
 printable width, every cell wraps inside its own column, each row grows to its
 tallest cell, and the heading row repeats on every page.
+
+2026-10-31 (BUG-016): fpdf2's ``Table`` captures the caller's current fill and
+text colour (``FPDF.font_face()``) as the style of every body cell. The invoice
+set a dark fill for its title bar first, so every line item was painted dark
+text on a dark fill. Both helpers now draw inside a local graphics state with
+the default (unpainted) fill and ``TEXT_COLOR``, so no caller state can leak in
+or out.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from functools import cache
 from typing import Any
 
@@ -35,6 +43,10 @@ _TYPOGRAPHY = {
 }
 _TRANSLATION = {ord(key): value for key, value in _TYPOGRAPHY.items()}
 _UNENCODABLE = re.compile(r"[^\x00-\xff]+")
+
+# Body text colour for generated PDFs: near-black on the white page.
+TEXT_COLOR = (17, 24, 39)
+HEADING_FILL = (236, 239, 244)
 
 
 def pdf_text(value: object) -> str:
@@ -72,6 +84,18 @@ def safe_pdf_class() -> type:
     return SafeCoreFontPDF
 
 
+@contextmanager
+def neutral_table_state(pdf: Any) -> Iterator[None]:
+    """Draw with the default (unpainted) fill and ``TEXT_COLOR``, then restore.
+
+    The default fill is what ``font_face()`` reports as "no fill", so table body
+    cells are not painted whatever colour the caller left set (BUG-016).
+    """
+
+    with pdf.local_context(fill_color=0, text_color=TEXT_COLOR):
+        yield
+
+
 def write_wrapped_table(
     pdf: Any,
     *,
@@ -91,12 +115,12 @@ def write_wrapped_table(
     from fpdf.fonts import FontFace  # type: ignore[import-not-found]
 
     pdf.set_font("Helvetica", "", font_size)
-    with pdf.table(
+    with neutral_table_state(pdf), pdf.table(
         col_widths=tuple(weights),
         width=pdf.epw,
         line_height=font_size * 0.55,
         text_align="LEFT",
-        headings_style=FontFace(emphasis="BOLD", fill_color=(236, 239, 244)),
+        headings_style=FontFace(emphasis="BOLD", color=TEXT_COLOR, fill_color=HEADING_FILL),
         repeat_headings=1,
         padding=1,
     ) as table:
@@ -127,7 +151,7 @@ def write_wrapped_pairs(
     if any(len(row) != width for row in rows):
         raise ValueError("Every pair row must have the same number of columns.")
     pdf.set_font("Helvetica", "", font_size)
-    with pdf.table(
+    with neutral_table_state(pdf), pdf.table(
         col_widths=tuple(1 for _ in range(width)),
         width=pdf.epw,
         line_height=font_size * 0.5,

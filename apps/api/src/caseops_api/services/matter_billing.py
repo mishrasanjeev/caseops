@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.db.models import (
+    InvoiceStatus,
     Matter,
     MatterBillingProfile,
     MatterBillingRate,
@@ -18,6 +19,7 @@ from caseops_api.db.models import (
     MatterInvoice,
     MatterInvoiceExport,
     MembershipRole,
+    PortalUser,
 )
 from caseops_api.schemas.matter_billing import (
     InvoiceNumberPreviewResponse,
@@ -30,7 +32,7 @@ from caseops_api.schemas.matter_billing import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.session_context import SessionContext
 
-PDF_TEMPLATE_VERSION = "caseops-matter-invoice-receipt-v2"
+PDF_TEMPLATE_VERSION = "caseops-matter-invoice-receipt-v3"
 
 
 @dataclass(frozen=True, slots=True)
@@ -663,6 +665,56 @@ def default_invoice_due_on(profile: MatterBillingProfile | None, issued_on):
     return issued_on + timedelta(days=profile.payment_terms_days)
 
 
+INVOICE_PDF_WEIGHTS = (80, 22, 30, 22, 31)
+_INVOICE_STATUS_LABELS = {
+    InvoiceStatus.DRAFT: "Draft",
+    InvoiceStatus.NEEDS_REVIEW: "Needs review",
+    InvoiceStatus.ISSUED: "Issued",
+    InvoiceStatus.PARTIALLY_PAID: "Partially paid",
+    InvoiceStatus.PAID: "Paid",
+    InvoiceStatus.VOID: "Void",
+}
+_BANNER_ISSUED = (17, 24, 39)
+_BANNER_ATTENTION = (146, 64, 14)
+
+
+def _invoice_document_kind(
+    invoice: MatterInvoice,
+) -> tuple[str, tuple[int, int, int], str | None, str]:
+    """Title, banner fill, explanatory line and footer marking for the status.
+
+    BUG-016: every invoice printed as "Tax Invoice / Receipt" whatever its
+    status, so a draft or an unreviewed outside-counsel submission looked like
+    an issued tax invoice. Only an issued invoice that charges GST is a tax
+    invoice, and "Receipt" appears only once a payment is recorded.
+    """
+    if invoice.status == InvoiceStatus.DRAFT:
+        return (
+            "DRAFT - NOT A TAX INVOICE",
+            _BANNER_ATTENTION,
+            "Draft for internal review. Not issued, not payable and not valid for tax purposes.",
+            "DRAFT - not a tax invoice | ",
+        )
+    if invoice.status == InvoiceStatus.NEEDS_REVIEW:
+        return (
+            "OUTSIDE COUNSEL INVOICE - SUBMITTED FOR REVIEW",
+            _BANNER_ATTENTION,
+            "Review copy. Submitted through the outside counsel portal and not yet approved.",
+            "REVIEW COPY | ",
+        )
+    if invoice.status == InvoiceStatus.VOID:
+        return (
+            "VOID - CANCELLED INVOICE",
+            _BANNER_ATTENTION,
+            "This invoice was cancelled and is not payable.",
+            "VOID | ",
+        )
+    title = "Tax Invoice" if invoice.tax_amount_minor > 0 else "Invoice"
+    if invoice.amount_received_minor > 0:
+        title += " / Receipt"
+    return title, _BANNER_ISSUED, None, ""
+
+
 def render_invoice_pdf(
     session: Session,
     *,
@@ -670,6 +722,7 @@ def render_invoice_pdf(
     invoice: MatterInvoice,
 ) -> tuple[bytes, str, str]:
     from caseops_api.services.pdf_layout import (
+        TEXT_COLOR,
         safe_pdf_class,
         write_wrapped_pairs,
         write_wrapped_table,
@@ -678,23 +731,50 @@ def render_invoice_pdf(
     pdf_class = safe_pdf_class()
 
     matter = invoice.matter or session.get(Matter, invoice.matter_id)
-    pdf = pdf_class(format="A4", unit="mm")
+    title, banner_fill, explanation, marking = _invoice_document_kind(invoice)
+    portal_user = (
+        session.get(PortalUser, invoice.submitted_by_portal_user_id)
+        if invoice.submitted_by_portal_user_id
+        else None
+    )
+    if portal_user is not None and portal_user.company_id != invoice.company_id:
+        portal_user = None
+    footer_text = f"{marking}{invoice.invoice_number} | Page {{page}} of {{{{nb}}}}"
+
+    class _InvoicePdf(pdf_class):  # type: ignore[misc]
+        # BUG-016: set_y(-14) inside the 16 mm auto-break margin forced a blank
+        # second page holding only "Page 1"; the footer hook numbers every page.
+        def footer(self) -> None:
+            self.set_y(-12)
+            self.set_font("Helvetica", "", 8)
+            self.set_text_color(*TEXT_COLOR)
+            self.cell(0, 5, footer_text.format(page=self.page_no()), align="C")
+
+    pdf = _InvoicePdf(format="A4", unit="mm")
     pdf.set_auto_page_break(auto=True, margin=16)
-    pdf.set_title(f"CaseOps matter invoice {invoice.invoice_number}")
-    pdf.set_author(invoice.firm_legal_name or "CaseOps")
+    pdf.alias_nb_pages()
+    pdf.set_title(f"{title} {invoice.invoice_number}")
+    pdf.set_author(invoice.firm_legal_name or context.company.name or "CaseOps")
     pdf.add_page()
-    pdf.set_fill_color(17, 24, 39)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 9, "Tax Invoice / Receipt", fill=True, new_x="LMARGIN", new_y="NEXT")
-    pdf.set_text_color(17, 24, 39)
-    pdf.ln(3)
+    pdf.set_text_color(*TEXT_COLOR)
+    # BUG-016: the bar's fill must not leak into the tables drawn below it.
+    with pdf.local_context(fill_color=banner_fill, text_color=(255, 255, 255)):
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 9, f" {title}", fill=True, new_x="LMARGIN", new_y="NEXT")
     # User-entered text wraps inside the printable width and every line returns
     # to the left margin. multi_cell() otherwise leaves the cursor at the right
     # edge, which drew the following Matter line off the page (BUG-033 audit).
     lines = {"new_x": "LMARGIN", "new_y": "NEXT"}
+    if explanation:
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.multi_cell(0, 5, explanation, **lines)
+    pdf.ln(3)
+    if portal_user is not None:
+        supplier = f"{portal_user.full_name} (outside counsel)"
+    else:
+        supplier = invoice.firm_legal_name or context.company.name
     pdf.set_font("Helvetica", "B", 15)
-    pdf.multi_cell(0, 8, invoice.firm_legal_name or "Invoice", **lines)
+    pdf.multi_cell(0, 8, supplier, **lines)
     pdf.set_font("Helvetica", "", 9)
     for line in (invoice.firm_address or "").splitlines()[:4]:
         pdf.multi_cell(0, 5, line, **lines)
@@ -702,11 +782,8 @@ def render_invoice_pdf(
         pdf.multi_cell(0, 5, f"GSTIN: {invoice.firm_gstin}", **lines)
     if invoice.firm_pan:
         pdf.multi_cell(0, 5, f"PAN: {invoice.firm_pan}", **lines)
-    pdf.ln(4)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "Matter billing receipt", **lines)
+    pdf.ln(3)
     due_label = invoice.due_on.isoformat() if invoice.due_on else "Not available"
-    receipt_status = "Paid" if invoice.balance_due_minor <= 0 else "Balance due"
     client_label = invoice.client_billing_name or invoice.client_name or "Not available"
     write_wrapped_pairs(
         pdf,
@@ -716,11 +793,11 @@ def render_invoice_pdf(
                 f"Invoice Date: {invoice.issued_on.isoformat()}",
             ),
             (
+                f"Status: {_INVOICE_STATUS_LABELS.get(invoice.status, invoice.status)}",
                 f"Due Date: {due_label}",
-                f"Place of Supply: {invoice.place_of_supply or 'Not available'}",
             ),
             (
-                f"Receipt Status: {receipt_status}",
+                f"Place of Supply: {invoice.place_of_supply or 'Not available'}",
                 f"Outstanding: {_format_minor(invoice.balance_due_minor, invoice.currency)}",
             ),
             (
@@ -741,17 +818,18 @@ def render_invoice_pdf(
     write_wrapped_table(
         pdf,
         headings=("Description", "Qty/Time", "Rate", "SAC/HSN", "Amount"),
-        weights=(82, 25, 25, 25, 28),
+        weights=INVOICE_PDF_WEIGHTS,
         rows=[
             (
                 line.description,
                 (
-                    f"{line.duration_minutes} min"
+                    f"{Decimal(line.duration_minutes) / Decimal(60):.2f} hrs"
                     if line.duration_minutes is not None
                     else line.category or "Item"
                 ),
                 (
                     _format_minor(line.unit_rate_amount_minor, invoice.currency)
+                    + ("/hr" if line.duration_minutes is not None else "")
                     if line.unit_rate_amount_minor is not None
                     else ""
                 ),
@@ -764,8 +842,13 @@ def render_invoice_pdf(
 
     pdf.ln(4)
     pdf.set_font("Helvetica", "", 9)
+    # Outside-counsel submissions created before BUG-016 stored taxable value 0
+    # with no tax; their taxable value is the subtotal.
+    taxable = invoice.taxable_value_minor
+    if not taxable and not invoice.tax_amount_minor:
+        taxable = invoice.subtotal_amount_minor
     totals = [
-        ("Taxable value", invoice.taxable_value_minor),
+        ("Taxable value", taxable),
         ("CGST", invoice.cgst_amount_minor),
         ("SGST", invoice.sgst_amount_minor),
         ("IGST", invoice.igst_amount_minor),
@@ -776,7 +859,7 @@ def render_invoice_pdf(
         ("Outstanding", invoice.balance_due_minor),
     ]
     for label, amount in totals:
-        pdf.cell(140, 6, label, align="R")
+        pdf.cell(130, 6, label, align="R")
         pdf.cell(
             0,
             6,
@@ -788,9 +871,6 @@ def render_invoice_pdf(
     if invoice.notes:
         pdf.ln(3)
         pdf.multi_cell(0, 5, f"Notes: {invoice.notes[:1000]}", **lines)
-    pdf.set_y(-14)
-    pdf.set_font("Helvetica", "", 8)
-    pdf.cell(0, 5, f"Page {pdf.page_no()}", align="C")
     body = bytes(pdf.output())
     checksum = hashlib.sha256(body).hexdigest()
     filename = _safe_invoice_filename(invoice.invoice_number)
@@ -826,7 +906,16 @@ def render_invoice_pdf(
 
 def _format_minor(amount_minor: int | None, currency: str) -> str:
     amount = Decimal(amount_minor or 0) / Decimal(100)
-    return f"{currency} {amount:,.2f}"
+    if currency != "INR":
+        return f"{currency} {amount:,.2f}"
+    # Indian digit grouping (1,75,000.00), matching the amounts in the app.
+    whole, fraction = f"{abs(amount):.2f}".split(".")
+    head, groups = whole[:-3], [whole[-3:]]
+    while head:
+        groups.insert(0, head[-2:])
+        head = head[:-2]
+    sign = "-" if amount < 0 else ""
+    return f"{currency} {sign}{','.join(groups)}.{fraction}"
 
 
 def _safe_invoice_filename(invoice_number: str) -> str:
