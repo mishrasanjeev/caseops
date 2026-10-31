@@ -107,6 +107,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   fetchIpDockets: fetchIpDocketsMock,
   fetchIpDocuments: fetchIpDocumentsMock,
   fetchIpDocumentTaxonomy: fetchIpDocumentTaxonomyMock,
+  seedIpDocumentTaxonomy: vi.fn(),
   previewIpDocumentName: vi.fn(),
   importIpDocumentAliases: vi.fn(),
   downloadApiFile: vi.fn(),

@@ -58,6 +58,8 @@ for (const width of [393, 768, 1280]) {
     });
     await page.getByLabel("Title", { exact: true }).fill("Original application source");
     await page.getByLabel("Invention", { exact: true }).fill("Substrate");
+    // Classification is an explicit choice from the server-listed entries.
+    await page.getByLabel("Classification", { exact: true }).selectOption("evidence");
     await page.getByRole("button", { name: "Preview controlled name" }).click();
     await expect(page.getByText("Controlled name preview", { exact: true })).toBeVisible();
     const uploadPromise = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/ip/documents/upload" && response.request().method() === "POST");

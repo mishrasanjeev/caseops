@@ -15,6 +15,7 @@ from caseops_api.db.models import (
     IpWorkspaceTestResult,
 )
 from caseops_api.schemas.ip_records import (
+    IpDocumentTaxonomyReadiness,
     IpWorkspaceConfigurationStatusResponse,
     IpWorkspaceConfigurationUpsertRequest,
     IpWorkspaceEnableRequest,
@@ -25,6 +26,11 @@ from caseops_api.services.assignment_memberships import (
     require_locked_membership_capability,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_documents import (
+    TAXONOMY_VERSION,
+    ensure_default_ip_document_taxonomy,
+    ip_document_taxonomy_counts,
+)
 from caseops_api.services.provider_adapter_catalog import (
     provider_adapter_contracts,
     provider_adapter_definition,
@@ -146,6 +152,9 @@ def get_ip_workspace_configuration_status(
     configuration = _configuration(session, company_id=context.company.id)
     tests = _tests_for_current_version(session, configuration) if configuration else []
     blockers = _enablement_blockers(configuration, tests)
+    total_entries, active_entries = ip_document_taxonomy_counts(
+        session, company_id=context.company.id
+    )
     return IpWorkspaceConfigurationStatusResponse(
         configuration=configuration,
         tests=tests,
@@ -156,6 +165,12 @@ def get_ip_workspace_configuration_status(
         )),
         enablement_blockers=blockers,
         provider_adapters=provider_adapter_contracts(domain="ip_office_registry"),
+        document_taxonomy=IpDocumentTaxonomyReadiness(
+            taxonomy_version=TAXONOMY_VERSION,
+            total_entry_count=total_entries,
+            active_entry_count=active_entries,
+            ready=active_entries > 0,
+        ),
     )
 
 
@@ -224,6 +239,7 @@ def upsert_ip_workspace_configuration(
     ):
         raise HTTPException(status_code=409, detail="Workspace configuration changed; reload.")
     now = datetime.now(UTC)
+    document_taxonomy_version = payload.document_taxonomy_version or TAXONOMY_VERSION
     if row is None:
         if payload.expected_version is not None:
             raise HTTPException(status_code=409, detail="Workspace configuration does not exist.")
@@ -232,7 +248,7 @@ def upsert_ip_workspace_configuration(
             version=1,
             timezone=payload.timezone,
             holiday_calendar_key=payload.holiday_calendar_key,
-            document_taxonomy_version=payload.document_taxonomy_version,
+            document_taxonomy_version=document_taxonomy_version,
             event_catalog_version=payload.event_catalog_version,
             escalation_owner_membership_id=payload.escalation_owner_membership_id,
             updated_by_membership_id=context.membership.id,
@@ -265,7 +281,7 @@ def upsert_ip_workspace_configuration(
     row.timezone = payload.timezone
     row.holiday_calendar_key = payload.holiday_calendar_key
     row.working_day_policy_json = payload.working_day_policy
-    row.document_taxonomy_version = payload.document_taxonomy_version
+    row.document_taxonomy_version = document_taxonomy_version
     row.event_catalog_version = payload.event_catalog_version
     row.deadline_rule_versions_json = payload.deadline_rule_versions
     row.notification_channels_json = payload.notification_channels
@@ -288,6 +304,12 @@ def upsert_ip_workspace_configuration(
         row.provider_terms_accepted_by_membership_id = None
         row.provider_terms_accepted_at = None
     session.flush()
+    ensure_default_ip_document_taxonomy(
+        session,
+        company_id=company_id,
+        actor_membership_id=context.membership.id,
+        trigger="workspace_configuration",
+    )
     record_from_context(
         session,
         context,
@@ -531,6 +553,12 @@ def enable_ip_workspace(
     row.workspace_enabled = True
     row.updated_by_membership_id = context.membership.id
     row.updated_at = datetime.now(UTC)
+    ensure_default_ip_document_taxonomy(
+        session,
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        trigger="workspace_enable",
+    )
     record_from_context(
         session,
         context,

@@ -28477,6 +28477,20 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * IpDocumentTaxonomyReadiness
+         * @description Whether IP documents can be classified, so an empty taxonomy is visible.
+         */
+        IpDocumentTaxonomyReadiness: {
+            /** Active Entry Count */
+            active_entry_count: number;
+            /** Ready */
+            ready: boolean;
+            /** Taxonomy Version */
+            taxonomy_version: string;
+            /** Total Entry Count */
+            total_entry_count: number;
+        };
         /** IpDocumentTaxonomyResponse */
         IpDocumentTaxonomyResponse: {
             /** Entries */
@@ -34710,6 +34724,7 @@ export interface components {
         /** IpWorkspaceConfigurationStatusResponse */
         IpWorkspaceConfigurationStatusResponse: {
             configuration: components["schemas"]["IpWorkspaceConfigurationResponse"] | null;
+            document_taxonomy: components["schemas"]["IpDocumentTaxonomyReadiness"];
             /** Enablement Blockers */
             enablement_blockers: string[];
             /** Provider Adapters */
@@ -34735,7 +34750,7 @@ export interface components {
                 [key: string]: string;
             };
             /** Document Taxonomy Version */
-            document_taxonomy_version: string;
+            document_taxonomy_version?: string | null;
             /** Enabled Asset Types */
             enabled_asset_types: "trademark"[];
             /** Escalation Owner Membership Id */

@@ -79,6 +79,7 @@ from caseops_api.services.ip_document_targets import (
 from caseops_api.services.ip_documents import (
     TAXONOMY_VERSION,
     _normalize_alias,
+    ensure_default_ip_document_taxonomy,
     preview_ip_document_name,
 )
 from caseops_api.services.ip_domain_policy import (
@@ -709,6 +710,16 @@ def upload_ip_document(
     _require_document_capability(session, context=context, capability="documents:upload")
     verify_upload(filename=filename, content_type=content_type, stream=stream)
     company_id = context.company.id
+    # A tenant whose IP workspace predates default provisioning may still have
+    # no taxonomy at all. Provision the defaults in their own committed unit
+    # before the upload's read-only checks; a tenant with any entry is untouched.
+    if ensure_default_ip_document_taxonomy(
+        session,
+        company_id=company_id,
+        actor_membership_id=context.membership.id,
+        trigger="document_upload",
+    ):
+        session.commit()
     _taxonomy_or_404(session, company_id=company_id, key=metadata.taxonomy_key)
     for target in metadata.links:
         _validate_target(session, context=context, target=target)

@@ -10612,12 +10612,20 @@ export type IpWorkspaceTestResult = {
   performed_at: string;
 };
 
+export type IpDocumentTaxonomyReadiness = {
+  taxonomy_version: string;
+  total_entry_count: number;
+  active_entry_count: number;
+  ready: boolean;
+};
+
 export type IpWorkspaceConfigurationStatus = {
   configuration: IpWorkspaceConfiguration | null;
   tests: IpWorkspaceTestResult[];
   ready_for_manual_docketing: boolean;
   enablement_blockers: string[];
   provider_adapters: ProviderAdapterContractRecord[];
+  document_taxonomy?: IpDocumentTaxonomyReadiness;
 };
 
 export type IpWorkspaceReadiness = {
@@ -10934,11 +10942,18 @@ export async function fetchIpDocumentsForDocket(
   return apiRequest(`/api/ip/documents?docket_id=${encodeURIComponent(docketId)}`);
 }
 
-export async function fetchIpDocumentTaxonomy(): Promise<{
+export type IpDocumentTaxonomy = {
   taxonomy_version: string;
   entries: Array<{ key: string; label: string; is_active: boolean; version: number }>;
-}> {
+};
+
+export async function fetchIpDocumentTaxonomy(): Promise<IpDocumentTaxonomy> {
   return apiRequest("/api/ip/document-taxonomy");
+}
+
+/** Loads the CaseOps standard classifications (ip:taxonomy_admin only). Idempotent. */
+export async function seedIpDocumentTaxonomy(): Promise<IpDocumentTaxonomy> {
+  return apiRequest("/api/ip/document-taxonomy/seed", { method: "POST" });
 }
 
 export async function previewIpDocumentName(input: {
@@ -11155,7 +11170,9 @@ export async function saveIpWorkspaceConfiguration(input: {
       timezone: input.timezone.trim(),
       holiday_calendar_key: input.holidayCalendarKey.trim(),
       working_day_policy: current?.working_day_policy_json ?? { working_weekdays: [0, 1, 2, 3, 4] },
-      document_taxonomy_version: current?.document_taxonomy_version ?? "ip-taxonomy-2026.1",
+      // The server owns the document taxonomy version for new configurations;
+      // an existing configuration keeps the value it already records.
+      ...(current ? { document_taxonomy_version: current.document_taxonomy_version } : {}),
       event_catalog_version: current?.event_catalog_version ?? "ip-events-v1",
       deadline_rule_versions: current?.deadline_rule_versions_json ?? { [jurisdiction]: "2026.1" },
       notification_channels: current?.notification_channels_json ?? ["in_app"],
