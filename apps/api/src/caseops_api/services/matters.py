@@ -28,6 +28,7 @@ from caseops_api.db.models import (
     ForumCatalogEntry,
     HearingReminder,
     HearingReminderStatus,
+    InvoiceStatus,
     IpDocketRecord,
     Matter,
     MatterActivity,
@@ -6754,3 +6755,63 @@ def get_matter_invoice_pdf(
     if invoice is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found.")
     return render_invoice_pdf(session, context=context, invoice=invoice)
+
+
+def void_matter_invoice_draft(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    invoice_id: str,
+) -> InvoiceRecord:
+    """Void a draft matter invoice and release its time entries.
+
+    BUG-016: a draft created by mistake had no way out of the matter's billing
+    list. Only a draft with no recorded payment can be voided here; an issued
+    invoice is a tax document and needs a credit note instead.
+    """
+    if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
+        _raise_billing_permission_error()
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    invoice = session.scalar(
+        select(MatterInvoice)
+        .options(selectinload(MatterInvoice.line_items))
+        .where(
+            MatterInvoice.id == invoice_id,
+            MatterInvoice.matter_id == matter.id,
+            MatterInvoice.company_id == context.company.id,
+        )
+        .with_for_update()
+    )
+    if invoice is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found.")
+    if invoice.status != InvoiceStatus.DRAFT or invoice.amount_received_minor > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Only a draft invoice with no recorded payment can be voided. "
+                "An issued invoice needs a credit note."
+            ),
+        )
+    released = 0
+    for line in invoice.line_items:
+        if line.time_entry_id is not None:
+            line.time_entry_id = None
+            released += 1
+    invoice.status = InvoiceStatus.VOID
+    record_from_context(
+        session,
+        context,
+        action="matter_invoice.voided",
+        target_type="matter_invoice",
+        target_id=invoice.id,
+        matter_id=invoice.matter_id,
+        metadata={
+            "invoice_number": invoice.invoice_number,
+            "previous_status": InvoiceStatus.DRAFT.value,
+            "released_time_entries": released,
+        },
+    )
+    session.commit()
+    session.refresh(invoice)
+    return _invoice_record(invoice)

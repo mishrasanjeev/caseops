@@ -9,9 +9,11 @@ const {
   useMatterWorkspaceMock,
   useCapabilityMock,
   fetchPaymentConfigMock,
+  voidMatterInvoiceDraftMock,
 } =
   vi.hoisted(() => ({
     downloadMatterInvoicePdfMock: vi.fn(),
+    voidMatterInvoiceDraftMock: vi.fn(),
     useMatterWorkspaceMock: vi.fn(),
     useCapabilityMock: vi.fn(),
     fetchPaymentConfigMock: vi.fn(),
@@ -30,6 +32,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   downloadMatterInvoicePdf: downloadMatterInvoicePdfMock,
   fetchPaymentConfig: fetchPaymentConfigMock,
   syncInvoicePaymentLink: vi.fn(),
+  voidMatterInvoiceDraft: voidMatterInvoiceDraftMock,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -168,6 +171,73 @@ describe("MatterBillingPage", () => {
       matterId: "m-1",
       invoiceId: "invoice-1",
     });
+  });
+
+  it("BUG-016 names a draft and a review-copy PDF by the invoice status", () => {
+    const invoice = {
+      issued_on: "2026-10-30",
+      due_on: "2026-11-29",
+      total_amount_minor: 400000,
+      balance_due_minor: 400000,
+      amount_received_minor: 0,
+      currency: "INR",
+      payment_attempts: [],
+    };
+    useMatterWorkspaceMock.mockReturnValue({
+      data: {
+        ...BASE_DATA,
+        invoices: [
+          { ...invoice, id: "draft-1", invoice_number: "INV-0007", status: "draft" },
+          { ...invoice, id: "oc-1", invoice_number: "OC-1", status: "needs_review" },
+          { ...invoice, id: "issued-1", invoice_number: "INV-0008", status: "issued" },
+        ],
+      },
+    });
+    useCapabilityMock.mockImplementation((cap: string) => cap === "invoices:issue");
+
+    render(withClient(<MatterBillingPage />));
+
+    expect(screen.getByTestId("invoice-pdf-draft-1")).toHaveTextContent("Draft PDF");
+    expect(screen.getByRole("button", { name: "Draft PDF for INV-0007" })).toBeEnabled();
+    expect(screen.getByTestId("invoice-pdf-oc-1")).toHaveTextContent("Review copy PDF");
+    expect(screen.getByTestId("invoice-pdf-issued-1")).toHaveTextContent(/^PDF$/);
+    // Only the draft offers "Void draft"; an issued invoice needs a credit note.
+    expect(screen.getByTestId("invoice-void-draft-1")).toBeEnabled();
+    expect(screen.queryByTestId("invoice-void-issued-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("invoice-void-oc-1")).not.toBeInTheDocument();
+  });
+
+  it("BUG-016 voids a draft only after an explicit confirmation", async () => {
+    const user = userEvent.setup();
+    voidMatterInvoiceDraftMock.mockResolvedValue({ id: "draft-1", invoice_number: "INV-0007" });
+    useMatterWorkspaceMock.mockReturnValue({
+      data: {
+        ...BASE_DATA,
+        invoices: [
+          {
+            id: "draft-1",
+            invoice_number: "INV-0007",
+            status: "draft",
+            issued_on: "2026-10-30",
+            due_on: "2026-11-29",
+            total_amount_minor: 400000,
+            balance_due_minor: 400000,
+            amount_received_minor: 0,
+            currency: "INR",
+            payment_attempts: [],
+          },
+        ],
+      },
+    });
+    useCapabilityMock.mockImplementation((cap: string) => cap === "invoices:issue");
+
+    render(withClient(<MatterBillingPage />));
+    await user.click(screen.getByRole("button", { name: "Void draft INV-0007" }));
+    expect(voidMatterInvoiceDraftMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Confirm void of draft INV-0007" }));
+
+    await waitFor(() => expect(voidMatterInvoiceDraftMock).toHaveBeenCalledTimes(1));
+    expect(voidMatterInvoiceDraftMock).toHaveBeenCalledWith({ matterId: "m-1", invoiceId: "draft-1" });
   });
 
   it("hides invoice PDF download when the user lacks invoice permission", () => {

@@ -124,7 +124,9 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
       await queryClient.invalidateQueries({
         queryKey: ["matters", matterId, "workspace"],
       });
-      toast.success("Invoice issued");
+      // BUG-016: the dialog creates a draft (createMatterInvoice sends status
+      // "draft"); the copy must not claim the invoice was issued.
+      toast.success("Draft invoice created");
       form.reset({
         invoice_number: "",
         issued_on: todayIso(),
@@ -301,8 +303,8 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
               role="note"
             >
               Add at least one manual line item, or enable
-              <em> Include uninvoiced time entries</em>, before issuing
-              this invoice.
+              <em> Include uninvoiced time entries</em>, before creating
+              this draft invoice.
             </p>
           ) : null}
           <DialogFooter>
@@ -324,10 +326,10 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
             >
               {mutation.isPending ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Issuing…
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Creating draft…
                 </>
               ) : (
-                "Issue invoice"
+                "Create draft invoice"
               )}
             </Button>
           </DialogFooter>

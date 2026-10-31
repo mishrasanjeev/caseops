@@ -91,6 +91,7 @@ describe("NewInvoiceDialog", () => {
     await user.type(screen.getByLabelText(/Line 1 description/i), "Court fees");
     await user.type(screen.getByLabelText(/Line 1 amount/i), "15000");
 
+    expect(screen.getByTestId("new-invoice-submit")).toHaveTextContent("Create draft invoice");
     await user.click(screen.getByTestId("new-invoice-submit"));
 
     await waitFor(() => expect(createInvoiceMock).toHaveBeenCalledTimes(1));
@@ -107,6 +108,9 @@ describe("NewInvoiceDialog", () => {
     expect(call.manualItems).toEqual([
       { description: "Court fees", amount_minor: 1_500_000 },
     ]);
-    expect(toastSuccess).toHaveBeenCalled();
+    // BUG-016: the dialog creates a draft, so neither the button nor the toast
+    // may say the invoice was issued.
+    expect(call.status).toBeUndefined();
+    expect(toastSuccess).toHaveBeenCalledWith("Draft invoice created");
   });
 });

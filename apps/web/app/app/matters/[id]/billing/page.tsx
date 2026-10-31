@@ -34,6 +34,7 @@ import {
   downloadMatterInvoicePdf,
   fetchPaymentConfig,
   syncInvoicePaymentLink,
+  voidMatterInvoiceDraft,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
@@ -55,6 +56,14 @@ function formatHourlyRate(entry: WorkspaceTimeEntry): string {
 function canIssuePaymentLink(inv: WorkspaceInvoice): boolean {
   if (inv.status === "void" || inv.status === "paid") return false;
   return inv.balance_due_minor > 0;
+}
+
+// BUG-016 (2026-10-31): a draft or an outside-counsel submission is not an
+// issued invoice; the download names what the PDF is.
+function invoicePdfLabel(inv: WorkspaceInvoice): string {
+  if (inv.status === "draft") return "Draft PDF";
+  if (inv.status === "needs_review") return "Review copy PDF";
+  return "PDF";
 }
 
 function hasPaymentAttempt(inv: WorkspaceInvoice): boolean {
@@ -133,6 +142,20 @@ export default function MatterBillingPage() {
     mutationFn: (invoiceId: string) => downloadMatterInvoicePdf({ matterId, invoiceId }),
     onError: (err) => {
       toast.error(apiErrorMessage(err, "Could not download invoice PDF."));
+    },
+  });
+  // BUG-016: a draft created by mistake can be voided (two-step confirm);
+  // issued invoices are refused by the API and never offered the action.
+  const [confirmVoidId, setConfirmVoidId] = useState<string | null>(null);
+  const voidDraftMutation = useMutation({
+    mutationFn: (invoiceId: string) => voidMatterInvoiceDraft({ matterId, invoiceId }),
+    onSuccess: async (record) => {
+      setConfirmVoidId(null);
+      await invalidate();
+      toast.success(`Draft ${record.invoice_number} voided.`);
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not void the draft invoice."));
     },
   });
 
@@ -215,11 +238,13 @@ export default function MatterBillingPage() {
               title="No invoices yet"
               description={
                 canIssueInvoice
-                  ? "Issue the first invoice on this matter. Uninvoiced billable time rolls in by default."
+                  ? "Create the first draft invoice on this matter. Uninvoiced billable time rolls in by default."
                   : "Ask a team member with billing permissions to issue the first invoice."
               }
             />
           ) : (
+            // BUG-016: the invoice actions must not widen the page at 393px.
+            <div className="overflow-x-auto" data-testid="matter-invoices-table">
             <table className="w-full text-sm tabular">
               <thead>
                 <tr className="border-b border-[var(--color-line)] bg-[var(--color-bg)] text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
@@ -255,7 +280,7 @@ export default function MatterBillingPage() {
                         <StatusBadge status={inv.status} />
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="inline-flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           {canIssueInvoice ? (
                             <Button
                               type="button"
@@ -264,10 +289,56 @@ export default function MatterBillingPage() {
                               disabled={downloadInvoiceMutation.isPending}
                               onClick={() => downloadInvoiceMutation.mutate(inv.id)}
                               data-testid={`invoice-pdf-${inv.id}`}
+                              aria-label={`${invoicePdfLabel(inv)} for ${inv.invoice_number}`}
                             >
-                              <Download className="h-4 w-4" aria-hidden />
-                              PDF
+                              {downloadInvoiceMutation.isPending
+                              && downloadInvoiceMutation.variables === inv.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                              ) : (
+                                <Download className="h-4 w-4" aria-hidden />
+                              )}
+                              {invoicePdfLabel(inv)}
                             </Button>
+                          ) : null}
+                          {canIssueInvoice && inv.status === "draft" ? (
+                            confirmVoidId === inv.id ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={voidDraftMutation.isPending}
+                                  onClick={() => voidDraftMutation.mutate(inv.id)}
+                                  data-testid={`invoice-void-confirm-${inv.id}`}
+                                  aria-label={`Confirm void of draft ${inv.invoice_number}`}
+                                >
+                                  {voidDraftMutation.isPending ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                  ) : null}
+                                  Confirm void
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={voidDraftMutation.isPending}
+                                  onClick={() => setConfirmVoidId(null)}
+                                >
+                                  Keep
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setConfirmVoidId(inv.id)}
+                                data-testid={`invoice-void-${inv.id}`}
+                                aria-label={`Void draft ${inv.invoice_number}`}
+                              >
+                                Void draft
+                              </Button>
+                            )
                           ) : null}
                           {canSendPaymentLink ? (
                             <>
@@ -316,6 +387,7 @@ export default function MatterBillingPage() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </CardContent>
       </Card>

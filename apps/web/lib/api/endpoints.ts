@@ -6915,6 +6915,17 @@ export async function downloadMatterInvoicePdf(input: {
   );
 }
 
+/** Voids a draft matter invoice; issued invoices are refused (409, credit note). */
+export async function voidMatterInvoiceDraft(input: {
+  matterId: string;
+  invoiceId: string;
+}): Promise<MatterInvoiceRecord> {
+  return apiRequest<MatterInvoiceRecord>(
+    `/api/matters/${input.matterId}/invoices/${input.invoiceId}/void`,
+    { method: "POST" },
+  );
+}
+
 export type CauseListPreviewInput = {
   date?: string | null;
   date_from?: string | null;

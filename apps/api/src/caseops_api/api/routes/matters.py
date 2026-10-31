@@ -309,6 +309,7 @@ from caseops_api.services.matters import (
     update_matter_court_order,
     update_matter_hearing,
     update_matter_task,
+    void_matter_invoice_draft,
 )
 from caseops_api.services.next_hearing import (
     decide_next_hearing_suggestion,
@@ -2718,6 +2719,22 @@ async def download_current_company_matter_invoice_pdf(
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-CaseOps-Checksum": checksum,
         },
+    )
+
+
+@router.post(
+    "/{matter_id}/invoices/{invoice_id}/void",
+    response_model=InvoiceRecord,
+    summary="Void a draft matter invoice",
+)
+async def void_current_company_matter_invoice_draft(
+    matter_id: str,
+    invoice_id: str,
+    context: InvoiceIssuer,
+    session: DbSession,
+) -> InvoiceRecord:
+    return void_matter_invoice_draft(
+        session, context=context, matter_id=matter_id, invoice_id=invoice_id
     )
 
 
