@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from caseops_api.schemas.ip_documents import IpDocumentRecord
 from caseops_api.schemas.ip_lifecycle import IpDocketEventResponse
 from caseops_api.schemas.ip_operations import IpDocketRecordResponse
+from caseops_api.services.ip_filing_jurisdictions import canonical_filing_jurisdiction
 
 IpForeignAssociateStatus = Literal[
     "draft",
@@ -88,6 +89,17 @@ class IpForeignAssociateCreateRequest(BaseModel):
     budget_policy_reference: str = Field(min_length=3, max_length=500)
     response_due_at: datetime | None = None
     reason: str = Field(min_length=5, max_length=2000)
+
+    @field_validator("target_jurisdiction")
+    @classmethod
+    def canonical_target_jurisdiction(cls, value: str) -> str:
+        code = canonical_filing_jurisdiction(value)
+        if code is None:
+            raise ValueError(
+                "Choose a filing jurisdiction: a country code such as GB, "
+                "or EM, WO or EP for a regional office."
+            )
+        return code
 
     @model_validator(mode="after")
     def validate_create_contract(self) -> IpForeignAssociateCreateRequest:
@@ -311,3 +323,104 @@ class IpForeignAssociateWorkspaceResponse(BaseModel):
     invoice_status: str | None
     response_overdue: bool
     reminders: list[IpForeignAssociateReminderRecord] = Field(default_factory=list)
+
+
+IpForeignAssociateCreateBlockerCode = Literal[
+    "no_panel_associate",
+    "no_associate_for_jurisdiction",
+    "no_assignment_for_matter",
+    "no_active_estimate",
+    "no_linked_documents",
+]
+
+
+class IpFilingJurisdictionOption(BaseModel):
+    code: str
+    name: str
+    #: Panel associates the create validator accepts for this jurisdiction.
+    associate_count: int
+
+
+class IpForeignAssociateOptionAssociate(BaseModel):
+    id: str
+    name: str
+    firm_city: str | None
+    primary_contact_name: str | None
+    primary_contact_email: str | None
+    panel_status: str
+    filing_jurisdictions: list[str]
+
+
+class IpForeignAssociateOptionAssignment(BaseModel):
+    id: str
+    counsel_id: str
+    counsel_name: str
+    role_summary: str | None
+    status: str
+    currency: str
+    budget_amount_minor: int
+    #: Active estimates the create validator pairs with this assignment.
+    compatible_estimate_ids: list[str]
+
+
+class IpForeignAssociateOptionEstimate(BaseModel):
+    id: str
+    description: str
+    amount_minor: int | None
+    amount_withheld: bool
+    currency: str
+    evidence_reference: str
+    created_at: datetime
+
+
+class IpForeignAssociateOptionClientInstruction(BaseModel):
+    id: str
+    submitted_by: str
+    instruction_kind: str
+    instruction_version: int
+    received_at: datetime
+
+
+class IpForeignAssociateOptionDocument(BaseModel):
+    id: str
+    title: str
+    is_privileged: bool
+
+
+class IpForeignAssociateCreateBlocker(BaseModel):
+    code: IpForeignAssociateCreateBlockerCode
+    field: Literal[
+        "outside_counsel_id",
+        "assignment_id",
+        "estimate_cost_item_id",
+        "selected_document_refs",
+    ]
+    message: str
+    action_label: str | None = None
+    href: str | None = None
+
+
+class IpForeignAssociateCreateOptionsResponse(BaseModel):
+    """Every value the create validator accepts for one docket, and why not.
+
+    Built from the same predicates as ``create_ip_foreign_associate_instruction``
+    so a picker never offers a value the API rejects (BUG-009/010/011/013).
+    """
+
+    docket_id: str
+    docket_title: str
+    lifecycle_version: int
+    matter_id: str | None
+    matter_title: str | None
+    target_jurisdiction: str | None
+    jurisdictions: list[IpFilingJurisdictionOption]
+    panel_associate_count: int
+    associates: list[IpForeignAssociateOptionAssociate]
+    assignment_required: bool
+    assignments: list[IpForeignAssociateOptionAssignment]
+    unbudgeted_assignment_count: int
+    estimates: list[IpForeignAssociateOptionEstimate]
+    client_instructions: list[IpForeignAssociateOptionClientInstruction]
+    documents: list[IpForeignAssociateOptionDocument]
+    can_record_estimate: bool
+    blockers: list[IpForeignAssociateCreateBlocker]
